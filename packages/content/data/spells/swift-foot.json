@@ -7,10 +7,10 @@
   "manaCost": 400,
   "group": "support",
   "groupCooldownMs": 2000,
-  "cooldownMs": 4000,
+  "cooldownMs": 10000,
   "secondaryGroup": {
     "name": "focus",
-    "cooldownMs": 2000
+    "cooldownMs": 10000
   },
   "effect": {
     "kind": "haste",
@@ -22,5 +22,5 @@
       "spell": -30
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Cooldown do Canary (`data/scripts/spells/support/swift_foot.lua`, main, 2026-09-24): cooldown próprio e do grupo secundário `focus` 4s/2s→10s/10s (o mesmo prazo da postura)."
 }

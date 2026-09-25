@@ -40,17 +40,17 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
-  it('carrega a tabela da party real, e todo item do repositório tem preço de venda (#188)', () => {
-    // A tabela é a do ADR 0027: 25 % por vocação única, teto 100 %. E `value` é obrigatório no
-    // schema — este teste prende que o conteúdo REAL passa, e diz quais itens ainda têm o
-    // preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
+  it('carrega a party real, e todo item do repositório tem preço de venda (#188)', () => {
+    // O multiplicador de XP saiu do conteúdo no #525 (ADR 0027 emenda 2026-09-24/25) — é
+    // `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary. E `value`
+    // é obrigatório no schema — este teste prende que o conteúdo REAL passa, e diz quais itens
+    // ainda têm o preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
     const content = loadContent(DATA);
     expect(content.party.maxMembers).toBe(8);
-    expect(content.party.xpPoolPercentByUniqueVocations).toEqual({
-      '1': 125, '2': 150, '3': 175, '4': 200,
-      '5': 200, '6': 200, '7': 200, '8': 200,
-    });
     expect(content.party.autoSellItemTypes).toEqual({ free: 5, premium: 20 });
+    expect(content.party.sharedExperience).toEqual({
+      rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000,
+    });
     for (const item of content.items.values()) {
       expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
     }
@@ -373,6 +373,8 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       readonly shape?: string;
       readonly skillMin: number;
       readonly skillMax: number;
+      readonly baseMin?: number;
+      readonly baseMax?: number;
       /** O projétil da tabela de aparências (#478): a Explosion fica sem, por ora. */
       readonly missile?: number;
     }>> = {
@@ -380,7 +382,8 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       'great-fireball-rune': { damageType: 'fire', shape: 'circle', skillMin: 1.2, skillMax: 2.8, missile: 4 },
       'thunderstorm-rune': { damageType: 'energy', shape: 'circle', skillMin: 1, skillMax: 2.6, missile: 5 },
       'stone-shower-rune': { damageType: 'earth', shape: 'circle', skillMin: 1, skillMax: 2.6, missile: 30 },
-      'sudden-death-rune': { damageType: 'death', skillMin: 4.6, skillMax: 7.4, missile: 11 },
+      // #523: base 32/48→28/46, skillMin/skillMax exatos 4,605/7,395 (`data/scripts/runes/sudden_death.lua`).
+      'sudden-death-rune': { damageType: 'death', skillMin: 4.605, skillMax: 7.395, baseMin: 28, baseMax: 46, missile: 11 },
       'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59, missile: 5 },
       'explosion-rune': { damageType: 'physical', shape: 'cross', skillMin: 0, skillMax: 4.8 },
     };
@@ -391,10 +394,34 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       expect(effect.damageType, id).toBe(want.damageType);
       expect(effect.formula?.skillMin, id).toBe(want.skillMin);
       expect(effect.formula?.skillMax, id).toBe(want.skillMax);
+      if (want.baseMin !== undefined) expect(effect.formula?.baseMin, id).toBe(want.baseMin);
+      if (want.baseMax !== undefined) expect(effect.formula?.baseMax, id).toBe(want.baseMax);
       expect(effect.area?.shape, id).toBe(want.shape);
       // A runa de ataque projeta (#478): o id vem da tabela de aparências, nunca do `sim`.
       // Mutação que mata: trocar o `missile` da Avalanche de 29 para 30 em `baseline.json`.
       expect(content.appearances?.supplies[id]?.missile, id).toBe(want.missile);
+    }
+  });
+
+  it('as runas de cura do Canary têm fórmula e level corretos (#523)', () => {
+    // Ultimate Healing Rune e Intense Healing Rune caíram numa conversão genérica ou num
+    // level torto antes do #523 — `data/scripts/runes/ultimate_healing_rune.lua` e
+    // `intense_healing_rune.lua`.
+    const content = loadContent(DATA);
+    const ultimate = content.supplies.get('ultimate-healing-rune');
+    expect(ultimate?.effect.kind).toBe('heal');
+    if (ultimate?.effect.kind === 'heal') {
+      expect(ultimate.effect.formula).toEqual({
+        levelFactor: 0.2, skillMin: 7.3, skillMax: 12.4, baseMin: 42, baseMax: 90,
+      });
+    }
+    const intense = content.supplies.get('intense-healing-rune');
+    expect(intense?.requires.level).toBe(15);
+    expect(intense?.effect.kind).toBe('heal');
+    if (intense?.effect.kind === 'heal') {
+      expect(intense.effect.formula).toEqual({
+        levelFactor: 0.2, skillMin: 3.2, skillMax: 5.4, baseMin: 20, baseMax: 40,
+      });
     }
   });
 
@@ -523,45 +550,47 @@ type SpellRow = {
 };
 const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
   knight: {
-    'bruise-bane': { level: 1, mana: 10, group: 'healing', groupMs: 2000, cdMs: 1000, kind: 'heal', bp: 15 },
+    'bruise-bane': { level: 1, mana: 10, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 15 },
     'lesser-front-sweep': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 14 },
-    'wound-cleansing': { level: 8, mana: 40, group: 'healing', groupMs: 2000, cdMs: 1000, kind: 'heal', bp: 70 },
+    'wound-cleansing': { level: 8, mana: 40, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 70 },
     'haste-knight': { level: 14, mana: 60, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
     'brutal-strike': { level: 16, mana: 30, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 39 },
-    'blood-rage': { level: 20, mana: 20, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'buff', secondary: ['stance', 2000] },
-    'protector': { level: 20, mana: 20, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'buff', secondary: ['stance', 2000] },
+    'blood-rage': { level: 60, mana: 290, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'buff', secondary: ['focus', 2000] },
+    'protector': { level: 55, mana: 200, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'buff', secondary: ['focus', 2000] },
     'charge': { level: 25, mana: 100, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
     'whirlwind-throw': { level: 28, mana: 40, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 32 },
-    'groundshaker': { level: 33, mana: 200, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', bp: 32 },
-    'berserk': { level: 35, mana: 125, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 44 },
+    'groundshaker': { level: 33, mana: 160, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', bp: 32 },
+    'berserk': { level: 35, mana: 115, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 44 },
     'recovery-knight': { level: 50, mana: 75, group: 'healing', groupMs: 1000, cdMs: 60000, kind: 'heal-over-time' },
     'front-sweep': { level: 70, mana: 200, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 80 },
-    'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 2000, cdMs: 120000, kind: 'heal', bp: 500 },
+    'fierce-berserk': { level: 90, mana: 340, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 90 },
+    'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 1000, cdMs: 600000, kind: 'heal', bp: 500 },
   },
   paladin: {
-    'lesser-ethereal-spear': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', bp: 9 },
+    'lesser-ethereal-spear': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 9 },
     'light-healing-paladin': { level: 8, mana: 20, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 40 },
     'haste-paladin': { level: 14, mana: 60, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
     'intense-healing-paladin': { level: 20, mana: 70, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 120 },
     'divine-defiance': { level: 20, mana: 250, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'buff', secondary: ['stance', 10000] },
-    'sharpshooter': { level: 20, mana: 250, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'buff', secondary: ['stance', 10000] },
+    'sharpshooter': { level: 60, mana: 450, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'buff', secondary: ['focus', 10000] },
     'ethereal-spear': { level: 23, mana: 25, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 25 },
     'divine-healing': { level: 35, mana: 160, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 250 },
     'divine-missile': { level: 40, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 60 },
     'divine-caldera': { level: 50, mana: 160, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 150 },
     'recovery-paladin': { level: 50, mana: 75, group: 'healing', groupMs: 1000, cdMs: 60000, kind: 'heal-over-time' },
-    'swift-foot': { level: 55, mana: 400, group: 'support', groupMs: 2000, cdMs: 4000, kind: 'haste', secondary: ['focus', 2000] },
+    'swift-foot': { level: 55, mana: 400, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'haste', secondary: ['focus', 10000] },
     'salvation': { level: 60, mana: 210, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 500 },
     'ethereal-barrage': { level: 60, mana: 135, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 100 },
     'divine-barrage': { level: 70, mana: 175, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 130 },
+    'strong-ethereal-spear': { level: 90, mana: 55, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', bp: 70 },
   },
   sorcerer: {
     'buzz': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
     'scorch': { level: 1, mana: 8, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 10 },
     'magic-patch-sorcerer': { level: 1, mana: 6, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 10 },
-    'apprentices-strike-sorcerer': { level: 6, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
-    'flame-strike-sorcerer': { level: 8, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
-    'ice-strike-sorcerer': { level: 8, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
+    'apprentices-strike-sorcerer': { level: 8, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
+    'flame-strike-sorcerer': { level: 14, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
+    'ice-strike-sorcerer': { level: 15, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'energy-strike-sorcerer': { level: 12, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'terra-strike-sorcerer': { level: 13, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'haste-sorcerer': { level: 14, mana: 60, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
@@ -576,17 +605,19 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'lightning': { level: 55, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 110 },
     'rage-of-the-skies': { level: 55, mana: 600, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 200 },
     'hells-core': { level: 60, mana: 1100, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 250 },
-    'great-death-beam': { level: 66, mana: 140, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', secondary: ['great-beams', 6000], bp: 155 },
+    'great-death-beam': { level: 300, mana: 140, group: 'attack', groupMs: 2000, cdMs: 10000, kind: 'damage', secondary: ['great-beams', 6000], bp: 155 },
     'strong-flame-strike': { level: 70, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 125 },
     'strong-energy-strike': { level: 80, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 125 },
+    'ultimate-energy-strike': { level: 100, mana: 100, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage', secondary: ['ultimatestrikes', 30000], bp: 180 },
   },
   druid: {
     'mud-attack': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
     'chill-out': { level: 1, mana: 8, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 10 },
     'magic-patch-druid': { level: 1, mana: 6, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 10 },
-    'apprentices-strike-druid': { level: 6, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
-    'flame-strike-druid': { level: 8, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
-    'ice-strike-druid': { level: 8, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
+    'apprentices-strike-druid': { level: 8, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
+    'flame-strike-druid': { level: 14, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
+    'ice-strike-druid': { level: 15, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
+    'heal-friend-druid': { level: 18, mana: 120, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 60 },
     'light-healing-druid': { level: 8, mana: 20, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 40 },
     'energy-strike-druid': { level: 12, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'terra-strike-druid': { level: 13, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
@@ -598,7 +629,7 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'ultimate-healing-druid': { level: 30, mana: 160, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 250 },
     'mass-healing': { level: 36, mana: 150, group: 'healing', groupMs: 1000, cdMs: 2000, kind: 'heal', bp: 200 },
     'terra-wave': { level: 38, mana: 170, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 120 },
-    'strong-ice-wave': { level: 40, mana: 170, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 150 },
+    'strong-ice-wave': { level: 40, mana: 170, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', bp: 150 },
     'wrath-of-nature': { level: 55, mana: 700, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 175 },
     'eternal-winter': { level: 60, mana: 1050, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 200 },
     'strong-terra-strike': { level: 70, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 115 },
@@ -648,14 +679,16 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 14 + 15 + 23 + 24 vocation spells, plus the three generic ones', () => {
+  it('has exactly the catalogue: 15 + 16 + 24 + 24 vocation spells, plus the three generic ones', () => {
+    // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
+    // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(14);
-    expect(byVocation.get('paladin')).toBe(15);
-    expect(byVocation.get('sorcerer')).toBe(23);
+    expect(byVocation.get('knight')).toBe(15);
+    expect(byVocation.get('paladin')).toBe(16);
+    expect(byVocation.get('sorcerer')).toBe(24);
     expect(byVocation.get('druid')).toBe(24);
     expect(byVocation.get(undefined)).toBe(3);
   });
@@ -664,10 +697,72 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     for (const excluded of EXCLUDED_SPELLS) expect(content.spells.has(excluded), excluded).toBe(false);
   });
 
-  it('a Exura Sio entra no catálogo com alvo em terceiro e alcance (§26, ADR 0035 d.10)', () => {
+  // Conformidade #523: toda magia/runa de dano ou cura que TEM correspondente real no Canary
+  // declara `formula`. Só três magias por vocação NÃO têm: as três genéricas pré-vocação
+  // (`heal`, `strike`, `blast`, level 1-7, sem `vocationId` — não existem no Tibia, que não dá
+  // magia nenhuma antes da escolha de vocação) e três magias inventadas antes desta auditoria
+  // que não correspondem a nenhum nome do Canary (`divine-barrage`, `ethereal-barrage`,
+  // `forked-thorns` — ver o `_open` de cada uma). A lista é a allowlist EXATA: crescer sem
+  // atualizar aqui é o teste fazendo o trabalho.
+  const NOT_FROM_CANARY = ['heal', 'strike', 'blast', 'divine-barrage', 'ethereal-barrage', 'forked-thorns'];
+
+  it('toda magia de dano/cura com correspondente no Canary declara `formula` (#523)', () => {
+    const missing: string[] = [];
+    for (const spell of content.spells.values()) {
+      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'heal') continue;
+      if (NOT_FROM_CANARY.includes(spell.id)) continue;
+      if (spell.effect.formula === undefined) missing.push(spell.id);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('toda runa de dano/cura com correspondente no Canary declara `formula` (#523)', () => {
+    // Poção não é runa e não tem fórmula de level/ML no Canary: é um valor fixo (`amount` —
+    // health-potion, mana-potion) ou uma faixa fixa por item (`amountRange` — as poções do Tibia
+    // da #524). Toda runa de verdade (as que têm `basePower`, o número de exibição que a fórmula
+    // substitui — ADR 0033) declara `formula`.
+    const missing: string[] = [];
+    for (const supply of content.supplies.values()) {
+      const effect = supply.effect;
+      if (effect.kind !== 'damage' && effect.kind !== 'heal') continue;
+      const isFixedAmount = ('amount' in effect && effect.amount !== undefined)
+        || ('amountRange' in effect && effect.amountRange !== undefined);
+      if (effect.formula === undefined && !isFixedAmount) missing.push(supply.id);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("Apprentice's Strike é dano de FOGO, level 8 (revisão de #523)", () => {
+    // `data/scripts/spells/attack/apprentice's_strike.lua`: COMBAT_FIREDAMAGE, spell:level(8).
+    // A primeira leitura do #523 trouxe a fórmula certa mas deixou `damageType`/`minLevel`
+    // como estavam (energy/6) — o efeito visual já era fogo desde a #219, então a mecânica
+    // ficou em desacordo com o que o jogador via na tela.
+    for (const id of ['apprentices-strike-druid', 'apprentices-strike-sorcerer']) {
+      const spell = content.spells.get(id);
+      expect(spell?.minLevel, id).toBe(8);
+      expect(spell?.effect.kind, id).toBe('damage');
+      if (spell?.effect.kind === 'damage') expect(spell.effect.damageType, id).toBe('fire');
+    }
+  });
+
+  it('a allowlist do que NÃO vem do Canary não cresce sem ninguém notar', () => {
+    // As três genéricas pré-vocação (nunca tiveram vocationId nem BP do TibiaWiki) e as três
+    // inventadas (têm vocationId e basePower, mas nome sem correspondente em
+    // `data/scripts/spells/**` do Canary — a varredura do #523 não achou).
+    for (const id of ['heal', 'strike', 'blast']) {
+      expect(content.spells.get(id)?.vocationId, id).toBeUndefined();
+    }
+    for (const id of ['divine-barrage', 'ethereal-barrage', 'forked-thorns']) {
+      expect(content.spells.get(id)?.vocationId, id).toBeDefined();
+    }
+  });
+
+  it('a Heal Friend (`exura sio`) entra no catálogo com alvo em terceiro e alcance (§26, ADR 0035 d.10)', () => {
     // Emenda ao ADR 0026 d.5: a magia sai da lista de excluídas e passa a ter `target`/`range`.
     // Mutação que mata: manter `'heal-friend'` em `EXCLUDED_SPELLS` — a magia não carregaria.
+    // Nome corrigido no #523 (era "Exura Sio", o nome do TibiaWiki não confirmado).
     const spell = content.spells.get('heal-friend-druid');
+    expect(spell?.name).toBe('Heal Friend');
     expect(spell?.vocationId).toBe('druid');
     const effect = spell?.effect;
     expect(effect?.kind).toBe('heal');

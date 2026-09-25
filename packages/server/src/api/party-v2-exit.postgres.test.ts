@@ -135,9 +135,7 @@ const raw: RawContent = {
   supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', effect: { kind: 'heal', amount: 80 } }],
   party: [{
     ...baseParty,
-    maxMembers: 8,
-    // O teto de 8 do M20 (ADR 0035 D12) exige a tabela até "8": 5..8 repetem 200.
-    xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200 },
+    maxMembers: 8, // O teto de 8 do M20 (ADR 0035 D12).
   }],
   progression: [{
     ...baseProgression,

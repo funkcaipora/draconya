@@ -13,6 +13,20 @@
 // A lógica de comparação é PURA (invariante 1): não conhece I/O, relógio nem framework. O
 // builder de cenário — conteúdo, monstro, ability, campo — mora em `tools`/teste, porque medir a
 // sessão real é assunto de quem tem o conteúdo.
+//
+// Registro do `combat-v2` (#522, ADR 0037 d.5): o contrato muda de propósito, e a regra de
+// evolução do ADR 0031 pede o registro aqui. O `compareConformance`/`compareObservations` desta
+// matriz são POR PERFIL AGNÓSTICOS — comparam resultado e RNG, não a fórmula —, e a MITIGAÇÃO
+// (Dodge, defesa/escudo, crítico, armadura, piso, resistência, imunidade) é a MESMA sob
+// `combat-v1` e `combat-v2` (`resolveMitigation`, `combat/damage.ts`): a matriz de oráculos
+// escritos à mão deste arquivo continua valendo para os dois perfis sem duplicação. O que o
+// `combat-v2` muda — a fórmula de poder de arma do Canary e a chance de acerto à distância — vive
+// ANTES desta função, em `combat/weapon-power.ts` e `combat/distance-hit.ts`, e tem a própria
+// matriz de oráculos no mesmo formato: `weapon-power.test.ts` (tabela attack/skill/level/
+// attackFactor e a distribuição da normal truncada), `distance-hit.test.ts` (a tabela por skill e
+// distância) e `rulesets/weapons.test.ts` (o `combat-v2` fim a fim, com frequência-invariância).
+// `content/data/combat/baseline.json` já declara `combat-v2`: `rat-cellars.test.ts`/
+// `rotworm-caves.test.ts` (packages/server) são a conformance do CONTEÚDO REAL sob o perfil novo.
 
 import type { RngState } from '../rng.js';
 import type { Aggregates, EndReason, Session } from '../session.js';

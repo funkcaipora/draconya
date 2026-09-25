@@ -15,8 +15,15 @@
   "effect": {
     "kind": "damage",
     "basePower": 125,
-    "range": 7,
-    "damageType": "fire"
+    "range": 3,
+    "damageType": "fire",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 2.8,
+      "skillMax": 4.4,
+      "baseMin": 16,
+      "baseMax": 28
+    }
   },
-  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior."
+  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior. Fórmula e alcance do Canary (`data/scripts/spells/attack/strong_flame_strike.lua`, main, 2026-09-24): range 7→3."
 }

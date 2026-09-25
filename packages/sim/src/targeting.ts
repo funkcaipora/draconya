@@ -11,8 +11,8 @@
 // bato", raio de visão quando é "para onde eu ando".
 
 import type { BotPosture, BotTargeting } from '@draconya/content';
-import type { GridPoint } from './monster/step.js';
-import { distance } from './monster/step.js';
+import type { FloorPoint } from './monster/step.js';
+import { distance, sameFloor } from './monster/step.js';
 
 /** O que a escolha precisa saber de um candidato. `MonsterRuntime` já satisfaz. */
 export interface TargetLike {
@@ -20,7 +20,7 @@ export interface TargetLike {
   readonly monsterId: string;
   readonly health: number;
   readonly alive: boolean;
-  readonly position: GridPoint;
+  readonly position: FloorPoint;
 }
 
 /** A política compilada. Conjuntos em vez de arrays: a checagem é por candidato por varredura. */
@@ -71,7 +71,7 @@ export function compileTargeting(config: BotTargeting | undefined): Targeting {
 export function selectTarget<M extends TargetLike>(
   targeting: Targeting,
   monsters: readonly M[],
-  from: GridPoint,
+  from: FloorPoint,
   maxDistance: number,
 ): M | null {
   let best: M | null = null;
@@ -82,6 +82,10 @@ export function selectTarget<M extends TargetLike>(
     const monster = monsters[i] as M;
     if (!monster.alive) continue;
     if (targeting.ignore.has(monster.monsterId)) continue;
+    // Andar diferente é tela diferente (#519): mirar por (x, y) sem conferir o andar acertaria
+    // um monstro atrás do chão, na Darashia Dragon Lair, onde os três andares compartilham a
+    // mesma caixa.
+    if (!sameFloor(from.z, monster.position.z)) continue;
     const d = distance(from, monster.position);
     if (d > maxDistance) continue;
 
@@ -125,13 +129,14 @@ function better(
  * deixar em paz faria a regra disparar por causa de quem ela não vai atingir.
  */
 export function countTargets<M extends TargetLike>(
-  targeting: Targeting, monsters: readonly M[], from: GridPoint, maxDistance: number,
+  targeting: Targeting, monsters: readonly M[], from: FloorPoint, maxDistance: number,
 ): number {
   let count = 0;
   for (let i = 0; i < monsters.length; i += 1) {
     const monster = monsters[i] as M;
     if (!monster.alive) continue;
     if (targeting.ignore.has(monster.monsterId)) continue;
+    if (!sameFloor(from.z, monster.position.z)) continue;
     if (distance(from, monster.position) <= maxDistance) count += 1;
   }
   return count;
@@ -146,24 +151,28 @@ export function countTargets<M extends TargetLike>(
  * cruz, onda, o que for —, e a resposta é exata.
  *
  * Ignorado não conta pela mesma razão de `countTargets`: um monstro que o jogador mandou o bot
- * deixar em paz não pode satisfazer a condição que manda atacar em área. A chave do tile é a
- * MESMA de `area.ts` (`x,y,z`), para a conferência bater com a mira de `#aimFor`.
+ * deixar em paz não pode satisfazer a condição que manda atacar em área. A chave do tile é por
+ * `(x, y)`, como sempre; o andar da forma inteira é o mesmo (`areaTiles` projeta num só), então
+ * confere-se ELE à parte (#519) — um monstro no andar errado com o mesmo `(x, y)` (os três
+ * andares da Darashia Dragon Lair compartilham a caixa) não pode contar.
  *
  * A lista de chaves é a única alocação, do tamanho da forma — como na mira de magia.
  */
 export function countAreaTargets<M extends TargetLike>(
-  targeting: Targeting, monsters: readonly M[], tiles: readonly GridPoint[],
+  targeting: Targeting, monsters: readonly M[], tiles: readonly FloorPoint[],
 ): number {
   const keys = new Set<string>();
   for (let i = 0; i < tiles.length; i += 1) {
-    const tile = tiles[i] as GridPoint;
+    const tile = tiles[i] as FloorPoint;
     keys.add(`${String(tile.x)},${String(tile.y)}`);
   }
+  const areaZ = tiles[0]?.z;
   let count = 0;
   for (let i = 0; i < monsters.length; i += 1) {
     const monster = monsters[i] as M;
     if (!monster.alive) continue;
     if (targeting.ignore.has(monster.monsterId)) continue;
+    if (!sameFloor(areaZ, monster.position.z)) continue;
     if (keys.has(`${String(monster.position.x)},${String(monster.position.y)}`)) count += 1;
   }
   return count;

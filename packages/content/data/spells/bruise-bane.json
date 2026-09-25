@@ -6,11 +6,18 @@
   "minLevel": 1,
   "manaCost": 10,
   "group": "healing",
-  "groupCooldownMs": 2000,
+  "groupCooldownMs": 1000,
   "cooldownMs": 1000,
   "effect": {
     "kind": "heal",
-    "basePower": 15
+    "basePower": 15,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1.795,
+      "skillMax": 1.795,
+      "baseMin": 0,
+      "baseMax": 5
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/healing/bruise_bane.lua`, main, 2026-09-24). Revisão de #523: `spell:groupCooldown(1000)`, não 2000."
 }

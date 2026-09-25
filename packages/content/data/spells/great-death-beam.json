@@ -3,11 +3,11 @@
   "name": "Great Death Beam",
   "description": "Lança um raio de morte numa linha reta à sua frente.",
   "vocationId": "sorcerer",
-  "minLevel": 66,
+  "minLevel": 300,
   "manaCost": 140,
   "group": "attack",
   "groupCooldownMs": 2000,
-  "cooldownMs": 6000,
+  "cooldownMs": 10000,
   "secondaryGroup": {
     "name": "great-beams",
     "cooldownMs": 6000
@@ -19,7 +19,14 @@
       "shape": "beam",
       "length": 5
     },
-    "damageType": "death"
+    "damageType": "death",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 5.5,
+      "skillMax": 9,
+      "baseMin": 0,
+      "baseMax": 0
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia usa 5×5 em cruz; aqui um feixe de 5."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia usa 5×5 em cruz; aqui um feixe de 5. Fórmula do Canary (`data/scripts/spells/attack/great_death_beam.lua`, main, 2026-09-24). Revisão de #523: level 300 e cooldown 10 s (era 66/6 s), batendo com `spell:level(300)`/`spell:cooldown(10*1000)` do arquivo real — o ADR 0037 é explícito, Tibia é a regra mesmo que isso deixe a magia fora de alcance de qualquer level 200; o mecanismo que a trava lá (`needLearn`, grade 1/2/3 do Wheel of Destiny) continua não modelado, só o LEVEL passou a ser o real. `groupCooldownMs`/`secondaryGroup` (2 s / `great-beams` 6 s) já batiam com `spell:groupCooldown(2*1000, 6*1000)`, e o feixe de 5 tiles já batia com `AREA_BEAM6` (grade 1, a menor)."
 }

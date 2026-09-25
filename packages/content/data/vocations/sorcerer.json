@@ -4,6 +4,8 @@
   "healthPerLevel": 5,
   "manaPerLevel": 30,
   "capacityPerLevel": 10,
+  "meleeDamageMultiplier": 1,
+  "distDamageMultiplier": 1,
   "startingKit": [
     {
       "itemId": "wand-of-vortex",

@@ -4,6 +4,8 @@
   "healthPerLevel": 15,
   "manaPerLevel": 5,
   "capacityPerLevel": 25,
+  "meleeDamageMultiplier": 1,
+  "distDamageMultiplier": 1,
   "spellSkill": "melee",
   "startingKit": [
     {

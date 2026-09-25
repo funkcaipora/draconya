@@ -4234,6 +4234,7 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
   const knight = {
     id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
     startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
+    meleeDamageMultiplier: 1, distDamageMultiplier: 1,
   };
   const vocations = new Map([[knight.id, knight]]);
   const itemCatalog = new Map([[axe.id, axe]]);
@@ -4387,12 +4388,12 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     const kitVocations: Map<string, Vocation> = new Map([
       ['knight', {
         id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
-        spellSkill: 'magic', skillMultipliers: {},
+        spellSkill: 'magic', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
         startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
       ['paladin', {
         id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20,
-        spellSkill: 'distance', skillMultipliers: {},
+        spellSkill: 'distance', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
         startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
     ]);
@@ -4915,17 +4916,26 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
     expect(leadState.partyBag).toMatchObject({ gold: 0, items: [], weight: 0, capacity: capacity() });
 
-    // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números.
+    // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números. Credita os
+    // DOIS, com valores diferentes: sem isto, o abate do instante 0 (ver comentário abaixo)
+    // já deixaria "lead" com toda a XP da sessão, e a asserção de baixo (individual < soma)
+    // não provaria nada — passaria mesmo se a soma vazasse para o analisador de "lead".
     session()?.credit('lead', 'xpGained', 7);
+    session()?.credit('b', 'xpGained', 4);
     runFor(200);
     const analyzerOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'analyzer').at(-1);
     const la = analyzerOf(lead.socket);
     const ba = analyzerOf(b.socket);
     if (la?.type !== 'analyzer') throw new Error('sem analyzer para lead');
-    // Os dois podem ter matado um rato no meio (XP dividida igual): a DIFERENÇA é o crédito
-    // só do líder — e é ela que a soma esconderia.
+    // O primeiro rato morre no instante 0 — o golpe inicial já sai ENGATILHADO —, antes de "b"
+    // ter agido uma vez: a XP compartilhada do TFS/Canary é TUDO OU NADA (§525), e um membro
+    // que nunca atacou é INATIVO (`Party::isPlayerActive`). Esse abate cai no rateio por DANO
+    // e "lead", que deu o golpe sozinho, fica com os 5 XP do rato inteiros — "b" nada, por não
+    // ter batido. Os 7 creditados à mão somam em cima: 12, não 7 — e nunca 12 + 4 = 16, que é
+    // o que a soma da sessão daria se o analisador de "lead" vazasse o total de "b".
     const bXp = ba?.type === 'analyzer' ? ba.aggregates.xpGained : 0;
-    expect(la.aggregates.xpGained - bXp).toBe(7);
+    expect(la.aggregates.xpGained - bXp).toBe(8);
+    expect(bXp).toBe(4);
     expect(la.aggregates.xpGained).toBeLessThan(session()?.aggregates.xpGained ?? 0);
   });
 
@@ -5214,8 +5224,12 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     runFor(100);
     const state = lead.socket.received().find((m) => m.type === 'session-state');
     if (state?.type !== 'session-state') throw new Error('sem session-state');
+    // §525 (emenda 2026-09-25): os dois membros nascem sem vocação (level < 8) — "nenhuma"
+    // CONTA como vocação distinta no Canary (`Party::getUniqueVocationsCount` não exclui
+    // `VOCATION_NONE`, diferente do TFS), então os dois mapeiam para a MESMA "nenhuma" e
+    // `uniqueVocations` é 1, não 0. `xpPercent` = 10×1² − 20×1 + 130 = 120 (tamanho 2 < 4).
     expect(state.partySummary).toMatchObject({
-      players: 2, uniqueVocations: 1, xpPercent: 125, shareCosts: true, splitLoot: true,
+      players: 2, uniqueVocations: 1, xpPercent: 120, shareCosts: true, splitLoot: true,
       autoSell: { used: 0, limit: 5 },
     });
 

@@ -48,6 +48,11 @@ const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
   health: 50, experience: 5, attack: 10, armor: 0,
   attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
+  // `blockable: true` (#519) preserva o comportamento de sempre deste rato de teste — ele
+  // representa o rat-cellars real, que também declara `blockable: true` para manter o
+  // `spawnClearRadius` (#236) observado no Huntera, não o `isBlockable: false` do Canary (que
+  // é o default do SCHEMA, e vale para monstro que não o declara — o caso do dragão do #519).
+  blockable: true,
   // Gold fixo por abate: o que os testes de recompensa conferem é a CONTA, não o sorteio —
   // o sorteio tem teste próprio em `loot.test.ts`.
   loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
@@ -100,7 +105,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const party = { id: 'baseline', maxMembers: 4 };
 
 // Magia e supply de teste (FUN-74, FUN-77). Números redondos de propósito: `strike` tira 40 de
 // um rato de 50, então dois golpes matam e o terceiro é ruído — dá para conferir a olho.
@@ -349,6 +354,33 @@ describe('entrada', () => {
     expect(() => createHuntSession({
       id: 's', content: content(), huntId: 'arena', difficulty: 'reckless', createdAtMs: 0,
     })).toThrow(/não define a dificuldade "reckless"/);
+  });
+
+  it('#companionAt confere o andar: um "companheiro" no MESMO (x, y) de outro andar não desvia a rota (#519)', () => {
+    // O monstro (sem agressão, para não interferir) trava o segundo tile da rota (2,1) — o
+    // herói fica genuinamente bloqueado por ELE, não por um companheiro. Um segundo
+    // personagem no MESMO (x, y) mas em outro andar (mutação direta — não existe rota que
+    // chegue lá nesta fixture) não pode ser confundido com quem bloqueia: antes desta issue,
+    // `#companionAt` ignorava o `z`, e o herói tentaria "contornar" um companheiro que não
+    // está nem perto — e SUCEDIA, porque a sala tem espaço para o desvio diagonal (2,2). A
+    // hunt hospeda um personagem só hoje (party é Fase 3), então isto é dormant até lá.
+    const loaded = content({
+      monsters: [{ ...rat, aggroRadius: 0 }],
+      routes: [{ ...route, spawnPoints: [{ routeIndex: 1, radius: 1, monsterId: 'rat' }] }],
+    });
+    const { session, hero } = start({ loaded });
+    const phantom = new CharacterRuntime({ ...character().getState(), id: 'phantom' });
+    session.enter(phantom);
+    // Mesmo (x, y) do tile que vai bloquear o herói (2,1), andar bem diferente — montagem de
+    // teste (como o resto do arquivo já faz), não um passo do `sim`.
+    phantom.position = { x: 2, y: 1, z: 99 };
+
+    session.advanceBy(600); // o suficiente para o rato nascer e o herói tentar o 2º tile.
+
+    // Com o desvio (o defeito), o herói estaria em (2,2) — vizinho livre que o passo guloso
+    // acharia. Com a checagem de andar, ele fica ONDE ESTAVA: bloqueado de verdade pelo rato,
+    // segurando o índice até o tile liberar.
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
   });
 });
 
@@ -5247,23 +5279,34 @@ describe('XP em party (#190, ADR 0027 decisão 3)', () => {
     expect(session.aggregates.xpGained).toBe(kills * 200);
   });
 
-  it('two knights get 62 each (125 % ÷ 2); knight + no vocation get 75 each (150 % ÷ 2)', () => {
+  it('two knights get 60 each (120 % ÷ 2); knight + no vocation get 65 each ("nenhuma" É vocação distinta no Canary)', () => {
+    // §525 (emenda 2026-09-25): o Canary NÃO exclui "nenhuma" (`Party::getUniqueVocationsCount`
+    // insere `baseId` sem filtrar `VOCATION_NONE`) — diferente do TFS, que exclui. A fidelidade
+    // do ADR 0037 d.4 segue o Canary: 1 knight + 1 sem vocação são DUAS vocações distintas (n=2,
+    // tamanho 2 < 4 → 130 %), não uma (120 %). (Sem `partyOptions`, `this.#party` fica
+    // indefinido — a fixture acima não usa o gate de elegibilidade de `#xpShares`, só `xpShare`
+    // puro sobre `allMembers = session.participants`: a divisão continua igual em TODO abate.)
     const kk = party([member('a', 'knight'), member('b', 'knight')]);
-    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 62);
-    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 62);
+    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 60);
+    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 60);
     const kn = party([member('a', 'knight'), member('b', null)]);
-    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 75);
-    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 75);
+    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 65);
+    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 65);
   });
 
-  it('a dead member gets nothing and leaves the vocation count: 4 unique with one dead is 58 for three', () => {
-    // O morto entra na sessão morto (fixture): nunca elegível, nunca conta como vocação única.
+  it('a dead member still counts for n/tamanho (ainda no roster), mas não recebe: 4 vocações (200 %) ÷ 4, pago só aos 3 vivos', () => {
+    // O morto entra na sessão morto (fixture) e nunca sai (não passou pelo pipeline de morte) —
+    // continua em `session.participants`, o `allMembers` que `sharedExperiencePercent` e o
+    // DIVISOR de `xpShare` leem (§525 emenda 2026-09-25: são o roster INTEIRO, como
+    // `getPlayers()` nas engines de origem, não só quem recebe). 4 vocações reais, tamanho 4 →
+    // 200 %; ceil(100 × 200 / 400) = 50 por cabeça — só que o morto não está em `eligible`, e os
+    // outros três dividem o TAMANHO de 4, não de 3.
     const session = party([member('k', 'knight'), member('d', 'druid'), member('s', 'sorcerer'), member('p', 'paladin', false)]);
     const kills = killsOf(session);
     expect(kills).toBeGreaterThan(0);
     expect(xpOf(session, 'p')).toBe(0);
     expect(findById(session.participants, 'p')?.bestiary.getState()).toEqual({});
-    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 58);
+    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 50);
   });
 
   it('solo is untouched: the killer gets the whole 100, with the level-up detail as before', () => {
@@ -5279,6 +5322,89 @@ describe('XP em party (#190, ADR 0027 decisão 3)', () => {
       return ['k', 'd', 's', 'p'].map((id) => [xpOf(session, id), findById(session.participants, id)?.health]);
     };
     expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('lastCombatActionAtMs sobrevive ao snapshot (§525, ADR 0027 emenda 2026-09-24/25)', () => {
+  // A elegibilidade de XP compartilhada depende deste campo sobreviver a uma retomada (nó
+  // reiniciado, hunt desanexada). Prende os DOIS sentidos do defeito: um refactor que droppasse
+  // o campo faria todo mundo voltar INATIVO (desliga a divisão igual até agir de novo); um que o
+  // reinicializasse com `session.nowMs` da retomada faria todo mundo voltar ATIVO mesmo tendo
+  // ficado parado por horas — os dois passam batido se o teste só confere "não é undefined".
+  const vocations = ['knight', 'druid'].map((id) => ({
+    id, name: id, healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10,
+  }));
+  const fat = { ...rat, experience: 100, health: 30 };
+  const loaded = () => content({ monsters: [fat], vocations });
+  const soldier = (id: string, vocationId: string | null) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  const runnersOf = (ruleset: HuntRuleset) => ruleset.getState().runners ?? {};
+
+  it('o valor exato (não só "não nulo") sobrevive à volta inteira — snapshot, JSON, e restore', () => {
+    const session = createHuntSession({
+      id: 'activity-snapshot', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'shared' },
+    });
+    session.enter(soldier('a', 'knight'));
+    session.enter(soldier('b', 'druid'));
+    // Um tick só (o golpe inicial já sai ENGATILHADO): "a" bate a tempo de registrar
+    // atividade, "b" ainda pode não ter agido — as duas pontas do campo (número e ausente)
+    // aparecem no MESMO teste, sem precisar de um segundo cenário.
+    run(session, 100, 100);
+    const before = runnersOf(session.ruleset as HuntRuleset);
+    const aBefore = before['a']?.lastCombatActionAtMs;
+    expect(typeof aBefore).toBe('number');
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('activity'),
+    );
+    const after = runnersOf(restored.ruleset as HuntRuleset);
+    // O valor RESTAURADO é o MESMO da captura — não `restored.nowMs` (provaria que não foi
+    // reinicializado com "agora") e não `undefined` (provaria que não foi dropado).
+    expect(after['a']?.lastCombatActionAtMs).toBe(aBefore);
+    expect(after['a']?.lastCombatActionAtMs).toBe(before['a']?.lastCombatActionAtMs);
+    expect(restored.nowMs).toBe(session.nowMs);
+    // "b" pode ter agido ou não neste único tick; o que importa é que o valor de ANTES e DEPOIS
+    // bate — presente ou ausente, o restore não o move para nenhum dos dois lados.
+    expect(after['b']?.lastCombatActionAtMs).toBe(before['b']?.lastCombatActionAtMs);
+  });
+
+  it('canShareExperience usa o valor RESTAURADO, não "agora": ativo continua ativo, e o efeito aparece no próximo abate', () => {
+    const session = createHuntSession({
+      id: 'activity-snapshot-2', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'shared' },
+    });
+    session.enter(soldier('a', 'knight'));
+    session.enter(soldier('b', 'druid'));
+    // 2 s: tempo de sobra para os dois terem agido ao menos uma vez (o rato de 30 HP não morre
+    // de um golpe só, então os dois alcançam e batem antes do primeiro abate).
+    run(session, 2_000, 100);
+    const beforeKills = session.aggregates.kills;
+    const beforeXp = { a: session.aggregatesOf('a').xpGained, b: session.aggregatesOf('b').xpGained };
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('activity2'),
+    );
+    // Bem dentro da janela de atividade (2 min): se o restore tivesse dropado ou zerado o
+    // campo, este abate cairia no rateio por dano (quase sempre assimétrico); sobrevivendo,
+    // continua a cota IGUAL de sempre.
+    run(restored, 3_000, 100);
+    const afterKills = restored.aggregates.kills - beforeKills;
+    expect(afterKills).toBeGreaterThan(0);
+    const aGain = restored.aggregatesOf('a').xpGained - beforeXp.a;
+    const bGain = restored.aggregatesOf('b').xpGained - beforeXp.b;
+    expect(aGain).toBe(bGain);
+    expect(aGain).toBeGreaterThan(0);
   });
 });
 
@@ -6191,7 +6317,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       splitLoot: true,
       members: ['lead', 'b'],
       uniqueVocations: 2,
-      xpPoolPercent: 150,
+      xpPoolPercent: 130,
       bagValue: 0,
       bagWeight: 0,
       autoSell: { configured: 2, limit: 20 },
@@ -6200,11 +6326,8 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
 });
 
 describe('entrada em hunt em curso (#397, ADR 0035 decisão 6)', () => {
-  const eightTable = {
-    '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
-  };
   const loadedEight = () => content({
-    party: [{ id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: eightTable }],
+    party: [{ id: 'baseline', maxMembers: 8 }],
   });
   const fat = { ...rat, experience: 100, health: 30 };
   const loadedFat = () => content({ monsters: [fat] });
@@ -6303,6 +6426,11 @@ describe('entrada em hunt em curso (#397, ADR 0035 decisão 6)', () => {
     run(session, 60_000, 100);
     const levelUp = session.notableEvents.find((e) => e.type === 'level-up');
     expect(levelUp).toBeDefined();
+    // Um tick de folga antes de "late" entrar (§525 mudou o ritmo de XP da party — um level up
+    // pode cair EXATAMENTE no instante 60 000): sem isto, `notableEvents.atMs >= joinedAtMs`
+    // (inclusive) incluiria por coincidência de relógio um level-up que aconteceu ANTES de
+    // "late" existir, e o teste não é sobre esse limite.
+    run(session, 100, 100);
 
     session.enter(member('late'));
     const lateDeparture = session.leave('late', 'manual-exit');
@@ -6416,9 +6544,7 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     // #397 o `onEnter` recusa acima de `maxMembers`, e este cenário é legal em party de 8.
     const roomy = content({
       monsters: [killer],
-      party: [{ id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: {
-        '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
-      } }],
+      party: [{ id: 'baseline', maxMembers: 8 }],
     });
     const session = createHuntSession({
       id: 'leave-session-five', content: roomy, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
@@ -6550,6 +6676,20 @@ describe('raio livre do spawn (#236)', () => {
 
   it('sem o campo o raio é zero, e a fixture de hoje nasce como sempre', () => {
     const loaded = content({ routes: [adjacent] });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    expect(ruleset.monsters).toHaveLength(1);
+  });
+
+  it('`blockable` ausente é o padrão do Canary — nasce mesmo com o jogador colado (#519)', () => {
+    // `isBlockable: false` é o que 1.640 dos 1.656 monstros do Canary declaram, Dragon e Dragon
+    // Lord inclusive: eles respawnam OLHANDO para o jogador, ignorando `spawnClearRadius`. Sem
+    // `blockable: true` no monstro, o campo da hunt para de valer para ELE — não porque a hunt
+    // desligou, mas porque o Tibia trata isto como propriedade do monstro, não da instância.
+    const naoBlockable = { ...rat, blockable: false };
+    const loaded = content({
+      monsters: [naoBlockable], routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }],
+    });
     const { session, ruleset } = start({ loaded });
     session.advanceBy(100);
     expect(ruleset.monsters).toHaveLength(1);
@@ -7284,6 +7424,49 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
     expect(healed[0]?.amount).toBe(60);
     expect(knight.health).toBe(2_060);
     expect(mage.health).toBe(1_000);
+  });
+
+  it('lowest-hp-member ignora quem está em OUTRO andar, mesmo dentro do alcance por (x, y) (#519)', () => {
+    // A hunt hospeda um personagem só hoje (party é Fase 3), mas o alvo de regra precisa
+    // conferir andar do MESMO jeito que `chooseTarget`/`selectTarget` já conferem para monstro
+    // — sem isso, a checagem "todo lugar que compara alvo confere o andar" seria falsa aqui.
+    const session = createHuntSession({
+      id: 'heal-target-floor', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: healRule({ kind: 'lowest-hp-member' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const knight = member('k', 20, 10_000); // 0,2 % — venceria por percentual se contasse.
+    session.enter(a);
+    session.enter(knight);
+    walkTo(session, ruleset, 'k', { x: 2, y: 1 });
+    // Mutação direta de posição: é montagem de teste (como `walkTo` já é), não um passo do
+    // `sim` — o andar do companheiro está fora do alcance de qualquer rota desta fixture.
+    knight.position = { ...knight.position, z: knight.position.z + 1 };
+
+    run(session, 100, 100);
+
+    expect(ofKind(session.drainEvents(), 'creature-healed')).toHaveLength(0);
+    expect(knight.health).toBe(20);
+  });
+
+  it('regra "member" com id específico também ignora o andar errado (#519)', () => {
+    const session = createHuntSession({
+      id: 'heal-target-floor-member', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: healRule({ kind: 'member', characterId: 'k' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const knight = member('k', 20, 10_000);
+    session.enter(a);
+    session.enter(knight);
+    walkTo(session, ruleset, 'k', { x: 2, y: 1 });
+    knight.position = { ...knight.position, z: knight.position.z + 1 };
+
+    run(session, 100, 100);
+
+    expect(ofKind(session.drainEvents(), 'creature-healed')).toHaveLength(0);
+    expect(knight.health).toBe(20);
   });
 
   it('membro específico morto não lança, e NÃO escolhe outro vivo no lugar (RF-02)', () => {
@@ -8235,5 +8418,96 @@ describe('automação bloqueada avisa na TRANSIÇÃO, não a cada ciclo (#420)',
     // A chave avisada viaja no snapshot: uma retomada não volta a registrar o mesmo aviso.
     const runner = Object.values(ruleset.getState().runners ?? {})[0];
     expect(runner?.automationWarned).toEqual({ 'renew-ring': 'missing-item:life-ring' });
+  });
+});
+
+describe('hunt multiandar (#519)', () => {
+  // Duas salas empilhadas, ligadas por DUAS escadas deslocadas — a mesma geometria de
+  // `movement.test.ts` ("andares e escadas"): descer em (2,1,7) pousa em (3,1,6); subir em
+  // (3,2,6) pousa em (2,2,7). A rota é o laço de três tiles já verificado válido em
+  // `map.test.ts`/`trace-route.test.ts`: (1,1,7) → degrau de descida (2,1,7) → degrau de
+  // subida (3,2,6) → fecha na diagonal de volta a (1,1,7). O rato do spawn fica LONGE do
+  // caminho — este teste é sobre o walker atravessar andares, não sobre combate.
+  const multiFloorMap = {
+    id: 'casa', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#....#', '######'] },
+      '6': { grid: ['######', '#....#', '#....#', '######'] },
+    },
+    floorChanges: [
+      { from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } },
+      { from: { x: 3, y: 2, z: 6 }, to: { x: 2, y: 2, z: 7 } },
+    ],
+  };
+  const multiFloorRoute = {
+    id: 'casa-loop', mapId: 'casa',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
+    // Sem ponto de spawn: "rota sem ponto de spawn é hunt sem monstro" (FUN-123) — este teste
+    // é só sobre o walker, e `monsterCount`/`composition` abaixo existem só porque o schema os
+    // exige, nunca porque algo nasce.
+    spawnPoints: [],
+  };
+  const multiFloorHunt = {
+    id: 'arena', name: 'Casa', recommendedLevel: 1, mapId: 'casa', routeId: 'casa-loop',
+    difficulties: {
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
+    },
+  };
+  const multiFloor = (): Content =>
+    content({ maps: [multiFloorMap], routes: [multiFloorRoute], hunts: [multiFloorHunt] });
+
+  it('o passo pisa no degrau e pousa no destino registrado da escada, do outro andar', () => {
+    // Cada passo aplica a posição NA HORA em que o evento vence (invariante 2) — `durationMs`
+    // é só quando o PRÓXIMO passo pode sair, não uma animação que o `sim` espera terminar. O
+    // primeiro `PLAYER_STEP` já vence em t=0 (a hunt entra pronta), então cada checagem abaixo
+    // avança para um instante ESTRITAMENTE ANTES do vencimento seguinte — 500, depois 500,
+    // depois 1.500 (a duração de CADA passo) somariam exatamente aos vencimentos e disparariam
+    // o passo seguinte também, porque o avanço inclui o instante em que ele vence.
+    const { session, hero } = start({ loaded: multiFloor() });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+
+    // t=0: (1,1,7) → pede o degrau (2,1,7) → pousa em (3,1,6). Reto, chão padrão (150),
+    // speed 300: ceil50(150 000/300) = 500 ms — o passo 2 só vence em t=500.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+
+    // t=500: (3,1,6) → pede o degrau de subida (3,2,6) → pousa em (2,2,7). Reto de novo: o
+    // passo 3 vence em t=1.000 — avança só até t=999.
+    session.advanceBy(998);
+    expect(hero.position).toEqual({ x: 2, y: 2, z: 7 });
+
+    // t=1.000: fecha o laço, (2,2,7) → (1,1,7), DIAGONAL — 3× antes do arredondamento.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('percorre o laço inteiro repetidas vezes e sempre volta ao início — nunca para no fim da rota', () => {
+    const { session, hero } = start({ loaded: multiFloor() });
+    // Um laço inteiro vence em 500 + 500 + 1.500 = 2.500 ms; cinco laços vencem em 12.500 —
+    // avançar exatamente até lá (ou além) dispararia também o PRIMEIRO passo do sexto laço, que
+    // sai do início. 12.499 é o último instante do quinto laço já fechado, ainda parado nele —
+    // se o laço não fechasse (§14.4), a rota pararia num tile do meio, nunca voltaria aqui.
+    session.advanceBy(12_499);
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('o monstro nasce no ANDAR do ponto de spawn declarado, não no padrão do mapa (#519)', () => {
+    // O mesmo laço, mas com UM ponto de spawn exato em z6. `aggroRadius: 0` desliga a
+    // perseguição de propósito — este teste é sobre ONDE o monstro nasce, não sobre para onde
+    // ele anda depois; sem isso, o primeiro passo do monstro (que também vence em t=0) mudaria
+    // a posição antes da checagem, e o teste ficaria sensível a um detalhe que não é o dele.
+    const comSpawnEmZ6 = {
+      ...multiFloorRoute,
+      spawnPoints: [{ routeIndex: 1, radius: 1, at: { x: 1, y: 2, z: 6 }, monsterId: 'rat' }],
+    };
+    const { session, ruleset } = start({
+      loaded: content({
+        monsters: [{ ...rat, aggroRadius: 0 }],
+        maps: [multiFloorMap], routes: [comSpawnEmZ6], hunts: [multiFloorHunt],
+      }),
+    });
+    session.advanceBy(10);
+    expect(ruleset.monsters).toHaveLength(1);
+    expect(ruleset.monsters[0]?.position).toEqual({ x: 1, y: 2, z: 6 });
   });
 });

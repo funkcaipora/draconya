@@ -1,9 +1,9 @@
 {
   "id": "apprentices-strike-druid",
   "name": "Apprentice's Strike",
-  "description": "Lança um raio de energia no seu alvo atual.",
+  "description": "Lança uma rajada de fogo no seu alvo atual.",
   "vocationId": "druid",
-  "minLevel": 6,
+  "minLevel": 8,
   "manaCost": 6,
   "group": "attack",
   "groupCooldownMs": 2000,
@@ -12,7 +12,14 @@
     "kind": "damage",
     "basePower": 15,
     "range": 3,
-    "damageType": "energy"
+    "damageType": "fire",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.4,
+      "skillMax": 0.7,
+      "baseMin": 3,
+      "baseMax": 5
+    }
   },
-  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior. a mesma do Sorcerer (DT-02)."
+  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior. a mesma do Sorcerer (DT-02). Fórmula do Canary (`data/scripts/spells/attack/apprentice's_strike.lua`, main, 2026-09-24) — revisão de #523: o arquivo é `COMBAT_FIREDAMAGE`/`spell:level(8)`, não energy/level 6; `damageType` e `minLevel` corrigidos para bater com a fórmula e o efeito visual (que já era fogo desde a #219)."
 }

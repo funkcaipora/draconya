@@ -10,6 +10,8 @@ requisito de vocação (FUN-74, FUN-92), skills
 por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de monstro do TFS —
 chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
 implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e o dano de arma do Canary
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -18,8 +20,18 @@ implementados
 A referência de combate está fixada pelo
 [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md): **Tibia 13.32**,
 com o mecanismo lido de TFS/Canary (GPL v2 — só mecanismo e caso de borda, nunca código copiado)
-e os números observados no TibiaWiki. O perfil semântico `combat-v1` é conteúdo versionado: a
+e os números observados no TibiaWiki. O perfil semântico de combate é conteúdo versionado: a
 sessão o congela na criação e não o troca no meio da hunt.
+
+Dois perfis existem hoje. `combat-v1` foi o primeiro, aditivo, e continua servindo sessão
+gravada antes do #522 (retomada de perfil `breaking` diferente é recusada, nunca reinterpretada
+— ADR 0031). `combat-v2` (#522) é o que `packages/content/data/combat/baseline.json` declara
+desde então: dano de arma pela fórmula do Canary, com variância pela normal truncada, e chance
+de acerto à distância por skill e tile — o que o ADR 0037 decisão 5 pediu para o M28
+(`docs/adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md`, mesclado ao main por
+outra branch do M28, ainda ausente nesta). A MITIGAÇÃO (Dodge, defesa/escudo, crítico, armadura,
+piso, resistência, imunidade) é **a mesma** nos dois perfis — o que o `combat-v2` muda vive
+antes dela, na seção "Como cada arma bate" adiante.
 
 Este documento separa três coisas: o que está **entregue** (comportamento atual), o que é
 **exceção de produto aprovada** e o que ainda é **lacuna**. Nenhuma hipótese entra como
@@ -29,18 +41,23 @@ comportamento entregue.
 
 A resolução de dano entregue é `resolveDamage` em `packages/sim/src/combat/damage.ts`. Desde o
 CMB-02 ele é o **ponto público único** de resolução — arma, magia, runa e monstro passam por
-ele — e devolve um `DamageOutcome` versionado e auditável em vez de um número solto. O perfil
-`combat-v1` aplica armadura por tipo, piso, uma rolagem de Dodge sempre consumida e arredonda no
-fim; a seção "O resolver canônico" detalha o contrato.
+ele — e devolve um `DamageOutcome` versionado e auditável em vez de um número solto. A mitigação
+(armadura por tipo, piso, uma rolagem de Dodge sempre consumida e arredondamento no fim) é a
+mesma sob `combat-v1` e `combat-v2`; a seção "O resolver canônico" detalha o contrato.
 
 ## Compatibilidade aprovada
 
-Duas regras do PRD §12 desviam explicitamente do Tibia e valem como exceção de produto fixada no
-perfil `combat-v1` — não são hipótese nem fidelidade pendente:
+Regras do PRD §12 que desviam explicitamente do Tibia e valem como exceção de produto — não são
+hipótese nem fidelidade pendente:
 
-Primeira: ataques realizados pelo jogador sempre acertam o alvo. Não existe miss ofensivo do lado do jogador — o servidor não rola chance de acerto para o atacante, o que elimina metade da matemática de combate tradicional.
+Primeira, e **só em corpo a corpo desde o #522**: o ataque do jogador sempre acerta. Não existe
+rolagem de acerto ofensivo corpo a corpo — o Canary também não rola acerto ofensivo em corpo a
+corpo no PvE, então isto deixou de ser exceção e passou a ser fidelidade (`player-always-hit-melee`
+no `combat-v2`, ver `COMBAT_V2` em `packages/content/src/schemas.ts`). **A DISTÂNCIA não é mais
+exceção**: desde o `combat-v2` ela rola a chance de acerto do Canary, por skill e por tile — ver
+"Como cada arma bate".
 
-Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário.
+Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário. A #522 confirmou que este mecanismo corresponde ao charm de esquiva do Tibia (que também reduz, não zera) — por isso continua listado como exceção de produto **e não** foi substituído pela fórmula do Tibia.
 
 Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Guild War) não herda automaticamente essas vantagens de farm.
 
@@ -361,34 +378,79 @@ mais por lançar no lugar certo, que é o inverso do que uma magia de área quer
 **Área centrada no LANÇADOR passou a existir com o #155** — ver a seção seguinte: é outra
 família de forma, com o portão que essa decisão previa (sem alvo, sem alcance).
 
-### Magias do catálogo do Tibia (#155, ADR 0026 decisão 5)
+### Magias do catálogo do Tibia (#155, ADR 0026 decisão 5; fórmulas do Canary desde o #523)
 
-O motor expressa o catálogo instantâneo do Tibia até o level 80; os números de cada magia são
-das issues por vocação (#156–#159). O que o motor ganhou:
+O motor expressa o catálogo instantâneo do Tibia até o level 100; os números de cada magia vêm
+do Canary (`opentibiabr/canary` `main`, ADR 0037) — a fórmula canônica é a regra desde o #523,
+não mais a exceção. O que o motor ganhou:
 
 - **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (centrado no alvo ou no
-  lançador; raio 1 é o 3x3 completo, raio ≥ 2 recorta os cantos por Manhattan — #472),
+  lançador; raio 1 é o 3x3 completo, raio 2-3 recortam os cantos por Manhattan com um bônus de
+  achatamento — #472 —, raio ≥ 4 é o diamante de Manhattan puro, sem bônus: uma revisão do #523
+  corrigiu o raio ≥ 4, que usava o MESMO bônus dos raios 2-3 e rendia tiles a mais para Eternal
+  Winter/Hell's Core (raio 5: 97 em vez de 61) e Rage of the Skies/Wrath of Nature (raio 6: 145
+  em vez de 85) — a `AREA_CIRCLE4X4/5X5/6X6` reais do Canary, conferidas em
+  `things/sources/canary` local, não têm o bônus. A ability de MONSTRO usa um mecanismo
+  diferente para "raio" — a tabela de anéis do Canary (`AreaCombat::setupArea`,
+  `src/creatures/combat/combat.cpp`) —, então `areaTiles` recebe um `source: 'spell' | 'monster'`
+  (default `'spell'`) que escolhe qual tabela vale; nenhum monstro do catálogo usa `circle` hoje,
+  mas a distinção já está testada (`area.test.ts`, raio 1-7 dos dois mecanismos) para quando a
+  primeira ability em área chegar,
   `cross` (cruz de `radius` tiles nos quatro eixos cardeais mais o centro, centrada no alvo —
   a Explosion), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
-  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os três tiles à
-  frente) e `beam` (linha reta). Onda, cleave, feixe e o círculo no lançador são **self-origin**:
-  não exigem alvo nem alcance (o boot recusa `range` nelas), e recusam `no-target` só quando
-  nenhum monstro cai nos tiles — sem gastar mana. Saem na **direção do personagem**, que o
-  passo grava (diagonal: a componente horizontal decide — regra nossa); quem nunca andou olha
-  para o sul. O evento `spell-cast` leva os tiles da forma, e o efeito aparece em todos —
-  inclusive onde não há monstro, como no Tibia.
-- **Base Power** (`effect.basePower`, o BP do TibiaWiki) convertido por `combat.spellPower` —
-  `mid = BP × (1 + level × levelFactor + skill × skillFactor)`, `[⌊mid × (1 − spread)⌋,
-  ⌈mid × (1 + spread)⌉]`, uma rolagem por alvo. A skill é a da vocação (`vocation.spellSkill`:
-  `magic`, e `distance` no Paladin). **A fórmula é nossa e provisória** `[ABERTO]`: o TibiaWiki
-  não publica a do Tibia, e a do TFS é GPL (ADR 0019); os coeficientes (0,06 / 0,15 / 0,15)
-  foram calibrados para Light Healing (BP 40) render ~59 no level 8 com magic 0, o que o `heal`
-  genérico cura. Uma magia de BP NÃO passa pelo multiplicador das skills por uso
-  (`damagePerLevel`) — contaria a skill duas vezes; `power`/`amount` fixos continuam passando.
+  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os **três tiles
+  imediatamente à frente** — Front Sweep e Lesser Front Sweep; o Canary ancora `AREA_WAVE6` um
+  passo à frente do lançador antes de aplicar a matriz — `getNextPosition`/`needDirection`,
+  `Spells::getCasterPosition` — então em coordenadas do mundo os três tiles da matriz caem
+  juntos, a um passo de distância: uma revisão do #523 tinha lido só a matriz local e "corrigido"
+  isto para o lado errado, revertido depois de conferir o motor) e `beam` (linha reta). Onda,
+  cleave, feixe e o círculo no
+  lançador são **self-origin**: não exigem alvo nem alcance (o boot recusa `range` nelas), e
+  recusam `no-target` só quando nenhum monstro cai nos tiles — sem gastar mana. Saem na
+  **direção do personagem**, que o passo grava (diagonal: a componente horizontal decide — regra
+  nossa); quem nunca andou olha para o sul. O evento `spell-cast` leva os tiles da forma, e o
+  efeito aparece em todos — inclusive onde não há monstro, como no Tibia.
+- **Fórmula canônica** (`effect.formula`, #474/#523): `min = level × levelFactor + skill ×
+  skillMin + baseMin` (idem `max`), os mesmos coeficientes que o `onGetFormulaValues` do Canary
+  devolve. `levelFactor` default 0,2 é o `level / 5` da referência; a skill é a da vocação
+  (`vocation.spellSkill`: `magic`, `distance` no Paladin, `melee` no Knight) na magia de DANO, e
+  o MAGIC LEVEL em toda vocação na magia e na runa de CURA (#475). Desde o #523, TODA magia de
+  dano/cura com correspondente real no Canary declara `formula` — só ficam de fora as três
+  genéricas pré-vocação (`heal`/`strike`/`blast`, que o Tibia não tem) e três magias inventadas
+  antes da auditoria sem nome correspondente no Canary (`divine-barrage`, `ethereal-barrage`,
+  `forked-thorns`); `load.test.ts` prende essa lista por nome (`NOT_FROM_CANARY`) e falha se
+  crescer sem ninguém notar. **Sem `formula`** (a exceção acima), o efeito cai no caminho
+  provisório do `basePower` × `combat.spellPower` — `mid = BP × (1 + level × levelFactor + skill
+  × skillFactor)`, `[⌊mid × (1 − spread)⌋, ⌈mid × (1 + spread)⌉]` — que continua **nosso e
+  provisório** `[ABERTO]` (coeficientes 0,06 / 0,15 / 0,15, calibrados para Light Healing render
+  ~59 no level 8 com magic 0). O `basePower` sobrevive em toda magia como o número de EXIBIÇÃO do
+  catálogo de ações (ADR 0033) — o `ActionConfigModal` sempre mostra a faixa do caminho genérico,
+  formula ou não, porque `detailOf` (`packages/server/src/game/catalogue.ts`) não propaga
+  `formula` ao cliente; é uma prévia aproximada, nunca a rolagem real.
+- **O termo de ATAQUE DA ARMA** (#523): Groundshaker, Berserk, Fierce Berserk, Front Sweep,
+  Lesser Front Sweep e Whirlwind Throw usam `CALLBACK_PARAM_SKILLVALUE` no Canary — a fórmula
+  soma (ou multiplica) o `attack` da arma equipada ao skill antes de escalar, então `skillMin`/
+  `skillMax` sozinhos não bastam. O schema ganhou `attackMin`/`attackMax` (coeficiente LINEAR do
+  `attack`, para a soma `skill + attack`: Groundshaker, Berserk, Fierce Berserk, Whirlwind Throw)
+  e `skillAttackMin`/`skillAttackMax` (coeficiente do PRODUTO `skill × attack`: Brutal Strike,
+  Front Sweep, Lesser Front Sweep) em `evaluateSpellPower` (`packages/content/src/spell-power.ts`)
+  — ausentes, o `attack` que `sim` passa nunca entra na conta, o que preserva bit a bit toda
+  fórmula que já existia antes do #523 (migração aditiva, ADR 0031). `sim` resolve o `attack` real
+  em `HuntRuleset#spellScaling` (`packages/sim/src/rulesets/hunt.ts`), com
+  `Inventory.weaponAttack` — `0` desarmado, a mesma resposta honesta que o resto do motor já dá.
+  Strong Ethereal Spear usa o MESMO campo `attackMin`/`attackMax` com um coeficiente residual
+  (2,30/2500 e 3,30/1875): a munição do Paladin no Draconya bate na casa das dezenas, então o
+  termo contribui ~0,01 de dano — mantido por fidelidade ao Canary, não porque pese hoje.
 - **Grupos de cooldown** (`group` + `groupCooldownMs`, `secondaryGroup`): três livros no mesmo
   `Cooldowns` (`spell:`, `group:`, `secondary:`), instante lógico absoluto. A recusa é
   `group-cooldown` com o prazo do livro que trancou, e a categoria do bot volta no vencimento.
-  Magia sem `group` (as três genéricas de antes) só tem o cooldown próprio.
+  Magia sem `group` (as três genéricas de antes) só tem o cooldown próprio. O #523 conferiu o
+  grupo secundário de cada magia contra o Canary: `focus` é o pool que TODO self-buff do
+  Knight/Paladin compartilha (Blood Rage, Protector, Sharpshooter, Swift Foot — e as quatro
+  ults de área centradas no lançador, Eternal Winter/Hell's Core/Rage of the Skies/Wrath of
+  Nature, que também usam `focus`), `special` é o dos `X Strike` fortes (mais Lightning),
+  `great-beams` o dos feixes grandes, e `ultimatestrikes` (novo, só Ultimate Energy Strike por
+  ora) o do topo da linha `X Strike`.
 - **Condições** (`packages/sim/src/conditions.ts`): haste (`speedScale` lido por
   `movementDuration`, à parte de `speed` — `retarget` reescreve `speed`), postura (`buff`:
   dano causado por fonte e dano tomado, em percentuais que somam), magic shield (o dano sai da
@@ -396,12 +458,27 @@ das issues por vocação (#156–#159). O que o motor ganhou:
   (Recovery: `amount` a cada `intervalMs`). Uma por tipo; relançar REINICIA. O vencimento e o
   tique são eventos da fila (`condition-expire`, `condition-tick` — invariante 2), e a condição
   vai no `CharacterState` com o prazo lógico: um snapshot no meio de um haste retoma vencendo
-  no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset.
+  no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset. A DURAÇÃO das
+  posturas vem de `CONDITION_PARAM_TICKS`: 10 s para Blood Rage/Sharpshooter/Swift Foot, mas 13 s
+  para Protector (corrigido numa segunda revisão do #523 — a primeira leitura tinha copiado os
+  10 s dos vizinhos sem conferir o arquivo da própria magia). Os PERCENTUAIS de postura
+  (`damageDealtPercent`/`damageTakenPercent`) continuam uma aproximação: o Canary usa
+  `SKILL_MELEEPERCENT`/`SKILL_DISTANCEPERCENT` (+skill, não +dano) para Blood Rage e Sharpshooter,
+  que o schema não modela — só Protector foi corrigido no #523 (`BUFF_DAMAGEDEALT 65` é dano
+  causado ×0,65, ou seja −35 %, não −15 %) porque o Canary já expressa Protector direto em
+  percentual de dano, sem passar por skill.
 
 O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade, cura
 de condição, magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições
 de monstro, que ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o
-catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …).
+catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …). Também ficam
+de fora as magias de "Wheel of Destiny" (o sistema de grades/`needLearn` do Canary moderno,
+level 300 — Fair Wound Cleansing, Divine Grenade, Terra Burst): o Draconya não modela o Wheel, e
+um level 200 não as alcançaria de qualquer forma. Great Death Beam já existia no catálogo com um
+level inventado (66); numa revisão do #523 o level passou a ser o real do Canary (300) — a magia
+fica no catálogo, correta e documentada, mas fora do alcance de qualquer personagem até o Wheel
+existir, o que o ADR 0037 pede explicitamente (Tibia é a regra, mesmo quando isso significa uma
+magia inacessível).
 
 ### Requisito de vocação (§9.2)
 
@@ -426,13 +503,20 @@ uso**, por `useSupply`, como qualquer suprimento (ADR 0032 d.6).
 | Great Fireball | `fire` | círculo raio 3 (37 tiles) | 30 / 4 | `level/5 + ml×1.2 + 7` / `level/5 + ml×2.8 + 17` |
 | Thunderstorm | `energy` | círculo raio 3 (37 tiles) | 28 / 4 | `level/5 + ml×1 + 6` / `level/5 + ml×2.6 + 16` |
 | Stone Shower | `earth` | círculo raio 3 (37 tiles) | 28 / 4 | `level/5 + ml×1 + 6` / `level/5 + ml×2.6 + 16` |
-| Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.6 + 32` / `level/5 + ml×7.4 + 48` |
+| Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.605 + 28` / `level/5 + ml×7.395 + 46` |
 | Heavy Magic Missile | `energy` | **alvo único** | 25 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Explosion | `physical` | **cruz** raio 1 | 31 / 6 | `level/5` (aprox.) / `level/5 + ml×4.8` |
+| Intense Healing (runa) | cura | **alvo único** | 15 / 1 | `level/5 + ml×3.2 + 20` / `level/5 + ml×5.4 + 40` |
+| Ultimate Healing (runa) | cura | **alvo único** | 24 / 4 | `level/5 + ml×7.3 + 42` / `level/5 + ml×12.4 + 90` |
 
 A `formula` é a mesma da magia de dano (#474): `min = level × levelFactor + ml × skillMin +
 baseMin` (idem `max`), com `levelFactor` 0,2 — o `level / 5` da referência. Runa sem `formula`
-continua no caminho provisório do `basePower` × `combat.spellPower`, bit a bit (ADR 0031).
+continua no caminho provisório do `basePower` × `combat.spellPower`, bit a bit (ADR 0031) — hoje
+só a poção (`amount` fixo, nunca teve `basePower`); toda runa de dano/cura tem `formula`
+(#523, conferido em `load.test.ts`). Sudden Death e as duas runas de cura foram corrigidas no
+#523: Sudden Death tinha base 32/48 (a real é 28/46), Intense Healing Rune caía na conversão
+genérica com level 8 (o real é 15), e Ultimate Healing Rune tinha coeficientes 5,7/10,3 base
+36/65 — a transcrição de #475 chegou perto, mas o Canary real é 7,3/12,4 base 42/90.
 
 O que difere da magia de ataque, e por quê:
 
@@ -500,6 +584,119 @@ resistência e imunidade do monstro.
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
 | Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
 | Distância — início, curva (base), dano por nível | 10 / 30 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` da distância no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/distance.json` |
+| Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (só vale para wand/rod e para o `combat-v1`; ver abaixo) | `packages/content/data/skills/distance.json` |
+
+## Dano de arma e chance de acerto à distância (#522, ADR 0037 d.5, `combat-v2`)
+
+O ADR 0019 tinha "ataque do jogador sempre acerta" como regra NOSSA, fora de discussão. O
+ADR 0037 revoga esse limite para mecânica de jogo: o Tibia passa a ser a REGRA, não a
+referência, e a #522 troca o dano de corpo a corpo/distância pelo do Canary. O
+`packages/sim/src/combat/weapon-power.ts` despacha por `combat.compatibilityProfile`: conteúdo
+`combat-v1` continua na fórmula antiga (escala + `spread`, abaixo); `combat-v2` — o que
+`baseline.json` declara — usa a fórmula nova. As duas convivem porque uma sessão fixa o perfil
+na criação (invariante 7) e uma sessão `combat-v1` em andamento não é reinterpretada (ADR 0031).
+
+### A fórmula (`Weapons::getMaxWeaponDamage`, `WeaponMelee`/`WeaponDistance::getWeaponDamage`)
+
+```text
+maxDamage = round(coefficient × attackFactor × attack × skill + ⌊level/5⌋) × vocationMultiplier
+minDamage = ⌊level/5⌋                      (corpo a corpo: 0 se attack ≤ 0; distância: sempre)
+damage    = normalRandomInt(minDamage, maxDamage)
+```
+
+- `coefficient` é `0,085` em corpo a corpo e `0,09` à distância — os mesmos números do Canary,
+  em conteúdo (`combat.weaponDamage.meleeCoefficient`/`distanceCoefficient`), nunca constante
+  mágica (§12.1).
+- `skill` é o nível ABSOLUTO da skill da família — ao contrário do `combat-v1`, que só contava a
+  partir do `skillStartingLevel` (um personagem nasce com skill 10, não 0).
+- `attackFactor` é o `getAttackFactor()` do modo de luta do Canary (ofensivo 1,0 / equilibrado
+  0,75 / defensivo 0,5). **O Draconya não tem seletor de postura** — o primitivo "Postura
+  Defensiva/Balanceada/Atacante" do `docs/hud-contract-plan.md` nunca foi montado —, então o
+  valor é uma CONSTANTE de conteúdo (`combat.weaponDamage.attackFactor`, `1,0` hoje) até essa UI
+  existir; trocar por leitura de `CharacterState` não muda a fórmula.
+- `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — `1,0` em toda
+  vocação, como em `vocations.xml` do Canary hoje; entra pela mesma razão do coeficiente.
+  **A truncagem é ASSIMÉTRICA por família, e a assimetria é do Canary, não nossa**:
+  `WeaponMelee::getWeaponDamage` multiplica primeiro e trunca o PRODUTO
+  (`static_cast<int32_t>(getMaxWeaponDamage(...) × meleeDamageMultiplier)`);
+  `WeaponDistance::getWeaponDamage` trunca o MULTIPLICADOR primeiro e só então multiplica
+  (`maxValue × static_cast<int32_t>(distDamageMultiplier)`) — um `distDamageMultiplier`
+  fracionário (`1,5`) vira `1` antes de entrar na conta, e o bônus desaparece por inteiro na
+  distância, enquanto o mesmo `1,5` vale cheio no corpo a corpo. Reproduzida bit a bit em
+  `resolveWeaponPowerV2`; invisível hoje porque nenhuma das quatro vocações declara
+  `distDamageMultiplier` fracionário — todas têm `1`.
+- `normalRandomInt` (`combat/weapon-power.ts`) é uma reimplementação ORIGINAL (ADR 0019) do
+  `normal_random` do Canary: uma normal (média 0,5, desvio 0,25) truncada em `[0,1]` por
+  rejeição — Box-Muller com duas frações do `Rng` da sessão por tentativa —, escalada para
+  `[min, max]` e arredondada. Roda SEMPRE, mesmo com `min === max`: a sequência de sorteios não
+  pode depender do VALOR do intervalo, a mesma regra do `blockChance` (ADR 0031).
+- **Simplificação deliberada**: o Canary soma `physicalAttack + elementalAttack +
+  weaponProficiency` num único termo antes de multiplicar pela skill
+  (`WeaponMelee::getWeaponDamage`/`WeaponDistance::getWeaponDamage`). O Draconya não tem ataque
+  elemental nem proficiência de arma como sub-atributos separados no catálogo — um elemento vira
+  um ITEM diferente com seu próprio `damageType` (CMB-03), nunca um bônus somado ao físico da
+  mesma arma —, então `attack` (`formula.base`) é o único termo de poder que entra na fórmula.
+  Fica para o dia em que o catálogo precisar de arma com dano misto físico+elemental na mesma
+  peça; até lá, uma espada com bônus de fogo simplesmente não existe como conceito.
+
+Wand/rod **mudam a distribuição, não a faixa**: continuam com o `min`/`max` fixo do item, sem
+coeficiente nem `attackFactor` — isso já era o modelo do Canary (DT-02 do CMB-05). O que muda sob
+`combat-v2` é COMO o número sai da faixa: `WeaponWand::getWeaponDamage` do Canary também sorteia
+pela normal truncada (`normal_random(minChange, maxChange)`), não uniformemente — a MESMA
+distribuição que a #522 introduziu para corpo a corpo e distância. `resolveWeaponPower` passa a
+usar `normalRandomInt` para `fixedDamage` sob `combat-v2`; `combat-v1` continua com `rng.integer`
+(uniforme), como sempre — preservando o v1 bit a bit.
+
+### Chance de acerto à distância (`WeaponDistance::useWeapon`)
+
+Só a DISTÂNCIA rola acerto ofensivo; corpo a corpo continua sempre acertando — o Canary também
+não rola acerto ofensivo em corpo a corpo no PvE. A tabela (`combat.distanceHitChance`,
+`packages/sim/src/combat/distance-hit.ts`) reproduz as TRÊS tabelas que o Canary modela — os
+baldes 75 (uma mão), 90 (duas mãos) e 100 —, não só a de 90 % que o catálogo usa hoje (arco):
+
+| Distância | Balde 75 (uma mão) | Balde 90 (duas mãos) | Balde 100 |
+|---|---|---|---|
+| 1, 5 | `⌊min(skill,74) × 1,00⌋ + 1` | `⌊min(skill,74) × 1,20⌋ + 1` | `⌊min(skill,73) × 1,35⌋ + 1` |
+| 2 | `⌊min(skill,28) × 2,40⌋ + 8` | `⌊min(skill,28) × 3,20⌋` | `⌊min(skill,30) × 3,20⌋ + 4` |
+| 3 | `⌊min(skill,45) × 1,55⌋ + 6` | `⌊min(skill,45) × 2,00⌋` | `⌊min(skill,48) × 2,05⌋ + 2` |
+| 4 | `⌊min(skill,58) × 1,25⌋ + 3` | `⌊min(skill,58) × 1,55⌋` | `⌊min(skill,65) × 1,50⌋ + 2` |
+| 6 | `⌊min(skill,90) × 0,80⌋ + 3` | `min(skill,90)` | `⌊min(skill,87) × 1,20⌋ − 4` |
+| 7 | `⌊min(skill,104) × 0,70⌋ + 2` | `min(skill,90)` | `⌊min(skill,90) × 1,10⌋ + 1` |
+| outro tile | **0 (MISS garantido)** | **0 (MISS garantido)** | **0 (MISS garantido)** |
+| balde não modelado (ex.: 91) | chance FIXA = o próprio valor do balde, ignora skill e distância | | |
+
+A distância só entra na tabela quando cai num balde RECONHECIDO (75/90/100) e num tile de 1 a 7:
+fora dessas duas condições, o Canary não erra "quase sempre" — erra SEMPRE (`default: chance =
+it.hitChance;`, que vale 0 dentro deste ramo do código, porque só se chega até aqui quando
+`it.hitChance` já é 0). Um balde que não é 75, 90 nem 100 (o power bolt do Tibia declara `91`,
+`ammunition.maxHitChance`) vira chance fixa, IGUAL ao próprio valor do balde — isso sim ignora
+skill e distância, e é diferente do caso "distância fora da tabela DENTRO de um balde
+reconhecido", que é sempre miss.
+
+`ammunition.hitChance`, `ammunition.maxHitChance` e `weapon.hitChance` entram em jogo pela
+primeira vez (os dois últimos, "só dado" desde o #524):
+
+1. `ammunition.hitChance` (#522), quando declarado e ≠ 0, IGNORA tudo abaixo — chance FIXA, sem
+   tabela nem balde (o `it.hitChance != 0` do Canary, checado ANTES de `maxHitChance`; é o
+   caminho da munição/arma de arremesso avulsa: viper star `80 %`, leaf star `90 %`).
+2. Sem isso, `ammunition.maxHitChance` escolhe o BALDE — ausente é `90` (duas mãos, a única
+   família de distância no catálogo hoje).
+3. `weapon.hitChance` (o bônus/malus do arco, ex.: royal crossbow `+3`) SOMA ao percentual que os
+   dois passos acima calcularam — tabela, balde-fixo ou miss —, sempre.
+
+A rolagem acontece uma vez por tiro, SEMPRE consumida (mesma regra do `blockChance`), e o erro
+não gasta a munição de graça: o preço já saiu antes da rolagem (o tiro existe, só não causa dano)
+— mas treina a skill igual, porque o disparo aconteceu.
+
+### Parâmetros
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| `meleeCoefficient` / `distanceCoefficient` | 0,085 / 0,09 | `packages/content/data/combat/baseline.json`, `weaponDamage` |
+| `attackFactor` | 1,0 (ofensivo — sem seletor de postura ainda) | `packages/content/data/combat/baseline.json`, `weaponDamage.attackFactor` |
+| `meleeDamageMultiplier` / `distDamageMultiplier` | 1,0 em toda vocação | `packages/content/data/vocations/*.json` |
+| Tabela de acerto à distância (baldes 75/90/100) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
+| `ammunition.hitChance` / `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #522/#524, `packages/content/src/schemas.ts` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 
@@ -516,10 +713,20 @@ interface WeaponProfile {
   readonly power?: WeaponPowerFormula;          // base, levelFactor, skillFactor, skillStartingLevel, spread
   readonly manaPerHit?: number;                 // wand/rod
   readonly fixedDamage?: { min: number; max: number }; // wand/rod
+  readonly hitChance?: number;                  // #524: bônus/malus da ARMA (ver #522, acima)
 }
 
-resolveWeaponPower(profile, level, skillLevel, rng): number
+resolveWeaponPower(profile, level, skillLevel, rng, combat?, vocationMultiplier?): number
 ```
+
+`combat` é OPCIONAL de propósito (DT-03): ausente, ou com `combat.compatibilityProfile` diferente
+de `combat-v2`, a fórmula é a v1 de sempre — nenhuma chamada existente precisou mudar. `power`
+(`levelFactor`, `skillFactor`, `skillStartingLevel`, `spread`) continua existindo e alimenta o
+`combat-v1`; o `combat-v2` usa só `power.base` (o `attack` da arma/munição) e ignora o resto —
+a escala por level/skill do v2 vem do `combat.weaponDamage`, não da família. `damagePerLevel`
+das skills `melee`/`distance` (`skills/*.json`) **deixa de alimentar o dano de arma sob
+`combat-v2`** (ele virava `skillFactor` só no v1, via `compileWeaponFamilies`); continua
+alimentando a defesa/escudo do CMB-04 (`powerMultiplier`, `skills.ts`), que a #522 não toca.
 
 | Família | `kind` | Skill | Fórmula / recurso |
 |---|---|---|---|
@@ -832,48 +1039,70 @@ a vida dele (golpe, cura, poção, regeneração, level up, penalidade de morte)
 a cada ciclo em que algo mudou — a stamina comparada no minuto, porque ela queima a cada evento
 e comparada exata faria a mensagem sair dez vezes por segundo.
 
-### As magias por vocação (#156–#159)
+### As magias por vocação (#156–#159; números do Canary desde o #523)
 
-Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spells/*.json`; o teste da tabela é `load.test.ts`. Magia compartilhada entre vocações é um arquivo por vocação (`vocationId` é um só). Aproximações e valores provisórios estão no `_open` de cada arquivo.
+Os números vêm do Canary (`opentibiabr/canary` `main`, 2026-09-24) como estão em
+`packages/content/data/spells/*.json`; o teste da tabela é `load.test.ts`. Magia compartilhada
+entre vocações é um arquivo por vocação (`vocationId` é um só). Divergências documentadas (Wheel
+of Destiny não modelado, aproximação de postura por skill) estão no `_open` de cada arquivo.
+`BP` é só o número de EXIBIÇÃO do catálogo (ADR 0033) — a coluna "fórmula" ao lado do nome, onde
+existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o raio real do Canary
+(`AREA_CIRCLEnXn`, raio = n), não mais uma aproximação de raio menor.
 
 **Knight (escala por `melee`)**
 
 | level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
 |---|---|---|---|---|---|---|
-| 1 | Bruise Bane | 10 | healing (2 s) | 1 s | cura | 15 |
-| 1 | Lesser Front Sweep | 6 | attack (2 s) | 6 s | dano · cleave | 14 |
-| 8 | Wound Cleansing | 40 | healing (2 s) | 1 s | cura | 70 |
+| 1 | Bruise Bane | 10 | healing (1 s) | 1 s | cura | 15 |
+| 1 | Lesser Front Sweep | 6 | attack (2 s) | 6 s | dano · cleave (3 tiles à frente) · skill×attack | 14 |
+| 8 | Wound Cleansing | 40 | healing (1 s) | 1 s | cura | 70 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
-| 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 | 39 |
-| 20 | Blood Rage | 20 | support (2 s) + stance (2 s) | 2 s | postura 10 s | — |
-| 20 | Protector | 20 | support (2 s) + stance (2 s) | 2 s | postura 10 s | — |
+| 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 · skill×attack | 39 |
 | 25 | Charge | 100 | support (2 s) | 2 s | haste +90 % / 5 s | — |
-| 28 | Whirlwind Throw | 40 | attack (2 s) | 6 s | dano · alvo, alcance 5 | 32 |
-| 33 | Groundshaker | 200 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador | 32 |
-| 35 | Berserk | 125 | attack (2 s) | 4 s | dano · círculo raio 1 no lançador | 44 |
+| 28 | Whirlwind Throw | 40 | attack (2 s) | 6 s | dano · alvo, alcance 5 · skill+attack | 32 |
+| 33 | Groundshaker | 160 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador · skill+attack | 32 |
+| 35 | Berserk | 115 | attack (2 s) | 4 s | dano · círculo raio 1 no lançador · skill+attack | 44 |
 | 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
-| 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave | 80 |
-| 80 | Intense Wound Cleansing | 200 | healing (2 s) | 120 s | cura | 500 |
+| 55 | Protector | 200 | support (2 s) + focus (2 s) | 2 s | postura 13 s (−35 % causado / −15 % tomado) | — |
+| 60 | Blood Rage | 290 | support (2 s) + focus (2 s) | 2 s | postura 10 s (+25 % causado / +15 % tomado) | — |
+| 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave (3 tiles à frente) · skill×attack | 80 |
+| 80 | Intense Wound Cleansing | 200 | healing (1 s) | **10 min** | cura | 500 |
+| 90 | **Fierce Berserk** (`exori gran`, novo #523) | 340 | attack (2 s) | 6 s | dano · círculo raio 1 no lançador · skill+2×attack | 90 |
+
+Blood Rage e Protector eram level 20/mana 20 (um placeholder de bootstrap): o Canary real os
+pede level 60/mana 290 e level 55/mana 200. Groundshaker (mana 200→160) e Berserk (mana 125→115)
+também tinham mana acima da real.
 
 **Paladin (escala por `distance`)**
 
 | level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
 |---|---|---|---|---|---|---|
-| 1 | Lesser Ethereal Spear | 6 | attack (2 s) | 8 s | dano · alvo, alcance 5 | 9 |
+| 1 | Lesser Ethereal Spear | 6 | attack (2 s) | 2 s | dano · alvo, alcance 7 | 9 |
 | 8 | Light Healing | 20 | healing (1 s) | 1 s | cura | 40 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
-| 20 | Divine Defiance | 250 | support (2 s) + stance (10 s) | 10 s | postura 10 s | — |
+| 20 | Divine Defiance* | 250 | support (2 s) + stance (10 s) | 10 s | postura 10 s | — |
 | 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
-| 20 | Sharpshooter | 250 | support (2 s) + stance (10 s) | 10 s | postura 10 s | — |
-| 23 | Ethereal Spear | 25 | attack (2 s) | 2 s | dano · alvo, alcance 5 | 25 |
+| 23 | Ethereal Spear | 25 | attack (2 s) | 2 s | dano · alvo, alcance 7 | 25 |
 | 35 | Divine Healing | 160 | healing (1 s) | 1 s | cura | 250 |
-| 40 | Divine Missile | 20 | attack (2 s) | 2 s | dano · alvo, alcance 5 | 60 |
+| 40 | Divine Missile | 20 | attack (2 s) | 2 s | dano · alvo, alcance 4 | 60 |
 | 50 | Divine Caldera | 160 | attack (2 s) | 4 s | dano · círculo raio 3 no lançador | 150 |
 | 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
-| 55 | Swift Foot | 400 | support (2 s) + focus (2 s) | 4 s | haste +80 % / 10 s | — |
-| 60 | Ethereal Barrage | 135 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 100 |
+| 55 | Swift Foot | 400 | support (2 s) + focus (10 s) | 10 s | haste +80 % / 10 s | — |
+| 60 | Ethereal Barrage* | 135 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 100 |
 | 60 | Salvation | 210 | healing (1 s) | 1 s | cura | 500 |
-| 70 | Divine Barrage | 175 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 130 |
+| 60 | Sharpshooter | 450 | support (2 s) + focus (10 s) | 10 s | postura 10 s | — |
+| 70 | Divine Barrage* | 175 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 130 |
+| 90 | **Strong Ethereal Spear** (`exori gran con`, novo #523) | 55 | attack (2 s) | 8 s | dano · alvo, alcance 7 | 70 |
+
+Lesser Ethereal Spear e Ethereal Spear tinham alcance 5 (o real é 7) — Lesser também tinha
+cooldown 8 s (o real é 2 s, igual ao da versão normal). Sharpshooter era level 20/mana 250 (o
+real é 60/450). Swift Foot tinha cooldown próprio 4 s e o do grupo `focus` 2 s (os dois são 10 s
+no Canary, o mesmo prazo da postura). \* Divine Barrage, Ethereal Barrage e Divine Defiance não
+têm correspondente no Canary/TibiaWiki — duas varreduras do #523 (a segunda incluindo
+`data-otservbr-global/` e `src/`, não só `data/scripts/spells/`) não acharam o nome nem a palavra
+mágica em nenhuma das três. Ficam como conteúdo próprio do Draconya, documentado no `_open` de
+cada uma, fora da conformidade de fórmula, e com remoção planejada (ADR 0037) — a remoção em si,
+com a migração de `botConfig` de quem já as configurou, é issue separada.
 
 **Sorcerer (escala por `magic`)**
 
@@ -881,57 +1110,74 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 |---|---|---|---|---|---|---|
 | 1 | Buzz | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
-| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 2 | 10 |
-| 6 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
-| 8 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
-| 8 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
+| 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 14 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
 | 14 | Magic Shield | 50 | support (2 s) | 14 s | magic shield 180 s | — |
+| 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Death Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 40 |
-| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 5 | 60 |
-| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 8 | 155 |
+| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 4 | 60 |
+| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 7 | 155 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
-| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 5 | 150 |
+| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 4 | 150 |
 | 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 4 | 100 |
-| 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · círculo raio 1 no alvo, alcance 5 | 110 |
-| 55 | Rage of the Skies | 600 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 200 |
-| 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 4 no lançador | 250 |
-| 66 | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 5 | 155 |
-| 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 125 |
-| 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 125 |
+| 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 4 | 110 |
+| 55 | Rage of the Skies | 600 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 200 |
+| 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 250 |
+| 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
+| 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
+| 100 | **Ultimate Energy Strike** (`exori max vis`, novo #523) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
+| 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 5 | 155 |
+
+Os `X Strike` fortes (Strong Energy/Flame Strike) e Lightning tinham alcance 7 (o real é 3/4).
+Ice Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. † Great Death
+Beam é level 300 + grade do Wheel of Destiny no Canary real (`needLearn`, não modelado); numa
+revisão do #523 o level inventado (66) virou o real (300, por isso a linha aparece por último
+apesar do BP baixo) e o cooldown próprio virou 10 s (era 6 s, o valor do grupo secundário
+copiado por engano) — a magia fica no catálogo mas fora de alcance de qualquer personagem sem o
+Wheel, o que o ADR 0037 aceita como resultado correto.
 
 **Druid (escala por `magic`)**
 
 | level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
 |---|---|---|---|---|---|---|
-| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 2 | 10 |
+| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
 | 1 | Mud Attack | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
-| 6 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
-| 8 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
-| 8 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
-| 8 | Light Healing | 20 | healing (1 s) | 1 s | cura | 40 |
+| 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 14 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
 | 14 | Magic Shield | 50 | support (2 s) | 14 s | magic shield 180 s | — |
+| 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Physical Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 50 |
+| 18 | Heal Friend (`exura sio`) | 120 | healing (1 s) | 1 s | cura, alvo em terceiro alcance 5 | 60 |
 | 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 35 |
 | 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
-| 36 | Mass Healing | 150 | healing (1 s) | 2 s | cura | 200 |
-| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 120 |
-| 40 | Strong Ice Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 150 |
-| 55 | Wrath of Nature | 700 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 175 |
-| 60 | Eternal Winter | 1050 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 4 no lançador | 200 |
-| 70 | Strong Terra Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 115 |
-| 80 | Forked Thorns | 180 | attack (2 s) | 6 s | dano · círculo raio 1 no alvo, alcance 5 | 97 |
-| 80 | Strong Ice Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 115 |
+| 36 | Mass Healing | 150 | healing (1 s) | 2 s | cura · círculo raio 3 no lançador | 200 |
+| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 4 | 120 |
+| 40 | Strong Ice Wave | 170 | attack (2 s) | 8 s | dano · onda 2 | 150 |
+| 55 | Wrath of Nature | 700 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 175 |
+| 60 | Eternal Winter | 1050 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 200 |
+| 70 | Strong Terra Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 115 |
+| 80 | Forked Thorns* | 180 | attack (2 s) | 6 s | dano · círculo raio 1 no alvo, alcance 5 | 97 |
+| 80 | Strong Ice Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 115 |
 
-**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Friend, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo.
+Mass Healing tinha raio 1 (9 tiles) — o Canary real é `AREA_CIRCLE3X3`, raio 3 (37 tiles). Heal
+Friend saiu da lista de excluídas desde o §26 (ADR 0035 d.10); o `_open` dizia "não auditado
+nesta task" e o #523 confirmou os números reais (level 14→18, mana 30→120). Strong Ice Wave
+tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (2 fileiras) e cooldown 8 s. Ice
+Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. \* Forked Thorns não
+tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/` e
+`src/` também) — conteúdo próprio, remoção planejada (ADR 0037), ver `_open`.
+
+**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Fair Wound Cleansing, Divine Grenade, Terra Burst (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo, porque o Tibia não dá magia nenhuma antes da escolha de vocação — não há "fórmula do Canary" para elas.
 
 ## Em aberto
 
@@ -952,6 +1198,52 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 - `[ABERTO]` A conferência visual dos efeitos e projéteis de combate está bloqueada pela
   biblioteca local parcial (47 de 4171 folhas; nenhum sprite de efeito/projétil tem PNG). Nenhum
   id foi corrigido sem evidência — ver [`combat-presentation-audit.md`](../combat-presentation-audit.md).
+- `[ABERTO]` (#523) O `compatibilityProfile` continua `combat-v1`: este PR muda o RESULTADO de
+  muita magia (coeficientes, e agora a contagem de alvos do Front Sweep — dois tiles em vez de
+  três) e, pelo ADR 0031/0037, isso pede um perfil novo, `breaking`. Não foi criado aqui de
+  propósito: a #522 (dano de arma, também M28) mexe na MESMA infraestrutura
+  (`COMBAT_PROFILES`, o `switch` de `resolveDamage`) e as duas issues inventarem o mesmo id em
+  paralelo colidiria. Quem mesclar as duas decide o id (`combat-v2`, o próximo livre) e a
+  migração de sessão em voo (invariante 7).
+- `[ABERTO]` A onda das magias em cone (`wave`) continua a aproximação de `2⌊k/2⌋+1` por
+  fileira, calibrada só contra `AREA_CIRCLE3X3`/`AREA_WAVEn` na direção geral — não reproduz
+  `AREA_SQUAREWAVEn` (Terra Wave, Energy Wave: retangular, não cone) nem o número exato de tiles
+  por fileira das outras `AREA_WAVEn`. O #523 ajustou só o `length` (a contagem de FILEIRAS) para
+  bater com a real, sem reescrever a forma — a largura de cada fileira ainda diverge em alguns
+  casos. Reescrever o `wave` para reproduzir a matriz exata é escopo de outra issue.
+- `[ABERTO]` Os percentuais de postura de Blood Rage (+25 % dano) e Sharpshooter (+32 % dano) são
+  uma aproximação anterior ao #523: o Canary real dá +35 %/+40 % de SKILL (`SKILL_MELEEPERCENT`/
+  `SKILL_DISTANCEPERCENT`), não de dano, e o schema (`damageDealtPercent`) só expressa dano. Só
+  Protector foi corrigido (o Canary já expressa em `BUFF_DAMAGEDEALT`, percentual de dano puro).
+  Converter skill % em dano % exigiria a fórmula de arma nova da #522 primeiro.
+- `[ABERTO]` `combat.weaponDamage.attackFactor` (#522) é uma CONSTANTE de conteúdo em `1,0`
+  (ofensivo) porque o Draconya não tem seletor de postura de luta ainda — o primitivo nunca foi
+  montado (`docs/hud-contract-plan.md`, M21 fechado sem issue). Quando a UI de postura existir,
+  o valor troca de constante para leitura de `CharacterState`, sem mudar a fórmula.
+- `[ABERTO]` `ammunition.maxHitChance` e `weapon.hitChance` (#524) não têm nenhum valor não-default
+  no catálogo real hoje — nenhuma munição ou arma especial (power bolt, royal crossbow) existe
+  ainda. Os campos e a leitura (#522) já existem; falta o item.
+- `[ABERTO]` O erro de tiro (#522) não tem apresentação própria: o cliente não recebe nenhum
+  evento no tiro que erra (sem `creature-hit`), e não existe efeito de "flecha na parede" nem
+  texto "MISS" — fica para quando a apresentação de combate (CMB-09/#242) sair do bloqueio da
+  biblioteca parcial.
+- `[ABERTO]` A #522 investigou se o monstro deveria ganhar um segundo atributo de defesa
+  (`Monster::getMitigation`/`getDefense` do Canary — um redutor percentual, distinto do `armor`
+  que já existe) para bloquear o corpo a corpo do jogador como o escudo do CMB-04 bloqueia o do
+  monstro. **Decisão: não adotado nesta issue.** O mecanismo do Canary é uma tabela de mitigação
+  percentual nova, não um ajuste da fórmula de arma — mudaria como TODO monstro reduz dano
+  recebido, não só o que a #522 pede. **O `armorReduction = armor × armorEffectiveness` que já
+  existe (`combat/damage.ts`, inalterado por esta issue) NÃO é da mesma família de mecanismo que
+  o Tibia usa** — é uma fórmula DETERMINÍSTICA original do Draconya. TFS e Canary reduzem dano
+  por um bloqueio ALEATÓRIO em `Creature::blockHit`
+  (`things/sources/forgottenserver/src/creature.cpp`, `things/sources/canary/src/creatures/
+  creature.cpp`): para `armor > 3`, `damage -= uniform_random(armor/2, armor − (armor%2 + 1))` —
+  uma ROLAGEM, não um produto fixo — e o Canary soma por cima `Monster::getMitigation()`
+  (`monster.cpp`, um redutor percentual por monstro, capado em 30%, aplicado a QUALQUER
+  atacante, jogador incluso). Nem o sorteio nem o teto de mitigação existem no Draconya hoje.
+  Isso é uma LACUNA DE FIDELIDADE em aberto, não algo já resolvido por acidente — fica para a
+  issue do catálogo de monstros do M28 planejar (armadura/mitigação de cada monstro é conteúdo
+  que ainda não existe para o Dragon/Dragon Lord de qualquer forma).
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.
@@ -966,3 +1258,29 @@ ficam para quando o protocolo os carregar.
   criar um evento novo só para o shuffle era escopo maior do que o #518 pedia. Fica registrado
   aqui, não como `[ABERTO]` — o número é conhecido (Dragon: 80%, `staticAttack: 0.8`), só o
   mecanismo que falta implementar.
+- **Três magias sem correspondente no Canary** (`divine-barrage.json`, `ethereal-barrage.json`,
+  `forked-thorns.json`, mais o self-buff `divine-defiance.json`): DUAS varreduras do #523 no
+  `opentibiabr/canary` local (`things/sources/canary` — `data/`, `data-otservbr-global/` e
+  `src/`, não só `data/scripts/spells/`) não acharam nome, palavra mágica nem efeito que bata
+  com nenhuma das quatro. Ficam como conteúdo próprio do Draconya, fora da paridade e da
+  conformidade de fórmula (`load.test.ts`, `NOT_FROM_CANARY`, para as três com `effect.formula`
+  — Divine Defiance é `buff` e não entra nessa checagem), com **remoção planejada** (ADR 0037) —
+  o motivo está no `_open` de cada arquivo; a remoção em si, com a migração de `botConfig` de
+  quem já as tiver configurado, é uma issue separada.
+- **Três magias genéricas pré-vocação** (`heal.json`, `strike.json`, `blast.json`): o Tibia real
+  não dá NENHUMA magia antes da escolha de vocação no level 8, então não existe "fórmula do
+  Canary" para elas por definição — são um kit de bootstrap do próprio Draconya (§4.1), também
+  fora da conformidade de fórmula.
+- **Great Death Beam** (`great-death-beam.json`) é level 300, como no Canary real — numa revisão
+  do #523 o level inventado (66) que uma leitura anterior tinha mantido foi substituído pelo
+  real. O que continua não modelado é o MECANISMO que caberia nesse level: no Canary a magia
+  também exige uma grade do sistema "Wheel of Destiny" (`needLearn`), que o Draconya não tem.
+  Resultado aceito pelo ADR 0037: a fórmula é a real e a magia fica inacessível a qualquer
+  personagem, porque é isso que "Tibia é a regra" significa aqui.
+O PRD §12.2 tinha "ataque ofensivo do jogador sempre acerta" como regra do PRODUTO, sem
+distinguir corpo a corpo de distância. O ADR 0037 (decisão 3) revogou esse limite para mecânica
+de jogo, e a #522 aplicou a revogação só onde o Canary também rola acerto: a distância passa a
+errar por skill/distância, e o corpo a corpo continua sempre acertando — não porque o PRD
+mandou, mas porque é isso que o Canary faz no PvE.
+O Dodge do §12.2 **não** mudou: a #522 confirmou que ele já corresponde ao charm de esquiva do
+Tibia (reduz à metade, não zera), então não havia divergência a corrigir ali.

@@ -11,7 +11,16 @@
   "effect": {
     "kind": "damage",
     "basePower": 39,
-    "range": 1
+    "range": 1,
+    "formula": {
+      "levelFactor": 0.256,
+      "skillMin": 0,
+      "skillMax": 0,
+      "baseMin": 5.12,
+      "baseMax": 11.52,
+      "skillAttackMin": 0.0256,
+      "skillAttackMax": 0.0512
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/attack/brutal_strike.lua`, main, 2026-09-24): escala pelo PRODUTO skill × attack."
 }

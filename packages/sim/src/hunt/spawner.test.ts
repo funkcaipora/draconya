@@ -170,6 +170,59 @@ describe('Spawner', () => {
     expect(requests).toHaveLength(cautious.monsterCount / points.length);
   });
 
+  it('a point that DECLARES the monster always spawns it, ignoring the composition (#519)', () => {
+    // O spawn do Canary é um `<monster name>` por posição, nunca um sorteio — é como a Darashia
+    // Dragon Lair funciona: cada um dos 47 pontos declara o SEU monstro.
+    const points19: Point[] = [{ x: 5, y: 5, z: 10 }, { x: 15, y: 5, z: 11 }];
+    const positionWithMonster = (i: number) =>
+      ({ at: points19[i] as Point, radius: 1, monsterId: i === 0 ? 'dragon' : 'dragon-lord' });
+    const spawner = new Spawner(2, { ...cautious, monsterCount: 2 });
+    const rng = Rng.fromSeed('a');
+    const a = spawner.fill(0, cautious, positionWithMonster, open, rng);
+    const b = spawner.fill(1, cautious, positionWithMonster, open, rng);
+    expect(a?.monsterId).toBe('dragon');
+    expect(b?.monsterId).toBe('dragon-lord');
+    expect(a?.position).toEqual(points19[0]);
+    expect(b?.position).toEqual(points19[1]);
+  });
+
+  it('without a declared monster, the composition keeps deciding — unchanged behaviour', () => {
+    const dense = { ...cautious, monsterCount: 1 };
+    const spawner = new Spawner(1, dense);
+    const request = spawner.fill(0, dense, positionOf, open, Rng.fromSeed('a'));
+    expect(request?.monsterId).toBe('rat');
+  });
+
+  it('checks the FLOOR of each candidate tile, not the map default (#519)', () => {
+    // `tilesAround` preserva o `z` do centro; o `blocked` recebido precisa CONFERIR esse `z`,
+    // senão todo ponto de um recorte multiandar seria checado no andar padrão do mapa.
+    const seenFloors: number[] = [];
+    const blockedRecordingFloor = (_x: number, _y: number, z = 0) => { seenFloors.push(z); return false; };
+    const spawner = new Spawner(1, cautious);
+    const onZ11 = () => ({ at: { x: 5, y: 5, z: 11 }, radius: 0 });
+    spawner.fill(0, cautious, onZ11, blockedRecordingFloor, Rng.fromSeed('a'));
+    expect(seenFloors).toEqual([11]);
+  });
+
+  it('passes the RESOLVED monsterId to `blocked` — declared or sorted (#519)', () => {
+    // `#spawnBlockedFor` (hunt.ts) precisa saber QUAL monstro para decidir se `blockable`
+    // vale — o spawner é quem resolve isso (composição sorteada, ou o ponto declarado), então
+    // é ele quem precisa repassar.
+    const seenIds: Array<string | undefined> = [];
+    const blockedRecordingId = (_x: number, _y: number, _z?: number, monsterId?: string) => {
+      seenIds.push(monsterId); return false;
+    };
+    const spawner = new Spawner(1, cautious);
+    spawner.fill(0, cautious, positionOf, blockedRecordingId, Rng.fromSeed('a'));
+    expect(seenIds).toEqual(['rat']); // sorteado da composição — só 'rat' no peso.
+
+    const declared = new Spawner(1, cautious);
+    const onDragon = () => ({ at: points[0] as Point, radius: 1, monsterId: 'dragon' });
+    seenIds.length = 0;
+    declared.fill(0, cautious, onDragon, blockedRecordingId, Rng.fromSeed('a'));
+    expect(seenIds).toEqual(['dragon']); // declarado no ponto — nunca sorteado.
+  });
+
   it('round-trips its state, so a resumed session keeps who is alive where', () => {
     const spawner = new Spawner(1, cautious);
     for (const [i, request] of fillAll(spawner, cautious).entries()) {
