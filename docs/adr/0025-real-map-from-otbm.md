@@ -214,3 +214,114 @@ que ainda não existe.
 Cellars. Três tamanhos de pull com os nomes do Huntera (2/5/8) e `respawnDelayMs: 2000` — o
 mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II
 §15).
+
+## Emenda — 2026-09-25 (#519): a Darashia Dragon Lair é a primeira hunt MULTIANDAR
+
+A decisão 5 (andares desde o primeiro dia) previa a travessia; até aqui nenhuma hunt a
+exercitava — Rat Cellars e Rotworm Caves são recortes de um andar só. O M28 (ADR 0037, fidelidade
+ao Tibia) pede a Darashia Dragon Lair, três andares de dragão, como primeira hunt copiada
+diretamente do **Canary** (não do Huntera): a fonte dos 47 pontos de spawn é
+`data-otservbr-global/world/otservbr-monster.xml`, o mesmo arquivo que a referência
+`docs/reference/opentibia-engine-reference.md` documenta o mecanismo de, e `dragon.lua` lista
+"Darashia Dragon Lair" nas localizações do Bestiário — confirmando o local.
+
+**O recorte** é `x ∈ [33185, 33270]`, `y ∈ [32195, 32315]`, `z 10..12` (86×121). A caixa dos 47
+spawns reais é mais justa — `x ∈ [33196, 33269]`, `y ∈ [32202, 32311]` —, mas o recorte importado
+precisa de margem: os conectores entre andares (abaixo) caem fora dessa caixa apertada.
+`pnpm map:import --id darashia-dragon-lair --x 33185..33270 --y 32195..32315 --z 10..12
+--allow-unknown` lê 17.848 tiles: z10 2.036 andáveis de 8.591 (a sala dos 19 Dragon), z11 1.849
+de 7.539 (a sala dos 24 Dragon Lord), z12 173 de 1.718 (a sala dos 4 Dragon Lord do fundo — bate
+com a TibiaWiki, "o terceiro nível tem 4 Dragon Lords"). `--allow-unknown` porque o recorte
+inclui bordas de salas vizinhas com aparências fora do pacote 1332 conferido.
+
+**Os conectores entre andares NÃO são um degrau óbvio, e isto é registrado por honestidade.** A
+regra das escadas de Thais (`load.test.ts`: o degrau leva ao tile deslocado um passo) veio de um
+item SEM chão (`ground === null`) que o importador já lista como candidato. Aqui o candidato
+geométrico mais próximo do heurístico de sempre — dois tiles sem chão na borda oeste do recorte —
+provou ser de OUTRA estrutura, sem conexão alguma por andar com a sala dos dragões (BFS de
+quatro vizinhos confirmou: componentes desconexos). E os 56 candidatos concentrados entre z11 e
+z12 (a "cratera" que o dry-run original relatou) formam uma sala PRÓPRIA de 56 tiles, também
+desconexa da sala principal dos 24 Dragon Lord — provavelmente decoração (uma claraboia, vista de
+cima) sem ligação andável de verdade. Sem acesso a um items.xml do Canary com ids de CLIENTE (o
+`data/items/items.xml` do Canary, como o do TFS, ainda numera por id de SERVIDOR — confirmado
+comparando contra o pacote 13.32: nenhum dos ids encontrados aqui aparece nele), não há como
+cruzar "este id é um degrau registrado" fora da inspeção visual em jogo. **A decisão foi
+pragmática**: os dois conectores usados são pontos onde a sala de UM andar e a do andar
+adjacente compartilham o MESMO tile andável (`(x, y)` idêntico nos dois), confirmados por BFS de
+quatro vizinhos a partir de um spawn real de cada andar — z10↔z11 em `(27, 44)` local (ambas as
+salas principais contêm o tile), z11↔z12 em `(41, 83)` local (a sala dos 24 Dragon Lord e a dos
+4 do fundo compartilham doze tiles nessas condições; escolhido um central). Os dois são
+bidirecionais, como o par de escadas de Thais — descer em `(27,44,10)`/`(41,83,11)` e subir em
+`(27,44,11)`/`(41,83,12)`, sempre pousando no MESMO `(x, y)` do andar vizinho: sem deslocamento,
+porque não há evidência de qual deslocamento seria o real. **Fica como débito de QA visual:**
+quando o cliente desenhar esta lair, conferir se os dois tiles têm de fato uma aparência de
+escada/buraco, e corrigir a coordenada se não tiverem.
+
+**A rota** (`pnpm route:trace`, estendido por esta issue para atravessar `floorChanges` — ver
+"Rota multiandar" abaixo) liga um laço de 1.366 tiles pelos três andares, ancorando cada um dos
+47 pontos de spawn EXATAMENTE na coordenada do Canary (distância zero — a ferramenta busca o
+tile andável mais próximo de cada spawn para a ORDEM de visita, mas guarda a coordenada exata
+como posição de nascimento, que o `Spawner` já sabe abrir mão em até `radius` tiles se estiver
+ocupada). `validateRoute` confere zero problemas: todo passo é adjacente no mesmo andar, ou
+pisa exatamente no tile registrado em `floorChanges`.
+
+**Cada spawn declara o monstro e o `spawntime` do Canary** (#519, decisão nova desta issue — ver
+"Spawn por ponto" abaixo): os 19 pontos de z10 são `dragon`, os 28 de z11+z12 são `dragon-lord`,
+todos com `respawnDelayMs: 90000` (90 s, o `spawntime="90"` do XML, igual nos 47). O `dragon.lua`
+e o `dragon_lord.lua` do Canary declaram `isBlockable = false` — a hunt copiada usa isso também
+(`blockable`, novo campo do monstro — ver abaixo), mas o VALOR concreto (`false`, herdado do
+default do schema) é decisão do conteúdo do monstro em si, que é a #520, não desta issue: aqui
+só o MECANISMO existe, testado com um monstro de fixture.
+
+### Rota multiandar (#519)
+
+`scripts/trace-route.ts` fazia BFS num andar só. Agora `shortestPath` também atravessa
+`floorChanges`: de um estado `(x, y, z)`, o vizinho que pisa num tile registrado como origem de
+uma escada não pára nele — ninguém para numa escada, porque `move()` do `sim` nunca deixa —, e a
+busca CONTINUA a partir do destino registrado. O tile GRAVADO no passo da rota é sempre o do
+degrau (o argumento que `move()` precisa receber para reconhecer a escada); o destino dela é
+implícito, nunca um tile a mais na lista. Um ponto de PASSAGEM (`--via`) nunca pode ser o próprio
+degrau — ninguém "para" nele —, e a ferramenta recusa com essa mensagem se alguém tentar.
+
+`packages/content/src/map.ts`'s `validateRoute` acompanha a mesma regra: cada passo é adjacente
+no mesmo andar OU pisa num tile de `floorChanges`, e a posição EFETIVA para julgar o passo
+seguinte é o destino da escada — nunca o tile autorado —, exatamente como o `sim` de fato resolve
+em `move()`. Um tile de escada com o andar de ORIGEM errado no arquivo é um erro nomeado, não uma
+rota silenciosamente quebrada.
+
+### Spawn por ponto (#519)
+
+Até aqui todo ponto de spawn era `{ routeIndex, radius }`, e o monstro saía sempre da composição
+sorteada da dificuldade — o formato do Huntera (2/5/8 num pull). O Canary funciona diferente: o
+XML de spawn declara um `<monster>` por posição, cada um com nome e `spawntime` próprios, nunca
+um sorteio. `routeSchema.spawnPoints` ganha três campos opcionais — `monsterId` (o `Spawner` usa
+esse monstro, e a composição vira fallback só para quem não declara), `at` (a posição EXATA,
+quando não é o tile do `routeIndex` — quase nunca é, no Canary) e `respawnDelayMs` (o `spawntime`
+DESTE ponto, por cima do `respawnDelayMs` da dificuldade). Nenhum dos três é obrigatório: Rat
+Cellars e Rotworm Caves continuam exatamente como estavam, porque nenhuma delas os declara.
+
+### `blockable`, o `isBlockable` do TFS/Canary (#519)
+
+`spawnClearRadius` (#236) segurava o respawn perto de QUALQUER participante vivo, para toda hunt
+que o ligasse. O TFS/Canary fazem o oposto por padrão: `isBlockable` é `false` em 1.640 dos 1.656
+monstros do bestiário do Canary — Dragon e Dragon Lord inclusive —, e só quem declara
+`isBlockable: true` espera a vista limpar antes de nascer (`Spawn::findPlayer`, alcance do
+viewport do servidor — `±11` tiles nas duas direções, `maxViewportX`/`maxViewportY` do TFS —, no
+MESMO andar: `getSpectators` com `multifloor: false`). O monstro ganha `blockable` (default
+`false`, o do Canary); Rat e Rotworm passam a declarar `blockable: true` explicitamente, porque
+o `spawnClearRadius` que os governa vem do Huntera (observado), não do Canary, e a issue não
+pode mudar o comportamento deles. `#spawnBlockedFor` (`packages/sim/src/rulesets/hunt.ts`) só
+aplica a checagem de distância quando o monstro do ponto é `blockable`.
+
+### Monstro, alvo e área: tudo confere o ANDAR (#519)
+
+Os três andares desta lair compartilham a mesma caixa `(x, y)` — um Dragon Lord de z11 pode ter
+coordenada idêntica à de um Dragon em z10, um andar acima. Sem conferir `z`, o monstro
+perseguiria, a área de magia acertaria, e o spawn segurada por `spawnClearRadius` enxergaria
+através do chão. `chooseTarget`, `selectTarget`/`countTargets`/`countAreaTargets`,
+`abilityTargets` (a área de uma ability de monstro) e o próprio `#spawnBlockedFor` passam a
+conferir o andar antes da distância — e o monstro em si (`MonsterRuntime.position.z`, opcional,
+igual à posição do personagem mas sem exigir formato novo no snapshot) passa a saber o PRÓPRIO
+andar, herdado do ponto de spawn. Ele continua sem carregar a CAPACIDADE de trocar de andar
+sozinho (`Movable.crossesFloors`, novo — só o personagem tem): o `z` na posição do monstro é
+identidade, nunca permissão de subir escada.
