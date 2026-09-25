@@ -74,5 +74,8 @@ describe('a party travada de uma QA ao vivo volta a andar (#527)', () => {
       .toBe(true);
     expect(movedAt20Hz, 'a 20 Hz: Knight nunca saiu do tile onde a QA ao vivo o flagrou parado')
       .toBe(true);
-  });
+    // 20 s de teto (#527) — a variante 20 Hz roda 3600 vencimentos de 50 ms, e a suíte inteira
+    // (CI, `pnpm check`) competindo por CPU o bastante ocasionalmente estoura o teto padrão de
+    // 5 s sem nenhuma regressão de verdade.
+  }, 20_000);
 });
