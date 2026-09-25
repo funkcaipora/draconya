@@ -175,7 +175,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Curva de ganho de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Teto de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Curva de XP | a cúbica do Tibia, `(L³ − 6L² + 17L − 12) / 6 × 100` (#521, ADR 0037 — ver seção acima) | `packages/content/data/progression/baseline.json`, `xp: { kind: 'tibia' }` |
-| Velocidade do personagem | 278 no level 1, +2 por level, sem incremento por vocação `[ABERTO — valor provisório, do Huntera — o Tibia usa 110 de base e +1/level, ADR 0037 decisão 4]`. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary: `gainhpticks` 12000, `gainmanaticks` 6000 — #521, ADR 0037; substitui o 1/1 provisório) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | 0,1667/0,3333 · 0,125/0,5 · 0,0833/0,6667 · 0,0833/0,6667 HP/mana por segundo (`gainhpticks`/`gainmanaticks` de cada vocação no Canary, #521, ADR 0037) | `packages/content/data/vocations/*.json`, `regen` |
 | Multiplicador de skill/ML por vocação — Knight | melee 1,1 / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
@@ -208,9 +208,10 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
   PRD: o §9.3 define só o incremento **por vocação**. Desde a #521 (ADR 0037) esses números SÃO
   o Tibia (`gainhp`/`gainmana`/`gaincap` da vocação `None`, verificados no Canary
-  `vocations.xml`), não mais provisórios do Draconya — só `startingCapacity` (400) e a
-  velocidade continuam sem fonte oficial do PRD, marcados como tal no próprio
-  `progression/baseline.json`.
+  `vocations.xml`), não mais provisórios do Draconya — só `startingCapacity` (400) continua sem
+  fonte oficial do PRD. ~~A velocidade também~~ → **Resolvido pela #527 (ADR 0037 decisão 4):**
+  `startingSpeed`/`speedPerLevel` agora são o TFS clássico (220, +2/level), a mesma escala do
+  passo e da velocidade de monstro — ver a linha "Velocidade do personagem" acima.
 - ~~A curva de XP também não está no PRD~~ → **Resolvido pela #521 (ADR 0037):** a curva agora
   é a cúbica do Tibia (`Player::getExpForLevel`), não mais uma escolha de balanceamento do
   Draconya — ver "A curva de XP é a do Tibia" acima.

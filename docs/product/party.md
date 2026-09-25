@@ -64,6 +64,22 @@ hunt (ADR 0035 d.1).
   tem "Iniciar com o time" (`shell/party-start.ts`, configure-then-start: o patch só sai se a
   configuração difere da seleção) e o membro não-líder vê o botão desabilitado com o motivo —
   NENHUM caminho manda `enter-hunt` solo.
+  - **O líder clica isso DA PRÓPRIA CIDADE** — o ticket chega para um socket que já está
+    hospedado ali, e não para um handshake do zero (#527, invariante 8). `SessionHost#prepare`
+    sai da Cidade (sem creditar, ADR 0023 — mas grava o que mudou desde a entrada,
+    `#saveDurableReceipt`, #154) e cai no caminho normal de criação da hunt; o mesmo vale para
+    outro membro que por acaso já esteja hospedado na MESMA Cidade deste nó quando o ticket
+    completo chega. Sem isso, `#prepare` simplesmente reanexava à Cidade e o ticket da party era
+    descartado em silêncio — a hunt nunca nascia, e o cliente reanexado só via `sessionType:
+    "city"` de novo, apesar do `start` ter respondido 200.
+  - **Uma `hunting` cujo `sessionId` nunca chegou a hospedar ninguém fica presa** — o líder fechou
+    o navegador antes de conectar (era exatamente o que `pnpm dev:dragon-party --start` fazia
+    antes do #527), ou o nó caiu antes do primeiro `session-attach`. `GET /api/party/mine` e `GET
+    /api/party/rooms` apuram isso contra o DIRETÓRIO (não contra a coluna `characters.state`,
+    nunca a fonte): passada uma carência de `DISBAND_GRACE_MS` (45 s, folgada acima do TTL padrão
+    do ticket) desde o `start`, se NENHUM membro está de fato hospedado na sessão gravada, a
+    party inteira é removida — não só podada — e os N ficam livres para formar outra sem esperar
+    o TTL de 24h de uma `hunting`.
 - **Matchmaking** (#199) forma a party e nada mais: `POST /api/matchmaking/join` põe o personagem
   numa fila (`matchmaking:queue`, TTL de 10 min); o casamento roda no `join`, num script Lua só,
   e escolhe até `maxMembers − 1` companheiros compatíveis **preferindo vocações distintas** — o
