@@ -4145,7 +4145,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         shape: { shape: 'circle', radius: 1, centered: 'target' },
         condition: {
           key: 'flame', merge: 'refresh', durationMs: 4_000,
-          effect: { kind: 'damage-over-time', amount: 4, intervalMs: 500, damageType: 'fire' },
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 8, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
         },
       },
     };
