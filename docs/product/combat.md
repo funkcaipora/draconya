@@ -10,8 +10,9 @@ requisito de vocação (FUN-74, FUN-92), skills
 por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de monstro do TFS —
 chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
 implementados
-por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e o dano de arma do Canary
-com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031), o dano de arma do Canary
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) e invocação
+de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -789,9 +790,11 @@ interface MonsterAbility {
 - **`scheduledAbilities` viaja no snapshot** (opcional, sem bump de formato). Sem ele, a hunt
   retomada reagendaria a ability que já tinha evento na fila e bateria em dobro no primeiro
   vencimento.
-- **Fora do escopo**, por decisão (CMB-08): invocação, scripts de boss e o detalhamento visual do
-  dano. Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a seção seguinte). A cura
-  própria (defesa) saiu do escopo do CMB-08 e entrou no #518 — ver a seção seguinte a esta.
+- **Fora do escopo**, por decisão (CMB-08): scripts de boss e o detalhamento visual do dano.
+  Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a seção seguinte). A cura própria
+  (defesa) saiu do escopo do CMB-08 e entrou no #518; a invocação de monstro por monstro também
+  saiu do escopo do CMB-08 e entrou no #546 — ver a seção "Invocação de monstro por monstro"
+  abaixo.
 
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
@@ -874,6 +877,67 @@ interface MonsterTargetChange { readonly intervalMs: number; readonly chance: nu
   `scheduledAbilities`: sem ele, a hunt retomada reagendaria a defesa que já tinha evento na
   fila e curaria em dobro no primeiro vencimento.
 - Rato e rotworm não declaram nenhum destes campos — o comportamento entregue não muda.
+
+## Invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`)
+
+Um monstro que declara `monster.summon` cria monstros próprios durante o combate, até o teto,
+seguindo a referência §15-19 e o mecanismo TFS/Canary `Monster::onThinkDefense` — o MESMO laço
+que avalia `defenses` (#518), mais um bloco (código GPL v2 lido, nunca copiado — ADR 0019).
+
+```ts
+interface MonsterSummonEntry {
+  readonly monsterId: string;
+  readonly intervalMs: number;
+  readonly chance: number;   // fração 0–1, como monsterDefenseSchema.chance
+  readonly count: number;    // teto de invocações VIVAS deste NOME
+}
+interface MonsterSummons {
+  readonly max: number;      // teto de invocações VIVAS, no TOTAL, entre todos os nomes
+  readonly entries: readonly MonsterSummonEntry[];
+}
+```
+
+- **Uma entrada por NOME**, cada uma com a própria cadência e a própria chance — um evento NA
+  FILA por entrada (o desenho das defesas), subject derivado `m:<id>:<monsterId>` — e
+  independente de alvo: invocar não precisa de ninguém, e reagenda-se SEMPRE, como a defesa.
+  `chance` é sempre declarada (conteúdo novo, sem concessão de compatibilidade) e consome UMA
+  rolagem por vencimento, mesmo em 1 — a sequência de RNG não pode depender do número.
+- **Dois tetos independentes.** `summons.max` é o do MONSTRO inteiro (TFS `m_summons.size() <
+  maxSummons`); `entries[].count` é o DESTA entrada, por nome (`summonCount >=
+  summonBlock.max`/`summonsCount >= summonCount`). Os dois seguram ao mesmo tempo: uma entrada
+  pode ter folga própria (`count` alto) e ainda assim parar porque o monstro já está no teto
+  geral, contando toda invocação viva de QUALQUER nome.
+- **Nasce perto do mestre** (TFS `placeCreature(..., force)`): a posição exata dele já está
+  ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca é em anéis a partir dela, a
+  MESMA de `Spawner.#freeTile` (`tilesAround` + o `Blocked` de `#spawnBlockedFor`). Sem tile
+  livre no raio, a tentativa se perde — a próxima cadência da entrada tenta de novo, como o
+  respawn adiado do Spawner.
+- **Não ocupa lugar do Spawner.** A invocação nasce por um caminho direto (`#spawnMonster`, o
+  mesmo que o Spawner usa por baixo, sem o registro de lugar) — o `monsterCount`/`composition` da
+  dificuldade continuam contando só quem o Spawner de fato administra.
+- **Nunca paga XP, loot nem Bestiário** (TFS `setDropLoot(false)`/`setSkillLoss(false)`, Canary
+  `Player::onKilledMonster` → `hasBeenSummoned()` devolve cedo, antes de tocar hunting task ou
+  Bestiário). O abate ainda conta no "matei N" do extrato (#190) — a mesma condição de sempre —,
+  mas o sorteio de destinatário do loot NUNCA roda para ela: rolar para quem nunca ganha nada
+  moveria a sequência de RNG de toda a hunt (FUN-63) por um abate que o Tibia nem registra.
+- **Some quando o mestre morre ou é removido** (TFS `Game::removeCreature`, que remove cada
+  `creature->summons` do dono que some). É uma REMOÇÃO, não um abate: sem golpe, sem cadáver, sem
+  entrada no "matei N" — libera o tile e cancela os eventos dela (ability, defesa e a própria
+  lista de invocação — vazia nela mesma, que nunca arma), e emite `creature-vanished` como
+  qualquer desaparecimento. `#onMonsterDied` faz a cascata: ao processar a morte do mestre,
+  remove toda invocação viva com aquele `masterId`.
+- **Uma invocação não invoca** (TFS `!isSummon()` em `onThinkDefense`): só quem nasce SEM mestre
+  arma a própria lista de `summons`. Sem isto, uma invocação declarando `summons` encadearia
+  mestre → invocação → invocação da invocação — o TFS não deixa, e nenhum monstro do recorte
+  precisa disso.
+- **`masterId`/`scheduledSummons` viajam no snapshot** (opcionais, sem bump de formato), como
+  `scheduledDefenses`/`scheduledAbilities`. `masterId` ausente é "não é invocação" — o
+  comportamento de sempre.
+- Nenhum monstro do recorte atual (rat, rotworm, dragon, dragon-lord) declara `monster.summon` na
+  fonte (conferido em 2026-09-25) — a mecânica existe e tem cobertura de teste com fixture, mas
+  nenhum monstro real do catálogo a usa ainda.
+- **Fora do escopo** (#546): invocação pelo JOGADOR (magia/item que convoca uma criatura própria
+  — M38), scripts de boss e o `staticAttack` que já ficava de fora do #518.
 
 ## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
 

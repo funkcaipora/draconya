@@ -1081,6 +1081,29 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // A invocação (#546): cada entrada aponta um monstro que precisa existir no catálogo — a
+  // mesma referência cruzada de `loot.items` acima, agora contra `monsterDefinitions` (o
+  // Slime pode invocar a si mesmo; o boot não recusa self-reference, o TFS também não). E o
+  // `monsterId` precisa ser único dentro da lista: duas entradas do mesmo nome dividiriam o
+  // MESMO `(kind, subject)` na fila do `sim` — uma sobrescreveria o vencimento da outra, e o
+  // erro certo é recusar no boot, não descobrir num monstro que para de invocar pela metade.
+  for (const monster of monsterDefinitions.values()) {
+    const seenSummons = new Set<string>();
+    for (const entry of monster.summons?.entries ?? []) {
+      if (seenSummons.has(entry.monsterId)) {
+        problems.push(
+          `monstro "${monster.id}": summons.entries "${entry.monsterId}" duplicada`,
+        );
+      }
+      seenSummons.add(entry.monsterId);
+      if (monsterDefinitions.has(entry.monsterId)) continue;
+      problems.push(
+        `monstro "${monster.id}": summons.entries referencia monstro "${entry.monsterId}", que `
+          + 'não existe no catálogo',
+      );
+    }
+  }
+
   // A ficha de Bestiário por monstro (#520): a chave precisa ser um monstro que existe — a
   // mesma referência cruzada de `loot.items` acima —, e o `class` da ficha precisa bater com o
   // `class` do PRÓPRIO monstro quando ele o declara: duas fontes da mesma categoria divergiriam

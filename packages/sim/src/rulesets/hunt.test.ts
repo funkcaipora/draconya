@@ -7091,6 +7091,176 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
   });
 });
 
+describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
+  // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
+  // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
+  // monstro de verdade. `aggroRadius: 0` em mestre e invocação isola o teste da IA de
+  // perseguição: ninguém sai do lugar. `pacifist` (o mesmo do describe do Dragon acima) zera o
+  // ataque do herói: sem ele, o herói mataria minions sozinho ao alcançar o ponto de spawn pela
+  // rota, e um abate incidental confundiria "o teto segura" com "o herói ajudou a esvaziar".
+  const minion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 20, experience: 50, attack: 0, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
+  };
+  const summoner = {
+    ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+    summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
+  };
+  const summonerHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
+    },
+  };
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+  const loaded = () => content({
+    monsters: [summoner, minion], hunts: [summonerHunt], combat: [pacifist],
+  });
+
+  it('1 Hz == 10 Hz: o timer da invocação não é "por tick" (invariante 2/3)', () => {
+    // 5 s de janela, teto 10: bem longe do teto, para medir só a cadência — não onde ela para.
+    const at = (hz: number): number => {
+      const { session, ruleset } = start({ loaded: loaded() });
+      run(session, 5_000, 1000 / hz);
+      return ruleset.monsters.filter((m) => m.alive && m.monsterId === 'minion').length;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+    expect(at(10)).toBeGreaterThan(0);
+  });
+
+  it('nasce perto do mestre, com masterId, e NÃO ocupa lugar do Spawner (TFS placeCreature force)', () => {
+    const { session, ruleset } = start({ loaded: loaded() });
+    run(session, 1_500, 100);
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    const summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    if (summon === undefined) throw new Error('sem invocação');
+
+    expect(summon.masterId).toBe(master.id);
+    // A posição exata do mestre já está ocupada por ELE (tile é exclusivo, invariante 8): a
+    // invocação nasce no anel de busca em volta, nunca longe dele.
+    expect(Math.max(
+      Math.abs(summon.position.x - master.position.x),
+      Math.abs(summon.position.y - master.position.y),
+    )).toBeLessThanOrEqual(3);
+
+    // O ÚNICO lugar do Spawner é do mestre (a hunt pede `monsterCount: 1`), e continua ocupado
+    // por ELE: a invocação nasceu por `#spawnMonster` direto, nunca por `#onSpawn`.
+    const slots = ruleset.getState().spawner.slots;
+    expect(slots).toHaveLength(1);
+    expect(slots[0]?.occupantId).toBe(master.id);
+  });
+
+  it('respeita o teto POR NOME e o teto DO MONSTRO, cada um separadamente', () => {
+    // `minion-a` para em 1 — o teto DELA (`count: 1`); `minion-b` para em 2 — o que SOBRA do
+    // teto do MONSTRO (`max: 3`) depois que `minion-a` já gastou 1, mesmo com `count: 5` de
+    // folga própria. Provar os dois juntos, com nomes diferentes, é o que distingue qual teto
+    // segurou cada um — um só monstro com os dois números iguais não distinguiria nada.
+    const minionA = { ...minion, id: 'minion-a' };
+    const minionB = { ...minion, id: 'minion-b' };
+    const capped = {
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+      summons: {
+        max: 3,
+        entries: [
+          { monsterId: 'minion-a', chance: 1, intervalMs: 1_000, count: 1 },
+          { monsterId: 'minion-b', chance: 1, intervalMs: 1_000, count: 5 },
+        ],
+      },
+    };
+    const cappedHunt = {
+      ...hunt,
+      difficulties: {
+        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
+      },
+    };
+    const cappedContent = content({
+      monsters: [capped, minionA, minionB], hunts: [cappedHunt], combat: [pacifist],
+    });
+    const { session, ruleset } = start({ loaded: cappedContent });
+    const live = (id: string): number => ruleset.monsters.filter((m) => m.alive && m.monsterId === id).length;
+
+    run(session, 10_000, 100);
+    expect(live('minion-a')).toBe(1);
+    expect(live('minion-b')).toBe(2);
+
+    // Roda mais: os dois tetos SEGURAM — não é só "ainda não deu tempo de rolar de novo".
+    run(session, 10_000, 100);
+    expect(live('minion-a')).toBe(1);
+    expect(live('minion-b')).toBe(2);
+  });
+
+  it('a invocação não paga XP, nem loot, nem conta no Bestiário (TFS hasBeenSummoned)', () => {
+    const { session, hero, ruleset } = start({ loaded: loaded() });
+    run(session, 1_500, 100);
+    const summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    if (summon === undefined) throw new Error('sem invocação');
+
+    const killsBefore = session.aggregates.kills;
+    summon.receiveDamage(summon.health);
+    resolveDeath(session, { kind: 'monster', monster: summon });
+
+    // O abate CONTA no "matei N" do extrato (#190) — a mesma condição de sempre —, mas nada
+    // MAIS paga: sem XP, sem gold, sem Bestiário. `Player::onKilledMonster` do Canary devolve
+    // cedo para quem `hasBeenSummoned()`, antes de tocar hunting task ou Bestiário.
+    expect(session.aggregates.kills).toBe(killsBefore + 1);
+    expect(hero.xp).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldGained).toBe(0);
+    expect(session.aggregates.xpGained).toBe(0);
+    expect(hero.bestiary.getState()).toEqual({});
+  });
+
+  it('some quando o mestre morre: desaparece, nunca morre (TFS Game::removeCreature)', () => {
+    const { session, ruleset } = start({ loaded: loaded() });
+    run(session, 3_000, 100);
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    const summons = ruleset.monsters.filter((m) => m.masterId === master.id);
+    expect(summons.length).toBeGreaterThan(0);
+
+    session.drainEvents();
+    master.receiveDamage(master.health);
+    resolveDeath(session, { kind: 'monster', monster: master });
+
+    // Nenhuma invocação DESTE mestre continua indexada — e nenhum novo `masterId` órfão
+    // apareceu (a lista de agora é exatamente vazia para ele, não só "diminuiu").
+    expect(ruleset.monsters.filter((m) => m.masterId === master.id)).toHaveLength(0);
+    // O desaparecimento saiu para o mestre E para CADA invocação — nunca um golpe (`creature-hit`
+    // ausente), nunca um cadáver (`ground-item-appeared` ausente): é remoção, não abate.
+    const events = session.drainEvents();
+    const vanished = events
+      .filter((e) => e.kind === 'creature-vanished')
+      .map((e) => (e.kind === 'creature-vanished' ? e.creatureId : ''));
+    expect(vanished).toContain(master.subject);
+    for (const summon of summons) expect(vanished).toContain(summon.subject);
+    expect(vanished).toHaveLength(summons.length + 1);
+    expect(events.some((e) => e.kind === 'ground-item-appeared')).toBe(false);
+  });
+
+  it('scheduledSummons sobrevive ao snapshot, como scheduledDefenses (#518)', () => {
+    // Só o suficiente para o mestre nascer e armar a lista — ANTES do primeiro vencimento
+    // (1 000 ms), para o teste provar que o CAMPO sobreviveu, não que a invocação já aconteceu.
+    const { session } = start({ loaded: loaded() });
+    run(session, 500, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const master = (resumed.ruleset as HuntRuleset).monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    expect(master.scheduledSummons.size).toBeGreaterThan(0);
+
+    resumed.drainEvents();
+    run(resumed, 3_000, 100);
+    const summons = (resumed.ruleset as HuntRuleset).monsters.filter((m) => m.masterId === master.id);
+    expect(summons.length).toBeGreaterThan(0);
+  });
+});
+
 describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#520)', () => {
   // Espelha `data/monsters/dragon.json` (TFS `dragon.xml`, conferido com o Canary): as mesmas
   // chances e a mesma mitigação — fogo IMUNE, gelo −10 % (vulnerável). HP alto de propósito,

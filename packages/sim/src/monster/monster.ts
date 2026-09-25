@@ -57,6 +57,22 @@ export interface MonsterState {
    */
   readonly scheduledDefenses?: readonly string[];
   /**
+   * O monstro que o invocou (#546, TFS `Creature::master`/`setMaster`). Ausente é nascido do
+   * Spawner — o comportamento de sempre. Presente, é o id de OUTRO monstro desta instância: a
+   * invocação não ocupa slot do Spawner, não paga XP nem loot, não conta no Bestiário
+   * (`Player::onKilledMonster`, `hasBeenSummoned()`), e some quando o mestre morre ou é
+   * removido (TFS `Game::removeCreature`). Campo NOVO e aditivo: ausente é sempre "não é
+   * invocação", sem bump de formato.
+   */
+  readonly masterId?: number;
+  /**
+   * As entradas de invocação DECLARADAS com evento pendente na fila (#546) — mesma invariante e
+   * mesmo desenho de `scheduledDefenses`, agora para `monster.summons.entries`. Ausente é
+   * nenhuma agendada — o caso de sempre, e o único caso para quem tem `masterId` (uma invocação
+   * nunca arma a própria lista de invocação).
+   */
+  readonly scheduledSummons?: readonly string[];
+  /**
    * As condições ativas (CMB-07): DOT de magia, lentidão, o que a condição fizer. Mesmo estado
    * do personagem, e mesma regra de snapshot: ausente é nenhuma, sem bump de formato.
    */
@@ -118,6 +134,10 @@ export class MonsterRuntime {
   readonly scheduledAbilities: Set<string>;
   /** Ver `MonsterState.scheduledDefenses` (#518). */
   readonly scheduledDefenses: Set<string>;
+  /** Ver `MonsterState.masterId` (#546). `null` é "não é invocação" — o de sempre. */
+  readonly masterId: number | null;
+  /** Ver `MonsterState.scheduledSummons` (#546). */
+  readonly scheduledSummons: Set<string>;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
   readonly conditions: Conditions;
 
@@ -134,6 +154,8 @@ export class MonsterRuntime {
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.scheduledAbilities = new Set(state.scheduledAbilities ?? []);
     this.scheduledDefenses = new Set(state.scheduledDefenses ?? []);
+    this.masterId = state.masterId ?? null;
+    this.scheduledSummons = new Set(state.scheduledSummons ?? []);
     this.conditions = Conditions.fromState(state.conditions);
   }
 
@@ -163,6 +185,10 @@ export class MonsterRuntime {
       ...(this.scheduledDefenses.size === 0
         ? {}
         : { scheduledDefenses: [...this.scheduledDefenses] }),
+      ...(this.masterId === null ? {} : { masterId: this.masterId }),
+      ...(this.scheduledSummons.size === 0
+        ? {}
+        : { scheduledSummons: [...this.scheduledSummons] }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
     };
   }

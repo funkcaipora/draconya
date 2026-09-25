@@ -23,7 +23,7 @@ import {
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
   CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
-  Monster, MonsterAbility, MonsterDefense, MonsterTargetChange, PartyConfig, Progression,
+  Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
   WeaponFamily, WeaponProfile,
 } from '@draconya/content';
@@ -120,6 +120,26 @@ const monsterAbilitySubject = (id: number, abilityId: string): string =>
 const MONSTER_DEFENSE = 'monster-defense';
 const monsterDefenseSubject = (id: number, defenseId: string): string =>
   `${monsterSubject(id)}:${defenseId}`;
+/**
+ * Uma entrada de invocação declarada de monstro (#546): mesmo desenho do `MONSTER_DEFENSE`,
+ * subject derivado (`m:<id>:<monsterId>`) para a morte do MESTRE cancelar sem varrer a fila, e
+ * para duas entradas de nomes diferentes não colidirem no mesmo `(kind, subject)`. O
+ * `monsterId` (o nome do que nasce) é o identificador natural da entrada, como o TFS conta
+ * `summonCount` por `summonBlock.name` — `buildContent` recusa duas entradas do mesmo nome no
+ * mesmo monstro, então a chave é única por construção.
+ */
+const MONSTER_SUMMON = 'monster-summon';
+const monsterSummonSubject = (id: number, monsterId: string): string =>
+  `${monsterSubject(id)}:${monsterId}`;
+/**
+ * O raio de busca de tile livre para uma invocação nascer perto do mestre (#546, TFS
+ * `placeCreature(..., force)`): a posição exata dele já está ocupada por ELE — tile é exclusivo
+ * (invariante 8) —, então a busca é em anéis, como `Spawner.#freeTile`. Sem tile livre no raio,
+ * a tentativa se perde — a PRÓXIMA cadência desta entrada rola de novo, como o respawn adiado
+ * do Spawner. O número é pequeno de propósito: uma invocação longe do mestre já não é "perto
+ * dele" nenhuma definição razoável reconheceria.
+ */
+const SUMMON_SPAWN_RADIUS = 3;
 /**
  * A troca de alvo por tempo (#518). Só existe UMA por monstro — o subject é o `m:<id>` de
  * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
@@ -2036,6 +2056,7 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_ATTACK: return this.#onMonsterAttack(session, event.subject);
       case MONSTER_ABILITY: return this.#onMonsterAbility(session, event.subject);
       case MONSTER_DEFENSE: return this.#onMonsterDefense(session, event.subject);
+      case MONSTER_SUMMON: return this.#onMonsterSummon(session, event.subject);
       case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
@@ -2461,25 +2482,43 @@ export class HuntRuleset implements Ruleset {
     // referência cruzada e derruba o boot. Sair é o resto defensivo, não a regra.
     if (definition === undefined) return;
 
+    // O tile já foi escolhido livre pelo spawner. O `z` é do PONTO, não do mapa (#519, hunt
+    // multiandar) — é o que faz um Dragon Lord nascer em z11 e não em z10.
+    const monster = this.#spawnMonster(session, definition, {
+      x: request.position.x, y: request.position.y, z: request.position.z,
+    }, null);
+    this.#spawner.occupy(request.slot, monster.id);
+  }
+
+  /**
+   * Nasce um monstro no mundo: cria o runtime, ocupa o tile e arma o que TODO monstro tem —
+   * ability básica, defesas, troca de alvo e a própria lista de invocação. Compartilhado por
+   * `#onSpawn` (`masterId: null`, do Spawner) e `#spawnSummon` (#546, `masterId` do mestre): as
+   * duas portas de entrada de um monstro na hunt.
+   *
+   * O evento vencendo AGORA reproduz o comportamento anterior — cooldown novo começa pronto,
+   * então ele agia no mesmo tick em que nascia. Como `Spawn` tem prioridade menor que
+   * `Movement` e `Attack`, isso acontece neste mesmo instante lógico, na ordem certa.
+   */
+  #spawnMonster(
+    session: Session, definition: Monster, at: FloorPoint, masterId: number | null,
+  ): MonsterRuntime {
     const monster = new MonsterRuntime({
       id: this.#nextCreatureId++,
       monsterId: definition.id,
-      // O `z` do PONTO de spawn, não o do mapa (#519, hunt multiandar) — é o que faz um Dragon
-      // Lord nascer em z11 e não em z10. Numa hunt de andar único é o mesmo valor de sempre,
-      // porque todo ponto da rota vive no andar padrão do mapa.
-      position: { x: request.position.x, y: request.position.y, z: request.position.z },
-      home: { x: request.position.x, y: request.position.y, z: request.position.z },
+      position: at,
+      home: at,
       health: definition.health,
       targetId: null,
       speed: definition.speed,
       cooldowns: {},
+      ...(masterId === null ? {} : { masterId }),
     });
     this.#monsters.push(monster);
     this.#monsterBySubject.set(monsterSubject(monster.id), monster);
-    // O tile já foi escolhido livre pelo spawner; `place` é quem o marca como ocupado, e é
-    // ele que recusaria se algo tivesse mudado entre uma coisa e outra.
-    place(this.#world, monster, request.position);
-    this.#spawner.occupy(request.slot, monster.id);
+    // `place` é quem marca o tile como ocupado, e é ele que recusaria se algo tivesse mudado
+    // entre uma coisa e outra — o chamador já escolheu um tile livre (Spawner ou #spawnSummon).
+    place(this.#world, monster, at);
 
     const subjectOf = monsterSubject(monster.id);
     // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
@@ -2513,6 +2552,15 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Attack, subject: subjectOf,
       });
     }
+    // A invocação (#546) é o mesmo desenho, com uma exceção: SÓ quem nasce sem mestre arma a
+    // própria lista — TFS `!isSummon()` em `onThinkDefense`. Sem isto, uma invocação declarando
+    // `summons` encadearia mestre → invocação → invocação da invocação, e nenhum monstro do
+    // recorte precisa disso nem o TFS deixa acontecer.
+    if (masterId === null) {
+      for (const entry of definition.summons?.entries ?? []) {
+        this.#scheduleMonsterSummon(session, monster, entry, entry.intervalMs);
+      }
+    }
     // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
     // um que o tem ao alcance (#203). E o auto-target (#444) reavalia na hora: o monstro que
     // acabou de surgir na tela vira alvo antes do próximo vencimento do bot.
@@ -2521,6 +2569,81 @@ export class HuntRuleset implements Ruleset {
       this.#armPlayerAttack(session, character);
       this.#armBot(session, character.id);
     }
+    return monster;
+  }
+
+  /**
+   * O mesmo, do lado da invocação (#546): agenda a PRÓXIMA rolagem desta entrada.
+   */
+  #scheduleMonsterSummon(
+    session: Session, monster: MonsterRuntime, entry: MonsterSummonEntry, delayMs: number,
+  ): void {
+    monster.scheduledSummons.add(entry.monsterId);
+    session.scheduleIn(MONSTER_SUMMON, delayMs, {
+      priority: EventPriority.Attack, subject: monsterSummonSubject(monster.id, entry.monsterId),
+    });
+  }
+
+  /**
+   * Uma entrada de invocação declarada venceu (#546, TFS/Canary `Monster::onThinkDefense`, o
+   * MESMO laço que avalia `defenses`, referência §15-19): tenta nascer um monstro do próprio
+   * nome, até o teto DA ENTRADA e o teto DO MONSTRO. Independente de alvo — invocar não precisa
+   * de ninguém —, então reagenda-se SEMPRE, como a defesa (#518).
+   */
+  #onMonsterSummon(session: Session, subject: string): void {
+    // `m:<id>:<monsterId>`, o mesmo desenho de `#onMonsterDefense`.
+    const rest = subject.startsWith('m:') ? subject.slice(2) : '';
+    const separator = rest.indexOf(':');
+    if (separator < 0) return;
+    const monster = this.#monsterBySubject.get(monsterSubject(Number(rest.slice(0, separator))));
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    const summons = definition?.summons;
+    if (definition === undefined || summons === undefined) return;
+    const entryMonsterId = rest.slice(separator + 1);
+    const entry = summons.entries.find((candidate) => candidate.monsterId === entryMonsterId);
+    if (entry === undefined) return;
+
+    monster.scheduledSummons.delete(entry.monsterId);
+    this.#scheduleMonsterSummon(session, monster, entry, entry.intervalMs);
+
+    // O teto do MONSTRO inteiro, contando toda invocação viva com este mestre — TFS
+    // `m_summons.size() < maxSummons`.
+    const live = this.#monsters.filter((m) => m.alive && m.masterId === monster.id);
+    if (live.length >= summons.max) return;
+    // O teto DESTA entrada, por NOME — TFS `summonCount >= summonBlock.max`/`summonsCount >=
+    // summonCount`.
+    if (live.filter((m) => m.monsterId === entry.monsterId).length >= entry.count) return;
+
+    // `chance` é SEMPRE declarada aqui (o schema exige, como `monsterDefenseSchema.chance`),
+    // então SEMPRE consome uma rolagem.
+    if (!session.rng.chance(entry.chance)) return;
+
+    this.#spawnSummon(session, monster, entry.monsterId);
+  }
+
+  /**
+   * Nasce a invocação perto do MESTRE (#546, TFS `placeCreature(..., force)`): a posição EXATA
+   * dele já está ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca é em anéis a
+   * partir dela, como `Spawner.#freeTile`. Sem tile livre no raio, a tentativa se perde — a
+   * PRÓXIMA cadência desta entrada tenta de novo.
+   */
+  #spawnSummon(session: Session, master: MonsterRuntime, monsterId: string): void {
+    const definition = this.#options.monsters.get(monsterId);
+    // `buildContent` confere `summons.entries[].monsterId` contra o catálogo: conteúdo válido
+    // não chega aqui com monstro inexistente. Sair é o resto defensivo, como em `#onSpawn`.
+    if (definition === undefined) return;
+
+    const blocked = this.#spawnBlockedFor(session);
+    let at: FloorPoint | null = null;
+    for (const tile of tilesAround(master.position, SUMMON_SPAWN_RADIUS)) {
+      if (blocked(tile.x, tile.y, tile.z, monsterId)) continue;
+      at = tile;
+      break;
+    }
+    if (at === null) return;
+
+    this.#spawnMonster(session, definition, at, master.id);
   }
 
   /**
@@ -5748,11 +5871,19 @@ const slots = bot.groups.get(group);
     const eligible = session.participants.length === 1
       ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
       : session.participants.filter((p) => p.alive && !isExhausted(p));
+    // Invocação (#546, TFS `hasBeenSummoned()`/`setDropLoot(false)`/`setSkillLoss(false)`):
+    // nunca paga loot, XP nem Bestiário — ela nasceu de outro monstro, não do Spawner, e o
+    // abate dela não é o que a hunt existe para pagar (`Player::onKilledMonster` devolve cedo
+    // para quem tem mestre, antes de tocar Bestiário ou hunting task). `#lootRecipient` consome
+    // `session.rng` em party `split`; pular o cálculo inteiro é o que impede um abate que nunca
+    // paga nada de mover a sequência de sorteio de toda a hunt (FUN-63) por uma rolagem que o
+    // Tibia nem faz.
+    const isSummon = monster.masterId !== null;
     // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
-    const recipient = this.#lootRecipient(session, killer, eligible);
-    if (definition !== undefined && this.#bag !== null && session.participants.length > 1) {
+    const recipient = isSummon ? null : this.#lootRecipient(session, killer, eligible);
+    if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
@@ -5771,7 +5902,7 @@ const slots = bot.groups.get(group);
         this.#creditSupplies(session, session.participants, loot.supplies);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
       }
-    } else if (definition !== undefined && recipient !== null) {
+    } else if (!isSummon && definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
       const loot = rollLoot(this.#lootTableFor(definition, recipient), session.rng);
@@ -5786,7 +5917,11 @@ const slots = bot.groups.get(group);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible, credit);
+    // `#grantPartyXp` também é quem credita o Bestiário (#546: nenhum dos dois vale para quem
+    // tem mestre).
+    if (!isSummon && definition !== undefined) {
+      this.#grantPartyXp(session, monster, definition, eligible, credit);
+    }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
@@ -5846,6 +5981,12 @@ const slots = bot.groups.get(group);
     for (const defense of definition?.defenses ?? []) {
       session.cancelEvent(MONSTER_DEFENSE, monsterDefenseSubject(monster.id, defense.id));
     }
+    // A INVOCAÇÃO (#546) é o mesmo problema e a mesma solução: subject derivado por NOME. Só um
+    // monstro sem mestre chegou a agendar algum (`#spawnMonster`), então este laço é vazio para
+    // toda invocação — e para todo monstro sem `summons` — sem precisar perguntar qual dos dois.
+    for (const entry of definition?.summons?.entries ?? []) {
+      session.cancelEvent(MONSTER_SUMMON, monsterSummonSubject(monster.id, entry.monsterId));
+    }
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // O alvo escolhido morreu: o auto-target reavalia AGORA para o próximo mais próximo na tela
@@ -5855,6 +5996,49 @@ const slots = bot.groups.get(group);
     for (const character of session.participants) this.#autoSelectTarget(session, character);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
     // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
+    session.emit({ kind: 'creature-vanished', creatureId: subject });
+
+    // O mestre morreu: as invocações dele vão junto (#546, TFS `Game::removeCreature`, o laço
+    // que remove `creature->summons` quando o dono some). `filter` ANTES de remover qualquer
+    // uma — `#removeSummon` troca `#monsters` por um array novo a cada chamada (a mesma cautela
+    // da FUN-92: varrer o array que está sendo trocado pularia a segunda invocação sempre que
+    // há duas), e o filtro compara pelo id NUMÉRICO, que continua válido mesmo depois do mestre
+    // já ter saído de `#monsters` alguns parágrafos acima.
+    const summons = this.#monsters.filter((m) => m.masterId === monster.id);
+    for (const summon of summons) this.#removeSummon(session, summon);
+  }
+
+  /**
+   * Uma invocação some porque o MESTRE morreu ou foi removido (#546, TFS `Game::removeCreature`:
+   * `setSkillLoss(false)` e `removeCreature(summon)` para cada uma, sem passar pelo pipeline de
+   * morte). Ela nunca pagou XP, loot nem Bestiário enquanto viva (`#onMonsterDied` já a exclui
+   * pelo `masterId`), e esta remoção não é diferente: sem golpe, sem cadáver, sem abate — libera
+   * o tile e cancela os eventos dela, os MESMOS três laços de `#onMonsterDied` (ability, defesa,
+   * invocação — vazio nela mesma, que nunca arma a própria lista), com `cancelEvents(subject)`
+   * no lugar do que `resolveDeath` faria por um golpe que nunca aconteceu.
+   */
+  #removeSummon(session: Session, summon: MonsterRuntime): void {
+    const definition = this.#options.monsters.get(summon.monsterId);
+    const subject = summon.subject;
+    this.#cancelConditions(session, summon);
+    for (const character of session.participants) forgetActor(character.contribution, subject);
+    for (const ability of definition?.abilities ?? []) {
+      if (ability.id === BASIC_ABILITY_ID) continue;
+      session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(summon.id, ability.id));
+    }
+    for (const defense of definition?.defenses ?? []) {
+      session.cancelEvent(MONSTER_DEFENSE, monsterDefenseSubject(summon.id, defense.id));
+    }
+    for (const entry of definition?.summons?.entries ?? []) {
+      session.cancelEvent(MONSTER_SUMMON, monsterSummonSubject(summon.id, entry.monsterId));
+    }
+    // `resolveDeath` cancelaria o `m:<id>` base (passo, ataque básico, troca de alvo) ao matar;
+    // esta invocação nunca morreu — ela some —, então quem cancela é aqui.
+    session.cancelEvents(subject);
+    this.#world.vacate(summon.position.x, summon.position.y, this.#floorOf(summon));
+    this.#monsterBySubject.delete(subject);
+    this.#monsters = this.#monsters.filter((m) => m.id !== summon.id);
+    for (const character of session.participants) this.#autoSelectTarget(session, character);
     session.emit({ kind: 'creature-vanished', creatureId: subject });
   }
 
