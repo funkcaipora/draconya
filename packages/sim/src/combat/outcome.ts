@@ -92,6 +92,12 @@ export function applyDamageOutcome(
     }
   }
 
+  // As cargas de bloqueio do `combat-v3` (#548): o resolver só CALCULA o estado novo
+  // (`outcome.blockCharge`); esta é a única etapa que ESCREVE recurso, e é aqui que ele volta
+  // para o dono (invariante 9). Ausente é `combat-v1`/`v2`; imunidade ou origem que não
+  // bloqueia nada devolvem o MESMO estado de entrada — a escrita é um no-op nesses casos.
+  if (outcome.blockCharge !== undefined) target.blockCharge = outcome.blockCharge;
+
   return {
     ...outcome,
     absorbedByMana,

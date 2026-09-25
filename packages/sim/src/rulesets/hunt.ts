@@ -45,6 +45,9 @@ import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import type { DefenseSource } from '../combat/defense.js';
+import {
+  DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS,
+} from '../combat/blockhit.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { rollDistanceHit } from '../combat/distance-hit.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
@@ -4076,11 +4079,15 @@ const slots = bot.groups.get(group);
       rawDamage: tick.amount,
       source: tick.source ?? 'monster-attack',
       damageType: tick.damageType ?? 'physical',
+      // DOT nunca bloqueia por defesa/armadura no `combat-v3` (#548) — poison/fire/campo passam
+      // pelo mesmo `Combat` sem `BLOCKARMOR`/`BLOCKSHIELD` que a magia. Ignorado em v1/v2.
+      blockable: MAGIC_BLOCK_FLAGS,
     } as const;
     const attacker = condition.sourceId ?? 'field';
     if (target instanceof CharacterRuntime) {
       const outcome = resolveDamage(
         intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
+        session.nowMs,
       );
       // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
       // aplicado. Sem atacante para leech — o DOT não repõe vida de quem o aplicou.
@@ -4098,11 +4105,9 @@ const slots = bot.groups.get(group);
       if (target.health <= 0) session.kill(target);
       return;
     }
-    const definition = this.#options.monsters.get(target.monsterId);
     const outcome = resolveDamage(
-      intent,
-      { armor: definition?.armor ?? 0, dodgeChance: 0, mitigation: definition?.mitigation },
-      'pve', this.#options.combat, session.rng,
+      intent, this.#monsterDefender(target), 'pve', this.#options.combat, session.rng,
+      session.nowMs,
     );
     const applied = applyDamageOutcome(target, outcome, null);
     recordDamage(target.contribution, attacker, applied.healthDamage);
@@ -4267,6 +4272,7 @@ const slots = bot.groups.get(group);
       armor: definition?.armor ?? 0,
       dodgeChance: 0,
       mitigation: definition?.mitigation,
+      defenseMitigation: definition?.defenseMitigation,
     });
   }
 
@@ -5052,11 +5058,16 @@ const slots = bot.groups.get(group);
           rawDamage: session.rng.integer(ability.power.min, ability.power.max),
           source: 'monster-attack',
           damageType: ability.damageType,
+          // A ORIGEM decide o bloqueio no `combat-v3` (#548): a ability CORPO A CORPO (a
+          // básica legada inclusive) bloqueia os dois; a de alcance/área é magia para o
+          // `blockHit`, como a do Canary sem `BLOCKARMOR`/`BLOCKSHIELD` declarado.
+          blockable: melee ? MELEE_BLOCK_FLAGS : MAGIC_BLOCK_FLAGS,
         },
         defender,
         'pve',
         this.#options.combat,
         session.rng,
+        session.nowMs,
       );
       this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
@@ -5409,9 +5420,7 @@ const slots = bot.groups.get(group);
   ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
-    const defender: Defender = {
-      armor: definition.armor, dodgeChance: 0, mitigation: definition.mitigation,
-    };
+    const defender = this.#monsterDefender(monster);
 
     if (weapon !== null && how?.kind === 'distance') {
       const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
@@ -5469,8 +5478,11 @@ const slots = bot.groups.get(group);
           source: 'basic-attack',
           damageType: profile.damageType,
           modifiers: this.#options.combat.modifiers,
+          // Distância bloqueia por armadura, mas NÃO por escudo no `combat-v3` (#548) —
+          // `WeaponDistance` do Canary não seta `blockedByShield`.
+          blockable: DISTANCE_BLOCK_FLAGS,
         },
-        defender, 'pve', this.#options.combat, session.rng,
+        defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
       this.#land(session, character, monster, result, 'melee');
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
@@ -5497,8 +5509,11 @@ const slots = bot.groups.get(group);
           source: 'basic-attack',
           damageType: how.damageType,
           modifiers: this.#options.combat.modifiers,
+          // Wand/rod não bloqueiam nem por armadura nem por escudo no `combat-v3` (#548) — o
+          // `WeaponWand` do Canary não declara nenhum dos dois; é dano MÁGICO.
+          blockable: MAGIC_BLOCK_FLAGS,
         },
-        defender, 'pve', this.#options.combat, session.rng,
+        defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
       this.#land(session, character, monster, result, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
@@ -5515,8 +5530,11 @@ const slots = bot.groups.get(group);
         source: 'basic-attack',
         damageType: profile.damageType,
         modifiers: this.#options.combat.modifiers,
+        // Corpo a corpo (ou desarmado) bloqueia os dois — o default de `MELEE_BLOCK_FLAGS`,
+        // explícito aqui só por simetria com os outros dois ramos de `#strike`.
+        blockable: MELEE_BLOCK_FLAGS,
       },
-      defender, 'pve', this.#options.combat, session.rng,
+      defender, 'pve', this.#options.combat, session.rng, session.nowMs,
     );
     this.#land(session, character, monster, result, 'melee');
     // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
@@ -6419,8 +6437,32 @@ const slots = bot.groups.get(group);
       // partir dos poucos slots vestidos — não é varredura de tabela de resistência.
       mitigation: character.inventory.mitigation(this.#options.items),
       // A fonte de defesa (CMB-04): escolhida pelo `Inventory` (DT-01) e escalada aqui pela
-      // skill de shielding, que é do ruleset porque vive no personagem.
+      // skill de shielding, que é do ruleset porque vive no personagem. O `combat-v3` (#548)
+      // REUSA o mesmo número como a magnitude do estágio novo — "o jogador defensor usa os
+      // números atuais de defesa e armadura até o M30-02".
       defense: this.#defenseSourceOf(character),
+      // As cargas de bloqueio do `combat-v3` (#548): o personagem é dono do próprio estado
+      // (invariante 9), e `applyDamageOutcome` é quem escreve de volta o que este golpe gastou.
+      blockCharge: character.blockCharge,
+    };
+  }
+
+  /**
+   * A defesa do MONSTRO como defensor (#548, `combat-v3`): armadura, mitigação por tipo
+   * (CMB-03), a defesa e a mitigação percentual novas (`Monster.defense`/`defenseMitigation`,
+   * ADR 0040) e as cargas de bloqueio — o mesmo papel de `#playerDefender`, do outro lado do
+   * golpe. Monstro sem definição (conteúdo apagado no meio de uma sessão viva, nunca deveria
+   * acontecer) vira o neutro de sempre.
+   */
+  #monsterDefender(monster: MonsterRuntime): Defender {
+    const definition = this.#options.monsters.get(monster.monsterId);
+    return {
+      armor: definition?.armor ?? 0,
+      dodgeChance: 0,
+      mitigation: definition?.mitigation,
+      defenseMitigation: definition?.defenseMitigation,
+      defense: { kind: 'monster', defense: definition?.defense ?? 0 },
+      blockCharge: monster.blockCharge,
     };
   }
 

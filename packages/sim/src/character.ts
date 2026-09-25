@@ -3,6 +3,8 @@
 
 import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
+import { FULL_BLOCK_CHARGE } from './combat/block-charge.js';
+import type { BlockChargeState } from './combat/block-charge.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Conditions } from './conditions.js';
@@ -158,6 +160,12 @@ export interface CharacterState {
    * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`.
    */
   readonly conditions?: readonly ConditionState[];
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548, ADR 0040): `block-charge.ts`. Ausente é
+   * `FULL_BLOCK_CHARGE` — o personagem que nunca bloqueou ainda, ou snapshot anterior a esta
+   * issue. Sem bump de `SNAPSHOT_FORMAT_VERSION`, como `conditions`.
+   */
+  readonly blockCharge?: BlockChargeState;
 }
 
 /** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
@@ -253,6 +261,11 @@ export class CharacterRuntime {
   direction: Direction;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions`. */
   readonly conditions: Conditions;
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548). Só `applyDamageOutcome` escreve (CMB-08,
+   * invariante 9) — ver `CharacterState.blockCharge`.
+   */
+  blockCharge: BlockChargeState;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -285,6 +298,7 @@ export class CharacterRuntime {
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
+    this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -427,6 +441,10 @@ export class CharacterRuntime {
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
+      // Como `conditions`: omitido quando ainda vale `FULL_BLOCK_CHARGE` (nunca bloqueou), para
+      // não inflar todo snapshot existente com dois zeros que o construtor já repõe sozinho.
+      ...(this.blockCharge[0] === 0 && this.blockCharge[1] === 0
+        ? {} : { blockCharge: this.blockCharge }),
     };
   }
 

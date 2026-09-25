@@ -182,7 +182,7 @@ export class TraceRuleset implements Ruleset {
     if (target === null || !target.alive) return;
     const outcome = resolveDamage(
       { rawDamage: action.rawDamage, source: 'basic-attack', damageType: 'physical' },
-      this.#defenderOf(target), 'pve', TRACE_COMBAT, session.rng,
+      this.#defenderOf(target), 'pve', TRACE_COMBAT, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(target, outcome, hero);
     this.#emit(session, {
@@ -202,7 +202,7 @@ export class TraceRuleset implements Ruleset {
     };
     const outcome = resolveDamage(
       intent, this.#scenario.heroDefender ?? { armor: 0, dodgeChance: 0 },
-      'pve', TRACE_COMBAT, session.rng,
+      'pve', TRACE_COMBAT, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(hero, outcome, null, hero.conditions.damageTakenScale());
     this.#emit(session, {
