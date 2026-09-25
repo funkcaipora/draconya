@@ -36,7 +36,9 @@ import {
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
-import { advanceTick, conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
+import {
+  advanceTick, conditionFromSpec, retiredTick, sameTick, specTickIntervalMs, tickOf,
+} from '../conditions.js';
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
@@ -4042,10 +4044,15 @@ const slots = bot.groups.get(group);
     // condição para de tiquetar (mesmo antes do vencimento), como o Canary faz quando
     // `damageList` esvazia. Sem fila (tique antigo), `advanceTick` devolve o MESMO tique — o
     // comportamento de sempre.
+    //
+    // Nos dois ramos abaixo o agendamento de tique acaba sem a condição vencer: `retiredTick`
+    // tira o `nextTickAtMs` fantasma E, quando o tique é a fila do Tibia, zera o que falta —
+    // senão o `amount` do ÚLTIMO tique já entregue fica reportando força pendente que não
+    // existe mais, e `strongest` recusa uma reaplicação real por causa de uma condição já
+    // esgotada (#557).
     const advanced = advanceTick(tick);
     if (advanced === null) {
-      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
-      target.conditions.replace(withoutTick);
+      target.conditions.replace(retiredTick(condition));
       return;
     }
     const nextTickAtMs = session.nowMs + advanced.intervalMs;
@@ -4062,8 +4069,7 @@ const slots = bot.groups.get(group);
         priority: TICK_PRIORITY, subject,
       });
     } else {
-      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
-      target.conditions.replace(withoutTick);
+      target.conditions.replace(retiredTick(condition));
     }
   }
 

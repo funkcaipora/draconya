@@ -949,7 +949,12 @@ interface FieldSpec {                     // declarado em content
   com `tick`: `strengthOf` soma `tick.amount` mais `Σ tick.queue[].amount`. Sem fila (tique
   antigo), a comparação continua sendo só o `amount`, como sempre foi — não há total finito a
   somar. Uma condição de fila menor no PRÓXIMO tique mas maior no TOTAL vence uma de próximo
-  tique maior mas fila mais curta; `conditions.test.ts` prende os dois lados.
+  tique maior mas fila mais curta; `conditions.test.ts` prende os dois lados. Quando a fila
+  ESGOTA (achado da revisão do #557), `retiredTick` zera `tick.amount`/`queue` em vez de deixar o
+  `amount` do ÚLTIMO tique já entregue: sem isso, uma condição já esgotada — sem nenhum tique
+  agendado — reportaria força fantasma e `strongest` recusaria uma reaplicação real mais fraca em
+  `amount` bruto. Um tique PLANO (sem fila) nunca precisa dessa limpeza: o `amount` não muda ao
+  longo da vida da condição.
 - **O DOT entra pelo mesmo pipeline.** Cada tique chama `resolveDamage` com um `DamageIntent`
   tipado (`source` e `damageType`) e passa por `recordDamage` e `resolveDeath`/`session.kill`.
   Não existe escrita direta de vida: a armadura, a resistência e a esquiva valem no tique como

@@ -4,7 +4,7 @@ import type { CharacterState } from './character.js';
 import { applyDamageOutcome } from './combat/outcome.js';
 import type { DamageOutcome } from './combat/damage.js';
 import {
-  Conditions, conditionFromSpec, damageOverTimeTicks, generateDamageList, tickOf,
+  Conditions, conditionFromSpec, damageOverTimeTicks, generateDamageList, retiredTick, tickOf,
 } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
@@ -171,6 +171,66 @@ describe('Conditions', () => {
     // — o novo vence, mesmo com o PRÓXIMO tique (10) menor que o do antigo (50).
     expect(conditions.apply(strongerTotal)).toBe(weakButFrontHeavy);
     expect(conditions.get('burn')).toBe(strongerTotal);
+  });
+
+  it('`retiredTick` zera a força de um tique com FILA esgotada, e nunca mexe num tique PLANO (achado da revisão do #557)', () => {
+    // O estado exatamente como `#onConditionTick` o encontra quando a fila do Tibia esgota: o
+    // `amount` é o do ÚLTIMO tique já entregue, e `queue` já está vazio.
+    const exhausted: ConditionState = {
+      key: 'burn', expiresAtMs: 10_000, merge: 'strongest',
+      tick: {
+        kind: 'damage', amount: 50, intervalMs: 1_000, damageType: 'fire', source: 'spell',
+        queue: [],
+      },
+    };
+    expect(retiredTick(exhausted)).toEqual({
+      key: 'burn', expiresAtMs: 10_000, merge: 'strongest',
+      tick: {
+        kind: 'damage', amount: 0, intervalMs: 1_000, damageType: 'fire', source: 'spell',
+        queue: [],
+      },
+    });
+
+    // Um tique PLANO (sem `queue` — cura ao longo do tempo, ou o DOT antigo de antes do #557)
+    // nunca muda de valor ao longo da vida da condição: `retiredTick` só tira o `nextTickAtMs`
+    // fantasma, sem zerar `amount` — não há nada obsoleto para limpar aqui.
+    const flat: ConditionState = {
+      key: 'heal-over-time', expiresAtMs: 10_000, nextTickAtMs: 9_500,
+      tick: { amount: 20, intervalMs: 3_000 },
+    };
+    expect(retiredTick(flat)).toEqual({
+      key: 'heal-over-time', expiresAtMs: 10_000, tick: { amount: 20, intervalMs: 3_000 },
+    });
+  });
+
+  it('sem `retiredTick`, uma condição ESGOTADA prende `strongest` num fantasma; com ele, a reaplicação real (mais fraca em `amount` bruto) vence (achado da revisão do #557)', () => {
+    const exhausted: ConditionState = {
+      key: 'burn', expiresAtMs: 10_000, merge: 'strongest',
+      tick: {
+        kind: 'damage', amount: 50, intervalMs: 1_000, damageType: 'fire', source: 'spell',
+        queue: [],
+      },
+    };
+    const realButWeaker: ConditionState = {
+      key: 'burn', expiresAtMs: 20_000, merge: 'strongest',
+      tick: { kind: 'damage', amount: 30, intervalMs: 1_000, damageType: 'fire', source: 'spell' },
+    };
+
+    // SEM a correção: `strengthOf(exhausted)` ainda lê os 50 do último tique já entregue, maior
+    // que os 30 (reais, pendentes) da nova — `strongest` recusa a reaplicação.
+    const buggy = new Conditions();
+    buggy.apply(exhausted);
+    expect(buggy.apply(realButWeaker)).toBe(exhausted);
+    expect(buggy.get('burn')).toBe(exhausted);
+
+    // COM `retiredTick` aplicado ao esgotar a fila: a força cai a zero, e a reaplicação real
+    // vence mesmo sendo mais fraca em `amount` bruto que o último tique já entregue.
+    const fixed = new Conditions();
+    fixed.apply(exhausted);
+    const retired = retiredTick(exhausted);
+    fixed.replace(retired);
+    expect(fixed.apply(realButWeaker)).toBe(retired);
+    expect(fixed.get('burn')).toBe(realButWeaker);
   });
 });
 

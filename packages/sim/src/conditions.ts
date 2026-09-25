@@ -153,6 +153,24 @@ export function advanceTick(tick: NormalizedTick): { amount: number; intervalMs:
 }
 
 /**
+ * O estado de uma condição depois que seu AGENDAMENTO de tique termina — por exaustão da fila do
+ * Tibia (`advanceTick` devolvendo `null`) ou porque o próximo tique cairia depois de
+ * `expiresAtMs`. `nextTickAtMs` sai: não sobra evento de tique pendente para o #334 proteger.
+ *
+ * Quando o tique tem fila (`queue` presente), a força que falta também vai a zero: nenhum tique
+ * a mais será entregue por esta condição, e `strengthOf` precisa refletir isso — senão a
+ * política `strongest` protege uma condição já esgotada (com o `amount` do ÚLTIMO tique já
+ * entregue) contra uma reaplicação real com dano de fato pendente (M31-02, #557). Um tique
+ * PLANO (sem `queue`, o `amount` que nunca muda ao longo da vida da condição) fica como estava
+ * — não há nada obsoleto para limpar nele.
+ */
+export function retiredTick(condition: ConditionState): ConditionState {
+  const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
+  if (condition.tick?.queue === undefined) return withoutTick;
+  return { ...withoutTick, tick: { ...condition.tick, amount: 0, queue: [] } };
+}
+
+/**
  * Duas condições tiquetam no MESMO ritmo? É o que decide se relançar pode reaproveitar o
  * evento de tique pendente. Sem isto, relançar na mesma cadência do tique cancelaria e
  * reagendaria o evento para sempre, e o DOT nunca aconteceria — a inanição que o CMB-07 mediu.
