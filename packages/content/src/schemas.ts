@@ -1009,15 +1009,49 @@ export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
 export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
 
 /**
+ * A fórmula de `ConditionSpeed::setFormula` (CMB-11, #556, `condition.cpp` do Canary/TFS): o
+ * formato da RUNA/MAGIA, declarado direto no Lua (`paralyze_rune.lua`: `setFormula(-1, 0, -1,
+ * 0)`; `haste.lua`: `setFormula(1.3, 40, 1.3, 40)`). O `sim` lê como o Canary lê —
+ * `min/max = a × (baseSpeed − 40) + b`, truncado para inteiro — nunca reescalada aqui.
+ */
+export const conditionSpeedFormulaSchema = z.object({
+  mina: z.number(),
+  minb: z.number(),
+  maxa: z.number(),
+  maxb: z.number(),
+});
+export type ConditionSpeedFormula = z.infer<typeof conditionSpeedFormulaSchema>;
+
+/**
+ * A chave RESERVADA de uma condição `speed` (CMB-11, #556). Haste e paralyze do Tibia são dois
+ * `ConditionType_t` que se REMOVEM um ao outro (`Creature::onAddCondition` do Canary/TFS); aqui
+ * os dois vivem na MESMA chave, e a política de fusão do `Conditions.apply` (que sempre
+ * substitui, exceto `strongest`) já os torna mutuamente exclusivos sem lógica extra — é por
+ * isso que `conditionSpecSchema` exige esta chave exata para o efeito `speed`.
+ */
+export const SPEED_CONDITION_KEY = 'speed' as const;
+
+/**
  * O efeito declarativo de uma condição (CMB-07). É o `ConditionEffect` do contrato da issue: um
- * estado com prazo que muda uma leitura (haste, postura, magic shield) ou dispara um tique (cura
- * ou DANO ao longo do tempo). O dano contínuo NÃO traz origem — quem aplica decide (`spell`,
- * `monster-attack`), e é a mesma divisão do `DamageSource` canônico (CMB-02).
+ * estado com prazo que muda uma leitura (velocidade, postura, magic shield) ou dispara um tique
+ * (cura ou DANO ao longo do tempo). O dano contínuo NÃO traz origem — quem aplica decide
+ * (`spell`, `monster-attack`), e é a mesma divisão do `DamageSource` canônico (CMB-02).
  */
 export const conditionEffectSchema = z.discriminatedUnion('kind', [
+  /**
+   * Velocidade com SINAL (CMB-11, #556, `ConditionSpeed` do Canary/TFS): `type` é o nome do
+   * Tibia (`haste` acelera, `paralyze` desacelera) — não é derivado do sinal calculado, porque
+   * só ele decide o PISO (paralyze nunca desce a velocidade abaixo de 40, a mesma escala do
+   * TFS que o nosso `speed` já usa — ADR 0037 decisão 4). Duas formas mutuamente exclusivas:
+   * `delta`, o `speedChange` do ATAQUE/DEFESA de monstro copiado em MILÉSIMOS, sem conversão
+   * (`Monsters::deserializeSpell` deriva a fórmula sozinho a partir dele); `formula`, a fórmula
+   * da RUNA/MAGIA copiada direto do Lua. Nunca os dois, nunca nenhum.
+   */
   z.object({
-    kind: z.literal('haste'),
-    speedPercent: z.number().int().positive(),
+    kind: z.literal('speed'),
+    type: z.enum(['haste', 'paralyze']),
+    delta: z.number().int().optional(),
+    formula: conditionSpeedFormulaSchema.optional(),
     damageDealtPercent: damagePercentBySource.optional(),
   }),
   z.object({
@@ -1038,20 +1072,29 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
     /** O tipo do tique (CMB-03). Ausente é `physical`, o default que preserva o v1. */
     damageType: z.enum(DAMAGE_TYPES).default('physical'),
   }),
-]);
+]).refine(
+  (effect) => effect.kind !== 'speed' || (effect.delta !== undefined) !== (effect.formula !== undefined),
+  { message: 'o efeito speed exige delta OU formula, nunca os dois nem nenhum' },
+);
 export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
 
 /**
  * A condição declarativa do conteúdo (CMB-07): chave, política de fusão, prazo e efeito. O
  * `sim` a compila para o estado de runtime com prazo LÓGICO absoluto. Nunca carrega arte
  * (invariante 6) — a apresentação, quando existir, é resolvida por id na tabela de aparências.
+ *
+ * O efeito `speed` (CMB-11) exige `key: 'speed'` — a chave RESERVADA que faz haste e paralyze
+ * de QUALQUER fonte se substituírem (ver `SPEED_CONDITION_KEY`), como no Tibia.
  */
 export const conditionSpecSchema = z.object({
   key: z.string().min(1),
   merge: conditionMergeSchema.default('refresh'),
   durationMs: z.number().int().positive(),
   effect: conditionEffectSchema,
-});
+}).refine(
+  (spec) => spec.effect.kind !== 'speed' || spec.key === SPEED_CONDITION_KEY,
+  { message: `a condição speed precisa da chave reservada "${SPEED_CONDITION_KEY}"` },
+);
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
 /**
@@ -1191,25 +1234,34 @@ export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
  * Uma DEFESA de monstro (#518, TFS `Monster::onThinkDefense`, referência §15-19): cura própria,
- * como o Dragon (`interval 2000, chance 15%, +40..+70`). É uma lista independente da de ataque —
+ * como o Dragon (`interval 2000, chance 15%, +40..+70`), OU self-haste (CMB-11, #556), como o
+ * Doom Deer (`{ name = "speed", interval 3000, chance 30%, speedChange 400, duration 8000 }`,
+ * `data-otservbr-global/monster/mammals/doom_deer.lua`). É uma lista independente da de ataque —
  * cada defesa tem a própria cadência e a própria chance, um evento na fila por defesa (o mesmo
  * desenho de `monsterAbilitySchema`), nunca um cálculo por tick.
  *
  * Campo NOVO e opcional no monstro: nenhum conteúdo existente declara `defenses`, então `chance`
  * aqui é OBRIGATÓRIA — declarar a lista já é conteúdo novo, sem concessão de compatibilidade a
- * preservar.
+ * preservar. `heal` e `condition` são cada um opcional, mas `buildContent` exige pelo menos um —
+ * uma defesa que não cura nem muda velocidade não tem o que fazer.
  */
 export const monsterDefenseSchema = z.strictObject({
   id: z.string().min(1),
   /** Milissegundos entre tentativas. Tempo decorrido, nunca contagem de tick (invariante 2). */
   cadenceMs: z.number().int().positive(),
-  /** A chance de curar quando o `cadenceMs` vence — uma rolagem por vencimento. */
+  /** A chance de agir quando o `cadenceMs` vence — uma rolagem por vencimento. */
   chance: z.number().min(0).max(1),
   /** Quanto repõe, sorteado com o `Rng` da sessão a cada cura — nunca passa do HP máximo. */
   heal: z.object({
     min: z.number().int().nonnegative(),
     max: z.number().int().nonnegative(),
-  }).refine((range) => range.min <= range.max, 'heal.min não pode passar de heal.max'),
+  }).refine((range) => range.min <= range.max, 'heal.min não pode passar de heal.max').optional(),
+  /**
+   * A condição que a defesa aplica a SI MESMO (CMB-11, #556) — o self-haste do Doom Deer.
+   * `effect.type` precisa ser `haste` aqui: uma defesa que se paralisa sozinha não é o
+   * mecanismo que o Canary usa (`speedChange` positivo nas defesas do bestiário observado).
+   */
+  condition: conditionSpecSchema.optional(),
   /**
    * A chave SEMÂNTICA de apresentação (CMB-06): o mesmo `impactKey` da ability, resolvido pelo
    * host em `appearances.abilities` — o `blueshimmer` do Dragon, por exemplo. Chave sem linha é
@@ -1219,7 +1271,14 @@ export const monsterDefenseSchema = z.strictObject({
     impactKey: z.string().min(1).optional(),
   }).optional(),
   _open: z.string().optional(),
-});
+}).refine(
+  (defense) => defense.heal !== undefined || defense.condition !== undefined,
+  { message: 'a defesa precisa de heal ou condition' },
+).refine(
+  (defense) => defense.condition === undefined || defense.condition.effect.kind !== 'speed'
+    || defense.condition.effect.type === 'haste',
+  { message: 'a condition de uma defesa só usa speed do tipo haste (self-buff)' },
+);
 export type MonsterDefenseDefinition = z.infer<typeof monsterDefenseSchema>;
 
 /** A defesa como o `sim` a consome — mesma forma do arquivo, sem defaults a resolver. */
@@ -1227,7 +1286,9 @@ export interface MonsterDefense {
   readonly id: string;
   readonly cadenceMs: number;
   readonly chance: number;
-  readonly heal: { readonly min: number; readonly max: number };
+  readonly heal?: { readonly min: number; readonly max: number };
+  /** A condição que a defesa aplica a SI MESMO (CMB-11). Ausente: defesa só de cura. */
+  readonly condition?: ConditionSpec;
   readonly presentation?: { readonly impactKey?: string };
 }
 

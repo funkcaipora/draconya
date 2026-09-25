@@ -3,9 +3,10 @@ import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
 import { applyDamageOutcome } from './combat/outcome.js';
 import type { DamageOutcome } from './combat/damage.js';
-import { Conditions, conditionFromSpec, tickOf } from './conditions.js';
+import { Conditions, conditionFromSpec, resolveSpeedPercent, tickOf } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
+import { Rng } from './rng.js';
 
 // As condições (#155): estado com prazo, sem tempo dentro — quem vence é a fila. O que se
 // prende aqui é a política (uma por chave, relançar substitui), as leituras e a serialização.
@@ -104,6 +105,119 @@ describe('Conditions', () => {
     expect(condition.sourceId).toBe('hero');
     expect(condition.expiresAtMs).toBe(5_000);
     expect(condition.tick).toEqual({ kind: 'damage', amount: 7, intervalMs: 2_000, damageType: 'earth', source: 'spell' });
+  });
+});
+
+describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
+  // O ataque do mutated_rat (`data-otservbr-global/monster/mammals/mutated_rat.lua`):
+  // `{ name = "speed", speedChange = -600, duration = 30000, target = true }`.
+  const paralyzeAttack = {
+    kind: 'speed' as const, type: 'paralyze' as const, delta: -600,
+  };
+  // A defesa do Doom Deer (`.../mammals/doom_deer.lua`): `speedChange = 400`, self-haste.
+  const hasteDefense = { kind: 'speed' as const, type: 'haste' as const, delta: 400 };
+  // A runa de paralyze (`data/scripts/runes/paralyze_rune.lua`): `setFormula(-1, 0, -1, 0)` —
+  // fora do escopo desta issue como CONTEÚDO (M37-05), mas o MECANISMO da fórmula é o mesmo, e
+  // é o caso que prende o piso com clareza (a fórmula dá sempre o mesmo `min === max`).
+  const paralyzeRuneFormula = {
+    kind: 'speed' as const, type: 'paralyze' as const,
+    formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+  };
+
+  it('o delta do ataque de monstro vira a MESMA fórmula aleatória que o Canary deriva de speedChange', () => {
+    // `Monsters::deserializeSpell`: multiplier = 1 + (-600)/1000 = 0.4; mina = 0.2, maxa = 0.4,
+    // minb = maxb = 40. Com baseSpeed 220 (`difference` 180): min = trunc(0.2×180+40) = 76,
+    // max = trunc(0.4×180+40) = 112 — o alvo sempre fica mais lento (o intervalo inteiro é
+    // negativo em relação a 220), mas sem tocar o piso (nenhum ponto do intervalo é < 40-220).
+    const percent = resolveSpeedPercent(paralyzeAttack, 220, Rng.fromSeed('cond-speed-1'));
+    expect(percent).toBeCloseTo(-49.545454545, 6);
+    expect(percent).toBeGreaterThan((76 - 220) / 220 * 100 - 1e-9); // dentro do intervalo…
+    expect(percent).toBeLessThan((112 - 220) / 220 * 100 + 1e-9);
+  });
+
+  it('a defesa self-haste do Doom Deer (speedChange positivo) acelera', () => {
+    const percent = resolveSpeedPercent(hasteDefense, 91, Rng.fromSeed('cond-speed-2'));
+    expect(percent).toBeCloseTo(7.692307692, 6);
+  });
+
+  it('a fórmula da runa/magia é usada como está, e o piso é speed 40 (a mesma escala do TFS)', () => {
+    // mina = maxa = -1: min === max sempre, e vale para QUALQUER baseSpeed — é o que faz a
+    // runa de paralyze levar qualquer alvo a exatamente 40 de velocidade, nunca menos.
+    const at220 = resolveSpeedPercent(paralyzeRuneFormula, 220, Rng.fromSeed('rune-a'));
+    const at300 = resolveSpeedPercent(paralyzeRuneFormula, 300, Rng.fromSeed('rune-b'));
+    expect(at220).toBeCloseTo(-81.818181818, 6); // (40 − 220) / 220 × 100
+    expect(at300).toBeCloseTo(-86.666666666, 6); // (40 − 300) / 300 × 100
+    // As duas convergem no MESMO piso absoluto: 1 + percent/100 é a fração de baseSpeed que
+    // sobra, e essa fração × baseSpeed é sempre 40.
+    expect((1 + at220 / 100) * 220).toBeCloseTo(40, 9);
+    expect((1 + at300 / 100) * 300).toBeCloseTo(40, 9);
+  });
+
+  it('speedChange nunca passa de -1000 ("Cant be slower than 100%") — abaixo disso o resultado empata', () => {
+    const extremo = { ...paralyzeAttack, delta: -5000 };
+    const noPiso = { ...paralyzeAttack, delta: -1000 };
+    // A MESMA semente para os dois: se o clamp valer, as duas rolagens são idênticas — e como
+    // o multiplicador vira 0 dos dois lados, min === max e nem consomem sorteio (abaixo).
+    expect(resolveSpeedPercent(extremo, 220, Rng.fromSeed('clamp')))
+      .toBe(resolveSpeedPercent(noPiso, 220, Rng.fromSeed('clamp')));
+  });
+
+  it('min === max não consome sorteio, como `uniform_random` do Canary quando os limites coincidem', () => {
+    const rng = Rng.fromSeed('no-draw');
+    const before = rng.getState();
+    // delta -1000: multiplier 0, mina = maxa = 0 → min = max = 40 sempre, para qualquer speed.
+    resolveSpeedPercent({ ...paralyzeAttack, delta: -1000 }, 220, rng);
+    expect(rng.getState()).toEqual(before);
+  });
+
+  it('`conditionFromSpec` recusa compilar speed sem o contexto de velocidade', () => {
+    expect(() => conditionFromSpec(
+      { key: 'speed', merge: 'refresh', durationMs: 30_000, effect: paralyzeAttack },
+      'hero', 'm:1', 0, 'monster-attack',
+    )).toThrow(/velocidade/);
+  });
+
+  it('haste substitui paralyze, e paralyze substitui haste — mesma chave, sempre uma condição só', () => {
+    // As duas nascem da MESMA chave reservada ("speed", exigida pelo schema) — é isso que faz
+    // `Conditions.apply` (que sempre substitui) reproduzir o `Creature::onAddCondition` do
+    // Canary/TFS sem precisar de lógica de exclusão mútua à parte.
+    const conditions = new Conditions();
+    const slow = conditionFromSpec(
+      { key: 'speed', merge: 'refresh', durationMs: 30_000, effect: paralyzeAttack },
+      'hero', 'm:1', 0, 'monster-attack', { baseSpeed: 220, rng: Rng.fromSeed('mutual-a') },
+    );
+    conditions.apply(slow);
+    expect(conditions.size).toBe(1);
+    expect(conditions.get('speed')?.speedPercent).toBeLessThan(0);
+
+    const fast = conditionFromSpec(
+      { key: 'speed', merge: 'refresh', durationMs: 8_000, effect: hasteDefense },
+      'hero', 'm:2', 1_000, 'monster-attack', { baseSpeed: 220, rng: Rng.fromSeed('mutual-b') },
+    );
+    conditions.apply(fast);
+    expect(conditions.size).toBe(1); // continua UMA condição — a paralyze não sobrevive ao lado.
+    expect(conditions.get('speed')?.speedPercent).toBeGreaterThan(0);
+    expect(conditions.get('speed')?.sourceId).toBe('m:2');
+
+    // E o caminho inverso: paralyze reaplicada por cima da haste também substitui inteira.
+    conditions.apply(slow);
+    expect(conditions.size).toBe(1);
+    expect(conditions.get('speed')?.speedPercent).toBeLessThan(0);
+  });
+
+  it('o monstro também expõe `speedScale` — o self-haste e o slow de outro monstro valem para ele', () => {
+    const monster = new MonsterRuntime({
+      id: 1, monsterId: 'rat', position: { x: 0, y: 0 }, home: { x: 0, y: 0 },
+      health: 100, targetId: null, cooldowns: {},
+    });
+    expect(monster.speedScale).toBe(1);
+    const buff = conditionFromSpec(
+      { key: 'speed', merge: 'refresh', durationMs: 8_000, effect: hasteDefense },
+      monster.subject, monster.subject, 0, 'monster-attack',
+      { baseSpeed: 91, rng: Rng.fromSeed('monster-haste-2') },
+    );
+    monster.conditions.apply(buff);
+    expect(monster.speedScale).toBeGreaterThan(1);
   });
 });
 

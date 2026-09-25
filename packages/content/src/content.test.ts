@@ -1907,3 +1907,72 @@ describe('condições e campos declarativos (CMB-07, #334)', () => {
     }))).toThrow(ContentError);
   });
 });
+
+describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
+  // O ataque do mutated_rat (`data-otservbr-global/monster/mammals/mutated_rat.lua`):
+  // `{ name = "speed", speedChange = -600, duration = 30000, target = true }`.
+  const paralyzeAttack = {
+    key: 'speed', merge: 'refresh' as const, durationMs: 30_000,
+    effect: { kind: 'speed', type: 'paralyze', delta: -600 },
+  };
+  // A defesa do Doom Deer (`data-otservbr-global/monster/mammals/doom_deer.lua`):
+  // `{ name = "speed", speedChange = 400, duration = 8000 }`, self-haste.
+  const hasteDefense = {
+    key: 'speed', merge: 'refresh' as const, durationMs: 8_000,
+    effect: { kind: 'speed', type: 'haste', delta: 400 },
+  };
+
+  it('monsterAbilitySchema aceita a condição speed, com a chave reservada', () => {
+    const ability = { id: 'slow', cadenceMs: 2_000, power: 0, condition: paralyzeAttack };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'slow')?.condition)
+      .toEqual(paralyzeAttack);
+  });
+
+  it('recusa speed sem delta e sem formula, ou com os dois ao mesmo tempo', () => {
+    const semNenhum = { ...paralyzeAttack, effect: { kind: 'speed', type: 'paralyze' } };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: semNenhum }] }],
+    }))).toThrow(ContentError);
+
+    const osDois = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'paralyze', delta: -600,
+        formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: osDois }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa a chave errada — speed exige a chave reservada "speed"', () => {
+    const chaveErrada = { ...paralyzeAttack, key: 'slow' };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveErrada }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('monsterDefenseSchema aceita heal, condition, ou os dois — mas recusa nenhum dos dois', () => {
+    const withHeal = { id: 'h', cadenceMs: 2_000, chance: 0.15, heal: { min: 40, max: 70 } };
+    const withCondition = { id: 's', cadenceMs: 3_000, chance: 0.3, condition: hasteDefense };
+    const content = buildContent(base({ monsters: [{ ...rat, defenses: [withHeal, withCondition] }] }));
+    const defenses = content.monsters.get('rat')?.defenses;
+    expect(defenses).toHaveLength(2);
+    expect(defenses?.[1]?.condition).toEqual(hasteDefense);
+    expect(defenses?.[1]?.heal).toBeUndefined();
+    expect(defenses?.[0]?.heal).toEqual({ min: 40, max: 70 });
+
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, defenses: [{ id: 'vazia', cadenceMs: 1_000, chance: 1 }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('a condition de uma defesa só usa speed do tipo haste (self-buff) — paralyze é recusado', () => {
+    const selfParalyze = { id: 'p', cadenceMs: 1_000, chance: 1, condition: paralyzeAttack };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, defenses: [selfParalyze] }],
+    }))).toThrow(ContentError);
+  });
+});

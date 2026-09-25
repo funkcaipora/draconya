@@ -4207,6 +4207,7 @@ const slots = bot.groups.get(group);
     for (const target of this.#occupants(session, field)) {
       const condition = conditionFromSpec(
         field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+        { baseSpeed: target.speed, rng: session.rng },
       );
       const tick = tickOf(condition);
       if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
@@ -4252,6 +4253,7 @@ const slots = bot.groups.get(group);
     if (field === null) return;
     const condition = conditionFromSpec(
       field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+      { baseSpeed: target.speed, rng: session.rng },
     );
     const tick = tickOf(condition);
     if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
@@ -5064,6 +5066,7 @@ const slots = bot.groups.get(group);
       if (ability.condition !== undefined && character.alive) {
         this.#applyConditionTo(session, character, conditionFromSpec(
           ability.condition, character.id, subject, session.nowMs, 'monster-attack',
+          { baseSpeed: character.speed, rng: session.rng },
         ));
       }
     }
@@ -5170,20 +5173,34 @@ const slots = bot.groups.get(group);
     this.#scheduleMonsterDefense(session, monster, defense, defense.cadenceMs);
 
     // `chance` é SEMPRE declarada aqui (o schema exige), então SEMPRE consome uma rolagem — ao
-    // contrário de `ability.chance`, que só existe em conteúdo novo.
+    // contrário de `ability.chance`, que só existe em conteúdo novo. UMA rolagem só: a defesa é
+    // UMA entrada do `monster.defenses` do Canary, cura OU condição, nunca as duas competindo
+    // por sorteios separados.
     if (!session.rng.chance(defense.chance)) return;
 
-    const healed = monster.heal(definition.health, session.rng.integer(defense.heal.min, defense.heal.max));
-    // De vida cheia, zero repôs — sem evento, como a regeneração passiva (`#onRegen`): um "+0"
-    // flutuando por cadência é ruído que uma hunt desanexada não precisa produzir.
-    if (healed <= 0) return;
-    session.emit({
-      kind: 'creature-healed', creatureId: monster.subject, amount: healed, source: 'monster',
-      position: this.#at(monster),
-      ...(defense.presentation?.impactKey === undefined
-        ? {} : { impactKey: defense.presentation.impactKey }),
-    });
-    this.#emitHealth(session, monster);
+    if (defense.heal !== undefined) {
+      const healed = monster.heal(definition.health, session.rng.integer(defense.heal.min, defense.heal.max));
+      // De vida cheia, zero repôs — sem evento, como a regeneração passiva (`#onRegen`): um "+0"
+      // flutuando por cadência é ruído que uma hunt desanexada não precisa produzir.
+      if (healed > 0) {
+        session.emit({
+          kind: 'creature-healed', creatureId: monster.subject, amount: healed, source: 'monster',
+          position: this.#at(monster),
+          ...(defense.presentation?.impactKey === undefined
+            ? {} : { impactKey: defense.presentation.impactKey }),
+        });
+        this.#emitHealth(session, monster);
+      }
+    }
+    // O self-haste (CMB-11, #556): a condição de velocidade que a defesa aplica em SI MESMO —
+    // o Doom Deer. `baseSpeed` é o `speed` do PRÓPRIO monstro no instante da aplicação, como
+    // `Creature::getBaseSpeed()` do Canary lê o de quem recebe a condição.
+    if (defense.condition !== undefined) {
+      this.#applyConditionTo(session, monster, conditionFromSpec(
+        defense.condition, monster.subject, monster.subject, session.nowMs, 'monster-attack',
+        { baseSpeed: monster.speed, rng: session.rng },
+      ));
+    }
   }
 
   /**

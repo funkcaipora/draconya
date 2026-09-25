@@ -464,3 +464,24 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
   para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
   1.640/1.656 do bestiário, não a exceção).
+- **A condição `speed` (CMB-11, #556) sempre nasce com a chave RESERVADA `SPEED_CONDITION_KEY`
+  (`'speed'`, exportada de `@draconya/content`), e `conditionFromSpec` confia nisso — não a
+  reescreve.** É o CONTEÚDO (`conditionSpecSchema`) quem recusa `key` diferente para
+  `effect.kind === 'speed'`, no boot; o `sim` não confere de novo em runtime. É essa chave
+  compartilhada — não uma lógica de exclusão mútua nova — que faz haste e paralyze de fontes
+  DIFERENTES (ability de ataque, defesa self-haste) se substituírem inteiro, como
+  `Creature::onAddCondition` do Canary/TFS faz com dois `ConditionType_t`. Um `ConditionSpec` de
+  `speed` fora desses dois caminhos (`ability.condition`/`defense.condition`) — um campo, por
+  exemplo — também precisa da mesma chave, ou o boot recusa.
+- **`resolveSpeedPercent` (`conditions.ts`) exige `SpeedContext` (`baseSpeed`, `rng`) para
+  `effect.kind === 'speed'`, e `conditionFromSpec` LANÇA sem ele** — nenhum default silencioso
+  que deixaria a velocidade em 1. Todo call site de `conditionFromSpec` no `hunt.ts` (ability,
+  defesa, campo) já passa `{ baseSpeed: target.speed, rng: session.rng }`; um call site NOVO
+  para uma condição que pode ser `speed` precisa do mesmo. `min`/`max` da fórmula são TRUNCADOS
+  (`Math.trunc`, como o C++ trunca `float` → `int32_t`), nunca arredondados, e `min === max` NÃO
+  consome sorteio — a mesma regra do `uniform_random` do Canary quando os limites coincidem.
+- **A haste do JOGADOR (as quatro magias de vocação, Swift Foot) continua em `casting.ts`, à
+  parte de `conditionFromSpec`.** `spellEffectSchema`'s `kind: 'haste'` (percentual FLAT, sem
+  fórmula) não mudou nesta issue — as duas mecânicas escrevem o MESMO campo de runtime
+  (`ConditionState.speedPercent`), mas por conteúdo e código diferentes; ver
+  `docs/product/combat.md` (CMB-11) para o porquê de não terem sido unificadas.

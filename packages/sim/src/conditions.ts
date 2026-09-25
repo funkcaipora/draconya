@@ -24,8 +24,9 @@
 import type { ConditionEffect, ConditionSpec } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
 import type { DamageSource } from './combat/damage.js';
+import type { Rng } from './rng.js';
 
-export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
+export type ConditionKind = 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -148,12 +149,62 @@ function strengthOf(condition: ConditionState): number {
  * `source` só entra no tique de dano — é o que decide de ONDE o DOT veio (magia, ability,
  * runa). Cura e leitura ignoram.
  */
+/**
+ * O contexto que só a condição `speed` (CMB-11, #556) precisa: a velocidade BASE do alvo no
+ * instante da aplicação (`Creature::getBaseSpeed()` do Canary/TFS — o `mover.speed` de
+ * `movement.ts`, antes de qualquer `speedScale`) e o `Rng` da sessão, para a mesma rolagem que
+ * `ConditionSpeed::startCondition` faz. Nenhum outro efeito usa isto.
+ */
+export interface SpeedContext {
+  readonly baseSpeed: number;
+  readonly rng: Rng;
+}
+
+/**
+ * Resolve o percentual de velocidade de um efeito `speed` (CMB-11, #556) reproduzindo
+ * `ConditionSpeed` do Canary/TFS (`src/creatures/combat/condition.cpp`):
+ *
+ * - `delta` (o `speedChange` do ATAQUE/DEFESA de monstro, em milésimos) vira a MESMA fórmula
+ *   aleatória que o Canary deriva sozinho em `Monsters::deserializeSpell` — nunca menos que
+ *   -1000 ("Cant be slower than 100%"), `multiplier = 1 + delta/1000`, `mina = multiplier/2`,
+ *   `maxa = multiplier`, `minb = maxb = 40`.
+ * - `formula` (a RUNA/MAGIA) é usada como está, copiada direto do `setFormula` do Lua.
+ *
+ * As duas convergem no MESMO cálculo: `difference = baseSpeed − 40`; `min`/`max` são LINEARES
+ * nele e TRUNCADOS para inteiro — como o C++ trunca ao atribuir um `float` a `int32_t`, nunca
+ * arredonda —; o resultado é sorteado INTEIRO e inclusivo no intervalo (`min === max` não
+ * consome sorteio, como `uniform_random` do Canary não consome quando os limites coincidem); e
+ * o piso do `paralyze` (`speedDelta < 40 − baseSpeed`) é a MESMA trava — a escala do nosso
+ * `speed` já é a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40" é o valor
+ * real do Canary, não um número reescalado.
+ */
+export function resolveSpeedPercent(
+  effect: Extract<ConditionEffect, { kind: 'speed' }>, baseSpeed: number, rng: Rng,
+): number {
+  let mina: number; let minb: number; let maxa: number; let maxb: number;
+  if (effect.formula !== undefined) {
+    ({ mina, minb, maxa, maxb } = effect.formula);
+  } else {
+    const speedChange = Math.max(-1000, effect.delta ?? 0);
+    const multiplier = 1 + speedChange / 1000;
+    mina = multiplier / 2; minb = 40; maxa = multiplier; maxb = 40;
+  }
+  const difference = baseSpeed - 40;
+  let min = Math.trunc(mina * difference + minb);
+  let max = Math.trunc(maxa * difference + maxb);
+  if (min > max) { const swap = min; min = max; max = swap; }
+  let speedDelta = (min === max ? min : rng.integer(min, max)) - baseSpeed;
+  if (effect.type === 'paralyze' && speedDelta < 40 - baseSpeed) speedDelta = 40 - baseSpeed;
+  return baseSpeed === 0 ? 0 : (speedDelta / baseSpeed) * 100;
+}
+
 export function conditionFromSpec(
   spec: ConditionSpec,
   targetId: string,
   sourceId: string,
   nowMs: number,
   source: DamageSource,
+  speed?: SpeedContext,
 ): ConditionState {
   const base = {
     key: spec.key,
@@ -164,12 +215,16 @@ export function conditionFromSpec(
   } as const;
   const effect: ConditionEffect = spec.effect;
   switch (effect.kind) {
-    case 'haste':
+    case 'speed': {
+      if (speed === undefined) {
+        throw new Error(`condição speed "${spec.key}" precisa do contexto de velocidade (baseSpeed/rng)`);
+      }
       return {
         ...base,
-        speedPercent: effect.speedPercent,
+        speedPercent: resolveSpeedPercent(effect, speed.baseSpeed, speed.rng),
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
       };
+    }
     case 'buff':
       return {
         ...base,

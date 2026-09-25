@@ -264,7 +264,10 @@ export function normalizeMonsterDefenses(monster: MonsterDefinition): readonly M
     id: defense.id,
     cadenceMs: defense.cadenceMs,
     chance: defense.chance,
-    heal: { min: defense.heal.min, max: defense.heal.max },
+    ...(defense.heal === undefined ? {} : { heal: { min: defense.heal.min, max: defense.heal.max } }),
+    // A condição (CMB-11, #556) passa direto, como `condition`/`field` de `normalizeMonsterAbilities`
+    // abaixo: já vem na forma que o `sim` lê, e copiar aqui mantém a normalização do BOOT (DT-02).
+    ...(defense.condition === undefined ? {} : { condition: defense.condition }),
     ...(defense.presentation === undefined ? {} : {
       presentation: {
         ...(defense.presentation.impactKey === undefined

@@ -145,6 +145,15 @@ export class MonsterRuntime {
     return monsterSubject(this.id);
   }
 
+  /**
+   * Velocidade com sinal (CMB-11, #556): o self-haste de defesa e o slow que uma ability de
+   * OUTRO monstro aplicasse nele passam por aqui, o mesmo `speedScale` que `CharacterRuntime`
+   * já tinha. `speed` continua sendo a base da tabela — `movement.ts` multiplica os dois.
+   */
+  get speedScale(): number {
+    return this.conditions.speedScale();
+  }
+
   getState(): MonsterState {
     return {
       id: this.id,
