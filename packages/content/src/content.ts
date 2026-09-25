@@ -359,6 +359,8 @@ export function compileItem(
         ...(raw.kind === 'distance' && raw.ammoFamily !== undefined
           ? { ammoFamily: raw.ammoFamily }
           : {}),
+        // O `hitChance` da arma (#524) é só dado — a chance de acerto à distância é a #522.
+        ...(raw.hitChance === undefined ? {} : { hitChance: raw.hitChance }),
       };
     }
   }

@@ -7,7 +7,8 @@ generalizadas, dano contínuo e campos de tile (CMB-07), outcomes avançados de 
 mana shield (CMB-08), auditoria de apresentação de combate (CMB-09, bloqueada pela biblioteca
 parcial), conformance seedada e benchmark misto (CMB-10), motor de magias com alvo único, área e
 requisito de vocação (FUN-74, FUN-92), skills
-por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e o dano de arma do Canary
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -16,8 +17,18 @@ por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementad
 A referência de combate está fixada pelo
 [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md): **Tibia 13.32**,
 com o mecanismo lido de TFS/Canary (GPL v2 — só mecanismo e caso de borda, nunca código copiado)
-e os números observados no TibiaWiki. O perfil semântico `combat-v1` é conteúdo versionado: a
+e os números observados no TibiaWiki. O perfil semântico de combate é conteúdo versionado: a
 sessão o congela na criação e não o troca no meio da hunt.
+
+Dois perfis existem hoje. `combat-v1` foi o primeiro, aditivo, e continua servindo sessão
+gravada antes do #522 (retomada de perfil `breaking` diferente é recusada, nunca reinterpretada
+— ADR 0031). `combat-v2` (#522) é o que `packages/content/data/combat/baseline.json` declara
+desde então: dano de arma pela fórmula do Canary, com variância pela normal truncada, e chance
+de acerto à distância por skill e tile — o que o ADR 0037 decisão 5 pediu para o M28
+(`docs/adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md`, mesclado ao main por
+outra branch do M28, ainda ausente nesta). A MITIGAÇÃO (Dodge, defesa/escudo, crítico, armadura,
+piso, resistência, imunidade) é **a mesma** nos dois perfis — o que o `combat-v2` muda vive
+antes dela, na seção "Como cada arma bate" adiante.
 
 Este documento separa três coisas: o que está **entregue** (comportamento atual), o que é
 **exceção de produto aprovada** e o que ainda é **lacuna**. Nenhuma hipótese entra como
@@ -27,18 +38,23 @@ comportamento entregue.
 
 A resolução de dano entregue é `resolveDamage` em `packages/sim/src/combat/damage.ts`. Desde o
 CMB-02 ele é o **ponto público único** de resolução — arma, magia, runa e monstro passam por
-ele — e devolve um `DamageOutcome` versionado e auditável em vez de um número solto. O perfil
-`combat-v1` aplica armadura por tipo, piso, uma rolagem de Dodge sempre consumida e arredonda no
-fim; a seção "O resolver canônico" detalha o contrato.
+ele — e devolve um `DamageOutcome` versionado e auditável em vez de um número solto. A mitigação
+(armadura por tipo, piso, uma rolagem de Dodge sempre consumida e arredondamento no fim) é a
+mesma sob `combat-v1` e `combat-v2`; a seção "O resolver canônico" detalha o contrato.
 
 ## Compatibilidade aprovada
 
-Duas regras do PRD §12 desviam explicitamente do Tibia e valem como exceção de produto fixada no
-perfil `combat-v1` — não são hipótese nem fidelidade pendente:
+Regras do PRD §12 que desviam explicitamente do Tibia e valem como exceção de produto — não são
+hipótese nem fidelidade pendente:
 
-Primeira: ataques realizados pelo jogador sempre acertam o alvo. Não existe miss ofensivo do lado do jogador — o servidor não rola chance de acerto para o atacante, o que elimina metade da matemática de combate tradicional.
+Primeira, e **só em corpo a corpo desde o #522**: o ataque do jogador sempre acerta. Não existe
+rolagem de acerto ofensivo corpo a corpo — o Canary também não rola acerto ofensivo em corpo a
+corpo no PvE, então isto deixou de ser exceção e passou a ser fidelidade (`player-always-hit-melee`
+no `combat-v2`, ver `COMBAT_V2` em `packages/content/src/schemas.ts`). **A DISTÂNCIA não é mais
+exceção**: desde o `combat-v2` ela rola a chance de acerto do Canary, por skill e por tile — ver
+"Como cada arma bate".
 
-Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário.
+Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário. A #522 confirmou que este mecanismo corresponde ao charm de esquiva do Tibia (que também reduz, não zera) — por isso continua listado como exceção de produto **e não** foi substituído pela fórmula do Tibia.
 
 Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Guild War) não herda automaticamente essas vantagens de farm.
 
@@ -493,7 +509,77 @@ resistência e imunidade do monstro.
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
 | Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
-| Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
+| Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (só vale para wand/rod e para o `combat-v1`; ver abaixo) | `packages/content/data/skills/distance.json` |
+
+## Dano de arma e chance de acerto à distância (#522, ADR 0037 d.5, `combat-v2`)
+
+O ADR 0019 tinha "ataque do jogador sempre acerta" como regra NOSSA, fora de discussão. O
+ADR 0037 revoga esse limite para mecânica de jogo: o Tibia passa a ser a REGRA, não a
+referência, e a #522 troca o dano de corpo a corpo/distância pelo do Canary. O
+`packages/sim/src/combat/weapon-power.ts` despacha por `combat.compatibilityProfile`: conteúdo
+`combat-v1` continua na fórmula antiga (escala + `spread`, abaixo); `combat-v2` — o que
+`baseline.json` declara — usa a fórmula nova. As duas convivem porque uma sessão fixa o perfil
+na criação (invariante 7) e uma sessão `combat-v1` em andamento não é reinterpretada (ADR 0031).
+
+### A fórmula (`Weapons::getMaxWeaponDamage`, `WeaponMelee`/`WeaponDistance::getWeaponDamage`)
+
+```text
+maxDamage = round(coefficient × attackFactor × attack × skill + ⌊level/5⌋) × vocationMultiplier
+minDamage = ⌊level/5⌋                      (corpo a corpo: 0 se attack ≤ 0; distância: sempre)
+damage    = normalRandomInt(minDamage, maxDamage)
+```
+
+- `coefficient` é `0,085` em corpo a corpo e `0,09` à distância — os mesmos números do Canary,
+  em conteúdo (`combat.weaponDamage.meleeCoefficient`/`distanceCoefficient`), nunca constante
+  mágica (§12.1).
+- `skill` é o nível ABSOLUTO da skill da família — ao contrário do `combat-v1`, que só contava a
+  partir do `skillStartingLevel` (um personagem nasce com skill 10, não 0).
+- `attackFactor` é o `getAttackFactor()` do modo de luta do Canary (ofensivo 1,0 / equilibrado
+  0,75 / defensivo 0,5). **O Draconya não tem seletor de postura** — o primitivo "Postura
+  Defensiva/Balanceada/Atacante" do `docs/hud-contract-plan.md` nunca foi montado —, então o
+  valor é uma CONSTANTE de conteúdo (`combat.weaponDamage.attackFactor`, `1,0` hoje) até essa UI
+  existir; trocar por leitura de `CharacterState` não muda a fórmula.
+- `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — `1,0` em toda
+  vocação, como em `vocations.xml` do Canary hoje; entra pela mesma razão do coeficiente.
+- `normalRandomInt` (`combat/weapon-power.ts`) é uma reimplementação ORIGINAL (ADR 0019) do
+  `normal_random` do Canary: uma normal (média 0,5, desvio 0,25) truncada em `[0,1]` por
+  rejeição — Box-Muller com duas frações do `Rng` da sessão por tentativa —, escalada para
+  `[min, max]` e arredondada. Roda SEMPRE, mesmo com `min === max`: a sequência de sorteios não
+  pode depender do VALOR do intervalo, a mesma regra do `blockChance` (ADR 0031).
+
+Wand/rod **não mudam**: continuam na faixa fixa do item, sem coeficiente nem `attackFactor` — já
+era o modelo do Canary para elas (DT-02 do CMB-05).
+
+### Chance de acerto à distância (`WeaponDistance::useWeapon`)
+
+Só a DISTÂNCIA rola acerto ofensivo; corpo a corpo continua sempre acertando — o Canary também
+não rola acerto ofensivo em corpo a corpo no PvE. A tabela (`combat.distanceHitChance`,
+`packages/sim/src/combat/distance-hit.ts`) reproduz o balde "de duas mãos" do Canary (arco/besta,
+teto 90 %) — a única família de distância que o catálogo tem hoje:
+
+| Distância | Fórmula (skill capado) | Distância | Fórmula (skill capado) |
+|---|---|---|---|
+| 1, 5 | `⌊min(skill,74) × 1,20⌋ + 1` | 4 | `⌊min(skill,58) × 1,55⌋` |
+| 2 | `⌊min(skill,28) × 3,20⌋` | 6, 7 | `min(skill,90)` |
+| 3 | `⌊min(skill,45) × 2,00⌋` | outro tile | `90` (o teto do balde) |
+
+`ammunition.maxHitChance` e `weapon.hitChance` (#524, "só dado" até aqui) entram em jogo pela
+primeira vez: um `maxHitChance` de munição DIFERENTE do balde da tabela (o power bolt do Tibia
+declara `91`) vira chance FIXA, sem tabela; `weapon.hitChance` (o bônus/malus do arco, ex.: royal
+crossbow `+3`) SOMA ao percentual — tabela ou fixo — sempre. A rolagem acontece uma vez por tiro,
+SEMPRE consumida (mesma regra do `blockChance`), e o erro não gasta a munição de graça: o preço
+já saiu antes da rolagem (o tiro existe, só não causa dano) — mas treina a skill igual, porque o
+disparo aconteceu.
+
+### Parâmetros
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| `meleeCoefficient` / `distanceCoefficient` | 0,085 / 0,09 | `packages/content/data/combat/baseline.json`, `weaponDamage` |
+| `attackFactor` | 1,0 (ofensivo — sem seletor de postura ainda) | `packages/content/data/combat/baseline.json`, `weaponDamage.attackFactor` |
+| `meleeDamageMultiplier` / `distDamageMultiplier` | 1,0 em toda vocação | `packages/content/data/vocations/*.json` |
+| Tabela de acerto à distância (balde 90 %) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
+| `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #524, `packages/content/src/schemas.ts` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 
@@ -510,10 +596,20 @@ interface WeaponProfile {
   readonly power?: WeaponPowerFormula;          // base, levelFactor, skillFactor, skillStartingLevel, spread
   readonly manaPerHit?: number;                 // wand/rod
   readonly fixedDamage?: { min: number; max: number }; // wand/rod
+  readonly hitChance?: number;                  // #524: bônus/malus da ARMA (ver #522, acima)
 }
 
-resolveWeaponPower(profile, level, skillLevel, rng): number
+resolveWeaponPower(profile, level, skillLevel, rng, combat?, vocationMultiplier?): number
 ```
+
+`combat` é OPCIONAL de propósito (DT-03): ausente, ou com `combat.compatibilityProfile` diferente
+de `combat-v2`, a fórmula é a v1 de sempre — nenhuma chamada existente precisou mudar. `power`
+(`levelFactor`, `skillFactor`, `skillStartingLevel`, `spread`) continua existindo e alimenta o
+`combat-v1`; o `combat-v2` usa só `power.base` (o `attack` da arma/munição) e ignora o resto —
+a escala por level/skill do v2 vem do `combat.weaponDamage`, não da família. `damagePerLevel`
+das skills `melee`/`distance` (`skills/*.json`) **deixa de alimentar o dano de arma sob
+`combat-v2`** (ele virava `skillFactor` só no v1, via `compileWeaponFamilies`); continua
+alimentando a defesa/escudo do CMB-04 (`powerMultiplier`, `skills.ts`), que a #522 não toca.
 
 | Família | `kind` | Skill | Fórmula / recurso |
 |---|---|---|---|
@@ -879,10 +975,35 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 - `[ABERTO]` A conferência visual dos efeitos e projéteis de combate está bloqueada pela
   biblioteca local parcial (47 de 4171 folhas; nenhum sprite de efeito/projétil tem PNG). Nenhum
   id foi corrigido sem evidência — ver [`combat-presentation-audit.md`](../combat-presentation-audit.md).
+- `[ABERTO]` `combat.weaponDamage.attackFactor` (#522) é uma CONSTANTE de conteúdo em `1,0`
+  (ofensivo) porque o Draconya não tem seletor de postura de luta ainda — o primitivo nunca foi
+  montado (`docs/hud-contract-plan.md`, M21 fechado sem issue). Quando a UI de postura existir,
+  o valor troca de constante para leitura de `CharacterState`, sem mudar a fórmula.
+- `[ABERTO]` `ammunition.maxHitChance` e `weapon.hitChance` (#524) não têm nenhum valor não-default
+  no catálogo real hoje — nenhuma munição ou arma especial (power bolt, royal crossbow) existe
+  ainda. Os campos e a leitura (#522) já existem; falta o item.
+- `[ABERTO]` O erro de tiro (#522) não tem apresentação própria: o cliente não recebe nenhum
+  evento no tiro que erra (sem `creature-hit`), e não existe efeito de "flecha na parede" nem
+  texto "MISS" — fica para quando a apresentação de combate (CMB-09/#242) sair do bloqueio da
+  biblioteca parcial.
+- `[ABERTO]` A #522 investigou se o monstro deveria ganhar um segundo atributo de defesa
+  (`Monster::getMitigation`/`getDefense` do Canary — um redutor percentual, distinto do `armor`
+  que já existe) para bloquear o corpo a corpo do jogador como o escudo do CMB-04 bloqueia o do
+  monstro. **Decisão: não adotado nesta issue.** O mecanismo do Canary é uma tabela de mitigação
+  percentual nova, não um ajuste da fórmula de arma — mudaria como TODO monstro reduz dano
+  recebido, não só o que a #522 pede, e o `armor` que já existe (`armorReduction = armor ×
+  armorEffectiveness`) é a mesma família de mecanismo que o Tibia clássico usava. Fica para uma
+  issue própria, se a auditoria do M28 contra o dragão achar que falta.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+O PRD §12.2 tinha "ataque ofensivo do jogador sempre acerta" como regra do PRODUTO, sem
+distinguir corpo a corpo de distância. O ADR 0037 (decisão 3) revogou esse limite para mecânica
+de jogo, e a #522 aplicou a revogação só onde o Canary também rola acerto: a distância passa a
+errar por skill/distância, e o corpo a corpo continua sempre acertando — não porque o PRD
+mandou, mas porque é isso que o Canary faz no PvE.
+O Dodge do §12.2 **não** mudou: a #522 confirmou que ele já corresponde ao charm de esquiva do
+Tibia (reduz à metade, não zera), então não havia divergência a corrigir ali.

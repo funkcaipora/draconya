@@ -61,28 +61,34 @@ describe('a Rotworm Caves real (#511)', () => {
     }
   });
 
-  it('o herói percorre o laço e a caverna rende: abates, XP, gold e loot em dez minutos', () => {
+  it('o herói percorre o laço e a caverna rende: abates, XP, gold e loot até morrer', () => {
     // Cautious, não bold (diferença do molde da Rat Cellars): o rotworm bate 24-30 contra
-    // armor 8, muito mais forte que o rato (3-4) — um herói level 8 desarmado sobrevive dez
-    // minutos no bold ou no reckless (medido: morre por volta de 127 s / 92 s, DT-05 só mede
-    // sobrevivência no cautious). Aqui o objetivo é medir o rendimento de uma sessão completa,
-    // e só o cautious chega ao fim das dez minutos sem morrer.
+    // armor 8, muito mais forte que o rato (3-4). Até o #522 um herói level 8 desarmado
+    // sobrevivia dez minutos no cautious (o bold e o reckless já matavam antes, medido: por
+    // volta de 127 s / 92 s). O dano de arma do Canary (#522, `combat-v2`) reduz o murro
+    // desarmado de um flat 25 para uma faixa em torno de `round(0,085 × 1 × 25 × 10 + ⌊8/5⌋)`
+    // ≈ 22 no máximo — a luta contra o rotworm demora mais, e agora nem o cautious sobrevive
+    // (medido: morre por volta de 97,6 s). Aqui o objetivo é medir o rendimento ATÉ a morte, não
+    // mais uma sessão completa — sem arma, no `combat-v2`, dez minutos de Rotworm Caves não é
+    // cenário sobrevivível no level 8, como no Tibia real.
     const { session, ruleset } = enter(real(), 'cautious');
     run(session, 600_000, 100);
-    expect(session.ended).toBeNull();
+    expect(session.ended).toBe('death');
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40);
     expect(session.aggregates.goldGained).toBeGreaterThan(0);
-    expect(session.aggregates.itemsLooted).toBeGreaterThan(0);
-    // A rota é um laço de 444 tiles: o walker deu a volta ao menos uma vez.
+    // Só 2 abates até morrer (#522 reduziu o rendimento do desarmado) — loot por abate é
+    // probabilístico, e a amostra é pequena demais para garantir item algum.
+    expect(session.aggregates.itemsLooted).toBeGreaterThanOrEqual(0);
+    // A rota é um laço de 444 tiles: o walker andou nele antes de morrer.
     expect(ruleset.routeIndex).toBeGreaterThanOrEqual(0);
     // RF-05: o número fica visível para comparar com o recorde solo do Huntera (9.346 XP/h ·
     // 2.610 gp/h, docs/reference/huntera-observed.md §31) — comparação, não asserção: o bot do
     // Draconya e o jogador do recorde não seguem a mesma rotação, e o número real muda com a
     // rota e o combate desarmado do level 8.
-    const hours = 600_000 / 3_600_000;
+    const hours = session.aggregates.durationMs / 3_600_000;
     console.log(
-      `Rotworm Caves (cautious, 10 min): XP/h=${(session.aggregates.xpGained / hours).toFixed(0)} `
+      `Rotworm Caves (cautious, até morrer): XP/h=${(session.aggregates.xpGained / hours).toFixed(0)} `
       + `gp/h=${(session.aggregates.goldGained / hours).toFixed(0)}`,
     );
   });
@@ -114,10 +120,14 @@ describe('a Rotworm Caves real (#511)', () => {
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
 
-  it('um personagem level 8 sem arma sobrevive 10 minutos no pull cautious', () => {
-    // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % é o que segura o herói, como o
-    // Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36). A poção é recusada (o herói
-    // de teste nasce com `goldDelta: 0`) — comportamento real, não defeito.
+  it('um personagem level 8 sem arma NÃO sobrevive 10 minutos no pull cautious (#522)', () => {
+    // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % é o que segurava o herói, como
+    // o Druid do Huntera com HP mínimo 116/170 (Parte VI §36) — até o dano de arma do Canary
+    // (#522, `combat-v2`) reduzir o murro desarmado do level 8 a menos da metade do flat de
+    // antes (§ do teste anterior). A cura ainda ajuda, mas a luta demora tanto mais que o
+    // herói morre por volta dos 97,6 s (medido, seed fixa) em vez de completar os 600 s. A poção
+    // continua recusada (o herói de teste nasce com `goldDelta: 0`) — comportamento real, não
+    // defeito.
     const { session } = enter(real(), 'cautious');
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
@@ -126,9 +136,11 @@ describe('a Rotworm Caves real (#511)', () => {
       minHp = Math.min(minHp, hero.health);
     }
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
-    expect(session.ended).toBeNull();
+    expect(session.ended).toBe('death');
+    expect(minHp).toBe(0);
     expect(session.aggregates.xpGained % 40).toBe(0);
-    const hoursFraction = 600_000 / 3_600_000;
+    expect(session.aggregates.xpGained).toBeGreaterThan(0);
+    const hoursFraction = session.aggregates.durationMs / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);
     // Comparar com o recorde solo do Huntera (9.346 XP/h · 2.610 gp/h, §31) — sem asserção:
