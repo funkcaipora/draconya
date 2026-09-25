@@ -25,6 +25,35 @@ esse tipo de violação difícil de enxergar em revisão.
 Regra prática: se a função lê arquivo, ela vai para `load.ts`. Se ela só valida ou monta
 estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
+## O catálogo importado (ADR 0038, #572)
+
+Qualquer `data/<tipo>/` (hoje `items/`, mais tarde `monsters/`) aceita, além do arquivo autoral
+direto na pasta, duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em
+`content.ts`:
+
+```
+data/items/backpack.json          # autoral, uma entidade por arquivo (de sempre)
+data/items/generated/weapons.json # gerado por `pnpm catalog:import items` — um ARRAY por fatia
+data/items/overrides/*.json       # correção nossa: { id, reason, patch }
+```
+
+Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
+continua sendo uma entidade só, como sempre foi. **Id repetido entre autoral e gerado é erro no
+boot** (a mesma checagem de duplicata que `parseAll` já fazia, sem código novo: as duas listas só
+se juntam antes de chegar lá).
+
+Um `overrides/*.json` **nunca** vira entidade nova — é `{ id, reason, patch }` aplicado por cima
+da entidade de mesmo id (autoral OU gerada) toda vez que o conteúdo é CARREGADO, nunca uma vez só
+na hora de importar. `reason` é obrigatório e sem default (o boot recusa sem ele): correção sem
+motivo é indistinguível de erro de digitação na próxima revisão. Override para um id que não
+existe em lugar nenhum é erro — correção órfã quase sempre significa que o id mudou. O patch é
+**raso**: sobrescreve os campos que lista, não troca o objeto inteiro nem faz merge profundo em
+campo aninhado.
+
+Por que a correção não entra em `generated/` direto: `pnpm catalog:import` regenera essa pasta a
+cada reimportação, sempre como transcrição PURA do Canary — um campo editado ali seria
+sobrescrito em silêncio na próxima vez. `overrides/` é o único lugar em que uma correção
+sobrevive a uma reimportação. Ver `scripts/catalog/` para quem escreve `generated/`.
 
 ## Mapa e rota
 
