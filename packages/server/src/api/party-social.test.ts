@@ -65,6 +65,9 @@ function build(over: { locate?: (characterId: string) => { type: string } | null
       lookup: async (characterId) => locations.get(characterId) ?? null,
       node: async (nodeId) => ({ nodeId, sessions: 0, url: `ws://${nodeId}:7171` }),
     },
+    // `/start` não é exercitado aqui (o convite social nasce fora de qualquer party) — sempre
+    // "sem snapshot pendente" (#527).
+    snapshots: { load: async () => null },
     limits: {
       maxMembers: 4, contentVersion: 'v-test',
       vocations: ['knight', 'druid', 'sorcerer', 'paladin'],

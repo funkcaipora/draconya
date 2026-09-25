@@ -23,6 +23,7 @@ import type { IssueFailure, IssuedTicket, PartyTicket, TicketService } from '../
 import type { PartyRecord, PartyStore } from '../party-store.js';
 import { NO_VOCATION } from '../party-store.js';
 import type { SessionDirectory } from '../directory.js';
+import type { SnapshotStore } from '../snapshots.js';
 import { initialCharacterOf } from './tickets.js';
 import type { Principal, SettlementResult } from './tickets.js';
 
@@ -36,6 +37,15 @@ export interface PartyRouteDependencies {
   readonly getCharacterById: GameRepository['getCharacterById'];
   readonly listItemInstances?: GameRepository['listItemInstances'];
   readonly settleProgress: (characterId: string) => Promise<SettlementResult>;
+  /**
+   * O snapshot de sessão de CADA personagem (#527, ADR 0010): um nó que reiniciou no meio de
+   * uma hunt deixa o registro do diretório morrer com o lease — o personagem passa a "parecer"
+   * em repouso —, mas o snapshot resumível continua de pé (§38.4, uma hunt AFK não some em
+   * silêncio). `/start` recusa formar uma party nova para quem tem um pendente: sem isto, o
+   * `game` "resolveria" escolhendo a sessão errada quando o ticket da party chegasse — a
+   * própria dele, indexado por `characterId`, não por `sessionId`.
+   */
+  readonly snapshots: Pick<SnapshotStore, 'load'>;
   /** Onde o personagem está, segundo o diretório: só quem está na Cidade (ou em repouso) inicia. */
   readonly locateSession: (characterId: string) => Promise<{ type: string } | null>;
   /**
@@ -789,6 +799,23 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
         return reply.code(503).send({ error: 'progress-not-settled' });
       }
       if (settlement.failed > 0) return reply.code(503).send({ error: 'progress-not-settled' });
+    }
+
+    // Nenhum membro pode ter um SNAPSHOT de outra sessão esperando retomada (#527, ADR 0010,
+    // invariante 8). `settleProgress` acima liquida EXTRATOS pendentes (sessões que já
+    // encerraram) — um snapshot é outra coisa: uma hunt que foi DRENADA sem encerrar (o nó
+    // reiniciou no meio dela) e ainda pode ser retomada. O registro dela no diretório morre
+    // com o lease do nó, então o check de "está na Cidade" acima passa — o personagem PARECE
+    // em repouso —, mas a hunt anterior continua pendente. Formar uma party nova aqui faria o
+    // `game` "resolver" sozinho qual sessão é a certa quando o ticket chegasse, e ele erraria
+    // para o lado errado (o achado da QA ao vivo: retomava a hunt velha em vez de criar a
+    // nova). A recusa é típada e retentável: reconectar sozinho resolve o snapshot (ele
+    // resume, e uma saída normal dali o encerra), e então `/start` funciona.
+    for (const member of party.members) {
+      const pending = await deps.snapshots.load(member);
+      if (pending !== null) {
+        return reply.code(409).send({ error: 'pending-session', characterId: member });
+      }
     }
 
     // As linhas, com a conta de cada um (registrada ao entrar na party).

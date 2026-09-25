@@ -333,6 +333,8 @@ beforeAll(async () => {
     isCharacterActive: (accountId, characterId) => directory.isActive(accountId, characterId),
     locateSession: (characterId) => directory.lookup(characterId),
     directory,
+    // O snapshot de cada personagem (#527) — `/start` recusa quem tem um pendente.
+    snapshots,
     settleProgress,
     listItemInstances: (characterId) => repository.listItemInstances(characterId),
     party: new PartyStore(redis),
