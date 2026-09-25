@@ -89,10 +89,11 @@ interface SweepResult {
   readonly cohesionWithinRadius: number;
 }
 
-// Raio de coesão do TESTE — mais folgado que o do líder (`PARTY_REGROUP_RADIUS`, 7, em
-// `hunt.ts`) de propósito: uma amostra pode cair NO MEIO de uma correção (o líder acabou de
-// decidir segurar o passo, mas o seguidor ainda não fechou a distância desta vez), e o teste
-// mede "a party está coesa na maior parte do tempo", não "em CADA amostra exata".
+// Raio de coesão do TESTE — alinhado ao raio de regroup do líder em produção
+// (`targetSearchRadius + PARTY_REGROUP_MARGIN`, `hunt.ts`; 8 + 0 = 8 na configuração atual),
+// com uma folga pequena e de propósito: uma amostra pode cair NO MEIO de uma correção (o líder
+// acabou de decidir segurar o passo, mas o seguidor ainda não fechou a distância desta vez), e
+// o teste mede "a party está coesa na maior parte do tempo", não "em CADA amostra exata".
 const COHESION_RADIUS = 10;
 
 /**
@@ -152,17 +153,21 @@ function runSweepSeed(content: Content, seedId: string, bounds: SweepBounds): Sw
 
     // Coesão (#527, pedido numa QA ao vivo depois de cae00cb: sem haste igual entre vocações o
     // líder — que nunca esperava — seguia sozinho por dezenas de tiles). Só conta enquanto
-    // houver seguidor vivo: a party inteira reduzida ao líder não tem o que medir.
-    const aliveFollowers = session.participants.filter((p) => p.id !== 'knight' && p.alive);
+    // houver seguidor vivo: a party inteira reduzida ao líder não tem o que medir. Amostra só
+    // NO MESMO ANDAR do líder — um seguidor num andar diferente já é medido por
+    // `maxTogetherBreachMs`/`STRANDED_BOUND_MS` (até 8 min, a válvula rara documentada acima),
+    // que é o teto certo para ESSE afastamento; contar a MESMA travessia de novo aqui, como
+    // "fora do raio" a cada amostra enquanto durar, pune a mesma coisa duas vezes por métricas
+    // diferentes — e é justamente o que fazia a proporção de coesão desabar numa travessia de
+    // andar comum (5-6 min), bem dentro do teto que `STRANDED_BOUND_MS` já tolera.
+    const aliveFollowers = session.participants.filter((p) => p.id !== 'knight' && p.alive)
+      .filter((f) => f.position.z === leader.position.z);
     if (aliveFollowers.length > 0) {
       cohesionSamples += 1;
-      const allSameFloor = aliveFollowers.every((f) => f.position.z === leader.position.z);
-      const maxFollowerDistance = allSameFloor
-        ? Math.max(...aliveFollowers.map((f) => Math.max(
-          Math.abs(f.position.x - leader.position.x), Math.abs(f.position.y - leader.position.y),
-        )))
-        : Number.POSITIVE_INFINITY;
-      if (allSameFloor && maxFollowerDistance <= COHESION_RADIUS) cohesionWithinRadius += 1;
+      const maxFollowerDistance = Math.max(...aliveFollowers.map((f) => Math.max(
+        Math.abs(f.position.x - leader.position.x), Math.abs(f.position.y - leader.position.y),
+      )));
+      if (maxFollowerDistance <= COHESION_RADIUS) cohesionWithinRadius += 1;
     }
 
     for (const character of session.participants) {
@@ -215,6 +220,10 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
     const result = runSweepSeed(real(), `dragon-party-real-5000-${String(seedIndex)}`, {
       stepMs: 5_000, totalMs: TOTAL_MS, idleBoundMs: IDLE_BOUND_MS, strandedBoundMs: STRANDED_BOUND_MS,
     });
+    // 20 s de teto (#527) — bem acima da duração observada isolada (~1-2 s/semente), mas o BFS
+    // limitado do follow soma custo real por vencimento, e a suíte inteira rodando junto (CI,
+    // `pnpm check`) compete por CPU o bastante para o teto padrão de 5 s ocasionalmente estourar
+    // sem nenhuma regressão de verdade.
 
     expect(result.leaderIdleMs, `semente ${String(seedIndex)}: líder parado além do razoável`)
       .toBeLessThanOrEqual(IDLE_BOUND_MS);
@@ -235,7 +244,7 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
           + `andar) só em ${(ratio * 100).toFixed(1)}% das amostras`,
       ).toBeGreaterThanOrEqual(MIN_COHESION_RATIO);
     }
-  });
+  }, 20_000);
 
   // **INVARIANTE 3 (#527, pedido numa QA ao vivo depois de 037fe29): a hunt desanexada tica a
   // ~1 Hz (ADR 0003/0020) — a MESMA propriedade tem que valer nesse ritmo, não só nos 5000 ms
@@ -267,7 +276,7 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
           + `mesmo andar) só em ${(ratio * 100).toFixed(1)}% das amostras`,
       ).toBeGreaterThanOrEqual(MIN_COHESION_RATIO);
     }
-  });
+  }, 20_000);
 });
 
 /**
@@ -280,6 +289,61 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
  * de eventos decide o resultado. `session.enter` é determinístico (mesmo id, mesma ordem de
  * entrada, mesmo `Rng.fromSeed`), então as duas sessões partem do mesmo estado inicial.
  */
+/**
+ * Geometria exata de uma QA ao vivo (#527), depois de c3acded/43df30b/40f1116 (BFS limitado do
+ * follow): o líder e dois seguidores já juntos, o Druid sozinho no bolso à esquerda da Darashia
+ * Dragon Lair (x 59..62, linhas 38..44 de z10), a Chebyshev EXATAMENTE 8 do líder — a distância
+ * onde a v1 desta emenda (raio de regroup fixo em 7, `targetSearchRadius` padrão em 8) entrava
+ * num impasse mútuo: o Druid, dentro do PRÓPRIO raio de follow (`d > radius` só desiste além de
+ * 8), continuava tentando fechar a distância sozinho — mas o líder, com um limiar MAIS
+ * APERTADO que o do Druid, já achava "longe demais" e segurava, e nenhum dos dois tinha motivo
+ * para se mexer mais rápido. O bolso conecta à área do líder por um caminho de ~15 passos
+ * (descer até a linha 43, seguir a leste até x≈67, subir) — dentro do raio do BFS (30), mas só
+ * alcançável se o guloso não ficar brigando com o caminho já calculado a cada vencimento (a
+ * OUTRA causa raiz achada nesta rodada: tentar o guloso de novo mesmo com um caminho do BFS já
+ * em andamento).
+ */
+describe('a party de dragões (bot config REAL) o Druid sai do bolso à esquerda e alcança o líder (#527)', () => {
+  const scenario = (stepMs: number) => {
+    const content = real();
+    const { session, ruleset } = enter(content, `druid-pocket-${String(stepMs)}`);
+    const knight = session.participants.find((p) => p.id === 'knight');
+    const paladin = session.participants.find((p) => p.id === 'paladin');
+    const sorcerer = session.participants.find((p) => p.id === 'sorcerer');
+    const druid = session.participants.find((p) => p.id === 'druid');
+    if (knight === undefined || paladin === undefined || sorcerer === undefined || druid === undefined) {
+      throw new Error('a sessão perdeu um membro');
+    }
+    knight.position = { x: 70, y: 38, z: 10 };
+    paladin.position = { x: 69, y: 39, z: 10 };
+    sorcerer.position = { x: 70, y: 39, z: 10 };
+    druid.position = { x: 62, y: 39, z: 10 };
+    // O líder e os dois seguidores já juntos ficam PARADOS de propósito — o teste isola o
+    // follow do Druid tentando alcançar o líder, não a interação com regroup/rota do líder
+    // (já coberta pelos outros testes deste arquivo).
+    session.cancelEvent('player-step', 'knight');
+    session.cancelEvent('player-step', 'paladin');
+    session.cancelEvent('player-step', 'sorcerer');
+
+    const TOTAL_MS = 3 * 60_000;
+    for (let elapsed = 0; elapsed < TOTAL_MS && session.ended === null; elapsed += stepMs) {
+      weakenNearby(ruleset, session);
+      session.advanceBy(stepMs);
+    }
+    return Math.max(
+      Math.abs(knight.position.x - druid.position.x), Math.abs(knight.position.y - druid.position.y),
+    );
+  };
+
+  it('a 5000 ms/passo (20 Hz aproximado)', () => {
+    expect(scenario(5_000), '20 Hz aproximado: Druid nunca alcançou o líder').toBeLessThanOrEqual(1);
+  });
+
+  it('a 1000 ms/passo (1 Hz, ritmo desanexado)', () => {
+    expect(scenario(1_000), '1 Hz: Druid nunca alcançou o líder').toBeLessThanOrEqual(1);
+  });
+});
+
 describe('a party de dragões (bot config REAL) dá o MESMO resultado a 1 Hz e a 20 Hz (#527)', () => {
   it('posição, vida e andar de cada personagem batem exatamente nas duas frequências', () => {
     const content = real();
