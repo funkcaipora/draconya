@@ -1009,10 +1009,39 @@ export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
 export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
 
 /**
+ * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
+ * cada `intervalMs` — o `addDamage(rounds, interval, value)` que os scripts de magia do Canary
+ * usam (Ignite: `addDamage(25, 3000, -45)`) e que o campo de fogo do Dragon Lord também usa
+ * (`items.xml` id 2118: `ticks 10000 count 7 damage 20`). O `form: 'rounds'` de
+ * `conditionEffectSchema` aceita mais de uma rodada, para concatenar grupos com cadência
+ * diferente — o caso comum (Dragon Lord) é uma rodada só.
+ */
+const damageOverTimeRoundSchema = z.object({
+  count: z.number().int().positive(),
+  intervalMs: z.number().int().positive(),
+  damage: z.number().int().positive(),
+});
+
+/**
  * O efeito declarativo de uma condição (CMB-07). É o `ConditionEffect` do contrato da issue: um
  * estado com prazo que muda uma leitura (haste, postura, magic shield) ou dispara um tique (cura
  * ou DANO ao longo do tempo). O dano contínuo NÃO traz origem — quem aplica decide (`spell`,
  * `monster-attack`), e é a mesma divisão do `DamageSource` canônico (CMB-02).
+ *
+ * O dano ao longo do tempo tem DUAS formas do Tibia (M31-02, ADR 0037), a mesma divisão que
+ * `ConditionDamage::init`/`ItemParse::parseFieldCombatDamage` do Canary fazem por `startDamage`
+ * presente ou ausente — nunca as DUAS ao mesmo tempo:
+ * - `generated`: a lista DECRESCENTE que `ConditionDamage::generateDamageList`
+ *   (`src/creatures/combat/condition.cpp:2143-2160`) soma até `totalDamage`, começando em
+ *   `startDamage` e descendo até 1 (poison field do Canary: `start=5 damage=100`). Ausente,
+ *   `startDamage` é `max(1, ceil(totalDamage / 20))`, o default do próprio Canary.
+ * - `rounds`: a lista de RODADAS explícitas de cima. O sim expande as duas para a MESMA fila de
+ *   tiques (`generateDamageList`/`damageOverTimeTicks` em `sim/conditions.ts`) — o conteúdo só
+ *   escolhe a forma mais perto da fonte.
+ *
+ * `damageType` é o ELEMENTO do Tibia (poison→earth, fire→fire, energy→energy, bleeding→physical,
+ * cursed→death, freezing→ice, dazzled→holy — tabela em `docs/product/combat.md`; `drown` fica de
+ * fora até o #547/M29-07 acrescentar o tipo). Ausente é `physical`, o default que preserva o v1.
  */
 export const conditionEffectSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -1031,15 +1060,28 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
     amount: z.number().int().positive(),
     intervalMs: z.number().int().positive(),
   }),
-  z.object({
-    kind: z.literal('damage-over-time'),
-    amount: z.number().int().positive(),
-    intervalMs: z.number().int().positive(),
-    /** O tipo do tique (CMB-03). Ausente é `physical`, o default que preserva o v1. */
-    damageType: z.enum(DAMAGE_TYPES).default('physical'),
-  }),
+  z.discriminatedUnion('form', [
+    z.object({
+      kind: z.literal('damage-over-time'),
+      form: z.literal('generated'),
+      totalDamage: z.number().int().positive(),
+      startDamage: z.number().int().positive().optional(),
+      intervalMs: z.number().int().positive(),
+      damageType: z.enum(DAMAGE_TYPES).default('physical'),
+    }).refine(
+      (effect) => effect.startDamage === undefined || effect.startDamage <= effect.totalDamage,
+      { message: 'startDamage não pode passar de totalDamage', path: ['startDamage'] },
+    ),
+    z.object({
+      kind: z.literal('damage-over-time'),
+      form: z.literal('rounds'),
+      rounds: z.array(damageOverTimeRoundSchema).min(1),
+      damageType: z.enum(DAMAGE_TYPES).default('physical'),
+    }),
+  ]),
 ]);
 export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
+export type DamageOverTimeEffect = Extract<ConditionEffect, { kind: 'damage-over-time' }>;
 
 /**
  * A condição declarativa do conteúdo (CMB-07): chave, política de fusão, prazo e efeito. O

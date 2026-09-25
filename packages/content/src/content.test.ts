@@ -1852,7 +1852,10 @@ describe('as runas de ataque do Canary (#476)', () => {
 });
 
 describe('condições e campos declarativos (CMB-07, #334)', () => {
-  const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
+  const dot = {
+    kind: 'damage-over-time', form: 'rounds',
+    rounds: [{ count: 4, intervalMs: 1_000, damage: 5 }], damageType: 'earth',
+  };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };
   const field = {
     id: 'fire', durationMs: 5_000,
@@ -1886,7 +1889,29 @@ describe('condições e campos declarativos (CMB-07, #334)', () => {
         ...rat,
         abilities: [{
           id: 'v', cadenceMs: 1_000, power: 1,
-          condition: { ...condition, effect: { kind: 'damage-over-time', amount: -1, intervalMs: 1_000 } },
+          condition: {
+            ...condition,
+            effect: {
+              kind: 'damage-over-time', form: 'rounds',
+              rounds: [{ count: 1, intervalMs: 1_000, damage: -1 }],
+            },
+          },
+        }],
+      }],
+    }))).toThrow(ContentError);
+    // `startDamage` maior que `totalDamage` é recusado (a clamp do Canary vira erro de conteúdo).
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: {
+            ...condition,
+            effect: {
+              kind: 'damage-over-time', form: 'generated',
+              totalDamage: 10, startDamage: 20, intervalMs: 1_000,
+            },
+          },
         }],
       }],
     }))).toThrow(ContentError);
