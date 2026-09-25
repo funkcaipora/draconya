@@ -107,6 +107,15 @@ describe('a party de dragões atravessa os três andares JUNTA (#527)', () => {
     // SEMPRE": bem abaixo do TOTAL_MS, para um deadlock de verdade ainda reprovar o teste.
     const STALL_BOUND_MS = 20 * 60_000;
     const STRANDED_BOUND_MS = 20 * 60_000; // ninguém preso em andar DIFERENTE do líder pelo resto da hunt
+    // O líder nunca fica parado com ZERO monstros ao alcance de busca por mais que uns poucos
+    // vencimentos (#527, achado na QA ao vivo em cima do #539/#538 integrados: a party toda
+    // ficou de 90 a 200+ segundos parada em (64,55,z10), lure MIN 4 · MAX 8, nenhum monstro a
+    // menos de 14 tiles — os dragões nos PRÓPRIOS pontos, fora do raio de busca). Um caçador do
+    // Tibia não fica parado olhando para o vazio; ele anda e puxa a próxima leva. A janela aqui
+    // é bem mais curta que `STALL_BOUND_MS`: parar por um vencimento enquanto pondera é normal,
+    // parar por mais de um minuto lógico sem NADA para lutar não é.
+    const IDLE_WITH_NOTHING_TO_FIGHT_BOUND_MS = 60_000;
+    const TARGET_SEARCH_RADIUS = 8;
 
     const killsByFloor = new Map<number, number>();
     const visitedFloors = new Map<string, Set<number>>(VOCATIONS.map((v) => [v, new Set<number>()]));
@@ -115,6 +124,8 @@ describe('a party de dragões atravessa os três andares JUNTA (#527)', () => {
     const strandedSinceMs = new Map<string, number>(VOCATIONS.map((v) => [v, 0]));
     let maxStalledMs = 0;
     let maxStrandedMs = 0;
+    let leaderIdleWithNothingToFightMs = 0;
+    let maxLeaderIdleWithNothingToFightMs = 0;
 
     for (let elapsed = 0; elapsed < TOTAL_MS && session.ended === null; elapsed += STEP_MS) {
       weakenNearby(ruleset, session);
@@ -137,6 +148,19 @@ describe('a party de dragões atravessa os três andares JUNTA (#527)', () => {
         const stalledMs = (stalled ? (stalledSinceMs.get(id) ?? 0) : 0) + (stalled ? STEP_MS : 0);
         stalledSinceMs.set(id, stalledMs);
         maxStalledMs = Math.max(maxStalledMs, stalledMs);
+
+        if (id === 'knight') {
+          const nearbyMonsters = stalled ? ruleset.monsters.filter((m) => m.alive
+            && m.position.z === position.z
+            && Math.max(Math.abs(m.position.x - position.x), Math.abs(m.position.y - position.y))
+              <= TARGET_SEARCH_RADIUS).length : 1;
+          leaderIdleWithNothingToFightMs = stalled && nearbyMonsters === 0
+            ? leaderIdleWithNothingToFightMs + STEP_MS
+            : 0;
+          maxLeaderIdleWithNothingToFightMs = Math.max(
+            maxLeaderIdleWithNothingToFightMs, leaderIdleWithNothingToFightMs,
+          );
+        }
         lastPosition.set(id, { x: position.x, y: position.y, z: position.z });
 
         const strandedNow = id !== 'knight' && !sameFloor(position.z, leader.position.z);
@@ -173,5 +197,14 @@ describe('a party de dragões atravessa os três andares JUNTA (#527)', () => {
     //    não fica abandonado para sempre num andar errado.
     expect(maxStrandedMs, 'alguém ficou preso longe do andar do líder além do razoável')
       .toBeLessThanOrEqual(STRANDED_BOUND_MS);
+
+    // 5) o líder nunca fica parado com ZERO monstros ao alcance de busca por mais que uns
+    //    poucos vencimentos — achado na QA ao vivo (#527): a party parava "PARADA NA ROTA" com
+    //    os dragões nos próprios pontos, fora de alcance, e nada ao alcance para justificar a
+    //    parada. O líder tem que puxar a próxima leva, não esperar ela vir sozinha.
+    expect(
+      maxLeaderIdleWithNothingToFightMs,
+      'o líder ficou parado sem NENHUM monstro ao alcance além do razoável',
+    ).toBeLessThanOrEqual(IDLE_WITH_NOTHING_TO_FIGHT_BOUND_MS);
   });
 });

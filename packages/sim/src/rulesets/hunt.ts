@@ -321,6 +321,47 @@ const LURE_FORCE_WALK_MS = 60_000;
 const NUDGE_YIELD_MS = 3_000;
 
 /**
+ * Quanto tempo LÓGICO um follow atravessando andar (#527, `floorChangeToward`) pode ficar sem
+ * progredir rumo à escada antes de desistir — a MESMA garantia que a distância recalculada a
+ * cada chamada já dá de graça no ramo do mesmo andar, só que aqui precisa de um relógio próprio:
+ * `stair` é uma propriedade do MAPA (não muda de um vencimento para o outro), então nada além de
+ * um teto de tempo solta quem fica bloqueado (parede, companheiro, monstro) o vencimento
+ * inteiro. Achado reproduzindo a QA do M28 com o `startingSpeed` novo do #527 (220, não 278): o
+ * Paladin ficou 24+ minutos lógicos com o walker PARADO — travado numa travessia de escada que
+ * `greedyStep` nunca conseguia terminar — sem nenhum caminho de volta para a própria rota. Meio
+ * minuto é generoso o bastante para um bloqueio comum se resolver sozinho (um monstro morre, um
+ * companheiro anda) sem deixar quem segue preso pelo resto da hunt.
+ */
+const MAX_CROSS_FLOOR_STUCK_MS = 30_000;
+
+/**
+ * Quanto tempo LÓGICO o follow fica suspenso depois de desistir de uma travessia de escada
+ * empacada (#527, reaproveita `Runner.nudgedUntilMs` — a mesma garantia de `#nudgeCompanion`:
+ * "não tente reocupar o alcance de follow por um tempo"). Sem isto, o vencimento SEGUINTE via
+ * os dois personagens ainda em andares diferentes e reengatilhava a MESMA travessia impossível
+ * na hora — antes da rota PRÓPRIA conseguir dar um único passo —, e o ciclo "empaca 30 s,
+ * desiste, reengatilha no instante seguinte" se repetia para sempre. Sair de uma reentrância do
+ * mapa pode levar mais de um passo (andar para longe da escada antes de poder curvar na
+ * direção certa); vinte segundos são dezenas de passos na velocidade de qualquer personagem
+ * deste nível — o bastante para a rota própria progredir de verdade antes do follow voltar a
+ * competir por ela.
+ */
+const FOLLOW_GIVE_UP_SUSPEND_MS = 20_000;
+
+/**
+ * Quanto tempo LÓGICO um personagem pode ficar CERCADO na rota — bloqueado por um companheiro
+ * que `#nudgeCompanion` não conseguiu mover — antes de recuar sozinho (#527). Achado na QA ao
+ * vivo em cima do #539/#538 integrados: a party inteira (os quatro dentro de 1–2 tiles, o
+ * follow funcionando bem) ficou de 90 a 200+ segundos parada num gargalo estreito, sem NENHUM
+ * monstro ao alcance — não era fome de presa, era engarrafamento: num corredor com três ou
+ * quatro personagens, `#nudgeCompanion` pode falhar em cadeia (quem bloqueia também está
+ * cercado, e não tem para onde ceder), e sem monstro nenhum nada mais desbloqueia sozinho.
+ * Trinta segundos é o mesmo teto de `MAX_CROSS_FLOOR_STUCK_MS` — generoso para um bloqueio
+ * transitório se resolver, curto o bastante para não parecer que o jogo travou.
+ */
+const MAX_ROUTE_BLOCK_STUCK_MS = 30_000;
+
+/**
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
@@ -367,6 +408,8 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.lureStoppedSinceMs === null ? {} : { lureStoppedSinceMs: runner.lureStoppedSinceMs }),
     ...(runner.lureForceWalkUntilMs === null ? {} : { lureForceWalkUntilMs: runner.lureForceWalkUntilMs }),
     ...(runner.nudgedUntilMs === null ? {} : { nudgedUntilMs: runner.nudgedUntilMs }),
+    ...(runner.crossFloorStuckSinceMs === null ? {} : { crossFloorStuckSinceMs: runner.crossFloorStuckSinceMs }),
+    ...(runner.routeStuckSinceMs === null ? {} : { routeStuckSinceMs: runner.routeStuckSinceMs }),
   };
 }
 
@@ -932,6 +975,16 @@ interface Runner {
    * sempre: um sai, o outro reentra, ninguém nunca passa.
    */
   nudgedUntilMs: number | null;
+  /**
+   * Desde QUANDO um follow atravessando andar está sem progredir rumo à escada (#527,
+   * `MAX_CROSS_FLOOR_STUCK_MS`). `null` fora de uma travessia, ou progredindo normalmente.
+   */
+  crossFloorStuckSinceMs: number | null;
+  /**
+   * Desde QUANDO a rota está cercada por um companheiro que não conseguiu ceder espaço (#527,
+   * `MAX_ROUTE_BLOCK_STUCK_MS`). `null` fora de um cerco, ou andando normalmente.
+   */
+  routeStuckSinceMs: number | null;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
   ringReplaced: string | null;
   warnedExhausted: boolean;
@@ -1031,6 +1084,10 @@ export interface RunnerState {
   readonly lureForceWalkUntilMs?: number | null;
   /** Até quando o empurrão (#527, `#nudgeCompanion`) suspende o follow. Ausente/`null` é fora. */
   readonly nudgedUntilMs?: number | null;
+  /** Desde quando a travessia de escada do follow está sem progredir (#527). Ausente/`null` é fora. */
+  readonly crossFloorStuckSinceMs?: number | null;
+  /** Desde quando a rota está cercada por um companheiro (#527). Ausente/`null` é fora. */
+  readonly routeStuckSinceMs?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1841,6 +1898,8 @@ export class HuntRuleset implements Ruleset {
       lureStoppedSinceMs: state?.lureStoppedSinceMs ?? null,
       lureForceWalkUntilMs: state?.lureForceWalkUntilMs ?? null,
       nudgedUntilMs: state?.nudgedUntilMs ?? null,
+      crossFloorStuckSinceMs: state?.crossFloorStuckSinceMs ?? null,
+      routeStuckSinceMs: state?.routeStuckSinceMs ?? null,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2455,12 +2514,29 @@ export class HuntRuleset implements Ruleset {
     const to = runner.walker.step();
     if (to === null) return null;
     let result = this.#step(session, character, to, character.id);
+    if (result.ok) runner.routeStuckSinceMs = null;
     if (!result.ok) {
       if (result.reason === 'not-adjacent') {
-        // O personagem não está onde a rota acha que ele está — andou à mão (FUN-69) ou foi
-        // empurrado. Reentrar pelo tile mais próximo, em vez de segurar um índice que nunca
-        // mais vai ficar adjacente.
+        // O personagem não está onde a rota acha que ele está — andou à mão (FUN-69), foi
+        // empurrado, ou vem de um follow que acabou de atravessar andar e pode deixá-lo longe
+        // de QUALQUER tile da rota (#527, `floorChangeToward`: o passo guloso livre até a
+        // escada não tem por que terminar perto da rota). `rejoinNearest` resincroniza o
+        // ÍNDICE para o tile mais próximo, mas NÃO move ninguém — se esse tile também não for
+        // adjacente, o vencimento seguinte cai no MESMO `not-adjacent` para sempre, resincroniza
+        // para o MESMO tile de novo, e nunca dá um passo de verdade (achado reproduzindo a QA
+        // do M28 com conteúdo real: o Paladin ficava preso repetindo o resync, imóvel, porque
+        // "voltar para a rota" nunca precisou fechar distância antes — um empurrão ou o
+        // `walk` manual deixam o personagem a um tile da rota, não a quatro). Fecha a
+        // distância com o MESMO passo guloso do resto do motor (ADR 0009) antes de confiar na
+        // rota nesta mesma chamada; sem caminho livre, o vencimento seguinte tenta de novo.
         runner.walker.rejoinNearest(character.position);
+        const rejoined = runner.walker.current;
+        if (distance(character.position, rejoined) > 1) {
+          const toward = greedyStep(character.position, rejoined, this.#blockedFor(character));
+          if (toward !== null) {
+            result = this.#step(session, character, { ...toward, z: character.position.z }, character.id);
+          }
+        }
       } else if (this.#companionAt(session, character, to)) {
         // Um COMPANHEIRO parado na rota (#203): ele está lutando ali, e esperar seria ficar
         // atrás dele a hunt inteira — foi o que aconteceu. Contorna com o passo guloso rumo
@@ -2477,7 +2553,25 @@ export class HuntRuleset implements Ruleset {
           // importante agora cede.
           this.#nudgeCompanion(session, character.position, to);
           runner.walker.hold();
+          // Um corredor com TRÊS OU MAIS personagens (a party inteira num gargalo estreito,
+          // achado na QA ao vivo em cima do #539/#538: a party toda parada, zero monstro ao
+          // alcance) pode fazer `#nudgeCompanion` falhar em cadeia — quem bloqueia também está
+          // cercado, e ceder não tem para onde ir. Sem um teto aqui, o "hold" é para sempre:
+          // ninguém luta (não há monstro nenhum), então nada nunca desbloqueia sozinho. Estourado
+          // `MAX_ROUTE_BLOCK_STUCK_MS`, o PRÓPRIO personagem recua (`fleeStep` de quem bloqueia)
+          // em vez de insistir para a frente — dar espaço é o que quebra um engarrafamento que
+          // empurrar não quebra.
+          const stuckSince = runner.routeStuckSinceMs ?? session.nowMs;
+          runner.routeStuckSinceMs = stuckSince;
+          if (session.nowMs - stuckSince >= MAX_ROUTE_BLOCK_STUCK_MS) {
+            runner.routeStuckSinceMs = null;
+            const back = fleeStep(character.position, to, this.#blockedFor(character));
+            if (back !== null) {
+              result = this.#step(session, character, { ...back, z: character.position.z }, character.id);
+            }
+          }
         } else {
+          runner.routeStuckSinceMs = null;
           runner.walker.hold();
           result = this.#step(session, character, { ...around, z: character.position.z }, character.id);
         }
@@ -2639,19 +2733,51 @@ export class HuntRuleset implements Ruleset {
     if (!sameFloor(from.z, target.position.z)) {
       const stair = floorChangeToward(this.#world.map, from.z, target.position.z);
       if (stair === null) {
+        runner.crossFloorStuckSinceMs = null;
         this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
         return false;
       }
+      const to = greedyStep(from, stair, this.#blockedFor(character));
+      if (to === null) {
+        // Empacado a caminho da escada (parede, companheiro, monstro): esperar UM vencimento é
+        // o mesmo passo guloso de sempre — mas, ao contrário da distância no ramo do mesmo
+        // andar (recalculada a CADA chamada, e por isso já se solta sozinha), `stair` é uma
+        // propriedade do MAPA que não muda: sem um teto, um bloqueio persistente prendia o
+        // seguidor para sempre, com o walker PARADO (`runner.walker.stop()` de uma travessia
+        // anterior) e nenhum caminho de volta para a rota (#527, achado reproduzindo a QA do
+        // M28 com o `startingSpeed` novo do #527/220: um seguidor pode acabar numa reentrância
+        // do mapa — só três candidatos por `greedyStep`, ADR 0009, "não conserte" — de onde a
+        // direção guloso rumo à escada bate em parede nas três tentativas, mesmo havendo saída
+        // por outro lado). `crossFloorStuckSinceMs` marca desde quando; estourado
+        // `MAX_CROSS_FLOOR_STUCK_MS`, desiste — a MESMA saída de "sem escada nenhuma".
+        const stuckSince = runner.crossFloorStuckSinceMs ?? session.nowMs;
+        runner.crossFloorStuckSinceMs = stuckSince;
+        if (session.nowMs - stuckSince >= MAX_CROSS_FLOOR_STUCK_MS) {
+          runner.crossFloorStuckSinceMs = null;
+          // Suspende o follow por um trecho (a MESMA proteção do empurrão, `nudgedUntilMs`/
+          // `NUDGE_YIELD_MS`): sem isto, o vencimento SEGUINTE via os dois ainda em andares
+          // diferentes e reengatilhava a travessia na hora, antes da rota PRÓPRIA conseguir
+          // dar um passo sequer — a reentrância prendia de novo por outros
+          // `MAX_CROSS_FLOOR_STUCK_MS`, em loop (achado reproduzindo a QA: o Paladin nunca
+          // realmente tentava a rota, só desistia e recomeçava a mesma travessia impossível).
+          // A rota própria pode precisar de mais de UM passo para sair da reentrância — andar
+          // para longe da escada antes de poder curvar na direção certa —, e cada passo dela
+          // é livre para chamar `#nudgeCompanion` se o bloqueio for um companheiro.
+          runner.nudgedUntilMs = session.nowMs + FOLLOW_GIVE_UP_SUSPEND_MS;
+          this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+          return false;
+        }
+        this.#reportFollow(session, runner, character.id, target.id, true);
+        return null;
+      }
       // Ainda seguindo — só navegando até a escada, não interrompido. `d === 1`/parado não se
       // aplica aqui: a distância contra um alvo em OUTRO andar não diz nada sobre proximidade.
+      runner.crossFloorStuckSinceMs = null;
       this.#reportFollow(session, runner, character.id, target.id, true);
-      const to = greedyStep(from, stair, this.#blockedFor(character));
-      // Empacado a caminho da escada (parede, companheiro): espera este vencimento, como o
-      // resto do passo guloso — não é motivo para desistir do follow.
-      if (to === null) return null;
       runner.walker.stop();
       return this.#step(session, character, { ...to, z: from.z }, character.id);
     }
+    runner.crossFloorStuckSinceMs = null;
 
     const d = distance(from, target.position);
     const radius = this.#options.targetSearchRadius ?? 8;
