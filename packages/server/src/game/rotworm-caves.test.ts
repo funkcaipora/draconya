@@ -18,7 +18,9 @@ const real = (): Content => {
   return cached;
 };
 
-function enter(content: Content, difficulty: 'cautious' | 'bold' | 'reckless'): { session: Session; ruleset: HuntRuleset } {
+function enter(
+  content: Content, difficulty: 'cautious' | 'bold' | 'reckless', options: { gold?: number } = {},
+): { session: Session; ruleset: HuntRuleset } {
   const session = createHuntSession({
     id: 'caves', content, huntId: 'rotworm-caves', difficulty, createdAtMs: 0,
   });
@@ -26,7 +28,7 @@ function enter(content: Content, difficulty: 'cautious' | 'bold' | 'reckless'): 
   session.enter(new CharacterRuntime({
     id: 'hero', position: { x: 0, y: 0, z: 8 },
     health: stats.maxHealth, maxHealth: stats.maxHealth, mana: stats.maxMana, maxMana: stats.maxMana,
-    level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+    level: 8, xp: 0, gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
   }));
   const ruleset = session.ruleset as HuntRuleset;
   // O personagem novo já nasce com o bot padrão do conteúdo (FUN-114), como no Huntera — onde a
@@ -66,14 +68,21 @@ describe('a Rotworm Caves real (#511)', () => {
     // armor 8, muito mais forte que o rato (3-4). Antes da #521 (ADR 0037) o herói level 8
     // desarmado sobrevivia dez minutos no cautious com a regeneração provisória (1 HP/s para
     // todos); o regen REAL do Tibia (`vocations.xml` da vocação `None`, ~0,08 HP/s — mais de
-    // 10× mais lento) tira a folga que sobrava, e a cura automática (heal com HP ≤ 70%) sozinha
-    // já não garante os dez minutos inteiros. O teste passa a medir o rendimento até o fim da
-    // janela OU até a morte, o que vier primeiro — a sobrevivência plena deixou de ser a
-    // asserção, e `xpGained` deixa de ter uma fórmula fechada porque a penalidade de morte (se
-    // houver) desconta um valor que não é múltiplo de 40.
+    // 10× mais lento) tira a folga que sobrava, e este herói — SEM gold, sem poção — depende só
+    // da cura automática (heal com HP ≤ 70%), que já não garante os dez minutos inteiros. O
+    // teste passa a medir o rendimento até o fim da janela OU até a morte, o que vier primeiro.
+    //
+    // O invariante `xpGained === kills × 40` continua de pé QUANDO o herói sobrevive — só
+    // relaxa se ele morre, porque aí a penalidade de morte desconta um valor que não é múltiplo
+    // de 40. Perder os dois juntos (sobrevivência OU a fórmula fechada) escondia justamente a
+    // regressão que valeria pegar: uma morte precoce por engano ainda passaria se a asserção só
+    // checasse `kills > 0`.
     const { session, ruleset } = enter(real(), 'cautious');
     run(session, 600_000, 100);
     expect(['death', null]).toContain(session.ended);
+    if (session.ended === null) {
+      expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40);
+    }
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(session.aggregates.goldGained).toBeGreaterThan(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThan(0);
@@ -117,18 +126,19 @@ describe('a Rotworm Caves real (#511)', () => {
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
 
-  it('um personagem level 8 sem arma aguenta o pull cautious com a cura automática', () => {
-    // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % é o que segura o herói, como o
-    // Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36). A poção é recusada (o herói
-    // de teste nasce com `goldDelta: 0`) — comportamento real, não defeito.
+  it('um personagem level 8 sem arma aguenta o pull cautious com cura automática e poção', () => {
+    // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % (magia `heal`) e poção com
+    // HP ≤ 40 % (`health-potion`, `packages/content/data/bot/baseline.json`) são o que segura o
+    // herói, como o Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36).
     //
-    // Não é mais garantido chegar aos dez minutos inteiros: o regen passivo REAL do Tibia
-    // (#521, ADR 0037 — vocação `None` do Canary, ~0,08 HP/s) é mais de 10× mais lento que o
-    // 1 HP/s provisório que este teste media antes, e só a cura automática pode não bastar. O
-    // teste passa a medir o que a cura consegue segurar, não a sobrevivência plena — e
-    // `xpGained` deixa de ser múltiplo de 40 quando há morte, porque a penalidade desconta um
-    // valor que não é.
-    const { session } = enter(real(), 'cautious');
+    // O regen passivo REAL do Tibia (#521, ADR 0037 — vocação `None` do Canary, ~0,08 HP/s) é
+    // mais de 10× mais lento que o 1 HP/s provisório que este teste media antes, e a cura
+    // automática SOZINHA (sem poção) já não garante os dez minutos inteiros — ver o teste
+    // acima, sem gold. Um jogador de Tibia de verdade carrega poção; este herói também passa a
+    // carregar (2.000 gold, o bastante para dezenas de poções de 45 — medido: a caverna real
+    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena volta a valer, como
+    // valia antes da #521 — só que agora sustentada do jeito certo.
+    const { session } = enter(real(), 'cautious', { gold: 2_000 });
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
     for (let t = 0; t < 600_000 && session.ended === null; t += 100) {
@@ -136,8 +146,9 @@ describe('a Rotworm Caves real (#511)', () => {
       minHp = Math.min(minHp, hero.health);
     }
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
-    expect(['death', null]).toContain(session.ended);
+    expect(session.ended).toBeNull();
     expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40);
     const hoursFraction = 600_000 / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);
