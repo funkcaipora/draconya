@@ -59,10 +59,15 @@ por ataque, se curar, trocar de alvo nem fugir.
    Dodge corresponde a uma mecânica do Tibia (o charm Dodge) — nesse caso fica na forma do Tibia.
    Sessão em andamento continua no perfil da versão de conteúdo dela (invariante 7).
 
-6. **Hunt copiada do Tibia usa o spawn do Tibia.** Os pontos vêm do arquivo de spawn do Canary,
-   cada um com o seu monstro, a sua posição e o seu `spawntime`, e o respawn espera o jogador sair
-   da vista, como no TFS. O modelo de dificuldade por tamanho de pull (`monsterCount`, FUN-123)
-   continua para as hunts copiadas do Huntera (Rat Cellars, Rotworm Caves), que são outra fonte.
+6. **A mecânica de caça é idêntica à do Tibia, em toda hunt.** O usuário reforçou no mesmo dia:
+   *"as mecânicas de caça têm que ser idênticas"*. Spawn por ponto do arquivo de spawn do Canary
+   (monstro, posição e `spawntime` de cada um), respawn que espera o jogador sair da vista (TFS
+   `Spawn::findPlayer`), IA de monstro, loot, XP por dano e compartilhada, stamina, treino de
+   skill — tudo como no Tibia. O modelo de dificuldade por tamanho de pull (`monsterCount` e
+   composição sorteada, FUN-123), que veio do Huntera, sai de todas as hunts, inclusive Rat
+   Cellars e Rotworm Caves; o que continua do Draconya é a automação que caça por cima dessa
+   mecânica (decisão 2). A Darashia Dragon Lair (#519/#520) já nasce assim; a conversão das outras
+   hunts é planejada junto do catálogo completo.
 
 7. **Dado persistido migra, nunca é descartado** (ADR 0014). A curva de XP do Tibia muda o que
    `xp` significa: quem existe mantém o level e a fração dentro dele.
@@ -82,6 +87,9 @@ de passo e reescalar o rato e o rotworm sem ganho de fidelidade no que o jogador
 
 ## Consequências
 
+- O pedido seguinte do usuário, no mesmo dia — *"copie todas as mecânicas, magias, monstros,
+  itens"* —, estende a regra ao catálogo inteiro; o plano sai de um inventário por domínio contra
+  o Canary/TFS e entra em marcos próprios depois do M28.
 - O M28 (#518–#527) aplica a regra ao que a party de dragões exercita: IA de monstro, mapa
   multiandar e spawn por ponto, Dragon e Dragon Lord, curva de XP e progressão, dano de arma,
   magias, kit level 200 e poções, XP compartilhada, semente local e o teste no navegador.
