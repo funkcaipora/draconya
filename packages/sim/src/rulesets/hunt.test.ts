@@ -5114,7 +5114,26 @@ describe('follow de membro (§D10, #398)', () => {
   });
 
   it('alvo fora do raio: unreachable uma vez, e retoma quando volta ao alcance', () => {
+    // Sala maior que o `map`/`route` padrão deste describe (#527): com `FOLLOW_UNREACHABLE_SLACK`
+    // somado ao raio, a distância máxima da sala 4×3 de sempre (3, canto a canto) nunca ficaria
+    // ALÉM do teto de desistência — este teste especificamente precisa de uma distância maior
+    // que a arena pequena comporta.
+    const bigRoom = {
+      id: 'arena', z: 7,
+      grid: [
+        '############',
+        '#..........#',
+        '#..........#',
+        '#..........#',
+        '############',
+      ],
+    };
+    const bigRoomRoute = {
+      id: 'arena-loop', mapId: 'arena', tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }], spawnPoints: [],
+    };
     const radius2 = followContent({
+      maps: [bigRoom],
+      routes: [bigRoomRoute],
       bot: [{
         id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 }, targetSearchRadius: 2,
@@ -5128,10 +5147,13 @@ describe('follow de membro (§D10, #398)', () => {
     const b = member('b');
     session.enter(a);
     session.enter(b);
-    walkTo(session, ruleset, 'b', { x: 4, y: 1 });
+    walkTo(session, ruleset, 'b', { x: 8, y: 1 });
     stand(session, 'b');
 
-    // (1,1) → (4,1) é distância 3, acima do raio 2: interrompe na primeira avaliação.
+    // (1,1) → (8,1) é distância 7 — acima do raio 2 mesmo com a folga de
+    // `FOLLOW_UNREACHABLE_SLACK` (#527, a distância raw não é monotônica ao longo de um
+    // caminho do BFS limitado, então o teto de desistência ganhou uma folga pequena e fixa
+    // além do raio configurado): interrompe na primeira avaliação.
     session.advanceBy(100);
     expect(followStates(session)).toEqual([
       expect.objectContaining({ active: false, targetId: 'b', reason: 'unreachable' }),
