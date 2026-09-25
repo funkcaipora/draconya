@@ -197,6 +197,23 @@ describe('resolveWeaponPower — combat-v2: tabela (attack, skill, level, attack
       expect(value).toBeLessThanOrEqual(169);
     }
   });
+
+  it('a truncagem de `vocationMultiplier` é ASSIMÉTRICA por família — reproduz o Canary bit a bit', () => {
+    // Corpo a corpo (`WeaponMelee::getWeaponDamage`, weapons.cpp:655): multiplica primeiro e
+    // trunca o PRODUTO. maxRounded = round(0,085×1×20×20+2) = 36; maxDamage = trunc(36×1,5) = 54.
+    const meleeValues = sample(melee(20), 10, 20, combatV2(), 1.5, 600, 'v2-asym-melee');
+    expect(Math.max(...meleeValues)).toBeGreaterThan(50); // perto do teto 54, prova que ele é alcançável
+    for (const value of meleeValues) expect(value).toBeLessThanOrEqual(54);
+
+    // Distância (`WeaponDistance::getWeaponDamage`, weapons.cpp:939): trunca o MULTIPLICADOR
+    // primeiro — `static_cast<int32_t>(1,5)` vira `1`, e o bônus de vocação desaparece por
+    // inteiro. maxRounded = round(0,09×1×20×20+2) = 38; maxDamage = 38 × trunc(1,5) = 38.
+    const distanceValues = sample(bow(20), 10, 20, combatV2(), 1.5, 600, 'v2-asym-distance');
+    for (const value of distanceValues) expect(value).toBeLessThanOrEqual(38);
+    // A prova da assimetria: o MESMO multiplicador 1,5 rende um teto mais alto em corpo a corpo
+    // do que em distância, porque o Canary trunca em posições diferentes do código-fonte.
+    expect(Math.max(...meleeValues)).toBeGreaterThan(Math.max(...distanceValues));
+  });
 });
 
 describe('normalRandomInt — a normal truncada do Canary (#522)', () => {
@@ -269,5 +286,55 @@ describe('resolveWeaponPower — combat-v2: retrocompatibilidade (DT-03)', () =>
     const v1Combat: Combat = { ...combatV2(), compatibilityProfile: 'combat-v1' };
     const profile = { ...melee(20), power: { ...melee(20).power!, skillFactor: 0.02 } };
     expect(resolveWeaponPower(profile, 1, 12, Rng.fromSeed('v1-explicit'), v1Combat)).toBeCloseTo(20.8);
+  });
+});
+
+describe('resolveWeaponPower — combat-v2: wand/rod sorteiam pela normal truncada (#522)', () => {
+  // `WeaponWand::getWeaponDamage` do Canary (`weapons.cpp:977-979`) sorteia com o MESMO
+  // `normal_random` que corpo a corpo e distância — não uma faixa uniforme. A #522 corrigiu
+  // `resolveWeaponPower` para usar `normalRandomInt` no caminho `fixedDamage` sob `combat-v2`.
+  const wandProfile: WeaponProfile = {
+    family: 'wand', damageType: 'energy', range: 3, fixedDamage: { min: 0, max: 1_000 },
+  };
+
+  it('a distribuição bate a normal truncada (média ≈ metade da faixa, desvio ≈ 0,22 × faixa)', () => {
+    const values = sample(wandProfile, 1, 0, combatV2(), 1, 4_000, 'v2-wand-distribution');
+    const n = values.length;
+    const mean = values.reduce((total, value) => total + value, 0) / n;
+    const variance = values.reduce((total, value) => total + (value - mean) ** 2, 0) / n;
+    const stddev = Math.sqrt(variance);
+    expect(mean).toBeGreaterThan(460);
+    expect(mean).toBeLessThan(560);
+    expect(stddev).toBeGreaterThan(170);
+    expect(stddev).toBeLessThan(280);
+  });
+
+  it('roda SEMPRE, mesmo com `min === max` — a sequência não depende do valor da faixa', () => {
+    const flatWand: WeaponProfile = {
+      family: 'wand', damageType: 'energy', range: 3, fixedDamage: { min: 7, max: 7 },
+    };
+    const generator = Rng.fromSeed('v2-wand-flat');
+    const before = generator.getState();
+    expect(resolveWeaponPower(flatWand, 1, 0, generator, combatV2(), 1)).toBe(7);
+    expect(generator.getState()).not.toEqual(before);
+  });
+
+  it('IGNORA a skill mesmo sob combat-v2: wand/rod não recebem multiplicador de weapon skill (DT-02)', () => {
+    const fixed: WeaponProfile = {
+      family: 'wand', damageType: 'energy', range: 3, fixedDamage: { min: 10, max: 10 },
+    };
+    expect(resolveWeaponPower(fixed, 99, 99, Rng.fromSeed('v2-wand-skill'), combatV2(), 1)).toBe(10);
+  });
+
+  it('`combat-v1` continua UNIFORME para wand/rod — só o v2 muda a distribuição', () => {
+    // Uma faixa larga e uma amostra pequena bastam: uniforme cobre os extremos quase sempre;
+    // a normal truncada raramente chega perto do extremo numa amostra de 30. `combat` ausente
+    // (a assinatura aceita omiti-lo) é o mesmo caminho que qualquer chamada v1 já usava.
+    const v1Values = Array.from(
+      { length: 30 },
+      (_, i) => resolveWeaponPower(wandProfile, 1, 0, Rng.fromSeed(`v2-wand-v1-${i}`)),
+    );
+    expect(Math.min(...v1Values)).toBeLessThan(100);
+    expect(Math.max(...v1Values)).toBeGreaterThan(900);
   });
 });

@@ -358,15 +358,20 @@ const combatV2 = {
   ...combat, compatibilityProfile: 'combat-v2',
   weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
   distanceHitChance: {
-    maxHitChance: 90,
-    tiers: [
-      { distance: 1, skillCap: 74, perSkill: 1.20, flat: 1 },
-      { distance: 2, skillCap: 28, perSkill: 3.20, flat: 0 },
-      { distance: 3, skillCap: 45, perSkill: 2.00, flat: 0 },
-      { distance: 4, skillCap: 58, perSkill: 1.55, flat: 0 },
-      { distance: 5, skillCap: 74, perSkill: 1.20, flat: 1 },
-      { distance: 6, skillCap: 90, perSkill: 1.00, flat: 0 },
-      { distance: 7, skillCap: 90, perSkill: 1.00, flat: 0 },
+    defaultMaxHitChance: 90,
+    buckets: [
+      {
+        maxHitChance: 90,
+        tiers: [
+          { distance: 1, skillCap: 74, perSkill: 1.20, flat: 1 },
+          { distance: 2, skillCap: 28, perSkill: 3.20, flat: 0 },
+          { distance: 3, skillCap: 45, perSkill: 2.00, flat: 0 },
+          { distance: 4, skillCap: 58, perSkill: 1.55, flat: 0 },
+          { distance: 5, skillCap: 74, perSkill: 1.20, flat: 1 },
+          { distance: 6, skillCap: 90, perSkill: 1.00, flat: 0 },
+          { distance: 7, skillCap: 90, perSkill: 1.00, flat: 0 },
+        ],
+      },
     ],
   },
 };

@@ -541,35 +541,77 @@ damage    = normalRandomInt(minDamage, maxDamage)
   existir; trocar por leitura de `CharacterState` não muda a fórmula.
 - `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — `1,0` em toda
   vocação, como em `vocations.xml` do Canary hoje; entra pela mesma razão do coeficiente.
+  **A truncagem é ASSIMÉTRICA por família, e a assimetria é do Canary, não nossa**:
+  `WeaponMelee::getWeaponDamage` multiplica primeiro e trunca o PRODUTO
+  (`static_cast<int32_t>(getMaxWeaponDamage(...) × meleeDamageMultiplier)`);
+  `WeaponDistance::getWeaponDamage` trunca o MULTIPLICADOR primeiro e só então multiplica
+  (`maxValue × static_cast<int32_t>(distDamageMultiplier)`) — um `distDamageMultiplier`
+  fracionário (`1,5`) vira `1` antes de entrar na conta, e o bônus desaparece por inteiro na
+  distância, enquanto o mesmo `1,5` vale cheio no corpo a corpo. Reproduzida bit a bit em
+  `resolveWeaponPowerV2`; invisível hoje porque nenhuma das quatro vocações declara
+  `distDamageMultiplier` fracionário — todas têm `1`.
 - `normalRandomInt` (`combat/weapon-power.ts`) é uma reimplementação ORIGINAL (ADR 0019) do
   `normal_random` do Canary: uma normal (média 0,5, desvio 0,25) truncada em `[0,1]` por
   rejeição — Box-Muller com duas frações do `Rng` da sessão por tentativa —, escalada para
   `[min, max]` e arredondada. Roda SEMPRE, mesmo com `min === max`: a sequência de sorteios não
   pode depender do VALOR do intervalo, a mesma regra do `blockChance` (ADR 0031).
+- **Simplificação deliberada**: o Canary soma `physicalAttack + elementalAttack +
+  weaponProficiency` num único termo antes de multiplicar pela skill
+  (`WeaponMelee::getWeaponDamage`/`WeaponDistance::getWeaponDamage`). O Draconya não tem ataque
+  elemental nem proficiência de arma como sub-atributos separados no catálogo — um elemento vira
+  um ITEM diferente com seu próprio `damageType` (CMB-03), nunca um bônus somado ao físico da
+  mesma arma —, então `attack` (`formula.base`) é o único termo de poder que entra na fórmula.
+  Fica para o dia em que o catálogo precisar de arma com dano misto físico+elemental na mesma
+  peça; até lá, uma espada com bônus de fogo simplesmente não existe como conceito.
 
-Wand/rod **não mudam**: continuam na faixa fixa do item, sem coeficiente nem `attackFactor` — já
-era o modelo do Canary para elas (DT-02 do CMB-05).
+Wand/rod **mudam a distribuição, não a faixa**: continuam com o `min`/`max` fixo do item, sem
+coeficiente nem `attackFactor` — isso já era o modelo do Canary (DT-02 do CMB-05). O que muda sob
+`combat-v2` é COMO o número sai da faixa: `WeaponWand::getWeaponDamage` do Canary também sorteia
+pela normal truncada (`normal_random(minChange, maxChange)`), não uniformemente — a MESMA
+distribuição que a #522 introduziu para corpo a corpo e distância. `resolveWeaponPower` passa a
+usar `normalRandomInt` para `fixedDamage` sob `combat-v2`; `combat-v1` continua com `rng.integer`
+(uniforme), como sempre — preservando o v1 bit a bit.
 
 ### Chance de acerto à distância (`WeaponDistance::useWeapon`)
 
 Só a DISTÂNCIA rola acerto ofensivo; corpo a corpo continua sempre acertando — o Canary também
 não rola acerto ofensivo em corpo a corpo no PvE. A tabela (`combat.distanceHitChance`,
-`packages/sim/src/combat/distance-hit.ts`) reproduz o balde "de duas mãos" do Canary (arco/besta,
-teto 90 %) — a única família de distância que o catálogo tem hoje:
+`packages/sim/src/combat/distance-hit.ts`) reproduz as TRÊS tabelas que o Canary modela — os
+baldes 75 (uma mão), 90 (duas mãos) e 100 —, não só a de 90 % que o catálogo usa hoje (arco):
 
-| Distância | Fórmula (skill capado) | Distância | Fórmula (skill capado) |
+| Distância | Balde 75 (uma mão) | Balde 90 (duas mãos) | Balde 100 |
 |---|---|---|---|
-| 1, 5 | `⌊min(skill,74) × 1,20⌋ + 1` | 4 | `⌊min(skill,58) × 1,55⌋` |
-| 2 | `⌊min(skill,28) × 3,20⌋` | 6, 7 | `min(skill,90)` |
-| 3 | `⌊min(skill,45) × 2,00⌋` | outro tile | `90` (o teto do balde) |
+| 1, 5 | `⌊min(skill,74) × 1,00⌋ + 1` | `⌊min(skill,74) × 1,20⌋ + 1` | `⌊min(skill,73) × 1,35⌋ + 1` |
+| 2 | `⌊min(skill,28) × 2,40⌋ + 8` | `⌊min(skill,28) × 3,20⌋` | `⌊min(skill,30) × 3,20⌋ + 4` |
+| 3 | `⌊min(skill,45) × 1,55⌋ + 6` | `⌊min(skill,45) × 2,00⌋` | `⌊min(skill,48) × 2,05⌋ + 2` |
+| 4 | `⌊min(skill,58) × 1,25⌋ + 3` | `⌊min(skill,58) × 1,55⌋` | `⌊min(skill,65) × 1,50⌋ + 2` |
+| 6 | `⌊min(skill,90) × 0,80⌋ + 3` | `min(skill,90)` | `⌊min(skill,87) × 1,20⌋ − 4` |
+| 7 | `⌊min(skill,104) × 0,70⌋ + 2` | `min(skill,90)` | `⌊min(skill,90) × 1,10⌋ + 1` |
+| outro tile | **0 (MISS garantido)** | **0 (MISS garantido)** | **0 (MISS garantido)** |
+| balde não modelado (ex.: 91) | chance FIXA = o próprio valor do balde, ignora skill e distância | | |
 
-`ammunition.maxHitChance` e `weapon.hitChance` (#524, "só dado" até aqui) entram em jogo pela
-primeira vez: um `maxHitChance` de munição DIFERENTE do balde da tabela (o power bolt do Tibia
-declara `91`) vira chance FIXA, sem tabela; `weapon.hitChance` (o bônus/malus do arco, ex.: royal
-crossbow `+3`) SOMA ao percentual — tabela ou fixo — sempre. A rolagem acontece uma vez por tiro,
-SEMPRE consumida (mesma regra do `blockChance`), e o erro não gasta a munição de graça: o preço
-já saiu antes da rolagem (o tiro existe, só não causa dano) — mas treina a skill igual, porque o
-disparo aconteceu.
+A distância só entra na tabela quando cai num balde RECONHECIDO (75/90/100) e num tile de 1 a 7:
+fora dessas duas condições, o Canary não erra "quase sempre" — erra SEMPRE (`default: chance =
+it.hitChance;`, que vale 0 dentro deste ramo do código, porque só se chega até aqui quando
+`it.hitChance` já é 0). Um balde que não é 75, 90 nem 100 (o power bolt do Tibia declara `91`,
+`ammunition.maxHitChance`) vira chance fixa, IGUAL ao próprio valor do balde — isso sim ignora
+skill e distância, e é diferente do caso "distância fora da tabela DENTRO de um balde
+reconhecido", que é sempre miss.
+
+`ammunition.hitChance`, `ammunition.maxHitChance` e `weapon.hitChance` entram em jogo pela
+primeira vez (os dois últimos, "só dado" desde o #524):
+
+1. `ammunition.hitChance` (#522), quando declarado e ≠ 0, IGNORA tudo abaixo — chance FIXA, sem
+   tabela nem balde (o `it.hitChance != 0` do Canary, checado ANTES de `maxHitChance`; é o
+   caminho da munição/arma de arremesso avulsa: viper star `80 %`, leaf star `90 %`).
+2. Sem isso, `ammunition.maxHitChance` escolhe o BALDE — ausente é `90` (duas mãos, a única
+   família de distância no catálogo hoje).
+3. `weapon.hitChance` (o bônus/malus do arco, ex.: royal crossbow `+3`) SOMA ao percentual que os
+   dois passos acima calcularam — tabela, balde-fixo ou miss —, sempre.
+
+A rolagem acontece uma vez por tiro, SEMPRE consumida (mesma regra do `blockChance`), e o erro
+não gasta a munição de graça: o preço já saiu antes da rolagem (o tiro existe, só não causa dano)
+— mas treina a skill igual, porque o disparo aconteceu.
 
 ### Parâmetros
 
@@ -578,8 +620,8 @@ disparo aconteceu.
 | `meleeCoefficient` / `distanceCoefficient` | 0,085 / 0,09 | `packages/content/data/combat/baseline.json`, `weaponDamage` |
 | `attackFactor` | 1,0 (ofensivo — sem seletor de postura ainda) | `packages/content/data/combat/baseline.json`, `weaponDamage.attackFactor` |
 | `meleeDamageMultiplier` / `distDamageMultiplier` | 1,0 em toda vocação | `packages/content/data/vocations/*.json` |
-| Tabela de acerto à distância (balde 90 %) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
-| `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #524, `packages/content/src/schemas.ts` |
+| Tabela de acerto à distância (baldes 75/90/100) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
+| `ammunition.hitChance` / `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #522/#524, `packages/content/src/schemas.ts` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 
@@ -991,9 +1033,18 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
   que já existe) para bloquear o corpo a corpo do jogador como o escudo do CMB-04 bloqueia o do
   monstro. **Decisão: não adotado nesta issue.** O mecanismo do Canary é uma tabela de mitigação
   percentual nova, não um ajuste da fórmula de arma — mudaria como TODO monstro reduz dano
-  recebido, não só o que a #522 pede, e o `armor` que já existe (`armorReduction = armor ×
-  armorEffectiveness`) é a mesma família de mecanismo que o Tibia clássico usava. Fica para uma
-  issue própria, se a auditoria do M28 contra o dragão achar que falta.
+  recebido, não só o que a #522 pede. **O `armorReduction = armor × armorEffectiveness` que já
+  existe (`combat/damage.ts`, inalterado por esta issue) NÃO é da mesma família de mecanismo que
+  o Tibia usa** — é uma fórmula DETERMINÍSTICA original do Draconya. TFS e Canary reduzem dano
+  por um bloqueio ALEATÓRIO em `Creature::blockHit`
+  (`things/sources/forgottenserver/src/creature.cpp`, `things/sources/canary/src/creatures/
+  creature.cpp`): para `armor > 3`, `damage -= uniform_random(armor/2, armor − (armor%2 + 1))` —
+  uma ROLAGEM, não um produto fixo — e o Canary soma por cima `Monster::getMitigation()`
+  (`monster.cpp`, um redutor percentual por monstro, capado em 30%, aplicado a QUALQUER
+  atacante, jogador incluso). Nem o sorteio nem o teto de mitigação existem no Draconya hoje.
+  Isso é uma LACUNA DE FIDELIDADE em aberto, não algo já resolvido por acidente — fica para a
+  issue do catálogo de monstros do M28 planejar (armadura/mitigação de cada monstro é conteúdo
+  que ainda não existe para o Dragon/Dragon Lord de qualquer forma).
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.

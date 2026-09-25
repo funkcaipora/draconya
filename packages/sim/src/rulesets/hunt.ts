@@ -4461,8 +4461,9 @@ const slots = bot.groups.get(group);
    * crítico (ADR 0031). Conteúdo `combat-v1` (sem a tabela) não rola nada e sempre acerta, o
    * que preserva o v1 bit a bit — nenhum sorteio novo entra na sequência de uma hunt legada.
    *
-   * `ammo.maxHitChance` e `how.hitChance` (#524, só dado até aqui) entram como o balde da
-   * munição e o bônus/malus do arco — ver `combat/distance-hit.ts`.
+   * `ammo.hitChance` (#522) e `ammo.maxHitChance`/`how.hitChance` (#524, só dado até aqui)
+   * entram como o caminho direto, o balde da munição e o bônus/malus do arco — ver
+   * `combat/distance-hit.ts`.
    */
   #rollDistanceHit(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, ammo: Ammunition,
@@ -4473,7 +4474,9 @@ const slots = bot.groups.get(group);
     const family = this.#options.weaponFamilies.get('distance');
     const skillLevel = this.#skillLevelOf(character, family);
     const tiles = distance(character.position, monster.position);
-    return rollDistanceHit(tiles, skillLevel, table, session.rng, ammo.maxHitChance, how.hitChance);
+    return rollDistanceHit(
+      tiles, skillLevel, table, session.rng, ammo.maxHitChance, ammo.hitChance, how.hitChance,
+    );
   }
 
   /**

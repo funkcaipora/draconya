@@ -11,8 +11,11 @@
 //     devolve o valor SEM consumir sorteio — é o que preserva o v1 bit a bit (DT-03). No
 //     `combat-v2` a variância é sempre a normal truncada do Canary, e SEMPRE consome sorteio —
 //     a sequência não pode depender do VALOR do intervalo (a mesma regra do `blockChance`).
-//   - `fixedDamage` (wand/rod): faixa fixa, UMA rolagem por golpe, como o loot. IDÊNTICA nos
-//     dois perfis — a #522 não muda wand/rod (já é o modelo de faixa fixa do Canary).
+//   - `fixedDamage` (wand/rod): faixa fixa. No `combat-v1`, uma rolagem UNIFORME por golpe
+//     (`rng.integer`), como sempre. No `combat-v2`, a MESMA normal truncada do corpo a corpo e
+//     da distância — `WeaponWand::getWeaponDamage` do Canary também usa `normal_random`, não uma
+//     faixa uniforme; só a fórmula de MÁXIMO/MÍNIMO de wand/rod não muda (ela já era uma faixa
+//     fixa do item, sem coeficiente nem `attackFactor`).
 //
 // Wand/rod NÃO passam por multiplicador de weapon skill: o perfil deles não tem `power`, e é
 // por construção, não por um `if` — o contrato de wand/rod é distinto do de spellPower (DT-02).
@@ -94,8 +97,21 @@ function resolveWeaponPowerV1(
  *
  * `attack` é `formula.base` — o `attack` do item, ou da munição no tiro (o mesmo campo que o v1
  * já usa); não existe ataque elemental nem proficiência de arma como sub-atributo separado no
- * catálogo do Draconya, então `attack` é o único termo de poder da arma. Documentado como
- * simplificação deliberada em `docs/product/combat.md`.
+ * catálogo do Draconya, então `attack` é o único termo de poder da arma — o Canary soma
+ * `physicalAttack + elementalAttack + weaponProficiency` num único termo antes de multiplicar
+ * pela skill, e o Draconya colapsa os três num só. Documentado como simplificação deliberada em
+ * `docs/product/combat.md`, seção "Dano de arma e chance de acerto à distância".
+ *
+ * `vocationMultiplier` trunca em ORDEM DIFERENTE por família — reproduzindo uma ASSIMETRIA real
+ * do Canary, não um capricho do Draconya: `WeaponMelee::getWeaponDamage` (`weapons.cpp:655`)
+ * multiplica primeiro e trunca o PRODUTO (`static_cast<int32_t>(getMaxWeaponDamage(...) *
+ * meleeDamageMultiplier)`); `WeaponDistance::getWeaponDamage` (`weapons.cpp:939`) trunca o
+ * MULTIPLICADOR primeiro e só então multiplica (`maxValue * static_cast<int32_t>(
+ * distDamageMultiplier)`) — um `distDamageMultiplier` fracionário (`1,5`, por exemplo) vira `1`
+ * ANTES de entrar na conta, e o bônus desaparece por inteiro na distância, enquanto o mesmo
+ * `1,5` vale cheio no corpo a corpo. Invisível hoje porque toda vocação declara `1` nos dois
+ * campos (`vocations.xml` do Canary e `packages/content/data/vocations/*.json`), mas é a conta
+ * exata que um `distDamageMultiplier` fracionário futuro precisa reproduzir.
  */
 function resolveWeaponPowerV2(
   formula: NonNullable<WeaponProfile['power']>, isDistance: boolean, level: number,
@@ -110,10 +126,12 @@ function resolveWeaponPowerV2(
   const maxRounded = !isDistance && attack <= 0
     ? 0
     : Math.round(coefficient * weaponDamage.attackFactor * attack * skillLevel + levelTerm);
-  // `static_cast<int32_t>(... * multiplicador)` do Canary trunca em vez de arredondar — o
-  // arredondamento já aconteceu no passo anterior, e este é só o produto pelo multiplicador de
-  // vocação (1,0 em toda vocação hoje, então o truncamento não é observável ainda).
-  const maxDamage = Math.trunc(maxRounded * vocationMultiplier);
+  // A assimetria do Canary (ver o comentário da função): corpo a corpo multiplica e trunca o
+  // PRODUTO; distância trunca o MULTIPLICADOR antes de multiplicar — dois `static_cast<int32_t>`
+  // em posições diferentes do código-fonte, não a mesma conta escrita duas vezes.
+  const maxDamage = isDistance
+    ? maxRounded * Math.trunc(vocationMultiplier)
+    : Math.trunc(maxRounded * vocationMultiplier);
   const minDamage = isDistance ? levelTerm : (attack > 0 ? levelTerm : 0);
   return normalRandomInt(rng, minDamage, maxDamage);
 }
@@ -138,15 +156,22 @@ export function resolveWeaponPower(
   combat?: Combat,
   vocationMultiplier = 1,
 ): number {
+  const isV2 = combat?.compatibilityProfile === 'combat-v2' && combat.weaponDamage !== undefined;
   if (profile.fixedDamage !== undefined) {
-    return rng.integer(profile.fixedDamage.min, profile.fixedDamage.max);
+    // `combat-v2`: `WeaponWand::getWeaponDamage` do Canary também sorteia pela normal truncada
+    // (`normal_random(minChange, maxChange)`), não uma faixa uniforme — a MESMA distribuição do
+    // corpo a corpo e da distância, só o MÁXIMO/MÍNIMO de wand/rod não muda (já era faixa fixa
+    // do item, sem coeficiente nem `attackFactor`). `combat-v1` continua uniforme, como sempre.
+    return isV2
+      ? normalRandomInt(rng, profile.fixedDamage.min, profile.fixedDamage.max)
+      : rng.integer(profile.fixedDamage.min, profile.fixedDamage.max);
   }
   const formula = profile.power;
   // Perfil sem fórmula nem faixa é uma arma sem dano — conteúdo que o boot já recusou, e zero
   // é a resposta honesta em vez de um número inventado.
   if (formula === undefined) return 0;
 
-  if (combat?.compatibilityProfile === 'combat-v2' && combat.weaponDamage !== undefined) {
+  if (isV2 && combat?.weaponDamage !== undefined) {
     return resolveWeaponPowerV2(
       formula, profile.family === 'distance', level, skillLevel, rng, combat.weaponDamage,
       vocationMultiplier,

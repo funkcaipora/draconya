@@ -815,10 +815,22 @@ export const ammunitionSchema = z.strictObject({
   /** Gold debitado por tiro. Sem munição grátis: o preço é > 0, e o gold no tiro é o custo. */
   price: z.number().int().positive(),
   /**
-   * O `maxhitchance` da munição (#524, o power bolt tem `91`). Só dado, como `weapon.hitChance`
-   * — a chance de acerto por skill/distância é da issue #522.
+   * O `maxhitchance` da munição (#524, o power bolt tem `91`) — o BALDE (`combat.
+   * distanceHitChance`, #522) que a tabela por skill/distância usa. `91` não bate nenhum dos
+   * três baldes que o Canary modela (75/90/100), então a munição especial cai na chance FIXA
+   * (`else { chance = maxHitChance; }` do Canary) — nem skill nem distância importam.
    */
   maxHitChance: z.number().int().min(0).max(100).optional(),
+  /**
+   * O `hitchance` DIRETO do Canary (`it.hitChance`, #522): quando declarado e diferente de
+   * zero, IGNORA `maxHitChance` e a tabela inteira — chance FIXA, sem skill nem distância. É o
+   * caminho da munição/arma de arremesso avulsa (viper star `hitchance=80`, leaf star `90`) —
+   * `it.hitChance != 0` é conferido ANTES de `it.maxHitChance` em `WeaponDistance::useWeapon`.
+   * Distinto de `weapon.hitChance` (#524): aquele é o bônus/malus ADITIVO do arco, somado ao
+   * que a munição calcular por qualquer um dos dois caminhos — os dois vêm do MESMO atributo
+   * `hitchance` do Canary, lido em papéis diferentes conforme o item é o arco ou o disparado.
+   */
+  hitChance: z.number().int().min(0).max(100).optional(),
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),
@@ -1520,41 +1532,75 @@ export const combatSchema = z.object({
   /**
    * A chance de acerto à distância do `combat-v2` (#522): só a DISTÂNCIA rola acerto ofensivo —
    * corpo a corpo continua sem rolagem (`player-always-hit-melee`). Mecanismo original do
-   * Draconya (ADR 0019: só número e caso de borda vêm do Canary, nunca código) que reproduz o
-   * comportamento de `WeaponDistance::useWeapon` para munição "de duas mãos" (arco/besta, teto
-   * de 90%) — a única família de distância que o catálogo tem hoje:
+   * Draconya (ADR 0019: só número e caso de borda vêm do Canary, nunca código) que reproduz
+   * `WeaponDistance::useWeapon` — as TRÊS tabelas que o Canary modela (baldes 75 uma mão, 90
+   * duas mãos e 100), não só a de 90% que o catálogo usa hoje:
    *
    * ```text
-   * bucket  = ammunition.maxHitChance ?? maxHitChance
-   * percent = bucket !== maxHitChance
-   *   ? bucket                                          (balde que a tabela não modela: flat)
-   *   : clamp(⌊min(skill, tier.skillCap) × tier.perSkill⌋ + tier.flat, 0, 100)
-   *                                                      (tile fora de `tiers`: `maxHitChance`)
+   * se ammunition.hitChance declarado e ≠ 0:
+   *   percent = ammunition.hitChance                    (caminho DIRETO — ignora tudo abaixo)
+   * senão:
+   *   balde   = ammunition.maxHitChance ?? defaultMaxHitChance
+   *   bucket  = buckets.find(b => b.maxHitChance === balde)
+   *   se bucket ausente:  percent = balde                (balde que a tabela não modela: flat)
+   *   senão:
+   *     tier = bucket.tiers.find(t => t.distance === distância)
+   *     se tier ausente:  percent = 0                     (distância fora da tabela: MISS)
+   *     senão:            percent = clamp(⌊min(skill, tier.skillCap) × tier.perSkill⌋ + tier.flat, 0, 100)
    * percent = clamp(percent + (weapon.hitChance ?? 0), 0, 100)   (bônus/malus do arco, #524)
    * hit     = rng.chance(percent / 100)               (uma rolagem por tiro, sempre consumida)
    * ```
    *
+   * `ammunition.hitChance` (#522, inteiro 0–100) é o `it.hitChance` DIRETO do Canary — conferido
+   * ANTES de `maxHitChance`, e quando ≠ 0 ignora a tabela inteira (a munição/arma de arremesso
+   * avulsa com chance fixa: viper star 80%, leaf star 90%).
    * `ammunition.maxHitChance` (#524, inteiro 0–100) é o `it.maxHitChance` do Canary: ausente,
-   * usa o balde default abaixo (a tabela); um valor DIFERENTE do balde — o power bolt do Tibia
-   * declara 91 — vira chance FIXA, sem tabela (o `else { chance = maxHitChance }` do Canary para
-   * qualquer balde que não seja um dos que ele modela — hoje só o de 90%, duas mãos).
+   * usa `defaultMaxHitChance` (90 — munição de duas mãos é a única família que o catálogo tem);
+   * um valor que não bate nenhum `bucket.maxHitChance` declarado — o power bolt do Tibia declara
+   * 91, e nem 75 nem 90 nem 100 estão nos `buckets` de baixo se algum dia sobrar de fora — vira
+   * chance FIXA (`else { chance = maxHitChance; }` do Canary), nunca um erro.
+   * Distância fora de `tiers`, DENTRO de um balde reconhecido, é MISS (0%) — o `default: chance
+   * = it.hitChance;` de cada `switch` do Canary, que vale 0 porque só se chega a essa tabela
+   * quando `it.hitChance` já é 0. **Não** é o teto do balde: um catálogo real nunca teria uma
+   * arma de alcance > 7 hoje, mas se tivesse, o Canary erraria sempre no tile 8 — não acertaria
+   * quase sempre.
    * `weapon.hitChance` (#524, inteiro -100–100) é o bônus/malus da ARMA — a besta real soma ao
-   * que a munição calculou, tabela ou flat, sempre. Os dois campos são "só dado" desde o #524;
-   * o #522 é quem passa a lê-los. Obrigatório quando `compatibilityProfile` é `combat-v2`;
-   * `buildContent` recusa a ausência.
+   * percentual que a munição calculou, por QUALQUER um dos caminhos acima, sempre. Os três
+   * campos de item são "só dado" desde o #524 (`ammunition.maxHitChance`, `weapon.hitChance`) e
+   * o #522 (`ammunition.hitChance`); o #522 é quem passa a lê-los todos. Obrigatório quando
+   * `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
    */
   distanceHitChance: z.object({
     /**
-     * O balde default (90%, munição de duas mãos) — usado quando `ammunition.maxHitChance` está
-     * ausente OU bate este valor; é também a chance para tile fora de `tiers`.
+     * O balde default (90, munição de duas mãos) quando `ammunition.maxHitChance` está ausente
+     * — o Canary auto-seleciona por `ammoType` (`!= AMMO_NONE` → 90, senão 75); o catálogo do
+     * Draconya só tem munição de duas mãos hoje, então o default é sempre 90.
      */
-    maxHitChance: z.number().int().min(0).max(100),
-    tiers: z.array(z.object({
-      distance: z.number().int().positive(),
-      skillCap: z.number().nonnegative(),
-      perSkill: z.number().nonnegative(),
-      flat: z.number(),
-    })),
+    defaultMaxHitChance: z.number().int().min(0).max(100),
+    /**
+     * As tabelas por balde RECONHECIDO. O Canary só tem fórmula própria para 75/90/100 — um
+     * `maxHitChance` fora daqui (declarado na munição, ou este `defaultMaxHitChance`) vira
+     * chance FIXA, nunca erro de conteúdo.
+     */
+    buckets: z.array(z.object({
+      maxHitChance: z.number().int().min(0).max(100),
+      tiers: z.array(z.object({
+        distance: z.number().int().positive(),
+        skillCap: z.number().nonnegative(),
+        perSkill: z.number().nonnegative(),
+        flat: z.number(),
+      })),
+    })).superRefine((buckets, context) => {
+      const seen = new Set<number>();
+      for (const bucket of buckets) {
+        if (seen.has(bucket.maxHitChance)) {
+          context.addIssue({
+            code: 'custom', message: `distanceHitChance.buckets tem maxHitChance ${bucket.maxHitChance} duplicado`,
+          });
+        }
+        seen.add(bucket.maxHitChance);
+      }
+    }),
   }).optional(),
   _open: z.string().optional(),
 }).superRefine((combat, context) => {
