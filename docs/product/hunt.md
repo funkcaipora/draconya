@@ -470,17 +470,12 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | O Dragon Lord (TFS `dragon_lord.xml`, conferido com o Canary, #520) | 1900 HP, 2100 XP, melee 0–230, armadura 35, speed 200 (escala do TFS); mesmos elementos do Dragon; mesmas flags | `data/monsters/dragon-lord.json` |
 | Abilities do Dragon Lord (#520) | bola de fogo: 100–200, 20 %; campo de fogo (alvo, alcance 7, sem dano direto — só larga o campo, círculo raio 4 centrado no alvo): 10 %; onda de fogo: 150–230, 15 %; cura própria: +57–93, 15 % | `data/monsters/dragon-lord.json` |
 | Campo de fogo do Dragon Lord (#520) | queimadura: 20 de dano a cada 10 s, por até 70 s (a cadeia de decaimento 2118→2119→2120 do Canary `items.xml` simplificada num campo só, com os números do estágio mais forte — ver `combat.md`) | `data/monsters/dragon-lord.json`, `abilities[].field` |
-| Loot do Dragon (20 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % — burst arrow (7,976 %) NÃO está: ver `items.md` | `data/monsters/dragon.json`, bloco `loot` |
-| Loot do Dragon Lord (19 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % — power bolt (6,565 %) NÃO está: ver `items.md` | `data/monsters/dragon-lord.json`, bloco `loot` |
+| Loot do Dragon (21 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; burst arrow (`ammunitionId`) 7,976 % (1–10); longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % | `data/monsters/dragon.json`, bloco `loot` |
+| Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
+| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 10 000 ms (Canary `items.xml`, dead dragon/dead dragon lord, `duration="10"` × 1000 — não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
 
 ## Em aberto
-
-**A hunt Darashia Dragon Lair ainda não existe (#520 fase 1).** O Dragon e o Dragon Lord, o loot
-completo e a classe `dragon` do Bestiário já estão no catálogo; falta `data/hunts/
-darashia-dragon-lair.json` — `mapId`/`routeId`, `ambience`, `recommendedLevel` da lair e os
-pontos de spawn —, que depende do mapa/rota real (#519, ainda não mesclado). Quando a hunt
-entrar, ela referencia os dois monstros por `monsterId` sem precisar de número novo nenhum.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Os dois da tabela acima são deste
 projeto, não do PRD: o personagem precisa de números de ataque e de velocidade para a hunt render,
@@ -548,6 +543,16 @@ cruzados por item id contra `items.xml` (id 469, `stairs`, `floorchange="down"`;
 `ramp`, `floorchange="west"`/`"down"`) e resolvidos pelo deslocamento de pouso que
 `Tile::queryDestination` aplica — não uma coincidência geométrica de overlap (ver o detalhe,
 inclusive a correção de uma revisão adversarial que pegou o pouso errado numa primeira tentativa,
-em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt são de outra issue** (#520): o que
-existe aqui é mapa, rota e o mecanismo do `sim` — testado com uma fixture pequena de dois
-andares, não com o Dragon de verdade. A entrada continua pelo menu (ADR 0025).
+em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt fecharam o laço na #520**:
+`data/hunts/darashia-dragon-lair.json` aponta o mesmo `mapId`/`routeId`, `ambience: cavern`,
+`recommendedLevel: 40` (o "Gate of Expertise" que trava a entrada da lair real, TibiaWiki) e uma
+dificuldade só (`monsterCount: 47` — o mesmo total de `spawnPoints`, para cada ponto nascer
+exatamente uma vez; o Tibia real não tem tamanho de pull aqui). `corpseTtlMs: 10000` é o fato do
+Canary (`items.xml` id 5973/5984, "dead dragon"/"dead dragon lord", `duration="10"` — segundos ×
+1000), NÃO os 30 000 ms que Rat Cellars/Rotworm Caves copiam do Huntera: ADR 0037 d.6 pede a
+caçada idêntica ao Tibia real em toda hunt, e aqui o fato real é mais curto. Testado contra o
+CONTEÚDO REAL (`packages/server/src/game/darashia-dragon-lair.test.ts`): uma party de quatro
+level 200 (Knight/Paladin/Sorcerer/Druid) que entra vê os 47 nascerem — 19 Dragon em z10, 24
+Dragon Lord em z11, 4 em z12 —, cada um na coordenada exata do próprio ponto, e o respawn de um
+ponto abatido acontece 90 s depois, nunca antes, com o mesmo `monsterId` na mesma vizinhança. A
+entrada continua pelo menu (ADR 0025).
