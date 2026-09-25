@@ -15,6 +15,7 @@ import {
 } from './dragon-party-plan.js';
 import { seedCharacterStats } from './dragon-party-seed.js';
 import { DragonPartyApi, type DragonPartySession, type PartyView } from './dragon-party-api.js';
+import { attachPartyTicket } from './dragon-party-attach.js';
 
 export interface DragonPartyOptions {
   readonly databaseUrl: string;
@@ -135,7 +136,41 @@ async function seedAndFormParty(
     log(`ERRO: iniciar a party falhou (${started.status}): ${JSON.stringify(started.body)}`);
     return { exitCode: 1 };
   }
-  log('party iniciada — falta o líder anexar no navegador (dev-login da conta do Knight) para presenciar a hunt.');
+  const startedBody = started.body as { sessionId: string; ticket: { wsUrl: string } | null };
+  log(`party iniciada: sessão ${startedBody.sessionId}.`);
+
+  // O `/start` só EMITE os tickets — quem cria a sessão no `game` é o primeiro socket que
+  // consome um deles (`SessionHost#prepare`). Sem anexar aqui, os quatro tickets ficavam
+  // esperando os 30 s de TTL e a party morria travada em `hunting` sem nunca ter existido de
+  // verdade no `game` (#527) — este é o empurrão que faltava.
+  if (startedBody.ticket === null) {
+    log(
+      'ERRO: a party iniciou, mas o ticket do líder já tinha sido pego por outra chamada — '
+        + 'rode `--reset` e tente de novo.',
+    );
+    return { exitCode: 1 };
+  }
+  try {
+    const attached = await attachPartyTicket(startedBody.ticket.wsUrl);
+    if (attached.sessionType !== 'hunt') {
+      log(
+        `AVISO: o session-state confirmou a sessão, mas com sessionType "${attached.sessionType}" `
+          + '(esperava "hunt") — confira o log do `game`.',
+      );
+    } else {
+      log('hunt criada e rodando no servidor — idle-first (ADR 0027): continua sem ninguém olhando.');
+    }
+  } catch (error) {
+    log(
+      `ERRO: falhou anexar o ticket do líder à hunt (${(error as Error).message}). A sessão pode não `
+        + 'ter nascido no `game` — confira se ele está de pé e tente de novo.',
+    );
+    return { exitCode: 1 };
+  }
+  log(
+    `Abra o navegador em ${options.clientOrigin}, faça dev-login como o líder (${leader.plan.email}) `
+      + 'e entre no personagem para acompanhar a hunt.',
+  );
   return { exitCode: 0 };
 }
 
