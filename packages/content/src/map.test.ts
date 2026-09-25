@@ -104,4 +104,91 @@ describe('rota', () => {
     };
     expect(validateRoute(ruim, map).length).toBeGreaterThanOrEqual(3);
   });
+
+  it('ancora no `at` declarado quando o ponto o traz, e leva o `monsterId` junto (#519)', () => {
+    const comSpawnDeclarado: RouteData = {
+      ...loop,
+      spawnPoints: [{ routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, monsterId: 'dragon' }],
+    };
+    const route = buildRoute(comSpawnDeclarado, map);
+    expect(route.spawnPoints[0]).toEqual({
+      routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, monsterId: 'dragon',
+    });
+  });
+
+  it('leva o `respawnDelayMs` do ponto, o `spawntime` por posição do Canary (#519)', () => {
+    // O Canary declara `spawntime` por `<monster>`, dentro do `<spawn>` — não por zona nem por
+    // dificuldade. Sem o campo, `buildRoute` não inventa nada: quem lê decide o fallback
+    // (`respawnDelayMs` da dificuldade), como sempre foi.
+    const comSpawntime: RouteData = {
+      ...loop,
+      spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'dragon', respawnDelayMs: 90_000 }],
+    };
+    const route = buildRoute(comSpawntime, map);
+    expect(route.spawnPoints[0]?.respawnDelayMs).toBe(90_000);
+    expect(route.spawnPoints[0]?.at).toEqual({ x: 1, y: 1, z: 7 }); // tiles[0], sem `at` próprio.
+
+    const semSpawntime = buildRoute(loop, map);
+    expect(semSpawntime.spawnPoints[0]?.respawnDelayMs).toBeUndefined();
+  });
+});
+
+describe('rota multiandar (#519)', () => {
+  // Duas salas empilhadas, ligadas por DUAS escadas deslocadas — como no Tibia, e como a casa
+  // de `movement.test.ts` (FUN-119): descer em (2,1,7) pousa em (3,1,6); subir em (3,2,6) pousa
+  // em (2,2,7). O laço (1,1,7) → (2,1,7) → (3,2,6) fecha de volta a (1,1,7) na diagonal, depois
+  // de pousar em (2,2,7) — sem precisar de mais tiles.
+  //
+  //   z7            z6
+  //   ######        ######
+  //   #....#        #....#
+  //   #....#        #....#
+  //   ######        ######
+  const casa = buildTilemap({
+    id: 'casa', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#....#', '######'] },
+      '6': { grid: ['######', '#....#', '#....#', '######'] },
+    },
+    floorChanges: [
+      { from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } },
+      { from: { x: 3, y: 2, z: 6 }, to: { x: 2, y: 2, z: 7 } },
+    ],
+  });
+
+  it('depois da escada, o próximo tile precisa ser adjacente ao POUSO dela, não ao degrau', () => {
+    // O degrau em (2,1,z7) leva a (3,1,z6) — um tile ADIANTE, como no Tibia. Continuar a rota
+    // em (1,1,z6) — adjacente ao degrau por (x, y), mas não ao pouso real — é o erro que esta
+    // checagem existe para pegar: sem ela, o personagem "teleportaria" no passo seguinte.
+    const naoAdjacenteAoPouso: RouteData = {
+      id: 'r2', mapId: 'casa',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 1, y: 1, z: 6 }],
+      spawnPoints: [],
+    };
+    const problems = validateRoute(naoAdjacenteAoPouso, casa);
+    expect(problems.join()).toMatch(/passo 1→2 não é adjacente nem escada: \(3,1,6\) para \(1,1,6\)/);
+  });
+
+  it('rota correta atravessa as duas escadas e fecha o laço, sem problema nenhum', () => {
+    const rota: RouteData = {
+      id: 'r3', mapId: 'casa',
+      // (1,1,7) → degrau de descida (2,1,7), pousa em (3,1,6) → degrau de subida (3,2,6),
+      // adjacente ao pouso anterior, pousa em (2,2,7) → fecha na diagonal de volta a (1,1,7).
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
+      spawnPoints: [{ routeIndex: 1, radius: 1 }],
+    };
+    expect(validateRoute(rota, casa)).toEqual([]);
+    expect(() => buildRoute(rota, casa)).not.toThrow();
+  });
+
+  it('recusa o andar errado no tile do degrau, com mensagem que diz qual devia ser', () => {
+    const rota: RouteData = {
+      id: 'r4', mapId: 'casa',
+      // O segundo tile é o degrau, mas foi escrito com o andar de CHEGADA (6) em vez do de
+      // ORIGEM (7) — o erro que a checagem existe para pegar antes de virar "a rota trava ali".
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 6 }, { x: 3, y: 2, z: 6 }],
+      spawnPoints: [],
+    };
+    expect(validateRoute(rota, casa).join()).toMatch(/devia ser 7 \(o de ORIGEM\), não 6/);
+  });
 });
