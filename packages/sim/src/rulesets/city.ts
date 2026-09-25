@@ -100,12 +100,16 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
           containerRulesFor(character.inventory, options.containers.items, options.containers.progression),
         );
         // A velocidade vem da tabela, como a hunt repõe na entrada (FUN-119): zero é "não sabe
-        // ainda", e o painel Skills mostraria "Speed 0" na praça (SV-04, #340).
+        // ainda", e o painel Skills mostraria "Speed 0" na praça (SV-04, #340). Soma o bônus de
+        // equipamento (#524, #527: boots of haste) pela MESMA conta da hunt — sem isto, um
+        // personagem que nasce com a bota já calçada (o kit level 200 do dragon-party, #526) e
+        // NUNCA entrou numa hunt ainda mostraria a velocidade base na Cidade, com ou sem a bota.
         if (character.speed <= 0) {
           const vocation = character.vocationId === null
             ? null
             : options.vocations?.get(character.vocationId) ?? null;
-          character.speed = statsForLevel(character.level, vocation, options.containers.progression).speed;
+          character.speed = statsForLevel(character.level, vocation, options.containers.progression).speed
+            + character.inventory.speedBonus(options.containers.items);
         }
       }
 

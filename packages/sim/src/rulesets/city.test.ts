@@ -1,5 +1,5 @@
-import { buildTilemap } from '@draconya/content';
-import type { Progression } from '@draconya/content';
+import { buildTilemap, compileItem, itemSchema } from '@draconya/content';
+import type { Item, Progression } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { Rng } from '../rng.js';
@@ -103,6 +103,48 @@ describe('chegar na Cidade (FUN-120)', () => {
     veteran.speed = 320;
     session.enter(veteran);
     expect(veteran.speed).toBe(320);
+  });
+
+  it('soma o bônus de equipamento ao repor a velocidade de quem chega com zero (#524, #527)', () => {
+    // Um personagem que NUNCA entrou numa hunt — o kit level 200 do dragon-party (#526) já
+    // nasce com a bota calçada, e a Cidade é a PRIMEIRA sessão dele. Sem somar o bônus aqui, o
+    // HUD mostraria a mesma velocidade com ou sem a bota até a primeira entrada numa hunt.
+    const progression: Progression = {
+      id: 'baseline',
+      startingHealth: 150, startingMana: 0, startingCapacity: 400,
+      healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
+      vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
+      startingSpeed: 220, speedPerLevel: 2,
+      regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      xp: { kind: 'power', base: 20, exponent: 2 },
+      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+      skillMultipliers: {},
+    };
+    const items = new Map<string, Item>([[
+      'boots-of-haste',
+      {
+        ...compileItem(itemSchema.parse({
+          id: 'boots-of-haste', name: 'Boots of Haste', kind: 'armor', slot: 'feet',
+          weight: 1, value: 0, bonuses: { speed: 40 },
+        })),
+        appearanceId: 1,
+      },
+    ]]);
+    const session = new Session({
+      id: 'thais', contentVersion: 'v1',
+      ruleset: createCityRuleset({ map: temple, stepDurationMs: 150, containers: { items, progression } }),
+      rng: Rng.fromSeed('c'), createdAtMs: 0,
+    });
+    const newcomer = new CharacterRuntime({
+      id: 'p0', position: { x: -1, y: -1, z: 0 },
+      health: 150, maxHealth: 150, mana: 0, maxMana: 0,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+      inventory: { backpack: [], equipped: { feet: { instanceId: 'b1', itemId: 'boots-of-haste', quantity: 1 } } },
+    });
+    expect(newcomer.speed).toBe(0);
+    session.enter(newcomer);
+    // 220 (level 1, sem incremento) + 40 da bota — nunca só a base.
+    expect(newcomer.speed).toBe(260);
   });
 
   it('a Cidade diz qual mapa desenhar', () => {
