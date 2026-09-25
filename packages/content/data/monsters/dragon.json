@@ -10,6 +10,8 @@
     "max": 120
   },
   "armor": 25,
+  "defense": 30,
+  "defenseMitigation": 0.99,
   "mitigation": {
     "resistances": {
       "earth": 0.8,
@@ -93,5 +95,5 @@
   "targetChange": { "intervalMs": 4000, "chance": 0.10 },
   "runOnHealth": 300,
   "staticAttack": 0.80,
-  "_open": "aggroRadius 11 (#527, era 8): TFS restringe `Monster::canSee` a um quadrado de `Map::maxClientViewportX + 1` = 9 (`src/monster.cpp`, `src/map.h`); o Canary NÃO sobrescreve `canSee` para monstro e herda o quadrado de `Creature::canSee`, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11 (`src/map/map_const.hpp`). Pela precedência do ADR 0037 d.4 (Canary primeiro quando ele define algo), o raio é 11. Os dois valores conferidos contra o código em 2026-09-25; 8 era um palpite de antes da fidelidade TFS/Canary."
+  "_open": "aggroRadius 11 (#527, era 8): TFS restringe `Monster::canSee` a um quadrado de `Map::maxClientViewportX + 1` = 9 (`src/monster.cpp`, `src/map.h`); o Canary NÃO sobrescreve `canSee` para monstro e herda o quadrado de `Creature::canSee`, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11 (`src/map/map_const.hpp`). Pela precedência do ADR 0037 d.4 (Canary primeiro quando ele define algo), o raio é 11. Os dois valores conferidos contra o código em 2026-09-25; 8 era um palpite de antes da fidelidade TFS/Canary. `defense`/`defenseMitigation` (#548, combat-v3): `monster.defenses = { defense = 30, armor = 25, mitigation = 0.99 }` em `data-otservbr-global/monster/dragons/dragon.lua` do Canary local (47dfd51), conferido em 2026-09-25 — `armor` já batia com o que este arquivo já tinha."
 }

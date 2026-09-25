@@ -1269,6 +1269,14 @@ export const monsterSchema = z.strictObject({
   ]),
   armor: z.number().int().nonnegative(),
   /**
+   * A defesa do monstro no `combat-v3` (#548, `Monster::getDefense`/`monster.defenses.defense`
+   * do Canary) — a peça que o `blockHit` subtrai em faixa (`uniform_random(defense/2,
+   * defense)`) enquanto o `blockCount` tiver carga, ANTES da armadura. Ausente é `0`: sem
+   * defesa, o estágio nunca reduz nada (a mesma identidade que preserva rato/rotworm). Dragon
+   * (30) e Dragon Lord (34), `dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25.
+   */
+  defense: z.number().int().nonnegative().default(0),
+  /**
    * O TIPO de dano do ataque do monstro (CMB-03). Ausente é `physical`, o default que preserva
    * o v1 — o rato morde, e mordida era dano físico. As abilities por tipo são do CMB-06.
    */
@@ -1278,6 +1286,18 @@ export const monsterSchema = z.strictObject({
    * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
    */
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * A mitigação PERCENTUAL do `combat-v3` (#548, `Monster::getMitigation`/`monster.defenses.
+   * mitigation` do Canary — nome DISTINTO de `mitigation` acima de propósito: aquele é
+   * resistência/imunidade POR TIPO, `Creature::mitigateDamage` é um percentual ÚNICO aplicado
+   * por ÚLTIMO, depois da armadura, sobre QUALQUER tipo de dano (a exceção do Canary é
+   * lifedrain/manadrain/agony — tipos que `@draconya/content` ainda não declara; a exceção
+   * entra com a M29-07). O valor É o percentual direto — `0.99` tira 0,99 % do dano, não 99 %
+   * — e o Canary o CAPA em 30. Ausente é `0`, a identidade de rato/rotworm e de todo monstro
+   * que o Canary não declara (a maioria: 1394/1655 no bestiário real DECLARAM, mas o Draconya
+   * só tem quatro monstros hoje).
+   */
+  defenseMitigation: z.number().min(0).max(30).default(0),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
   /**
@@ -1676,11 +1696,36 @@ export const COMBAT_V2: CombatCompatibilityProfile = {
 };
 
 /**
+ * O perfil `combat-v3` (#548, M30-01; ADR 0040): o próximo id livre depois do `combat-v2`.
+ * **Rompimento**: o bloqueio binário do defensor (`combat.defense.blockChance` do CMB-04) é
+ * substituído pela ORDEM e pela MATEMÁTICA do `Creature::blockHit` do Canary —
+ * imunidade explícita → defesa/escudo com `blockCount` (uma carga por golpe elegível, até duas,
+ * recarregando com o tempo) → armadura numa FAIXA aleatória (não mais flat) → mitigação
+ * percentual (`defenseMitigation`, campo novo do monstro, distinto de `mitigation`). O que o
+ * `combat-v2` mudou (fórmula de arma, chance de acerto à distância) continua valendo — `combat-
+ * v3` exige os MESMOS blocos `weaponDamage`/`distanceHitChance` do v2, porque não os substitui.
+ *
+ * As exceções de produto continuam as do `combat-v2`: Dodge fica (é o Draconya, não o Tibia, e
+ * o Tibia nega o golpe inteiro ANTES do `blockHit` — a mesma posição que o Draconya já usa), e
+ * `player-always-hit-melee` não muda (a chance de acerto ofensivo é FORA do escopo do #548).
+ *
+ * Absorção/aumento por tipo (`applyAbsorbDamageModifications`) e reflexo ficam de fora — são o
+ * M30-05 (ADR 0040). Defesa e mitigação do JOGADOR continuam os números atuais (o que muda é só
+ * o MECANISMO que os consome): a fórmula própria do 13.x é o M30-02.
+ */
+export const COMBAT_V3: CombatCompatibilityProfile = {
+  id: 'combat-v3',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'breaking',
+};
+
+/**
  * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
  * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
  */
 export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
-  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2]]);
+  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2], [COMBAT_V3.id, COMBAT_V3]]);
 
 /**
  * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
@@ -1909,12 +1954,19 @@ export const combatSchema = z.object({
 }).superRefine((combat, context) => {
   // A #522/ADR 0037: perfil `combat-v2` sem os blocos novos é conteúdo que o resolver de poder
   // de arma não sabe executar — recusar no boot, nunca por um `??` silencioso no caminho quente.
-  if (combat.compatibilityProfile === 'combat-v2') {
+  // O `combat-v3` (#548, ADR 0040) HERDA a exigência: ele não substitui o lado ofensivo do v2,
+  // só o pipeline de RECEBIMENTO (defesa/armadura/mitigação) — um conteúdo v3 sem esses blocos
+  // continua sem fórmula de dano de arma nenhuma.
+  if (combat.compatibilityProfile === 'combat-v2' || combat.compatibilityProfile === 'combat-v3') {
     if (combat.weaponDamage === undefined) {
-      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "weaponDamage"' });
+      context.addIssue({
+        code: 'custom', message: `${combat.compatibilityProfile} exige o bloco "weaponDamage"`,
+      });
     }
     if (combat.distanceHitChance === undefined) {
-      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "distanceHitChance"' });
+      context.addIssue({
+        code: 'custom', message: `${combat.compatibilityProfile} exige o bloco "distanceHitChance"`,
+      });
     }
   }
 });
