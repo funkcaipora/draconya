@@ -382,3 +382,28 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   propriedade de equivalência. `combat/conformance.ts` é a comparação PURA; o cenário misto do
   benchmark vive em `tools` e a interpretação da linha de base em
   `docs/product/combat-conformance.md`.
+- **Hunt multiandar (#519): o monstro carrega `z` para achar o PRÓPRIO andar, nunca para trocar
+  de andar sozinho.** `MonsterRuntime.position`/`.home` passaram a ser `FloorPoint` (`z`
+  opcional — ausente é snapshot anterior a esta issue, ou hunt de andar único). Isso faz `zOf`
+  (`movement.ts`) resolver o andar CERTO para ele em `canOccupy`/`move`/ocupação — sem isso, todo
+  monstro de um mapa multiandar seria tratado como se estivesse no andar padrão do mapa. O
+  `crossesFloors: false` de `MonsterRuntime` é o que impede esse `z` novo de virar permissão de
+  usar escada: antes desta issue, "não carrega `z`" e "não sobe escada" eram a MESMA checagem
+  (`'z' in from`); agora são duas, porque o monstro passou a satisfazer a primeira sem poder
+  satisfazer a segunda. Mexer nessa dupla checagem sem entender as duas metades quebra uma das
+  duas invisivelmente.
+- **Todo lugar que compara alvo por distância confere o ANDAR primeiro** (#519,
+  `sameFloor`/`FloorPoint` em `monster/step.ts`): `chooseTarget`, `selectTarget`/`countTargets`/
+  `countAreaTargets` (`targeting.ts`), `abilityTargets` (`monster/ability.ts`) e
+  `#spawnBlockedFor`/`#liveTargetOf`/`#holdFollow` (`hunt.ts`). `sameFloor(a, b)` é NO-OP quando
+  QUALQUER lado é `undefined` — é o que mantém bit a bit toda hunt de andar único e todo
+  snapshot anterior a esta issue, onde `z` nunca era escrito. Antes desta issue,
+  `abilityTargets` FORÇAVA `z: caster.z` em todo candidato antes de montar a chave — parecia
+  reforçar "mesmo andar", mas na verdade fazia o oposto: aceitava QUALQUER andar do candidato,
+  porque a chave comparada era sempre a do lançador. Ver #519 no ADR 0025 (emenda).
+- **`Blocked` (`monster/step.ts`) ganhou dois parâmetros opcionais, `z` e `monsterId` — nesta
+  ordem, e os dois só importam para o spawner.** O passo guloso de personagem e monstro continua
+  chamando com dois argumentos; `Spawner.#freeTile` é quem passa os quatro, porque só ele
+  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
+  para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
+  1.640/1.656 do bestiário, não a exceção).

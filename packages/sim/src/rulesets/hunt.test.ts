@@ -48,6 +48,11 @@ const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
   health: 50, experience: 5, attack: 10, armor: 0,
   attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
+  // `blockable: true` (#519) preserva o comportamento de sempre deste rato de teste — ele
+  // representa o rat-cellars real, que também declara `blockable: true` para manter o
+  // `spawnClearRadius` (#236) observado no Huntera, não o `isBlockable: false` do Canary (que
+  // é o default do SCHEMA, e vale para monstro que não o declara — o caso do dragão do #519).
+  blockable: true,
   // Gold fixo por abate: o que os testes de recompensa conferem é a CONTA, não o sorteio —
   // o sorteio tem teste próprio em `loot.test.ts`.
   loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
@@ -6530,6 +6535,20 @@ describe('raio livre do spawn (#236)', () => {
     session.advanceBy(100);
     expect(ruleset.monsters).toHaveLength(1);
   });
+
+  it('`blockable` ausente é o padrão do Canary — nasce mesmo com o jogador colado (#519)', () => {
+    // `isBlockable: false` é o que 1.640 dos 1.656 monstros do Canary declaram, Dragon e Dragon
+    // Lord inclusive: eles respawnam OLHANDO para o jogador, ignorando `spawnClearRadius`. Sem
+    // `blockable: true` no monstro, o campo da hunt para de valer para ELE — não porque a hunt
+    // desligou, mas porque o Tibia trata isto como propriedade do monstro, não da instância.
+    const naoBlockable = { ...rat, blockable: false };
+    const loaded = content({
+      monsters: [naoBlockable], routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }],
+    });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    expect(ruleset.monsters).toHaveLength(1);
+  });
 });
 
 // --- o resolver canônico é o ponto único de dano (CMB-02, ADR 0031) --------------------------
@@ -8066,5 +8085,96 @@ describe('automação bloqueada avisa na TRANSIÇÃO, não a cada ciclo (#420)',
     // A chave avisada viaja no snapshot: uma retomada não volta a registrar o mesmo aviso.
     const runner = Object.values(ruleset.getState().runners ?? {})[0];
     expect(runner?.automationWarned).toEqual({ 'renew-ring': 'missing-item:life-ring' });
+  });
+});
+
+describe('hunt multiandar (#519)', () => {
+  // Duas salas empilhadas, ligadas por DUAS escadas deslocadas — a mesma geometria de
+  // `movement.test.ts` ("andares e escadas"): descer em (2,1,7) pousa em (3,1,6); subir em
+  // (3,2,6) pousa em (2,2,7). A rota é o laço de três tiles já verificado válido em
+  // `map.test.ts`/`trace-route.test.ts`: (1,1,7) → degrau de descida (2,1,7) → degrau de
+  // subida (3,2,6) → fecha na diagonal de volta a (1,1,7). O rato do spawn fica LONGE do
+  // caminho — este teste é sobre o walker atravessar andares, não sobre combate.
+  const multiFloorMap = {
+    id: 'casa', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#....#', '######'] },
+      '6': { grid: ['######', '#....#', '#....#', '######'] },
+    },
+    floorChanges: [
+      { from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } },
+      { from: { x: 3, y: 2, z: 6 }, to: { x: 2, y: 2, z: 7 } },
+    ],
+  };
+  const multiFloorRoute = {
+    id: 'casa-loop', mapId: 'casa',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
+    // Sem ponto de spawn: "rota sem ponto de spawn é hunt sem monstro" (FUN-123) — este teste
+    // é só sobre o walker, e `monsterCount`/`composition` abaixo existem só porque o schema os
+    // exige, nunca porque algo nasce.
+    spawnPoints: [],
+  };
+  const multiFloorHunt = {
+    id: 'arena', name: 'Casa', recommendedLevel: 1, mapId: 'casa', routeId: 'casa-loop',
+    difficulties: {
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
+    },
+  };
+  const multiFloor = (): Content =>
+    content({ maps: [multiFloorMap], routes: [multiFloorRoute], hunts: [multiFloorHunt] });
+
+  it('o passo pisa no degrau e pousa no destino registrado da escada, do outro andar', () => {
+    // Cada passo aplica a posição NA HORA em que o evento vence (invariante 2) — `durationMs`
+    // é só quando o PRÓXIMO passo pode sair, não uma animação que o `sim` espera terminar. O
+    // primeiro `PLAYER_STEP` já vence em t=0 (a hunt entra pronta), então cada checagem abaixo
+    // avança para um instante ESTRITAMENTE ANTES do vencimento seguinte — 500, depois 500,
+    // depois 1.500 (a duração de CADA passo) somariam exatamente aos vencimentos e disparariam
+    // o passo seguinte também, porque o avanço inclui o instante em que ele vence.
+    const { session, hero } = start({ loaded: multiFloor() });
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+
+    // t=0: (1,1,7) → pede o degrau (2,1,7) → pousa em (3,1,6). Reto, chão padrão (150),
+    // speed 300: ceil50(150 000/300) = 500 ms — o passo 2 só vence em t=500.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+
+    // t=500: (3,1,6) → pede o degrau de subida (3,2,6) → pousa em (2,2,7). Reto de novo: o
+    // passo 3 vence em t=1.000 — avança só até t=999.
+    session.advanceBy(998);
+    expect(hero.position).toEqual({ x: 2, y: 2, z: 7 });
+
+    // t=1.000: fecha o laço, (2,2,7) → (1,1,7), DIAGONAL — 3× antes do arredondamento.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('percorre o laço inteiro repetidas vezes e sempre volta ao início — nunca para no fim da rota', () => {
+    const { session, hero } = start({ loaded: multiFloor() });
+    // Um laço inteiro vence em 500 + 500 + 1.500 = 2.500 ms; cinco laços vencem em 12.500 —
+    // avançar exatamente até lá (ou além) dispararia também o PRIMEIRO passo do sexto laço, que
+    // sai do início. 12.499 é o último instante do quinto laço já fechado, ainda parado nele —
+    // se o laço não fechasse (§14.4), a rota pararia num tile do meio, nunca voltaria aqui.
+    session.advanceBy(12_499);
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('o monstro nasce no ANDAR do ponto de spawn declarado, não no padrão do mapa (#519)', () => {
+    // O mesmo laço, mas com UM ponto de spawn exato em z6. `aggroRadius: 0` desliga a
+    // perseguição de propósito — este teste é sobre ONDE o monstro nasce, não sobre para onde
+    // ele anda depois; sem isso, o primeiro passo do monstro (que também vence em t=0) mudaria
+    // a posição antes da checagem, e o teste ficaria sensível a um detalhe que não é o dele.
+    const comSpawnEmZ6 = {
+      ...multiFloorRoute,
+      spawnPoints: [{ routeIndex: 1, radius: 1, at: { x: 1, y: 2, z: 6 }, monsterId: 'rat' }],
+    };
+    const { session, ruleset } = start({
+      loaded: content({
+        monsters: [{ ...rat, aggroRadius: 0 }],
+        maps: [multiFloorMap], routes: [comSpawnEmZ6], hunts: [multiFloorHunt],
+      }),
+    });
+    session.advanceBy(10);
+    expect(ruleset.monsters).toHaveLength(1);
+    expect(ruleset.monsters[0]?.position).toEqual({ x: 1, y: 2, z: 6 });
   });
 });

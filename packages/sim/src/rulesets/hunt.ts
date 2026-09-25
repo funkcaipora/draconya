@@ -67,8 +67,8 @@ import {
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
-import type { Blocked, GridPoint } from '../monster/step.js';
-import { distance, fleeStep, greedyStep } from '../monster/step.js';
+import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
+import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
@@ -2176,7 +2176,10 @@ export class HuntRuleset implements Ruleset {
       this.#difficulty,
       (pointIndex) => {
         const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
-        return { at: point.at, radius: point.radius };
+        return {
+          at: point.at, radius: point.radius,
+          ...(point.monsterId === undefined ? {} : { monsterId: point.monsterId }),
+        };
       },
       this.#spawnBlockedFor(session),
       session.rng,
@@ -2199,8 +2202,11 @@ export class HuntRuleset implements Ruleset {
     const monster = new MonsterRuntime({
       id: this.#nextCreatureId++,
       monsterId: definition.id,
-      position: request.position,
-      home: request.position,
+      // O `z` do PONTO de spawn, não o do mapa (#519, hunt multiandar) — é o que faz um Dragon
+      // Lord nascer em z11 e não em z10. Numa hunt de andar único é o mesmo valor de sempre,
+      // porque todo ponto da rota vive no andar padrão do mapa.
+      position: { x: request.position.x, y: request.position.y, z: request.position.z },
+      home: { x: request.position.x, y: request.position.y, z: request.position.z },
       health: definition.health,
       targetId: null,
       speed: definition.speed,
@@ -2215,12 +2221,11 @@ export class HuntRuleset implements Ruleset {
 
     const subjectOf = monsterSubject(monster.id);
     // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
-    // ser recusada publicaria um monstro onde ele não está (FUN-103).
+    // ser recusada publicaria um monstro onde ele não está (FUN-103). `#at` lê o andar de FATO
+    // do monstro (#519) — o do mapa só sobra para quem nunca declarou `z` (andar único).
     session.emit({
       kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
-      // O `z` é do mapa, como o passo faz em `move()`: monstro vive numa grade 2D e o andar é
-      // propriedade da instância, não da criatura.
-      position: { ...monster.position, z: this.#world.map.z },
+      position: this.#at(monster),
       health: monster.health, maxHealth: definition.health,
     });
     session.scheduleIn(MONSTER_STEP, 0, {
@@ -2422,7 +2427,13 @@ export class HuntRuleset implements Ruleset {
     const d = distance(from, target.position);
     const radius = this.#options.targetSearchRadius ?? 8;
 
-    if (d > radius) {
+    // Andar diferente é `unreachable` pela MESMA razão da distância (#519): sem pathfinding
+    // real (ADR 0009), o passo guloso não sabe atravessar escada nenhuma — ele só sabe reduzir
+    // (x, y). Caindo em `unreachable`, quem segue volta a percorrer a PRÓPRIA rota — que já
+    // atravessa as mesmas escadas que o líder atravessou —, e o follow retoma sozinho assim que
+    // os dois estiverem no mesmo andar de novo. É "o companheiro toma a mesma escada" sem
+    // precisar de pathfinding novo nenhum.
+    if (d > radius || !sameFloor(from.z, target.position.z)) {
       this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
       return false;
     }
@@ -3909,9 +3920,7 @@ const slots = bot.groups.get(group);
     const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
     const cadence = result !== null && result.ok
       ? result.durationMs
-      : movementDuration(this.#world, monster, monster.position, {
-        ...monster.position, z: this.#world.map.z,
-      });
+      : movementDuration(this.#world, monster, monster.position, this.#at(monster));
     session.scheduleIn(MONSTER_STEP, cadence, {
       priority: EventPriority.Movement, subject,
     });
@@ -4224,13 +4233,22 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Onde a criatura está, com o andar do MAPA — o mesmo `z` que `creature-appeared` e o passo
-   * publicam. O monstro vive numa grade 2D e não carrega `z`; o personagem carrega, mas o mapa
-   * é a única fonte de verdade sobre o andar (`WorldPoint`), e ler de dois lugares é como os
-   * dois divergem.
+   * Onde a criatura está, com o andar de FATO dela (#519, hunt multiandar).
+   *
+   * Até esta issue isto sempre devolvia `this.#world.map.z` — o andar PADRÃO do mapa —,
+   * ignorando `creature.position.z` mesmo para o personagem. Numa hunt de andar único isso nunca
+   * divergia (só existia um andar para se estar), e por isso o defeito nunca apareceu: a
+   * Darashia Dragon Lair é a primeira hunt em que ele apareceria, com todo golpe e toda mira de
+   * área calculados no andar ERRADO sempre que alguém não estivesse no padrão do mapa. `?? map.z`
+   * sobra só para quem nunca carrega `z` de verdade — o monstro de snapshot anterior a esta issue.
    */
-  #at(creature: { readonly position: GridPoint }): WorldPoint {
-    return { x: creature.position.x, y: creature.position.y, z: this.#world.map.z };
+  #at(creature: { readonly position: FloorPoint }): WorldPoint {
+    return { x: creature.position.x, y: creature.position.y, z: creature.position.z ?? this.#world.map.z };
+  }
+
+  /** O andar de FATO da criatura — o mesmo que `#at` usa, sem montar o `WorldPoint` inteiro. */
+  #floorOf(creature: { readonly position: FloorPoint }): number {
+    return creature.position.z ?? this.#world.map.z;
   }
 
   #onExitRules(session: Session): void {
@@ -4605,14 +4623,21 @@ const slots = bot.groups.get(group);
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
     // O lugar volta a contar o tempo — e é aqui que a próxima hora dele é marcada, agora que
-    // o spawner não guarda mais instante nenhum.
+    // o spawner não guarda mais instante nenhum. O `spawntime` do PONTO (#519, o `<monster
+    // spawntime="...">` do Canary é por posição, não por zona nem por dificuldade) prevalece
+    // quando a rota o declara; sem ele, o `respawnDelayMs` da dificuldade continua valendo,
+    // como sempre foi — é o caminho de rat-cellars/rotworm-caves, que não declaram nada por ponto.
     const slot = this.#spawner.release(monster.id);
     if (slot !== null) {
-      session.scheduleIn(SPAWN, this.#difficulty.respawnDelayMs, {
+      const pointIndex = this.#spawner.slots[slot]?.pointIndex;
+      const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
+      session.scheduleIn(SPAWN, point?.respawnDelayMs ?? this.#difficulty.respawnDelayMs, {
         priority: EventPriority.Spawn, subject: String(slot),
       });
     }
-    this.#world.vacate(monster.position.x, monster.position.y);
+    // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
+    // ele morre em z11 num mapa cujo andar padrão é z10.
+    this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
     // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
     // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
     // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
@@ -4621,7 +4646,7 @@ const slots = bot.groups.get(group);
       const corpse: CorpseState = {
         id: this.#nextGroundItemId++,
         monsterId: monster.monsterId,
-        position: { x: monster.position.x, y: monster.position.y, z: this.floor },
+        position: this.#at(monster),
       };
       this.#corpses.push(corpse);
       session.emit({
@@ -5159,6 +5184,9 @@ const slots = bot.groups.get(group);
     if (subject === null) return null;
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return null;
+    // Andar diferente é tela diferente (#519): um alvo pinado antes de trocar de andar — o dele
+    // ou o do personagem — não continua "na tela" só porque o (x, y) ainda está perto.
+    if (!sameFloor(this.#floorOf(character), this.#floorOf(monster))) return null;
     if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
       return null;
     }
@@ -5292,14 +5320,35 @@ const slots = bot.groups.get(group);
    * continua sendo a da dificuldade — é a diferença para a supressão que a referência (§29)
    * manda não copiar. Morto não conta: ele está saindo, e um cadáver que segura o spawn
    * seria um raio que ninguém vê.
+   *
+   * **O `z` é do PONTO, nunca o do mapa (#519).** `Spawner.#freeTile` passa o andar de cada
+   * tile que sonda; sem isto, todo ponto seria checado no andar padrão do mapa, e um lugar
+   * de z11 nasceria "livre" mesmo bloqueado por parede em z11 só porque o tile equivalente em
+   * z10 está livre. Pela mesma razão, "à vista" (a distância do `spawnClearRadius`, o
+   * `Spawn::findPlayer` do TFS) só conta um participante do MESMO andar do ponto — os três
+   * andares da Darashia Dragon Lair compartilham a caixa x/y, e um jogador em z10 não pode
+   * segurar o respawn de um Dragon Lord em z12 só por estar no (x, y) parecido.
+   *
+   * **`blockable` é a EXCEÇÃO, não a regra (#519, `isBlockable` do TFS/Canary).** No Canary,
+   * 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — têm
+   * `isBlockable: false`: eles respawnam OLHANDO PARA O JOGADOR, ignorando quem está perto.
+   * Só quem declara `blockable: true` espera a vista limpar. `spawnClearRadius` continua
+   * existindo para quem precisa dele (o rato/rotworm de antes, que não declara `blockable` —
+   * ausente é `false`, então a checagem abaixo já os isenta também: era o comportamento ANTIGO
+   * que estava invertido, ligado para todo mundo por um `spawnClearRadius` > 0 só do lado da
+   * hunt). Sem `monsterId` (chamador que ainda não resolveu o monstro do ponto) a checagem
+   * roda — é o caminho defensivo, nunca o normal.
    */
   #spawnBlockedFor(session: Session): Blocked {
     const radius = this.#options.hunt.spawnClearRadius;
-    return (x, y) => {
-      if (isBlocked(this.#options.map, x, y) || this.#world.occupied(x, y)) return true;
+    return (x, y, z = this.#world.map.z, monsterId) => {
+      if (isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
       if (radius <= 0) return false;
+      const definition = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (definition !== undefined && !definition.blockable) return false;
       for (const participant of session.participants) {
-        if (participant.alive && distance(participant.position, { x, y }) < radius) return true;
+        if (!participant.alive || this.#floorOf(participant) !== z) continue;
+        if (distance(participant.position, { x, y }) < radius) return true;
       }
       return false;
     };

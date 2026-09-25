@@ -12,15 +12,21 @@ import type { ConditionState } from '../conditions.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
-import { distance, greedyStep, type Blocked, type GridPoint } from './step.js';
+import { distance, greedyStep, sameFloor, type Blocked, type FloorPoint, type GridPoint } from './step.js';
 
 export interface MonsterState {
   readonly id: number;
   readonly monsterId: string;
-  readonly position: GridPoint;
+  /**
+   * O `z` é opcional (#519, hunt multiandar): ausente é o andar padrão do mapa — snapshot
+   * anterior a esta issue, ou hunt de andar único, onde nenhum monstro precisou dizer em que
+   * andar nasceu porque só havia um. O spawner passou a preenchê-lo com o andar do PONTO de
+   * spawn, não do mapa — é o que faz um Dragon Lord nascer em z11 e não em z10.
+   */
+  readonly position: FloorPoint;
   readonly health: number;
   /** De onde ele saiu. É para onde volta quando desiste do alvo. */
-  readonly home: GridPoint;
+  readonly home: FloorPoint;
   readonly targetId: string | null;
   /**
    * O golpe está ENGATILHADO, esperando alguém entrar no alcance?
@@ -63,7 +69,7 @@ export const monsterSubject = (id: number): string => `m:${id}`;
 /** O que o monstro consegue enxergar de um alvo. Estreito para não arrastar o mundo junto. */
 export interface Prey {
   readonly id: string;
-  readonly position: GridPoint;
+  readonly position: FloorPoint;
   readonly alive: boolean;
 }
 
@@ -84,13 +90,19 @@ export type MonsterAction =
 export class MonsterRuntime {
   readonly id: number;
   readonly monsterId: string;
-  readonly home: GridPoint;
-  position: GridPoint;
+  readonly home: FloorPoint;
+  position: FloorPoint;
   health: number;
   targetId: string | null;
   /** Ver `MonsterState.attackReady`. */
   attackReady: boolean;
   speed: number;
+  /**
+   * Nunca usa escada (#519, hunt multiandar) — `movement.ts` lê isto para não deixar o
+   * `z` que a posição agora carrega virar permissão de trocar de andar sozinho. Ver o
+   * comentário de `Movable.crossesFloors`.
+   */
+  readonly crossesFloors = false;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
@@ -168,7 +180,7 @@ export function chooseTarget(
     ? undefined
     : prey.find((p) => p.id === monster.targetId);
 
-  if (current !== undefined && current.alive) {
+  if (current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
     const leash = definition.leashRadius;
     // Zero significa "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK
     // faria o jogador voltar e encontrar tudo parado sem explicação.
@@ -179,6 +191,10 @@ export function chooseTarget(
   let closestDistance = Number.POSITIVE_INFINITY;
   for (const candidate of prey) {
     if (!candidate.alive) continue;
+    // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
+    // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair compartilham
+    // a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima através do chão.
+    if (!sameFloor(monster.position.z, candidate.position.z)) continue;
     const d = distance(monster.position, candidate.position);
     if (d > definition.aggroRadius || d >= closestDistance) continue;
     closest = candidate;

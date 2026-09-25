@@ -59,6 +59,39 @@ describe('chooseTarget', () => {
     const leashed = { ...rat, leashRadius: 5 };
     expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed)).toBeNull();
   });
+
+  describe('andar (#519, hunt multiandar)', () => {
+    // Um monstro com `z` na posição só enxerga presa NO MESMO `z` — os três andares da
+    // Darashia Dragon Lair compartilham a mesma caixa (x, y), então ignorar o andar faria um
+    // Dragon Lord do meio agredir o Dragon de cima através do chão.
+    const monsterAtFloor = (x: number, y: number, z: number, over: Record<string, unknown> = {}) =>
+      new MonsterRuntime({
+        id: 1, monsterId: 'rat', position: { x, y, z }, home: { x, y, z },
+        health: 20, targetId: null, cooldowns: {}, ...over,
+      });
+    const preyAtFloor = (id: string, x: number, y: number, z: number, alive = true): Prey =>
+      ({ id, position: { x, y, z }, alive });
+
+    it('ignora presa perto por (x, y) mas em outro andar', () => {
+      const monster = monsterAtFloor(0, 0, 10);
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11)], rat)).toBeNull();
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11), preyAtFloor('same', 2, 0, 10)], rat))
+        .toBe('same');
+    });
+
+    it('larga o alvo que trocou de andar, mesmo dentro do leash', () => {
+      const monster = monsterAtFloor(0, 0, 10, { targetId: 'runner' });
+      const leashed = { ...rat, leashRadius: 0 };
+      expect(chooseTarget(monster, [preyAtFloor('runner', 1, 0, 11)], leashed)).toBeNull();
+    });
+
+    it('sem `z` de nenhum dos lados continua igual a antes — compatível com snapshot anterior', () => {
+      // Nem o monstro nem a presa carregam `z`: é o snapshot de uma hunt de andar único gravado
+      // antes desta issue, e o comportamento não pode mudar para ela.
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [prey('p', 1, 0)], rat)).toBe('p');
+    });
+  });
 });
 
 describe('decideMonsterAction', () => {

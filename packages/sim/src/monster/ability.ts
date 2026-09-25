@@ -11,7 +11,8 @@
 import type { MonsterAbility } from '@draconya/content';
 import { areaTiles, tileKey } from '../area.js';
 import type { WorldPoint } from '../movement.js';
-import type { GridPoint } from './step.js';
+import { sameFloor } from './step.js';
+import type { FloorPoint } from './step.js';
 
 /**
  * A ability é corpo a corpo? Alcance 1 e sem área — é o que decide se o impacto é "melee"
@@ -45,7 +46,7 @@ export function abilityTiles(
  * Morto é pulado: um alvo que caiu não leva um segundo golpe, e a ordem dos que sobram não
  * muda. Sem área é o alvo principal — um caso do mesmo caminho, não um ramo à parte.
  */
-export function abilityTargets<T extends { readonly position: GridPoint; readonly alive: boolean }>(
+export function abilityTargets<T extends { readonly position: FloorPoint; readonly alive: boolean }>(
   ability: MonsterAbility,
   caster: WorldPoint,
   primary: T,
@@ -59,7 +60,11 @@ export function abilityTargets<T extends { readonly position: GridPoint; readonl
   const targets: T[] = [];
   for (const candidate of prey) {
     if (!candidate.alive) continue;
-    if (!keys.has(tileKey({ ...candidate.position, z: caster.z }))) continue;
+    // O andar do CANDIDATO, nunca o do lançador (#519): forçar `caster.z` em quem está lendo a
+    // própria posição acertava, por acidente, quem estivesse no (x, y) certo em OUTRO andar — a
+    // onda de fogo do dragão atravessando o chão para acertar quem está no andar de baixo.
+    if (!sameFloor(caster.z, candidate.position.z)) continue;
+    if (!keys.has(tileKey({ x: candidate.position.x, y: candidate.position.y, z: candidate.position.z ?? caster.z }))) continue;
     targets.push(candidate);
   }
   return targets;

@@ -142,6 +142,19 @@ describe('abilityTargets (puro)', () => {
     expect(abilityTargets(casterArea, casterAt, primary, prey).map((t) => t.id)).toEqual(['a', 'b']);
   });
 
+  it('ignora quem está no (x, y) certo mas no andar ERRADO (#519, hunt multiandar)', () => {
+    // Antes desta issue o andar do CANDIDATO era descartado e substituído pelo do lançador — a
+    // onda de fogo do dragão em z10 acertaria quem estivesse no (x, y) certo em z11, atravessando
+    // o chão. Aqui `b` está no tile certo por (x, y), mas num andar diferente do lançador.
+    interface DummyComAndar { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z?: number }; readonly alive: boolean }
+    const comOutroAndar: DummyComAndar[] = [
+      { id: 'a', position: { x: 5, y: 5 }, alive: true },
+      { id: 'b', position: { x: 6, y: 5, z: 8 }, alive: true },
+      { id: 'longe', position: { x: 9, y: 9 }, alive: true },
+    ];
+    expect(abilityTargets(area, casterAt, primary, comOutroAndar).map((t) => t.id)).toEqual(['a']);
+  });
+
   it('abilityTiles devolve a forma; alvo único devolve vazio', () => {
     expect(abilityTiles(single, casterAt, { x: 5, y: 5, z: 7 })).toEqual([]);
     const tiles = abilityTiles(area, casterAt, { x: 5, y: 5, z: 7 });
