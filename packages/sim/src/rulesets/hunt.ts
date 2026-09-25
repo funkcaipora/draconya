@@ -23,7 +23,7 @@ import {
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
   CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
-  Monster, MonsterAbility, PartyConfig, Progression,
+  Monster, MonsterAbility, MonsterDefense, MonsterTargetChange, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
   WeaponFamily, WeaponProfile,
 } from '@draconya/content';
@@ -63,7 +63,7 @@ import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction 
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
+  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
@@ -106,6 +106,19 @@ const MONSTER_ATTACK = 'monster-attack';
 const MONSTER_ABILITY = 'monster-ability';
 const monsterAbilitySubject = (id: number, abilityId: string): string =>
   `${monsterSubject(id)}:${abilityId}`;
+/**
+ * Uma DEFESA declarada de monstro (#518): mesmo desenho do `MONSTER_ABILITY`, subject derivado
+ * (`m:<id>:<defenseId>`) para a morte cancelar sem varrer a fila e para duas defesas do mesmo
+ * monstro, com cadências diferentes, não colidirem no mesmo (kind, subject).
+ */
+const MONSTER_DEFENSE = 'monster-defense';
+const monsterDefenseSubject = (id: number, defenseId: string): string =>
+  `${monsterSubject(id)}:${defenseId}`;
+/**
+ * A troca de alvo por tempo (#518). Só existe UMA por monstro — o subject é o `m:<id>` de
+ * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
+ */
+const MONSTER_TARGET_CHANGE = 'monster-target-change';
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
@@ -1775,6 +1788,8 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_STEP: return this.#onMonsterStep(session, event.subject);
       case MONSTER_ATTACK: return this.#onMonsterAttack(session, event.subject);
       case MONSTER_ABILITY: return this.#onMonsterAbility(session, event.subject);
+      case MONSTER_DEFENSE: return this.#onMonsterDefense(session, event.subject);
+      case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
@@ -2231,6 +2246,20 @@ export class HuntRuleset implements Ruleset {
     // evento por ability por monstro nascendo, para quase sempre não achar alvo.
     if (definition.abilities.some((ability) => ability.id === BASIC_ABILITY_ID)) {
       this.#scheduleMonsterAttack(session, monster, 0);
+    }
+    // As defesas (#518) não dependem de alvo — cura própria é um timer, não uma reação. Cada
+    // uma agenda a PRÓPRIA cadência, e a primeira chance só é rolada em `cadenceMs`: um
+    // monstro recém-nascido não se cura antes do primeiro vencimento, como o TFS não cura no
+    // instante em que nasce.
+    for (const defense of definition.defenses) {
+      this.#scheduleMonsterDefense(session, monster, defense, defense.cadenceMs);
+    }
+    // A troca de alvo (#518) é o mesmo desenho: um timer da instância do monstro, não uma
+    // reação ao passo. Só existe um por monstro — sem `Set` de agendados, como as abilities.
+    if (definition.targetChange !== undefined) {
+      session.scheduleIn(MONSTER_TARGET_CHANGE, definition.targetChange.intervalMs, {
+        priority: EventPriority.Attack, subject: subjectOf,
+      });
     }
     // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
     // um que o tem ao alcance (#203). E o auto-target (#444) reavalia na hora: o monstro que
@@ -3931,7 +3960,9 @@ const slots = bot.groups.get(group);
    *
    * A sequência é a de sempre: reescolhe alvo, confere o alcance, reagenda a cadência e aplica
    * pelo pipeline canônico. Sem alvo ao alcance, ENGATILHA em vez de desperdiçar — quem o traz
-   * de volta é o passo, que reavalia a distância a cada vencimento.
+   * de volta é o passo, que reavalia a distância a cada vencimento. Fugindo (#518), o corpo a
+   * corpo entra na mesma regra de "fora do alcance": engatilha e não bate, e é `#armMonsterAbilities`
+   * quem re-arma quando o HP subir de novo acima de `runOnHealth`.
    */
   #onMonsterAttack(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
@@ -3948,12 +3979,18 @@ const slots = bot.groups.get(group);
     monster.targetId = chooseTarget(monster, prey, definition);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
-      || distance(monster.position, target.position) > ability.target.range) {
+      || distance(monster.position, target.position) > ability.target.range
+      || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
       monster.attackReady = true;
       return;
     }
 
+    // Reagenda SEMPRE — a chance é rolada A CADA vencimento, independente do resultado. É o
+    // TFS `doAttacking`: o intervalo continua correndo mesmo quando a rolagem falha.
     this.#scheduleMonsterAttack(session, monster, ability.cadenceMs);
+    // Ausente é sempre passa, sem consumir sorteio (preserva rato/rotworm bit a bit); declarada,
+    // UMA rolagem por vencimento (#518).
+    if (ability.chance !== undefined && !session.rng.chance(ability.chance)) return;
     this.#executeMonsterAbility(session, monster, ability, target);
   }
 
@@ -3980,12 +4017,15 @@ const slots = bot.groups.get(group);
     monster.targetId = chooseTarget(monster, prey, definition);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
-      || distance(monster.position, target.position) > ability.target.range) {
-      // Alvo saiu do alcance no vencimento: NÃO bate, e a ability volta a ficar engatilhada.
+      || distance(monster.position, target.position) > ability.target.range
+      || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
+      // Alvo saiu do alcance (ou o monstro está fugindo e esta ability é corpo a corpo): NÃO
+      // bate, e a ability volta a ficar engatilhada — `#armMonsterAbilities` a re-arma.
       return;
     }
 
     this.#scheduleMonsterAbility(session, monster, ability, ability.cadenceMs);
+    if (ability.chance !== undefined && !session.rng.chance(ability.chance)) return;
     this.#executeMonsterAbility(session, monster, ability, target);
   }
 
@@ -3994,12 +4034,16 @@ const slots = bot.groups.get(group);
    *
    * A básica usa `attackReady`; as declaradas usam `scheduledAbilities` — cada uma tem a
    * própria cadência, e um booleano só não distinguiria "vai bater" de "já tem evento na fila".
+   * Fugindo (#518), as abilities CORPO A CORPO nem são armadas — o monstro segue se afastando e
+   * só as de alcance continuam saindo.
    */
   #armMonsterAbilities(
     session: Session, monster: MonsterRuntime, definition: Monster, target: Prey | null,
   ): void {
     if (target === null || !target.alive) return;
+    const fleeing = isMonsterFleeing(monster, definition);
     for (const ability of definition.abilities) {
+      if (fleeing && isMeleeAbility(ability)) continue;
       if (distance(monster.position, target.position) > ability.target.range) continue;
       if (ability.id === BASIC_ABILITY_ID) {
         if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
@@ -4136,6 +4180,86 @@ const slots = bot.groups.get(group);
     session.scheduleIn(MONSTER_ABILITY, delayMs, {
       priority: EventPriority.Attack, subject: monsterAbilitySubject(monster.id, ability.id),
     });
+  }
+
+  /** O mesmo, do lado da defesa (#518). */
+  #scheduleMonsterDefense(
+    session: Session, monster: MonsterRuntime, defense: MonsterDefense, delayMs: number,
+  ): void {
+    monster.scheduledDefenses.add(defense.id);
+    session.scheduleIn(MONSTER_DEFENSE, delayMs, {
+      priority: EventPriority.Attack, subject: monsterDefenseSubject(monster.id, defense.id),
+    });
+  }
+
+  /**
+   * Uma DEFESA declarada de um monstro venceu (#518, TFS `Monster::onThinkDefense`, referência
+   * §15-19): cura própria. Independente do alvo — não precisa de ninguém para curar —, então
+   * reagenda-se SEMPRE, ao contrário das abilities de ataque, que dependem de alcance.
+   */
+  #onMonsterDefense(session: Session, subject: string): void {
+    // `m:<id>:<defenseId>`, o mesmo desenho de `#onMonsterAbility`.
+    const rest = subject.startsWith('m:') ? subject.slice(2) : '';
+    const separator = rest.indexOf(':');
+    if (separator < 0) return;
+    const monster = this.#monsterBySubject.get(monsterSubject(Number(rest.slice(0, separator))));
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const defenseId = rest.slice(separator + 1);
+    const defense = definition.defenses.find((candidate) => candidate.id === defenseId);
+    if (defense === undefined) return;
+
+    monster.scheduledDefenses.delete(defense.id);
+    this.#scheduleMonsterDefense(session, monster, defense, defense.cadenceMs);
+
+    // `chance` é SEMPRE declarada aqui (o schema exige), então SEMPRE consome uma rolagem — ao
+    // contrário de `ability.chance`, que só existe em conteúdo novo.
+    if (!session.rng.chance(defense.chance)) return;
+
+    const healed = monster.heal(definition.health, session.rng.integer(defense.heal.min, defense.heal.max));
+    // De vida cheia, zero repôs — sem evento, como a regeneração passiva (`#onRegen`): um "+0"
+    // flutuando por cadência é ruído que uma hunt desanexada não precisa produzir.
+    if (healed <= 0) return;
+    session.emit({
+      kind: 'creature-healed', creatureId: monster.subject, amount: healed, source: 'monster',
+      position: this.#at(monster),
+      ...(defense.presentation?.impactKey === undefined
+        ? {} : { impactKey: defense.presentation.impactKey }),
+    });
+    this.#emitHealth(session, monster);
+  }
+
+  /**
+   * A troca de alvo por tempo de um monstro venceu (#518, TFS `Monster::onThinkTarget`,
+   * referência §15-19). Um timer da instância, como a defesa — não depende do alvo atual estar
+   * vivo ou no alcance, e reagenda-se sempre enquanto o monstro viver.
+   */
+  #onMonsterTargetChange(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    const targetChange = definition?.targetChange;
+    if (definition === undefined || targetChange === undefined) return;
+
+    session.scheduleIn(MONSTER_TARGET_CHANGE, targetChange.intervalMs, {
+      priority: EventPriority.Attack, subject,
+    });
+
+    if (!session.rng.chance(targetChange.chance)) return;
+
+    // TFS `searchTarget(TARGETSEARCH_RANDOM)`: um alvo válido ao acaso, DIFERENTE do atual —
+    // trocar para o mesmo não é troca. A estratégia ponderada do Canary (70/10/10/10) fica fora
+    // (§ "Fora do escopo" do #518).
+    const prey: readonly Prey[] = session.participants;
+    const candidates = prey.filter((candidate) => candidate.alive
+      && candidate.id !== monster.targetId
+      && distance(monster.position, candidate.position) <= definition.aggroRadius);
+    if (candidates.length === 0) return;
+    const chosen = candidates[session.rng.integer(0, candidates.length - 1)];
+    if (chosen === undefined) return;
+    monster.targetId = chosen.id;
+    this.#armMonsterAbilities(session, monster, definition, chosen);
   }
 
   /**
@@ -4646,6 +4770,12 @@ const slots = bot.groups.get(group);
     for (const ability of definition?.abilities ?? []) {
       if (ability.id === BASIC_ABILITY_ID) continue;
       session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(monster.id, ability.id));
+    }
+    // As DEFESAS (#518) têm o mesmo problema e a mesma solução: subject derivado, cancelado
+    // pelos ids que o conteúdo conhece. `MONSTER_TARGET_CHANGE` usa o subject `m:<id>` exato, e
+    // esse o `resolveDeath` já cancelou junto do resto.
+    for (const defense of definition?.defenses ?? []) {
+      session.cancelEvent(MONSTER_DEFENSE, monsterDefenseSubject(monster.id, defense.id));
     }
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);

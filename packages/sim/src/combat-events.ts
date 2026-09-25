@@ -59,9 +59,18 @@ export interface CreatureHealed {
   /**
    * `leech` é o CMB-08: a vida que o life leech repôs no ATACANTE. O hospedeiro o desenha como
    * cura, como os outros — a apresentação não distingue, e não precisa enquanto não há UI.
+   *
+   * `monster` é a defesa de cura própria do monstro (#518) — o `blueshimmer` do Dragon, por
+   * exemplo.
    */
-  readonly source: 'spell' | 'supply' | 'leech';
+  readonly source: 'spell' | 'supply' | 'leech' | 'monster';
   readonly position: WorldPoint;
+  /**
+   * A chave SEMÂNTICA de apresentação da defesa (#518, CMB-06): o host a resolve em
+   * `appearances.abilities`, como `MonsterAbilityCast.impactKey`. Chave sem linha é MUDA — a
+   * cura acontece igual (invariante 6). Só acompanha `source: 'monster'`.
+   */
+  readonly impactKey?: string;
 }
 
 /** Um alvo de magia como o cliente o enxerga: quem, e onde desenhar o efeito. */

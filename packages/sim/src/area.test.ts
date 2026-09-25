@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaTiles, directionOf, isSelfOrigin, tileKey } from './area.js';
+import { areaTiles, directionOf, facingDirection, isSelfOrigin, tileKey } from './area.js';
 import type { Direction } from './area.js';
 
 // As formas (#155): tiles exatos por forma e direção. A onda é o que mais importa — o cone
@@ -95,5 +95,30 @@ describe('directionOf', () => {
     expect(directionOf(origin, { x: 9, y: 11, z: 7 })).toBe('west');
     // Sem passo, sem direção: quem chama mantém a que tinha.
     expect(directionOf(origin, origin)).toBeNull();
+  });
+});
+
+describe('facingDirection (#518, TFS Monster::updateLookDirection)', () => {
+  it('faces whichever axis has the larger offset, cardinal moves included', () => {
+    expect(facingDirection(origin, { x: 10, y: 5, z: 7 })).toBe('north');
+    expect(facingDirection(origin, { x: 10, y: 15, z: 7 })).toBe('south');
+    expect(facingDirection(origin, { x: 20, y: 10, z: 7 })).toBe('east');
+    expect(facingDirection(origin, { x: 0, y: 10, z: 7 })).toBe('west');
+  });
+
+  it('the DOMINANT axis wins on a diagonal — unlike `directionOf`, which is always horizontal', () => {
+    // O alvo está muito mais longe no eixo VERTICAL: o monstro olha para norte/sul, não para
+    // leste/oeste. É o que distingue de `directionOf` (passo, sempre horizontal quando dx != 0).
+    expect(facingDirection(origin, { x: 11, y: 5, z: 7 })).toBe('north');
+    expect(facingDirection(origin, { x: 11, y: 15, z: 7 })).toBe('south');
+    expect(directionOf(origin, { x: 11, y: 5, z: 7 })).toBe('east');
+  });
+
+  it('a tie (equal offsets, or no offset at all) decides horizontal, by the sign of dx', () => {
+    expect(facingDirection(origin, { x: 15, y: 15, z: 7 })).toBe('east');
+    expect(facingDirection(origin, { x: 5, y: 15, z: 7 })).toBe('west');
+    expect(facingDirection(origin, { x: 5, y: 5, z: 7 })).toBe('west');
+    // Mesmo tile (empate zero-zero): a mesma regra do TFS dá leste, não uma direção arbitrária.
+    expect(facingDirection(origin, origin)).toBe('east');
   });
 });

@@ -305,6 +305,25 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
   "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
   `scheduledAbilities` (opcional no snapshot, sem bump).
+- **A IA do TFS é entrada independente, evento na fila — nunca um "pensamento" por tick**
+  (#518, referência §15-19). `ability.chance` AUSENTE é sempre passa e NÃO consome sorteio (o
+  mesmo argumento do `blockChance`/CMB-04 e do `modifiers.critical`/CMB-08 — preserva rato e
+  rotworm bit a bit); declarada, consome UMA rolagem por vencimento mesmo em 1.
+  `#onMonsterAttack`/`#onMonsterAbility` REAGENDAM antes de rolar a chance, para o intervalo
+  correr mesmo quando a rolagem falha. `wave`/`beam` de ability saem na direção do ALVO,
+  recalculada a cada golpe por `facingDirection` (`area.ts`, eixo de maior deslocamento, empate
+  decide horizontal) — DIFERENTE de `directionOf`, que é do PASSO e sempre prioriza horizontal.
+  `monster.defenses` (cura própria) é evento POR DEFESA, subject derivado `m:<id>:<defenseId>`,
+  `scheduledDefenses` (opcional no snapshot); não depende de alvo, e de vida cheia não emite
+  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` troca para um alvo
+  ao acaso DIFERENTE do atual dentro do `aggroRadius` (TFS `TARGETSEARCH_RANDOM`); a estratégia
+  ponderada do Canary e o `TARGETSEARCH_NEAREST` ficam de fora — nenhum monstro do recorte
+  precisa deles. `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
+  a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
+  aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
+  alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no
+  schema mas NÃO é wired: sem "pensamento" periódico separado do passo, simular o shuffle do
+  TFS exigiria um evento novo só para isso — divergência registrada em `docs/product/combat.md`.
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
   munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
   lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).

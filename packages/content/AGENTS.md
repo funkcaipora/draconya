@@ -153,6 +153,19 @@ reservado ao boot. **Os ids que cada chave resolve continuam sendo arte**, entã
 `packProblems` os confere contra o inventário do pacote (CMB-09, #242): um projétil fora da
 faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
 
+**A IA do TFS é conteúdo opcional, nunca contagem por tick** (#518, referência §15-19).
+`monsterAbilitySchema.chance` é OPCIONAL e sem default preenchido de propósito — não
+`z.number().default(1)` — porque a diferença entre "ausente" e "declarado como 1" é observável
+no `sim` (ausente não rola sorteio, declarado rola sempre). `monsterAbilityTargetSchema.area`
+aceita `circle`, `wave` e `beam` (`buildContent` recusa o resto); `wave`/`beam` saem do monstro
+na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
+(cura própria) é normalizado no boot como `abilities` (`normalizeMonsterDefenses`, ausente vira
+lista VAZIA — nunca `undefined` — para o `sim` iterar sem `?? []`), mas sem básica a sintetizar:
+nenhum monstro cura sozinho por padrão. `monster.targetChange`/`runOnHealth`/`staticAttack` são
+opcionais e passam direto (sem compilação) — presença é o que importa, não normalização de
+forma. Nenhum destes campos tem default preenchido: ausência é o comportamento de sempre, e é
+isso que preserva rato e rotworm.
+
 **A conferência visual dos efeitos e projéteis é auditada e re-rodável** (CMB-09, #242). O
 método, a versão do pacote e o bloqueio da biblioteca parcial estão em
 `docs/combat-presentation-audit.md`; `src/appearances.test.ts` prende que toda referência cai no

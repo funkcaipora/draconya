@@ -468,10 +468,16 @@ describe('abilities de monstro (CMB-06)', () => {
     }))).toThrow(/duplicada/);
   });
 
-  it('recusa forma de área que o monstro não lança — `wave` sai da direção do lançador', () => {
+  it('aceita `wave` e `beam` — saem na direção do lançador para o alvo (#518)', () => {
     const wave = { id: 'wave', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'wave', length: 2 } } };
-    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [wave] }] })))
-      .toThrow(/só lança `circle`/);
+    const beam = { id: 'beam', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'beam', length: 4 } } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [wave, beam] }] }))).not.toThrow();
+  });
+
+  it('recusa forma de área que o monstro ainda não lança — `cross` fica de fora (#518)', () => {
+    const cross = { id: 'cross', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'cross', radius: 1 } } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [cross] }] })))
+      .toThrow(/só lança `circle`, `wave` ou `beam`/);
   });
 
   it('ability sem linha na tabela de aparências é MUDA, nunca erro', () => {

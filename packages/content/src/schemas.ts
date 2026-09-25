@@ -931,9 +931,12 @@ export interface MonsterAbilityPower {
 }
 
 /**
- * O alvo de uma ability de monstro (CMB-06): o alcance até o alvo principal e, opcionalmente,
- * a forma de área. `area` é só `circle` — o monstro não carrega DIREÇÃO, e `wave`/`cleave`/
- * `beam` saem do lançador na direção dele; `buildContent` recusa as outras formas.
+ * O alvo de uma ability de monstro (CMB-06, estendido em #518): o alcance até o alvo principal
+ * e, opcionalmente, a forma de área. `circle` é o caso de sempre (centrado no alvo ou no
+ * lançador); `wave` e `beam` saem do lançador NA DIREÇÃO dele — o monstro vira para o alvo antes
+ * de atacar (`facingDirection`, `area.ts`), o mesmo cálculo do TFS `updateLookDirection` (eixo
+ * dominante de dx/dy, empate decide horizontal; referência §15-19). `cross`/`cleave` continuam
+ * fora: `buildContent` recusa as formas que o monstro ainda não lança.
  */
 export const monsterAbilityTargetSchema = z.object({
   range: z.number().int().positive().default(1),
@@ -949,6 +952,17 @@ export const monsterAbilitySchema = z.strictObject({
   id: z.string().min(1),
   /** Milissegundos entre usos. Tempo decorrido, nunca contagem de tick (invariante 2). */
   cadenceMs: z.number().int().positive(),
+  /**
+   * A chance de a ability sair quando o `cadenceMs` vence (#518, TFS `Monster::doAttacking`/
+   * `onThinkDefense`, referência §15-19): cada entrada da lista rola a PRÓPRIA chance, uma
+   * rolagem independente — corpo a corpo, onda e bola podem sair no mesmo vencimento.
+   *
+   * **Ausente é sempre passa, e NÃO consome sorteio** — o mesmo argumento do `blockChance`
+   * (CMB-04) e do `modifiers.critical` (CMB-08): é o que preserva o rato e o rotworm bit a bit,
+   * porque a ability básica do boot nunca declara este campo. Declarada, a ability consome UMA
+   * rolagem a cada vencimento, mesmo com o valor 1 — a sequência não pode depender do número.
+   */
+  chance: z.number().min(0).max(1).optional(),
   target: monsterAbilityTargetSchema.default(() => ({ range: 1 })),
   power: z.union([
     z.number().int().nonnegative(),
@@ -988,6 +1002,8 @@ export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
 export interface MonsterAbility {
   readonly id: string;
   readonly cadenceMs: number;
+  /** A chance de sair a cada vencimento (#518). Ausente: sempre sai, sem consumir sorteio. */
+  readonly chance?: number;
   readonly target: { readonly range: number; readonly area?: SpellArea };
   readonly power: MonsterAbilityPower;
   readonly damageType: DamageType;
@@ -1015,6 +1031,62 @@ export interface MonsterAbility {
  */
 export const MONSTER_CLASSES = ['mammal', 'vermin'] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
+
+/**
+ * Uma DEFESA de monstro (#518, TFS `Monster::onThinkDefense`, referência §15-19): cura própria,
+ * como o Dragon (`interval 2000, chance 15%, +40..+70`). É uma lista independente da de ataque —
+ * cada defesa tem a própria cadência e a própria chance, um evento na fila por defesa (o mesmo
+ * desenho de `monsterAbilitySchema`), nunca um cálculo por tick.
+ *
+ * Campo NOVO e opcional no monstro: nenhum conteúdo existente declara `defenses`, então `chance`
+ * aqui é OBRIGATÓRIA — declarar a lista já é conteúdo novo, sem concessão de compatibilidade a
+ * preservar.
+ */
+export const monsterDefenseSchema = z.strictObject({
+  id: z.string().min(1),
+  /** Milissegundos entre tentativas. Tempo decorrido, nunca contagem de tick (invariante 2). */
+  cadenceMs: z.number().int().positive(),
+  /** A chance de curar quando o `cadenceMs` vence — uma rolagem por vencimento. */
+  chance: z.number().min(0).max(1),
+  /** Quanto repõe, sorteado com o `Rng` da sessão a cada cura — nunca passa do HP máximo. */
+  heal: z.object({
+    min: z.number().int().nonnegative(),
+    max: z.number().int().nonnegative(),
+  }).refine((range) => range.min <= range.max, 'heal.min não pode passar de heal.max'),
+  /**
+   * A chave SEMÂNTICA de apresentação (CMB-06): o mesmo `impactKey` da ability, resolvido pelo
+   * host em `appearances.abilities` — o `blueshimmer` do Dragon, por exemplo. Chave sem linha é
+   * MUDA; a cura acontece igual (invariante 6).
+   */
+  presentation: z.object({
+    impactKey: z.string().min(1).optional(),
+  }).optional(),
+  _open: z.string().optional(),
+});
+export type MonsterDefenseDefinition = z.infer<typeof monsterDefenseSchema>;
+
+/** A defesa como o `sim` a consome — mesma forma do arquivo, sem defaults a resolver. */
+export interface MonsterDefense {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly chance: number;
+  readonly heal: { readonly min: number; readonly max: number };
+  readonly presentation?: { readonly impactKey?: string };
+}
+
+/**
+ * A troca de alvo por tempo (#518, TFS `Monster::onThinkTarget`, `changeTargetSpeed`/
+ * `changeTargetChance`, referência §15-19): a cada `intervalMs` rola `chance`; se passa, o
+ * monstro troca para outro alvo válido ao acaso dentro do `aggroRadius` — o ramo
+ * `TARGETSEARCH_RANDOM` do TFS, que é o que o Dragon usa (`targetDistance <= 1`). O ramo
+ * `TARGETSEARCH_NEAREST` para monstro de alcance maior fica de fora (§ "Fora do escopo" do
+ * #518): nenhum monstro do recorte precisa dele, e o Dragon/Dragon Lord usam o aleatório.
+ */
+export const monsterTargetChangeSchema = z.object({
+  intervalMs: z.number().int().positive(),
+  chance: z.number().min(0).max(1),
+});
+export type MonsterTargetChange = z.infer<typeof monsterTargetChangeSchema>;
 
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
@@ -1076,6 +1148,31 @@ export const monsterSchema = z.strictObject({
    * elas (o boot NÃO sintetiza a básica). O id `basic` é reservado ao boot.
    */
   abilities: z.array(monsterAbilitySchema).optional(),
+  /**
+   * As defesas declaradas (#518): cura própria, hoje. AUSENTE é nenhuma — o rato e o rotworm não
+   * declaram, e não curam sozinhos, como sempre.
+   */
+  defenses: z.array(monsterDefenseSchema).optional(),
+  /** A troca de alvo por tempo (#518). Ausente é o comportamento de sempre: só troca quando o
+   * alvo atual morre ou sai do `leashRadius` (`chooseTarget`). */
+  targetChange: monsterTargetChangeSchema.optional(),
+  /**
+   * O HP em que o monstro passa a fugir (#518, TFS `runonhealth`, referência §15-19): abaixo ou
+   * igual a este valor, ele se afasta do alvo em vez de aproximar, não dá golpe corpo a corpo,
+   * mas continua usando as abilities à distância que alcançam. Ausente é nunca foge — o
+   * comportamento de sempre.
+   */
+  runOnHealth: z.number().int().nonnegative().optional(),
+  /**
+   * A fração de vencimentos em que o monstro, podendo atacar, fica parado em vez de dar um
+   * passo aleatório colado no alvo (#518, TFS `staticattack`, referência §15-19: `randomStepping`
+   * quando o sorteio passa do valor). **Aceito e validado, mas ainda NÃO wired no `sim`** — o
+   * motor de passo daqui não tem um "pensamento" periódico independente do passo em si, e
+   * simular o shuffle exigiria um evento novo só para isso. Registrado como divergência em
+   * `docs/product/combat.md`, por decisão explícita do #518 ("implementar só se couber sem mexer
+   * no determinismo; senão registrar como divergência").
+   */
+  staticAttack: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -2331,7 +2428,7 @@ export type Spell = z.infer<typeof spellSchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities'> & {
+export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities' | 'defenses'> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
@@ -2342,6 +2439,12 @@ export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities'> & {
    * que o `sim` lê, e é por isso que ele não conhece o par `attack`/`attackIntervalMs`.
    */
   readonly abilities: readonly MonsterAbility[];
+  /**
+   * As defesas JÁ NORMALIZADAS (#518): nunca `undefined` — ausência vira lista vazia, para o
+   * `sim` iterar sem `?? []`. Ao contrário das abilities, não há básica a sintetizar: nenhum
+   * monstro cura sozinho por padrão.
+   */
+  readonly defenses: readonly MonsterDefense[];
 };
 export type MonsterAttack = MonsterDefinition['attack'];
 export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];

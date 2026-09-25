@@ -27,6 +27,7 @@ const definition: Monster = {
     id: BASIC_ABILITY_ID, cadenceMs: 2_000, target: { range: 1 },
     power: { min: 6, max: 6 }, damageType: 'physical',
   }],
+  defenses: [],
 };
 
 // Grade com paredes espalhadas: caminho livre demais não exercita o desvio, que é o ramo
