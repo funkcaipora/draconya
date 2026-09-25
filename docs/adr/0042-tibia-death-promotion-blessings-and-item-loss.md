@@ -2,7 +2,8 @@
 
 **Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 decisão 1 (mecânica de jogo segue o Tibia); bloqueada por duas questões em aberto (ver seção
-própria)
+própria); avaliadas contra o Huntera em 2026-09-25 sem evidência aplicável — as duas seguem
+abertas, capturas pendentes registradas (ver emenda)
 **Data:** 2026-09-25
 **Contexto técnico:** `packages/content` (`vocations/`, novo bloco `promotion`, bênçãos, morte),
 `packages/sim` (pipeline de morte, ledger de item destruído), `packages/server` (débito de gold
@@ -104,3 +105,50 @@ comportamento de produto fica marcado `[ABERTO]` em `docs/product/death.md` até
 Nenhum muda de texto. O invariante 10 é quem exige que a destruição de item passe pelo ledger,
 não por uma escrita direta em inventário. O invariante 8 é o motivo de promoção e bênção serem
 ações de Cidade (estado ATIVO sem sessão de hunt) em vez de um mecanismo simulado.
+
+## Emenda — 2026-09-25: decisões do dono ("copie do Huntera") — sem captura para responder, captura registrada
+
+Em 2026-09-25 o dono respondeu as doze questões abertas do `docs/tibia-parity-plan.md` §5 com
+"copie do Huntera": onde o Huntera (o Tibia-idle observado em `docs/reference/huntera-observed.md`)
+foi observado fazendo algo, a decisão segue o Huntera; onde não foi observado, a regra provisória
+atual permanece e a captura que falta fica registrada. As duas questões em aberto deste ADR foram
+avaliadas contra o documento inteiro, e nenhuma tem evidência aplicável.
+
+- **Perda de item na morte.** Nenhuma morte de personagem, tela ou payload de opcode aparece em
+  nenhuma das 828 linhas do documento — grep completo por
+  `morte|death|skull|item loss|perda de item|morr` bate só na runa Sudden Death, no tipo de dano
+  `death`, e em "até morrer" descrevendo HP de MONSTRO (não de jogador) na Parte VI. **Sem
+  captura, não há o que copiar.** A implementação mantém a regra provisória atual, "nunca perde
+  item" (`docs/product/death.md` §3.8), e a questão acima segue exatamente tão aberta quanto
+  estava — aguardando decisão do dono sobre destruir-e-registrar vs. manter, não uma resposta do
+  Huntera.
+- **Promoção e bênçãos.** Promoção EXISTE no Huntera — a party da Parte IV mostra nomes de
+  vocação promovida (Elite Knight, Elder Druid, Master Sorcerer, Royal Paladin) —, mas COMO ela é
+  obtida nunca foi observado: nenhuma tela de serviço, diálogo de NPC ou custo em gold aparece em
+  nenhuma das seis partes, incluindo as que decodificam tráfego da Cidade em detalhe (Parte II) e
+  as que têm personagem de level alto onde a tela plausivelmente apareceria (Partes IV/VI, e um
+  personagem level 328 visto de relance na Cidade na Parte II). Bênçãos: zero ocorrências de
+  `blessing|bênção|promotion|promoção` no documento inteiro — inclusive nas seções "o que NÃO dá
+  para concluir daqui" (§10, §16, §30, §35, §39), o que confirma que o assunto nunca foi sequer
+  olhado, não que ele não exista. A existência de promoção corrobora, sem decidir o mecanismo, a
+  decisão 1 acima (promoção como estado do personagem); o mecanismo de obtenção continua o da
+  decisão 1 (tela de serviço, level 20, 20.000 gold — fonte Canary) como valor provisório, até a
+  questão em aberto ser respondida pelo dono.
+
+Nenhuma das decisões 1-4 acima muda. As duas questões em aberto seguem exatamente onde estavam.
+
+Confiança: baixa nas duas — a ausência é ausência de captura, não confirmação negativa.
+
+**Captura pendente:**
+- Morte: uma morte real de personagem do Huntera — a tela (mensagem de perda de item? inventário
+  faltando itens logo depois?) e o WebSocket no instante (uma mensagem S2C perto da vida do
+  personagem chegando a zero, e se ela carrega uma lista de item/equipamento); e se algum status
+  "abençoado" estava ativo no momento.
+- Promoção/bênção: um personagem de level ≥20 do Huntera, checando toda tela da Cidade (painel de
+  personagem, qualquer loja, qualquer NPC) por uma oferta de promoção e o custo em gold;
+  separadamente, uma tela de compra de bênção ou um indicador "abençoado" antes de entrar numa
+  hunt, com o socket decodificado no instante da ação que dispara qualquer um dos dois.
+
+(Evidência: grep completo de `docs/reference/huntera-observed.md` para
+`morte|death|skull|item loss|perda de item|morr` e para `blessing|bênção|promotion|promoção`,
+zero ocorrências relevantes; Parte IV linhas 474-475; Parte II, personagem level 328.)

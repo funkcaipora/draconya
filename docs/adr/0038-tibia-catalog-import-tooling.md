@@ -1,6 +1,7 @@
 # 0038 — Catálogo do Tibia importado do Canary por ferramenta
 
-**Status:** aceito — decorre diretamente do pedido do usuário em 2026-09-24, no mesmo dia do
+**Status:** aceito; decisão 5 corroborada por evidência do Huntera em 2026-09-25 (ver emenda) —
+decorre diretamente do pedido do usuário em 2026-09-24, no mesmo dia do
 [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md): *"copie todas as
 mecânicas, magias, monstros, itens"*; usa o limite de licença do [ADR 0019](0019-opentibia-as-domain-specification.md)/[ADR 0031](0031-contrato-de-compatibilidade-de-combate-e-migracao.md)
 e o precedente do [ADR 0025](0025-real-map-from-otbm.md) (o mapa real por importador)
@@ -99,3 +100,36 @@ Nenhum muda de texto. O invariante 6 (`content/` nunca contém arte) ganha um me
 o importador nunca escreve `appearanceId` para uma entidade que o pacote 13.32 não desenha. O
 invariante 7 (versão de conteúdo fixada na sessão) continua valendo porque o catálogo gerado é
 conteúdo versionado como qualquer outro — `computeVersion` o inclui sem tratamento especial.
+
+## Emenda — 2026-09-25: decisões do dono ("copie do Huntera") — decisão 5 corroborada
+
+Em 2026-09-25 o dono respondeu as doze questões em aberto do `docs/tibia-parity-plan.md` §5 com
+"copie do Huntera": onde o Huntera (o Tibia-idle observado em `docs/reference/huntera-observed.md`)
+foi de fato observado fazendo algo, a decisão de produto segue o Huntera; onde não foi observado,
+a regra provisória atual permanece e a captura que falta fica registrada. Ver
+`docs/tibia-parity-plan.md` §5 para a tabela cheia e §6 para a lista de capturas pendentes.
+
+A questão 1 do plano ("corte de versão: 13.32 ou planejar troca de pacote?") já estava resolvida
+por esta decisão 5, pela razão de licença/pacote de arte — não por observação do Huntera. A
+evidência do Huntera **corrobora de forma independente**, sem mudar a decisão: o Huntera serve o
+pacote de assets em `/things/1332/` (`catalog-content.json`, `appearances-<hash>.dat` — Parte I
+§1-2, linha 22) — a mesma versão 13.32 que o pacote do Draconya usa —, e os termos `Monk`,
+`Soulpit`, `Weapon Proficiency` e `Animus Mastery` não aparecem em nenhuma das seis partes do
+documento (grep de texto completo, zero ocorrências), incluindo a Parte IV, que mostra uma party
+level 300+ com quatro vocações nomeadas (Elite Knight, Elder Druid, Master Sorcerer, Royal
+Paladin) e nenhuma quinta.
+
+Confiança: média. A URL do pacote é observação direta (alta confiança); a ausência de sistemas
+pós-13.32 é ausência ao longo de seis capturas, não confirmação negativa direta — a vocação da
+party foi lida da UI/prosa, não de um valor decodificado de `party-update.vocation`. Imbuements
+existem na captura (`imbuementSlots`/`imbuable` na mochila, Parte III §18 linha 406; 2 slots de
+imbuement na espada de loot da Rotworm Caves, Parte V §31 linha 709) — sistema anterior ao
+13.32, consistente com o corte, não contra ele.
+
+**Captura pendente:** abrir a tela de escolha de vocação na criação de personagem do Huntera para
+checar uma quinta opção "Monk", e checar a ficha de um personagem de level alto por um painel de
+Wheel of Destiny, um menu de Bosstiary/Hazard ou um slot de inventário de soul core — nenhuma
+dessas telas foi capturada.
+
+(Evidência: `docs/reference/huntera-observed.md` Parte I §1-2 linha 22; Parte IV linhas 474-475 e
+655-656; Parte III §18 linha 406; Parte V §31 linha 709.)

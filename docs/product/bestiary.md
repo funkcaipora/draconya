@@ -106,6 +106,15 @@ ordem faria o terceiro marco fechar antes do segundo.
 
 ## Em aberto
 
+- **Remoção do bônus de +1 % de XP por marco (FUN-113)** `[ABERTO]`: o [ADR 0045](../adr/0045-tibia-bestiary-charms-prey-and-training.md)
+  propõe substituir este bônus por estágios + Charms puros, sem XP direta. A resposta do dono de
+  2026-09-25 ("copie do Huntera") CONTESTA essa remoção: a tela de personagem do Huntera lista
+  "Progresso no Bestiary" como uma das cinco fontes que somam o bônus de XP total do personagem
+  (ao lado de level/guild/Premium/Experience Scroll), não como um sistema de Charm points sem XP
+  — o mesmo formato que o Draconya já usa. Isto é um conflito genuíno para o dono resolver, não
+  uma resposta fechada: manter o bônus, manter e somar Charms por cima, ou seguir o ADR 0045 como
+  proposto. **Até essa decisão, o bônus de +1 %/marco NÃO é removido.** Ver a emenda
+  "2026-09-25: decisões do dono" no fim do ADR 0045 e `docs/tibia-parity-plan.md` questão 7.
 - **Recompensas especiais por monstro** (§18.4, DT-05): loot PvE, Dodge PvE, resistência
   física e elemental PvE, redução de penalidade de morte. O conteúdo não tem monstro que as
   peça, e o formato — qual marco de qual monstro troca a XP por qual bônus — entra com o

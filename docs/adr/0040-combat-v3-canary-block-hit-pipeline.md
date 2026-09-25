@@ -3,7 +3,8 @@
 **Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 decisão 5 (perfil de combate novo, `breaking`, para toda mudança de resultado) e do
 [ADR 0031](0031-contrato-de-compatibilidade-de-combate-e-migracao.md) (regra de evolução de
-perfil); bloqueada por uma questão em aberto (ver seção própria)
+perfil); a questão de `arcane`/magias genéricas sem fonte foi RESOLVIDA em 2026-09-25 ("remover",
+ver emenda) — o restante do perfil `combat-v3` segue proposto, sem bloqueio
 **Data:** 2026-09-25
 **Contexto técnico:** `packages/content` (schema de combate, perfil), `packages/sim`
 (`combat/defense.ts`, `combat/damage.ts`, resolver canônico), `packages/server` (retomada e
@@ -65,6 +66,9 @@ acumularia um perfil `breaking` congelado por milestone para sempre.
 
 ## Questões em aberto (decisão do dono)
 
+**Resolvida em 2026-09-25** — a favor de "remover"; ver a emenda no fim deste documento. O texto
+abaixo é preservado como registro do que estava em aberto até a resposta do dono.
+
 - **Tipo de dano `arcane` e magias genéricas sem fonte no Canary.** O `combat-v1`/`v2` usa
   `arcane` como o tipo default de magia sem elemento declarado (ADR 0031, emenda de 2026-09-17),
   e o catálogo atual tem magias genéricas (blast/strike/heal) e a Divine Defiance sem
@@ -115,3 +119,46 @@ acumularia um perfil `breaking` congelado por milestone para sempre.
 Nenhum muda. O invariante 4 continua garantindo que o cliente nunca manda perfil, tipo de dano ou
 resultado. O invariante 7 é o que torna o perfil conteúdo versionado e congelado na sessão — a
 regra de aposentadoria da decisão 4 só é segura porque a fixação na sessão já existe.
+
+## Emenda — 2026-09-25: decisões do dono ("copie do Huntera") — `arcane` e as magias sem fonte saem
+
+Em 2026-09-25 o dono respondeu as doze questões abertas do `docs/tibia-parity-plan.md` §5 com
+"copie do Huntera": onde o Huntera (o Tibia-idle observado em `docs/reference/huntera-observed.md`)
+foi observado fazendo algo, a decisão segue o Huntera. A questão em aberto acima é uma das que tem
+evidência aplicável.
+
+A Parte IV do Huntera (§24, linhas 500-546) capturou o menu completo de magias do editor de ação
+de um paladino level 360 — Haste, Intense Healing, Ethereal Spear, Divine Healing, Divine
+Missile, Divine Caldera, Salvation, Strong Ethereal Spear, Swift Foot, Sharpshooter — sem "Divine
+Defiance" e sem "Divine Barrage". O §28 (linhas 626-647) registrou as palavras mágicas reais
+ditas por paladino, cavaleiro e druida ao longo de ~11 minutos de captura (exura san/exura gran
+san, exeta res/exeta amp res/exori gran/exori min/exura ico/exura med ico/utamo tempo/utani hur,
+exura sio) — todas palavras reais do Tibia. O vocabulário de tipo de dano é um enum
+genuinamente fechado: `hunt-analyzer-update.damageInput` (§29, linha 652) é tipado `channel:
+fire|earth|holy|energy|physical|death` — seis valores, sem `arcane`, em notação de união de tipo,
+não amostra de valores observados.
+
+**Decisão:** remover o tipo de dano `arcane`, as três magias genéricas pré-vocação
+(`strike.json`/`blast.json`/`heal.json`, hoje excluídas da checagem de conformidade de fórmula do
+Canary por nome, nota do #523) e `divine-defiance.json`/`divine-barrage.json`/
+`ethereal-barrage.json`/`forked-thorns.json` do catálogo, migrando qualquer `botConfig` que as
+referencia numa issue separada. Isto não é mudança de rumo: os três últimos arquivos já
+carregavam, em `_open`, "não existe no Tibia — remoção planejada (ADR 0037)" desde a varredura do
+#523; `divine-defiance.json` tem a mesma nota. A captura do Huntera corrobora, de forma
+independente, a mesma conclusão que a varredura de fonte do Canary já tinha alcançado — os dois
+caminhos convergem para "remover".
+
+Isto fecha a questão em aberto original acima a favor de "remover". A migração do tipo `arcane`
+para um tipo canônico do Tibia no vocabulário de `combat-v3` (decisão 1 acima) e na tabela
+`V1_ARMOR_EFFECTIVENESS` (ADR 0031) fica para a issue de implementação (M37, extração de magias),
+não para este ADR.
+
+Confiança: alta. **Captura pendente residual:** o menu de action-bar do Sorcerer nunca foi
+capturado item a item como o do paladino (§24) — "nenhuma Strike/Blast genérica específica do
+Sorcerer" descansa sobre o enum fechado de `damageInput` e a varredura do Canary (#523), não numa
+captura direta do menu do Sorcerer. Para fechar: capturar a tela de editor de ação do Sorcerer do
+mesmo jeito que a Parte IV §24 capturou a do paladino.
+
+(Evidência: `docs/reference/huntera-observed.md` Parte IV §24 linhas 500-546; §28 linhas 626-647;
+§29 linha 652; Parte V §32 linha 718 — este último é amostra por monstro, não enum declarado, e
+não é usado como pilar independente desta decisão.)

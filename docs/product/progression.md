@@ -175,6 +175,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Curva de ganho de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Teto de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Curva de XP | a cúbica do Tibia, `(L³ − 6L² + 17L − 12) / 6 × 100` (#521, ADR 0037 — ver seção acima) | `packages/content/data/progression/baseline.json`, `xp: { kind: 'tibia' }` |
+| Bônus de XP de level baixo | `[ABERTO]` — forma decidida (ADR 0043, emenda 2026-09-25): multiplicador decrescente `levelBonusPercent` (Huntera: L1 +200 %, L2 +199 %, L3 +197 %, L7 +192 %), não o `lowLevelBonusExp = 50` aditivo fixo do TFS/Canary; curva exata ajustada a esses quatro pontos, provisória; bloqueava M32-02/#563 | caminho previsto: `packages/content/data/progression/baseline.json` |
 | Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary: `gainhpticks` 12000, `gainmanaticks` 6000 — #521, ADR 0037; substitui o 1/1 provisório) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | 0,1667/0,3333 · 0,125/0,5 · 0,0833/0,6667 · 0,0833/0,6667 HP/mana por segundo (`gainhpticks`/`gainmanaticks` de cada vocação no Canary, #521, ADR 0037) | `packages/content/data/vocations/*.json`, `regen` |
@@ -219,6 +220,12 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
   de morte também eram provisórios do Draconya e **foram resolvidos pela #521 (ADR 0037)**: os
   três agora são os números do Tibia, verificados no Canary `vocations.xml` e em
   `player.cpp`/`vocation.cpp` — ver as seções acima e a tabela de parâmetros.
+- **Bônus de XP de level baixo (M32-02, #563):** o [ADR 0043](../adr/0043-tibia-stamina-and-food-only-regeneration.md)
+  tinha essa questão bloqueada entre o `lowLevelBonusExp = 50` fixo do TFS/Canary e "fora de
+  escopo". A resposta do dono de 2026-09-25 ("copie do Huntera") resolveu a FORMA: um
+  multiplicador `levelBonusPercent`, decrescente por level, medido em quatro pontos no Huntera
+  (L1 +200 %, L2 +199 %, L3 +197 %, L7 +192 %) — ver a linha na tabela de parâmetros acima e a
+  emenda do ADR 0043. A fórmula exata da curva e o level em que ela zera continuam `[ABERTO]`.
 
 ## Decidido na implementação: a vocação não é retroativa
 
