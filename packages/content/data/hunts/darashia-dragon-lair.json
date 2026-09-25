@@ -1,0 +1,21 @@
+{
+  "id": "darashia-dragon-lair",
+  "name": "Darashia Dragon Lair",
+  "recommendedLevel": 40,
+  "mapId": "darashia-dragon-lair",
+  "routeId": "darashia-dragon-lair",
+  "ambience": "cavern",
+  "description": "A caverna de dragões ao norte de Darashia — Dragons no piso raso, Dragon Lords nos dois de baixo. O respawn é generoso: sempre sobra dragão para todo mundo.",
+  "corpseTtlMs": 10000,
+  "difficulties": {
+    "cautious": {
+      "monsterCount": 47,
+      "composition": [
+        { "monsterId": "dragon", "weight": 1 },
+        { "monsterId": "dragon-lord", "weight": 1 }
+      ],
+      "respawnDelayMs": 90000
+    }
+  },
+  "_open": "#520 fase 2. recommendedLevel 40: o \"Gate of Expertise\" que trava a entrada da lair no Tibia real exige level 40 (TibiaWiki, via WebSearch) — o mesmo piso que o Dragon (#520 fase 1) já usa como recommendedLevel individual; o Dragon Lord (recommendedLevel 90) é o desafio de quem avança lá dentro, não a entrada. Uma dificuldade só (`cautious`, nome arbitrário — o Tibia real não tem tamanho de pull aqui: os 47 pontos do Canary nascem sempre, todos ao mesmo tempo, sem escolha de Cauteloso/Ousado/Agressivo). `monsterCount: 47` é DELIBERADO — igual ao número de spawnPoints da rota (`data/routes/darashia-dragon-lair.json`, #519): cada `spawnPoints[i].monsterId` já diz o monstro EXATO daquele ponto (19 Dragon em z10, 24+4=28 Dragon Lord em z11/z12), então o Spawner nunca sorteia pela `composition` abaixo — ela existe só para satisfazer o schema (`min(1)`) e como fallback documentado, nunca de fato lida. `respawnDelayMs: 90000` no nível da dificuldade é o MESMO valor que todo ponto já declara (`spawnPoints[i].respawnDelayMs`, o `spawntime` do Canary) — nunca usado de fato, porque nenhum ponto está sem o próprio. `spawnClearRadius` ausente (0, desligado): a referência (§29) pede para NÃO copiar a supressão de spawn do TFS perto do jogador, e o Canary real não tem essa regra na lair. corpseTtlMs 10000 (10 s): Canary `items.xml` id 5973 (dead dragon) e 5984 (dead dragon lord) — `duration=\"10\"`, lido em segundos e multiplicado por 1000 (`item.cpp`, `newDuration = it.decayTime * 1000`) — NÃO os 30000 ms da Rat Cellars/Rotworm Caves (cópia do Huntera): ADR 0037 d.6 pede a caçada IDÊNTICA ao Tibia real em toda hunt, e aqui o fato real é 10 s. O motor não tem TTL de cadáver por monstro (só por hunt); com Dragon e Dragon Lord usando o MESMO valor no Canary, o único número da hunt já é o certo para os dois."
+}
