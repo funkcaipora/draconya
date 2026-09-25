@@ -362,13 +362,26 @@ do Canary (`opentibiabr/canary` `main`, ADR 0037) — a fórmula canônica é a 
 não mais a exceção. O que o motor ganhou:
 
 - **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (centrado no alvo ou no
-  lançador; raio 1 é o 3x3 completo, raio ≥ 2 recorta os cantos por Manhattan — #472),
+  lançador; raio 1 é o 3x3 completo, raio 2-3 recortam os cantos por Manhattan com um bônus de
+  achatamento — #472 —, raio ≥ 4 é o diamante de Manhattan puro, sem bônus: uma revisão do #523
+  corrigiu o raio ≥ 4, que usava o MESMO bônus dos raios 2-3 e rendia tiles a mais para Eternal
+  Winter/Hell's Core (raio 5: 97 em vez de 61) e Rage of the Skies/Wrath of Nature (raio 6: 145
+  em vez de 85) — a `AREA_CIRCLE4X4/5X5/6X6` reais do Canary, conferidas em
+  `things/sources/canary` local, não têm o bônus. A ability de MONSTRO usa um mecanismo
+  diferente para "raio" — a tabela de anéis do Canary (`AreaCombat::setupArea`,
+  `src/creatures/combat/combat.cpp`) —, então `areaTiles` recebe um `source: 'spell' | 'monster'`
+  (default `'spell'`) que escolhe qual tabela vale; nenhum monstro do catálogo usa `circle` hoje,
+  mas a distinção já está testada (`area.test.ts`, raio 1-7 dos dois mecanismos) para quando a
+  primeira ability em área chegar,
   `cross` (cruz de `radius` tiles nos quatro eixos cardeais mais o centro, centrada no alvo —
   a Explosion), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
-  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os **dois tiles ao
-  lado** do lançador, perpendiculares à direção dele — Front Sweep e Lesser Front Sweep;
-  corrigido no #523 contra a matriz real do Canary, `AREA_WAVE6`: o desenho antigo, três tiles à
-  frente, media a direção errada) e `beam` (linha reta). Onda, cleave, feixe e o círculo no
+  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os **três tiles
+  imediatamente à frente** — Front Sweep e Lesser Front Sweep; o Canary ancora `AREA_WAVE6` um
+  passo à frente do lançador antes de aplicar a matriz — `getNextPosition`/`needDirection`,
+  `Spells::getCasterPosition` — então em coordenadas do mundo os três tiles da matriz caem
+  juntos, a um passo de distância: uma revisão do #523 tinha lido só a matriz local e "corrigido"
+  isto para o lado errado, revertido depois de conferir o motor) e `beam` (linha reta). Onda,
+  cleave, feixe e o círculo no
   lançador são **self-origin**: não exigem alvo nem alcance (o boot recusa `range` nelas), e
   recusam `no-target` só quando nenhum monstro cai nos tiles — sem gastar mana. Saem na
   **direção do personagem**, que o passo grava (diagonal: a componente horizontal decide — regra
@@ -422,8 +435,11 @@ não mais a exceção. O que o motor ganhou:
   (Recovery: `amount` a cada `intervalMs`). Uma por tipo; relançar REINICIA. O vencimento e o
   tique são eventos da fila (`condition-expire`, `condition-tick` — invariante 2), e a condição
   vai no `CharacterState` com o prazo lógico: um snapshot no meio de um haste retoma vencendo
-  no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset. Os PERCENTUAIS de
-  postura (`damageDealtPercent`/`damageTakenPercent`) continuam uma aproximação: o Canary usa
+  no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset. A DURAÇÃO das
+  posturas vem de `CONDITION_PARAM_TICKS`: 10 s para Blood Rage/Sharpshooter/Swift Foot, mas 13 s
+  para Protector (corrigido numa segunda revisão do #523 — a primeira leitura tinha copiado os
+  10 s dos vizinhos sem conferir o arquivo da própria magia). Os PERCENTUAIS de postura
+  (`damageDealtPercent`/`damageTakenPercent`) continuam uma aproximação: o Canary usa
   `SKILL_MELEEPERCENT`/`SKILL_DISTANCEPERCENT` (+skill, não +dano) para Blood Rage e Sharpshooter,
   que o schema não modela — só Protector foi corrigido no #523 (`BUFF_DAMAGEDEALT 65` é dano
   causado ×0,65, ou seja −35 %, não −15 %) porque o Canary já expressa Protector direto em
@@ -434,10 +450,12 @@ de condição, magias de escudo, elemento e resistência. O dano ao longo do tem
 de monstro, que ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o
 catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …). Também ficam
 de fora as magias de "Wheel of Destiny" (o sistema de grades/`needLearn` do Canary moderno,
-level 300 — Fair Wound Cleansing, Divine Grenade, Terra Burst, Great Death Beam): o Draconya não
-modela o Wheel, e um level 200 não as alcançaria de qualquer forma; Great Death Beam já existia
-no catálogo com um level inventado (66) e ganhou a fórmula do Canary mesmo assim, documentado
-como divergência no seu `_open`.
+level 300 — Fair Wound Cleansing, Divine Grenade, Terra Burst): o Draconya não modela o Wheel, e
+um level 200 não as alcançaria de qualquer forma. Great Death Beam já existia no catálogo com um
+level inventado (66); numa revisão do #523 o level passou a ser o real do Canary (300) — a magia
+fica no catálogo, correta e documentada, mas fora do alcance de qualquer personagem até o Wheel
+existir, o que o ADR 0037 pede explicitamente (Tibia é a regra, mesmo quando isso significa uma
+magia inacessível).
 
 ### Requisito de vocação (§9.2)
 
@@ -822,8 +840,8 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 
 | level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
 |---|---|---|---|---|---|---|
-| 1 | Bruise Bane | 10 | healing (2 s) | 1 s | cura | 15 |
-| 1 | Lesser Front Sweep | 6 | attack (2 s) | 6 s | dano · cleave (2 tiles ao lado) · skill×attack | 14 |
+| 1 | Bruise Bane | 10 | healing (1 s) | 1 s | cura | 15 |
+| 1 | Lesser Front Sweep | 6 | attack (2 s) | 6 s | dano · cleave (3 tiles à frente) · skill×attack | 14 |
 | 8 | Wound Cleansing | 40 | healing (1 s) | 1 s | cura | 70 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
 | 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 · skill×attack | 39 |
@@ -832,10 +850,10 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 33 | Groundshaker | 160 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador · skill+attack | 32 |
 | 35 | Berserk | 115 | attack (2 s) | 4 s | dano · círculo raio 1 no lançador · skill+attack | 44 |
 | 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
-| 55 | Protector | 200 | support (2 s) + focus (2 s) | 2 s | postura 10 s (−35 % causado / −15 % tomado) | — |
+| 55 | Protector | 200 | support (2 s) + focus (2 s) | 2 s | postura 13 s (−35 % causado / −15 % tomado) | — |
 | 60 | Blood Rage | 290 | support (2 s) + focus (2 s) | 2 s | postura 10 s (+25 % causado / +15 % tomado) | — |
-| 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave (2 tiles ao lado) · skill×attack | 80 |
-| 80 | Intense Wound Cleansing | 200 | healing (2 s) | **10 min** | cura | 500 |
+| 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave (3 tiles à frente) · skill×attack | 80 |
+| 80 | Intense Wound Cleansing | 200 | healing (1 s) | **10 min** | cura | 500 |
 | 90 | **Fierce Berserk** (`exori gran`, novo #523) | 340 | attack (2 s) | 6 s | dano · círculo raio 1 no lançador · skill+2×attack | 90 |
 
 Blood Rage e Protector eram level 20/mana 20 (um placeholder de bootstrap): o Canary real os
@@ -867,9 +885,11 @@ Lesser Ethereal Spear e Ethereal Spear tinham alcance 5 (o real é 7) — Lesser
 cooldown 8 s (o real é 2 s, igual ao da versão normal). Sharpshooter era level 20/mana 250 (o
 real é 60/450). Swift Foot tinha cooldown próprio 4 s e o do grupo `focus` 2 s (os dois são 10 s
 no Canary, o mesmo prazo da postura). \* Divine Barrage, Ethereal Barrage e Divine Defiance não
-têm correspondente encontrado no Canary/TibiaWiki (a varredura do #523 não achou o nome nem a
-palavra mágica) — ficam como conteúdo próprio do Draconya, documentado no `_open` de cada uma, e
-fora da conformidade de fórmula.
+têm correspondente no Canary/TibiaWiki — duas varreduras do #523 (a segunda incluindo
+`data-otservbr-global/` e `src/`, não só `data/scripts/spells/`) não acharam o nome nem a palavra
+mágica em nenhuma das três. Ficam como conteúdo próprio do Draconya, documentado no `_open` de
+cada uma, fora da conformidade de fórmula, e com remoção planejada (ADR 0037) — a remoção em si,
+com a migração de `botConfig` de quem já as configurou, é issue separada.
 
 **Sorcerer (escala por `magic`)**
 
@@ -878,7 +898,7 @@ fora da conformidade de fórmula.
 | 1 | Buzz | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
 | 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
-| 6 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
+| 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 14 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
@@ -895,16 +915,18 @@ fora da conformidade de fórmula.
 | 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 4 | 110 |
 | 55 | Rage of the Skies | 600 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 200 |
 | 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 250 |
-| 66 | Great Death Beam† | 140 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 5 | 155 |
 | 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 100 | **Ultimate Energy Strike** (`exori max vis`, novo #523) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
+| 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 5 | 155 |
 
 Os `X Strike` fortes (Strong Energy/Flame Strike) e Lightning tinham alcance 7 (o real é 3/4).
 Ice Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. † Great Death
-Beam é level 300 + grade do Wheel of Destiny no Canary real (não modelado); o level 66 é uma
-aproximação PRÉ-#523 mantida por não termos o sistema de grades — a fórmula é a real, o level
-não.
+Beam é level 300 + grade do Wheel of Destiny no Canary real (`needLearn`, não modelado); numa
+revisão do #523 o level inventado (66) virou o real (300, por isso a linha aparece por último
+apesar do BP baixo) e o cooldown próprio virou 10 s (era 6 s, o valor do grupo secundário
+copiado por engano) — a magia fica no catálogo mas fora de alcance de qualquer personagem sem o
+Wheel, o que o ADR 0037 aceita como resultado correto.
 
 **Druid (escala por `magic`)**
 
@@ -913,7 +935,7 @@ não.
 | 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
 | 1 | Mud Attack | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
-| 6 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
+| 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 14 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
@@ -939,7 +961,8 @@ Friend saiu da lista de excluídas desde o §26 (ADR 0035 d.10); o `_open` dizia
 nesta task" e o #523 confirmou os números reais (level 14→18, mana 30→120). Strong Ice Wave
 tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (2 fileiras) e cooldown 8 s. Ice
 Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. \* Forked Thorns não
-tem correspondente encontrado no Canary/TibiaWiki — conteúdo próprio, ver `_open`.
+tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/` e
+`src/` também) — conteúdo próprio, remoção planejada (ADR 0037), ver `_open`.
 
 **Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Fair Wound Cleansing, Divine Grenade, Terra Burst (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo, porque o Tibia não dá magia nenhuma antes da escolha de vocação — não há "fórmula do Canary" para elas.
 
@@ -987,15 +1010,21 @@ ficam para quando o protocolo os carregar.
 ## Divergências do PRD
 
 - **Três magias sem correspondente no Canary** (`divine-barrage.json`, `ethereal-barrage.json`,
-  `forked-thorns.json`, mais o self-buff `divine-defiance.json`): a varredura do #523 no
-  `opentibiabr/canary` `main` não achou nome, palavra mágica nem efeito que bata com elas.
-  Ficam como conteúdo próprio do Draconya, fora da paridade e da conformidade de fórmula
-  (`load.test.ts`, `NOT_FROM_CANARY`) — o motivo está no `_open` de cada arquivo.
+  `forked-thorns.json`, mais o self-buff `divine-defiance.json`): DUAS varreduras do #523 no
+  `opentibiabr/canary` local (`things/sources/canary` — `data/`, `data-otservbr-global/` e
+  `src/`, não só `data/scripts/spells/`) não acharam nome, palavra mágica nem efeito que bata
+  com nenhuma das quatro. Ficam como conteúdo próprio do Draconya, fora da paridade e da
+  conformidade de fórmula (`load.test.ts`, `NOT_FROM_CANARY`, para as três com `effect.formula`
+  — Divine Defiance é `buff` e não entra nessa checagem), com **remoção planejada** (ADR 0037) —
+  o motivo está no `_open` de cada arquivo; a remoção em si, com a migração de `botConfig` de
+  quem já as tiver configurado, é uma issue separada.
 - **Três magias genéricas pré-vocação** (`heal.json`, `strike.json`, `blast.json`): o Tibia real
   não dá NENHUMA magia antes da escolha de vocação no level 8, então não existe "fórmula do
   Canary" para elas por definição — são um kit de bootstrap do próprio Draconya (§4.1), também
   fora da conformidade de fórmula.
-- **Great Death Beam** (`great-death-beam.json`) é level 66 no Draconya; no Canary real é level
-  300 e exige uma grade do sistema "Wheel of Destiny" (`needLearn`), que o Draconya não modela.
-  A fórmula de dano é a real; o gate de acesso é uma aproximação pré-#523 mantida por falta do
-  Wheel, documentada no `_open`.
+- **Great Death Beam** (`great-death-beam.json`) é level 300, como no Canary real — numa revisão
+  do #523 o level inventado (66) que uma leitura anterior tinha mantido foi substituído pelo
+  real. O que continua não modelado é o MECANISMO que caberia nesse level: no Canary a magia
+  também exige uma grade do sistema "Wheel of Destiny" (`needLearn`), que o Draconya não tem.
+  Resultado aceito pelo ADR 0037: a fórmula é a real e a magia fica inacessível a qualquer
+  personagem, porque é isso que "Tibia é a regra" significa aqui.
