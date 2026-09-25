@@ -116,6 +116,7 @@
     }
   ],
   "targetChange": { "intervalMs": 4000, "chance": 0.10 },
+  "targetStrategy": { "nearest": 70, "health": 10, "damage": 10, "random": 10 },
   "runOnHealth": 300,
   "staticAttack": 0.80,
   "_open": "aggroRadius 11 (#527, era 8): mesma fonte do Dragon — TFS `Monster::canSee` é um quadrado de `Map::maxClientViewportX + 1` = 9; o Canary herda o quadrado de `Creature::canSee` sem sobrescrever, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11. Precedência do ADR 0037 d.4: Canary vence."

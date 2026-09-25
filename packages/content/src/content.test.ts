@@ -510,6 +510,45 @@ describe('abilities de monstro (CMB-06)', () => {
   });
 });
 
+describe('a estratégia ponderada de alvo (`monster.targetStrategy`, #541)', () => {
+  it('ausente é `undefined` — o comportamento de sempre, sem sorteio de critério', () => {
+    const content = buildContent(base());
+    expect(content.monsters.get('rat')?.targetStrategy).toBeUndefined();
+  });
+
+  it('aceita os quatro pesos do Dragon (70/10/10/10) e os expõe intactos ao `sim`', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 70, health: 10, damage: 10, random: 10 } }],
+    }));
+    expect(content.monsters.get('rat')?.targetStrategy)
+      .toEqual({ nearest: 70, health: 10, damage: 10, random: 10 });
+  });
+
+  it('recusa soma zero — nenhum peso maior que zero não sorteia critério nenhum', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 0, health: 0, damage: 0, random: 0 } }],
+    }))).toThrow(/peso maior que zero/);
+  });
+
+  it('recusa peso negativo', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: -1, health: 0, damage: 0, random: 100 } }],
+    }))).toThrow();
+  });
+
+  it('recusa peso fracionário — o sorteio é inteiro em `rankTarget`', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 0.5, health: 0, damage: 0, random: 100 } }],
+    }))).toThrow();
+  });
+
+  it('recusa quando falta um dos quatro pesos — os quatro são obrigatórios, sem default implícito', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 100 } }],
+    }))).toThrow();
+  });
+});
+
 describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.

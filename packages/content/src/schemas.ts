@@ -1245,6 +1245,31 @@ export const monsterTargetChangeSchema = z.object({
 });
 export type MonsterTargetChange = z.infer<typeof monsterTargetChangeSchema>;
 
+/**
+ * A seleção PONDERADA de alvo (#541, Canary `Monster::searchTargetImmediate`,
+ * `monster.cpp:906-931`, e `MonsterTargetRanker::rank`, `monster_targeting.cpp:17-83`): o
+ * CRITÉRIO usado por `chooseTarget` e pelo vencimento de `targetChange` é sorteado pelos pesos
+ * declarados — mais perto, menos vida, mais dano causado NO monstro, ou aleatório — em vez de
+ * fixo. Ausente preserva o comportamento de sempre: `chooseTarget` só pelo mais perto, e a troca
+ * por tempo só pelo `TARGETSEARCH_RANDOM` do #518.
+ *
+ * Inteiros não-negativos, soma > 0. O Canary sorteia com `uniform_random(1, 100)` contra os
+ * QUATRO campos de `monsters.hpp:127-130`, mas `strategiesTargetRandom` nunca entra na soma do
+ * `.cpp` — "aleatório" é implicitamente "o que sobra até 100". Aqui `random` é um peso
+ * EXPLÍCITO como os outros três: a soma não precisa ser 100, e `rankTarget`
+ * (`packages/sim/src/monster/target-strategy.ts`) sorteia proporcionalmente à soma real.
+ */
+export const monsterTargetStrategySchema = z.object({
+  nearest: z.number().int().nonnegative(),
+  health: z.number().int().nonnegative(),
+  damage: z.number().int().nonnegative(),
+  random: z.number().int().nonnegative(),
+}).refine(
+  (strategy) => strategy.nearest + strategy.health + strategy.damage + strategy.random > 0,
+  { message: 'targetStrategy precisa de ao menos um peso maior que zero' },
+);
+export type MonsterTargetStrategy = z.infer<typeof monsterTargetStrategySchema>;
+
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1335,6 +1360,11 @@ export const monsterSchema = z.strictObject({
   /** A troca de alvo por tempo (#518). Ausente é o comportamento de sempre: só troca quando o
    * alvo atual morre ou sai do `leashRadius` (`chooseTarget`). */
   targetChange: monsterTargetChangeSchema.optional(),
+  /**
+   * O critério de seleção ponderada (#541) que `chooseTarget` e o vencimento de `targetChange`
+   * sorteiam. Ausente é o comportamento de sempre — ver `monsterTargetStrategySchema`.
+   */
+  targetStrategy: monsterTargetStrategySchema.optional(),
   /**
    * O HP em que o monstro passa a fugir (#518, TFS `runonhealth`, referência §15-19): abaixo ou
    * igual a este valor, ele se afasta do alvo em vez de aproximar, não dá golpe corpo a corpo,
