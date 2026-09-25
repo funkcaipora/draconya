@@ -87,6 +87,7 @@ import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { RouteWalker } from '../route/walker.js';
+import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
 import type { Aggregates, EndReason, Receipt, Ruleset, SessionSnapshot } from '../session.js';
 
@@ -365,6 +366,32 @@ const PARTY_REGROUP_FLOOR_CHANGE_RADIUS = 3;
  * "ficou para trás lutando", que se resolve rápido; a válvula é só para quando não resolve.
  */
 const MAX_REGROUP_WAIT_MS = 180_000;
+
+/**
+ * O raio (Chebyshev, a partir de quem segue) do BFS limitado do follow (#527, emenda ao ADR
+ * 0009, ADR 0037: o bot é automação própria — não precisa da fidelidade ao Tibia que o resto da
+ * simulação mantém). Achado numa QA ao vivo: um corredor em U onde os três candidatos do passo
+ * guloso (ADR 0009 — direção + dois vizinhos) eram todos parede, mas havia caminho livre pelo
+ * lado OPOSTO — o Sorcerer ficou 8 tiles do líder, visivelmente perto, sem nunca conseguir
+ * andar até lá, e só a válvula de regroup (3 min) liberava o líder. Trinta tiles cobre qualquer
+ * desvio plausível dentro do raio de regroup/busca de follow (7) com folga generosa, sem
+ * varrer o mapa inteiro a cada vencimento — é limitado por design, não "path-finding de verdade"
+ * (ADR 0009 continua valendo para a rota autorada, que nunca usa isto).
+ */
+const FOLLOW_PATHFIND_RADIUS = 30;
+
+/**
+ * Quanto tempo LÓGICO o passo guloso do follow precisa ficar empacado SEGUIDO antes do BFS
+ * limitado entrar (#527). Um monstro ou companheiro momentaneamente no caminho é o caso comum
+ * — resolve sozinho em segundos, andando ou morrendo —, e path-find nele produz um desvio
+ * inútil pela masmorra em vez de uma espera curta (achado varrendo o bot config real: a coesão
+ * da party PIOROU depois do BFS entrar sem este atraso — todo bloqueio passageiro virava rota
+ * alternativa). Só uma parede de VERDADE — o corredor em U de uma QA ao vivo, por exemplo —
+ * continua bloqueada além deste prazo; poucos segundos é curto o bastante para não atrasar
+ * visivelmente a travessia real, e longo o bastante para deixar um monstro/companheiro sair
+ * sozinho da frente antes de desviar.
+ */
+const FOLLOW_PATHFIND_DELAY_MS = 4_000;
 
 /**
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
@@ -1000,6 +1027,24 @@ interface Runner {
    * espera — só o próprio líder escreve este campo.
    */
   regroupSinceMs: number | null;
+  /**
+   * Cache do caminho do BFS limitado do follow (#527, ADR 0009 emenda) — só usado quando o
+   * passo guloso emperra contra uma parede que exige rodear. `goal` é o tile mirado quando o
+   * caminho foi calculado; `path` é o resto do caminho (sem o tile já dado). Invalidado (`null`)
+   * assim que o alvo muda de tile, o passo guloso volta a resolver sozinho, ou o próximo tile
+   * do caminho deixa de estar livre. NUNCA persiste no snapshot — cache de desempenho puro.
+   */
+  followPath: { readonly goal: FloorPoint; readonly path: readonly GridPoint[] } | null;
+  /**
+   * Desde QUANDO o passo guloso do follow está empacado sem progredir (#527) — o BFS limitado
+   * só entra depois de `FOLLOW_PATHFIND_DELAY_MS` de bloqueio SEGUIDO, nunca na primeira falha.
+   * Um monstro ou companheiro momentaneamente no caminho é o caso comum, e resolve sozinho em
+   * segundos — path-find nele produzia desvios inúteis (achado varrendo o bot config real: a
+   * coesão da party PIOROU com o BFS sem este atraso, porque todo bloqueio passageiro virava
+   * um desvio pela masmorra em vez de uma espera curta). Parede de verdade continua sendo
+   * resolvida — só um pouco depois. `null` fora de um bloqueio. NUNCA persiste no snapshot.
+   */
+  followStuckSinceMs: number | null;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
   ringReplaced: string | null;
   warnedExhausted: boolean;
@@ -1918,6 +1963,11 @@ export class HuntRuleset implements Ruleset {
       crossFloorStuckSinceMs: state?.crossFloorStuckSinceMs ?? null,
       sameTileStreak: state?.sameTileStreak ?? 0,
       regroupSinceMs: state?.regroupSinceMs ?? null,
+      // Cache de caminho do follow (#527) — NUNCA persiste no snapshot: é um cache de
+      // desempenho puro (o BFS limitado é determinístico e barato de refazer), não um estado
+      // de jogo. Uma sessão restaurada recalcula na hora se precisar; nada observa a diferença.
+      followPath: null,
+      followStuckSinceMs: null,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2931,7 +2981,9 @@ export class HuntRuleset implements Ruleset {
       // sempre tentando repisar um degrau cuja chegada está ocupada.
       const landing = floorChangeAt(this.#world.map, stair.x, stair.y, from.z);
       const landingBlocked = landing !== null && this.#world.occupied(landing.x, landing.y, landing.z);
-      const to = landingBlocked ? null : greedyStep(from, stair, this.#blockedFor(character));
+      const to = landingBlocked
+        ? null
+        : this.#followStep(session, runner, from, stair, this.#blockedFor(character), true, null, false);
       if (to === null) {
         // Empacado a caminho da escada (parede, companheiro, monstro): espera, e PERMANECE
         // seguindo — nunca desiste para ir caçar sozinho em outro andar por um bloqueio
@@ -2962,7 +3014,10 @@ export class HuntRuleset implements Ruleset {
       // aplica aqui: a distância contra um alvo em OUTRO andar não diz nada sobre proximidade.
       this.#reportFollow(session, runner, character.id, target.id, true);
       runner.walker.stop();
-      return this.#step(session, character, { ...to, z: from.z }, character.id);
+      const crossingResult = this.#step(session, character, { ...to, z: from.z }, character.id);
+      if (crossingResult.ok) this.#advanceFollowPath(runner, to);
+      else runner.followPath = null;
+      return crossingResult;
     }
 
     const d = distance(from, target.position);
@@ -2998,7 +3053,20 @@ export class HuntRuleset implements Ruleset {
       : (x, y, z, monsterId) => base(x, y, z, monsterId)
         || (x === reserved.x && y === reserved.y && (z ?? from.z) === reserved.z);
 
-    const to = greedyStep(from, target.position, blocked);
+    // Guloso primeiro; só quando ele emperra o BFS limitado entra (`#followStep`, #527, emenda
+    // ao ADR 0009) — o corredor em U que uma QA ao vivo achou, onde os três candidatos do
+    // guloso eram todos parede mas havia caminho livre pelo lado OPOSTO.
+    if (character.id === 'b') {
+      (globalThis as unknown as { console: { error: (...a: unknown[]) => void } }).console.error(
+        'DEBUG_HOLDFOLLOW', 'from', from, 'target', target.position, 'reserved', reserved, 'd', d,
+      );
+    }
+    const to = this.#followStep(session, runner, from, target.position, blocked, false, reserved, true);
+    if (character.id === 'b') {
+      (globalThis as unknown as { console: { error: (...a: unknown[]) => void } }).console.error(
+        'DEBUG_FOLLOWSTEP_RESULT', to,
+      );
+    }
     // Empacado — mesmo comportamento de `#holdPosture`: esperar este vencimento, não é
     // interrupção. "Sem caminho" vira `unreachable` só pela DISTÂNCIA (acima), não por um passo
     // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento. Já em cima do
@@ -3007,7 +3075,99 @@ export class HuntRuleset implements Ruleset {
     if (to === null) return null;
 
     runner.walker.stop();
-    return this.#step(session, character, { ...to, z: from.z }, character.id);
+    const result = this.#step(session, character, { ...to, z: from.z }, character.id);
+    if (result.ok) this.#advanceFollowPath(runner, to);
+    else runner.followPath = null;
+    return result;
+  }
+
+  /**
+   * O passo em direção a `goal` para o FOLLOW (#527, emenda ao ADR 0009 —
+   * `docs/adr/0009-fixed-hunt-route-without-pathfinding.md`): guloso primeiro — resolve a
+   * esmagadora maioria dos casos, O(1), sem estado —, e só quando ele emperra (devolve `null`,
+   * empacado contra parede) entra o BFS limitado em cache (`FOLLOW_PATHFIND_RADIUS`,
+   * `route/pathfind.ts`). Achado numa QA ao vivo: um corredor em U onde os três candidatos do
+   * guloso eram todos parede, mas havia caminho livre pelo lado OPOSTO — sem isto, o seguidor
+   * fica visivelmente perto (8 tiles) e nunca anda, até a válvula de regroup soltar o líder.
+   *
+   * `exact` pede pisar EXATAMENTE em `goal` (a escada que o follow vai atravessar); sem
+   * `exact`, o alvo é ficar ADJACENTE a ele (o alvo seguido, cujo tile ninguém pode ocupar).
+   *
+   * O cache é validado contra a posição ATUAL antes de ser usado — não só contra o alvo: um
+   * `from` que se moveu por fora (o guloso resolvendo sozinho por vários vencimentos, um
+   * empurrão) deixa `path[0]` do cache velho sem ser mais adjacente a onde o personagem está
+   * agora, e usá-lo assim tentaria um passo `not-adjacent`. Mais barato invalidar e recalcular
+   * do que arriscar isso.
+   */
+  #followStep(
+    session: Session, runner: Runner, from: FloorPoint, goal: FloorPoint, blocked: Blocked,
+    exact: boolean, reserved: FloorPoint | null, grounded: boolean,
+  ): GridPoint | null {
+    const direct = greedyStep(from, goal, blocked);
+    if (direct !== null) {
+      runner.followStuckSinceMs = null;
+      return direct;
+    }
+
+    // Só entra no BFS depois de `FOLLOW_PATHFIND_DELAY_MS` de bloqueio SEGUIDO — não na
+    // primeira falha (#527, `FOLLOW_PATHFIND_DELAY_MS`): um monstro ou companheiro
+    // momentaneamente no caminho resolve sozinho, e path-find nele produzia um desvio inútil
+    // pela masmorra em vez de uma espera curta.
+    const stuckSince = runner.followStuckSinceMs ?? session.nowMs;
+    runner.followStuckSinceMs = stuckSince;
+    if (session.nowMs - stuckSince < FOLLOW_PATHFIND_DELAY_MS) return null;
+
+    // `blocked` (acima) é o predicado de `canOccupy` (#blockedFor/#blockedForGroundedStep) —
+    // ele SEMPRE compara contra a posição ATUAL do personagem (`not-adjacent` quando o tile
+    // pedido não é vizinho imediato dela), o que faz sentido para o passo guloso — que só
+    // avalia os três vizinhos IMEDIATOS de `from` — mas quebra um BFS: ele avalia vizinhos dos
+    // nós da FRENTE de busca, não de `from`, e todo tile a mais de um passo do personagem
+    // voltaria "bloqueado" mesmo livre (achado depurando o teste desta issue: `blocked(10,2)`
+    // devolvia `true` com `isBlocked`/ocupação/`floorChangeAt` todos `false` — só a distância
+    // até a posição REAL do personagem, não a do tile explorado, é que reprovava). O BFS usa a
+    // MESMA regra de passabilidade (parede, fora do mapa, ocupado, e as mesmas exceções de
+    // `blocked` — reservado, aterrado), só que sem o gate de adjacência.
+    // `from` é sempre `character.position` (#519: personagem carrega `z` de verdade, nunca
+    // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
+    const z = from.z ?? this.#world.map.z;
+    const pathBlocked: Blocked = (x, y) => {
+      if (isBlocked(this.#world.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (grounded && floorChangeAt(this.#world.map, x, y, z) !== null) return true;
+      if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
+      return false;
+    };
+
+    const cache = runner.followPath;
+    const sameGoal = cache !== null
+      && cache.goal.x === goal.x && cache.goal.y === goal.y && cache.goal.z === goal.z;
+    if (sameGoal) {
+      const next = cache.path[0];
+      if (next !== undefined && distance(from, next) === 1 && !pathBlocked(next.x, next.y)) return next;
+      runner.followPath = null;
+    }
+
+    const isGoal = exact ? isExactly(goal) : isAdjacentTo(goal);
+    const path = boundedPath(from, isGoal, pathBlocked, FOLLOW_PATHFIND_RADIUS);
+    if (path === null || path.length === 0) return null;
+    runner.followPath = { goal: { ...goal }, path };
+    return path[0] ?? null;
+  }
+
+  /**
+   * Consome o tile de `to` do cache do caminho do follow, se ele bater com o topo — mantém o
+   * resto do BFS já calculado para o vencimento seguinte, em vez de refazer a busca a cada
+   * passo. Qualquer outra coisa (o guloso resolveu direto, o tile não bate) invalida o cache:
+   * mais barato recalcular do zero do que arriscar seguir um caminho que não é mais o de agora.
+   */
+  #advanceFollowPath(runner: Runner, to: GridPoint): void {
+    const cache = runner.followPath;
+    if (cache === null) return;
+    const head = cache.path[0];
+    if (head !== undefined && head.x === to.x && head.y === to.y) {
+      runner.followPath = { goal: cache.goal, path: cache.path.slice(1) };
+    } else {
+      runner.followPath = null;
+    }
   }
 
   /**
