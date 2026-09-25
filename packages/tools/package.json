@@ -19,12 +19,15 @@
     "bench:hunts": "node --expose-gc --import tsx src/bench/cold-hunts.ts",
     "bench:combat": "SCENARIO=combat node --expose-gc --import tsx src/bench/cold-hunts.ts",
     "load": "tsx src/load/main.ts",
-    "bench:city": "tsx src/bench/city-broadcast.ts"
+    "bench:city": "tsx src/bench/city-broadcast.ts",
+    "dev:dragon-party": "tsx --env-file-if-exists=../../.env src/dev/dragon-party-main.ts"
   },
   "dependencies": {
     "@draconya/protocol": "workspace:*",
     "@draconya/content": "workspace:*",
     "@draconya/sim": "workspace:*",
-    "@draconya/server": "workspace:*"
+    "@draconya/server": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "ioredis": "^6.0.0"
   }
 }
