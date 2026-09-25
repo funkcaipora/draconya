@@ -473,7 +473,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot do Dragon (21 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; burst arrow (`ammunitionId`) 7,976 % (1–10); longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % | `data/monsters/dragon.json`, bloco `loot` |
 | Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
-| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 10 000 ms (Canary `items.xml`, dead dragon/dead dragon lord, `duration="10"` × 1000 — não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
+| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 670 000 ms — soma da cadeia de decaimento do Canary `items.xml` (dead dragon/dead dragon lord: 10 s → 300 s → 300 s → 60 s, `decayTo` até sumir, não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
 
 ## Em aberto
 
@@ -547,10 +547,18 @@ em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt fecharam 
 `data/hunts/darashia-dragon-lair.json` aponta o mesmo `mapId`/`routeId`, `ambience: cavern`,
 `recommendedLevel: 40` (o "Gate of Expertise" que trava a entrada da lair real, TibiaWiki) e uma
 dificuldade só (`monsterCount: 47` — o mesmo total de `spawnPoints`, para cada ponto nascer
-exatamente uma vez; o Tibia real não tem tamanho de pull aqui). `corpseTtlMs: 10000` é o fato do
-Canary (`items.xml` id 5973/5984, "dead dragon"/"dead dragon lord", `duration="10"` — segundos ×
-1000), NÃO os 30 000 ms que Rat Cellars/Rotworm Caves copiam do Huntera: ADR 0037 d.6 pede a
-caçada idêntica ao Tibia real em toda hunt, e aqui o fato real é mais curto. Testado contra o
+exatamente uma vez; o Tibia real não tem tamanho de pull aqui). `corpseTtlMs: 670000` (670 s) é a
+vida útil TOTAL do cadáver no Canary — corrigido numa revisão da #536, achado [major]: a primeira
+versão tinha lido só os 10 s do PRIMEIRO estágio de decaimento (`items.xml` id 5973/5984, "dead
+dragon"/"dead dragon lord", `duration="10"`) e confundido isso com o tempo total no chão, quando
+na verdade o item decai (`decayTo`) para o próximo estágio em vez de sumir. A cadeia completa —
+idêntica em forma para os dois monstros — é 10 s → 300 s → 300 s → 60 s até o último `decayTo="0"`
+(aí some de fato): 10+300+300+60 = 670 s = 670 000 ms (segundos × 1000). NÃO os 30 000 ms que Rat
+Cellars/Rotworm Caves copiam do Huntera: ADR 0037 d.6 pede a caçada idêntica ao Tibia real em toda
+hunt, e o fato real é a soma da cadeia, não o primeiro estágio dela. O motor não modela decaimento
+em múltiplos estágios (só um `corpseTtlMs` por hunt) nem TTL por monstro; como Dragon e Dragon
+Lord chegam à MESMA soma no Canary, o único número da hunt já serve para os dois — a simplificação
+é "um TTL só", não o valor do TTL. Testado contra o
 CONTEÚDO REAL (`packages/server/src/game/darashia-dragon-lair.test.ts`): uma party de quatro
 level 200 (Knight/Paladin/Sorcerer/Druid) que entra vê os 47 nascerem — 19 Dragon em z10, 24
 Dragon Lord em z11, 4 em z12 —, cada um na coordenada exata do próprio ponto, e o respawn de um
