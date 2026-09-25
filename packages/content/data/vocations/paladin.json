@@ -4,6 +4,8 @@
   "healthPerLevel": 10,
   "manaPerLevel": 15,
   "capacityPerLevel": 20,
+  "meleeDamageMultiplier": 1,
+  "distDamageMultiplier": 1,
   "spellSkill": "distance",
   "startingKit": [
     {

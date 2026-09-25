@@ -112,11 +112,14 @@ export class Spawner {
     const slot = this.#slots[slotIndex];
     if (slot === undefined || slot.occupantId !== null) return null;
 
-    const monsterId = pickByWeight(difficulty.composition, rng);
+    const area = spawnPointOf(slot.pointIndex);
+    // O ponto pode DECLARAR o monstro (#519, hunt copiada do Tibia: cada spawn do Canary tem o
+    // seu, na posição dele) — a composição sorteada vira fallback, para o ponto sem `monsterId`
+    // continuar exatamente como antes.
+    const monsterId = area.monsterId ?? pickByWeight(difficulty.composition, rng);
     if (monsterId === null) return null;
 
-    const area = spawnPointOf(slot.pointIndex);
-    const position = this.#freeTile(area.at, area.radius, blocked);
+    const position = this.#freeTile(area.at, area.radius, blocked, monsterId);
     // Sem lugar livre agora — outro monstro ocupou o ponto, ou o jogador está em cima.
     // Quem chama tenta de novo mais tarde; empilhar dois monstros no mesmo tile é pior.
     if (position === null) return null;
@@ -153,17 +156,26 @@ export class Spawner {
    * guardar o trecho da rota que ele existe para guardar —, e é por isso que o raio é de quem
    * escreve a rota, tile a tile, e não de uma constante daqui.
    */
-  #freeTile(center: Point, radius: number, blocked: Blocked): Point | null {
+  #freeTile(center: Point, radius: number, blocked: Blocked, monsterId: string): Point | null {
     for (const tile of tilesAround(center, radius)) {
-      if (blocked(tile.x, tile.y)) continue;
+      // O `z` do PONTO, nunca o do mapa (#519): num recorte multiandar, `tilesAround` preserva o
+      // andar de `center` em cada tile gerado, e é ele que precisa ser conferido — sem passar
+      // adiante, todo ponto seria checado no andar padrão do mapa, e um Dragon Lord de z11
+      // nasceria "livre" num tile de z10 que por acaso está vazio. O `monsterId` já resolvido é
+      // o que deixa `#spawnBlockedFor` saber se ESTE monstro é `blockable` antes de aplicar o
+      // `spawnClearRadius` (#519, `isBlockable` do TFS/Canary).
+      if (blocked(tile.x, tile.y, tile.z, monsterId)) continue;
       return tile;
     }
     return null;
   }
 }
 
-/** Um ponto de spawn como o `Spawner` o vê: o tile, e até onde procurar lugar em volta dele. */
+/** Um ponto de spawn como o `Spawner` o vê: o tile, até onde procurar lugar em volta dele, e —
+ * quando a rota o declara (#519) — o monstro exato daquele ponto, no lugar da composição
+ * sorteada. */
 export interface SpawnArea {
   readonly at: Point;
   readonly radius: number;
+  readonly monsterId?: string;
 }

@@ -367,5 +367,22 @@ entre arquivos resolvem.
 - **O `.refine` de `botRingSwapSchema` é regra de jogo, não de forma.** `removeAbove` maior que
   `equipBelow` é o que garante a faixa morta da histerese — limiares iguais parseiam como número
   válido e trocam o anel a cada golpe. Recusar aqui é mais barato que descobrir pelo extrato.
+- **Rota pode atravessar `floorChanges`, e a posição EFETIVA de um passo pode divergir do tile
+  autorado** (#519, hunt multiandar — a Darashia Dragon Lair). `validateRoute` (`map.ts`) não
+  confere mais adjacência tile a tile: confere adjacência à posição EFETIVA, que vira o destino
+  da escada assim que o passo pisa nela — exatamente como `move()` do `sim` resolve de verdade.
+  Um tile que É origem de escada nunca é o problema por si só; o que é sempre um erro é um ponto
+  de PASSAGEM (`--via` do `trace-route.ts`) sobre um degrau, porque ninguém "para" numa escada.
+- **`routeSchema.spawnPoints` ganhou `monsterId`, `at` e `respawnDelayMs`, todos opcionais e
+  todos por PONTO** (#519, o formato do spawn do Canary — um `<monster>` por posição, com
+  `spawntime` próprio, nunca um sorteio por zona). Ausentes, o comportamento é o de sempre:
+  `Spawner` sorteia da composição, a posição é o tile do `routeIndex`, o respawn usa o
+  `respawnDelayMs` da DIFICULDADE. `routeIndex` continua obrigatório mesmo com `at` declarado —
+  ele ancora ao laço (ordem, andar de referência); `at` é só a posição de nascimento.
+- **`monsterSchema.blockable` é o `isBlockable` do TFS/Canary, e o default é `false`** (#519) —
+  NÃO esperar o jogador sair da vista antes de respawnar, porque é isso que 1.640 dos 1.656
+  monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`
+  (#236) da hunt só vale para quem declara `blockable: true` — Rat e Rotworm o fazem, porque o
+  comportamento deles vem do Huntera observado, não do Canary, e não podia mudar aqui.
 
 Issue: FUN-8.

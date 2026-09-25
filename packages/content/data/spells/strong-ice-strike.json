@@ -15,8 +15,15 @@
   "effect": {
     "kind": "damage",
     "basePower": 115,
-    "range": 7,
-    "damageType": "ice"
+    "range": 3,
+    "damageType": "ice",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 2.8,
+      "skillMax": 4.4,
+      "baseMin": 16,
+      "baseMax": 28
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula e alcance do Canary (`data/scripts/spells/attack/strong_ice_strike.lua`, main, 2026-09-24): range 7→3."
 }

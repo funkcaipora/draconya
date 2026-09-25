@@ -115,7 +115,10 @@ export const spellAreaTrace: CombatGoldenTrace = {
 
 /**
  * Forma que sai do LANÇADOR (self-origin): a direção é a do passo, e aqui ninguém andou, então
- * é `south`. O `cleave` são os três tiles à frente — dois monstros caem neles.
+ * é `south`. O `cleave` são os três tiles à frente — dois monstros caem neles. O Canary ancora
+ * `AREA_WAVE6` um passo à frente do lançador (`getNextPosition`/`needDirection`, revisão do
+ * #523); em coordenadas do mundo isso é `distance` 1, largura 3 — o mesmo `row(origin,f,s,1,3)`
+ * de sempre.
  */
 export const spellSelfOriginTrace: CombatGoldenTrace = {
   id: 'spell-self-origin',

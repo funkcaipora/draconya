@@ -13,6 +13,7 @@
   "attackIntervalMs": 2000,
   "speed": 180,
   "aggroRadius": 4,
+  "blockable": true,
   "loot": {
     "gold": {
       "chance": 0.7176,

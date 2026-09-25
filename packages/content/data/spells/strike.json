@@ -12,5 +12,5 @@
     "power": 40,
     "range": 3
   },
-  "_open": "Ataque em alvo único, de referência. Ataque em ÁREA é a mesma issue e entra com a forma de área (FUN-74) — aqui só o de alvo único."
+  "_open": "Ataque em alvo único, de referência. Ataque em ÁREA é a mesma issue e entra com a forma de área (FUN-74) — aqui só o de alvo único. Nota do #523: fora da conformidade de fórmula do Canary de propósito — é uma das três magias GENÉRICAS pré-vocação (sem `vocationId`), e o Tibia real não dá magia nenhuma antes da escolha de vocação no level 8; não existe \"fórmula do Canary\" para uma magia que o Canary não tem. `load.test.ts` (`NOT_FROM_CANARY`) as exclui da checagem por nome."
 }

@@ -45,6 +45,7 @@ import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import type { DefenseSource } from '../combat/defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
+import { rollDistanceHit } from '../combat/distance-hit.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
@@ -52,8 +53,9 @@ import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
-  autoSellLimit, bagValue, reserveProportionally, settleEntries, shareCostsOf, splitEqually,
-  splitLootOf, uniqueVocations, xpShare,
+  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
+  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
+  xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootItem, LootSupply } from '../loot.js';
@@ -67,8 +69,8 @@ import {
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
-import type { Blocked, GridPoint } from '../monster/step.js';
-import { distance, fleeStep, greedyStep } from '../monster/step.js';
+import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
+import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
@@ -321,6 +323,7 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.followInterrupted ? { followInterrupted: true } : {}),
     ...(runner.followTargetId === undefined ? {} : { followTargetId: runner.followTargetId }),
     ...(runner.followReason === undefined ? {} : { followReason: runner.followReason }),
+    ...(runner.lastCombatActionAtMs === null ? {} : { lastCombatActionAtMs: runner.lastCombatActionAtMs }),
   };
 }
 
@@ -881,6 +884,17 @@ interface Runner {
   followTargetId: string | undefined;
   /** Por que o follow está interrompido (#401): o `reason` do último `follow-state` inativo. */
   followReason: 'dead' | 'left' | 'unreachable' | undefined;
+  /**
+   * O instante LÓGICO do último ataque ou cura A OUTRO PARTICIPANTE (§525, ADR 0027 emenda
+   * 2026-09-24/25): é o que `canShareExperience` lê como atividade (`Party::isPlayerActive` do
+   * TFS/Canary). `null` é "nunca agiu" — o mesmo que não ter entrada no `ticksMap` de lá.
+   * Escrito só por `#markCombatActive`, chamado dos MESMOS pontos que já creditam dano/cura
+   * para o DPS/HPS (#431) — `#land`, `#applyHits` sempre; `#emitHealed` só quando o RECIPIENTE
+   * não é o próprio healer (`Player::isPartner` exclui `player == this` nas duas engines antes
+   * de registrar atividade por cura — curar a si mesmo continua valendo para o HPS, só não para
+   * esta atividade). Um quinto ponto de escrita divergiria do que já é creditado em algum lugar.
+   */
+  lastCombatActionAtMs: number | null;
 }
 
 /**
@@ -936,6 +950,12 @@ export interface RunnerState {
   readonly followTargetId?: string;
   /** A razão da interrupção do follow (#401). Opcional pelo mesmo motivo. */
   readonly followReason?: 'dead' | 'left' | 'unreachable';
+  /**
+   * O último ataque ou cura deste participante (§525). Ausente é "nunca" — a hunt retomada
+   * volta com a XP compartilhada avaliando este membro como INATIVO até ele agir de novo, o
+   * mesmo efeito conservador de um `ticksMap` vazio no TFS/Canary logo após um restart.
+   */
+  readonly lastCombatActionAtMs?: number;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1490,7 +1510,10 @@ export class HuntRuleset implements Ruleset {
     if (party === undefined) return undefined;
     const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
     const unique = uniqueVocations(present);
-    const xpPoolPercent = this.#options.party.xpPoolPercentByUniqueVocations[String(unique)] ?? 100;
+    // `sharedExperiencePercent` (party.ts) é a MESMA fórmula do Canary que `xpShare` usa ao
+    // pagar de verdade — ler qualquer outra conta aqui divergiria do que a party realmente
+    // recebe (§525).
+    const percent = sharedExperiencePercent(present);
     const value = this.#bag === null ? 0 : bagValue(this.#bag, this.#options.items);
     // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
     // tipo é opcional por causa das fixtures antigas de `RawContent`.
@@ -1503,7 +1526,7 @@ export class HuntRuleset implements Ruleset {
       splitLoot: party.splitLoot,
       members: session.participants.map((p) => p.id),
       uniqueVocations: unique,
-      xpPoolPercent,
+      xpPoolPercent: percent,
       bagValue: value,
       bagWeight: this.#bagWeight,
       autoSell: { configured: party.autoSell.length, limit },
@@ -1747,6 +1770,7 @@ export class HuntRuleset implements Ruleset {
       followInterrupted: state?.followInterrupted ?? false,
       followTargetId: state?.followTargetId,
       followReason: state?.followReason,
+      lastCombatActionAtMs: state?.lastCombatActionAtMs ?? null,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -2194,7 +2218,10 @@ export class HuntRuleset implements Ruleset {
       this.#difficulty,
       (pointIndex) => {
         const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
-        return { at: point.at, radius: point.radius };
+        return {
+          at: point.at, radius: point.radius,
+          ...(point.monsterId === undefined ? {} : { monsterId: point.monsterId }),
+        };
       },
       this.#spawnBlockedFor(session),
       session.rng,
@@ -2217,8 +2244,11 @@ export class HuntRuleset implements Ruleset {
     const monster = new MonsterRuntime({
       id: this.#nextCreatureId++,
       monsterId: definition.id,
-      position: request.position,
-      home: request.position,
+      // O `z` do PONTO de spawn, não o do mapa (#519, hunt multiandar) — é o que faz um Dragon
+      // Lord nascer em z11 e não em z10. Numa hunt de andar único é o mesmo valor de sempre,
+      // porque todo ponto da rota vive no andar padrão do mapa.
+      position: { x: request.position.x, y: request.position.y, z: request.position.z },
+      home: { x: request.position.x, y: request.position.y, z: request.position.z },
       health: definition.health,
       targetId: null,
       speed: definition.speed,
@@ -2233,12 +2263,11 @@ export class HuntRuleset implements Ruleset {
 
     const subjectOf = monsterSubject(monster.id);
     // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
-    // ser recusada publicaria um monstro onde ele não está (FUN-103).
+    // ser recusada publicaria um monstro onde ele não está (FUN-103). `#at` lê o andar de FATO
+    // do monstro (#519) — o do mapa só sobra para quem nunca declarou `z` (andar único).
     session.emit({
       kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
-      // O `z` é do mapa, como o passo faz em `move()`: monstro vive numa grade 2D e o andar é
-      // propriedade da instância, não da criatura.
-      position: { ...monster.position, z: this.#world.map.z },
+      position: this.#at(monster),
       health: monster.health, maxHealth: definition.health,
     });
     session.scheduleIn(MONSTER_STEP, 0, {
@@ -2376,10 +2405,20 @@ export class HuntRuleset implements Ruleset {
     return result;
   }
 
-  /** Há OUTRO participante vivo parado em `at`? É o bloqueio que se contorna, não se espera. */
-  #companionAt(session: Session, self: CharacterRuntime, at: GridPoint): boolean {
+  /**
+   * Há OUTRO participante vivo parado em `at`? É o bloqueio que se contorna, não se espera.
+   *
+   * Confere o andar (#519) antes de x/y: `at` vem de `runner.walker.ahead()`/`.step()`, um tile
+   * da ROTA — que já carrega o `z` de verdade, mesmo quando o TIPO aqui só promete `GridPoint`
+   * —, e a hunt hospeda um personagem só hoje (§14, Fase 3 traz party), então isto é código
+   * morto POR ENQUANTO. Sem a checagem, o dia em que a party entrar numa hunt multiandar faria
+   * um companheiro dois andares abaixo "bloquear" o walker por coincidência de (x, y) — os três
+   * andares da Darashia Dragon Lair compartilham a mesma caixa.
+   */
+  #companionAt(session: Session, self: CharacterRuntime, at: FloorPoint): boolean {
     for (const other of session.participants) {
       if (other === self || !other.alive) continue;
+      if (!sameFloor(other.position.z, at.z)) continue;
       if (other.position.x === at.x && other.position.y === at.y) return true;
     }
     return false;
@@ -2455,7 +2494,13 @@ export class HuntRuleset implements Ruleset {
     const d = distance(from, target.position);
     const radius = this.#options.targetSearchRadius ?? 8;
 
-    if (d > radius) {
+    // Andar diferente é `unreachable` pela MESMA razão da distância (#519): sem pathfinding
+    // real (ADR 0009), o passo guloso não sabe atravessar escada nenhuma — ele só sabe reduzir
+    // (x, y). Caindo em `unreachable`, quem segue volta a percorrer a PRÓPRIA rota — que já
+    // atravessa as mesmas escadas que o líder atravessou —, e o follow retoma sozinho assim que
+    // os dois estiverem no mesmo andar de novo. É "o companheiro toma a mesma escada" sem
+    // precisar de pathfinding novo nenhum.
+    if (d > radius || !sameFloor(from.z, target.position.z)) {
       this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
       return false;
     }
@@ -2817,6 +2862,12 @@ const slots = bot.groups.get(group);
    * a regra não age (§30 — nunca substitui por outro vivo). `lowest-hp-member` devolve todo
    * participante vivo ao alcance ordenado por percentual ASCENDENTE (§28); o próprio lançador
    * entra como candidato de si mesmo, então numa hunt solo "menor vida da party" é ele.
+   *
+   * Confere o andar (#519) antes do alcance: a hunt hospeda um personagem só hoje (§14 — party
+   * é Fase 3), então isto é código morto POR ENQUANTO — mas os três andares da Darashia Dragon
+   * Lair compartilham a mesma caixa (x, y), e sem a checagem um curandeiro curaria (ou um
+   * `heal-friend` miraria) um companheiro dois andares acima só por coincidência de coordenada,
+   * a primeira vez que uma party entrar numa hunt multiandar.
    */
   #resolveRuleTarget(
     session: Session, character: CharacterRuntime, rule: CompiledSlot,
@@ -2827,6 +2878,7 @@ const slots = bot.groups.get(group);
     if (rule.target.kind === 'member') {
       const member = findById(session.participants, rule.target.characterId);
       if (member === null || !member.alive) return NO_CANDIDATES;
+      if (!sameFloor(character.position.z, member.position.z)) return NO_CANDIDATES;
       if (distance(character.position, member.position) > range) return NO_CANDIDATES;
       return [member];
     }
@@ -2834,7 +2886,8 @@ const slots = bot.groups.get(group);
     // `session.participants` já está na ordem de entrada, e `Array#sort` é ESTÁVEL: o desempate
     // cai de graça.
     return session.participants
-      .filter((p) => p.alive && distance(character.position, p.position) <= range)
+      .filter((p) => p.alive && sameFloor(character.position.z, p.position.z)
+        && distance(character.position, p.position) <= range)
       .sort((a, b) => percentOf(a.health, a.maxHealth) - percentOf(b.health, b.maxHealth));
   }
 
@@ -2994,6 +3047,7 @@ const slots = bot.groups.get(group);
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied);
       recordDamage(monster.contribution, character.id, applied);
+      this.#markCombatActive(session, character.id);
       // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
       // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
       session.emit({
@@ -3090,6 +3144,10 @@ const slots = bot.groups.get(group);
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
       magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
         + character.inventory.skillBonus(this.#options.items, 'magic'),
+      // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
+      // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
+      // `weaponAttack`, nunca um número inventado.
+      weaponAttack: character.inventory.weaponAttack(this.#options.items, character) ?? 0,
     };
   }
 
@@ -3983,9 +4041,7 @@ const slots = bot.groups.get(group);
     const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
     const cadence = result !== null && result.ok
       ? result.durationMs
-      : movementDuration(this.#world, monster, monster.position, {
-        ...monster.position, z: this.#world.map.z,
-      });
+      : movementDuration(this.#world, monster, monster.position, this.#at(monster));
     session.scheduleIn(MONSTER_STEP, cadence, {
       priority: EventPriority.Movement, subject,
     });
@@ -4297,8 +4353,11 @@ const slots = bot.groups.get(group);
     // trocar para o mesmo não é troca. A estratégia ponderada do Canary (70/10/10/10) fica fora
     // (§ "Fora do escopo" do #518).
     const prey: readonly Prey[] = session.participants;
+    // O mesmo andar primeiro (#519): um alvo em outro andar não é alvo válido — o `isTarget` do
+    // TFS confere o `z` antes da distância, como `chooseTarget` já faz.
     const candidates = prey.filter((candidate) => candidate.alive
       && candidate.id !== monster.targetId
+      && sameFloor(monster.position.z, candidate.position.z)
       && distance(monster.position, candidate.position) <= definition.aggroRadius);
     if (candidates.length === 0) return;
     const chosen = candidates[session.rng.integer(0, candidates.length - 1)];
@@ -4384,6 +4443,12 @@ const slots = bot.groups.get(group);
     // (a condição de um monstro, por exemplo) — `creditHealing` somaria num id que não é dono.
     if (healerId !== undefined && session.participants.some((p) => p.id === healerId)) {
       session.creditHealing(healerId, amount);
+      // Atividade de XP compartilhada (§525) é OUTRA coisa que HPS: `Player::isPartner`
+      // (TFS/Canary) exclui `player == this` antes de registrar `updatePlayerTicks` por cura —
+      // curar A SI MESMO não prova que o personagem está engajado com a party, e as duas
+      // engines não contam. HPS continua contando o self-heal (linha acima); só a atividade
+      // que `canShareExperience` lê exige um RECIPIENTE diferente do healer.
+      if (character.id !== healerId) this.#markCombatActive(session, healerId);
     }
     session.emit({
       kind: 'creature-healed', creatureId: character.id, amount, source,
@@ -4393,13 +4458,22 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Onde a criatura está, com o andar do MAPA — o mesmo `z` que `creature-appeared` e o passo
-   * publicam. O monstro vive numa grade 2D e não carrega `z`; o personagem carrega, mas o mapa
-   * é a única fonte de verdade sobre o andar (`WorldPoint`), e ler de dois lugares é como os
-   * dois divergem.
+   * Onde a criatura está, com o andar de FATO dela (#519, hunt multiandar).
+   *
+   * Até esta issue isto sempre devolvia `this.#world.map.z` — o andar PADRÃO do mapa —,
+   * ignorando `creature.position.z` mesmo para o personagem. Numa hunt de andar único isso nunca
+   * divergia (só existia um andar para se estar), e por isso o defeito nunca apareceu: a
+   * Darashia Dragon Lair é a primeira hunt em que ele apareceria, com todo golpe e toda mira de
+   * área calculados no andar ERRADO sempre que alguém não estivesse no padrão do mapa. `?? map.z`
+   * sobra só para quem nunca carrega `z` de verdade — o monstro de snapshot anterior a esta issue.
    */
-  #at(creature: { readonly position: GridPoint }): WorldPoint {
-    return { x: creature.position.x, y: creature.position.y, z: this.#world.map.z };
+  #at(creature: { readonly position: FloorPoint }): WorldPoint {
+    return { x: creature.position.x, y: creature.position.y, z: creature.position.z ?? this.#world.map.z };
+  }
+
+  /** O andar de FATO da criatura — o mesmo que `#at` usa, sem montar o `WorldPoint` inteiro. */
+  #floorOf(creature: { readonly position: FloorPoint }): number {
+    return creature.position.z ?? this.#world.map.z;
   }
 
   #onExitRules(session: Session): void {
@@ -4507,6 +4581,17 @@ const slots = bot.groups.get(group);
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
       });
+      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
+      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
+      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
+      // A prática é do TIRO, não do acerto (CMB-05): imunidade, bloqueio e agora o erro de
+      // pontaria não impedem a skill de subir — ela sai do gatilho da família, nunca do dano.
+      this.#practice(session, character, how.family, 1);
+      if (!hit) {
+        // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
+        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
+        return;
+      }
       // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
       // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
       const power = how.power;
@@ -4526,7 +4611,6 @@ const slots = bot.groups.get(group);
         defender, 'pve', this.#options.combat, session.rng,
       );
       this.#land(session, character, monster, result, 'melee');
-      this.#practice(session, character, profile.family, 1);
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
       // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
       return;
@@ -4579,21 +4663,27 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O poder bruto de um golpe pelo PERFIL (CMB-05), com a postura por último.
+   * O poder bruto de um golpe pelo PERFIL (CMB-05, `combat-v2` em #522), com a postura por
+   * último.
    *
    * A skill que escala é a da FAMÍLIA, não uma por nome: o ruleset lê `family.skillId` do
    * conteúdo e o nível do personagem, MAIS o bônus de equipamento da mesma skill (#524: a
    * Paladin Armor soma em `distance` — o crossbow bate mais forte com ela vestida). Corpo a
-   * corpo e distância recebem a postura (`buff`); wand/rod têm faixa fixa e não passam por ela
-   * — como sempre, e o bônus entra sem efeito aí (`resolveWeaponPower` ignora `skillLevel` no
-   * caminho `fixedDamage`, ver o comentário de `weapon-power.ts`).
+   * corpo e distância recebem a postura (`buff`);
+   * wand/rod têm faixa fixa e não passam por ela — como sempre. O multiplicador de vocação
+   * (`meleeDamageMultiplier`/`distDamageMultiplier`, #522) só o `combat-v2` lê; passar o valor
+   * sempre é inofensivo — o v1 nunca teve multiplicador de vocação.
    */
   #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
     const family = this.#options.weaponFamilies.get(profile.family);
-    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
-    const skillLevel = (skill === undefined ? 0 : character.skills.levelOf(skill))
-      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
-    const power = resolveWeaponPower(profile, character.level, skillLevel, session.rng);
+    const skillLevel = this.#skillLevelOf(character, family);
+    const vocation = this.#vocationOf(character);
+    const vocationMultiplier = family?.kind === 'distance'
+      ? vocation?.distDamageMultiplier ?? 1
+      : vocation?.meleeDamageMultiplier ?? 1;
+    const power = resolveWeaponPower(
+      profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
+    );
     if (family?.kind === 'distance') {
       return Math.round(power * character.conditions.damageDealtScale('distance'));
     }
@@ -4601,6 +4691,50 @@ const slots = bot.groups.get(group);
       return Math.round(power * character.conditions.damageDealtScale('melee'));
     }
     return power;
+  }
+
+  /** O nível da skill que a família aponta; sem família ou skill no catálogo, zero. */
+  #skillLevelOf(character: CharacterRuntime, family: CompiledWeaponFamily | undefined): number {
+    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
+    // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
+    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item.
+    return (skill === undefined ? 0 : character.skills.levelOf(skill))
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
+  }
+
+  /**
+   * A chance de acerto à distância (#522, `combat-v2`): uma rolagem por tiro, SEMPRE consumida
+   * quando o conteúdo declara `combat.distanceHitChance` — a mesma regra do bloqueio e do
+   * crítico (ADR 0031). Conteúdo `combat-v1` (sem a tabela) não rola nada e sempre acerta, o
+   * que preserva o v1 bit a bit — nenhum sorteio novo entra na sequência de uma hunt legada.
+   *
+   * `ammo.hitChance` (#522) e `ammo.maxHitChance`/`how.hitChance` (#524, só dado até aqui)
+   * entram como o caminho direto, o balde da munição e o bônus/malus do arco — ver
+   * `combat/distance-hit.ts`.
+   */
+  #rollDistanceHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, ammo: Ammunition,
+    how: ResolvedWeapon,
+  ): boolean {
+    const table = this.#options.combat.distanceHitChance;
+    if (table === undefined) return true;
+    const family = this.#options.weaponFamilies.get('distance');
+    const skillLevel = this.#skillLevelOf(character, family);
+    const tiles = distance(character.position, monster.position);
+    return rollDistanceHit(
+      tiles, skillLevel, table, session.rng, ammo.maxHitChance, ammo.hitChance, how.hitChance,
+    );
+  }
+
+  /**
+   * Registra que `characterId` atacou ou curou agora (§525, ADR 0027 emenda 2026-09-24): a
+   * atividade que `canShareExperience` lê como `Party::isPlayerActive` do TFS/Canary. Sem
+   * `Runner` (id que não é participante — `healerId` de uma condição, por exemplo) é no-op, a
+   * mesma guarda de `session.creditHealing` em `#emitHealed`.
+   */
+  #markCombatActive(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner !== undefined) runner.lastCombatActionAtMs = session.nowMs;
   }
 
   /**
@@ -4631,6 +4765,7 @@ const slots = bot.groups.get(group);
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
     const applied = applyDamageOutcome(monster, outcome, character);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
+    this.#markCombatActive(session, character.id);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
     // cliente contando uma história que a barra desmente.
@@ -4784,19 +4919,26 @@ const slots = bot.groups.get(group);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible);
+    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible, credit);
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
     // O lugar volta a contar o tempo — e é aqui que a próxima hora dele é marcada, agora que
-    // o spawner não guarda mais instante nenhum.
+    // o spawner não guarda mais instante nenhum. O `spawntime` do PONTO (#519, o `<monster
+    // spawntime="...">` do Canary é por posição, não por zona nem por dificuldade) prevalece
+    // quando a rota o declara; sem ele, o `respawnDelayMs` da dificuldade continua valendo,
+    // como sempre foi — é o caminho de rat-cellars/rotworm-caves, que não declaram nada por ponto.
     const slot = this.#spawner.release(monster.id);
     if (slot !== null) {
-      session.scheduleIn(SPAWN, this.#difficulty.respawnDelayMs, {
+      const pointIndex = this.#spawner.slots[slot]?.pointIndex;
+      const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
+      session.scheduleIn(SPAWN, point?.respawnDelayMs ?? this.#difficulty.respawnDelayMs, {
         priority: EventPriority.Spawn, subject: String(slot),
       });
     }
-    this.#world.vacate(monster.position.x, monster.position.y);
+    // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
+    // ele morre em z11 num mapa cujo andar padrão é z10.
+    this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
     // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
     // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
     // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
@@ -4805,7 +4947,7 @@ const slots = bot.groups.get(group);
       const corpse: CorpseState = {
         id: this.#nextGroundItemId++,
         monsterId: monster.monsterId,
-        position: { x: monster.position.x, y: monster.position.y, z: this.floor },
+        position: this.#at(monster),
       };
       this.#corpses.push(corpse);
       session.emit({
@@ -4862,13 +5004,60 @@ const slots = bot.groups.get(group);
    * onde cada coisa ficou, e o extrato leva.
    */
   /**
-   * A XP de um abate, dividida pela party (#190, ADR 0027 decisão 3).
+   * A cota de XP de cada elegível para este abate (§525, ADR 0027 emenda 2026-09-24/25).
    *
-   * `pool = floor(xp × tabela[vocações únicas] / 100)`, `cota = floor(pool / elegíveis)`, resto
-   * descartado. Elegível é quem está VIVO com stamina — a condição que sempre decidiu se o
-   * matador recebia, aplicada a cada membro. Em solo, `xpShare` devolve a XP inteira sem ler
-   * a tabela, e o único elegível é o matador: nada muda, inclusive quando a fonte do golpe
-   * sumiu — aí o solo continua sem XP, porque o único candidato não é o matador (DT-04).
+   * Com 0/1 elegível, ou fora de party, `xpShare` já devolve a cota igual (a XP inteira em
+   * solo) sem ler mais nada — o `canShareExperience` do TFS/Canary não tem o que decidir com
+   * menos de dois. Com 2+, a XP compartilhada é TUDO OU NADA (`Party::getSharedExperienceStatus`):
+   * `canShareExperience` confere nível (2/3 do MAIOR level de TODA a sessão), alcance/andar do
+   * líder e atividade recente — checados sobre `allMembers`, o ROSTER INTEIRO da sessão
+   * (`getPlayers()` nas duas engines: líder + membros, presente ou não elegível para receber),
+   * não só `eligible`; se todos passam, a cota é igual (`xpShare`, cujo divisor TAMBÉM é
+   * `allMembers.length` — o tamanho total da party, como as duas engines fazem, não a contagem
+   * de elegíveis); se qualquer um falha, ninguém compartilha — cada elegível recebe pelo DANO
+   * que causou neste monstro (`xpByDamage`), como o Tibia sem party.
+   *
+   * `this.#party` ausente com `eligible.length > 1` não deveria acontecer (só a party hospeda
+   * mais de um dono), mas cai para a cota igual em vez de lançar — o mesmo espírito defensivo
+   * de `autoSellLimit` diante de conteúdo incompleto.
+   */
+  #xpShares(
+    session: Session, eligible: readonly CharacterRuntime[], experience: number, credit: KillCredit,
+  ): ReadonlyMap<string, number> {
+    const party = this.#party;
+    const allMembers = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    if (eligible.length <= 1 || party === undefined) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    const leader = session.participants.find((p) => p.id === party.leaderId);
+    const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
+    const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
+    const canShare = leader !== undefined && canShareExperience(
+      session.participants.map((member) => ({
+        id: member.id,
+        level: member.level,
+        position: member.position,
+        lastActionAtMs: this.#runners.get(member.id)?.lastCombatActionAtMs ?? null,
+      })),
+      highestLevel, leader.position, session.nowMs, rules,
+    );
+    if (canShare) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    return xpByDamage(experience, eligible, credit.damageByActor);
+  }
+
+  /**
+   * A XP de um abate, dividida pela party (#190, ADR 0027 decisões 3 e emenda 2026-09-24).
+   *
+   * A cota vem de `#xpShares` — pool por vocações únicas reais dividido por igual quando a
+   * party inteira atende a elegibilidade do TFS/Canary, por dano quando não atende. Elegível é
+   * quem está VIVO com stamina — a condição que sempre decidiu se o matador recebia, aplicada a
+   * cada membro. Em solo, a cota é a XP inteira sem ler a tabela, e o único elegível é o
+   * matador: nada muda, inclusive quando a fonte do golpe sumiu — aí o solo continua sem XP,
+   * porque o único candidato não é o matador (DT-04).
    *
    * A ordem é contrato: para cada elegível, na ordem de ENTRADA, `applyXpBonus` (o bônus de
    * Bestiário de ANTES deste abate — DT-04 da FUN-113) → `grantXp` → `record` no Bestiário.
@@ -4876,11 +5065,13 @@ const slots = bot.groups.get(group);
    */
   #grantPartyXp(
     session: Session, monster: MonsterRuntime, definition: Monster, eligible: readonly CharacterRuntime[],
+    credit: KillCredit,
   ): void {
     if (eligible.length === 0) return;
-    const share = xpShare(definition.experience, eligible, this.#options.party);
+    const shares = this.#xpShares(session, eligible, definition.experience, credit);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
+      const share = shares.get(member.id) ?? 0;
       const experience = member.bestiary.applyXpBonus(share, this.#options.bestiary);
       const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
       session.credit(member.id, 'xpGained', experience);
@@ -5389,6 +5580,9 @@ const slots = bot.groups.get(group);
     if (subject === null) return null;
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return null;
+    // Andar diferente é tela diferente (#519): um alvo pinado antes de trocar de andar — o dele
+    // ou o do personagem — não continua "na tela" só porque o (x, y) ainda está perto.
+    if (!sameFloor(this.#floorOf(character), this.#floorOf(monster))) return null;
     if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
       return null;
     }
@@ -5522,14 +5716,35 @@ const slots = bot.groups.get(group);
    * continua sendo a da dificuldade — é a diferença para a supressão que a referência (§29)
    * manda não copiar. Morto não conta: ele está saindo, e um cadáver que segura o spawn
    * seria um raio que ninguém vê.
+   *
+   * **O `z` é do PONTO, nunca o do mapa (#519).** `Spawner.#freeTile` passa o andar de cada
+   * tile que sonda; sem isto, todo ponto seria checado no andar padrão do mapa, e um lugar
+   * de z11 nasceria "livre" mesmo bloqueado por parede em z11 só porque o tile equivalente em
+   * z10 está livre. Pela mesma razão, "à vista" (a distância do `spawnClearRadius`, o
+   * `Spawn::findPlayer` do TFS) só conta um participante do MESMO andar do ponto — os três
+   * andares da Darashia Dragon Lair compartilham a caixa x/y, e um jogador em z10 não pode
+   * segurar o respawn de um Dragon Lord em z12 só por estar no (x, y) parecido.
+   *
+   * **`blockable` é a EXCEÇÃO, não a regra (#519, `isBlockable` do TFS/Canary).** No Canary,
+   * 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — têm
+   * `isBlockable: false`: eles respawnam OLHANDO PARA O JOGADOR, ignorando quem está perto.
+   * Só quem declara `blockable: true` espera a vista limpar. `spawnClearRadius` continua
+   * existindo para quem precisa dele (o rato/rotworm de antes, que não declara `blockable` —
+   * ausente é `false`, então a checagem abaixo já os isenta também: era o comportamento ANTIGO
+   * que estava invertido, ligado para todo mundo por um `spawnClearRadius` > 0 só do lado da
+   * hunt). Sem `monsterId` (chamador que ainda não resolveu o monstro do ponto) a checagem
+   * roda — é o caminho defensivo, nunca o normal.
    */
   #spawnBlockedFor(session: Session): Blocked {
     const radius = this.#options.hunt.spawnClearRadius;
-    return (x, y) => {
-      if (isBlocked(this.#options.map, x, y) || this.#world.occupied(x, y)) return true;
+    return (x, y, z = this.#world.map.z, monsterId) => {
+      if (isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
       if (radius <= 0) return false;
+      const definition = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (definition !== undefined && !definition.blockable) return false;
       for (const participant of session.participants) {
-        if (participant.alive && distance(participant.position, { x, y }) < radius) return true;
+        if (!participant.alive || this.#floorOf(participant) !== z) continue;
+        if (distance(participant.position, { x, y }) < radius) return true;
       }
       return false;
     };

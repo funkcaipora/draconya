@@ -10,7 +10,14 @@
   "cooldownMs": 1000,
   "effect": {
     "kind": "heal",
-    "basePower": 10
+    "basePower": 10,
+    "formula": {
+      "levelFactor": 0,
+      "skillMin": 0.1614,
+      "skillMax": 0.2468,
+      "baseMin": 8,
+      "baseMax": 15
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. BP não publicado; 10 é provisório. A mesma do Sorcerer (DT-02)."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. BP não publicado; 10 é provisório. A mesma do Sorcerer (DT-02). Fórmula do Canary (`data/scripts/spells/healing/magic_patch.lua`, main, 2026-09-24): sem termo de level (`levelFactor: 0`)."
 }

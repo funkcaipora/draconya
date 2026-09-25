@@ -144,7 +144,13 @@ export function effectiveDodge(defender: Defender, context: CombatContext): numb
 }
 
 /**
- * A resolução do perfil `combat-v1` (ADR 0031, emenda do CMB-03). Preserva **bit a bit** o
+ * A resolução da MITIGAÇÃO (ADR 0031, emenda do CMB-03) — compartilhada por `combat-v1` e
+ * `combat-v2` (#522, ADR 0037 d.5): o que muda no v2 é o PODER BRUTO que chega em `rawDamage`
+ * (a fórmula de arma do Canary, `combat/weapon-power.ts`) e a chance de acerto à distância — as
+ * duas resolvidas ANTES desta função, pelo chamador (`HuntRuleset#strike`). O que este resolver
+ * faz com o `rawDamage` — Dodge, defesa/escudo, crítico, armadura, piso, resistência,
+ * imunidade — é uma decisão do Draconya (ADR 0031), não do Canary, e nenhuma das duas issues
+ * (#522 aqui, defesa/armadura já fechada no M24) muda esse pipeline. Preserva **bit a bit** o
  * resultado entregue quando não há mitigação, e a ordem é a do contrato:
  *
  *   1. uma única rolagem de Dodge, SEMPRE consumida, primeiro ato;
@@ -165,7 +171,7 @@ export function effectiveDodge(defender: Defender, context: CombatContext): numb
  * sequência do conteúdo JÁ entregue exige perfil novo; o bloqueio do CMB-04 só rola quando o
  * conteúdo declara defesa, então o v1 sem defesa continua consumindo exatamente um sorteio.
  */
-function resolveCombatV1(
+function resolveMitigation(
   intent: DamageIntent,
   defender: Defender,
   context: CombatContext,
@@ -279,7 +285,11 @@ export function resolveDamage(
   }
   switch (combat.compatibilityProfile) {
     case 'combat-v1':
-      return resolveCombatV1(intent, defender, context, combat, rng);
+    case 'combat-v2':
+      // O pipeline de mitigação é o MESMO nos dois perfis (ver o comentário de
+      // `resolveMitigation`) — o que o `combat-v2` muda é o `rawDamage` que chega aqui (fórmula
+      // de arma do Canary) e a chance de acerto à distância, resolvidos ANTES pelo chamador.
+      return resolveMitigation(intent, defender, context, combat, rng);
     default:
       // Inalcançável enquanto o registro do conteúdo e este despacho conhecerem o mesmo
       // conjunto; existe para um perfil novo não virar uma fórmula silenciosamente ausente.

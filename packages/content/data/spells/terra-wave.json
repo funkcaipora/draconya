@@ -13,7 +13,7 @@
     "basePower": 120,
     "area": {
       "shape": "wave",
-      "length": 5
+      "length": 4
     },
     "damageType": "earth",
     "formula": {
@@ -23,5 +23,5 @@
       "baseMax": 0
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Área do Canary (`data/scripts/spells/attack/terra_wave.lua`, main, 2026-09-24): AREA_SQUAREWAVE5 tem 4 fileiras, não 5; fórmula já batia."
 }

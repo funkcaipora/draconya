@@ -64,4 +64,47 @@ describe('a fórmula canônica do Canary (#474)', () => {
   });
 });
 
+describe('o termo de ataque da arma (#523)', () => {
+  // Groundshaker (`exori mas`): min = (level/5 + (skill+attack)×0,5) × 1,28,
+  // max = (level/5 + (skill+attack)×1,1) × 1,28 — os dois lados da soma escalam igual, então
+  // `skillMin`/`skillMax` e `attackMin`/`attackMax` levam o mesmo coeficiente já com o ×1,28
+  // dobrado (`docs/product/combat.md`).
+  const groundshaker = {
+    levelFactor: 0.256, skillMin: 0.64, skillMax: 1.408, baseMin: 0, baseMax: 0,
+    attackMin: 0.64, attackMax: 1.408,
+  } as const;
+
+  it('level 200, melee 105, arma 50: soma skill e attack antes de escalar', () => {
+    // min = 200×0,256 + 105×0,64 + 50×0,64 = 150,4 → 150; max = 51,2 + 105×1,408 + 50×1,408 =
+    // 269,44 → 269. Mutação que mata: aplicar `attackMin`/`attackMax` só quando `skillMin` é 0,
+    // ou esquecer que os dois têm o MESMO peso aqui.
+    expect(evaluateSpellPower(groundshaker, 32, 200, 105, spellPower, 50)).toEqual({ min: 150, max: 269 });
+  });
+
+  it('sem arma (attack 0), a fórmula ainda soma o skill sozinho', () => {
+    expect(evaluateSpellPower(groundshaker, 32, 200, 105, spellPower, 0)).toEqual({
+      min: Math.floor(200 * 0.256 + 105 * 0.64), max: Math.floor(200 * 0.256 + 105 * 1.408),
+    });
+  });
+
+  it('magia sem `attackMin`/`attackMax` ignora o `attack` recebido (aditivo, ADR 0031)', () => {
+    const iceStrike = { levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 8, baseMax: 13 } as const;
+    expect(evaluateSpellPower(iceStrike, 45, 50, 40, spellPower, 999)).toEqual({ min: 74, max: 111 });
+  });
+
+  // Brutal Strike (`exori ico`): o termo é o PRODUTO `skill × attack`, não a soma — Front Sweep e
+  // Lesser Front Sweep usam a mesma forma. `skillAttackMin`/`skillAttackMax` carregam o
+  // coeficiente do produto, já com o ×1,28 externo dobrado, como `baseMin`/`baseMax`.
+  const brutalStrike = {
+    levelFactor: 0.256, skillMin: 0, skillMax: 0, baseMin: 5.12, baseMax: 11.52,
+    skillAttackMin: 0.0256, skillAttackMax: 0.0512,
+  } as const;
+
+  it('level 200, melee 105, arma 50: escala pelo PRODUTO skill × attack', () => {
+    // min = 200×0,256 + (105×50)×0,0256 + 5,12 = 190,72 → 190;
+    // max = 51,2 + 5250×0,0512 + 11,52 = 331,52 → 331.
+    expect(evaluateSpellPower(brutalStrike, 39, 200, 105, spellPower, 50)).toEqual({ min: 190, max: 331 });
+  });
+});
+
 

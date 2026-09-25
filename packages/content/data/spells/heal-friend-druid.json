@@ -1,12 +1,24 @@
 {
   "id": "heal-friend-druid",
-  "name": "Exura Sio",
+  "name": "Heal Friend",
   "vocationId": "druid",
-  "minLevel": 14,
-  "manaCost": 30,
+  "minLevel": 18,
+  "manaCost": 120,
   "group": "healing",
   "groupCooldownMs": 1000,
   "cooldownMs": 1000,
-  "effect": { "kind": "heal", "basePower": 60, "target": "friend", "range": 5 },
-  "_open": "TibiaWiki (conferir ao gravar): level, mana e basePower REAIS de Exura Sio ainda não foram auditados nesta task — os valores acima são um ponto de partida no mesmo formato de intense-healing-druid.json, não uma cópia confirmada. range 5 é o mesmo teto de alcance de magia de alvo único do catálogo atual; ajustar se o TibiaWiki divergir. A variante do Paladin (§9.2) fica para quando o TibiaWiki confirmar que ele a usa."
+  "effect": {
+    "kind": "heal",
+    "basePower": 60,
+    "target": "friend",
+    "range": 5,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 10,
+      "skillMax": 14,
+      "baseMin": 3,
+      "baseMax": 5
+    }
+  },
+  "_open": "TibiaWiki (conferir ao gravar): level, mana e basePower REAIS de Exura Sio ainda não foram auditados nesta task — os valores acima são um ponto de partida no mesmo formato de intense-healing-druid.json, não uma cópia confirmada. range 5 é o mesmo teto de alcance de magia de alvo único do catálogo atual; ajustar se o TibiaWiki divergir. A variante do Paladin (§9.2) fica para quando o TibiaWiki confirmar que ele a usa. Nome, level, mana e fórmula do Canary (`data/scripts/spells/healing/heal_friend.lua`, main, 2026-09-24): os valores antigos eram um palpite não confirmado (ver nota anterior); level 14→18, mana 30→120."
 }

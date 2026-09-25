@@ -6,17 +6,18 @@
   "minLevel": 8,
   "manaCost": 40,
   "group": "healing",
-  "groupCooldownMs": 2000,
+  "groupCooldownMs": 1000,
   "cooldownMs": 1000,
   "effect": {
     "kind": "heal",
     "basePower": 70,
     "formula": {
-      "skillMin": 1.795,
-      "skillMax": 3.0,
-      "baseMin": 8,
-      "baseMax": 11
+      "levelFactor": 0.2,
+      "skillMin": 4.0,
+      "skillMax": 7.95,
+      "baseMin": 25,
+      "baseMax": 51
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula e cooldown do Canary (`data/scripts/spells/healing/wound_cleansing.lua`, main, 2026-09-24): grupo 2s→1s."
 }

@@ -11,7 +11,14 @@
   "effect": {
     "kind": "damage",
     "basePower": 25,
-    "range": 5
+    "range": 7,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.333333,
+      "skillMax": 1,
+      "baseMin": 8.333333,
+      "baseMax": 25
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. alcance 5 (TibiaWiki)."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. alcance 5 (TibiaWiki). Fórmula e alcance do Canary (`data/scripts/spells/attack/ethereal_spear.lua`, main, 2026-09-24): range 5→7."
 }

@@ -12,7 +12,14 @@
     "kind": "damage",
     "basePower": 15,
     "range": 3,
-    "damageType": "earth"
+    "damageType": "earth",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.4,
+      "skillMax": 0.7,
+      "baseMin": 3,
+      "baseMax": 5
+    }
   },
-  "_open": "Efeito corrigido para 17 (CONST_ME_HITBYPOISON) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de um respingo verde. O effect 16 anterior era CONST_ME_HITBYFIRE (chama), herdado do palpite anterior."
+  "_open": "Efeito corrigido para 17 (CONST_ME_HITBYPOISON) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de um respingo verde. O effect 16 anterior era CONST_ME_HITBYFIRE (chama), herdado do palpite anterior. Fórmula do Canary (`data/scripts/spells/attack/mud_attack.lua`, main, 2026-09-24)."
 }

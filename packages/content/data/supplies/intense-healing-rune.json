@@ -6,7 +6,7 @@
   "group": "healing",
   "groupCooldownMs": 1000,
   "requires": {
-    "level": 8,
+    "level": 15,
     "magicLevel": 1
   },
   "effect": {
@@ -14,11 +14,11 @@
     "range": 4,
     "formula": {
       "levelFactor": 0.2,
-      "skillMin": 2.4,
-      "skillMax": 3.0,
+      "skillMin": 3.2,
+      "skillMax": 5.4,
       "baseMin": 20,
-      "baseMax": 30
+      "baseMax": 40
     }
   },
-  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula (a mesma da Intense Healing, paridade Canary); preço e requisitos provisórios. Aparência: efeito 13 (magic blue) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula (a mesma da Intense Healing, paridade Canary); preço e requisitos provisórios. Aparência: efeito 13 (magic blue) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md). Fórmula e level do Canary (`data/scripts/runes/intense_healing_rune.lua`, main, 2026-09-24): level 8→15."
 }

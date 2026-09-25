@@ -4,7 +4,7 @@
   "description": "Causa dano mágico numa área de 7x7 ao seu redor.",
   "vocationId": "knight",
   "minLevel": 33,
-  "manaCost": 200,
+  "manaCost": 160,
   "group": "attack",
   "groupCooldownMs": 2000,
   "cooldownMs": 8000,
@@ -17,11 +17,14 @@
       "centered": "caster"
     },
     "formula": {
-      "skillMin": 0.5,
-      "skillMax": 1.1,
+      "levelFactor": 0.256,
+      "skillMin": 0.64,
+      "skillMax": 1.408,
       "baseMin": 0,
-      "baseMax": 0
+      "baseMax": 0,
+      "attackMin": 0.64,
+      "attackMax": 1.408
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula canônica #474 (Canary `exori mas`): o termo `attack` da arma não é representável no schema canônico, que só carrega level e skill, então a fórmula usa só a skill de melee; recalibrar quando o ataque entrar na fórmula."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula canônica #474 (Canary `exori mas`): o termo `attack` da arma não é representável no schema canônico, que só carrega level e skill, então a fórmula usa só a skill de melee; recalibrar quando o ataque entrar na fórmula. Fórmula do Canary (`data/scripts/spells/attack/groundshaker.lua`, main, 2026-09-24): soma skill e o `attack` da arma equipada antes de escalar (`attackMin`/`attackMax`, #523); mana 200→160."
 }
