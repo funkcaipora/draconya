@@ -2255,7 +2255,11 @@ export class SessionHost {
    *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
    *                      lançamento (`spell-cast`) ou do uso (`supply-used`), que vêm antes —
    *                      senão uma cura que repôs zero não teria efeito e uma que repôs teria,
-   *                      e a magia pareceria falhar quando o jogador estava cheio;
+   *                      e a magia pareceria falhar quando o jogador estava cheio. A EXCEÇÃO é
+   *                      `source: 'monster'` (#518, a defesa de cura própria): não há
+   *                      lançamento prévio, e o `sim` só emite o evento quando REPÔS — como
+   *                      `spell-cast`/`supply-used` sempre emitem, o efeito aqui é seguro do
+   *                      mesmo jeito;
    *   spell-cast       → o projétil do conjurador ao PRIMEIRO alvo (é um projétil, não uma
    *                      rajada), e o efeito em CADA alvo — ou no próprio conjurador quando
    *                      não há alvo, que é a cura;
@@ -2294,6 +2298,14 @@ export class SessionHost {
         const id = hosted.creatureIds.get(String(event.creatureId));
         if (id === undefined) return;
         messages.push({ type: 'creature-hit', id, amount: event.amount, kind: 'heal' });
+        // A defesa de cura própria (#518) não tem lançamento prévio — o efeito sai AQUI, só
+        // quando o evento existe (o `sim` já suprime a cura que repôs zero).
+        const impactId = event.impactKey === undefined
+          ? undefined
+          : appearances?.abilities[event.impactKey]?.effect;
+        if (impactId !== undefined) {
+          messages.push({ type: 'effect', position: event.position, effectId: impactId });
+        }
         break;
       }
       case 'spell-cast': {

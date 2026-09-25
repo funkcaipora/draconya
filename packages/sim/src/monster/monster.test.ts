@@ -1,7 +1,9 @@
 import { compileMonster, monsterSchema } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
-import { MonsterRuntime, chooseTarget, decideMonsterAction, type Prey } from './monster.js';
+import {
+  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, type Prey,
+} from './monster.js';
 
 const rat: Monster = {
   ...compileMonster(monsterSchema.parse({
@@ -131,5 +133,75 @@ describe('MonsterRuntime', () => {
     monster.receiveDamage(5);
     const restored = new MonsterRuntime(monster.getState());
     expect(restored.getState()).toEqual(monster.getState());
+  });
+
+  it('round-trips scheduledDefenses (#518), like scheduledAbilities', () => {
+    const monster = monsterAt(0, 0);
+    monster.scheduledDefenses.add('self-heal');
+    const restored = new MonsterRuntime(monster.getState());
+    expect(restored.scheduledDefenses.has('self-heal')).toBe(true);
+  });
+
+  it('heals up to the max, never past it (#518)', () => {
+    const monster = monsterAt(0, 0);
+    monster.receiveDamage(15);
+    expect(monster.health).toBe(5);
+    expect(monster.heal(20, 100)).toBe(15);
+    expect(monster.health).toBe(20);
+  });
+
+  it('reports zero healed at full health, so callers can skip the event', () => {
+    const monster = monsterAt(0, 0);
+    expect(monster.heal(20, 10)).toBe(0);
+    expect(monster.health).toBe(20);
+  });
+});
+
+describe('isMonsterFleeing (#518)', () => {
+  const runsAt300 = { ...rat, runOnHealth: 300 };
+
+  it('is false without `runOnHealth` declared, however low the HP', () => {
+    const monster = monsterAt(0, 0, { health: 1 });
+    expect(isMonsterFleeing(monster, rat)).toBe(false);
+  });
+
+  it('is true at or below the threshold, false above it', () => {
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 300 }), runsAt300)).toBe(true);
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 299 }), runsAt300)).toBe(true);
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 301 }), runsAt300)).toBe(false);
+  });
+
+  it('is false for the dead — a corpse does not flee', () => {
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 0 }), runsAt300)).toBe(false);
+  });
+});
+
+describe('decideMonsterAction fleeing (#518)', () => {
+  const runsAt300 = { ...rat, runOnHealth: 300 };
+
+  it('steps AWAY from the target instead of attacking, even well inside reach', () => {
+    const monster = monsterAt(5, 5, { health: 300 });
+    const action = decideMonsterAction(monster, prey('p', 6, 5), runsAt300, open);
+    expect(action).toEqual({ kind: 'step', to: { x: 4, y: 5 } });
+  });
+
+  it('steps away instead of approaching when the target is far', () => {
+    const monster = monsterAt(5, 5, { health: 300 });
+    const action = decideMonsterAction(monster, prey('p', 9, 5), runsAt300, open);
+    expect(action).toEqual({ kind: 'step', to: { x: 4, y: 5 } });
+  });
+
+  it('stands its ground when cornered — a wall to consult, not a bug', () => {
+    const monster = monsterAt(0, 0, { health: 300 });
+    // Encurralado no canto (0,0): fugir de um alvo a leste (1,0) empurraria para x=-1, fora
+    // do mapa nesta grade de teste.
+    const corner = (x: number, y: number) => x < 0 || y < 0;
+    expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, corner).kind).toBe('idle');
+  });
+
+  it('does not flee above the threshold — attacks as usual', () => {
+    const monster = monsterAt(0, 0, { health: 301 });
+    expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
   });
 });

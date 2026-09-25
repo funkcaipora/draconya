@@ -7,7 +7,9 @@ generalizadas, dano contínuo e campos de tile (CMB-07), outcomes avançados de 
 mana shield (CMB-08), auditoria de apresentação de combate (CMB-09, bloqueada pela biblioteca
 parcial), conformance seedada e benchmark misto (CMB-10), motor de magias com alvo único, área e
 requisito de vocação (FUN-74, FUN-92), skills
-por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de monstro do TFS —
+chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
+implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -576,12 +578,79 @@ interface MonsterAbility {
 - **`scheduledAbilities` viaja no snapshot** (opcional, sem bump de formato). Sem ele, a hunt
   retomada reagendaria a ability que já tinha evento na fila e bateria em dobro no primeiro
   vencimento.
-- **Fora do escopo**, por decisão (CMB-08): invocação, cura de monstro, scripts de boss e o
-  detalhamento visual do dano. Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a
-  seção seguinte).
+- **Fora do escopo**, por decisão (CMB-08): invocação, scripts de boss e o detalhamento visual do
+  dano. Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a seção seguinte). A cura
+  própria (defesa) saiu do escopo do CMB-08 e entrou no #518 — ver a seção seguinte a esta.
 
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
+
+## IA de monstro do TFS: chance, onda direcional, defesa, troca de alvo e fuga (#518)
+
+O CMB-06 deu ao monstro uma lista de abilities, mas cada uma disparava **sempre** que o
+`cadenceMs` vencia — o TFS rola uma chance a cada intervalo, e o monstro não tinha defesa, troca
+de alvo nem fuga. O #518 fecha essa distância, seguindo a referência §15-19
+(`docs/reference/opentibia-engine-reference.md`) e o mecanismo do TFS `Monster::doAttacking`/
+`onThinkDefense`/`onThinkTarget`/`isFleeing` (código GPL v2 lido, nunca copiado — ADR 0019).
+
+```ts
+interface MonsterDefense {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly chance: number;                              // SEMPRE declarada — conteúdo novo
+  readonly heal: { readonly min: number; readonly max: number };
+  readonly presentation?: { readonly impactKey?: string };
+}
+interface MonsterTargetChange { readonly intervalMs: number; readonly chance: number; }
+```
+
+- **`chance` por ability** (`monsterAbilitySchema.chance`, `[0, 1]`): a cada vencimento do
+  `cadenceMs`, a entrada rola a PRÓPRIA chance — corpo a corpo, onda e bola podem sair no mesmo
+  intervalo, como no TFS. **Ausente é sempre passa e NÃO consome sorteio** (o mesmo argumento do
+  `blockChance`/CMB-04 e do `modifiers.critical`/CMB-08): é o que preserva o rato e o rotworm bit
+  a bit, porque a ability básica sintetizada pelo boot nunca declara o campo. Declarada, consome
+  UMA rolagem por vencimento mesmo com o valor 1 — a sequência de RNG não pode depender do
+  número. `#onMonsterAttack`/`#onMonsterAbility` sempre REAGENDAM a próxima tentativa antes de
+  rolar a chance: o intervalo continua correndo mesmo quando a rolagem falha.
+- **Onda e feixe direcionais**: `monsterAbilityTargetSchema.area` aceita `circle` (de sempre),
+  `wave` e `beam` — as duas últimas saem do MONSTRO na direção do alvo, recalculada a cada golpe
+  por `facingDirection` (`packages/sim/src/area.ts`), o mesmo cálculo do TFS
+  `updateLookDirection`: o eixo de MAIOR deslocamento decide (`|dx| > |dy|` → leste/oeste), e o
+  empate (inclusive `dx = dy = 0`) decide horizontal pelo sinal de `dx`. A geometria da onda
+  continua a do #155 (`area.ts`, cone `1, 3, 3, 5, 5…`) — fato observado do Tibia, não a matriz
+  `length`/`spread` do TFS (GPL, ADR 0019). `cross`/`cleave` continuam fora; `buildContent`
+  recusa.
+- **Defesa (`monster.defenses`)**: cura própria, o mecanismo que o Dragon usa (`interval 2000,
+  chance 15%, +40..+70`). Cada defesa é um evento NA FILA com a própria cadência — o mesmo
+  desenho das abilities, subject derivado `m:<id>:<defenseId>` — e não depende de alvo: cura
+  mesmo sem ninguém para atacar. `chance` é sempre declarada (o campo é conteúdo NOVO, sem
+  concessão de compatibilidade). A cura nunca passa do HP máximo, e de vida cheia o `sim` não
+  emite `creature-healed` — a mesma regra de `#emitHealed` do personagem (um "+0" flutuando é
+  ruído). A apresentação é a mesma chave semântica de `MonsterAbilityCast.impactKey`
+  (`appearances.abilities`), agora carregada por `CreatureHealed.impactKey` — só em
+  `source: 'monster'`.
+- **Troca de alvo (`monster.targetChange`)**: a cada `intervalMs` rola `chance`; se passa, escolhe
+  um alvo válido AO ACASO dentro do `aggroRadius`, diferente do atual — o ramo
+  `TARGETSEARCH_RANDOM` do TFS, que é o que o Dragon usa (`targetDistance <= 1`). O ramo
+  `TARGETSEARCH_NEAREST` (monstro de alcance maior) fica de fora: nenhum monstro do recorte
+  precisa dele, e o #518 não introduz o campo `targetDistance` só para essa distinção.
+- **Fuga (`monster.runOnHealth`)**: `HP <= runOnHealth` é fugindo (`isMonsterFleeing`,
+  `packages/sim/src/monster/monster.ts`) — pura, recalculada a cada decisão a partir do HP atual,
+  nunca um booleano guardado à parte. Fugindo, `decideMonsterAction` SEMPRE devolve um passo para
+  LONGE do alvo (`fleeStep`, o passo guloso com a ameaça espelhada — FUN-85), nunca aproxima;
+  encurralado, fica parado (ADR 0009). As abilities CORPO A CORPO (`isMeleeAbility`: sem área,
+  alcance 1) nem são armadas nem executam enquanto foge; as de alcance continuam saindo — passo
+  e ataque são decisões independentes, como no TFS (`getNextStep` × `doAttacking`).
+- **`staticAttack` (aceito, ainda NÃO wired)**: o campo existe no schema
+  (`monster.staticAttack`, fração de vencimentos em que o monstro fica parado em vez de dar um
+  passo aleatório colado no alvo — TFS `staticattack`/`randomStepping`), mas o motor de passo
+  daqui não tem um "pensamento" periódico independente do passo em si; simular o shuffle exigiria
+  um evento novo só para isso. Decisão explícita do #518 ("implementar só se couber sem mexer no
+  determinismo; senão registrar como divergência") — ver "Divergências do PRD" abaixo.
+- **`scheduledDefenses` viaja no snapshot** (opcional, sem bump de formato), como
+  `scheduledAbilities`: sem ele, a hunt retomada reagendaria a defesa que já tinha evento na
+  fila e curaria em dobro no primeiro vencimento.
+- Rato e rotworm não declaram nenhum destes campos — o comportamento entregue não muda.
 
 ## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
 
@@ -885,4 +954,11 @@ ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+- **`monster.staticAttack` é aceito no schema, mas não muda comportamento nenhum** (#518). O
+  TFS usa este número para decidir se o monstro, podendo atacar, fica parado ou dá um passo
+  aleatório colado no alvo (`randomStepping`/`getDanceStep`) — puramente cosmético, não afeta
+  dano nem cadência de ataque. O motor de passo do Draconya não tem um "pensamento" periódico
+  independente do passo em si (`decideMonsterAction` só roda quando o `MONSTER_STEP` vence), e
+  criar um evento novo só para o shuffle era escopo maior do que o #518 pedia. Fica registrado
+  aqui, não como `[ABERTO]` — o número é conhecido (Dragon: 80%, `staticAttack: 0.8`), só o
+  mecanismo que falta implementar.

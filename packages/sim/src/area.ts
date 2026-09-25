@@ -135,6 +135,23 @@ export function directionOf(from: WorldPoint, to: WorldPoint): Direction | null 
   return null;
 }
 
+/**
+ * Para onde o monstro OLHA, virado para o alvo (#518, TFS `Monster::updateLookDirection`,
+ * referência §15-19): o eixo de MAIOR deslocamento decide — `|dx| > |dy|` olha para leste/oeste,
+ * `|dy| > |dx|` para norte/sul —, e o empate (inclusive os dois zerados) decide horizontal, pelo
+ * sinal de `dx`. É DIFERENTE de `directionOf`: aquela é a direção de um PASSO e sempre prioriza
+ * o eixo horizontal quando ele se move; esta é para onde o monstro fica de frente antes de
+ * lançar `wave`/`beam`, recalculada a cada golpe — o monstro não guarda direção entre golpes.
+ */
+export function facingDirection(from: WorldPoint, to: WorldPoint): Direction {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  if (absDy > absDx) return dy < 0 ? 'north' : 'south';
+  return dx < 0 ? 'west' : 'east';
+}
+
 /** A chave de um tile num `Set`: é como a mira confere quem caiu na forma. */
 export function tileKey(point: WorldPoint): string {
   return `${String(point.x)},${String(point.y)},${String(point.z)}`;

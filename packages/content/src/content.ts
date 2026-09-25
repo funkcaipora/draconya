@@ -21,7 +21,7 @@ import {
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
-  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility,
+  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
@@ -196,10 +196,11 @@ export function compileMitigation(profile: MitigationProfile | undefined): Compi
 
 /** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
 export function compileMonster(monster: MonsterDefinition): CompiledMonster {
-  const { mitigation: _rawMitigation, abilities: _rawAbilities, ...rest } = monster;
+  const { mitigation: _rawMitigation, abilities: _rawAbilities, defenses: _rawDefenses, ...rest } = monster;
   return {
     ...rest,
     abilities: normalizeMonsterAbilities(monster),
+    defenses: normalizeMonsterDefenses(monster),
     mitigation: compileMitigation(monster.mitigation),
   };
 }
@@ -221,6 +222,7 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
     return declared.map((ability) => ({
       id: ability.id,
       cadenceMs: ability.cadenceMs,
+      ...(ability.chance === undefined ? {} : { chance: ability.chance }),
       target: {
         range: ability.target.range,
         ...(ability.target.area === undefined ? {} : { area: ability.target.area }),
@@ -249,6 +251,26 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
     power: attackRange(monster.attack),
     damageType: monster.damageType,
   }];
+}
+
+/**
+ * Normaliza as defesas no BOOT (#518), mesmo desenho de `normalizeMonsterAbilities`: ausente
+ * vira lista vazia — nunca `undefined` —, para o `sim` iterar sem `?? []` em cada chamada.
+ * Não há caso legado a preservar aqui: nenhum monstro existente declara `defenses`.
+ */
+export function normalizeMonsterDefenses(monster: MonsterDefinition): readonly MonsterDefense[] {
+  return (monster.defenses ?? []).map((defense) => ({
+    id: defense.id,
+    cadenceMs: defense.cadenceMs,
+    chance: defense.chance,
+    heal: { min: defense.heal.min, max: defense.heal.max },
+    ...(defense.presentation === undefined ? {} : {
+      presentation: {
+        ...(defense.presentation.impactKey === undefined
+          ? {} : { impactKey: defense.presentation.impactKey }),
+      },
+    }),
+  }));
 }
 
 /** Compila a mitigação de cada monstro no boot (CMB-03). */
@@ -1002,10 +1024,13 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
-  // As abilities DECLARADAS (CMB-06), conferidas no arquivo CRU — o compilado já tem a básica
-  // sintetizada, e validá-lo reprovaria todo monstro legado pelo id reservado. O `basic` é do
-  // BOOT; a duplicata tornaria a escolha por id ambígua; e `wave`/`cleave`/`beam` saem da
-  // DIREÇÃO do lançador, que o monstro não carrega.
+  // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
+  // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
+  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave` e
+  // `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
+  // — o monstro não guarda direção entre golpes); `cross`/`cleave` continuam fora porque nenhum
+  // monstro do recorte precisa deles ainda.
+  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'beam']);
   for (const monster of rawMonsterDefinitions.values()) {
     const seenAbilities = new Set<string>();
     for (const ability of monster.abilities ?? []) {
@@ -1017,14 +1042,15 @@ export function buildContent(raw: RawContent): Content {
       }
       seenAbilities.add(ability.id);
       const area = ability.target.area;
-      if (area !== undefined && area.shape !== 'circle') {
+      if (area !== undefined && !MONSTER_ABILITY_AREA_SHAPES.has(area.shape)) {
         problems.push(
           `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
-            'monstro só lança `circle` — as outras formas saem da direção do lançador',
+            'monstro só lança `circle`, `wave` ou `beam`',
         );
       }
-      // O campo (CMB-07) segue a mesma regra da área: só `circle`, pela mesma razão — o
-      // monstro não carrega direção. A condição do campo é validada pelo schema.
+      // O campo (CMB-07) segue a regra ANTERIOR da área: só `circle`. `wave`/`beam` são da
+      // ability em si (#518, o ataque que sai do monstro); o campo que ela deixa no chão
+      // continua centrado no alvo, como sempre — estender o campo fica para quem precisar.
       if (ability.field !== undefined && ability.field.shape.shape !== 'circle') {
         problems.push(
           `monstro "${monster.id}": o campo da ability "${ability.id}" usa forma ` +

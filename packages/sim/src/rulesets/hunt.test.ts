@@ -6788,6 +6788,55 @@ describe('a ability de monstro entre taxas e no snapshot (CMB-06)', () => {
   });
 });
 
+describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
+  // Um monstro que usa TUDO de uma vez: ability com chance < 1, defesa (cura própria) e
+  // troca de alvo — a mesma fixture serve para a equivalência de taxa e para o snapshot,
+  // como a `casterRat` faz para a ability sozinha logo acima.
+  const busyRat = {
+    ...rat, health: 100_000,
+    abilities: [{
+      id: 'spit', cadenceMs: 1_000, chance: 0.6, target: { range: 4 },
+      power: { min: 5, max: 5 }, damageType: 'energy',
+    }],
+    defenses: [{ id: 'heal', cadenceMs: 1_000, chance: 1, heal: { min: 10, max: 10 } }],
+    targetChange: { intervalMs: 5_000, chance: 0.5 },
+  };
+  const loaded = content({ monsters: [busyRat] });
+
+  it('1 Hz == 10 Hz com chance, defesa própria e troca de alvo juntos', () => {
+    // A mesma propriedade da matriz de abilities (invariante 2/3): nenhum dos três mecanismos
+    // novos é "por tick", e por isso 1 Hz desanexado rende exatamente o que 10 Hz rende.
+    const at = (hz: number): number => {
+      const { session, hero } = start({ loaded, health: 100_000 });
+      run(session, 30_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+  });
+
+  it('`scheduledDefenses` sobrevive ao snapshot, como `scheduledAbilities` (CMB-06)', () => {
+    // Sem o campo no snapshot, a hunt retomada agendaria a defesa de novo — o evento pendente
+    // veio na fila — e ela curaria em dobro no primeiro vencimento (o mesmo defeito que a
+    // issue original do CMB-06 evitou para as abilities).
+    const { session } = start({ loaded, health: 100_000 });
+    run(session, 3_000, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const caster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (caster === undefined) throw new Error('sem monstro');
+    expect(caster.scheduledDefenses.size).toBeGreaterThan(0);
+
+    caster.receiveDamage(50_000); // dá o que curar — de vida cheia o evento não emite nada.
+    resumed.drainEvents();
+    run(resumed, 3_000, 100);
+    expect(resumed.drainEvents().some(
+      (e) => e.kind === 'creature-healed' && e.source === 'monster',
+    )).toBe(true);
+  });
+});
+
 describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', () => {
   const poison = {
     id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 500,

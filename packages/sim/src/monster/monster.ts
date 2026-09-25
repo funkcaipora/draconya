@@ -12,7 +12,7 @@ import type { ConditionState } from '../conditions.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
-import { distance, greedyStep, type Blocked, type GridPoint } from './step.js';
+import { distance, fleeStep, greedyStep, type Blocked, type GridPoint } from './step.js';
 
 export interface MonsterState {
   readonly id: number;
@@ -45,6 +45,11 @@ export interface MonsterState {
    * para agendar.
    */
   readonly scheduledAbilities?: readonly string[];
+  /**
+   * As DEFESAS declaradas com evento pendente na fila (#518) — mesma invariante e mesma razão
+   * de `scheduledAbilities`, agora para `monster.defenses`. Ausente é nenhuma agendada.
+   */
+  readonly scheduledDefenses?: readonly string[];
   /**
    * As condições ativas (CMB-07): DOT de magia, lentidão, o que a condição fizer. Mesmo estado
    * do personagem, e mesma regra de snapshot: ausente é nenhuma, sem bump de formato.
@@ -99,6 +104,8 @@ export class MonsterRuntime {
    * A básica não entra aqui: ela usa `attackReady`, como sempre.
    */
   readonly scheduledAbilities: Set<string>;
+  /** Ver `MonsterState.scheduledDefenses` (#518). */
+  readonly scheduledDefenses: Set<string>;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
   readonly conditions: Conditions;
 
@@ -114,6 +121,7 @@ export class MonsterRuntime {
     this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.scheduledAbilities = new Set(state.scheduledAbilities ?? []);
+    this.scheduledDefenses = new Set(state.scheduledDefenses ?? []);
     this.conditions = Conditions.fromState(state.conditions);
   }
 
@@ -140,6 +148,9 @@ export class MonsterRuntime {
       ...(this.scheduledAbilities.size === 0
         ? {}
         : { scheduledAbilities: [...this.scheduledAbilities] }),
+      ...(this.scheduledDefenses.size === 0
+        ? {}
+        : { scheduledDefenses: [...this.scheduledDefenses] }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
     };
   }
@@ -148,6 +159,16 @@ export class MonsterRuntime {
     const applied = Math.min(amount, this.health);
     this.health = Math.max(0, this.health - applied);
     return applied;
+  }
+
+  /**
+   * Cura o próprio monstro (#518, a defesa): repõe até `max`, nunca passa. Devolve o que REPÔS
+   * de fato — de vida cheia, zero —, o mesmo contrato de `CharacterRuntime.heal`.
+   */
+  heal(max: number, amount: number): number {
+    const before = this.health;
+    this.health = Math.min(max, this.health + amount);
+    return this.health - before;
   }
 }
 
@@ -188,6 +209,20 @@ export function chooseTarget(
 }
 
 /**
+ * O monstro está fugindo (#518, TFS `Monster::isFleeing`, referência §15-19): HP no ou abaixo
+ * de `runOnHealth`. Ausente o campo, nunca foge — o comportamento de sempre.
+ *
+ * Pura e recalculada a cada decisão — não é estado guardado, como o `attackReady` é: fugir é
+ * uma FUNÇÃO do HP atual, e o HP já é o estado. Guardar um segundo booleano derivado dele
+ * divergiria na primeira cura que não passasse por aqui.
+ */
+export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
+  return definition.runOnHealth !== undefined
+    && monster.alive
+    && monster.health <= definition.runOnHealth;
+}
+
+/**
  * O que o monstro faz neste instante. Decide, não aplica: quem move e quem tira vida é a
  * sessão, que é a dona do estado (invariante 9).
  *
@@ -202,6 +237,18 @@ export function decideMonsterAction(
   blocked: Blocked,
 ): MonsterAction {
   if (!monster.alive || target === null || !target.alive) return { kind: 'idle' };
+
+  // Fugindo (#518): o movimento é SEMPRE afastar, nunca aproximar — mesmo com o alvo já fora
+  // do alcance de ability nenhuma. O corpo a corpo é recusado à parte, em `#armMonsterAbilities`
+  // e nos vencimentos de ataque; as abilities à distância continuam armando normalmente, porque
+  // passo e ataque são decisões independentes (a mesma separação do TFS entre movimento e
+  // `doAttacking`).
+  if (isMonsterFleeing(monster, definition)) {
+    const away = fleeStep(monster.position, target.position, blocked);
+    // Encurralado: fica — recuar até a parede e parar lá é o comportamento certo (ADR 0009),
+    // não um caso a consertar.
+    return away === null ? { kind: 'idle' } : { kind: 'step', to: away };
+  }
 
   // O alcance de parada é o MAIOR entre as abilities (CMB-06): um monstro de ability à
   // distância 4 para a 4 tiles e atira, em vez de colar no alvo como um corpo a corpo.

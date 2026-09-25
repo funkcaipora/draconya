@@ -9,7 +9,7 @@
 // do RNG da sessão, e trocar a ordem troca qual sorteio cai em quem.
 
 import type { MonsterAbility } from '@draconya/content';
-import { areaTiles, tileKey } from '../area.js';
+import { areaTiles, facingDirection, tileKey } from '../area.js';
 import type { WorldPoint } from '../movement.js';
 import type { GridPoint } from './step.js';
 
@@ -26,16 +26,18 @@ export function isMeleeAbility(ability: MonsterAbility): boolean {
 /**
  * Os tiles da forma, a partir do lançador e do alvo principal. Vazio em alvo único.
  *
- * Só `circle` chega aqui: o boot recusa `wave`/`cleave`/`beam` para monstro, porque elas saem
- * da DIREÇÃO do lançador, que o monstro não carrega. A direção passada é irrelevante para o
- * círculo — o parâmetro existe para o contrato de `areaTiles`.
+ * `circle` ignora a direção — o parâmetro existe para o contrato de `areaTiles`. `wave`/`beam`
+ * (#518) saem na direção do lançador PARA o alvo, recalculada aqui a cada golpe pelo mesmo
+ * cálculo do TFS `updateLookDirection` (`facingDirection`, `area.ts`): o monstro não guarda
+ * direção entre golpes, então "virar para o alvo" é ler as duas posições, não um campo de
+ * estado. `cross`/`cleave` continuam fora — o boot recusa (`content.ts`).
  */
 export function abilityTiles(
   ability: MonsterAbility, caster: WorldPoint, target: WorldPoint,
 ): WorldPoint[] {
   const area = ability.target.area;
   if (area === undefined) return [];
-  return areaTiles(area, caster, 'south', target);
+  return areaTiles(area, caster, facingDirection(caster, target), target);
 }
 
 /**
