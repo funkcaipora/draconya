@@ -234,36 +234,53 @@ de 7.539 (a sala dos 24 Dragon Lord), z12 173 de 1.718 (a sala dos 4 Dragon Lord
 com a TibiaWiki, "o terceiro nível tem 4 Dragon Lords"). `--allow-unknown` porque o recorte
 inclui bordas de salas vizinhas com aparências fora do pacote 1332 conferido.
 
-**Os conectores entre andares NÃO são um degrau óbvio, e isto é registrado por honestidade.** A
-regra das escadas de Thais (`load.test.ts`: o degrau leva ao tile deslocado um passo) veio de um
-item SEM chão (`ground === null`) que o importador já lista como candidato. Aqui o candidato
-geométrico mais próximo do heurístico de sempre — dois tiles sem chão na borda oeste do recorte —
-provou ser de OUTRA estrutura, sem conexão alguma por andar com a sala dos dragões (BFS de
-quatro vizinhos confirmou: componentes desconexos). E os 56 candidatos concentrados entre z11 e
-z12 (a "cratera" que o dry-run original relatou) formam uma sala PRÓPRIA de 56 tiles, também
-desconexa da sala principal dos 24 Dragon Lord — provavelmente decoração (uma claraboia, vista de
-cima) sem ligação andável de verdade. Sem acesso a um items.xml do Canary com ids de CLIENTE (o
-`data/items/items.xml` do Canary, como o do TFS, ainda numera por id de SERVIDOR — confirmado
-comparando contra o pacote 13.32: nenhum dos ids encontrados aqui aparece nele), não há como
-cruzar "este id é um degrau registrado" fora da inspeção visual em jogo. **A decisão foi
-pragmática**: os dois conectores usados são pontos onde a sala de UM andar e a do andar
-adjacente compartilham o MESMO tile andável (`(x, y)` idêntico nos dois), confirmados por BFS de
-quatro vizinhos a partir de um spawn real de cada andar — z10↔z11 em `(27, 44)` local (ambas as
-salas principais contêm o tile), z11↔z12 em `(41, 83)` local (a sala dos 24 Dragon Lord e a dos
-4 do fundo compartilham doze tiles nessas condições; escolhido um central). Os dois são
-bidirecionais, como o par de escadas de Thais — descer em `(27,44,10)`/`(41,83,11)` e subir em
-`(27,44,11)`/`(41,83,12)`, sempre pousando no MESMO `(x, y)` do andar vizinho: sem deslocamento,
-porque não há evidência de qual deslocamento seria o real. **Fica como débito de QA visual:**
-quando o cliente desenhar esta lair, conferir se os dois tiles têm de fato uma aparência de
-escada/buraco, e corrigir a coordenada se não tiverem.
+**Os conectores entre andares SÃO degraus reais do Canary, cruzados por item id contra
+`items.xml`** (correção de 2026-09-25, revisão adversarial da #535: a primeira versão desta
+emenda registrava dois pares por overlap andável entre salas, sem confirmar o item — o que a
+revisão pegou é que um cruzamento direto era possível e tinha sido pulado). O OTBM grava ids de
+CLIENTE (ADR 0025 decisão 1), e o `items.xml` do Canary (`data/items/items.xml`) numera os
+MESMOS ids — confirmado batendo a pilha do recorte (`things/1332/maps/darashia-dragon-lair.json`)
+contra as faixas `fromid`/`toid` e os `id` isolados do arquivo: id 469 é "stairs"
+(`floorchange="down"`), id 7544 é "ramp" (`floorchange="west"`), id 7729–7736 é "ramp"
+(`floorchange="down"`), entre outros — 434 ids do pacote 1332 carregam a flag no total. A
+varredura do recorte inteiro por essa flag achou:
+
+- **z10↔z11**: o ÚNICO tile com `floorchange="down"` em z10 é local `(79, 106)` (o degrau
+  `ramp`, id 7729–7736). O destino REAL não é o mesmo `(x, y)` um andar abaixo: o algoritmo do
+  Canary (`Tile::queryDestination`, `things/sources/canary/src/items/tile.cpp`) olha as flags do
+  tile de pouso PADRÃO antes de aceitar — se ele próprio tiver uma flag direcional, desloca. O
+  tile de pouso padrão, local `(79, 106, 11)`, carrega `floorchange="west"` (o mesmo id 7544), o
+  que desloca `dx` **+1**: o pouso real é `(80, 106, 11)`. A volta é OUTRA transição, não o
+  espelho da primeira: o degrau de subida é o PRÓPRIO tile `(79, 106, 11)` — cuja flag `west`
+  agora é lida como a do PASSO SENDO DADO (o ramo "sobe" do algoritmo lê a flag do tile de
+  partida, não a do pouso) —, e desloca `dx` **−1**: sobe para `(78, 106, 10)`.
+- **z11↔z12**: o par que a primeira versão desta emenda já tinha escolhido por coincidência de
+  overlap — local `(41, 83)` — de fato TEM um degrau real (`id 469`, `stairs`,
+  `floorchange="down"`, em z11). O que a primeira versão errou foi o pouso: `(41, 83, 12)`
+  carrega `floorchange="west"` (id 7544, o mesmo "ramp"), então o mesmo deslocamento `dx += 1`
+  vale aqui — o pouso real é `(42, 83, 12)`, não `(41, 83, 12)`. Subindo pela flag `west` do
+  PRÓPRIO `(41, 83, 12)`, `dx -= 1`: volta para `(40, 83, 11)`.
+
+Os quatro tiles de destino/origem (`(80,106,11)`, `(78,106,10)`, `(42,83,12)`, `(40,83,11)`) são
+andáveis e confirmados, por busca em largura de quatro vizinhos, dentro do MESMO componente
+conectado que os spawns reais de cada andar — não são estruturas isoladas. **Isto substitui o
+"débito de QA visual"** que a versão anterior desta emenda registrava: os dois conectores não são
+mais uma escolha pragmática de overlap, são o mecanismo do Canary aplicado com os números dele.
+
+**Fica como possível trabalho futuro, não feito nesta issue**: derivar `floorChanges`
+automaticamente no importador, cruzando o inventário do pacote com uma tabela de
+`floorchange` — o que exigiria trazer essa tabela (hoje só em `items.xml`, fora do repositório e
+fora do pipeline de `things/`) para dentro do fluxo de `pnpm map:import`, decisão de escopo maior
+que esta issue. `thais.json` continua com as escadas autoradas à mão como sempre — esta emenda
+não o toca.
 
 **A rota** (`pnpm route:trace`, estendido por esta issue para atravessar `floorChanges` — ver
-"Rota multiandar" abaixo) liga um laço de 1.366 tiles pelos três andares, ancorando cada um dos
-47 pontos de spawn EXATAMENTE na coordenada do Canary (distância zero — a ferramenta busca o
-tile andável mais próximo de cada spawn para a ORDEM de visita, mas guarda a coordenada exata
-como posição de nascimento, que o `Spawner` já sabe abrir mão em até `radius` tiles se estiver
-ocupada). `validateRoute` confere zero problemas: todo passo é adjacente no mesmo andar, ou
-pisa exatamente no tile registrado em `floorChanges`.
+"Rota multiandar" abaixo) liga um laço de 1.494 tiles pelos três andares pelos conectores
+corrigidos, ancorando cada um dos 47 pontos de spawn EXATAMENTE na coordenada do Canary
+(distância zero — a ferramenta busca o tile andável mais próximo de cada spawn para a ORDEM de
+visita, mas guarda a coordenada exata como posição de nascimento, que o `Spawner` já sabe abrir
+mão em até `radius` tiles se estiver ocupada). `validateRoute` confere zero problemas: todo passo
+é adjacente no mesmo andar, ou pisa exatamente no tile registrado em `floorChanges`.
 
 **Cada spawn declara o monstro e o `spawntime` do Canary** (#519, decisão nova desta issue — ver
 "Spawn por ponto" abaixo): os 19 pontos de z10 são `dragon`, os 28 de z11+z12 são `dragon-lord`,
@@ -325,3 +342,12 @@ igual à posição do personagem mas sem exigir formato novo no snapshot) passa 
 andar, herdado do ponto de spawn. Ele continua sem carregar a CAPACIDADE de trocar de andar
 sozinho (`Movable.crossesFloors`, novo — só o personagem tem): o `z` na posição do monstro é
 identidade, nunca permissão de subir escada.
+
+**Personagem-a-personagem também confere o andar, mesmo sem party em hunt ainda** (correção de
+2026-09-25, revisão adversarial da #535). `#resolveRuleTarget` (regra de cura/suporte com alvo
+`member`/`lowest-hp-member`, ADR 0035 d.10) e `#companionAt` (o desvio de quem está parado na
+rota, #203) comparavam só `(x, y)` — igual a todo o resto ANTES desta issue tocar neles. A hunt
+hospeda um personagem só hoje (§14, Fase 3 traz party), então os dois caminhos são código morto
+NA PRÁTICA — mas "todo lugar que compara alvo confere o andar" só fica verdade com os dois
+corrigidos, e o dia em que a party entrar numa hunt multiandar sem ninguém reabrir esta auditoria
+é exatamente o dia em que o gap deixaria de ser dormant.

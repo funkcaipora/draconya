@@ -525,15 +525,15 @@ abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.
 **A Darashia Dragon Lair é a primeira hunt MULTIANDAR, e a primeira copiada do Canary em vez do
 Huntera** (#519, ADR 0025 emenda, ADR 0037): o recorte real importado (86×121, z10–z12 — 2.036
 andáveis em z10, 1.849 em z11, 173 em z12), a rota traçada por `pnpm route:trace` — estendido
-nesta issue para atravessar `floorChanges` — sobre ele: um laço de 1.366 tiles pelos três
+nesta issue para atravessar `floorChanges` — sobre ele: um laço de 1.494 tiles pelos três
 andares, com os 47 pontos de spawn do Canary (`data-otservbr-global/world/otservbr-monster.xml`)
 ancorados na coordenada EXATA, distância zero. Os 19 pontos de z10 são `dragon`, os 28 de
 z11+z12 são `dragon-lord` — cada um com `respawnDelayMs: 90000`, o `spawntime="90"` do XML, por
-PONTO, não por dificuldade. **Os dois conectores entre andares são uma escolha pragmática**: a
-regra do degrau sem chão que funcionou em Thais não achou um marcador confiável aqui (os
-candidatos geométricos mais próximos provaram ser estruturas desconexas da sala de dragões — ver
-o detalhe em ADR 0025), então os dois pontos usados são overlaps andáveis confirmados por busca
-em largura entre a sala de UM andar e a do andar vizinho — um débito de QA visual registrado no
-ADR. **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt são de outra issue** (#520): o que
+PONTO, não por dificuldade. **Os dois conectores entre andares são degraus reais do Canary**:
+cruzados por item id contra `items.xml` (id 469, `stairs`, `floorchange="down"`; id 7544/7729–7736,
+`ramp`, `floorchange="west"`/`"down"`) e resolvidos pelo deslocamento de pouso que
+`Tile::queryDestination` aplica — não uma coincidência geométrica de overlap (ver o detalhe,
+inclusive a correção de uma revisão adversarial que pegou o pouso errado numa primeira tentativa,
+em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt são de outra issue** (#520): o que
 existe aqui é mapa, rota e o mecanismo do `sim` — testado com uma fixture pequena de dois
 andares, não com o Dragon de verdade. A entrada continua pelo menu (ADR 0025).
