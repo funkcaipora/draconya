@@ -72,7 +72,7 @@ export function registerCharacterRoutes(
     try {
       return (await settleProgress(characterId)).written > 0;
     } catch (error) {
-      log.error({ error, characterId }, 'Settlement failed while listing characters');
+      log.error({ err: error, characterId }, 'Settlement failed while listing characters');
       return false;
     }
   };

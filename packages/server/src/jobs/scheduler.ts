@@ -93,7 +93,7 @@ export function createJobsCycle(
       } catch (error) {
         // Redis fora do ar: NÃO rodar. Assumir a liderança quando não dá para saber quem a
         // tem é a única forma de ter dois líderes de verdade.
-        logger.error({ error }, 'Could not reach the singleton lock; skipping this cycle');
+        logger.error({ err: error }, 'Could not reach the singleton lock; skipping this cycle');
         metrics?.observeLock(false);
         return;
       }
@@ -173,7 +173,7 @@ export function createJobsCycle(
       // O `catch` continua engolindo — um ciclo que explode não pode derrubar o processo —,
       // mas agora conta. Antes, só logava, e log ninguém alerta.
       metrics?.observeCycleFailure();
-      logger.error({ error }, 'Scheduler cycle failed');
+      logger.error({ err: error }, 'Scheduler cycle failed');
     } finally {
       running = false;
     }
