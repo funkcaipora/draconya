@@ -7094,10 +7094,17 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
 describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
   // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
   // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
-  // monstro de verdade. `aggroRadius: 0` em mestre e invocação isola o teste da IA de
-  // perseguição: ninguém sai do lugar. `pacifist` (o mesmo do describe do Dragon acima) zera o
-  // ataque do herói: sem ele, o herói mataria minions sozinho ao alcançar o ponto de spawn pela
-  // rota, e um abate incidental confundiria "o teto segura" com "o herói ajudou a esvaziar".
+  // monstro de verdade. `aggroRadius: 0` na INVOCAÇÃO isola o teste da IA de perseguição DELA:
+  // ela nunca sai do lugar nem bate em ninguém — quem invoca não pode ser confundido com quem é
+  // invocado. O MESTRE precisa de alvo de verdade (#546, TFS/Canary `hasFollowPath`): sem ele, a
+  // invocação nunca dispara — é o describe seguinte que prova isso isoladamente —, então aqui ele
+  // fica com o `aggroRadius` de sempre do `rat` (4), e a rota da fixture (herói entra em (1,1),
+  // ponto de spawn em (4,2)) garante o engajamento na primeira decisão do mestre: a distância
+  // máxima de qualquer tile de nascimento possível (raio 2 ao redor do ponto) até (1,1) é 3, e
+  // 3 ≤ 4. `pacifist` (o mesmo do describe do Dragon acima) zera o ataque do herói: sem ele, o
+  // herói mataria minions sozinho ao alcançar o ponto de spawn pela rota, e um abate incidental
+  // confundiria "o teto segura" com "o herói ajudou a esvaziar" — o mestre pode bater de volta
+  // (o herói tem HP absurdo, de propósito, na fixture-base), mas nunca o contrário.
   const minion = {
     id: 'minion', name: 'Minion', recommendedLevel: 1,
     health: 20, experience: 50, attack: 0, armor: 0,
@@ -7105,7 +7112,7 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
     loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
   };
   const summoner = {
-    ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+    ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
     summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
   };
   const summonerHunt = {
@@ -7117,6 +7124,32 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
   const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
   const loaded = () => content({
     monsters: [summoner, minion], hunts: [summonerHunt], combat: [pacifist],
+  });
+
+  it('nunca invoca sem alvo — mestre nunca engajado (aggroRadius: 0) fica no cadenciamento e nunca rola a chance (TFS/Canary hasFollowPath)', () => {
+    // O MESMO desenho da fixture acima, com uma diferença: `aggroRadius: 0` no MESTRE, não na
+    // invocação — `chooseTarget` nunca acha ninguém a distância ≤ 0 (tile é exclusivo,
+    // invariante 8), então `targetId` fica `null` para sempre. É exatamente a fixture que a
+    // versão anterior deste teste usava para o describe INTEIRO — provando, sem querer, que a
+    // implementação de então invocava com o mestre permanentemente sem alvo. Aqui ela vira o
+    // que deveria ser desde o início: a prova de que SEM alvo não nasce invocação nenhuma.
+    const neverEngaged = {
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+      summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
+    };
+    const neverEngagedContent = content({
+      monsters: [neverEngaged, minion], hunts: [summonerHunt], combat: [pacifist],
+    });
+    const { session, ruleset } = start({ loaded: neverEngagedContent });
+    run(session, 10_000, 100); // 10 vencimentos de cadência (1 000 ms cada) sem rolar nenhum.
+
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    expect(master.targetId).toBeNull();
+    // A CADÊNCIA continua se rearmando — `scheduledSummons` não é o gate, `targetId` é (a
+    // invariante "engatilhada OU agendada" continua valendo por entrada).
+    expect(master.scheduledSummons.size).toBeGreaterThan(0);
+    expect(ruleset.monsters.filter((m) => m.monsterId === 'minion')).toHaveLength(0);
   });
 
   it('1 Hz == 10 Hz: o timer da invocação não é "por tick" (invariante 2/3)', () => {
@@ -7132,20 +7165,34 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
   });
 
   it('nasce perto do mestre, com masterId, e NÃO ocupa lugar do Spawner (TFS placeCreature force)', () => {
+    // O mestre agora tem alvo de verdade (#546, `hasFollowPath`) — e, engajado, ele ANDA. Se o
+    // teste rodasse mais tempo e comparasse com a posição ATUAL do mestre, um passo dele entre
+    // o instante da invocação e o instante da leitura faria a distância medida crescer por um
+    // motivo que não tem nada a ver com ONDE ela nasceu. Por isso o loop para no primeiro
+    // vencimento em que a invocação aparece, sem avançar mais um passo — a posição do mestre lida
+    // ali É a mesma que `#spawnSummon` usou para buscar o tile livre.
     const { session, ruleset } = start({ loaded: loaded() });
-    run(session, 1_500, 100);
-    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    let master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    let summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    let masterPositionAtBirth: { x: number; y: number; z?: number } | undefined;
+    for (let elapsed = 0; elapsed < 1_500 && summon === undefined && session.ended === null; elapsed += 50) {
+      session.advanceBy(50);
+      master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+      summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+      if (master !== undefined && summon !== undefined) masterPositionAtBirth = { ...master.position };
+    }
     if (master === undefined) throw new Error('sem mestre');
-    const summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
     if (summon === undefined) throw new Error('sem invocação');
+    if (masterPositionAtBirth === undefined) throw new Error('sem posição do mestre no nascimento');
 
     expect(summon.masterId).toBe(master.id);
     // A posição exata do mestre já está ocupada por ELE (tile é exclusivo, invariante 8): a
-    // invocação nasce no anel de busca em volta, nunca longe dele.
+    // invocação nasce num dos 8 vizinhos imediatos — `SUMMON_SPAWN_RADIUS` é 1, como
+    // `Map::placeCreature(..., extendedPos: false)` da fonte, nunca um anel mais largo.
     expect(Math.max(
-      Math.abs(summon.position.x - master.position.x),
-      Math.abs(summon.position.y - master.position.y),
-    )).toBeLessThanOrEqual(3);
+      Math.abs(summon.position.x - masterPositionAtBirth.x),
+      Math.abs(summon.position.y - masterPositionAtBirth.y),
+    )).toBeLessThanOrEqual(1);
 
     // O ÚNICO lugar do Spawner é do mestre (a hunt pede `monsterCount: 1`), e continua ocupado
     // por ELE: a invocação nasceu por `#spawnMonster` direto, nunca por `#onSpawn`.
@@ -7162,7 +7209,7 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
     const minionA = { ...minion, id: 'minion-a' };
     const minionB = { ...minion, id: 'minion-b' };
     const capped = {
-      ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
       summons: {
         max: 3,
         entries: [

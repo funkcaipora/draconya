@@ -132,14 +132,20 @@ const MONSTER_SUMMON = 'monster-summon';
 const monsterSummonSubject = (id: number, monsterId: string): string =>
   `${monsterSubject(id)}:${monsterId}`;
 /**
- * O raio de busca de tile livre para uma invocação nascer perto do mestre (#546, TFS
- * `placeCreature(..., force)`): a posição exata dele já está ocupada por ELE — tile é exclusivo
- * (invariante 8) —, então a busca é em anéis, como `Spawner.#freeTile`. Sem tile livre no raio,
- * a tentativa se perde — a PRÓXIMA cadência desta entrada rola de novo, como o respawn adiado
- * do Spawner. O número é pequeno de propósito: uma invocação longe do mestre já não é "perto
- * dele" nenhuma definição razoável reconheceria.
+ * O raio de busca de tile livre para uma invocação nascer perto do mestre (#546, TFS/Canary
+ * `Map::placeCreature(centerPos, creature, extendedPos: false, ...)`, chamado por
+ * `Game::placeCreature(summon, getPosition(), false, summonBlock.force)`): a posição exata do
+ * mestre já está ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca tenta os
+ * vizinhos, como `Spawner.#freeTile`. **É 1, não um raio maior — fidelidade, não estética.**
+ * Com `extendedPos: false` a fonte usa só o `normalRelList` de 8 posições (os 8 vizinhos
+ * imediatos; `things/sources/forgottenserver/src/map.cpp`, o mesmo em
+ * `things/sources/canary/src/map/map.cpp`) e NUNCA expande além disso — sem vizinho livre,
+ * `placeCreature` devolve falso e a invocação daquela rolagem simplesmente não acontece (o TFS
+ * não tenta um anel mais largo). Um raio maior aqui nasceria invocação 2-3 tiles longe do mestre
+ * em sala cheia, onde a fonte teria simplesmente desistido daquela rolagem — a PRÓXIMA cadência
+ * desta entrada tenta de novo, como o respawn adiado do Spawner.
  */
-const SUMMON_SPAWN_RADIUS = 3;
+const SUMMON_SPAWN_RADIUS = 1;
 /**
  * A troca de alvo por tempo (#518). Só existe UMA por monstro — o subject é o `m:<id>` de
  * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
@@ -2587,8 +2593,14 @@ export class HuntRuleset implements Ruleset {
   /**
    * Uma entrada de invocação declarada venceu (#546, TFS/Canary `Monster::onThinkDefense`, o
    * MESMO laço que avalia `defenses`, referência §15-19): tenta nascer um monstro do próprio
-   * nome, até o teto DA ENTRADA e o teto DO MONSTRO. Independente de alvo — invocar não precisa
-   * de ninguém —, então reagenda-se SEMPRE, como a defesa (#518).
+   * nome, até o teto DA ENTRADA e o teto DO MONSTRO. A CADÊNCIA reagenda SEMPRE, como a defesa
+   * (#518) — mas a rolagem em si é gated por engajamento (`monster.targetId !== null`), o
+   * equivalente do Draconya para o `hasFollowPath` que embrulha o laço inteiro na fonte
+   * (`!isSummon() && summons.size() < maxSummons && hasFollowPath`, TFS `monster.cpp:991`;
+   * idêntico no Canary `monster.cpp:2224`). `hasFollowPath` só fica verdadeiro perseguindo um
+   * `followCreature` de verdade (`creature.cpp:351`/`761`/`809`) — este motor não guarda
+   * caminho nenhum (armadilha conhecida do `AGENTS.md`: passo guloso, não A*), então "ter alvo"
+   * é a aproximação fiel: sem alvo, a fonte nunca entra no laço, e aqui nunca rola a chance.
    */
   #onMonsterSummon(session: Session, subject: string): void {
     // `m:<id>:<monsterId>`, o mesmo desenho de `#onMonsterDefense`.
@@ -2607,6 +2619,12 @@ export class HuntRuleset implements Ruleset {
     monster.scheduledSummons.delete(entry.monsterId);
     this.#scheduleMonsterSummon(session, monster, entry, entry.intervalMs);
 
+    // O gate de engajamento (`hasFollowPath` do TFS/Canary) vem ANTES de qualquer teto ou
+    // rolagem — igual à fonte, onde ele embrulha o laço `summons` inteiro. Sem alvo, nem sequer
+    // consome `session.rng`: um monstro parado, nunca visto, não deve mover a sequência de RNG
+    // da hunt por uma invocação que a fonte também nunca tentaria.
+    if (monster.targetId === null) return;
+
     // O teto do MONSTRO inteiro, contando toda invocação viva com este mestre — TFS
     // `m_summons.size() < maxSummons`.
     const live = this.#monsters.filter((m) => m.alive && m.masterId === monster.id);
@@ -2623,10 +2641,17 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Nasce a invocação perto do MESTRE (#546, TFS `placeCreature(..., force)`): a posição EXATA
-   * dele já está ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca é em anéis a
-   * partir dela, como `Spawner.#freeTile`. Sem tile livre no raio, a tentativa se perde — a
-   * PRÓXIMA cadência desta entrada tenta de novo.
+   * Nasce a invocação perto do MESTRE (#546, TFS/Canary `Map::placeCreature(..., extendedPos:
+   * false)`): a posição EXATA dele já está ocupada por ELE — tile é exclusivo (invariante 8) —,
+   * então a busca tenta os vizinhos, como `Spawner.#freeTile`. Sem tile livre, a tentativa se
+   * perde — a PRÓXIMA cadência desta entrada tenta de novo.
+   *
+   * **Bloqueio é só parede e ocupação — NUNCA `spawnClearRadius`/`blockable`.** Usar
+   * `#spawnBlockedFor` aqui (a checagem do SPAWNER) seria aplicar a um mecanismo diferente uma
+   * supressão que a fonte nunca tem: `Map::placeCreature` só chama `tile->queryAdd`, sem olhar
+   * posição de jogador nenhuma — e `monster.summon` só dispara com o mestre ENGAJADO
+   * (`#onMonsterSummon`, `hasFollowPath`), justo a hora em que um jogador típico está colado
+   * nele. `#summonBlockedFor` é o bloqueio PRÓPRIO da invocação, não o do Spawner reaproveitado.
    */
   #spawnSummon(session: Session, master: MonsterRuntime, monsterId: string): void {
     const definition = this.#options.monsters.get(monsterId);
@@ -2634,10 +2659,10 @@ export class HuntRuleset implements Ruleset {
     // não chega aqui com monstro inexistente. Sair é o resto defensivo, como em `#onSpawn`.
     if (definition === undefined) return;
 
-    const blocked = this.#spawnBlockedFor(session);
+    const blocked = this.#summonBlockedFor();
     let at: FloorPoint | null = null;
     for (const tile of tilesAround(master.position, SUMMON_SPAWN_RADIUS)) {
-      if (blocked(tile.x, tile.y, tile.z, monsterId)) continue;
+      if (blocked(tile.x, tile.y, tile.z)) continue;
       at = tile;
       break;
     }
@@ -6879,6 +6904,23 @@ const slots = bot.groups.get(group);
       }
       return false;
     };
+  }
+
+  /**
+   * Onde uma INVOCAÇÃO não nasce (#546, TFS/Canary `Map::placeCreature`): só parede e tile
+   * ocupado — NUNCA a supressão de `spawnClearRadius`/`blockable` de `#spawnBlockedFor`.
+   *
+   * As duas checagens têm o MESMO formato (`Blocked`) e o mesmo primeiro passo, mas são
+   * mecanismos diferentes da fonte: `Spawn::findPlayer` (TFS/Canary) segura o RESPAWN do
+   * Spawner perto de um jogador vivo; `Map::placeCreature`, que resolve `monster.summon`, nunca
+   * olha posição de jogador — só `tile->queryAdd`. Reaproveitar `#spawnBlockedFor` aqui faria um
+   * jogador cercando o mestre (a ÚNICA hora em que `#onMonsterSummon` de fato tenta invocar,
+   * porque exige `targetId` — TFS `hasFollowPath`) suprimir a invocação que a fonte deixaria
+   * nascer ao lado dele.
+   */
+  #summonBlockedFor(): Blocked {
+    return (x, y, z = this.#world.map.z) =>
+      isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z);
   }
 
   /**

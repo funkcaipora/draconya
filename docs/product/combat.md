@@ -898,20 +898,28 @@ interface MonsterSummons {
 ```
 
 - **Uma entrada por NOME**, cada uma com a própria cadência e a própria chance — um evento NA
-  FILA por entrada (o desenho das defesas), subject derivado `m:<id>:<monsterId>` — e
-  independente de alvo: invocar não precisa de ninguém, e reagenda-se SEMPRE, como a defesa.
-  `chance` é sempre declarada (conteúdo novo, sem concessão de compatibilidade) e consome UMA
-  rolagem por vencimento, mesmo em 1 — a sequência de RNG não pode depender do número.
+  FILA por entrada (o desenho das defesas), subject derivado `m:<id>:<monsterId>`. A CADÊNCIA
+  reagenda SEMPRE, como a defesa — mas a rolagem em si só acontece com o mestre ENGAJADO
+  (`targetId !== null`): é o equivalente do Draconya para `hasFollowPath`, que embrulha o laço
+  `summons` inteiro na fonte (`!isSummon() && summons.size() < maxSummons && hasFollowPath`,
+  TFS `monster.cpp:991`, idêntico no Canary `monster.cpp:2224`) — um monstro que nunca viu
+  ninguém não invoca nada, mesmo tendo `monster.summon` declarado. `chance` é sempre declarada
+  (conteúdo novo, sem concessão de compatibilidade) e consome UMA rolagem por vencimento, mesmo
+  em 1, SÓ quando engajado — sem alvo, nem a rolagem acontece, e a sequência de RNG não muda.
 - **Dois tetos independentes.** `summons.max` é o do MONSTRO inteiro (TFS `m_summons.size() <
   maxSummons`); `entries[].count` é o DESTA entrada, por nome (`summonCount >=
   summonBlock.max`/`summonsCount >= summonCount`). Os dois seguram ao mesmo tempo: uma entrada
   pode ter folga própria (`count` alto) e ainda assim parar porque o monstro já está no teto
   geral, contando toda invocação viva de QUALQUER nome.
-- **Nasce perto do mestre** (TFS `placeCreature(..., force)`): a posição exata dele já está
-  ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca é em anéis a partir dela, a
-  MESMA de `Spawner.#freeTile` (`tilesAround` + o `Blocked` de `#spawnBlockedFor`). Sem tile
-  livre no raio, a tentativa se perde — a próxima cadência da entrada tenta de novo, como o
-  respawn adiado do Spawner.
+- **Nasce perto do mestre, só nos 8 vizinhos imediatos** (TFS/Canary `Map::placeCreature(...,
+  extendedPos: false)`, chamado com `false` pelo `Game::placeCreature` de `monster.summon`): a
+  posição exata dele já está ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca
+  tenta os vizinhos, como `Spawner.#freeTile` (`tilesAround`, raio 1 — o `normalRelList` de 8
+  posições da fonte, sem expansão nenhuma além dele). Sem tile livre, a tentativa se perde — a
+  próxima cadência da entrada tenta de novo, como o respawn adiado do Spawner. O bloqueio é
+  PRÓPRIO da invocação (`#summonBlockedFor`: só parede e ocupação) — nunca o
+  `spawnClearRadius`/`blockable` de `#spawnBlockedFor`, que é a supressão do SPAWNER perto de um
+  jogador vivo e que a fonte não aplica a `Map::placeCreature` nenhuma.
 - **Não ocupa lugar do Spawner.** A invocação nasce por um caminho direto (`#spawnMonster`, o
   mesmo que o Spawner usa por baixo, sem o registro de lugar) — o `monsterCount`/`composition` da
   dificuldade continuam contando só quem o Spawner de fato administra.
