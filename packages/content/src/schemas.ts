@@ -406,6 +406,8 @@ export interface WeaponProfile {
   readonly power?: WeaponPowerFormula;
   readonly manaPerHit?: number;
   readonly fixedDamage?: { readonly min: number; readonly max: number };
+  /** O `hitChance` da arma (#524), só dado — ver o comentário em `weaponSchema`. */
+  readonly hitChance?: number;
 }
 
 export const weaponSchema = z.strictObject({
@@ -430,6 +432,12 @@ export const weaponSchema = z.strictObject({
     min: z.number().int().nonnegative(),
     max: z.number().int().nonnegative(),
   }).optional(),
+  /**
+   * O bônus/malus de acerto à distância da ARMA (#524, `hitchance` do Canary — o royal
+   * crossbow tem `+3`). Só dado: a chance de acerto por skill/distância é da issue #522
+   * (`chance de acerto à distância`); este campo carrega o número para quando ela existir.
+   */
+  hitChance: z.number().int().min(-100).max(100).optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 
@@ -476,6 +484,35 @@ export const ITEM_ORIGINS = [
   'loot', 'boss', 'quest', 'market', 'admin', 'starting-kit', 'vocation-choice',
 ] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
+
+/**
+ * Um requisito de vocação (FUN-92, #524): UMA vocação, ou VÁRIAS — a peça/poção do Tibia que
+ * duas vocações usam igual (Magic Plate Armor em Knight+Paladin, Focus Cape em Sorcerer+Druid).
+ * Magia continua com um arquivo por vocação (`haste-knight.json` etc., #155): lá o formato pode
+ * mudar por vocação (mana, alcance); aqui o item/suprimento é IDÊNTICO nas duas, e duplicar o
+ * arquivo só para variar `vocationId` divergiria peso/preço/atributo no primeiro balanceamento.
+ * `min(2)` porque uma vocação só é o `z.string()` de sempre — a lista existe para dizer "mais de
+ * uma", nunca para repetir o caso simples.
+ */
+export const vocationRequirementSchema = z.union([
+  z.string().min(1),
+  z.array(z.string().min(1)).min(2),
+]);
+export type VocationRequirement = z.infer<typeof vocationRequirementSchema>;
+
+/**
+ * Casa a vocação do portador com o requisito (FUN-92, #524). Ausente é "qualquer um", como
+ * sempre; string é a comparação de sempre; lista aceita qualquer uma das declaradas. Mora aqui
+ * (e não em `sim`) porque é pura leitura do formato do schema — `Inventory#meets` e `useSupply`
+ * chamam a mesma função em vez de reimplementar a união cada um do seu jeito.
+ */
+export function matchesVocationRequirement(
+  required: VocationRequirement | undefined, actual: string | null,
+): boolean {
+  if (required === undefined) return true;
+  if (actual === null) return false;
+  return typeof required === 'string' ? actual === required : required.includes(actual);
+}
 
 /**
  * Os grupos de cooldown do consumível (ADR 0032 d.2/d.6). O motor v2 os lê: o uso do supply
@@ -588,7 +625,8 @@ export const itemSchema = z.strictObject({
    */
   requires: z.object({
     level: z.number().int().positive().optional(),
-    vocationId: z.string().min(1).optional(),
+    /** Uma vocação, ou várias (#524) — ver `vocationRequirementSchema`. */
+    vocationId: vocationRequirementSchema.optional(),
     /** O `magicLevel` da runa (#165). Hoje só o supply de dano o usa. */
     magicLevel: z.number().int().nonnegative().optional(),
   }).default(() => ({})),
@@ -601,6 +639,26 @@ export const itemSchema = z.strictObject({
    */
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
+  /**
+   * Bônus PASSIVO enquanto o item está equipado (#524, kit level 200): skill (inclusive magic
+   * level — que aqui é a skill `magic`, FUN-92) e velocidade. Ausente é o item comum de sempre,
+   * sem bônus nenhum. Mora num objeto só, como `ringEffect`, porque os dois são "efeito de estar
+   * vestido" — ao contrário de `charges`/`durationMs`, que são consumo.
+   *
+   * Um item só declara UM bônus de skill (o Hat of the Mad soma magic level; a Paladin Armor
+   * soma distância) — o Canary também nunca soma dois `skillboost`/`*points` no mesmo item base
+   * (o que teria dois é imbuement, que o catálogo ainda não modela, `docs/product/items.md`
+   * "Em aberto"). Lista viraria generalidade sem exemplo — o mesmo motivo do `itemSchema` inteiro
+   * ser enxuto de propósito.
+   */
+  bonuses: z.object({
+    skill: z.object({
+      skillId: z.string().min(1),
+      amount: z.number().int().positive(),
+    }).optional(),
+    /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
+    speed: z.number().int().positive().optional(),
+  }).optional(),
   /**
    * O que o EQUIPAMENTO resiste e ao que é imune (CMB-03). Ausente é o item neutro — o default
    * preserva o v1, em que nenhum item tinha mitigação. Soma com os outros equipados no boot do
@@ -708,6 +766,15 @@ const runeAreaSchema = z.union([
 ]);
 
 /**
+ * Uma faixa `[min, max]` sorteada por uso (#524) — a poção do Tibia, que cura/repõe um valor
+ * ALEATÓRIO fixo, sem escalar por level ou skill (ao contrário de `basePower`/`formula`).
+ */
+const rangeSchema = z.object({
+  min: z.number().int().positive(),
+  max: z.number().int().positive(),
+}).refine((range) => range.min <= range.max, { message: 'faixa invertida: min maior que max' });
+
+/**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
  * direto, no ato. Por isso supply tem preço e `group` de cooldown, e não tem peso, slot nem
  * instância. O `effect` é a união discriminada por `kind`, fechada como o vocabulário do bot:
@@ -736,8 +803,10 @@ export const supplySchema = z.object({
   groupCooldownMs: z.number().int().positive().default(1_000),
   effect: z.discriminatedUnion('kind', [
     /**
-     * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). Os três mecanismos são
-     * os mesmos da magia de cura — `amount` fixo, `basePower` provisório ou `formula` canônica —
+     * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). QUATRO mecanismos —
+     * `amount` fixo, `amountRange` (faixa fixa sorteada por uso, #524: a poção do Tibia cura
+     * entre um mínimo e um máximo, SEM escalar por level/ML — a strong health potion cura
+     * 250-350 tanto no level 50 quanto no 200), `basePower` provisório ou `formula` canônica —
      * e a runa escala pelo MAGIC LEVEL. `range` é o alcance da runa (catalogado; no motor v1 a
      * runa de cura cura o próprio usuário, como a poção).
      * `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10).
@@ -745,18 +814,43 @@ export const supplySchema = z.object({
     z.object({
       kind: z.literal('heal'),
       amount: z.number().int().positive().optional(),
+      amountRange: rangeSchema.optional(),
       basePower: z.number().int().positive().optional(),
       formula: spellFormulaSchema.optional(),
+      /**
+       * Mana reposta NO MESMO uso (#524: great/ultimate spirit potion do Tibia curam vida E
+       * mana de um só gole). Ausente é a poção/runa de cura de sempre, sem mana junto. Ao lado
+       * de `heal`, e não um `kind` novo, para não duplicar todo `switch`/`if` por `effect.kind`
+       * que já trata `'heal'` como "isto cura" (auto-target do bot, `#emitHealed`) — a poção de
+       * espírito CURA, com um bônus, não é um quinto tipo de efeito.
+       */
+      alsoMana: z.object({
+        amount: z.number().int().positive().optional(),
+        amountRange: rangeSchema.optional(),
+      }).refine(
+        (mana) => mana.amount !== undefined || mana.amountRange !== undefined,
+        { message: 'alsoMana precisa de "amount" ou "amountRange"' },
+      ).optional(),
       /** `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10). */
       target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
-    }),
+    }).refine(
+      (effect) => effect.amount !== undefined || effect.amountRange !== undefined
+        || effect.basePower !== undefined || effect.formula !== undefined,
+      { message: 'heal precisa de "amount", "amountRange", "basePower" ou "formula"' },
+    ),
     z.object({
-      kind: z.literal('mana'), amount: z.number().int().positive(),
+      kind: z.literal('mana'),
+      amount: z.number().int().positive().optional(),
+      /** Faixa fixa sorteada por uso (#524), como `heal.amountRange` — a mesma poção do Tibia. */
+      amountRange: rangeSchema.optional(),
       target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
-    }),
+    }).refine(
+      (effect) => effect.amount !== undefined || effect.amountRange !== undefined,
+      { message: 'mana precisa de "amount" ou "amountRange"' },
+    ),
     /**
      * Runa de ataque (#165, ADR 0026 d.8; #476): o dano sai de UM mecanismo — o Base Power do
      * TibiaWiki convertido pela mesma fórmula das magias (`combat.spellPower`, #155) ou a
@@ -783,6 +877,9 @@ export const supplySchema = z.object({
   requires: z.object({
     level: z.number().int().positive().optional(),
     magicLevel: z.number().int().nonnegative().optional(),
+    /** Uma vocação, ou várias (#524, o suprimento do Tibia restrito por vocação — a poção de
+     * espírito é só do Paladin, a grande poção de mana é Sorcerer/Druid/Paladin). */
+    vocationId: vocationRequirementSchema.optional(),
   }).default(() => ({})),
   _open: z.string().optional(),
 });
@@ -806,6 +903,11 @@ export const ammunitionSchema = z.strictObject({
   damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /** Gold debitado por tiro. Sem munição grátis: o preço é > 0, e o gold no tiro é o custo. */
   price: z.number().int().positive(),
+  /**
+   * O `maxhitchance` da munição (#524, o power bolt tem `91`). Só dado, como `weapon.hitChance`
+   * — a chance de acerto por skill/distância é da issue #522.
+   */
+  maxHitChance: z.number().int().min(0).max(100).optional(),
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),

@@ -1,0 +1,19 @@
+{
+  "id": "great-mana-potion",
+  "name": "Great Mana Potion",
+  "description": "Recupera entre 150 e 250 pontos de mana. Nível 80 ou mais, Sorcerer, Druid ou Paladino.",
+  "price": 250,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "mana",
+    "amountRange": { "min": 150, "max": 250 },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 80,
+    "vocationId": ["sorcerer", "druid", "paladin"]
+  },
+  "_open": "Kit level 200 (#524). Canary `potions.lua`, item id 238: `mana = {150, 250}`, `vocations = {SORCERER, DRUID, PALADIN, MONK}`, `level = 80` — Monk omitido (não existe no Draconya); Knight NÃO bebe (mana baixa, magic level provisionado). `price` 250: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/great-mana-potion)."
+}

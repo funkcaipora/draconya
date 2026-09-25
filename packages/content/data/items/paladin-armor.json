@@ -1,0 +1,16 @@
+{
+  "id": "paladin-armor",
+  "name": "Paladin Armor",
+  "kind": "armor",
+  "slot": "chest",
+  "weight": 65,
+  "value": 12000,
+  "armor": 12,
+  "requires": {
+    "vocationId": "paladin"
+  },
+  "bonuses": {
+    "skill": { "skillId": "distance", "amount": 2 }
+  },
+  "_open": "Kit level 200 (#524), só Paladin. Armor 12, weight 6500 (65 oz) e o bônus passivo `skilldist` +2 do Canary `items.xml` id 8063 (`<attribute key=\"skilldist\" value=\"2\"/>`, atributo base do item — não é imbuement, que o catálogo ainda não modela, `docs/product/items.md` \"Em aberto\"). O bônus soma na skill `distance` enquanto vestida (`Inventory.skillBonus`), lida por `#weaponPower` (crossbow) e por `#spellScaling` (a magia do Paladin escala pela mesma skill). `value` 12000: Alesar compra por esse preço (TibiaWiki via tibiascape.com/library/items/paladin-armor)."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "ultimate-spirit-potion",
+  "name": "Ultimate Spirit Potion",
+  "description": "Cura entre 420 e 580 pontos de vida e recupera entre 250 e 350 pontos de mana. Nível 130 ou mais, Paladino.",
+  "price": 450,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "amountRange": { "min": 420, "max": 580 },
+    "alsoMana": { "amountRange": { "min": 250, "max": 350 } },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 130,
+    "vocationId": "paladin"
+  },
+  "_open": "Kit level 200 (#524) — a Great Spirit Potion mais forte, mesmo mecanismo `alsoMana`. Canary `potions.lua`, item id 23374: `health = {420, 580}`, `mana = {250, 350}`, `vocations = {PALADIN, MONK}`, `level = 130` — Monk omitido. `price` 450: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/ultimate-spirit-potion)."
+}
