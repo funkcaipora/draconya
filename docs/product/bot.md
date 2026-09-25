@@ -452,6 +452,40 @@ lógicos) com a densidade ainda alta, `#luring` força `running = true` e abre u
 sem essa proteção, o vencimento seguinte via a densidade ainda alta e reengatilhava o cerco no
 MESMO tile, e o "resume" durava um único passo.
 
+### Três outros tetos, achados numa segunda rodada de QA (#527)
+
+O follow através de andar e o `#nudgeCompanion` (acima) resolveram os dois primeiros deadlocks,
+mas expuseram mais três, todos com o mesmo formato — um mecanismo que espera resolver sozinho
+"no próximo vencimento" mas não tinha teto para quando isso nunca acontece:
+
+- **Travessia de escada empacada.** `greedyStep` rumo à escada (`floorChangeToward`) só tenta três
+  candidatos (ADR 0009); um seguidor pode acabar numa reentrância do mapa de onde a direção
+  guloso bate em parede nas três tentativas, mesmo havendo saída por outro lado. `stair` é uma
+  propriedade do MAPA — ao contrário da distância no ramo do mesmo andar, não muda de um
+  vencimento para o outro —, então sem teto o seguidor ficava parado (walker `stop()`ado de uma
+  travessia anterior) para sempre. `Runner.crossFloorStuckSinceMs`/`MAX_CROSS_FLOOR_STUCK_MS`
+  (30 s) desistem e devolvem `unreachable`; `Runner.nudgedUntilMs`/`FOLLOW_GIVE_UP_SUSPEND_MS`
+  (20 s, reaproveitando o campo do empurrão) suspendem o follow por um trecho — sem isso, o
+  vencimento seguinte via os dois ainda em andares diferentes e reengatilhava a MESMA travessia
+  impossível antes da rota própria dar um passo sequer.
+- **Reentrar na rota de longe.** `not-adjacent → rejoinNearest` sempre assumiu que quem saiu da
+  rota está PERTO dela (um empurrão, um `walk` manual). O follow através de andar quebra essa
+  suposição — o passo guloso livre até a escada pode terminar a vários tiles de qualquer tile da
+  rota —, e `rejoinNearest` só resincroniza o ÍNDICE, nunca move ninguém: se o tile mais próximo
+  também não é adjacente, o vencimento seguinte cai no MESMO `not-adjacent`, resincroniza para o
+  MESMO tile de novo, e nunca dá um passo de verdade. `#playerStep` agora fecha essa distância com
+  `greedyStep` rumo ao tile resincronizado, na MESMA chamada, antes de voltar a confiar na rota.
+- **Corredor com três ou mais personagens.** Um gargalo estreito com a party inteira dentro pode
+  fazer `#nudgeCompanion` falhar em CADEIA — quem bloqueia também está cercado, e ceder não tem
+  para onde ir —, e sem monstro nenhum por perto nada mais desbloqueia sozinho (achado numa QA ao
+  vivo: a party toda parada 90–200+ s, zero monstro a menos de 14 tiles — engarrafamento, não
+  fome de presa). `Runner.routeStuckSinceMs`/`MAX_ROUTE_BLOCK_STUCK_MS` (30 s) fazem o PRÓPRIO
+  personagem recuar (`fleeStep` de quem bloqueia) em vez de insistir para a frente — abrir espaço
+  é o que quebra um engarrafamento que empurrar não quebra.
+
+Nenhum destes números é fidelidade de Tibia — são design do Draconya (ADR 0037 decisão 2) para o
+CONTRATO do bot ("anda, luta, segue") nunca virar "trava para sempre".
+
 ## Quando a hunt encerra sozinha (FUN-86)
 
 §13.9. A configuração tem uma lista `exit`, com teto de 4 slots em `bot/baseline.json` — regra de
