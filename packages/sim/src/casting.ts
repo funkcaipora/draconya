@@ -159,10 +159,13 @@ export interface SpellScaling {
    */
   readonly magicLevel?: number;
   /**
-   * O ataque da arma equipada (#523), para a magia cuja fórmula do Canary soma `skill` e
-   * `attack` (Groundshaker, Berserk, Fierce Berserk, Front Sweep, Whirlwind Throw). Ausente é
-   * `0`: o mesmo valor que uma magia sem arma, ou um alvo desarmado, já receberia — nenhuma
-   * fórmula sem `attackMin`/`attackMax`/`skillAttackMin`/`skillAttackMax` lê este campo.
+   * O ataque da arma equipada (#523), para a magia cuja fórmula do Canary lê `skill` e `attack`
+   * juntos: soma (Groundshaker, Berserk, Fierce Berserk, Whirlwind Throw), produto (Brutal
+   * Strike, Front Sweep, Lesser Front Sweep) ou o termo residual de Strong Ethereal Spear
+   * (coeficiente pequeno o bastante para não pesar com o ataque de munição do Draconya hoje —
+   * ver o `_open` da magia). Ausente é `0`: o mesmo valor que uma magia sem arma, ou um alvo
+   * desarmado, já receberia — nenhuma fórmula sem `attackMin`/`attackMax`/`skillAttackMin`/
+   * `skillAttackMax` lê este campo.
    */
   readonly weaponAttack?: number;
 }
