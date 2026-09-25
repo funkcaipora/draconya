@@ -8,7 +8,7 @@ import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
 import { huntListings } from '../hunt/catalogue.js';
-import { statsForLevel, totalXpForLevel, xpToCompleteLevel } from '../progression.js';
+import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
@@ -84,8 +84,9 @@ const progression = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  skillMultipliers: {},
 };
 
 const combat = {
@@ -6088,14 +6089,15 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     expect(session.aggregates.goldSpent).toBe(paid * 5);
   });
 
-  it('a penalidade de morte lê o Premium do morto: 54 % contra 60 %', () => {
+  it('a penalidade de morte lê o Premium (bênção) do morto: perde menos XP (#521, ADR 0037)', () => {
     const killer = { ...rat, health: 1_000_000, attack: 50, attackRange: 1, experience: 0 };
     const deadly = content({ monsters: [killer] });
     const stats = statsForLevel(10, null, progression as Progression);
+    const startXp = totalXpForLevel(10, progression as Progression);
     const dying = (id: string) => new CharacterRuntime({
       id, position: { x: 0, y: 0, z: 7 },
       health: 1, maxHealth: stats.maxHealth,
-      mana: 0, maxMana: stats.maxMana, level: 10, xp: totalXpForLevel(10, progression as Progression), vocationId: null,
+      mana: 0, maxMana: stats.maxMana, level: 10, xp: startXp, vocationId: null,
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
     });
@@ -6114,9 +6116,11 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       if (event?.kind !== 'member-left') throw new Error(`sem member-left de ${id}`);
       return event.departure.receipt.aggregates.xpGained;
     };
-    const xpToComplete = xpToCompleteLevel(10, progression as Progression);
-    expect(xpOf('premium')).toBe(-Math.round(0.54 * xpToComplete));
-    expect(xpOf('free')).toBe(-Math.round(0.6 * xpToComplete));
+    // Level 10 < `cubicFromLevel` (24): a perda é `flatFraction` da XP ACUMULADA (não mais uma
+    // fração de `xpToCompleteLevel`), reduzida por `blessedReduction` para quem está abençoado.
+    const { flatFraction, blessedReduction } = (progression as Progression).deathPenalty;
+    expect(xpOf('premium')).toBe(-Math.round(flatFraction * startXp * (1 - blessedReduction)));
+    expect(xpOf('free')).toBe(-Math.round(flatFraction * startXp));
   });
 
   it('1 Hz == 10 Hz alternando os dois eixos no meio da corrida', () => {

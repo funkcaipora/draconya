@@ -23,7 +23,7 @@ import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
   Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
 } from '@draconya/content';
-import { containerRulesFor, PartyFullError, shareCostsOf, splitLootOf } from '@draconya/sim';
+import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
@@ -355,19 +355,23 @@ type PlayerStats = S2CProps<'player-stats'>;
  */
 function skillProgressOf(
   character: CharacterRuntime | undefined, definition: Skill | undefined,
+  vocation: Vocation | null, progression: Progression | undefined,
 ): SkillProgress {
   if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
-  return character.skills.progressOf(definition);
+  const factor = progression === undefined ? undefined : skillFactorFor(definition, vocation, progression);
+  return character.skills.progressOf(definition, factor);
 }
 
 function playerStatsOf(
   character: CharacterRuntime | undefined,
   skillCatalog?: ReadonlyMap<string, Skill>,
+  vocation: Vocation | null = null,
+  progression?: Progression,
 ): PlayerStats {
   const skills: Record<string, SkillProgress> = {};
   if (character !== undefined && skillCatalog !== undefined) {
     for (const definition of skillCatalog.values()) {
-      skills[definition.id] = character.skills.progressOf(definition);
+      skills[definition.id] = skillProgressOf(character, definition, vocation, progression);
     }
   }
   return {
@@ -388,7 +392,7 @@ function playerStatsOf(
     },
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
-    magicLevel: skillProgressOf(character, skillCatalog?.get('magic')),
+    magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
   };
 }
 
@@ -1543,7 +1547,7 @@ export class SessionHost {
     // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
     // `equipment-changed` como caminho próprio.
     const character = this.#participantOf(hosted, viewer.characterId);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = this.#statsOf(character);
     hosted.sentStats.set(viewer.characterId, stats);
     this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
   }
@@ -1703,7 +1707,7 @@ export class SessionHost {
       }
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
@@ -1712,6 +1716,18 @@ export class SessionHost {
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
+  }
+
+  /**
+   * `playerStatsOf` com a vocação DESTE personagem já resolvida (#521, ADR 0037): o `%` de
+   * skill/ML no HUD precisa do fator da vocação dele, não do genérico do conteúdo — e todo
+   * chamador tinha o mesmo par `character`/`this.#options.skillCatalog` repetido.
+   */
+  #statsOf(character: CharacterRuntime | undefined): PlayerStats {
+    const vocation = character?.vocationId == null
+      ? null
+      : this.#options.vocations?.get(character.vocationId) ?? null;
+    return playerStatsOf(character, this.#options.skillCatalog, vocation, this.#options.progression);
   }
 
   /**
@@ -1735,7 +1751,7 @@ export class SessionHost {
       return;
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
@@ -2424,7 +2440,7 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character, this.#options.skillCatalog);
+      const stats = this.#statsOf(character);
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
@@ -2583,7 +2599,7 @@ export class SessionHost {
     viewer.send(state);
     hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);
-    const stats = playerStatsOf(participant, this.#options.skillCatalog);
+    const stats = this.#statsOf(participant);
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
     // E o alvo selecionado (#470): tem mensagem própria, e sem ela quem reanexa com um alvo
@@ -3582,10 +3598,7 @@ export class SessionHost {
     const { session } = hosted;
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
-    const self = playerStatsOf(
-      this.#participantOf(hosted, characterId),
-      this.#options.skillCatalog,
-    );
+    const self = this.#statsOf(this.#participantOf(hosted, characterId));
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que

@@ -61,17 +61,20 @@ describe('a Rotworm Caves real (#511)', () => {
     }
   });
 
-  it('o herói percorre o laço e a caverna rende: abates, XP, gold e loot em dez minutos', () => {
+  it('o herói percorre o laço e a caverna rende: abates, gold e loot em dez minutos', () => {
     // Cautious, não bold (diferença do molde da Rat Cellars): o rotworm bate 24-30 contra
-    // armor 8, muito mais forte que o rato (3-4) — um herói level 8 desarmado sobrevive dez
-    // minutos no bold ou no reckless (medido: morre por volta de 127 s / 92 s, DT-05 só mede
-    // sobrevivência no cautious). Aqui o objetivo é medir o rendimento de uma sessão completa,
-    // e só o cautious chega ao fim das dez minutos sem morrer.
+    // armor 8, muito mais forte que o rato (3-4). Antes da #521 (ADR 0037) o herói level 8
+    // desarmado sobrevivia dez minutos no cautious com a regeneração provisória (1 HP/s para
+    // todos); o regen REAL do Tibia (`vocations.xml` da vocação `None`, ~0,08 HP/s — mais de
+    // 10× mais lento) tira a folga que sobrava, e a cura automática (heal com HP ≤ 70%) sozinha
+    // já não garante os dez minutos inteiros. O teste passa a medir o rendimento até o fim da
+    // janela OU até a morte, o que vier primeiro — a sobrevivência plena deixou de ser a
+    // asserção, e `xpGained` deixa de ter uma fórmula fechada porque a penalidade de morte (se
+    // houver) desconta um valor que não é múltiplo de 40.
     const { session, ruleset } = enter(real(), 'cautious');
     run(session, 600_000, 100);
-    expect(session.ended).toBeNull();
+    expect(['death', null]).toContain(session.ended);
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40);
     expect(session.aggregates.goldGained).toBeGreaterThan(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThan(0);
     // A rota é um laço de 444 tiles: o walker deu a volta ao menos uma vez.
@@ -114,10 +117,17 @@ describe('a Rotworm Caves real (#511)', () => {
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
 
-  it('um personagem level 8 sem arma sobrevive 10 minutos no pull cautious', () => {
+  it('um personagem level 8 sem arma aguenta o pull cautious com a cura automática', () => {
     // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % é o que segura o herói, como o
     // Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36). A poção é recusada (o herói
     // de teste nasce com `goldDelta: 0`) — comportamento real, não defeito.
+    //
+    // Não é mais garantido chegar aos dez minutos inteiros: o regen passivo REAL do Tibia
+    // (#521, ADR 0037 — vocação `None` do Canary, ~0,08 HP/s) é mais de 10× mais lento que o
+    // 1 HP/s provisório que este teste media antes, e só a cura automática pode não bastar. O
+    // teste passa a medir o que a cura consegue segurar, não a sobrevivência plena — e
+    // `xpGained` deixa de ser múltiplo de 40 quando há morte, porque a penalidade desconta um
+    // valor que não é.
     const { session } = enter(real(), 'cautious');
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
@@ -126,8 +136,8 @@ describe('a Rotworm Caves real (#511)', () => {
       minHp = Math.min(minHp, hero.health);
     }
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
-    expect(session.ended).toBeNull();
-    expect(session.aggregates.xpGained % 40).toBe(0);
+    expect(['death', null]).toContain(session.ended);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
     const hoursFraction = 600_000 / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);
