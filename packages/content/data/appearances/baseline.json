@@ -357,6 +357,17 @@
     "strong-ice-strike": {
       "effect": 43,
       "missile": 29
+    },
+    "fierce-berserk": {
+      "effect": 10
+    },
+    "strong-ethereal-spear": {
+      "effect": 2,
+      "missile": 28
+    },
+    "ultimate-energy-strike": {
+      "effect": 12,
+      "missile": 5
     }
   },
   "supplies": {

@@ -401,3 +401,12 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   propriedade de equivalência. `combat/conformance.ts` é a comparação PURA; o cenário misto do
   benchmark vive em `tools` e a interpretação da linha de base em
   `docs/product/combat-conformance.md`.
+- **`circle` tem DOIS mecanismos de raio, e o parâmetro `source` de `areaTiles` (#523) escolhe
+  qual** — a magia usa as `AREA_CIRCLEnXn` nomeadas do Canary (raio 1-3 com bônus de
+  achatamento, raio ≥ 4 diamante puro, SEM o bônus — uma descontinuidade real da autoria, não um
+  erro de leitura), a ability de monstro usa a tabela de anéis de `AreaCombat::setupArea(radius)`
+  (mecanismo diferente, escala de raio diferente: raio de monstro 5 e raio de magia 3 dão a
+  MESMA forma por coincidência, não porque sejam o mesmo raio). O default é `'spell'` — quem
+  escreve uma ability de monstro em área precisa passar `'monster'` explicitamente (só
+  `monster/ability.ts` faz isso hoje); esquecer faz a ability usar a tabela errada em silêncio,
+  sem erro de tipo nenhum para pegar.

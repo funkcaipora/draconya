@@ -13,15 +13,16 @@
     "basePower": 200,
     "area": {
       "shape": "circle",
-      "radius": 1,
+      "radius": 3,
       "centered": "caster"
     },
     "formula": {
-      "skillMin": 1.4,
-      "skillMax": 2.0,
-      "baseMin": 40,
-      "baseMax": 60
+      "levelFactor": 0.2,
+      "skillMin": 5.7,
+      "skillMax": 10.43,
+      "baseMin": 26,
+      "baseMax": 62
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Coeficientes da fórmula provisórios (Canary não publica os de Mass Healing na referência usada); a área é o 3x3 centrado no lançador (#475)."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Coeficientes da fórmula provisórios (Canary não publica os de Mass Healing na referência usada); a área é o 3x3 centrado no lançador (#475). Fórmula e raio do Canary (`data/scripts/spells/healing/mass_healing.lua`, main, 2026-09-24): AREA_CIRCLE3X3 é raio 3 (37 tiles), não 1."
 }

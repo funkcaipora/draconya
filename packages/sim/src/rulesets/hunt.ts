@@ -3090,6 +3090,10 @@ const slots = bot.groups.get(group);
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
       magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
         + character.inventory.skillBonus(this.#options.items, 'magic'),
+      // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
+      // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
+      // `weaponAttack`, nunca um número inventado.
+      weaponAttack: character.inventory.weaponAttack(this.#options.items, character) ?? 0,
     };
   }
 
