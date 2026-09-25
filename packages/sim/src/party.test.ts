@@ -1,24 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import type { Item, PartyConfig } from '@draconya/content';
+import type { Item } from '@draconya/content';
 import {
   autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
-  settleEntries, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpByDamage, xpPool, xpShare,
+  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
+  xpByDamage, xpShare,
 } from './party.js';
 import type {
   BagEntry, GoldEntry, MemberCapacity, PartyBagState, PartyMember, SharedExperienceMember,
 } from './party.js';
 
-// As contas da party (#189, ADR 0027; fórmula e elegibilidade emendadas em 2026-09-24, #525,
-// pela fidelidade TFS/Canary do ADR 0037). O que se prende aqui é a fórmula real das duas
-// engines (`Party:onShareExperience`/`Party::canUseSharedExperience`) — e que nada consome RNG
-// nem sai de inteiro.
-
-const config: PartyConfig = {
-  id: 'baseline', maxMembers: 8, matchmakingLevelRange: 0,
-  xpPoolPercentByUniqueVocations: {
-    '1': 120, '2': 130, '3': 160, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
-  },
-};
+// As contas da party (#189, ADR 0027; fórmula e elegibilidade emendadas em 2026-09-24 e
+// 2026-09-25, #525, pela fidelidade CANARY do ADR 0037 decisão 4 — não TFS: as duas engines
+// divergem aqui, e o Canary manda em fórmula). O que se prende é a fórmula real do Canary
+// (`Party:onShareExperience`/`Party::getUniqueVocationsCount`/`Party::canUseSharedExperience`)
+// — e que nada consome RNG nem sai de inteiro.
 
 const m = (id: string, vocationId: string | null = null): PartyMember => ({ id, vocationId });
 const k = (id: string) => m(id, 'knight');
@@ -26,65 +21,79 @@ const d = (id: string) => m(id, 'druid');
 const s = (id: string) => m(id, 'sorcerer');
 const p = (id: string) => m(id, 'paladin');
 
-describe('uniqueVocations', () => {
-  it('counts distinct REAL vocations; "none" (null) never counts (TFS: VOCATION_NONE excluded)', () => {
+describe('uniqueVocations — Party::getUniqueVocationsCount do Canary', () => {
+  it('conta "nenhuma" (null) como uma vocação DISTINTA — Canary NÃO exclui VOCATION_NONE (id 0 "None" é um Vocation* real)', () => {
     expect(uniqueVocations([])).toBe(0);
-    // Antes do #525 "nenhuma" contava como uma vocação a mais (era 1); agora é 0.
-    expect(uniqueVocations([m('a'), m('b')])).toBe(0);
-    expect(uniqueVocations([m('a'), m('b'), m('c')])).toBe(0);
-    // Um real + um sem vocação: só o real conta (era 2, agora 1).
-    expect(uniqueVocations([m('a'), k('b')])).toBe(1);
+    expect(uniqueVocations([m('a'), m('b')])).toBe(1);
+    expect(uniqueVocations([m('a'), m('b'), m('c')])).toBe(1);
+    // Um real + um sem vocação: as duas contam — "nenhuma" É uma vocação distinta no Canary.
+    expect(uniqueVocations([m('a'), k('b')])).toBe(2);
     expect(uniqueVocations([k('a'), k('b'), d('c')])).toBe(2);
     expect(uniqueVocations([k('a'), d('b'), s('c'), p('d')])).toBe(4);
-    // Três reais + um sem vocação: a "nenhuma" não soma à conta dos reais.
-    expect(uniqueVocations([k('a'), d('b'), s('c'), m('d')])).toBe(3);
+    expect(uniqueVocations([k('a'), d('b'), s('c'), m('d')])).toBe(4);
+  });
+
+  it('capa em 4 — o loop do Canary para de inserir ao chegar em 4 distintas (`if (size >= 4) break`)', () => {
+    const eight = ['knight', 'druid', 'sorcerer', 'paladin', 'monk', 'a', 'b', 'c']
+      .map((vocation, index) => m(`m${String(index)}`, vocation));
+    expect(uniqueVocations(eight)).toBe(4);
   });
 });
 
-describe('xpShare — a tabela do TFS/Canary (§525), monstro de 100 XP', () => {
-  // 0–1 vocações reais → ×1,20; 2 → ×1,30; 3 → ×1,60; 4 → ×2,00
-  // (`1 + n × (5 × (n − 1) + 10) / 100` para n > 1 — `data/events/scripts/party.lua` do TFS).
-  it.each<[string, PartyMember[], number, number]>([
-    ['solo', [k('a')], 100, 100],
-    ['knight + knight (1 vocação real)', [k('a'), k('b')], 120, 60],
-    ['knight + druid (2)', [k('a'), d('b')], 130, 65],
-    ['knight + sem vocação (1 real — "nenhuma" não soma)', [k('a'), m('b')], 120, 60],
-    ['sem vocação + sem vocação (0 reais — mesma linha que 1)', [m('a'), m('b')], 120, 60],
-    ['knight + druid + sorcerer (3)', [k('a'), d('b'), s('c')], 160, 54],
-    ['knight + druid + sorcerer + paladin (4)', [k('a'), d('b'), s('c'), p('d')], 200, 50],
-    ['4 vocações reais com um morto (3 elegíveis)', [k('a'), d('b'), s('c')], 160, 54],
-    ['knight + knight + druid + druid (2 reais, 4 elegíveis)', [k('a'), k('b'), d('c'), d('d')], 130, 33],
-    ['ninguém elegível', [], 100, 0],
-  ])('%s', (_name, eligible, pool, share) => {
-    expect(xpPool(100, eligible, config)).toBe(pool);
-    expect(xpShare(100, eligible, config)).toBe(share);
-    expect(Number.isInteger(xpShare(100, eligible, config))).toBe(true);
+describe('sharedExperiencePercent — Party:onShareExperience do Canary (m = 0,1n² − 0,2n + 1,3; −0,1 se tamanho ≥ 4)', () => {
+  // O DIVISOR do desconto é o TAMANHO da party (membros + líder), NÃO a contagem de vocações
+  // únicas — o comentário do Canary fala em "todas as vocações presentes", mas o código testa
+  // `partySize`. Reproduzimos o CÓDIGO: uma party de 4+ com vocações repetidas TAMBÉM desconta.
+  it.each<[string, PartyMember[], number]>([
+    ['1 knight (solo não passa por aqui, mas a fórmula sozinha dá isto)', [k('a')], 120],
+    ['2 knights (n=1, tamanho 2 < 4)', [k('a'), k('b')], 120],
+    ['knight + druid (n=2, tamanho 2 < 4)', [k('a'), d('b')], 130],
+    ['knight + sem vocação (n=2 — "nenhuma" conta, tamanho 2 < 4)', [k('a'), m('b')], 130],
+    ['sem vocação + sem vocação (n=1, tamanho 2 < 4)', [m('a'), m('b')], 120],
+    ['knight + druid + sorcerer (n=3, tamanho 3 < 4)', [k('a'), d('b'), s('c')], 160],
+    ['knight + druid + sorcerer + paladin (n=4, tamanho 4 ≥ 4 → 210 − 10)', [k('a'), d('b'), s('c'), p('d')], 200],
+    // Os dois casos que o Canary real diverge do TFS — exatamente os que a revisão pediu:
+    ['4 knights (n=1, tamanho 4 ≥ 4 → 120 − 10)', [k('a'), k('b'), k('c'), k('d')], 110],
+    ['2 knights + 2 druids + 1 sorcerer (n=3, tamanho 5 ≥ 4 → 160 − 10)', [k('a'), k('b'), d('c'), d('d'), s('e')], 150],
+    // 2K+2D é o mesmo `n=2` do caso isolado acima, mas com tamanho 4: o desconto muda o resultado.
+    ['2 knights + 2 druids (n=2, tamanho 4 ≥ 4 → 130 − 10, NÃO 130 como o TFS daria)', [k('a'), k('b'), d('c'), d('d')], 120],
+  ])('%s', (_name, allMembers, percent) => {
+    expect(sharedExperiencePercent(allMembers)).toBe(percent);
   });
 
-  it('rounds the SHARE up (ceil), like TFS/Canary — the rest of this file discards remainders, this does not', () => {
-    // 7 × 160 / 100 = 11,2 → floor 11 (xpPool, informativo); a cota vem de UMA conta com ceil:
-    // ceil(7 × 160 / 300) = ceil(3,73) = 4 — não `floor(11 / 3) = 3`.
-    expect(xpPool(7, [k('a'), d('b'), s('c')], config)).toBe(11);
-    expect(xpShare(7, [k('a'), d('b'), s('c')], config)).toBe(4);
-    // Rato de 5 XP, party de quatro vocações reais: ceil(5 × 200 / 400) = ceil(2,5) = 3 — NÃO 2
-    // (`floor(10 / 4)`). É o TFS/Canary arredondando a cota final para cima, sempre.
-    expect(xpShare(5, [k('a'), d('b'), s('c'), p('d')], config)).toBe(3);
-  });
-
-  it('solo never reads the table, and a missing key means no bonus', () => {
-    // Mutação que mata: `eligible.length < 1` — o solo passaria a ler a linha "1" e render 120.
-    expect(xpPool(100, [k('a')], { ...config, xpPoolPercentByUniqueVocations: { '1': 999 } })).toBe(100);
-    expect(xpPool(100, [k('a'), d('b')], { ...config, xpPoolPercentByUniqueVocations: { '1': 120 } })).toBe(100);
-  });
-
-  it('a tabela vai até 8, e o teto de 200 % se mantém', () => {
-    // #392/#394: `maxMembers` é 8 e a tabela ganha "5".."8" = 200. Oito vocações reais
-    // (o teto do conteúdo real é 4, mas a tabela aceita até 8 chaves) não passam de 200 %.
+  it('capa em 4 vocações e ainda desconta por tamanho: 8 membros distintos rendem 200 %, não 210 %', () => {
     const eight = ['knight', 'druid', 'sorcerer', 'paladin', 'monk', 'a', 'b', 'c']
       .map((vocation, index) => m(`m${String(index)}`, vocation));
-    expect(xpPool(100, eight, config)).toBe(200);
-    expect(xpShare(100, eight, config)).toBe(25);
-    expect(xpPool(100, [k('a'), d('b'), s('c'), p('d'), m('e', 'monk')], config)).toBe(200);
+    expect(sharedExperiencePercent(eight)).toBe(200);
+  });
+});
+
+describe('xpShare — cota final, monstro de 100 XP', () => {
+  it.each<[string, PartyMember[], PartyMember[], number]>([
+    ['solo (eligible.length 1, não lê a fórmula)', [k('a')], [k('a')], 100],
+    ['knight + knight, todos elegíveis', [k('a'), k('b')], [k('a'), k('b')], 60],
+    ['knight + druid, todos elegíveis', [k('a'), d('b')], [k('a'), d('b')], 65],
+    ['4 vocações reais, todos elegíveis: ceil(100 × 200 / 400)', [k('a'), d('b'), s('c'), p('d')], [k('a'), d('b'), s('c'), p('d')], 50],
+    ['4 knights, todos elegíveis: ceil(100 × 110 / 400)', [k('a'), k('b'), k('c'), k('d')], [k('a'), k('b'), k('c'), k('d')], 28],
+    ['ninguém elegível', [], [], 0],
+  ])('%s', (_name, allMembers, eligible, share) => {
+    expect(xpShare(100, eligible, allMembers)).toBe(share);
+    expect(Number.isInteger(xpShare(100, eligible, allMembers))).toBe(true);
+  });
+
+  it('o DIVISOR é o TAMANHO TOTAL da party (allMembers), não a contagem de elegíveis — um membro exausto de stamina ainda conta, só não recebe', () => {
+    // 4 vocações reais, mas só 3 elegíveis (o 4º está sem stamina, ainda no roster): a fórmula
+    // usa os 4 (200 %) e divide por 4 — o mesmo POR CABEÇA que os 4 receberiam juntos, só que
+    // o 4º não recebe nada (ele não está em `eligible`).
+    const allFour = [k('a'), d('b'), s('c'), p('d')];
+    expect(xpShare(100, [k('a'), d('b'), s('c')], allFour)).toBe(50);
+  });
+
+  it('rounds the SHARE up (ceil), like the Canary does — the rest of this file discards remainders, this does not', () => {
+    // Rato de 5 XP, party de 4 vocações reais: ceil(5 × 200 / 400) = ceil(2,5) = 3 — NÃO 2
+    // (`floor(10 / 4)`). É o Canary arredondando a cota final para cima, sempre.
+    const allFour = [k('a'), d('b'), s('c'), p('d')];
+    expect(xpShare(5, allFour, allFour)).toBe(3);
   });
 });
 

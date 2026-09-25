@@ -53,8 +53,8 @@ import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
   autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
-  settleEntries, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpByDamage, xpPoolPercent,
-  xpShare,
+  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
+  xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
@@ -871,12 +871,14 @@ interface Runner {
   /** Por que o follow está interrompido (#401): o `reason` do último `follow-state` inativo. */
   followReason: 'dead' | 'left' | 'unreachable' | undefined;
   /**
-   * O instante LÓGICO do último ataque ou cura deste participante (§525, ADR 0027 emenda
-   * 2026-09-24): é o que `canShareExperience` lê como atividade (`Party::isPlayerActive` do
+   * O instante LÓGICO do último ataque ou cura A OUTRO PARTICIPANTE (§525, ADR 0027 emenda
+   * 2026-09-24/25): é o que `canShareExperience` lê como atividade (`Party::isPlayerActive` do
    * TFS/Canary). `null` é "nunca agiu" — o mesmo que não ter entrada no `ticksMap` de lá.
-   * Escrito só por `#markCombatActive`, nos MESMOS três pontos que já creditam dano/cura
-   * (`#land`, `#applyHits`, `#emitHealed`) — um quarto ponto de escrita divergiria do que o
-   * DPS/HPS (#431) já considera "agiu".
+   * Escrito só por `#markCombatActive`, chamado dos MESMOS pontos que já creditam dano/cura
+   * para o DPS/HPS (#431) — `#land`, `#applyHits` sempre; `#emitHealed` só quando o RECIPIENTE
+   * não é o próprio healer (`Player::isPartner` exclui `player == this` nas duas engines antes
+   * de registrar atividade por cura — curar a si mesmo continua valendo para o HPS, só não para
+   * esta atividade). Um quinto ponto de escrita divergiria do que já é creditado em algum lugar.
    */
   lastCombatActionAtMs: number | null;
 }
@@ -1494,10 +1496,10 @@ export class HuntRuleset implements Ruleset {
     if (party === undefined) return undefined;
     const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
     const unique = uniqueVocations(present);
-    // `xpPoolPercent` (party.ts) já trata "0 vocações reais" como a mesma linha "1" que
-    // `xpShare` lê ao pagar de verdade — ler `xpPoolPercentByUniqueVocations` direto aqui
-    // divergiria com uma party inteira sem vocação (§525).
-    const percent = xpPoolPercent(present, this.#options.party);
+    // `sharedExperiencePercent` (party.ts) é a MESMA fórmula do Canary que `xpShare` usa ao
+    // pagar de verdade — ler qualquer outra conta aqui divergiria do que a party realmente
+    // recebe (§525).
+    const percent = sharedExperiencePercent(present);
     const value = this.#bag === null ? 0 : bagValue(this.#bag, this.#options.items);
     // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
     // tipo é opcional por causa das fixtures antigas de `RawContent`.
@@ -4237,7 +4239,12 @@ const slots = bot.groups.get(group);
     // (a condição de um monstro, por exemplo) — `creditHealing` somaria num id que não é dono.
     if (healerId !== undefined && session.participants.some((p) => p.id === healerId)) {
       session.creditHealing(healerId, amount);
-      this.#markCombatActive(session, healerId);
+      // Atividade de XP compartilhada (§525) é OUTRA coisa que HPS: `Player::isPartner`
+      // (TFS/Canary) exclui `player == this` antes de registrar `updatePlayerTicks` por cura —
+      // curar A SI MESMO não prova que o personagem está engajado com a party, e as duas
+      // engines não contam. HPS continua contando o self-heal (linha acima); só a atividade
+      // que `canShareExperience` lê exige um RECIPIENTE diferente do healer.
+      if (character.id !== healerId) this.#markCombatActive(session, healerId);
     }
     session.emit({
       kind: 'creature-healed', creatureId: character.id, amount, source,
@@ -4707,15 +4714,18 @@ const slots = bot.groups.get(group);
    * onde cada coisa ficou, e o extrato leva.
    */
   /**
-   * A cota de XP de cada elegível para este abate (§525, ADR 0027 emenda 2026-09-24).
+   * A cota de XP de cada elegível para este abate (§525, ADR 0027 emenda 2026-09-24/25).
    *
    * Com 0/1 elegível, ou fora de party, `xpShare` já devolve a cota igual (a XP inteira em
    * solo) sem ler mais nada — o `canShareExperience` do TFS/Canary não tem o que decidir com
    * menos de dois. Com 2+, a XP compartilhada é TUDO OU NADA (`Party::getSharedExperienceStatus`):
-   * `canShareExperience` confere nível (2/3 do MAIOR level de TODA a sessão, elegível ou não),
-   * alcance/andar do líder e atividade recente de cada elegível; se todos passam, a cota é igual
-   * (`xpShare`); se qualquer um falha, ninguém compartilha — cada elegível recebe pelo DANO que
-   * causou neste monstro (`xpByDamage`), como o Tibia sem party.
+   * `canShareExperience` confere nível (2/3 do MAIOR level de TODA a sessão), alcance/andar do
+   * líder e atividade recente — checados sobre `allMembers`, o ROSTER INTEIRO da sessão
+   * (`getPlayers()` nas duas engines: líder + membros, presente ou não elegível para receber),
+   * não só `eligible`; se todos passam, a cota é igual (`xpShare`, cujo divisor TAMBÉM é
+   * `allMembers.length` — o tamanho total da party, como as duas engines fazem, não a contagem
+   * de elegíveis); se qualquer um falha, ninguém compartilha — cada elegível recebe pelo DANO
+   * que causou neste monstro (`xpByDamage`), como o Tibia sem party.
    *
    * `this.#party` ausente com `eligible.length > 1` não deveria acontecer (só a party hospeda
    * mais de um dono), mas cai para a cota igual em vez de lançar — o mesmo espírito defensivo
@@ -4725,15 +4735,16 @@ const slots = bot.groups.get(group);
     session: Session, eligible: readonly CharacterRuntime[], experience: number, credit: KillCredit,
   ): ReadonlyMap<string, number> {
     const party = this.#party;
+    const allMembers = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
     if (eligible.length <= 1 || party === undefined) {
-      const share = xpShare(experience, eligible, this.#options.party);
+      const share = xpShare(experience, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
     const leader = session.participants.find((p) => p.id === party.leaderId);
     const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
     const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
     const canShare = leader !== undefined && canShareExperience(
-      eligible.map((member) => ({
+      session.participants.map((member) => ({
         id: member.id,
         level: member.level,
         position: member.position,
@@ -4742,7 +4753,7 @@ const slots = bot.groups.get(group);
       highestLevel, leader.position, session.nowMs, rules,
     );
     if (canShare) {
-      const share = xpShare(experience, eligible, this.#options.party);
+      const share = xpShare(experience, eligible, allMembers);
       return new Map(eligible.map((member) => [member.id, share]));
     }
     return xpByDamage(experience, eligible, credit.damageByActor);

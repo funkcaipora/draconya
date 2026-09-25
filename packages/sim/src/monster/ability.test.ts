@@ -47,7 +47,7 @@ const combat = {
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const party = { id: 'baseline', maxMembers: 4 };
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
   difficulties: {

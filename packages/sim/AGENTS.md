@@ -122,34 +122,44 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
 - **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
-  pelo #525 em 2026-09-24, fidelidade TFS/Canary do ADR 0037), e o ruleset só chama.** Seis
-  contas em inteiro, sem RNG: `uniqueVocations` (`null`, sem vocação, NÃO CONTA — o TFS exclui
-  `VOCATION_NONE`; antes do #525 contava, e era o defeito), `xpPool` (`floor(xp × tabela[únicas
-  reais] / 100)`; um elegível só devolve `xp` sem ler a tabela — solo é 100 %, e a linha `"1"` é
-  da party de vocações iguais OU só "nenhuma", via `max(1, únicas)`), `xpShare` (cota
-  ARREDONDADA PARA CIMA — `ceil`, não `floor` —, como o TFS/Canary fazem de verdade; é a ÚNICA
-  conta deste arquivo que NÃO descarta resto, porque não é escolha de quem leva o resto, é
-  "todos levam um pouco mais"), `canShareExperience` (o TUDO OU NADA do
-  `Party::canUseSharedExperience`: nível ≥ 2/3 do maior de TODA a sessão, alcance/andar do
-  LÍDER, atividade em `activityWindowMs` — falhar qualquer um desliga a cota igual do abate
-  INTEIRO), `xpByDamage` (o rateio por dano quando a regra acima desliga — `floor(dano/total ×
-  xp)`, igual ao `Creature::getGainedExperience`; quem não bateu não recebe) e `settleEntries`
-  (vende a bolsa ENTRADA por entrada, cada uma dividida só entre `eligible ∩ presentes` com
-  `splitEqually` — resto UM a UM nos primeiros, porque gold descartado é valor que o ledger não
-  vê; `value: 0` vai em `unsold`, para o líder, não para o gold), além de `autoSellLimit` (o
-  limite de tipos do líder lê o Premium do PERSONAGEM). Nada aqui sabe o que é sessão — a
-  atividade chega como `lastActionAtMs` já resolvido, não como `Runner`/relógio —; é o que
-  permite testar por tabela.
+  pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
+  divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**
+  `uniqueVocations` conta `null` (sem vocação) como uma vocação DISTINTA, capada em 4
+  (`Party::getUniqueVocationsCount` do Canary não exclui `VOCATION_NONE` — o TFS exclui, mas
+  perde a decisão 4). `sharedExperiencePercent` é a fórmula do Canary em INTEIRO —
+  `10n² − 20n + 130`, menos 10 se o TAMANHO do roster (não `n`) for ≥ 4 — reproduzida do CÓDIGO
+  do Canary, não do comentário dele (que fala em "vocações", mas testa tamanho). `xpShare`
+  (cota ARREDONDADA PARA CIMA — `ceil`, não `floor` —, dividida pelo TAMANHO TOTAL do roster,
+  não por elegíveis; é a ÚNICA conta deste arquivo que NÃO descarta resto, porque não é escolha
+  de quem leva o resto, é "todos levam um pouco mais"), `canShareExperience` (o TUDO OU NADA do
+  `Party::canUseSharedExperience`, avaliado sobre o ROSTER inteiro — não só elegíveis: nível ≥
+  2/3 do maior de TODO o roster, alcance/andar do LÍDER, atividade em `activityWindowMs` — falhar
+  qualquer um desliga a cota igual do abate INTEIRO), `xpByDamage` (o rateio por dano quando a
+  regra acima desliga — `floor(dano/total × xp)`, igual ao `Creature::getGainedExperience`, SEM
+  o teto da cota compartilhada — quem causa 100 % do dano leva o XP inteiro do monstro; quem não
+  bateu não recebe) e `settleEntries` (vende a bolsa ENTRADA por entrada, cada uma dividida só
+  entre `eligible ∩ presentes` com `splitEqually` — resto UM a UM nos primeiros, porque gold
+  descartado é valor que o ledger não vê; `value: 0` vai em `unsold`, para o líder, não para o
+  gold), além de `autoSellLimit` (o limite de tipos do líder lê o Premium do PERSONAGEM). Nada
+  aqui sabe o que é sessão — a atividade chega como `lastActionAtMs` já resolvido, não como
+  `Runner`/relógio —; é o que permite testar por tabela. Duas populações, nomes DIFERENTES de
+  propósito: `allMembers` (o roster inteiro — decide `n`, tamanho e quem `canShareExperience`
+  confere) e `eligible` (vivo + stamina — decide só quem RECEBE a cota calculada).
 - **A atividade de `canShareExperience` é `Runner.lastCombatActionAtMs`, escrita só por
-  `#markCombatActive`** (`hunt.ts`, #525), nos MESMOS três pontos que já creditam dano/cura para
-  o DPS/HPS (#431): `#land` (golpe corpo a corpo/distância/wand), `#applyHits` (magia em área) e
-  `#emitHealed` (cura de qualquer fonte). Um quarto ponto de escrita divergiria do que o
-  DPS/HPS já considera "agiu". `null` é "nunca agiu" — o mesmo efeito conservador de um
-  `ticksMap` vazio no TFS/Canary logo após a entrada ou uma retomada de snapshot (o campo é
-  opcional no `RunnerState`, ausente quando `null`). Consequência OBSERVADA, não defeito: o
-  abate que acontece no instante 0 de uma hunt cai sempre no rateio por dano — ninguém teve
-  tempo de agir ainda —, e um membro que nunca ataca nem cura (sem bot configurado, por exemplo)
-  desliga a cota igual para a party inteira pelo resto da hunt, não só para ele.
+  `#markCombatActive`** (`hunt.ts`, #525), nos MESMOS pontos que já creditam dano/cura para o
+  DPS/HPS (#431): `#land` (golpe corpo a corpo/distância/wand) e `#applyHits` (magia em área)
+  sempre; `#emitHealed` só quando o RECIPIENTE da cura é DIFERENTE do healer — curar A SI MESMO
+  não conta (`Player::isPartner`, TFS e Canary, exclui `player == this` antes de registrar
+  atividade por cura; o HPS continua contando o self-heal, só esta atividade não). Um ponto de
+  escrita a mais divergiria do que já é creditado em algum lugar. `null` é "nunca agiu" — o mesmo
+  efeito conservador de um `ticksMap` vazio no TFS/Canary logo após a entrada ou uma retomada de
+  snapshot (o campo é opcional no `RunnerState`, ausente quando `null`). Consequência OBSERVADA
+  (ou, no self-heal do Canary, INTENCIONADA e confirmada pelo TFS funcional — o código do Canary
+  para esse caminho específico tem uma variável não resolvida antes do uso, o que o torna inerte
+  na versão observada), não defeito: o abate que acontece no instante 0 de uma hunt cai sempre no
+  rateio por dano — ninguém teve tempo de agir ainda —, e um membro que nunca ataca nem cura
+  OUTRO (sem bot configurado, por exemplo) desliga a cota igual para a party inteira pelo resto
+  da hunt, não só para ele.
 - **Agregados são POR PARTICIPANTE desde o #187, e `session.aggregates` é a SOMA.** Escreva
   com `session.credit(id, key, delta)` — nunca `session.aggregates.x += n`: `credit` escreve
   no participante e na soma no mesmo passo, e trata `best*Hit` como máximo. `end()` devolve
