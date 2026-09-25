@@ -1,5 +1,29 @@
 {
   "id": "baseline",
   "milestones": [10000, 25000, 50000, 100000, 200000],
-  "xpBonusPercentPerMilestone": 1
+  "xpBonusPercentPerMilestone": 1,
+  "entries": {
+    "dragon": {
+      "class": "dragon",
+      "race": "dragon",
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0,
+      "_open": "Canary `Bestiary` (data-otservbr-global/monster/dragons/dragon.lua): toKill 1000, FirstUnlock 50, SecondUnlock 500, CharmsPoints 25, Stars 3, Occurrence 0, class \"Dragon\", race BESTY_RACE_DRAGON. TFS confirma os três limiares com outros nomes (prowess 50 = FirstUnlock, expertise 500 = SecondUnlock, mastery 1000 = toKill). Declarado e ainda sem consumidor — ver o comentário de `bestiarySchema.entries`."
+    },
+    "dragon-lord": {
+      "class": "dragon",
+      "race": "dragon",
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0,
+      "_open": "Canary `Bestiary` (data-otservbr-global/monster/dragons/dragon_lord.lua): mesmos números do Dragon — toKill 1000, FirstUnlock 50, SecondUnlock 500, CharmsPoints 25, Stars 3, Occurrence 0, class \"Dragon\", race BESTY_RACE_DRAGON. TFS não traz um segundo bloco de bestiário para o Dragon Lord além do herdado da classe Dragon."
+    }
+  }
 }

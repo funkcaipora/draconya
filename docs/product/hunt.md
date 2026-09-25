@@ -434,8 +434,22 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot por abate (Rat Cellars) | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
 | O rotworm (números do Canary v3.6.1, #511) | 65 HP, 40 XP, ataque 24–30 sorteado por golpe, armadura 8, speed 180; sem elementos (Cyclopedia não lista nenhum) | `data/monsters/rotworm.json` |
 | Loot por abate (Rotworm Caves, #511) | Rotworm: gold 71,76 %, 1–17; sword 3 %; mace 4,5 %; meat 20 %; ham 20,12 %; worm 3 % (1–3 un.); lump of dirt 10 %; legion helmet 1,89 % | `data/monsters/rotworm.json`, bloco `loot` |
+| O Dragon (TFS `dragon.xml`, conferido com o Canary, #520) | 1000 HP, 700 XP, melee 0–120, armadura 25, speed 172 (escala do TFS — o Canary guarda metade por outra fórmula de cliente, não usada aqui); terra +80 %, energia +20 %, gelo −10 % (vulnerável), fogo IMUNE; `targetDistance 1`, `staticAttack 80 %` (aceito, não ligado ao passo — ver `combat.md`), `runOnHealth 300`, troca de alvo 4 s/10 % | `data/monsters/dragon.json` |
+| Abilities do Dragon (#520, CMB-06/#518) | bola de fogo (alvo, alcance 7, círculo raio 4, centrada no alvo): 60–140, 15 %; onda de fogo (comprimento 8, sem alvo): 100–170, 10 %; cura própria: +40–70, 15 % | `data/monsters/dragon.json`, blocos `abilities`/`defenses` |
+| O Dragon Lord (TFS `dragon_lord.xml`, conferido com o Canary, #520) | 1900 HP, 2100 XP, melee 0–230, armadura 35, speed 200 (escala do TFS); mesmos elementos do Dragon; mesmas flags | `data/monsters/dragon-lord.json` |
+| Abilities do Dragon Lord (#520) | bola de fogo: 100–200, 20 %; campo de fogo (alvo, alcance 7, sem dano direto — só larga o campo, círculo raio 4 centrado no alvo): 10 %; onda de fogo: 150–230, 15 %; cura própria: +57–93, 15 % | `data/monsters/dragon-lord.json` |
+| Campo de fogo do Dragon Lord (#520) | queimadura: 20 de dano a cada 10 s, por até 70 s (a cadeia de decaimento 2118→2119→2120 do Canary `items.xml` simplificada num campo só, com os números do estágio mais forte — ver `combat.md`) | `data/monsters/dragon-lord.json`, `abilities[].field` |
+| Loot do Dragon (20 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % — burst arrow (7,976 %) NÃO está: ver `items.md` | `data/monsters/dragon.json`, bloco `loot` |
+| Loot do Dragon Lord (19 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % — power bolt (6,565 %) NÃO está: ver `items.md` | `data/monsters/dragon-lord.json`, bloco `loot` |
+| Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
 
 ## Em aberto
+
+**A hunt Darashia Dragon Lair ainda não existe (#520 fase 1).** O Dragon e o Dragon Lord, o loot
+completo e a classe `dragon` do Bestiário já estão no catálogo; falta `data/hunts/
+darashia-dragon-lair.json` — `mapId`/`routeId`, `ambience`, `recommendedLevel` da lair e os
+pontos de spawn —, que depende do mapa/rota real (#519, ainda não mesclado). Quando a hunt
+entrar, ela referencia os dois monstros por `monsterId` sem precisar de número novo nenhum.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Os dois da tabela acima são deste
 projeto, não do PRD: o personagem precisa de números de ataque e de velocidade para a hunt render,

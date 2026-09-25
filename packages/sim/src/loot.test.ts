@@ -28,7 +28,7 @@ describe('rollLoot', () => {
   });
 
   it('tabela vazia é zero e nada, não erro', () => {
-    expect(rollLoot(table(), Rng.fromSeed('loot'))).toEqual({ gold: 0, items: [] });
+    expect(rollLoot(table(), Rng.fromSeed('loot'))).toEqual({ gold: 0, items: [], supplies: [] });
   });
 
   it('a mesma semente produz a mesma sequência', () => {
@@ -72,6 +72,29 @@ describe('rollLoot', () => {
     expect(result).toEqual({
       gold: 7,
       items: [{ itemId: 'first', quantity: 2 }, { itemId: 'second', quantity: 1 }],
+      supplies: [],
+    });
+  });
+
+  it('supplyId cai em `supplies`, separado de `items`, na ordem de sorteio da tabela (#520)', () => {
+    // A linha de supply consome sorteio na mesma posição que ocuparia se fosse item — só o
+    // BALDE de destino muda, não a sequência. Intercalar item e supply na tabela prova que a
+    // separação acontece DEPOIS do sorteio, não antes.
+    const rng = Rng.fromSeed('supply');
+    const result = rollLoot(table({
+      items: [
+        { itemId: 'dragon-ham', chance: 1, min: 1, max: 1 },
+        { supplyId: 'strong-health-potion', chance: 1, min: 2, max: 2 },
+        { itemId: 'small-diamond', chance: 1, min: 1, max: 1 },
+      ],
+    }), rng);
+    expect(result).toEqual({
+      gold: 0,
+      items: [
+        { itemId: 'dragon-ham', quantity: 1 },
+        { itemId: 'small-diamond', quantity: 1 },
+      ],
+      supplies: [{ supplyId: 'strong-health-potion', quantity: 2 }],
     });
   });
 });

@@ -56,7 +56,7 @@ import {
   splitLootOf, uniqueVocations, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
-import type { LootItem } from '../loot.js';
+import type { LootItem, LootSupply } from '../loot.js';
 import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
 import { compileBot, percentOf } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
@@ -4760,6 +4760,10 @@ const slots = bot.groups.get(group);
         // `#deliverToBag` rebalanceia e emite SEMPRE (mesmo sem itens: o gold muda o `value`),
         // então o `#emitBag` que existia aqui para o drop de gold puro sumiu (DT-03).
         this.#deliverToBag(session, loot.items);
+        // Supply (#520): não passa pela bolsa — é abstrato, sem peso e sem settlement a
+        // liquidar depois. Dividido por igual entre os MESMOS presentes que a bolsa usa
+        // (`presentAtDrop`, D4/§16.1), não o `eligible` de XP.
+        this.#creditSupplies(session, session.participants, loot.supplies);
       }
     } else if (definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
@@ -4770,6 +4774,8 @@ const slots = bot.groups.get(group);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
       this.#deliverLoot(session, recipient, loot.items);
+      // Supply (#520): o recipiente do loot leva o estoque inteiro, como o gold.
+      this.#creditSupplies(session, [recipient], loot.supplies);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
@@ -5224,6 +5230,36 @@ const slots = bot.groups.get(group);
     // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
     // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
     this.#rebalanceBag(session);
+  }
+
+  /**
+   * Credita o ESTOQUE de supply do loot (#520) a quem recebeu o drop: em solo/split o
+   * recipiente sozinho leva tudo; em shared, dividido por igual entre os presentes no abate
+   * (`splitEqually`, o mesmo do auto-sell), resto um a um nos primeiros.
+   *
+   * Supply é ABSTRATO (AB-01, ADR 0032 d.6): sem peso, sem instância, sem OVERWEIGHT — o
+   * estoque É o destino final, e não passa pela bolsa nem pelo `#settle` como item. O catálogo
+   * é conferido ANTES de gastar um supply, como `#deliverLoot` faz com item: `buildContent`
+   * recusa loot de supply inexistente no boot, e isto só dispara com conteúdo mudando sob uma
+   * sessão em voo.
+   */
+  #creditSupplies(
+    session: Session, recipients: readonly CharacterRuntime[], supplies: readonly LootSupply[],
+  ): void {
+    if (recipients.length === 0 || supplies.length === 0) return;
+    for (const rolled of supplies) {
+      if (this.#options.supplies.get(rolled.supplyId) === undefined) continue;
+      const shares = splitEqually(rolled.quantity, recipients.length);
+      for (let i = 0; i < recipients.length; i += 1) {
+        const share = shares[i] ?? 0;
+        if (share === 0) continue;
+        const member = recipients[i] as CharacterRuntime;
+        member.supplyStock.set(rolled.supplyId, (member.supplyStock.get(rolled.supplyId) ?? 0) + share);
+        // Conta no ANALISADOR como o item (§16.1): o supply caiu, e é isso que importa para
+        // "quantos itens caíram" — não há um agregado separado só para supply.
+        session.credit(member.id, 'itemsLooted', share);
+      }
+    }
   }
 
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */

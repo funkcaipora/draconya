@@ -708,6 +708,32 @@ interface FieldSpec {                     // declarado em content
 **Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
 e a UI detalhada de buff.
 
+**O primeiro campo de conteúdo real é o do Dragon Lord (#520).** A ability `firefield`
+(`data/monsters/dragon-lord.json`) não causa dano direto (`power: 0`) — ela só larga o campo,
+círculo raio 4 centrado no alvo, com uma condição `damage-over-time` de 20 de fogo a cada 10 s.
+Os números vêm do Canary `items.xml` (fire field id 2118: `ticks 10000`, `count 7`,
+`damage 20`): 7 tiques de 20 em 10 000 ms cada, 70 000 ms de queima total. **O Tibia real
+decai o campo em três estágios** (2118 → 2119 → 2120, cada um mais fraco que o anterior, até
+sumir); `FieldSpec` do Draconya é um campo só, sem decaimento — usamos os números do estágio
+MAIS FORTE (2118) pelo tempo inteiro, em vez de simular a cadeia. Um jogador que pisa tarde no
+campo do Tibia real levaria menos dano (estágio mais fraco); aqui leva o mesmo.
+
+## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
+
+O #518 desenhou o mecanismo; o #520 é quem o usa pela primeira vez em conteúdo real, e por isso
+os exemplos deste documento (`staticAttack: 0,8`, `runOnHealth: 300`) já citavam o Dragon antes
+de ele existir. `data/monsters/dragon.json` e `dragon-lord.json` declaram: `melee` (id reservado
+diferente de `basic` — abilities declaradas substituem a básica do boot, não somam a ela),
+`fireball` (círculo raio 4 centrado no alvo), `firewave` (onda comprimento 8, sem alvo — sai do
+monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
+— `paralyze` e `invisible` do TFS não têm mecanismo equivalente no Draconya (não há condição de
+paralisia nem invisibilidade, ver CMB-07 "Fora do escopo"), então a imunidade a eles não tem o
+que ser declarada. Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable`
+do Canary (`monster.flags`) e a `strategiesTarget` ponderada (nearest 70 % / health 10 % /
+damage 10 % / random 10 %) não existem no schema — `monsterTargetChangeSchema` só tem o ramo
+`TARGETSEARCH_RANDOM` do TFS (ver acima), e o resto fica registrado aqui como o que falta ao
+motor, não implementado por esta issue.
+
 ## Outcomes avançados: crítico, leech e mana shield (CMB-08, #335)
 
 O CMB-02 devolvia um outcome; o CMB-04 tornou a defesa um estágio; o CMB-08 completa o resultado

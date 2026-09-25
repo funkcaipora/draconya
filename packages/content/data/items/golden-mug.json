@@ -1,0 +1,8 @@
+{
+  "id": "golden-mug",
+  "name": "Golden Mug",
+  "kind": "other",
+  "weight": 4.7,
+  "value": 250,
+  "_open": "Loot do Dragon Lord (#520). Canary `items.xml` id 2903 (`golden mug`): weight 470 (4,7 oz). `value` 250: NPC Tamoril compra por esse preço, confirmado via WebSearch (TibiaWiki) — fato do Tibia (ADR 0037 d.4)."
+}

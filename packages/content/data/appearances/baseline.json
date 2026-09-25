@@ -3,7 +3,9 @@
   "pack": "tibia-1332",
   "monsters": {
     "rat": 21,
-    "rotworm": 26
+    "rotworm": 26,
+    "dragon": 34,
+    "dragon-lord": 39
   },
   "characters": {
     "default": 128
@@ -50,7 +52,38 @@
     "dragon-necklace": 3085,
     "might-ring": 3048,
     "wand-of-starstorm": 8092,
-    "hailstorm-rod": 3067
+    "hailstorm-rod": 3067,
+    "dragon-ham": 3583,
+    "steel-shield": 3409,
+    "crossbow": 3349,
+    "dragons-tail": 11457,
+    "longsword": 3285,
+    "steel-helmet": 3351,
+    "broadsword": 3301,
+    "plate-legs": 3557,
+    "wand-of-inferno": 3071,
+    "green-dragon-scale": 5920,
+    "green-dragon-leather": 5877,
+    "double-axe": 3275,
+    "dragon-hammer": 3322,
+    "serpent-sword": 3297,
+    "small-diamond": 3028,
+    "dragon-shield": 3416,
+    "life-crystal": 3061,
+    "dragonbone-staff": 7430,
+    "green-mushroom": 3732,
+    "royal-spear": 7378,
+    "gemmed-book": 2842,
+    "small-sapphire": 3029,
+    "golden-mug": 2903,
+    "red-dragon-scale": 5882,
+    "red-dragon-leather": 5948,
+    "strange-helmet": 3373,
+    "fire-sword": 3280,
+    "tower-shield": 3428,
+    "dragon-scale-mail": 3386,
+    "dragon-slayer": 7402,
+    "dragon-lord-trophy": 7399
   },
   "ammunition": {
     "arrow": {
@@ -86,11 +119,16 @@
     },
     "hailstorm-rod": {
       "missile": 29
+    },
+    "wand-of-inferno": {
+      "missile": 4
     }
   },
   "corpses": {
     "rat": 5964,
-    "rotworm": 5967
+    "rotworm": 5967,
+    "dragon": 5973,
+    "dragon-lord": 5984
   },
   "maps": {},
   "spells": {
@@ -429,5 +467,16 @@
   },
   "hits": {
     "melee": 1
+  },
+  "abilities": {
+    "fire": {
+      "missile": 4
+    },
+    "firearea": {
+      "effect": 7
+    },
+    "blueshimmer": {
+      "effect": 13
+    }
   }
 }

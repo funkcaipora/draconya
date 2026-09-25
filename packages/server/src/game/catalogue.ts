@@ -276,6 +276,10 @@ function lootOf(content: Content, huntId: string): Array<{ itemId: string; name:
       if (loot === undefined) continue;
       for (const item of loot.items) {
         if (item.chance <= 0) continue;
+        // Loot de supply (#520) não tem `itemId` — não é item físico, e esta lista é só do
+        // catálogo de item (FUN-76). Fica fora da vitrine da hunt por enquanto; ver o `_open`
+        // de `CharacterState.supplyStock`.
+        if (item.itemId === undefined) continue;
         const definition = content.items.get(item.itemId);
         if (definition !== undefined) found.set(item.itemId, definition.name);
       }
@@ -308,7 +312,10 @@ function lootDropsOf(content: Content, huntId: string): number {
       const loot = content.monsters.get(entry.monsterId)?.loot;
       if (loot === undefined) continue;
       if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
-      for (const item of loot.items) if (item.chance > 0) items.add(item.itemId);
+      // Supply (#520) não conta aqui — mesma razão de `lootOf`, acima.
+      for (const item of loot.items) {
+        if (item.chance > 0 && item.itemId !== undefined) items.add(item.itemId);
+      }
     }
   }
   return items.size + (gold ? 1 : 0);

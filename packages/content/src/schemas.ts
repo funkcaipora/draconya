@@ -307,11 +307,28 @@ const lootRollSchema = z.object({
  * A tabela de loot (FUN-63). Moeda e item são coisas DIFERENTES, e o schema diz qual é qual:
  * gold é campo no personagem (`character.gold`), não item — por isso tem lugar próprio, em vez
  * de um `itemId: "gold-coin"` que o código teria que reconhecer por nome.
+ *
+ * `items` aceita `itemId` OU `supplyId` (#520): poção é suprimento ABSTRATO (`supplies/*.json`,
+ * AB-01), e não existia no catálogo de item — sem isso, uma poção no loot de monstro não tinha
+ * como ser declarada. `supplyId` credita o ESTOQUE do supply (`CharacterRuntime.supplyStock`,
+ * `character.ts`) de quem recebe o drop, e NÃO passa pela mochila: sem peso, sem instância, sem
+ * a Caixa de Loot — o mesmo motivo de gold não ser item. O `.refine` recusa a linha ambígua (as
+ * duas chaves) ou vazia (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo
+ * existente que só declara `itemId` continua válido sem mudar uma vírgula.
  */
 export const lootTableSchema = z.object({
   gold: lootRollSchema.optional(),
-  /** Itens de verdade. `buildContent` confere cada `itemId` contra o catálogo (FUN-76). */
-  items: z.array(lootRollSchema.safeExtend({ itemId: z.string().min(1) })).default([]),
+  /**
+   * Itens de verdade OU supply. `buildContent` confere cada `itemId`/`supplyId` contra o
+   * catálogo correspondente (FUN-76 / AB-01).
+   */
+  items: z.array(lootRollSchema.safeExtend({
+    itemId: z.string().min(1).optional(),
+    supplyId: z.string().min(1).optional(),
+  }).refine(
+    (line) => (line.itemId !== undefined) !== (line.supplyId !== undefined),
+    { message: 'loot: declare itemId OU supplyId, nunca os dois nem nenhum' },
+  )).default([]),
 });
 
 /**
@@ -1131,7 +1148,7 @@ export interface MonsterAbility {
  * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
  * Ver Decisão técnica DT-02.
  */
-export const MONSTER_CLASSES = ['mammal', 'vermin'] as const;
+export const MONSTER_CLASSES = ['mammal', 'vermin', 'dragon'] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
@@ -1721,6 +1738,38 @@ export const partySchema = z.object({
 export type PartyConfig = z.infer<typeof partySchema>;
 
 /**
+ * A entrada de Bestiário de UM monstro (#520, Canary `Bestiary`/TFS `bestiary`, referência
+ * §15-19). `class` é o MESMO vocabulário de `MONSTER_CLASSES` (a categoria do Cyclopedia); `race`
+ * é a família usada pelo sistema de Charms do Tibia — string livre, porque o Draconya ainda não
+ * tem Charms, e `race` entra só como dado (como `class` fez antes do primeiro monstro real).
+ *
+ * Os três limiares (Canary `FirstUnlock`/`SecondUnlock`/`toKill`, TFS `prowess`/`expertise`/
+ * `mastery`) são CRESCENTES por definição — o segundo desbloqueio não pode pedir menos abates
+ * que o primeiro, nem a ficha completa menos que o segundo —, e o `.refine` o exige.
+ */
+export const bestiaryEntrySchema = z.strictObject({
+  class: z.enum(MONSTER_CLASSES),
+  race: z.string().min(1),
+  /** Abates para a ficha completa (Canary `toKill`, TFS `mastery`). */
+  toKill: z.number().int().positive(),
+  /** Abates para o primeiro desbloqueio — a ficha básica (Canary `FirstUnlock`, TFS `prowess`). */
+  firstUnlock: z.number().int().positive(),
+  /** Abates para o segundo desbloqueio — quase completa (Canary `SecondUnlock`, TFS `expertise`). */
+  secondUnlock: z.number().int().positive(),
+  /** Pontos de Charm ganhos ao completar a ficha (Canary `CharmsPoints`, TFS `charmPoints`). */
+  charmsPoints: z.number().int().nonnegative(),
+  /** Estrelas de dificuldade do Cyclopedia, 1 a 4 (Canary `Stars`). */
+  stars: z.number().int().min(1).max(4),
+  /** Raridade de encontro do Cyclopedia: 0 comum … 3 muito raro (Canary `Occurrence`). */
+  occurrence: z.number().int().min(0).max(3),
+  _open: z.string().optional(),
+}).refine(
+  (entry) => entry.firstUnlock <= entry.secondUnlock && entry.secondUnlock <= entry.toKill,
+  { message: 'bestiary: firstUnlock <= secondUnlock <= toKill' },
+);
+export type BestiaryEntry = z.infer<typeof bestiaryEntrySchema>;
+
+/**
  * O Bestiário (§18, FUN-113): os marcos de abates por monstro e o que cada marco vale.
  *
  * Só a recompensa PADRÃO — +1 % de XP PvE por marco, global (DT-01 da FUN-113). As
@@ -1752,6 +1801,18 @@ export const bestiarySchema = z.object({
    * ponto flutuante na frente do arredondamento — a armadilha que a conta em inteiro evita.
    */
   xpBonusPercentPerMilestone: z.number().int().nonnegative(),
+  /**
+   * A ficha de Bestiário de cada monstro (#520, Canary `Bestiary`/TFS `bestiary`, referência
+   * §15-19): os limiares de abate que desbloqueiam a ficha e a classificação do próprio Tibia.
+   * Chave é `monsterId`; `buildContent` confere que ele existe (como `class` já fazia sozinho) e
+   * que `class` bate com o `class` do monstro — duas fontes da mesma verdade divergiriam na
+   * primeira mudança em uma delas.
+   *
+   * **Declarado, e ainda não lido por ninguém** — como `staticAttack` (#518): o Cyclopedia
+   * (#321) hoje mostra só progresso por marco global, e a UI de estrelas/desbloqueio é dado à
+   * espera de consumidor. Registrado como divergência em `docs/product/bestiary.md`.
+   */
+  entries: z.record(z.string().min(1), bestiaryEntrySchema).default({}),
   _open: z.string().optional(),
 });
 

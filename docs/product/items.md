@@ -2,7 +2,7 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord e `supplyId` no loot** (#520, M28): 31 itens novos e o loot de monstro aceitando supply, que credita `CharacterRuntime.supplyStock` — ainda sem consumidor; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário); E2 (kit level 200, M28)
 
@@ -327,6 +327,35 @@ sessão encerrada encheria o Redis com cinco mil chaves dizendo "não sobrou ite
 (`draconya_loot_boxes_pending`) — uma pilha que só cresce é jogador ganhando item que não
 consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o número.
 
+### Loot de SUPPLY: `supplyId` credita o ESTOQUE, não passa pela mochila (#520)
+
+Poção é suprimento **abstrato** (AB-01, ADR 0032 d.6) — sem pilha física, sem instância. Antes
+da #520, `lootTableSchema` só conhecia `itemId`: um monstro não tinha como dropar poção nenhuma,
+e o Dragon/Dragon Lord do Tibia soltam Strong Health Potion. A linha da tabela agora declara
+**`itemId` OU `supplyId`**, nunca os dois — o `.refine` do schema recusa a ambiguidade —, e
+`rollLoot` separa o resultado em `items`/`supplies` DEPOIS de sortear, na mesma ordem de sempre
+(gold, depois cada linha na ordem do arquivo): a separação é de DESTINO, não de sorteio, e por
+isso o contrato de semente do FUN-63 continua valendo sem exceção.
+
+**O destino é `CharacterRuntime.supplyStock` (`supplyId → quantidade`), um Map novo no
+personagem, opcional no snapshot como `ammo`/`bestiary` — sem bump de `SNAPSHOT_FORMAT_VERSION`.**
+Solo e party `split` creditam o recipiente do loot sozinho (o mesmo `recipient` do gold);
+party `shared` divide por igual entre os presentes no abate (`splitEqually`, o mesmo do
+auto-sell), resto um a um nos primeiros — supply não pesa e não passa pela bolsa/`#settle` como
+item, porque não tem peso nem valor de venda: o estoque **é** o destino final.
+
+**`supplyStock` ainda não tem consumidor.** `useSupply` continua debitando gold, sem olhar o
+estoque — a mesma decisão do `staticAttack` do monstro (#518): aceito e persistido, registrado
+aqui como divergência em vez de meio implementado. Quando alguém ligar "gastar do estoque antes
+do gold" em `casting.ts`, o dado já está no personagem; até lá, uma Strong Health Potion caída
+do Dragon fica contada, mas o jogador não vê nem gasta — nenhuma tela mostra `supplyStock` hoje.
+
+**Munição (Burst Arrow, Power Bolt) NÃO está no loot do Dragon/Dragon Lord**, apesar de cair
+deles no Tibia real. Munição é abstrata do MESMO jeito que supply (ADR 0026 d.7: sem item
+físico, cada tiro debita gold direto pela família escolhida) — mas `supplyId` só cobre
+`supplies/`, e estender o mesmo mecanismo para `ammunition/` ficou fora do escopo da #520.
+Nenhuma issue aberta cobre isso ainda.
+
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
@@ -449,6 +478,8 @@ UMA mão, attack 44, defense 25, level 60, sem vocação — usável com escudo,
 | Escudo — `defense` / peso / `value` | wooden shield 14 / 40 oz / 0 `[ABERTO — defense, peso e valor provisórios]` | `packages/content/data/items/wooden-shield.json` |
 | Kit level 200 — atributos e preço de NPC | os 19 itens da tabela do kit, acima (armor/attack/defense/weight/`value`/`bonuses`/`requires`) — números do Canary `items.xml` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/items/*.json` (as 16 peças novas), `packages/content/data/ammunition/power-bolt.json` |
 | Poções do Tibia — `amountRange` / `requires` / `price` | as nove poções da tabela, acima — números do Canary `potions.lua` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/supplies/{strong,great,ultimate,supreme}-*.json` |
+| Loot do Dragon (#520) — 20 linhas | atributos e `value` do Canary `items.xml`; preço de NPC do Tibia real via TibiaWiki quando o Canary só tinha oferta custom (ADR 0037 d.4) — 19 itens novos + `supplyId: strong-health-potion` | `packages/content/data/items/{dragon-ham,steel-shield,crossbow,dragons-tail,longsword,steel-helmet,broadsword,plate-legs,wand-of-inferno,green-dragon-scale,green-dragon-leather,double-axe,dragon-hammer,serpent-sword,small-diamond,dragon-shield,life-crystal,dragonbone-staff}.json` |
+| Loot do Dragon Lord (#520) — 19 linhas | idem; reaproveita Energy Ring e Royal Helmet (já existiam), 12 itens novos + `supplyId: strong-health-potion` | `packages/content/data/items/{green-mushroom,royal-spear,gemmed-book,small-sapphire,golden-mug,red-dragon-scale,red-dragon-leather,strange-helmet,fire-sword,tower-shield,dragon-scale-mail,dragon-slayer,dragon-lord-trophy}.json` |
 
 ## Em aberto
 
@@ -464,6 +495,25 @@ UMA mão, attack 44, defense 25, level 60, sem vocação — usável com escudo,
   as seis peças e o slot em que cada uma nasce vestida, e `createCharacter` grava as linhas de
   `item_instance` na **mesma transação** que o personagem (id `<characterId>:kit:<n>`), sem
   passar pelo ledger — o kit não tem preço. Personagem criado antes do #153 continua sem kit.
+- **Royal Spear (#520) não é arma de arremesso.** No Tibia real é `weaponType distance` sem
+  munição — o próprio item é o projétil, consumido ao acertar (`breakChance`). `WEAPON_KINDS`
+  (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
+  arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
+  vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
+- **Serpent Sword e Fire Sword (#520) perdem o componente elemental embutido.** O Tibia real dá
+  `elementearth 8` à Serpent Sword e `elementfire 11` à Fire Sword — dano elemental somado ao
+  físico no MESMO golpe. `weapon.damageType` é um tipo só por arma (CMB-03); `attack` fica com o
+  total, e o componente elemental não aparece. As duas armas continuam batendo o número certo em
+  físico; só o "queima também" some.
+- **Defesa residual de arma de duas mãos (#520) não é copiada.** O Tibia real dá `defense` a
+  Broadsword, Double Axe e Dragon Slayer mesmo sendo de duas mãos; `buildContent` recusa
+  `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — regra
+  de antes da #520, não uma exceção criada para ela. O número simplesmente não entra no item.
+- **Dragonbone Staff (#520) é club, não wand/rod.** O nome sugere conjuração, mas o Tibia real a
+  modela como arma de club corpo a corpo (`weaponType club`), sem `mana`/`fromDamage`/`toDamage`
+  no script de equip — e é assim que o catálogo a declara.
+- **Gemmed Book (#520) reaproveita o item genérico "book" do Canary**, sem atributo próprio que
+  distinga a versão "gemmed" (a diferença no Tibia real é só de nome/arte).
 
 ## Decidido (ADR 0026): munição, containers e runa
 

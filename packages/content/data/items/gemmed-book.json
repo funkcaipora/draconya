@@ -1,0 +1,8 @@
+{
+  "id": "gemmed-book",
+  "name": "Gemmed Book",
+  "kind": "other",
+  "weight": 13,
+  "value": 0,
+  "_open": "Loot do Dragon Lord (#520). Canary `data-otservbr-global` lista o Dragon Lord soltando `id 2842` (o item genérico \"book\" do `items.xml`, sem atributo que distinga a versão \"gemmed\" — a variação é só de nome/arte no Tibia real); weight 1300 (13 oz). `value` 0: nenhum NPC compra o Gemmed Book (TibiaWiki via WebSearch: \"no NPC sells this item\")."
+}

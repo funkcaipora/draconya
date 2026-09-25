@@ -1,0 +1,95 @@
+{
+  "id": "dragon",
+  "name": "Dragon",
+  "class": "dragon",
+  "recommendedLevel": 40,
+  "health": 1000,
+  "experience": 700,
+  "attack": {
+    "min": 0,
+    "max": 120
+  },
+  "armor": 25,
+  "mitigation": {
+    "resistances": {
+      "earth": 0.8,
+      "energy": 0.2,
+      "ice": -0.1
+    },
+    "immunities": ["fire"]
+  },
+  "attackIntervalMs": 2000,
+  "speed": 172,
+  "aggroRadius": 8,
+  "attackRange": 1,
+  "leashRadius": 0,
+  "loot": {
+    "gold": { "chance": 0.90082, "min": 1, "max": 105 },
+    "items": [
+      { "itemId": "dragon-ham", "chance": 0.65143, "min": 1, "max": 2 },
+      { "itemId": "steel-shield", "chance": 0.14893 },
+      { "itemId": "crossbow", "chance": 0.10085 },
+      { "itemId": "dragons-tail", "chance": 0.09883 },
+      { "itemId": "longsword", "chance": 0.04027 },
+      { "itemId": "steel-helmet", "chance": 0.03005 },
+      { "itemId": "broadsword", "chance": 0.01995 },
+      { "itemId": "plate-legs", "chance": 0.01909 },
+      { "supplyId": "strong-health-potion", "chance": 0.01055 },
+      { "itemId": "wand-of-inferno", "chance": 0.01053 },
+      { "itemId": "green-dragon-scale", "chance": 0.01038 },
+      { "itemId": "green-dragon-leather", "chance": 0.01018 },
+      { "itemId": "double-axe", "chance": 0.01008 },
+      { "itemId": "dragon-hammer", "chance": 0.00517 },
+      { "itemId": "serpent-sword", "chance": 0.00504 },
+      { "itemId": "small-diamond", "chance": 0.00384 },
+      { "itemId": "dragon-shield", "chance": 0.00301 },
+      { "itemId": "life-crystal", "chance": 0.00113 },
+      { "itemId": "dragonbone-staff", "chance": 0.00102 }
+    ]
+  },
+  "abilities": [
+    {
+      "id": "melee",
+      "cadenceMs": 2000,
+      "target": { "range": 1 },
+      "power": { "min": 0, "max": 120 },
+      "damageType": "physical"
+    },
+    {
+      "id": "fireball",
+      "cadenceMs": 2000,
+      "chance": 0.15,
+      "target": {
+        "range": 7,
+        "area": { "shape": "circle", "radius": 4, "centered": "target" }
+      },
+      "power": { "min": 60, "max": 140 },
+      "damageType": "fire",
+      "presentation": { "missileKey": "fire", "impactKey": "firearea" }
+    },
+    {
+      "id": "firewave",
+      "cadenceMs": 2000,
+      "chance": 0.10,
+      "target": {
+        "range": 7,
+        "area": { "shape": "wave", "length": 8 }
+      },
+      "power": { "min": 100, "max": 170 },
+      "damageType": "fire",
+      "presentation": { "impactKey": "firearea" }
+    }
+  ],
+  "defenses": [
+    {
+      "id": "heal",
+      "cadenceMs": 2000,
+      "chance": 0.15,
+      "heal": { "min": 40, "max": 70 },
+      "presentation": { "impactKey": "blueshimmer" }
+    }
+  ],
+  "targetChange": { "intervalMs": 4000, "chance": 0.10 },
+  "runOnHealth": 300,
+  "staticAttack": 0.80
+}

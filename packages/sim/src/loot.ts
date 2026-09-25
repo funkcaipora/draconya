@@ -13,12 +13,24 @@ export interface LootItem {
   readonly quantity: number;
 }
 
+/**
+ * Um supply sorteado (#520): poção é suprimento ABSTRATO (AB-01), e não passa pela mochila —
+ * `quantity` credita direto o estoque de quem recebe (`CharacterRuntime.supplyStock`), sem
+ * peso, sem instância. Ver `lootTableSchema` em `@draconya/content`.
+ */
+export interface LootSupply {
+  readonly supplyId: string;
+  readonly quantity: number;
+}
+
 export interface LootResult {
   readonly gold: number;
   readonly items: readonly LootItem[];
+  readonly supplies: readonly LootSupply[];
 }
 
 const NO_ITEMS: readonly LootItem[] = [];
+const NO_SUPPLIES: readonly LootSupply[] = [];
 
 /**
  * Sorteia a tabela com o `Rng` da SESSÃO, nunca `Math.random`: sem isso, uma sessão retomada
@@ -26,18 +38,25 @@ const NO_ITEMS: readonly LootItem[] = [];
  * possível.
  *
  * A ORDEM dos sorteios é contrato: mudar a ordem muda o resultado de toda semente já gravada,
- * e uma hunt retomada passaria a render diferente do que renderia. Gold primeiro, itens na
- * ordem da tabela.
+ * e uma hunt retomada passaria a render diferente do que renderia. Gold primeiro, itens e
+ * supplies na ordem da tabela — cada linha consome UMA rolagem, declare ela `itemId` ou
+ * `supplyId`; separar os dois resultados em listas diferentes DEPOIS de sortear não muda a
+ * sequência nenhuma (FUN-63).
  */
 export function rollLoot(table: LootTable, rng: Rng): LootResult {
   const gold = table.gold === undefined ? 0 : rollLine(table.gold, rng);
   let items: LootItem[] | null = null;
+  let supplies: LootSupply[] | null = null;
   for (const line of table.items) {
     const quantity = rollLine(line, rng);
     if (quantity === 0) continue;
-    (items ??= []).push({ itemId: line.itemId, quantity });
+    if (line.itemId !== undefined) {
+      (items ??= []).push({ itemId: line.itemId, quantity });
+    } else if (line.supplyId !== undefined) {
+      (supplies ??= []).push({ supplyId: line.supplyId, quantity });
+    }
   }
-  return { gold, items: items ?? NO_ITEMS };
+  return { gold, items: items ?? NO_ITEMS, supplies: supplies ?? NO_SUPPLIES };
 }
 
 /**

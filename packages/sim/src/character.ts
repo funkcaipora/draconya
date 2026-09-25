@@ -126,6 +126,16 @@ export interface CharacterState {
    * vocação; opcional, e por isso o `SNAPSHOT_FORMAT_VERSION` continua o mesmo.
    */
   readonly ammo?: Readonly<Partial<Record<AmmoFamily, string>>>;
+  /**
+   * O ESTOQUE de supply que caiu em loot (#520): `supplyId → quantidade`, creditado por quem
+   * recebe o drop (`rollLoot`/`LootSupply`, `packages/sim/src/loot.ts`) — nunca escrito por
+   * `useSupply`. Supply continua abstrato (AB-01, ADR 0032 d.6: sem pilha, sem reposição no
+   * USO); o estoque é só o RECEBIMENTO de um drop, e ainda não tem consumidor — como
+   * `staticAttack` no monstro (#518), aceito e persistido, mas nenhum caminho de `useSupply`
+   * gasta dele ainda (divergência registrada em `docs/product/items.md`). Ausente é nenhum
+   * estoque, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly supplyStock?: Readonly<Record<string, number>>;
   readonly cooldowns: Partial<CooldownState>;
   /**
    * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
@@ -225,6 +235,8 @@ export class CharacterRuntime {
    * família cai na básica da família na hora do tiro.
    */
   readonly ammo: Map<AmmoFamily, string>;
+  /** O estoque de supply do loot (#520). Só a sessão dona escreve — ver `CharacterState.supplyStock`. */
+  readonly supplyStock: Map<string, number>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
@@ -257,6 +269,7 @@ export class CharacterRuntime {
     this.lootSeq = state.lootSeq ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
+    this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
@@ -390,6 +403,7 @@ export class CharacterRuntime {
       lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
+      ...(this.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(this.supplyStock) }),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
