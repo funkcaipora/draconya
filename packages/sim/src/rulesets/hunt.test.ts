@@ -7001,6 +7001,327 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
   });
 });
 
+describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#520)', () => {
+  // Espelha `data/monsters/dragon.json` (TFS `dragon.xml`, conferido com o Canary): as mesmas
+  // chances e a mesma mitigação — fogo IMUNE, gelo −10 % (vulnerável). HP alto de propósito,
+  // para rodar muitos vencimentos de cadência sem morrer nem fugir sem querer.
+  const dragon = {
+    id: 'dragon', name: 'Dragon', recommendedLevel: 40,
+    health: 1_000_000, experience: 700,
+    attack: { min: 0, max: 120 }, armor: 0,
+    mitigation: { resistances: { ice: -0.1 }, immunities: ['fire'] },
+    attackIntervalMs: 2000, speed: 172, aggroRadius: 8, attackRange: 1,
+    loot: { items: [] },
+    abilities: [
+      {
+        id: 'melee', cadenceMs: 2000, target: { range: 1 },
+        power: { min: 0, max: 120 }, damageType: 'physical',
+      },
+      {
+        id: 'fireball', cadenceMs: 2000, chance: 0.15,
+        target: { range: 7, area: { shape: 'circle', radius: 4, centered: 'target' } },
+        power: { min: 60, max: 140 }, damageType: 'fire',
+      },
+      {
+        id: 'firewave', cadenceMs: 2000, chance: 0.10,
+        target: { range: 7, area: { shape: 'wave', length: 8 } },
+        power: { min: 100, max: 170 }, damageType: 'fire',
+      },
+    ],
+    defenses: [{ id: 'heal', cadenceMs: 2000, chance: 0.15, heal: { min: 40, max: 70 } }],
+    targetChange: { intervalMs: 4000, chance: 0.10 },
+    runOnHealth: 300,
+    staticAttack: 0.80,
+  };
+
+  /** O personagem level 200 do cenário (#520): stats absurdamente altos, como a fixture já
+   * faz com o rato (500 000 HP) — o que este describe mede é o comportamento do Dragon, não
+   * quanto o herói aguenta. */
+  const heroLevel200 = (over: Partial<{ health: number; mana: number }> = {}) =>
+    new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: over.health ?? 1_000_000, maxHealth: over.health ?? 1_000_000,
+      mana: over.mana ?? 1_000, maxMana: over.mana ?? 1_000,
+      level: 200, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+
+  /** Ataque desarmado ZERO: só o Dragon causa dano na cena, então a leitura de frequência
+   * é só dele — o herói nunca reduz o HP dele e nunca dispara a fuga por engano. */
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+
+  /** A hunt fixture aponta para "rat"; aqui a composição é o Dragon. */
+  const dragonHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'dragon', weight: 1 }] },
+      bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'dragon', weight: 1 }] },
+    },
+  };
+
+  it('melee, bola de fogo, onda e cura própria saem nas frequências esperadas pela semente (~200 vencimentos)', () => {
+    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], combat: [pacifist] }));
+    const session = createHuntSession({
+      id: 'dragon-freq', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    session.enter(heroLevel200());
+    const ruleset = session.ruleset as HuntRuleset;
+    session.advanceBy(100);
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem monstro nesta cena');
+    // De vida CHEIA a cura não emite nada (a mesma regra do `#emitHealed` do personagem) — sem
+    // ferida nenhuma, todo sorteio de cura bem-sucedido seria mudo, e `heals` ficaria zero por
+    // um motivo que não tem nada a ver com a chance. 50 000 de ferida é bem mais que o total
+    // que 30 curas (o teto da banda abaixo) somam (30 × 70 no máximo = 2 100): o Dragon segue
+    // ferido a cena inteira, e toda cura bem-sucedida tem o que repor.
+    target.receiveDamage(50_000);
+    session.drainEvents();
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < 400_000 && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    const casts = (abilityId: string): number => events.filter(
+      (e) => e.kind === 'monster-ability-cast' && e.abilityId === abilityId,
+    ).length;
+    const meleeHits = events.filter((e) => e.kind === 'creature-hit' && e.source === 'melee'
+      && typeof e.attackerId === 'string' && e.attackerId.startsWith('m:')).length;
+    const heals = events.filter(
+      (e) => e.kind === 'creature-healed' && e.source === 'monster',
+    ).length;
+
+    // ~200 vencimentos de cadência (400 000 ms / 2 000 ms). `melee` não declara `chance` — sai
+    // em quase todo vencimento —, e `fireball` (15 %), `firewave` (10 %) e a cura (15 %) rolam
+    // uma chance a cada vencimento: a lei dos grandes números os aproxima do esperado. A banda
+    // é generosa (grosso modo metade a uma vez e meia o valor esperado, ~3 desvios-padrão do
+    // binomial com n=200) para não ficar frágil a um detalhe de implementação que não muda o
+    // COMPORTAMENTO — a simulação em si já é 100 % determinística pela semente da sessão.
+    expect(meleeHits).toBeGreaterThan(150);
+    expect(casts('fireball')).toBeGreaterThan(15);
+    expect(casts('fireball')).toBeLessThan(45);
+    expect(casts('firewave')).toBeGreaterThan(8);
+    expect(casts('firewave')).toBeLessThan(32);
+    expect(heals).toBeGreaterThan(15);
+    expect(heals).toBeLessThan(45);
+    // Melee (sem chance) é claramente mais frequente que qualquer ability com chance — a prova
+    // qualitativa de que `chance` reduz a frequência de verdade, não é só um número decorativo.
+    expect(meleeHits).toBeGreaterThan(casts('fireball') * 3);
+    expect(meleeHits).toBeGreaterThan(casts('firewave') * 3);
+  });
+
+  it('fogo não causa dano (imune) e gelo causa +10 % (vulnerável) — a mitigação do Dragon', () => {
+    // Sem `defenses`: a cura própria do Dragon (15 % a cada 2 s) contaminaria a leitura de UM
+    // golpe se rolasse no meio da janela — este teste é sobre o TIPO de dano, não sobre a cura,
+    // que já tem o teste dela acima.
+    const dragonNoHeal = { ...dragon, defenses: [] };
+    const alwaysTarget = { kind: 'targets' as const, op: '>=' as const, count: 1 };
+    const fireBolt = {
+      id: 'fire-bolt', name: 'Fire Bolt', manaCost: 15, cooldownMs: 999_999,
+      effect: { kind: 'damage', power: 100, range: 3, damageType: 'fire' },
+    };
+    const frostBolt = {
+      id: 'frost-bolt', name: 'Frost Bolt', manaCost: 15, cooldownMs: 999_999,
+      effect: { kind: 'damage', power: 100, range: 3, damageType: 'ice' },
+    };
+
+    // Um cooldown absurdo (999 999 ms) garante UM lançamento só na janela do teste. O dano lido
+    // vem do PRÓPRIO evento `creature-hit` (o `amount` APLICADO), não de um antes/depois do
+    // `health` do monstro: o bot pode lançar já no primeiro passo (FUN-25, cooldowns prontos na
+    // entrada), e capturar "antes" tarde demais mediria zero mesmo com dano de verdade.
+    const damageDealt = (spellId: string, spellDef: unknown): number => {
+      const loaded = buildContent(raw({
+        monsters: [dragonNoHeal], hunts: [dragonHunt], combat: [pacifist], spells: [spellDef],
+      }));
+      const config = botConfig({
+        attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId } }],
+      });
+      const session = createHuntSession({
+        id: `dragon-mitigation-${spellId}`, content: loaded, huntId: 'arena',
+        difficulty: 'cautious', createdAtMs: 0, botConfig: config,
+      });
+      session.enter(heroLevel200());
+      const events: DomainEvent[] = [];
+      for (let t = 0; t < 10_000 && session.ended === null; t += 100) {
+        session.advanceBy(100);
+        events.push(...session.drainEvents());
+      }
+      // O lançamento de verdade aconteceu — sem isto, "0 de dano" no fogo provaria imunidade
+      // OU um bot que nunca lançou nada, e as duas leituras são indistinguíveis sem este
+      // sinal.
+      expect(events.some((e) => e.kind === 'spell-cast' && e.spellId === spellId), spellId).toBe(true);
+      // `source: 'spell'` sozinho pegaria TAMBÉM a bola/onda do próprio Dragon batendo no
+      // herói (não são corpo a corpo); `attackerId === 'hero'` isola o golpe do FEITIÇO do
+      // herói no Dragon.
+      return events
+        .filter((e) => e.kind === 'creature-hit' && e.source === 'spell' && e.attackerId === 'hero')
+        .reduce((sum, e) => sum + (e as { amount: number }).amount, 0);
+    };
+
+    expect(damageDealt('fire-bolt', fireBolt)).toBe(0);
+    const iceDamage = damageDealt('frost-bolt', frostBolt);
+    // 100 de poder × 1,1 (gelo −10 % = vulnerabilidade) = 110; a banda cobre o resíduo de ponto
+    // flutuante da multiplicação sem se prender ao arredondamento exato do pipeline.
+    expect(iceDamage).toBeGreaterThan(105);
+    expect(iceDamage).toBeLessThan(115);
+  });
+
+  it('abaixo de runOnHealth o Dragon foge: para de bater corpo a corpo, mas a bola de fogo continua saindo', () => {
+    // `fireball` com chance 1 nesta cena: garante o disparo sem depender de sorteio, provando
+    // que "fugir" não desliga a ability de ALCANCE — só o corpo a corpo (`isMeleeAbility`).
+    const alwaysFireball = {
+      ...dragon,
+      abilities: dragon.abilities.map((a) => (a.id === 'fireball' ? { ...a, chance: 1 } : a)),
+    };
+    const loaded = buildContent(raw({ monsters: [alwaysFireball], hunts: [dragonHunt] }));
+    const session = createHuntSession({
+      id: 'dragon-flee', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    session.enter(heroLevel200({ health: 2_000_000 }));
+    session.advanceBy(100);
+    const ruleset = session.ruleset as HuntRuleset;
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // Empurra o HP para a faixa de fuga (runOnHealth 300) sem depender de sorteio de dano.
+    monster.receiveDamage(alwaysFireball.health - 250);
+    session.drainEvents();
+    const positionBefore = { ...monster.position };
+
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < 6_000 && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    // Nenhum corpo a corpo enquanto foge.
+    expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee'
+      && typeof e.attackerId === 'string' && e.attackerId.startsWith('m:'))).toBe(false);
+    // A bola de fogo continua saindo — passo e ataque são decisões independentes (FUN-85).
+    expect(events.some(
+      (e) => e.kind === 'monster-ability-cast' && e.abilityId === 'fireball',
+    )).toBe(true);
+    // E ele se afastou do herói (fleeStep), em vez de ficar colado.
+    const distanceBefore = Math.abs(positionBefore.x) + Math.abs(positionBefore.y);
+    const distanceAfter = Math.abs(monster.position.x) + Math.abs(monster.position.y);
+    expect(distanceAfter).toBeGreaterThanOrEqual(distanceBefore);
+  });
+
+  it('o campo de fogo do Dragon Lord (#520) cobre os MESMOS 21 tiles da bola — `source: \'monster\'` (achado da revisão do #536)', () => {
+    // Antes da correção, `applyField` chamava `areaTiles` sem `source`, caindo no default
+    // `'spell'` — o mesmo raio 4 que dá 21 tiles na bola de fogo (tabela de monstro) daria 69
+    // no campo (tabela de magia). `firefield` com chance 1: sem depender de sorteio.
+    const dragonLordField = {
+      ...dragon, id: 'dragon-lord', name: 'Dragon Lord',
+      abilities: [
+        {
+          id: 'firefield', cadenceMs: 2000, chance: 1, target: { range: 7 }, power: 0,
+          damageType: 'fire' as const,
+          field: {
+            id: 'dragon-lord-firefield', durationMs: 200_000,
+            shape: { shape: 'circle' as const, radius: 4, centered: 'target' as const },
+            condition: {
+              key: 'burning', merge: 'refresh' as const, durationMs: 70_000,
+              effect: { kind: 'damage-over-time' as const, amount: 20, intervalMs: 10_000, damageType: 'fire' as const },
+            },
+          },
+        },
+      ],
+      defenses: [],
+    };
+    const fieldHunt = {
+      ...hunt,
+      difficulties: {
+        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'dragon-lord', weight: 1 }] },
+        bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'dragon-lord', weight: 1 }] },
+      },
+    };
+    const loaded = buildContent(raw({ monsters: [dragonLordField], hunts: [fieldHunt], combat: [pacifist] }));
+    const session = createHuntSession({
+      id: 'dragon-lord-field', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    session.enter(heroLevel200());
+    const ruleset = session.ruleset as HuntRuleset;
+    run(session, 3_000, 100);
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.tiles).toHaveLength(21);
+  });
+});
+
+describe('estoque de supply/munição do loot: solo, split e shared não enviesado (#520, revisão do #536)', () => {
+  // Um monstro fraco (morre num golpe do herói desarmado) que sempre solta 1 de supply E 1 de
+  // munição — chance 1 tira o sorteio da conta, e a quantidade 1 é o caso comum (Strong Health
+  // Potion do Dragon/Dragon Lord) que expõe o enviesamento de `splitEqually` na revisão do #536.
+  const looter = {
+    ...rat, id: 'looter', health: 1,
+    loot: {
+      items: [
+        { supplyId: 'health-potion', chance: 1, min: 1, max: 1 },
+        { ammunitionId: 'arrow', chance: 1, min: 1, max: 1 },
+      ],
+    },
+  };
+  const looterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'looter', weight: 1 }], respawnDelayMs: 200 },
+      bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'looter', weight: 1 }], respawnDelayMs: 200 },
+    },
+  };
+  const loaded = () => content({ monsters: [looter], hunts: [looterHunt] });
+  const partyMember = (id: string) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+  };
+
+  it('solo: o matador leva o estoque inteiro', () => {
+    const { session, hero } = start({ loaded: loaded() });
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.supplyStock.get('health-potion')).toBeGreaterThan(0);
+    expect(hero.ammunitionStock.get('arrow')).toBeGreaterThan(0);
+  });
+
+  it('shared, quantidade NÃO divisível (1 para 3 presentes): ao longo de muitos abates, NÃO é sempre o mesmo membro (achado da revisão do #536)', () => {
+    // Antes da correção, `splitEqually(1, 3)` sempre devolvia `[1, 0, 0]` — o presente de
+    // índice 0 levava TODA unidade indivisível, abate após abate. Aqui os três entram na
+    // mesma ordem em toda sessão (a semente é a mesma), então se o defeito ainda existisse
+    // só 'a' teria estoque ao final — os outros dois ficariam em zero.
+    const a = partyMember('a');
+    const b = partyMember('b');
+    const c = partyMember('c');
+    const session = createHuntSession({
+      id: 'shared-stock', content: loaded(), huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'shared' },
+    });
+    for (const m of [a, b, c]) session.enter(m);
+    run(session, 15_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(5);
+    const stocked = [a, b, c].filter((m) => (m.supplyStock.get('health-potion') ?? 0) > 0);
+    expect(stocked.length).toBeGreaterThan(1);
+  });
+
+  it('split: um elegível sorteado leva o estoque inteiro do abate — nunca fica dividido num só drop', () => {
+    const a = partyMember('a');
+    const b = partyMember('b');
+    const session = createHuntSession({
+      id: 'split-stock', content: loaded(), huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    for (const m of [a, b]) session.enter(m);
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // A soma bate com o total de abates recompensados: cada drop de 1 caiu inteiro em alguém.
+    const total = (a.supplyStock.get('health-potion') ?? 0) + (b.supplyStock.get('health-potion') ?? 0);
+    expect(total).toBeGreaterThan(0);
+  });
+});
+
 describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', () => {
   const poison = {
     id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 500,

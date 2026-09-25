@@ -3468,6 +3468,12 @@ export class SessionHost {
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
+      // do Dragon sumiria a cada logout, mesmo sem ser gasta.
+      ...(owner === undefined || owner.supplyStock.size === 0
+        ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner === undefined || owner.ammunitionStock.size === 0
+        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
@@ -3862,6 +3868,9 @@ export class SessionHost {
         ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
         ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
         ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
+        // E o estoque de supply/munição do loot (#520), pela mesma razão da munição escolhida.
+        ...(owner?.supplyStock === undefined ? {} : { supplyStock: owner.supplyStock }),
+        ...(owner?.ammunitionStock === undefined ? {} : { ammunitionStock: owner.ammunitionStock }),
         // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
         // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
         ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),

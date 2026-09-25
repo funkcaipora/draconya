@@ -48,6 +48,10 @@ export interface CharacterRecord {
   readonly bestiary: unknown;
   /** A munição escolhida por família (#152), como veio do banco; `null` é a grátis. */
   readonly ammo: unknown;
+  /** O estoque de supply do loot (#520), como veio do banco; `null` é quem nunca recebeu um drop. */
+  readonly supplyStock: unknown;
+  /** O estoque de munição do loot (#520), pela mesma razão do `supplyStock`. */
+  readonly ammunitionStock: unknown;
   readonly createdAt: Date;
 }
 
@@ -530,6 +534,8 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     outfitColors: row.outfitColors,
     bestiary: row.bestiary,
     ammo: row.ammo,
+    supplyStock: row.supplyStock,
+    ammunitionStock: row.ammunitionStock,
     createdAt: row.createdAt,
   };
 }

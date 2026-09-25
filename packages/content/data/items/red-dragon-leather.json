@@ -1,0 +1,9 @@
+{
+  "id": "red-dragon-leather",
+  "name": "Red Dragon Leather",
+  "kind": "other",
+  "weight": 0.6,
+  "value": 200,
+  "stackable": true,
+  "_open": "Loot do Dragon Lord (#520). Canary `items.xml` id 5948 (`red dragon leather`): weight 60 (0,6 oz). `value` 200: NPCs Yasir e Irmana compram por esse preço, fato do Tibia (ADR 0037 d.4)."
+}

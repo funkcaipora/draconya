@@ -71,6 +71,13 @@
       "when": 1789800000000,
       "tag": "0009_521-tibia-xp-curve",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0010_520-supply-and-ammunition-stock",
+      "breakpoints": true
     }
   ]
 }

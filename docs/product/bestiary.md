@@ -47,6 +47,18 @@ protocolo). A busca do modal é uma só, fica acima das abas e filtra a aba que 
 Descrição e "dropado por" não aparecem: nenhum dos dois existe em
 `content` hoje (ver `docs/reviews/kit-fidelity-audit-2026-09-16.md`, achado R8-22b).
 
+**A ficha de Bestiário por monstro chegou como DADO antes de ter leitor (#520).**
+`bestiary/baseline.json` ganhou `entries` — uma linha por `monsterId` com `class`/`race`, os
+três limiares de desbloqueio (`firstUnlock` ≤ `secondUnlock` ≤ `toKill`, crescentes por
+`.refine`) e `charmsPoints`/`stars`/`occurrence`, os mesmos números que o Bestiário real do
+Tibia mostra por monstro (Canary `Bestiary`/TFS `bestiary`, conferido monstro a monstro).
+`buildContent` confere que a chave é um monstro que existe e que o `class` da ficha bate com o
+`class` do próprio monstro — duas fontes da mesma categoria divergiriam na primeira mudança em
+uma delas. **Nenhum caminho do `sim`, do `server` nem do cliente lê `entries` ainda**: a mesma
+decisão do `staticAttack` do monstro (#518) — aceito e persistido, registrado aqui como
+divergência em vez de fingir que a tela de "%" de desbloqueio, estrelas de dificuldade e
+Charms já existe. Quando o Cyclopedia (#321) ganhar essa tela, o dado já está no lugar certo.
+
 ## Regras
 
 - Cinco marcos de abates por monstro: 10 000 / 25 000 / 50 000 / 100 000 / 200 000.
@@ -86,6 +98,7 @@ Descrição e "dropado por" não aparecem: nenhum dos dois existe em
 | Marcos (os cinco, crescentes) | 10 000 / 25 000 / 50 000 / 100 000 / 200 000 abates | `packages/content/data/bestiary/baseline.json`, `milestones` |
 | Recompensa por marco | +1 ponto percentual de XP PvE | `packages/content/data/bestiary/baseline.json`, `xpBonusPercentPerMilestone` |
 | Recompensas especiais por monstro | não implementado (DT-05) | sem entrada — entram com o primeiro monstro que as pedir |
+| Ficha do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0, class/race `dragon` — os dois iguais | `packages/content/data/bestiary/baseline.json`, `entries.dragon` / `entries.dragon-lord` |
 
 O schema (`bestiarySchema`, em `packages/content/src/schemas.ts`) exige os marcos em ordem
 crescente: o `sim` para de contar no primeiro que o contador não alcança, e uma lista fora de
@@ -99,6 +112,11 @@ ordem faria o terceiro marco fechar antes do segundo.
   primeiro que pedir, não antes.
 - **Guild War** (§18.5): "os bônus valem só em PvE" é verdade por falta de PvP, não por regra
   escrita. A regra entra com a Guild War.
+- **A ficha por monstro (`bestiary.entries`, #520) não tem tela nem protocolo.** O `catalogue`
+  não a manda ao cliente, e o Cyclopedia (#321) não lê `firstUnlock`/`secondUnlock`/`stars`/
+  `occurrence`/`charmsPoints` — a barra de progresso de hoje é só o marco global (`milestones`).
+  O dado existe para o dia em que a tela de desbloqueio por monstro entrar, sem precisar voltar
+  a `packages/content` para descobrir os números do Tibia de novo.
 
 ## Divergências do PRD
 

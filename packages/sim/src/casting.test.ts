@@ -173,6 +173,59 @@ describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
   });
 });
 
+describe('useSupply — o ESTOQUE do loot é gasto antes do gold (#520, revisão do #536)', () => {
+  it('com estoque, usa SEM debitar gold nenhum — `goldSpent` sai 0', () => {
+    const user = hero({ health: 50, gold: 0 });
+    user.supplyStock.set('health-potion', 2);
+    const result = useSupply(user, potion);
+
+    expect(result).toMatchObject({ ok: true, healed: 50, goldSpent: 0 });
+    expect(user.goldDelta).toBe(0);
+    expect(balanceOf(user)).toBe(0);
+    expect(user.supplyStock.get('health-potion')).toBe(1);
+  });
+
+  it('esgota o estoque em 1 unidade: a chave some do Map ao zerar', () => {
+    // `Map` sem a chave, não `0` guardado — o mesmo cuidado de `Cooldowns`/`ammo`: uma chave
+    // com valor 0 sobreviveria ao snapshot como "tem estoque zero" em vez de "não tem estoque".
+    const user = hero({ health: 50, gold: 100 });
+    user.supplyStock.set('health-potion', 1);
+    useSupply(user, potion);
+    expect(user.supplyStock.has('health-potion')).toBe(false);
+    // E o gold NÃO foi tocado nesse uso — só o estoque.
+    expect(user.goldDelta).toBe(0);
+  });
+
+  it('sem estoque, cai no gold de sempre — `goldSpent` sai o preço cheio', () => {
+    const user = hero({ health: 50, gold: 100 });
+    const result = useSupply(user, potion);
+    expect(result).toMatchObject({ ok: true, goldSpent: 45 });
+    expect(user.goldDelta).toBe(-45);
+  });
+
+  it('com estoque MAS sem gold, ainda assim usa: o estoque não depende do saldo', () => {
+    const user = hero({ health: 50, gold: 0, goldDelta: 0 });
+    user.supplyStock.set('health-potion', 1);
+    expect(useSupply(user, potion).ok).toBe(true);
+    expect(balanceOf(user)).toBe(0);
+  });
+
+  it('sem estoque e sem gold, recusa como sempre — o estoque não inventa saldo', () => {
+    const user = hero({ health: 10, gold: 44 });
+    expect(useSupply(user, potion))
+      .toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+    expect(user.supplyStock.size).toBe(0);
+  });
+
+  it('o estoque de mana potion é um id DIFERENTE — não compartilha contador com a de vida', () => {
+    const user = hero({ mana: 10, gold: 0 });
+    user.supplyStock.set('mana-potion', 1);
+    expect(useSupply(user, manaPotion)).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(user.supplyStock.has('health-potion')).toBe(false);
+    expect(user.supplyStock.has('mana-potion')).toBe(false);
+  });
+});
+
 describe('cura em outro personagem (#399, ADR 0035 d.10)', () => {
   it('castSpell: o RECIPIENT recebe a cura, quem lança paga a mana (RF-04)', () => {
     const caster = hero({ mana: 100 });
@@ -505,6 +558,15 @@ describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisã
     expect(again.ok && again.hits).toEqual(result.hits);
   });
 
+  it('com estoque de loot (#520), a runa sai SEM debitar gold — goldSpent 0', () => {
+    const caster = hero({ level: 30, gold: 0 });
+    caster.supplyStock.set('avalanche-rune', 1);
+    const result = useSupply(caster, rune, three, combat, rng(), scaling(4));
+    expect(result).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(caster.goldDelta).toBe(0);
+    expect(caster.supplyStock.has('avalanche-rune')).toBe(false);
+  });
+
   it('refuses by level, magic level, target, range and gold — and NEVER charges on a refusal', () => {
     // Mutação que mata: subir o débito para antes da mira (runa em ninguém custaria).
     const at = (level: number, gold: number, skill: number, aim: typeof three | null) => {
@@ -804,6 +866,16 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
     expect(user.goldDelta).toBe(-35);
     expect(user.cooldowns.isReady('group:healing', 999)).toBe(false);
     expect(user.cooldowns.isReady('group:healing', 1_000)).toBe(true);
+  });
+
+  it('com estoque de loot (#520), a UH rune escalada sai SEM debitar gold', () => {
+    const user = hero({ level: 50, health: 100, gold: 0 });
+    user.maxHealth = 5_000;
+    user.supplyStock.set('ultimate-healing-rune', 3);
+    const result = useSupply(user, uhRune, null, combat, rng(), magic, undefined, user, 0);
+    expect(result).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(user.goldDelta).toBe(0);
+    expect(user.supplyStock.get('ultimate-healing-rune')).toBe(2);
   });
 
   it('a IH rune recusa por magic level e não cura sem contexto — sem cobrar gold', () => {

@@ -214,6 +214,13 @@ async function applyProgression(
   // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
   const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
 
+  // O estoque de supply/munição do loot (#520): ABSOLUTO e última-escrita-vence, como `ammo` —
+  // sobe por loot e desce por uso na MESMA sessão, então o valor final da sessão é o único que
+  // os dois lados podem concordar sobre (não monotônico como o Bestiário, que funde pelo maior).
+  const supplyStock = receipt.supplyStock === undefined ? {} : { supplyStock: receipt.supplyStock };
+  const ammunitionStock = receipt.ammunitionStock === undefined
+    ? {} : { ammunitionStock: receipt.ammunitionStock };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -258,6 +265,8 @@ async function applyProgression(
       ...skills,
       ...bestiary,
       ...ammo,
+      ...supplyStock,
+      ...ammunitionStock,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

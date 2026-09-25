@@ -1,0 +1,10 @@
+{
+  "id": "plate-legs",
+  "name": "Plate Legs",
+  "kind": "armor",
+  "slot": "legs",
+  "weight": 50,
+  "value": 115,
+  "armor": 7,
+  "_open": "Loot do Dragon (#520). Canary `items.xml` id 3557 (`plate legs`): armor 7, weight 5000 (50 oz). `value` 115: NPCs brengus e rock_in_a_hard_place compram por esse preço, fato do Tibia (ADR 0037 d.4)."
+}

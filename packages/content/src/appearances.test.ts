@@ -143,14 +143,21 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
     }
   });
 
-  it('as abilities de monstro não usam chave nenhuma nesta versão — omissão documentada', () => {
-    // O rato é o único monstro e não declara `abilities`: o boot o normaliza para a básica,
-    // que usa `hits.melee` e não tem projétil. Então `appearances.abilities` é vazio, e não há
-    // chave do CMB-06 para conferir visualmente — a omissão está registrada no doc da auditoria.
-    // Quando o primeiro monstro declarar uma ability, esta asserção reprova e força a auditoria.
+  it('as abilities do Dragon/Dragon Lord usam o vocabulário fire/firearea/blueshimmer (#520)', () => {
+    // O rato e o rotworm não declaram `abilities`; o Dragon e o Dragon Lord (#520) são os
+    // primeiros a usar o CMB-06 de verdade, e as três chaves são as mesmas já auditadas para
+    // magia de fogo: `fire` (míssil 4, CONST_ANI_FIRE), `firearea` (efeito 7,
+    // CONST_ME_FIREAREA — já usado por `great-fireball-rune`/`fire-wave`) e `blueshimmer`
+    // (efeito 13, CONST_ME_MAGIC_BLUE — já usado pelas curas). Reaproveitar o vocabulário
+    // existente é o que faz a primeira asserção deste describe (faixas do pacote) continuar
+    // verde sem precisar de nenhum id novo.
     expect(appearances).toBeDefined();
     if (appearances === undefined) return;
-    expect(Object.keys(appearances.abilities)).toEqual([]);
+    expect(appearances.abilities).toEqual({
+      fire: { missile: 4 },
+      firearea: { effect: 7 },
+      blueshimmer: { effect: 13 },
+    });
   });
 
   it('nenhum `_open` do conteúdo carrega a frase "sem conferência visual"', () => {

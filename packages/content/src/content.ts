@@ -1053,13 +1053,55 @@ export function buildContent(raw: RawContent): Content {
   // Loot de item agora tem catálogo (FUN-76), e a referência é conferida — o que continua sendo
   // recusado é o item FANTASMA. Aceitar a linha creditaria no primeiro abate um item que nunca
   // vai poder ser desenhado, equipado nem vendido, e o sintoma chegaria dias depois.
+  //
+  // Loot de SUPPLY e de MUNIÇÃO (#520) é a mesma conferência do outro lado: a linha declara
+  // exatamente um de `itemId`/`supplyId`/`ammunitionId` (o schema já garante isso), e cada um
+  // confere contra o catálogo dele.
   for (const monster of monsterDefinitions.values()) {
     for (const line of monster.loot.items) {
-      if (itemDefinitions.has(line.itemId)) continue;
-      problems.push(
-        `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
-          + 'no catálogo',
-      );
+      if (line.itemId !== undefined) {
+        if (itemDefinitions.has(line.itemId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
+            + 'no catálogo',
+        );
+      } else if (line.supplyId !== undefined) {
+        if (supplies.has(line.supplyId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia supply "${line.supplyId}", que não `
+            + 'existe no catálogo',
+        );
+      } else if (line.ammunitionId !== undefined) {
+        if (ammunitionDefinitions.has(line.ammunitionId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia munição "${line.ammunitionId}", que não `
+            + 'existe no catálogo',
+        );
+      }
+    }
+  }
+
+  // A ficha de Bestiário por monstro (#520): a chave precisa ser um monstro que existe — a
+  // mesma referência cruzada de `loot.items` acima —, e o `class` da ficha precisa bater com o
+  // `class` do PRÓPRIO monstro quando ele o declara: duas fontes da mesma categoria divergiriam
+  // na primeira mudança em uma delas, e ninguém perceberia (a categoria do Cyclopedia é a do
+  // monstro, §"A classe do monstro" acima).
+  if (bestiary !== undefined) {
+    for (const [monsterId, entry] of Object.entries(bestiary.entries)) {
+      const monster = monsterDefinitions.get(monsterId);
+      if (monster === undefined) {
+        problems.push(
+          `bestiary/baseline.json: entries referencia monstro "${monsterId}", que não existe `
+            + 'no catálogo',
+        );
+        continue;
+      }
+      if (monster.class !== undefined && monster.class !== entry.class) {
+        problems.push(
+          `bestiary/baseline.json: entries."${monsterId}".class é "${entry.class}", e o monstro `
+            + `declara "${monster.class}"`,
+        );
+      }
     }
   }
 

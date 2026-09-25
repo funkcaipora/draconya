@@ -1,0 +1,20 @@
+{
+  "id": "dragon-slayer",
+  "name": "Dragon Slayer",
+  "kind": "weapon",
+  "slot": "hand",
+  "twoHanded": true,
+  "weight": 82,
+  "value": 15000,
+  "attack": 44,
+  "requires": {
+    "level": 45,
+    "vocationId": "knight"
+  },
+  "_open": "Loot do Dragon Lord (#520). Canary `items.xml` id 7402 (`dragon slayer`): duas mãos, attack 44, weight 8200 (82 oz), level 45, vocação Knight. O Tibia real também dá defense 28, mas `buildContent` recusa `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — arma de duas mãos não tem defesa residual neste motor. `value` 15000: NPC Rashid compra por esse preço, fato do Tibia (ADR 0037 d.4).",
+  "weapon": {
+    "kind": "melee",
+    "family": "sword",
+    "range": 1
+  }
+}

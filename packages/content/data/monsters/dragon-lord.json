@@ -1,0 +1,121 @@
+{
+  "id": "dragon-lord",
+  "name": "Dragon Lord",
+  "class": "dragon",
+  "recommendedLevel": 90,
+  "health": 1900,
+  "experience": 2100,
+  "attack": {
+    "min": 0,
+    "max": 230
+  },
+  "armor": 35,
+  "mitigation": {
+    "resistances": {
+      "earth": 0.8,
+      "energy": 0.2,
+      "ice": -0.1
+    },
+    "immunities": ["fire"]
+  },
+  "attackIntervalMs": 2000,
+  "speed": 200,
+  "aggroRadius": 8,
+  "attackRange": 1,
+  "leashRadius": 0,
+  "loot": {
+    "gold": { "chance": 0.95258, "min": 1, "max": 246 },
+    "items": [
+      { "itemId": "dragon-ham", "chance": 0.79757, "min": 1, "max": 2 },
+      { "itemId": "green-mushroom", "chance": 0.12120 },
+      { "itemId": "royal-spear", "chance": 0.09139, "min": 1, "max": 3 },
+      { "itemId": "gemmed-book", "chance": 0.09090 },
+      { "ammunitionId": "power-bolt", "chance": 0.06565, "min": 1, "max": 7 },
+      { "itemId": "energy-ring", "chance": 0.05072 },
+      { "itemId": "small-sapphire", "chance": 0.04968 },
+      { "itemId": "golden-mug", "chance": 0.03072 },
+      { "itemId": "red-dragon-scale", "chance": 0.01963 },
+      { "itemId": "red-dragon-leather", "chance": 0.01022 },
+      { "supplyId": "strong-health-potion", "chance": 0.00971 },
+      { "itemId": "life-crystal", "chance": 0.00629 },
+      { "itemId": "strange-helmet", "chance": 0.00382 },
+      { "itemId": "fire-sword", "chance": 0.00286 },
+      { "itemId": "tower-shield", "chance": 0.00268 },
+      { "itemId": "royal-helmet", "chance": 0.00233 },
+      { "itemId": "dragon-scale-mail", "chance": 0.00142 },
+      { "itemId": "dragon-slayer", "chance": 0.00109 },
+      { "itemId": "dragon-lord-trophy", "chance": 0.00093 }
+    ]
+  },
+  "abilities": [
+    {
+      "id": "melee",
+      "cadenceMs": 2000,
+      "target": { "range": 1 },
+      "power": { "min": 0, "max": 230 },
+      "damageType": "physical"
+    },
+    {
+      "id": "fireball",
+      "cadenceMs": 2000,
+      "chance": 0.20,
+      "target": {
+        "range": 7,
+        "area": { "shape": "circle", "radius": 4, "centered": "target" }
+      },
+      "power": { "min": 100, "max": 200 },
+      "damageType": "fire",
+      "presentation": { "missileKey": "fire", "impactKey": "firearea" }
+    },
+    {
+      "id": "firefield",
+      "cadenceMs": 2000,
+      "chance": 0.10,
+      "target": { "range": 7 },
+      "power": 0,
+      "damageType": "fire",
+      "presentation": { "missileKey": "fire" },
+      "field": {
+        "id": "dragon-lord-firefield",
+        "durationMs": 200000,
+        "shape": { "shape": "circle", "radius": 4, "centered": "target" },
+        "condition": {
+          "key": "burning",
+          "merge": "refresh",
+          "durationMs": 70000,
+          "effect": {
+            "kind": "damage-over-time",
+            "amount": 20,
+            "intervalMs": 10000,
+            "damageType": "fire"
+          }
+        }
+      },
+      "_open": "O campo fica no chão (`field.durationMs`) 200000 ms — a duração do PRÓPRIO item (Canary `items.xml` id 2118, `duration=\"200\"`, segundos × 1000 conforme `item.cpp` `newDuration = it.decayTime * 1000`), não os 70000 ms da queima (`condition.durationMs` — sete tiques de 10000 ms cada, `field ticks=10000 count=7`, número diferente e correto). O Tibia real decai o item em três estágios (2118 → 2119, mais fraco, → 2120, sem dano) ao longo de ~446 s; `FieldSpec` do Draconya não tem decaimento em estágios — o campo usa os números do estágio mais forte (2118) pelos 200000 ms inteiros, em vez de enfraquecer. Achado da revisão da #520/PR #536; ver `docs/product/combat.md`."
+    },
+    {
+      "id": "firewave",
+      "cadenceMs": 2000,
+      "chance": 0.15,
+      "target": {
+        "range": 7,
+        "area": { "shape": "wave", "length": 8 }
+      },
+      "power": { "min": 150, "max": 230 },
+      "damageType": "fire",
+      "presentation": { "impactKey": "firearea" }
+    }
+  ],
+  "defenses": [
+    {
+      "id": "heal",
+      "cadenceMs": 2000,
+      "chance": 0.15,
+      "heal": { "min": 57, "max": 93 },
+      "presentation": { "impactKey": "blueshimmer" }
+    }
+  ],
+  "targetChange": { "intervalMs": 4000, "chance": 0.10 },
+  "runOnHealth": 300,
+  "staticAttack": 0.80
+}

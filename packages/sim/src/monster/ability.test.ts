@@ -179,6 +179,24 @@ describe('abilityTargets (puro)', () => {
     expect(tiles).toHaveLength(5);
   });
 
+  it('raio 4 (a bola de fogo do Dragon/Dragon Lord, #520) dá exatamente os 21 tiles do TFS — não 69', () => {
+    // Achado da revisão do #536: `radius: 4` copiado direto do TFS/Canary (`dragon.xml`/
+    // `dragon_lord.lua`, atributo `radius="4"` do ataque) SÓ está certo se resolvido pela
+    // tabela de anéis de MONSTRO (#523) — a mesma fórmula usada para MAGIA daria 69 tiles
+    // (`radius + ⌊radius/2⌋` = 6 de Manhattan), quase o triplo da área real do Tibia.
+    // `MONSTER_CIRCLE_HALF_WIDTHS[4-1] = [5, 5, 3]`: fileira central 5, uma de cada lado com 5,
+    // duas mais externas com 3 → 5 + 2×5 + 2×3 = 21.
+    const fireball: MonsterAbility = {
+      id: 'fireball', cadenceMs: 2_000, chance: 0.15, power: { min: 60, max: 140 }, damageType: 'fire',
+      target: { range: 7, area: { shape: 'circle', radius: 4, centered: 'target' } },
+    };
+    const tiles = abilityTiles(fireball, casterAt, { x: 5, y: 5, z: 7 });
+    expect(tiles).toHaveLength(21);
+    // E é um diamante achatado em torno do alvo (5,5), não o quadrado 9×9 do raio de Manhattan
+    // 6: nenhum tile a mais de 4 de distância vertical/horizontal do centro.
+    expect(tiles.every((t) => Math.abs(t.x - 5) <= 4 && Math.abs(t.y - 5) <= 4)).toBe(true);
+  });
+
   it('alcance 1 sem área é corpo a corpo', () => {
     expect(isMeleeAbility(single)).toBe(false);
     expect(isMeleeAbility({ ...single, target: { range: 1 } })).toBe(true);
