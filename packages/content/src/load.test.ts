@@ -598,7 +598,7 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'lightning': { level: 55, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 110 },
     'rage-of-the-skies': { level: 55, mana: 600, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 200 },
     'hells-core': { level: 60, mana: 1100, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 250 },
-    'great-death-beam': { level: 66, mana: 140, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', secondary: ['great-beams', 6000], bp: 155 },
+    'great-death-beam': { level: 300, mana: 140, group: 'attack', groupMs: 2000, cdMs: 10000, kind: 'damage', secondary: ['great-beams', 6000], bp: 155 },
     'strong-flame-strike': { level: 70, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 125 },
     'strong-energy-strike': { level: 80, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 125 },
     'ultimate-energy-strike': { level: 100, mana: 100, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage', secondary: ['ultimatestrikes', 30000], bp: 180 },
