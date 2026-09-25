@@ -281,6 +281,13 @@ export function botConfigFor(content: Content, vocationId: DragonPartyVocation):
       // degrau sozinho quando o de cima está em cooldown ou sem mana.
       return buildConfig({ kind: 'none' }, [
         supply('supreme-health-potion', [hpBelow(60)]),
+        // Strong Mana Potion (Canary `potions.lua`, item 237: nível 50, sem restrição de
+        // vocação — ao contrário das outras três poções de mana do kit, que são só
+        // Sorcerer/Druid ou Paladin) é a ÚNICA poção de mana que o Knight pode beber. Sem ela, a
+        // rotação inteira de magia dele (#527, achado na QA do M28: mana zerou em 3/1050 e o
+        // Knight parou de lançar) depende de nunca gastar mais mana do que a regeneração
+        // repõe — falso a partir do segundo Fierce Berserk.
+        supply('strong-mana-potion', [manaBelow(40)]),
         haste('haste-knight'),
         ...spellCascade(
           content, ['fierce-berserk', 'front-sweep', 'berserk', 'whirlwind-throw'],
