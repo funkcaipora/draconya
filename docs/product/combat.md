@@ -10,8 +10,9 @@ requisito de vocação (FUN-74, FUN-92), skills
 por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de monstro do TFS —
 chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
 implementados
-por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e o dano de arma do Canary
-com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031), o dano de arma do Canary
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) e a
+seleção ponderada de alvo do Canary (nearest/health/damage/random, #541) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -813,6 +814,13 @@ interface MonsterDefense {
   readonly presentation?: { readonly impactKey?: string };
 }
 interface MonsterTargetChange { readonly intervalMs: number; readonly chance: number; }
+// #541 — inteiros não-negativos, soma > 0. Dragon/Dragon Lord: { 70, 10, 10, 10 }.
+interface MonsterTargetStrategy {
+  readonly nearest: number;
+  readonly health: number;
+  readonly damage: number;
+  readonly random: number;
+}
 ```
 
 - **`chance` por ability** (`monsterAbilitySchema.chance`, `[0, 1]`): a cada vencimento do
@@ -853,10 +861,29 @@ interface MonsterTargetChange { readonly intervalMs: number; readonly chance: nu
   precedência do ADR 0037 d.4 (Canary primeiro quando ele define algo; TFS só onde a escala é a
   clássica — não é o caso aqui), o valor certo é o do Canary, 11.
 - **Troca de alvo (`monster.targetChange`)**: a cada `intervalMs` rola `chance`; se passa, escolhe
-  um alvo válido AO ACASO dentro do `aggroRadius`, diferente do atual — o ramo
-  `TARGETSEARCH_RANDOM` do TFS, que é o que o Dragon usa (`targetDistance <= 1`). O ramo
-  `TARGETSEARCH_NEAREST` (monstro de alcance maior) fica de fora: nenhum monstro do recorte
-  precisa dele, e o #518 não introduz o campo `targetDistance` só para essa distinção.
+  um alvo válido diferente do atual dentro do `aggroRadius`. **Sem `monster.targetStrategy`
+  (#518)**, o ramo `TARGETSEARCH_RANDOM` do TFS — AO ACASO, que é o que o Dragon usava antes do
+  #541. `TARGETSEARCH_NEAREST` (monstro de alcance maior) fica de fora: nenhum monstro do
+  recorte precisa dele.
+- **Seleção ponderada de alvo (`monster.targetStrategy`, #541)**: o Canary sorteia o CRITÉRIO do
+  reroll pelos pesos declarados — mais perto, menos vida, mais dano causado no monstro, ou
+  aleatório (`Monster::searchTargetImmediate`, `monster.cpp:906-931`;
+  `MonsterTargetRanker::rank`, `monster_targeting.cpp:17-83`) — em vez de sempre `random`.
+  `rankTarget` (`packages/sim/src/monster/target-strategy.ts`) reproduz isso com a MESMA
+  ordem fixa de sorteio: um para o critério, e um segundo SÓ quando o critério é `random`
+  (nearest/health/damage resolvem por redução determinística, empate com quem aparece primeiro
+  na lista de candidatos — o mesmo `<`/`>` estrito do `.cpp`). É usado nos DOIS lugares que
+  escolhem alvo: o vencimento de `targetChange` acima, e a aquisição inicial em `chooseTarget`
+  (`packages/sim/src/monster/monster.ts`). Ausente o campo, nenhum dos dois consome sorteio a
+  mais — a sequência de RNG do rato e do rotworm continua bit a bit a de antes. O schema
+  (`monsterTargetStrategySchema`) exige os quatro pesos como inteiros não-negativos com soma
+  > 0; ao contrário do Canary (que trata `random` como "o que sobra até 100", e nunca soma o
+  campo), aqui `random` é um peso EXPLÍCITO como os outros três, e a soma não precisa ser 100 —
+  `rankTarget` sorteia proporcionalmente à soma real. Dragon e Dragon Lord declaram
+  `{ nearest: 70, health: 10, damage: 10, random: 10 }` (`dragon.lua`/`dragon_lord.lua`,
+  conferidos em 2026-09-25); os outros 644 monstros do bestiário do Canary só declaram
+  `nearest: 100` — fora do recorte desta issue (ver "Fora do escopo" do #541), então o rato e o
+  rotworm continuam sem o campo.
 - **Fuga (`monster.runOnHealth`)**: `HP <= runOnHealth` é fugindo (`isMonsterFleeing`,
   `packages/sim/src/monster/monster.ts`) — pura, recalculada a cada decisão a partir do HP atual,
   nunca um booleano guardado à parte. Fugindo, `decideMonsterAction` SEMPRE devolve um passo para
@@ -967,11 +994,12 @@ generalizadas..." acima), `firewave` (onda comprimento 8, sem alvo — sai do
 monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
 — `paralyze` e `invisible` do TFS não têm mecanismo equivalente no Draconya (não há condição de
 paralisia nem invisibilidade, ver CMB-07 "Fora do escopo"), então a imunidade a eles não tem o
-que ser declarada. Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable`
-do Canary (`monster.flags`) e a `strategiesTarget` ponderada (nearest 70 % / health 10 % /
-damage 10 % / random 10 %) não existem no schema — `monsterTargetChangeSchema` só tem o ramo
-`TARGETSEARCH_RANDOM` do TFS (ver acima), e o resto fica registrado aqui como o que falta ao
-motor, não implementado por esta issue.
+que ser declarada. Pela mesma razão, os flags `canPushItems`/`canPushCreatures` do Canary
+(`monster.flags`) não existem no schema — ficam registrados aqui como o que falta ao motor, não
+implementado por esta issue. A `strategiesTarget` ponderada (nearest 70 % / health 10 % / damage
+10 % / random 10 %) deixou de ser divergência com o #541: `monster.targetStrategy` existe no
+schema, e Dragon/Dragon Lord já declaram os mesmos quatro pesos — ver "Seleção ponderada de
+alvo" acima.
 
 ## Outcomes avançados: crítico, leech e mana shield (CMB-08, #335)
 
