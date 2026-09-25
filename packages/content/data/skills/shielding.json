@@ -3,13 +3,13 @@
   "name": "Escudo",
   "startingLevel": 10,
   "curve": {
-    "base": 50,
-    "factor": 1.1
+    "base": 100,
+    "factor": 1.5
   },
   "gain": {
     "on": "shield-block",
     "points": 1
   },
   "damagePerLevel": 0.02,
-  "_open": "Curva e contribuição provisórias, copiadas do corpo a corpo (CMB-04): o §9.4 decide que skill sobe por uso, e o balanceamento real depende de quanto uma hunt com escudo rende, que ainda não foi medido. `damagePerLevel` escala a DEFESA da peça (escudo ou arma de uma mão), não o ataque; a chance de bloqueio é `combat.defense.blockChance`."
+  "_open": "Base 100 é a `skillBase` do escudo do Canary (`Vocation::skillBase`, #521, ADR 0037), verificada em `opentibiabr/canary` `main` 2026-09-24 — não é mais copiada do corpo a corpo (CMB-04). `factor` 1.5 é o FALLBACK sem vocação (`None` do `vocations.xml`); cada vocação real sobe por `vocationSchema.skillMultipliers.shielding`. `damagePerLevel` continua provisório e escala a DEFESA da peça (escudo ou arma de uma mão), não o ataque; a chance de bloqueio é `combat.defense.blockChance`."
 }

@@ -60,20 +60,36 @@ export function statsForLevel(
   };
 }
 
-// --- curva de XP, level up e penalidade de morte (FUN-37) ------------------------------------
+// --- curva de XP, level up e penalidade de morte (FUN-37, #521 ADR 0037) ----------------------
 //
-// A curva é FÓRMULA, não tabela (ver `progressionSchema.xp`), e `xp` no personagem é o total
-// ACUMULADO — nunca "xp dentro do level". Guardar o acumulado é o que faz a penalidade de
-// morte cascatear sozinha: tira-se XP do total e o level é recalculado. Guardar o progresso
-// dentro do level exigiria um laço de "desce um level, devolve o resto" escrito à mão, que é
-// exatamente onde o caso de cascata de dois levels passa despercebido.
+// `xp` no personagem é o total ACUMULADO — nunca "xp dentro do level". Guardar o acumulado é o
+// que faz a penalidade de morte cascatear sozinha: tira-se XP do total e o level é recalculado.
+// Guardar o progresso dentro do level exigiria um laço de "desce um level, devolve o resto"
+// escrito à mão, que é exatamente onde o caso de cascata de dois levels passa despercebido.
+//
+// A curva em si (`progression.xp.kind`) é UMA de duas: `'tibia'` é a curva real do Canary/TFS
+// (`Player::getExpForLevel`), fechada e O(1) — é a do conteúdo de jogo, desde a #521 ela não é
+// mais uma escolha de balanceamento do Draconya (ADR 0037 revoga esse limite do ADR 0019 para
+// mecânica de jogo). `'power'` é a fórmula antiga (`base * level^exponent`), somada por um laço
+// — sobrevive só para o conteúdo de TESTE que quer uma curva pequena e arbitrária.
 
-/** XP para completar `level` e chegar ao seguinte. */
-export function xpToCompleteLevel(level: number, progression: Progression): number {
-  if (!Number.isInteger(level) || level < 1) {
-    throw new Error(`level precisa ser inteiro positivo: ${level}`);
-  }
-  return Math.round(progression.xp.base * level ** progression.xp.exponent);
+/**
+ * O total acumulado do Tibia para estar no `level`: `(L³ − 6L² + 17L − 12) / 6 × 100`
+ * (`Player::getExpForLevel`, Canary/TFS, verificado em `opentibiabr/canary` `main` 2026-09-24).
+ *
+ * SEMPRE inteiro: `L³ − L` é o produto de três inteiros consecutivos e por isso múltiplo de 6,
+ * e o resto da expressão (`−6L² + 18L − 12`) já é múltiplo de 6 sozinho. `Math.round` aqui é
+ * só rede de segurança contra o épsilon de ponto flutuante da exponenciação, não parte da
+ * fórmula — o valor exato já sai inteiro.
+ *
+ * Fechada e O(1) DE PROPÓSITO (e não somada por um laço como a curva antiga): level 200+ não
+ * pode custar uma soma de 200 termos toda vez que alguém pergunta "quanto falta", muito menos
+ * dentro do laço do `levelForXp`, onde isso viraria O(level²).
+ */
+function tibiaTotalXp(level: number): number {
+  if (level <= 1) return 0;
+  const cubic = level * level * level - 6 * level * level + 17 * level - 12;
+  return Math.round((cubic / 6) * 100);
 }
 
 /** XP acumulada necessária para ESTAR em `level`. Level 1 custa zero: é onde todo mundo nasce. */
@@ -81,9 +97,26 @@ export function totalXpForLevel(level: number, progression: Progression): number
   if (!Number.isInteger(level) || level < 1) {
     throw new Error(`level precisa ser inteiro positivo: ${level}`);
   }
+  if (progression.xp.kind === 'tibia') return tibiaTotalXp(level);
   let total = 0;
-  for (let l = 1; l < level; l++) total += xpToCompleteLevel(l, progression);
+  for (let l = 1; l < level; l++) {
+    total += Math.round(progression.xp.base * l ** progression.xp.exponent);
+  }
   return total;
+}
+
+/**
+ * XP para completar `level` e chegar ao seguinte.
+ *
+ * Para a curva Tibia isto é a DIFERENÇA de dois totais fechados (O(1) — nunca um laço próprio
+ * recontando do zero); para a curva de teste é a própria fórmula linear de sempre.
+ */
+export function xpToCompleteLevel(level: number, progression: Progression): number {
+  if (!Number.isInteger(level) || level < 1) {
+    throw new Error(`level precisa ser inteiro positivo: ${level}`);
+  }
+  if (progression.xp.kind === 'tibia') return tibiaTotalXp(level + 1) - tibiaTotalXp(level);
+  return Math.round(progression.xp.base * level ** progression.xp.exponent);
 }
 
 /**
@@ -133,13 +166,37 @@ export interface DeathPenalty {
 }
 
 /**
- * A penalidade de morte (§26.2): 60% da XP necessária para completar o level atual, 54% com
- * Premium. Pode rebaixar o level, e pode cascatear por mais de um.
+ * A penalidade de morte do Tibia (#521, ADR 0037 — `Player::getLostPercent` e `Player::death`
+ * do Canary/TFS, verificados em `opentibiabr/canary` `main` 2026-09-24; a ausência de piso
+ * confirmada na TibiaPlan, "Tibia Death Penalty", 2026-09-24).
+ *
+ * Abaixo de `cubicFromLevel` (Tibia: 24) a perda é uma fração FIXA da XP acumulada
+ * (`flatFraction`, 10%). A partir dali é a fórmula cúbica clássica —
+ * `((L+50) / 100) × 50 × (L² − 5L + 8)` —, com `L` incluindo a fração de progresso DENTRO do
+ * level corrente (a mesma conta do `levelPercent` do Canary): sem isso a perda saltaria toda
+ * vez que o level vira, em vez de crescer suave como no jogo real. As duas contam sobre a XP
+ * ACUMULADA, não mais sobre `xpToCompleteLevel` — o modelo antigo (uma fração de UM level)
+ * media perda errado porque não é assim que o Tibia mede.
+ *
+ * `options.premium` continua o nome do parâmetro (não é renomeado para não recascatear pelos
+ * chamadores existentes), mas o que ele representa agora é "está abençoado" — mapeia o conceito
+ * de bênção do Tibia (`blessedReduction`, sete bênçãos × 8% = 56%) no binário que o repo já
+ * tinha. Cobrança/promoção/PvP e o gradiente por NÚMERO de bênçãos ficam fora — fora do escopo
+ * da #521, e o repo nunca teve blessing de verdade para gradiente nenhum.
+ *
+ * **Abaixo de `cubicFromLevel` a redução do abençoado é TETADA em 50%, não os 56% crus**
+ * (correção de revisão — `Player::getLostPercent` do Canary, ramo `else` do `if (level >= 24)`:
+ * `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`). Sete bênçãos dão
+ * 56%, que é ≥ 40%, e o Tibia arredonda isso para exatamente 50% NESSE ramo — não é o valor
+ * bruto. O teto só existe no ramo da fração fixa; a fórmula cúbica (level ≥ 24) usa a redução
+ * crua, sem teto.
  *
  * **O piso do level 8 protege, nunca promove.** Um personagem que já está abaixo dele não
- * perde nada; um acima dele nunca desce além. Escrito como `max` puro, o piso levantaria a XP
- * de quem está no level 5 — um "castigo" que dá level, que é o tipo de bug que só aparece
- * quando alguém reclama de ter subido ao morrer.
+ * perde nada; um acima dele nunca desce além. **Não tem equivalente no Tibia** — lá não existe
+ * piso —, e é decisão de PRODUTO do Draconya (documentada em `docs/product/progression.md`) para
+ * não punir quem acabou de escolher vocação. Escrito como `max` puro, o piso levantaria a XP de
+ * quem está no level 5 — um "castigo" que dá level, que é o tipo de bug que só aparece quando
+ * alguém reclama de ter subido ao morrer.
  *
  * O piso é de XP, não só de level: parar no level 8 com XP negativa é um estado impossível que
  * dá erro estranho três sistemas adiante.
@@ -150,17 +207,42 @@ export function applyDeathPenalty(
   vocation: Vocation | null,
   progression: Progression,
 ): DeathPenalty {
-  const fraction = options.premium
-    ? progression.deathPenalty.premiumFraction
-    : progression.deathPenalty.fraction;
-  const loss = Math.round(fraction * xpToCompleteLevel(character.level, progression));
+  const { flatFraction, cubicFromLevel, blessedReduction, levelFloor } = progression.deathPenalty;
+  const level = character.level;
+  const belowCubic = level < cubicFromLevel;
+  // O teto de 50% é só do ramo `level < cubicFromLevel` (ver o comentário da função).
+  const reduction = options.premium
+    ? (belowCubic && blessedReduction >= 0.40 ? 0.50 : blessedReduction)
+    : 0;
 
-  const floorXp = totalXpForLevel(progression.deathPenalty.levelFloor, progression);
+  const raw = belowCubic
+    ? flatFraction * character.xp
+    : cubicLoss(level + fractionIntoLevel(character, progression));
+  const loss = Math.round(raw * (1 - reduction));
+
+  const floorXp = totalXpForLevel(levelFloor, progression);
   const lowest = Math.min(character.xp, floorXp);
   const before = character.xp;
   character.xp = Math.max(lowest, character.xp - loss);
 
   return { xpLost: before - character.xp, levelChange: retarget(character, vocation, progression) };
+}
+
+/**
+ * A fórmula cúbica clássica do Tibia — perda em XP ABSOLUTA, função só do level (efetivo, com
+ * fração), não da XP acumulada: o `experience` que aparece no `getLostPercent` do Canary se
+ * cancela algebricamente contra o mesmo `experience` usado para chegar em `effectiveLevel`.
+ */
+function cubicLoss(effectiveLevel: number): number {
+  return ((effectiveLevel + 50) / 100) * 50 * (effectiveLevel * effectiveLevel - 5 * effectiveLevel + 8);
+}
+
+/** Quanto do level ATUAL já foi andado, de 0 (acabou de subir) a quase 1 (na fronteira do próximo). */
+function fractionIntoLevel(character: CharacterRuntime, progression: Progression): number {
+  const toNext = xpToCompleteLevel(character.level, progression);
+  if (toNext <= 0) return 0;
+  const into = character.xp - totalXpForLevel(character.level, progression);
+  return Math.min(1, Math.max(0, into / toNext));
 }
 
 /** Recalcula level e stats a partir da XP. O `health`/`mana` acompanha a variação do máximo. */

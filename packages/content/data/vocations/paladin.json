@@ -14,5 +14,15 @@
       "itemId": "wooden-shield",
       "slot": "shield"
     }
-  ]
+  ],
+  "regen": {
+    "healthPerSecond": 0.125,
+    "manaPerSecond": 0.5
+  },
+  "skillMultipliers": {
+    "melee": 1.2,
+    "distance": 1.1,
+    "shielding": 1.1,
+    "magic": 1.4
+  }
 }

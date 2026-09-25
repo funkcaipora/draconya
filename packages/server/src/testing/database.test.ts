@@ -34,10 +34,19 @@ describe('test Postgres files (FUN-102)', () => {
   it('and the ones that are named so DO open one — the suffix is not decoration', () => {
     // Guarda contra o teste virar vácuo: se o helper for renomeado e nada mais casar, ou se
     // alguém der o sufixo a um arquivo que não toca banco só para ele rodar devagar.
+    //
+    // `connectTestDatabase(` não é o ÚNICO jeito legítimo de abrir o banco: um teste que precisa
+    // do estado ANTES de uma migração (como `xp-curve-migration.postgres.test.ts`, #521) monta
+    // o próprio `postgres(...)` e aplica só as migrações que quer, do mesmo jeito que
+    // `upgrade-existing-schema.test.ts` já fazia antes deste teste existir. Os dois sinais contam.
     const named = testFiles(PACKAGES).filter((file) => file.endsWith('.postgres.test.ts'));
     expect(named.length).toBeGreaterThanOrEqual(5);
     for (const file of named) {
-      expect(readFileSync(file, 'utf8'), file).toContain('connectTestDatabase(');
+      const contents = readFileSync(file, 'utf8');
+      expect(
+        contents.includes('connectTestDatabase(') || contents.includes('postgres('),
+        file,
+      ).toBe(true);
     }
   });
 });

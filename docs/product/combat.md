@@ -274,9 +274,13 @@ personagem continua podendo morrer, não que ele passa a morrer mais rápido.
 Morto não regenera — sem essa linha, quem caiu voltaria sozinho na hunt em que morreu, e a morte
 deixaria de encerrar coisa nenhuma.
 
-A taxa de hoje faz um rato sozinho **não** matar um personagem de level 1: ele apanha, mata, e
-recupera durante o respawn. Três ratos ainda matam. É o balanceamento que as poções vão
-reequilibrar quando existirem.
+**A taxa é do Tibia, e é por VOCAÇÃO (#521, ADR 0037).** Antes da #521 era 1 HP/s e 1 mana/s
+para todo mundo, provisório; agora é `gainhpticks`/`gainmanaticks` do Canary `vocations.xml`
+por vocação (Knight regenera vida mais rápido que Mago, Mago regenera mana mais rápido que
+Knight), e quem ainda não escolheu vocação (levels 1–7) usa a taxa da vocação `None` — cerca de
+12× mais lenta em vida que o 1 HP/s de antes. É o balanceamento que as poções (e a cura
+automática do bot) vão reequilibrar — no Tibia real, sustentar uma hunt sem poção não é a
+expectativa.
 
 ## Regras
 
@@ -297,13 +301,13 @@ reequilibrar quando existirem.
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
 | Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `arcane`) | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
 | Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
-| Regeneração de vida | 1 HP/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.healthPerSecond` |
-| Regeneração de mana | 1 mana/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.manaPerSecond` |
+| Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary, #521, ADR 0037) | `packages/content/data/progression/baseline.json`, `regen` |
+| Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
 | Chance de bloqueio (`blockChance`) | 0,6 `[ABERTO — valor provisório: 0,6]` | `packages/content/data/combat/baseline.json`, `defense.blockChance` |
 | Tipos que o blocking mitiga | `["physical"]` (v1) | `packages/content/data/combat/baseline.json`, `defense.blockTypes` |
 | Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
-| Shielding — início, curva, defesa por nível | 10 / 50×1,1 / +2 % `[ABERTO — valores provisórios]` | `packages/content/data/skills/shielding.json` |
+| Shielding — início, curva (base), defesa por nível | 10 / 100 / +2 % `[ABERTO — defesa por nível provisória]` (base = `skillBase` do escudo no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/shielding.json` |
 | Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]` | `packages/content/data/combat/baseline.json`, `modifiers` |
 
 As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
@@ -495,7 +499,7 @@ resistência e imunidade do monstro.
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
 | Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
-| Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
+| Distância — início, curva (base), dano por nível | 10 / 30 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` da distância no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/distance.json` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 

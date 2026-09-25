@@ -21,11 +21,13 @@ describe('a curva vem do CONTEÚDO, e é fórmula', () => {
     // fim, e o fim vira o teto acidental que ninguém decidiu.
     expect(pointsForLevel(melee, 10)).toBe(50);
     expect(pointsForLevel(melee, 11)).toBe(55);
-    expect(pointsForLevel(melee, 12)).toBe(61);
+    // `50 * 1.1^2` é exatamente 60,5 — TRUNCADO para 60, não arredondado para 61 (ver o teste
+    // de truncação logo abaixo).
+    expect(pointsForLevel(melee, 12)).toBe(60);
   });
 
   it('o custo é INTEIRO, e por isso o resto não acumula lixo', () => {
-    // `50 * 1.1` é `55.000000000000007` em ponto flutuante. Sem arredondar, o resto que sobra
+    // `50 * 1.1` é `55.000000000000007` em ponto flutuante. Sem inteirar, o resto que sobra
     // ao fechar um nível carrega esse lixo para o próximo, e numa hunt de oito horas são
     // milhares de níveis de resíduo somado — a armadilha que o `AGENTS.md` deste pacote
     // registra sobre acumular `0,1` dez vezes.
@@ -39,6 +41,20 @@ describe('a curva vem do CONTEÚDO, e é fórmula', () => {
     for (let level = 10; level < 40; level += 1) gasto += pointsForLevel(melee, level);
     for (let i = 0; i < gasto; i += 1) skills.gain(melee, 1);
     expect(skills.getState()['melee']).toEqual({ level: 40, points: 0 });
+  });
+
+  it('TRUNCA, não arredonda — como o Canary (revisão da #521)', () => {
+    // `Vocation::getReqSkillTries` faz `static_cast<uint64_t>(base * pow(mult, steps))`, e
+    // `Vocation::getReqMana` faz `std::floor<uint64_t>(1600 * pow(mult, ml - 1))` — as duas
+    // TRUNCAM, nunca arredondam para cima. Um Knight (multiplicador de melee 1,1) subindo do
+    // level 15 para o 16 precisa de `floor(50 × 1,1⁵) = floor(80,5255…) = 80` tries no Canary;
+    // `Math.round` pedia 81 — um a mais, em toda vocação cujo fator não cai numa potência
+    // inteira exata (o caso comum: só coincidências como fator 2,0 escapavam).
+    expect(pointsForLevel(melee, 15, 1.1)).toBe(80);
+    // A mesma conta pela função de fator explícito (a forma que `skillFactorFor` alimenta):
+    // nunca arredonda para cima do valor exato truncado.
+    expect(Math.floor(50 * 1.1 ** 5)).toBe(80);
+    expect(pointsForLevel(melee, 15, 1.1)).not.toBe(Math.round(50 * 1.1 ** 5));
   });
 
   it('o expoente conta a partir do nível INICIAL, não do zero', () => {

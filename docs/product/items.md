@@ -446,6 +446,13 @@ Mastermind Shield junto. Substituída pela Mystic Blade (Canary `items.xml` id 7
 UMA mão, attack 44, defense 25, level 60, sem vocação — usável com escudo, como a issue autoriza
 ("item com requisito incompatível... trocar pelo equivalente do Tibia").
 
+**Sem divergência de peso na Royal Crossbow.** Uma revisão anterior desta PR usava o peso do
+TibiaWiki (60 oz) por parecer pesada demais para uma besta de duas mãos frente ao resto do kit —
+uma divergência não autorizada pela ADR 0037 d.4, que reserva TibiaWiki só ao que nenhuma das duas
+engines carrega (preço de NPC, por exemplo), nunca a atributo de item. Corrigido para os 120 oz
+(12000) do Canary `items.xml` id 8023, confirmados também no TFS `items.xml` id 8851 — os dois
+concordam em peso, `hitChance`, alcance e `attack`.
+
 | Kit | Knight | Paladin | Sorcerer | Druid |
 |---|---|---|---|---|
 | cabeça | Crusader Helmet | Royal Helmet | Hat of the Mad | Hat of the Mad |

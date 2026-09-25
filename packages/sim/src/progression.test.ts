@@ -12,16 +12,17 @@ const baseline: Progression = {
   vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
   startingSpeed: 300, speedPerLevel: 2,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  skillMultipliers: {},
 };
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25, spellSkill: 'magic',
-  startingKit: [],
+  startingKit: [], skillMultipliers: {},
 };
 const sorcerer: Vocation = {
   id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 25, capacityPerLevel: 10, spellSkill: 'magic',
-  startingKit: [],
+  startingKit: [], skillMultipliers: {},
 };
 
 describe('statsForLevel', () => {
@@ -106,7 +107,7 @@ const atLevel = (level: number, vocationId: string | null = null): CharacterRunt
 describe('curva de XP', () => {
   it('é fórmula, não tabela: mudar dois números muda a curva inteira', () => {
     // Tabela de 500 linhas nunca é rebalanceada, e a curva vai ser rebalanceada muitas vezes.
-    const íngreme: Progression = { ...baseline, xp: { base: 20, exponent: 3 } };
+    const íngreme: Progression = { ...baseline, xp: { kind: 'power', base: 20, exponent: 3 } };
     expect(xpToCompleteLevel(3, baseline)).toBe(180);
     expect(xpToCompleteLevel(3, íngreme)).toBe(540);
   });
@@ -157,18 +158,43 @@ describe('level up', () => {
   });
 });
 
-describe('penalidade de morte', () => {
-  it('tira 60% da XP necessária para completar o level atual', () => {
+describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
+  it('abaixo do limiar cúbico (24), tira a fração fixa da XP ACUMULADA — não mais de UM level', () => {
+    // A diferença estrutural para o modelo antigo: a fração agora é sobre `character.xp`
+    // (o total), não sobre `xpToCompleteLevel` (o custo de UM level).
     const character = atLevel(20);
-    const esperado = Math.round(0.6 * xpToCompleteLevel(20, baseline));
+    const antes = character.xp;
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes);
     expect(applyDeathPenalty(character, { premium: false }, null, baseline).xpLost)
       .toBe(esperado);
   });
 
-  it('tira 54% com Premium', () => {
+  it('abençoado (premium) perde menos — TETADO em 50%, não os 56% crus, abaixo do limiar cúbico', () => {
+    // `Player::getLostPercent` do Canary (ramo `level < 24`):
+    // `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`. Sete bênçãos
+    // dão 56% — ≥ 40% —, e o Tibia teta isso em exatamente 50% NESTE ramo, não o valor bruto.
     const character = atLevel(20);
-    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost)
-      .toBe(Math.round(0.54 * xpToCompleteLevel(20, baseline)));
+    const antes = character.xp;
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.50));
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
+  });
+
+  it('abaixo de 40% cru, o teto não mexe em nada — só entra quando a redução bateria 40% ou mais', () => {
+    const gentle: Progression = { ...baseline, deathPenalty: { ...baseline.deathPenalty, blessedReduction: 0.30 } };
+    const character = atLevel(20);
+    const antes = character.xp;
+    const esperado = Math.round(gentle.deathPenalty.flatFraction * antes * (1 - 0.30));
+    expect(applyDeathPenalty(character, { premium: true }, null, gentle).xpLost).toBe(esperado);
+  });
+
+  it('no limiar cúbico (level ≥ 24) a redução crua vale, sem teto: 56%, não 50%', () => {
+    // O teto do Canary só existe no ramo `else` (`level < 24`) de `getLostPercent` — a fórmula
+    // cúbica não passa por ele.
+    const character = atLevel(24);
+    const level = character.level; // atLevel deixa o personagem exatamente na fronteira do level.
+    const rawLoss = ((level + 50) / 100) * 50 * (level * level - 5 * level + 8);
+    const esperado = Math.round(rawLoss * (1 - baseline.deathPenalty.blessedReduction));
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
   });
 
   it('pode rebaixar o level', () => {
@@ -178,10 +204,11 @@ describe('penalidade de morte', () => {
   });
 
   it('desce um level e para lá, com a curva que está no conteúdo hoje', () => {
-    // Vale saber, e foi medido escrevendo estes testes: com `exponent: 2`, a penalidade
-    // NUNCA cascateia acima do piso. Cascatear exige `0,6 × f(L) > f(L-1)`, e para a curva
-    // quadrática isso só valeria abaixo do level 6 — onde o piso do 8 já protege. O código
-    // trata cascata mesmo assim, porque a curva é conteúdo e vai ser rebalanceada.
+    // Vale saber, e foi medido escrevendo estes testes: `flatFraction` é 10% do ACUMULADO, e
+    // para qualquer curva de potência com termos crescentes isso nunca cascateia mais de um
+    // level partindo exatamente da fronteira — precisaria de uma fração bem maior que 50% para
+    // ultrapassar o termo do level anterior. O código trata cascata mesmo assim (abaixo), com
+    // uma curva onde o modelo cúbico (level ≥ 24) domina.
     const character = atLevel(9);
     applyDeathPenalty(character, { premium: false }, null, baseline);
     expect(character.level).toBe(8);
@@ -189,25 +216,28 @@ describe('penalidade de morte', () => {
     expect(character.xp).toBeGreaterThan(totalXpForLevel(8, baseline));
   });
 
-  // Curva íngreme o bastante para a cascata acontecer de verdade. Não é a do conteúdo, e é
-  // esse o ponto: é o teste que vai continuar valendo quando alguém rebalancear a curva.
-  const íngreme: Progression = { ...baseline, xp: { base: 20, exponent: 8 } };
+  // A partir do level 24 a perda é a fórmula CÚBICA do Tibia — função só do level, não da curva
+  // de XP —, então uma curva de XP mais "barata" (`base` pequeno) faz a mesma perda ABSOLUTA
+  // valer muitos levels. Não é a curva do conteúdo, e é esse o ponto: o teste continua valendo
+  // quando alguém rebalancear `baseline.xp`.
+  const íngreme: Progression = { ...baseline, xp: { kind: 'power', base: 5, exponent: 2 } };
+  const profunda: Progression = { ...baseline, xp: { kind: 'power', base: 1, exponent: 2 } };
 
   it('CASCATEIA por mais de um level quando a perda passa do level inteiro', () => {
     // O caso que passa despercebido e só aparece com um jogador reclamando.
-    const character = hero({ level: 12, xp: totalXpForLevel(12, íngreme) });
+    const character = hero({ level: 24, xp: totalXpForLevel(24, íngreme) });
     const penalidade = applyDeathPenalty(character, { premium: false }, null, íngreme);
-    expect(penalidade.levelChange?.to).toBeLessThan(11);
+    expect(penalidade.levelChange?.to).toBeLessThan(23);
     expect(character.level).toBe(levelForXp(character.xp, íngreme));
   });
 
   it('nunca desce abaixo do level 8, e para nele com a XP EXATA do 8', () => {
     // O piso é de XP, não só de level: parar no 8 com XP negativa é um estado impossível que
     // dá erro estranho três sistemas adiante.
-    const character = hero({ level: 9, xp: totalXpForLevel(9, íngreme) });
-    applyDeathPenalty(character, { premium: false }, null, íngreme);
+    const character = hero({ level: 24, xp: totalXpForLevel(24, profunda) });
+    applyDeathPenalty(character, { premium: false }, null, profunda);
     expect(character.level).toBe(8);
-    expect(character.xp).toBe(totalXpForLevel(8, íngreme));
+    expect(character.xp).toBe(totalXpForLevel(8, profunda));
   });
 
   it('o piso protege, e nunca promove', () => {

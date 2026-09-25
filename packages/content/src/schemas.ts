@@ -1391,6 +1391,27 @@ export const vocationSchema = z.object({
   /** A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`, e `distance` no Paladin. */
   spellSkill: z.string().min(1).default('magic'),
   /**
+   * Regeneração passiva DESTA vocação (#521, ADR 0037), na mesma forma de `progression.regen`:
+   * pontos por segundo, não por tick (ver o comentário lá). Vem do Canary `vocations.xml`
+   * (`gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — convertidos para taxa:
+   * `amount * 1000 / ticks`), verificado contra o arquivo em `main` de 2026-09-24. Ausente:
+   * quem monta a sessão cai no `regen` da tabela base (sem vocação) — o conteúdo de teste que
+   * não fala de vocação por vocação.
+   */
+  regen: z.object({
+    healthPerSecond: z.number().nonnegative(),
+    manaPerSecond: z.number().nonnegative(),
+  }).optional(),
+  /**
+   * Quanto esta vocação demora para subir cada skill (#521, ADR 0037): o `factor` de
+   * `pointsForLevel` (`skills.ts`) por `skillId`, substituindo o da tabela do conteúdo da
+   * skill. É o `<skill id multiplier="…">` do Canary `vocations.xml` — a mesma chave cobre
+   * magic level, porque ML é só mais uma entrada da tabela (`manamultiplier` no Canary).
+   * Ausente para um `skillId`: cai no `factor` do PRÓPRIO conteúdo da skill (o padrão de quem
+   * não distingue vocação nenhuma — o conteúdo de teste antigo).
+   */
+  skillMultipliers: z.record(z.string(), z.number().min(1)).default({}),
+  /**
    * A arma que a vocação recebe ao ser escolhida (#154, ADR 0026 decisão 3). `buildContent`
    * confere que o item existe, é `kind: 'weapon'` e exige ESTA vocação — uma arma que qualquer
    * um veste não é "a arma da vocação". Opcional no SCHEMA, e não no conteúdo real: as quatro
@@ -1477,30 +1498,59 @@ export const progressionSchema = z.object({
   satchelInitialSlots: z.number().int().positive().default(10),
   containerRow: z.number().int().positive().default(5),
   /**
-   * A curva de XP, como FÓRMULA e não como tabela: `base * level^exponent` é a XP para
-   * completar aquele level.
+   * A curva de XP (#521, ADR 0037).
    *
-   * Tabela de 500 linhas seria mais expressiva e é o caminho errado aqui. A curva vai ser
-   * rebalanceada muitas vezes, e rebalancear uma tabela é reescrever 500 linhas à mão — o que
-   * na prática significa que ela nunca é rebalanceada. Dois números mudam a curva inteira, e
-   * a forma continua legível para quem balanceia.
+   * `kind: 'tibia'` é a curva REAL do Tibia (`Player::getExpForLevel` do Canary/TFS): total
+   * acumulado para estar no level `L` é `(L³ − 6L² + 17L − 12) / 6 × 100` — sempre inteiro,
+   * porque `L³ − L` é produto de três inteiros consecutivos e por isso múltiplo de 6. É a curva
+   * do conteúdo REAL (`baseline.json`); não é mais uma escolha de balanceamento do Draconya
+   * (ADR 0037 revoga esse limite do ADR 0019 para mecânica de jogo).
+   *
+   * `kind: 'power'` é a fórmula antiga (`base * level^exponent`), mantida só para o conteúdo de
+   * TESTE que quer uma curva pequena e arbitrária sem carregar os números do Tibia — nunca para
+   * conteúdo de jogo real.
    */
-  xp: z.object({
-    base: z.number().positive(),
-    exponent: z.number().positive(),
-  }),
+  xp: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('tibia') }),
+    z.object({
+      kind: z.literal('power'),
+      base: z.number().positive(),
+      exponent: z.number().positive(),
+    }),
+  ]),
   /**
-   * Penalidade de morte (§26.2). Mora aqui, junto da curva, porque ela é definida COMO
-   * fração da curva — separar as duas é como as duas divergem numa rebalanceada.
+   * Penalidade de morte (#521, ADR 0037): a fórmula do Tibia (`Player::getLostPercent`,
+   * `Player::death` do Canary), não mais uma fração fixa de um level.
+   *
+   * Abaixo de `cubicFromLevel` o Tibia cobra uma fração FIXA da XP acumulada (`flatFraction`,
+   * 10% dos levels 8–23); a partir dali a perda é a fórmula cúbica clássica —
+   * `((L+50) / 100) × 50 × (L² − 5L + 8)`, com `L` incluindo a fração de progresso dentro do
+   * level, para a perda não saltar na fronteira — sobre a XP acumulada, não mais uma fração de
+   * `xpToCompleteLevel`. `blessedReduction` mapeia o conceito de bênção do repo (`premium` na
+   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%.
    */
   deathPenalty: z.object({
-    /** Fração da XP necessária para completar o level atual. §26.2: 60%. */
-    fraction: z.number().min(0).max(1),
-    /** A mesma fração para quem tem Premium. §26.2: 54%. */
-    premiumFraction: z.number().min(0).max(1),
-    /** Abaixo deste level a penalidade não derruba ninguém. §26.2: 8. */
+    /** Fração fixa da XP acumulada perdida abaixo de `cubicFromLevel`. Tibia: 10%. */
+    flatFraction: z.number().min(0).max(1),
+    /** A partir de qual level a fórmula cúbica substitui a fração fixa. Tibia: 24. */
+    cubicFromLevel: z.number().int().positive(),
+    /** Redução de quem está "abençoado" (mapeia `premium`). Tibia: 56% (7 bênçãos × 8%). */
+    blessedReduction: z.number().min(0).max(1),
+    /**
+     * Abaixo deste level a penalidade não tira XP nenhuma. **Sem equivalente no Tibia** — lá
+     * não existe piso (TibiaPlan, "Tibia Death Penalty", 2026-09-24): é decisão de PRODUTO do
+     * Draconya, para não punir quem acabou de escolher vocação, documentada como divergência
+     * em `docs/product/progression.md`.
+     */
     levelFloor: z.number().int().positive(),
   }),
+  /**
+   * Quanto demora para subir cada skill SEM vocação escolhida (levels 1–7, §7.4): o `factor`
+   * por `skillId`, na mesma forma do `skillMultipliers` da vocação. Vem da vocação `None` do
+   * Canary `vocations.xml` (#521, ADR 0037). Ausente para um `skillId`: cai no `factor` do
+   * próprio conteúdo da skill.
+   */
+  skillMultipliers: z.record(z.string(), z.number().min(1)).default({}),
   _open: z.string().optional(),
 });
 

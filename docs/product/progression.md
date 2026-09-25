@@ -27,19 +27,54 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 - Pontos de passiva são distribuídos em árvore própria por vocação (dano / suporte / sustain).
 - Respec de passivas é livre, ilimitado e restrito a PZ.
 
-## A curva de XP é fórmula, não tabela
+## A curva de XP é a do Tibia (#521, ADR 0037)
 
-`xpToCompleteLevel(L) = round(base × L^exponent)`, e `xp` no personagem é o **total acumulado**,
-nunca "XP dentro do level".
+Desde a #521, a curva não é mais um número que o Draconya escolhe — é a fórmula real do Tibia
+(`Player::getExpForLevel`, Canary/TFS, verificada em `opentibiabr/canary` `main` 2026-09-24):
 
-Uma tabela de 500 linhas seria mais expressiva e é o caminho errado: a curva vai ser
-rebalanceada muitas vezes, e rebalancear uma tabela é reescrever 500 linhas à mão — o que na
-prática significa que ela nunca é rebalanceada. Dois números mudam a curva inteira.
+```
+totalXpForLevel(L) = (L³ − 6L² + 17L − 12) / 6 × 100
+```
+
+Sempre um inteiro: `L³ − L` é o produto de três inteiros consecutivos e por isso múltiplo de 6,
+e o resto da expressão já é múltiplo de 6 sozinho — não precisa arredondar. `xpToCompleteLevel(L)`
+é a diferença entre dois totais consecutivos, calculada em O(1) — nunca um laço somando do zero,
+que a level 200+ tornaria caro. `xp` no personagem continua sendo o **total acumulado**, nunca
+"XP dentro do level".
+
+Conferida: level 1 = 0, level 8 = 4.200, level 200 = 129.389.800.
+
+O `progressionSchema.xp` é um tipo com duas formas (`{ kind: 'tibia' }` ou
+`{ kind: 'power', base, exponent }`): o CONTEÚDO real (`baseline.json`) sempre usa `'tibia'`; a
+forma `'power'` (a fórmula antiga, `base × level^exponent`) sobrevive só para fixture de teste
+que quer uma curva pequena e arbitrária, sem carregar os números do Tibia. Antes da #521 a curva
+era balanceamento do Draconya e ficava só em conteúdo, sem código dedicado — agora ela é regra
+do Tibia (ADR 0037 revoga esse limite do ADR 0019 para mecânica de jogo), e por isso vive como
+fórmula fechada em `packages/sim/src/progression.ts` (`tibiaTotalXp`), não mais como dois
+números em JSON.
 
 Guardar o **acumulado**, e não o progresso dentro do level, é o que faz a penalidade de morte
 cascatear sozinha: tira-se XP do total e o level é recalculado. Guardar o progresso dentro do
 level exigiria um laço de "desce um level, devolve o resto" escrito à mão — exatamente onde o
 caso de cascata de dois levels passa despercebido.
+
+### Personagem que já existia (migração 0009, ADR 0014)
+
+A curva nova muda o que `xp` SIGNIFICA — o mesmo número aponta para um level diferente. A
+migração `packages/server/migrations/0009_521-tibia-xp-curve.sql` preserva o **level** e a
+**fração de progresso dentro dele** de quem já tinha personagem, recalculando só o valor
+absoluto de `xp`:
+
+```
+xp_novo = total_novo(L) + fração × completar_novo(L)
+fração  = (xp_antigo − total_antigo(L)) / completar_antigo(L)
+```
+
+As duas curvas em SQL fechado (soma de quadrados para a antiga, a cúbica para a nova — ver o
+comentário do arquivo), sem laço e sem função: um `UPDATE` só, por personagem. Testado em
+`packages/server/src/db/xp-curve-migration.postgres.test.ts` — inclusive o caso que dá nome ao
+teste, um personagem level 9 na metade do level que continua level 9 na metade depois da
+migração, só que na curva nova.
 
 **Subir de level dá os pontos, não cura.** O máximo de HP e mana sobe, e o atual sobe junto na
 mesma quantidade. Curar no level up faria "subir de level" virar poção grátis, e um bot bem
@@ -129,23 +164,33 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | HP / mana / capacidade por level — Druid | +5 / +30 / +10 (o Tibia; ADR 0026) | `packages/content/data/vocations/druid.json` |
 | Arma inicial de cada vocação | steel axe / bow / wand of vortex / snakebite rod (ADR 0026, decisão 3; #154) | `packages/content/data/vocations/*.json`, `startingWeaponItemId` |
 | Kit inicial de cada vocação (level 8) | Knight: steel axe + wooden shield; Paladin: bow (o escudo vai para a mochila, duas mãos); Sorcerer: wand of vortex + wooden shield; Druid: snakebite rod + wooden shield (#496) | `packages/content/data/vocations/*.json`, `startingKit` |
-| Skill de distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (ADR 0026, decisão 4; sobe por tiro de bow, #152) | `packages/content/data/skills/distance.json` |
-| HP inicial (level 1) | 150 `[ABERTO — valor provisório: 150]` | `packages/content/data/progression/baseline.json` |
-| Mana inicial (level 1) | 20 `[ABERTO — valor provisório: 20, uma cura ou um Golpe Arcano no level 1 (FUN-114)]` | `packages/content/data/progression/baseline.json` |
-| Capacidade inicial | 400 `[ABERTO — valor provisório: 400]` | `packages/content/data/progression/baseline.json` |
-| HP por level antes da vocação | 5 `[ABERTO — valor provisório: 5]` | `packages/content/data/progression/baseline.json` |
-| Mana por level antes da vocação | 5 `[ABERTO — valor provisório: 5]` | `packages/content/data/progression/baseline.json` |
+| Skill de distância — início, curva (base), dano por nível | 10 / 30 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` da distância no Canary, #521, ADR 0037; o `factor` é por vocação, ver abaixo; sobe por tiro de bow, #152) | `packages/content/data/skills/distance.json` |
+| HP inicial (level 1) | 150 (o Tibia; verificado batendo o HP 3065 do Knight level 200, #521) | `packages/content/data/progression/baseline.json` |
+| Mana inicial (level 1) | 55 (o Tibia: `5 × (level + 10)`, verificado batendo a mana 1050/5850 do Knight/Sorcerer level 200, #521, ADR 0037 — substitui os 20 provisórios da FUN-114) | `packages/content/data/progression/baseline.json` |
+| Capacidade inicial | 400 (o Tibia) | `packages/content/data/progression/baseline.json` |
+| HP por level antes da vocação | 5 (o `gainhp` da vocação `None` do Canary `vocations.xml`, #521) | `packages/content/data/progression/baseline.json` |
+| Mana por level antes da vocação | 5 (o `gainmana` da vocação `None` do Canary, #521) | `packages/content/data/progression/baseline.json` |
 | Level em que a vocação é escolhida | 8 | `packages/content/data/progression/baseline.json` |
 | Quantidade de promoções no MVP | 1 | caminho previsto: `packages/content/vocations` |
 | Curva de ganho de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Teto de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
-| Base da curva de XP | 20 `[ABERTO — valor provisório: 20]` | `packages/content/data/progression/baseline.json`, `xp.base` |
-| Expoente da curva de XP | 2 `[ABERTO — valor provisório: 2]` | `packages/content/data/progression/baseline.json`, `xp.exponent` |
-| Velocidade do personagem | 278 no level 1, +2 por level, sem incremento por vocação `[ABERTO — valor provisório, do Huntera]`. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Curva de XP | a cúbica do Tibia, `(L³ − 6L² + 17L − 12) / 6 × 100` (#521, ADR 0037 — ver seção acima) | `packages/content/data/progression/baseline.json`, `xp: { kind: 'tibia' }` |
+| Velocidade do personagem | 278 no level 1, +2 por level, sem incremento por vocação `[ABERTO — valor provisório, do Huntera — o Tibia usa 110 de base e +1/level, ADR 0037 decisão 4]`. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary: `gainhpticks` 12000, `gainmanaticks` 6000 — #521, ADR 0037; substitui o 1/1 provisório) | `packages/content/data/progression/baseline.json`, `regen` |
+| Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | 0,1667/0,3333 · 0,125/0,5 · 0,0833/0,6667 · 0,0833/0,6667 HP/mana por segundo (`gainhpticks`/`gainmanaticks` de cada vocação no Canary, #521, ADR 0037) | `packages/content/data/vocations/*.json`, `regen` |
+| Multiplicador de skill/ML por vocação — Knight | melee 1,1 / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Paladin | melee 1,2 / distância 1,1 / escudo 1,1 / magia 1,4 | `packages/content/data/vocations/paladin.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Sorcerer | melee 2,0 / distância 2,0 / escudo 1,5 / magia 1,1 | `packages/content/data/vocations/sorcerer.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Druid | melee 1,8 / distância 1,8 / escudo 1,5 / magia 1,1 (só a Druid difere da Sorcerer aqui — a XML do Canary não trata as duas como idênticas) | `packages/content/data/vocations/druid.json`, `skillMultipliers` |
+| Multiplicador de skill/ML sem vocação (levels 1–7) | melee 2,0 / distância 2,0 / escudo 1,5 / magia 4,0 (a vocação `None`) | `packages/content/data/progression/baseline.json`, `skillMultipliers` |
+| Penalidade de morte — fração fixa (< level 24) | 10 % da XP ACUMULADA (não mais de `xpToCompleteLevel`) — o Tibia, #521, ADR 0037 | `packages/content/data/progression/baseline.json`, `deathPenalty.flatFraction` |
+| Penalidade de morte — limiar da fórmula cúbica | level 24 (o Tibia) | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
+| Penalidade de morte — redução de quem está abençoado (`premium`) | 56 % (sete bênçãos × 8 % do Tibia — mapeia o `premium` que o repo já tinha) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
+| Penalidade de morte — piso de level | 8 — **sem equivalente no Tibia** (decisão de produto do Draconya, ver "Divergências do PRD") | `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor` |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
-| Corpo a Corpo — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/melee.json` |
-| Magia — início, curva, dano por nível | 0 / 400×1,1 / +3% `[ABERTO — valores provisórios]` | `packages/content/data/skills/magic.json` |
-| Escudo — início, curva, defesa por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (CMB-04) | `packages/content/data/skills/shielding.json` |
+| Corpo a Corpo — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do club/sword/axe no Canary, #521, ADR 0037; `factor` por vocação, ver acima) | `packages/content/data/skills/melee.json` |
+| Magia (ML) — início, curva (base), dano por nível | 0 / 1600 / +3% `[ABERTO — dano por nível provisório]` (base = `getReqMana` do Canary — o custo do ML1 é sempre a base cheia, o expoente zera; `factor` = `manamultiplier`, por vocação, ver acima; #521, ADR 0037) | `packages/content/data/skills/magic.json` |
+| Escudo — início, curva (base), defesa por nível | 10 / 100 / +2% `[ABERTO — defesa por nível provisória]` (base = `skillBase` do escudo no Canary, #521, ADR 0037; `factor` por vocação, ver acima) (CMB-04) | `packages/content/data/skills/shielding.json` |
 | Cura — mana, cooldown, quanto cura | 20 / 1 000 ms / 60 `[ABERTO — valor provisório]` | `packages/content/data/spells/heal.json` |
 | Golpe Arcano — mana, cooldown, dano, alcance | 15 / 2 000 ms / 40 / 3 tiles `[ABERTO — valor provisório]` | `packages/content/data/spells/strike.json` |
 
@@ -161,11 +206,18 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
   existe desde o CMB-05, mas as três corpo a corpo ainda compartilham a skill `melee` — separá-las
   é rebalanceamento, não motor (ADR 0026, decisão 4).
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
-  PRD: o §9.3 define só o incremento **por vocação**. Os valores em
-  `progression/baseline.json` são provisórios e estão marcados como tal no próprio arquivo.
-- A curva de XP também não está no PRD. `base: 20, exponent: 2` põe o level 8 — onde a vocação
-  é escolhida — a cerca de duas horas de Rat Cellars, cedo o bastante para a escolha não virar
-  espera.
+  PRD: o §9.3 define só o incremento **por vocação**. Desde a #521 (ADR 0037) esses números SÃO
+  o Tibia (`gainhp`/`gainmana`/`gaincap` da vocação `None`, verificados no Canary
+  `vocations.xml`), não mais provisórios do Draconya — só `startingCapacity` (400) e a
+  velocidade continuam sem fonte oficial do PRD, marcados como tal no próprio
+  `progression/baseline.json`.
+- ~~A curva de XP também não está no PRD~~ → **Resolvido pela #521 (ADR 0037):** a curva agora
+  é a cúbica do Tibia (`Player::getExpForLevel`), não mais uma escolha de balanceamento do
+  Draconya — ver "A curva de XP é a do Tibia" acima.
+- Skill/ML por vocação (multiplicador de crescimento), regeneração por vocação e a penalidade
+  de morte também eram provisórios do Draconya e **foram resolvidos pela #521 (ADR 0037)**: os
+  três agora são os números do Tibia, verificados no Canary `vocations.xml` e em
+  `player.cpp`/`vocation.cpp` — ver as seções acima e a tabela de parâmetros.
 
 ## Decidido na implementação: a vocação não é retroativa
 
@@ -191,6 +243,13 @@ não avisa.
   (ADR 0026, decisão 5): copiar o Tibia — Knight 15/5/25, Paladin 10/15/20, Sorcerer e Druid
   5/30/10 (HP / mana / capacidade), sem vocação 5/5/10 —, "qualquer coisa eu edito depois". Os
   números moram em `packages/content/data/vocations/*.json` e entram pela issue #151.
+- **§26.2 — piso de level da penalidade de morte (levelFloor, #521, ADR 0037).** O Draconya
+  nunca deixa a penalidade derrubar alguém abaixo do level 8 — **o Tibia real não tem esse
+  piso** (confirmado na TibiaPlan, "Tibia Death Penalty", 2026-09-24: todo mundo perde XP,
+  mesmo abaixo do level 8). É decisão de PRODUTO do Draconya, não uma lacuna: punir com perda
+  de level quem acabou de escolher vocação é ruim de onboarding, e o piso já existia antes da
+  #521 (mantido, só reimplementado sobre a fórmula nova). Mora em
+  `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor`.
 
 ## Como a vocação é escolhida (ADR 0026, decisões 1 e 3)
 
@@ -220,6 +279,26 @@ bloqueio ter acontecido nem de quanto HP foi perdido: um bloqueio total ainda tr
 ataque elemental não treina. O rato parado, sem atacar, também não move a skill (não é por
 tick). A fórmula e a posição do sorteio estão em
 [`combat.md`](./combat.md) e na emenda do ADR 0031.
+
+### O ritmo de cada skill é por VOCAÇÃO (#521, ADR 0037)
+
+`pointsForLevel(definition, level, factor)` (`packages/sim/src/skills.ts`) sempre calculou
+`base × factor^(level − startingLevel)`; o que mudou é de onde vem `factor`. Antes era só o
+`curve.factor` do JSON da skill — igual para todo mundo. Agora `skillFactorFor(definition,
+vocation, progression)` escolhe o multiplicador da VOCAÇÃO de quem está usando (o `<skill id
+multiplier="…">` do Canary `vocations.xml`), caindo no `skillMultipliers` da tabela base (a
+vocação `None`) para quem ainda não escolheu, e só no `curve.factor` do próprio conteúdo quando
+nem vocação nem tabela base declaram um valor — o caminho do conteúdo de teste antigo.
+
+É por isso que um Knight sobe corpo a corpo rápido (multiplicador 1,1) e magia devagar (3,0),
+e um Sorcerer o oposto (2,0 / 1,1) — a MESMA curva de conteúdo (`base`, `startingLevel`), um
+fator diferente por quem está jogando. A mesma tabela cobre magic level: no Canary, ML é só mais
+uma entrada de `vocations.xml` (`manamultiplier`), então não tem mecanismo próprio — é
+`skillMultipliers.magic`, como qualquer outra skill.
+
+`character.skills.gain`/`progressOf` recebem o `factor` já resolvido: quem chama (o ruleset, ou
+`playerStatsOf` no `host`) é quem sabe a vocação do personagem — `Skills` continua sem conhecer
+`Vocation` nem `Progression`, só números.
 
 ### Famílias de arma e proficiência (CMB-05, #333)
 

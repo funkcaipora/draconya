@@ -79,7 +79,7 @@ import type { Movable, MoveResult, WorldPoint } from '../movement.js';
 import type { RouteState } from '../route/walker.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
-import { powerMultiplier } from '../skills.js';
+import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { RouteWalker } from '../route/walker.js';
 import { Session } from '../session.js';
@@ -1597,7 +1597,7 @@ export class HuntRuleset implements Ruleset {
     this.#schedulePlayerAttack(session, character.id, 0);
     if (attackIntervalMs <= 0) throw new Error('attackIntervalMs must be positive');
 
-    const { healthPerSecond, manaPerSecond } = this.#options.progression.regen;
+    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
     // Taxa zero não é intervalo infinito: é "não regenera", e então não há evento nenhum.
     if (healthPerSecond > 0) {
       session.scheduleIn(HEALTH_REGEN, 0, {
@@ -1857,7 +1857,7 @@ export class HuntRuleset implements Ruleset {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
 
-    const { healthPerSecond, manaPerSecond } = this.#options.progression.regen;
+    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
     const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
     if (perSecond <= 0) return;
 
@@ -4715,11 +4715,16 @@ const slots = bot.groups.get(group);
   ): void {
     if (amount <= 0) return;
     const definitions = this.#skillsByGain[on];
+    const vocation = this.#vocationOf(character);
     for (let i = 0; i < definitions.length; i += 1) {
       const definition = definitions[i] as Skill;
       const gain = definition.gain;
       const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
-      if (character.skills.gain(definition, points) > 0) {
+      // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
+      // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
+      // diferente por quem está usando.
+      const factor = skillFactorFor(definition, vocation, this.#options.progression);
+      if (character.skills.gain(definition, points, factor) > 0) {
         session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
       }
     }
@@ -5272,6 +5277,16 @@ const slots = bot.groups.get(group);
     // Vocação que saiu do conteúdo cai para a tabela base em vez de derrubar a hunt: perder
     // stats é ruim, perder a sessão inteira de quem estava caçando é pior.
     return this.#options.vocations.get(character.vocationId) ?? null;
+  }
+
+  /**
+   * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
+   * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
+   * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
+   * para todo mundo.
+   */
+  #regenOf(character: CharacterRuntime): { healthPerSecond: number; manaPerSecond: number } {
+    return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
   }
 
   /**
