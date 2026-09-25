@@ -30,7 +30,7 @@ import type {
   PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
-import type { SessionDirectory } from '../directory.js';
+import type { SessionDirectory, SessionLocation } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
@@ -1037,7 +1037,13 @@ export class SessionHost {
       // à Cidade e o ticket da party era descartado em silêncio — a hunt nunca nascia, e quem
       // mandasse `session-attach` continuava recebendo `sessionType: "city"` para sempre.
       if (party !== undefined && existing.id !== party.sessionId) {
-        await this.#leaveForParty(characterId, existing);
+        // O tipo do destino é o da sessão já hospedada (#402, quem chega depois do primeiro
+        // ticket) quando ela existe; senão é o que `createSession` vai produzir para um
+        // `PartyTicket` — sempre `'hunt'` (`sessions.ts`, `partyHuntFor`), nunca outra coisa.
+        const targetType = this.#sessions.get(party.sessionId)?.session.ruleset.type ?? 'hunt';
+        await this.#leaveForParty(characterId, existing, {
+          sessionId: party.sessionId, nodeId: this.#options.nodeId, type: targetType,
+        });
       } else {
         await this.#register(characterId, existing, accountId);
         return { created: false };
@@ -1073,12 +1079,17 @@ export class SessionHost {
 
   /**
    * Tira o personagem da sessão que ele ocupa NESTE nó antes de a party assumir (#527,
-   * invariante 8: nunca duas sessões ao mesmo tempo). Espelha o ramo de shard de `release` —
-   * a Cidade não credita e não encerra por personagem (ADR 0023), mas guarda o que mudou
-   * (`#saveDurableReceipt`, #154) — só que sem tocar no diretório: quem escreve o registro
-   * novo é `#register`/`#createAndRegister`, chamado pelo MESMO `#prepare` logo em seguida, e
-   * `directory.register` já sabe tomar posse de um registro que aponta para outro lugar
-   * (`#takeOver`, pensado para retomada depois de nó morto — serve igual aqui).
+   * invariante 8: nunca duas sessões ao mesmo tempo) — E move o registro do diretório pela
+   * MESMA operação que a transição hunt↔Cidade da morte usa (`directory.succeed`, FUN-38, o
+   * `#replace` abaixo), nunca por `#register`/`#takeOver`: `#takeOver` existe para RETOMAR
+   * depois de nó morto — `TAKE_OVER_SESSION` recusa quando o batimento do nó ainda existe
+   * (`directory.ts`) — e o nó aqui está bem vivo, é ele mesmo quem está pedindo a troca. Sem
+   * isto, o `#register` que `#createAndRegister` chama logo depois via o `sessionKey` ainda
+   * apontando para a Cidade, caía no `#takeOver`, e ele recusava SEMPRE — "active reservation
+   * expired before session registration" em todo handshake, porque o nó nunca estava morto.
+   *
+   * Espelha o ramo de shard de `release` — a Cidade não credita e não encerra por personagem
+   * (ADR 0023), mas guarda o que mudou (`#saveDurableReceipt`, #154).
    *
    * A sessão de origem só deveria ser um shard: a API só emite ticket de party para quem o
    * diretório via na Cidade (ou em repouso) no instante da emissão — `/start` e o `/join` em
@@ -1086,32 +1097,54 @@ export class SessionHost {
    * para essa suposição falhar — credita como uma saída normal em vez de arriscar apagar
    * progresso em silêncio.
    */
-  async #leaveForParty(characterId: string, existing: Session): Promise<void> {
+  async #leaveForParty(characterId: string, existing: Session, target: SessionLocation): Promise<void> {
     const hosted = this.#sessions.get(existing.id);
     if (hosted === undefined) {
       this.#sessionIdByCharacter.delete(characterId);
-      return;
-    }
-    this.#dropViewers(hosted, characterId);
-    if (existing.ruleset.shared === true) {
-      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
-      hosted.session.leave(characterId);
-      this.#announceDeparture(hosted, characterId);
     } else {
-      let receipt: Receipt | null;
-      if (hosted.session.ended === null && hosted.session.participants.length > 1) {
-        const departure = hosted.session.leave(characterId, 'manual-exit');
-        receipt = departure?.receipt ?? null;
+      this.#dropViewers(hosted, characterId);
+      if (existing.ruleset.shared === true) {
+        await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+        hosted.session.leave(characterId);
+        this.#announceDeparture(hosted, characterId);
       } else {
-        if (hosted.session.ended === null) hosted.session.end('manual-exit');
-        receipt = receiptOf(hosted, characterId);
+        let receipt: Receipt | null;
+        if (hosted.session.ended === null && hosted.session.participants.length > 1) {
+          const departure = hosted.session.leave(characterId, 'manual-exit');
+          receipt = departure?.receipt ?? null;
+        } else {
+          if (hosted.session.ended === null) hosted.session.end('manual-exit');
+          receipt = receiptOf(hosted, characterId);
+        }
+        if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
       }
-      if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
+      const remaining = this.#charactersOf(existing.id).filter((id) => id !== characterId);
+      if (remaining.length === 0) this.#sessions.delete(existing.id);
+      this.#sessionIdByCharacter.delete(characterId);
+      this.#restingSince.delete(characterId);
     }
-    const remaining = this.#charactersOf(existing.id).filter((id) => id !== characterId);
-    if (remaining.length === 0) this.#sessions.delete(existing.id);
-    this.#sessionIdByCharacter.delete(characterId);
-    this.#restingSince.delete(characterId);
+
+    // O registro do diretório troca AQUI, não em `#register` — ver o comentário acima. A
+    // conta é a que a Cidade já registrou (`#createLocal` a gravou quando o personagem
+    // entrou lá); sem diretório (host de teste sem essa dependência), não há o que mover.
+    const directory = this.#options.directory;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    if (directory === undefined || accountId === undefined) return;
+    const moved = await directory.succeed(
+      characterId, accountId,
+      { sessionId: existing.id, nodeId: this.#options.nodeId, type: existing.ruleset.type satisfies SessionType },
+      target,
+    );
+    if (!moved) {
+      // Outro nó assumiu o registro, ou o lease/reserva expirou, entre a leitura da sessão
+      // atual e agora — a mesma corrida rara que `#replace` cobre soltando o personagem. Aqui
+      // não há `hosted` para soltar (o estado local já saiu acima); falhar alto é o que faz o
+      // handshake responder 503 em vez de hospedar uma sessão sem registro válido nenhum
+      // (invariante 9).
+      throw new Error(
+        `directory entry for ${characterId} changed hands while leaving a session for a party ticket`,
+      );
+    }
   }
 
   /**
@@ -3801,6 +3834,16 @@ export class SessionHost {
         this.#logger.warn({ characterId: other.id, sessionId: session.id }, 'Party member has no snapshot of their own; hosting without a lease');
         continue;
       }
+      // O outro membro pode estar hospedado AQUI, na Cidade, no mesmo nó (#527) — o cenário de
+      // duas caçadas locais logadas juntas. ANTES do `#register` de propósito: registrar com o
+      // `sessionKey` ainda apontando para a Cidade cairia no `#takeOver`, que recusa sempre
+      // (o nó está vivo — ver `#leaveForParty`).
+      const existingOther = this.sessionFor(other.id);
+      if (existingOther !== undefined && existingOther.id !== session.id) {
+        await this.#leaveForParty(other.id, existingOther, {
+          sessionId: session.id, nodeId: this.#options.nodeId, type: session.ruleset.type,
+        });
+      }
       await this.#register(other.id, session, otherAccount);
       this.#accountIdByCharacter.set(other.id, otherAccount);
     }
@@ -3815,15 +3858,9 @@ export class SessionHost {
     }
     this.#createLocal(characterId, session, accountId);
     for (const other of others) {
-      // O outro membro pode estar hospedado AQUI, na Cidade, no mesmo nó (#527) — o cenário de
-      // duas caçadas locais logadas juntas: sem isto, o mapa local passaria a apontar para a
-      // hunt enquanto o `HostedSession` da Cidade continuaria com ele em `participants` e
-      // qualquer visualizador dele ainda em `viewers`, e o personagem ficaria em DUAS sessões
-      // ao mesmo tempo por dentro (invariante 8), mesmo com o diretório já certo.
-      const existingOther = this.sessionFor(other.id);
-      if (existingOther !== undefined && existingOther.id !== session.id) {
-        await this.#leaveForParty(other.id, existingOther);
-      }
+      // A Cidade dele já foi deixada no loop acima, ANTES do `#register` — aqui só falta o
+      // mapa local, que aquele loop não mexeu de propósito (a ordem de `#createLocal` importa
+      // para quem já estava na hunt ver a chegada, como o comentário duas linhas acima explica).
       this.#sessionIdByCharacter.set(other.id, session.id);
       this.#restingSince.set(other.id, this.#now());
       // Nome, cores e bot dos outros membros vêm do bloco da party (#195): quem os vê no
