@@ -46,6 +46,10 @@ export interface SpawnPoint {
   readonly routeIndex: number;
   readonly radius: number;
   readonly at: Point;
+  /** O monstro deste ponto (#519). Ausente é o sorteio de composição de sempre. */
+  readonly monsterId?: string;
+  /** O `spawntime` deste ponto, em ms (#519). Ausente cai no `respawnDelayMs` da dificuldade. */
+  readonly respawnDelayMs?: number;
 }
 
 export interface Route {
@@ -161,7 +165,12 @@ export function buildRoute(data: RouteData, map: Tilemap): Route {
     spawnPoints: data.spawnPoints.map((s) => ({
       routeIndex: s.routeIndex,
       radius: s.radius,
-      at: data.tiles[s.routeIndex] as Point,
+      // A posição EXATA (#519) prevalece quando declarada — é o caso do Canary, cujo spawn
+      // raramente cai em cima da rota; sem ela, o tile do `routeIndex` continua sendo a posição,
+      // como sempre foi.
+      at: s.at ?? (data.tiles[s.routeIndex] as Point),
+      ...(s.monsterId === undefined ? {} : { monsterId: s.monsterId }),
+      ...(s.respawnDelayMs === undefined ? {} : { respawnDelayMs: s.respawnDelayMs }),
     })),
   };
 }
@@ -171,11 +180,17 @@ export function buildRoute(data: RouteData, map: Tilemap): Route {
  * ninguém liga à causa:
  *
  *  - tile fora do mapa ou em parede: o personagem fica preso e a hunt "não rende";
- *  - tile numa escada: o personagem trocaria de andar no meio da rota;
- *  - passo não adjacente, ou em outro andar: o personagem teleporta, e o cliente desenha um
- *    salto;
+ *  - passo não adjacente, nem escada, nem em outro andar por conta própria: o personagem
+ *    teleporta, e o cliente desenha um salto;
  *  - laço aberto: ele chega ao fim da rota e PARA. Ninguém percebe até alguém reclamar que
  *    a hunt travou — e o §14.4 é explícito que a rota forma um laço.
+ *
+ * **Hunt multiandar (#519):** um tile pode SER uma escada — `move()` já resolve isso sozinho, e
+ * proibir era o que impedia a primeira rota de três andares. O que se confere é diferente do
+ * passo comum: pisar no tile `(x, y)` da escada, vindo do andar de ORIGEM dela, pousa no destino
+ * registrado em `floorChanges` — não em `(x, y)` — e é ESSA posição, não o tile autorado, que
+ * conta como "onde o personagem está" para julgar o passo seguinte. `at` abaixo é essa posição
+ * EFETIVA; ela só diverge do tile autorado durante uma travessia de escada.
  */
 export function validateRoute(data: RouteData, map: Tilemap): string[] {
   const problems: string[] = [];
@@ -183,27 +198,43 @@ export function validateRoute(data: RouteData, map: Tilemap): string[] {
   data.tiles.forEach((tile, i) => {
     if (isBlocked(map, tile.x, tile.y, tile.z)) {
       problems.push(`tile ${i} (${tile.x},${tile.y},${tile.z}) está fora do mapa ou em parede`);
-    } else if (floorChangeAt(map, tile.x, tile.y, tile.z) !== null) {
-      problems.push(`tile ${i} (${tile.x},${tile.y},${tile.z}) é uma escada — a rota trocaria de andar`);
     }
   });
 
+  let at: Point = data.tiles[0] as Point;
   for (let i = 0; i < data.tiles.length; i++) {
-    const atual = data.tiles[i] as Point;
     const proximo = data.tiles[(i + 1) % data.tiles.length] as Point;
-    const dx = Math.abs(proximo.x - atual.x);
-    const dy = Math.abs(proximo.y - atual.y);
-    const adjacente = dx <= 1 && dy <= 1 && dx + dy > 0 && proximo.z === atual.z;
-    if (!adjacente) {
-      const ehFechamento = i === data.tiles.length - 1;
-      problems.push(
-        ehFechamento
-          ? `a rota não fecha o laço: o último tile (${atual.x},${atual.y}) não é adjacente ` +
-            `ao primeiro (${proximo.x},${proximo.y})`
-          : `passo ${i}→${i + 1} não é adjacente: (${atual.x},${atual.y}) para ` +
-            `(${proximo.x},${proximo.y})`,
-      );
+    const dx = Math.abs(proximo.x - at.x);
+    const dy = Math.abs(proximo.y - at.y);
+    // Um tile de distância, em QUALQUER direção — a mesma régua do passo comum; o `z` de
+    // `proximo` não entra aqui, porque quem decide se há troca de andar é o mapa, não o autor.
+    const umPasso = dx <= 1 && dy <= 1 && dx + dy > 0;
+    const troca = umPasso ? floorChangeAt(map, proximo.x, proximo.y, at.z) : null;
+    if (troca !== null) {
+      if (proximo.z !== at.z) {
+        problems.push(
+          `tile ${i + 1} (${proximo.x},${proximo.y},${proximo.z}) é o degrau de uma escada que ` +
+            `sai do andar ${at.z} — o andar dele devia ser ${at.z} (o de ORIGEM), não ${proximo.z}`,
+        );
+      }
+      // O passo pousa no destino registrado da escada, nunca no tile pedido — é para ONDE o
+      // próximo trecho da rota precisa continuar adjacente.
+      at = troca;
+      continue;
     }
+    if (umPasso && proximo.z === at.z) {
+      at = proximo;
+      continue;
+    }
+    const ehFechamento = i === data.tiles.length - 1;
+    problems.push(
+      ehFechamento
+        ? `a rota não fecha o laço: o último tile (${at.x},${at.y},${at.z}) não é adjacente ` +
+          `nem escada até o primeiro (${proximo.x},${proximo.y},${proximo.z})`
+        : `passo ${i}→${i + 1} não é adjacente nem escada: (${at.x},${at.y},${at.z}) para ` +
+          `(${proximo.x},${proximo.y},${proximo.z})`,
+    );
+    at = proximo; // segue com o valor autorado, para não propagar um erro em cascata
   }
 
   for (const spawn of data.spawnPoints) {

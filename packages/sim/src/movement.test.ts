@@ -297,12 +297,27 @@ describe('andares e escadas (FUN-119)', () => {
     expect(w.occupied(1, 1, 7)).toBe(false);
   });
 
-  it('quem não carrega `z` — o monstro — trata a escada como parede', () => {
+  it('quem não carrega `z` — o monstro de andar único — trata a escada como parede', () => {
     const w = new TileOccupancy(house);
     const rat: Movable<{ x: number; y: number }> = { position: { x: 1, y: 1 }, speed: 300 };
     w.reset([{ ...rat, alive: true }]);
     expect(move(w, rat, { x: 2, y: 1 })).toEqual({ ok: false, reason: 'tile-blocked' });
     expect(canOccupy(w, rat, { x: 2, y: 1 })).toBe('tile-blocked');
+  });
+
+  it('`crossesFloors: false` trata a escada como parede MESMO carregando `z` (#519)', () => {
+    // O monstro multiandar carrega `z` de verdade — é o que faz `zOf` achar o andar CERTO dele
+    // para bloqueio e ocupação (a outra metade desta issue) —, mas isso não pode virar
+    // permissão de trocar de andar sozinho: no Tibia, um Dragon Lord não sobe escada.
+    const w = new TileOccupancy(house);
+    const dragonLord: Movable<Ponto> & { alive: boolean; crossesFloors: false } =
+      { alive: true, position: { x: 1, y: 1, z: 7 }, speed: 300, crossesFloors: false };
+    w.reset([dragonLord]);
+    expect(canOccupy(w, dragonLord, to(2, 1))).toBe('tile-blocked');
+    expect(move(w, dragonLord, to(2, 1))).toEqual({ ok: false, reason: 'tile-blocked' });
+    // Mas o `z` que ele carrega continua achando o andar CERTO para um passo comum: sai de
+    // (1,1,7) para (1,2,7), sem cair no andar padrão do mapa por engano.
+    expect(move(w, dragonLord, to(1, 2))).toMatchObject({ ok: true, to: { x: 1, y: 2, z: 7 } });
   });
 
   it('fora do mapa continua fora, e andar que não existe é parede', () => {

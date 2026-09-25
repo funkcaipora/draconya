@@ -187,8 +187,20 @@ navegação e não simulação.
 
 **O mapa tem andares** (FUN-119): `floors` por `z`, e pisar numa escada (`floorChanges`) é um
 passo cujo destino está em outro andar — como no Tibia, o tile de chegada pode não ser o
-adjacente. O monstro não usa escada: para quem não carrega `z`, o degrau é parede. A rota fica
-num andar só, e o carregador recusa rota que pise em escada.
+adjacente. O monstro não usa escada: para quem não carrega `z`, o degrau é parede.
+
+**A rota pode atravessar andares** (#519, a Darashia Dragon Lair): `validateRoute` aceita um
+passo que pisa exatamente no tile registrado em `floorChanges`, e a posição EFETIVA para julgar o
+passo seguinte é o destino da escada — nunca o tile autorado, porque `move()` nunca deixa ninguém
+parado nela. `scripts/trace-route.ts` traça isso sozinho: de um estado `(x, y, z)`, o vizinho que
+é uma escada não vira um tile a mais no caminho, a busca CONTINUA a partir do destino dela. O
+monstro, mesmo passando a carregar o PRÓPRIO andar (`position.z`, para saber onde nasceu — ver
+"Spawn" abaixo), continua sem a CAPACIDADE de usar escada: o `z` na posição dele é identidade,
+nunca permissão (`Movable.crossesFloors`, só o personagem tem). Todo lugar que compara alvo,
+área ou proximidade confere o andar antes da distância — os três andares da Darashia Dragon Lair
+compartilham a mesma caixa `(x, y)`, e um Dragon Lord de z11 pode ter coordenada idêntica à de um
+Dragon em z10, um andar acima; sem a checagem, o monstro perseguiria e a magia acertaria através
+do chão.
 
 ## Spawn: densidade é dado, composição é sorteio
 
@@ -218,6 +230,23 @@ segundo, no evento que já existia — e nunca cancela: a densidade continua sen
 dificuldade, que é o que a referência (§29) exige ao mandar não copiar a supressão do TFS. Sem
 isso, com `respawnDelayMs` igual ao intervalo de ataque, o rato nascia e morria no mesmo
 instante, e o cliente desenhava o dano num tile vazio. `0` desliga.
+
+**`spawnClearRadius` só vale para quem é `blockable`** (#519, o `isBlockable` do TFS/Canary). No
+Canary, 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — respawnam
+olhando para o jogador: `isBlockable` é `false` neles, e a EXCEÇÃO é quem declara `true`. O
+monstro do Draconya ganha o mesmo campo, com o mesmo default (`blockable: false`); Rat e Rotworm
+DECLARAM `blockable: true`, porque o comportamento deles vem do Huntera observado (não do
+Canary) e não pode mudar por esta issue. A checagem de distância — o alcance é o mesmo
+`Spawn::findPlayer` do TFS, `±11` tiles no MESMO andar — só roda para quem é `blockable`.
+
+**Cada ponto de spawn pode declarar o próprio monstro, a posição exata e o próprio `spawntime`**
+(#519, o formato do XML de spawn do Canary — um `<monster>` por posição, nunca um sorteio). Um
+ponto assim SEMPRE nasce aquele monstro: a composição sorteada da dificuldade vira fallback, só
+para quem não declara. A Darashia Dragon Lair é a primeira hunt a usar isto: 47 pontos, cada um
+com o `monsterId` (`dragon` ou `dragon-lord`), a coordenada exata do Canary e
+`respawnDelayMs: 90000` (o `spawntime="90"` do XML). Rat Cellars e Rotworm Caves continuam com o
+formato de sempre — `routeIndex` + `radius`, monstro sorteado, `respawnDelayMs` da dificuldade —,
+porque nenhuma delas declara os campos novos.
 
 Os três pulls — Cauteloso, Ousado, Agressivo — são **dados**, não código. Trocar `monsterCount`
 e a composição no JSON muda densidade e variedade sem tocar em lógica; há teste afirmando
@@ -422,6 +451,8 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
+| Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary; Rat e Rotworm declaram `true` para preservar o `spawnClearRadius` observado no Huntera (#519) | `data/monsters/*.json`, campo `blockable` |
+| Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Ausente é o de sempre (sorteio da composição, `respawnDelayMs` da dificuldade) — Rat Cellars e Rotworm Caves não declaram; a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
 | Prazo do cadáver no chão (só visual) | 30 s em Rat Cellars e em Rotworm Caves (RESOLVIDO, Huntera Parte VI §36) | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
@@ -490,3 +521,19 @@ além do gold: sete itens (`sword`, `mace`, `meat`, `ham`, `worm`, `lump-of-dirt
 `legion-helmet`), com `value` de TibiaWiki provisório para as três peças de equipamento e `0`
 para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada continua pelo menu,
 abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.
+
+**A Darashia Dragon Lair é a primeira hunt MULTIANDAR, e a primeira copiada do Canary em vez do
+Huntera** (#519, ADR 0025 emenda, ADR 0037): o recorte real importado (86×121, z10–z12 — 2.036
+andáveis em z10, 1.849 em z11, 173 em z12), a rota traçada por `pnpm route:trace` — estendido
+nesta issue para atravessar `floorChanges` — sobre ele: um laço de 1.494 tiles pelos três
+andares, com os 47 pontos de spawn do Canary (`data-otservbr-global/world/otservbr-monster.xml`)
+ancorados na coordenada EXATA, distância zero. Os 19 pontos de z10 são `dragon`, os 28 de
+z11+z12 são `dragon-lord` — cada um com `respawnDelayMs: 90000`, o `spawntime="90"` do XML, por
+PONTO, não por dificuldade. **Os dois conectores entre andares são degraus reais do Canary**:
+cruzados por item id contra `items.xml` (id 469, `stairs`, `floorchange="down"`; id 7544/7729–7736,
+`ramp`, `floorchange="west"`/`"down"`) e resolvidos pelo deslocamento de pouso que
+`Tile::queryDestination` aplica — não uma coincidência geométrica de overlap (ver o detalhe,
+inclusive a correção de uma revisão adversarial que pegou o pouso errado numa primeira tentativa,
+em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt são de outra issue** (#520): o que
+existe aqui é mapa, rota e o mecanismo do `sim` — testado com uma fixture pequena de dois
+andares, não com o Dragon de verdade. A entrada continua pelo menu (ADR 0025).

@@ -1276,6 +1276,16 @@ export const monsterSchema = z.strictObject({
   attackRange: z.number().int().positive().default(1),
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
+  /**
+   * Espera o jogador sair da vista do ponto para respawnar (#519, `isBlockable` no TFS/Canary)?
+   * Ausente é `false` — o DEFAULT do Canary, e o que 1.640 dos 1.656 monstros do bestiário dele
+   * declaram (inclusive Dragon e Dragon Lord): a maioria respawna na hora, ignorando quem está
+   * perto. `true` é a EXCEÇÃO (só ~7 monstros, tipicamente NPCs/eventos de quest) — é ela que
+   * `spawnClearRadius` (#236) passa a valer só para. Draconya invertia isso por padrão (`0`
+   * desligava a checagem inteira, mas quando ligada valia para todo monstro); a partir daqui o
+   * padrão passa a ser o do Tibia, monstro por monstro.
+   */
+  blockable: z.boolean().default(false),
   loot: lootTableSchema.default({ items: [] }),
   /**
    * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
@@ -2887,6 +2897,26 @@ export const routeSchema = z.object({
       /** Índice na rota. Ancorar no índice, e não em coordenada, mantém rota e spawn juntos. */
       routeIndex: z.number().int().nonnegative(),
       radius: z.number().int().positive().default(3),
+      /**
+       * O monstro DESTE ponto (#519, hunt copiada do Tibia). Ausente é o de sempre: o `Spawner`
+       * sorteia pela composição da dificuldade. Declarado, o ponto sempre nasce esse monstro —
+       * é como o spawn do Canary funciona, um `<monster name>` por posição, nunca um sorteio.
+       */
+      monsterId: z.string().min(1).optional(),
+      /**
+       * A posição EXATA do spawn (#519), quando ela não é o tile do `routeIndex` — o caso do
+       * Canary, cujos pontos raramente caem em cima da rota do bot. Ausente é o tile da rota
+       * nesse índice, como sempre foi. `routeIndex` continua obrigatório mesmo com `at`: é o
+       * ANCORADOR ao laço (ordem, andar de referência), nunca a posição de nascimento.
+       */
+      at: point.optional(),
+      /**
+       * O `spawntime` DESTE ponto, em ms (#519) — no Canary é um atributo por `<monster>`
+       * dentro do `<spawn>`, não da zona nem da dificuldade: cada ponto pode render num ritmo
+       * diferente do vizinho. Ausente cai no `respawnDelayMs` da dificuldade, como sempre foi —
+       * é o que mantém rat-cellars/rotworm-caves (sem `spawntime` por ponto) exatamente iguais.
+       */
+      respawnDelayMs: z.number().int().positive().optional(),
     }),
   ).default([]),
 });
