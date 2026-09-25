@@ -12,36 +12,51 @@ direto no Postgres o que a API de personagem novo não expõe: level, xp, skills
 
 ## 1. Postgres e Redis
 
-Duas opções — use a que já tiver disponível.
+Duas opções — use a que já tiver disponível. As duas terminam num `.env` completo e consistente;
+não misture uma linha de uma com uma linha da outra.
 
-**Do zero**, com o `docker-compose.yml` do repositório:
+**Opção A — do zero**, com o `docker-compose.yml` do repositório:
 
 ```bash
-docker compose up -d          # Postgres em 5432 (db `draconya`), Redis em 6379
+docker compose up -d          # Postgres em 5432 (db `draconya`, usuário/senha `draconya`), Redis em 6379
 cp .env.example .env
 ```
 
-**Reaproveitando um Postgres/Redis de teste que já roda na máquina** (o setup deste projeto para
-QA em worktree, `docs/harness-plan.md`): o Postgres de teste em `5433` também serve um banco
-`draconya_dev` separado do `draconya_review` que os testes usam, e há um Redis DEDICADO ao dev em
-`6381` — **nunca o `6380`, esse é o Redis de teste** que `TEST_REDIS_URL`/`pnpm test` apagam a
-cada rodada. Se `draconya_dev` ainda não existir nesse Postgres:
+`.env` fica como o `.env.example` já traz (`DATABASE_URL=postgres://draconya:draconya@localhost:5432/draconya`,
+`REDIS_URL=redis://localhost:6379`) — só falta o `API_ORIGIN` do passo 2.
+
+**Opção B — reaproveitando um Postgres/Redis de teste que já roda na máquina** (o setup deste
+projeto para QA em worktree, `docs/harness-plan.md`): o Postgres de teste em `5433` também pode
+servir um banco `draconya_dev` separado do `draconya_review` que os testes usam, mas ele não vem
+pronto — crie uma vez:
 
 ```bash
 docker exec <container-do-postgres-5433> psql -U draconya -c 'create database draconya_dev'
 ```
 
+Redis de teste (`6380`) é apagado a cada `pnpm test` (`TEST_REDIS_URL`) — **nunca aponte
+`REDIS_URL` para ele**. Suba um Redis PRÓPRIO para o dev, em `6381`, se ainda não tiver um:
+
+```bash
+docker run -d --name draconya-dev-redis -p 127.0.0.1:6381:6379 redis:7-alpine
+```
+
+`.env` desta opção:
+
+```
+DATABASE_URL=postgres://draconya:<senha do Postgres 5433>@localhost:5433/draconya_dev
+REDIS_URL=redis://localhost:6381
+```
+
 ## 2. `.env`
 
 ```bash
-cp .env.example .env   # se ainda não copiou acima
+cp .env.example .env   # se ainda não copiou na opção A
 ```
 
-Edite:
+Em QUALQUER das duas opções, edite (ou confirme) `API_ORIGIN`:
 
 ```
-DATABASE_URL=postgres://draconya:<senha>@localhost:<5432 ou 5433>/draconya_dev
-REDIS_URL=redis://localhost:<6379 ou 6381>
 API_ORIGIN=http://localhost:5174
 ```
 
@@ -93,11 +108,12 @@ Flags (todas opcionais):
 | `--reset` | — | tira os quatro da party e os devolve à Cidade |
 | `--database-url=`, `--redis-url=`, `--content-dir=`, `--api-base=`, `--api-port=`, `--client-origin=` | do `.env`/padrão | sobrescrevem o que o `.env` traz, para rodar fora do fluxo acima |
 
-**A Darashia Dragon Lair ainda não existe no conteúdo** enquanto as issues #519 (mapa) e #520
-(monstro e hunt) não estiverem integradas nesta branch — rodar com o default falha com uma
-mensagem clara listando as hunts que EXISTEM (`rat-cellars`, `rotworm-caves` no MVP) e segue
-sem configurar a hunt nem iniciar; as quatro contas, personagens e a party continuam formados e
-prontos, só falta configurar assim que a hunt chegar. Para testar o fluxo inteiro antes disso:
+**A Darashia Dragon Lair ainda não existe como HUNT no conteúdo** enquanto a issue #520 (o
+dragão e o arquivo `hunts/darashia-dragon-lair.json`) não estiver integrada nesta branch — o
+mapa e a rota já chegaram pelo #519. Rodar com o default falha com uma mensagem clara listando
+as hunts que EXISTEM (`rat-cellars`, `rotworm-caves` no MVP) e segue sem configurar a hunt nem
+iniciar; as quatro contas, personagens e a party continuam formados e prontos, só falta
+configurar assim que a hunt chegar. Para testar o fluxo inteiro antes disso:
 
 ```bash
 pnpm dev:dragon-party --hunt-id=rat-cellars --difficulty=bold --start
@@ -124,19 +140,30 @@ por membro. Cada personagem ("Draco Knight", "Draco Paladin", "Draco Sorcerer", 
   virote power-bolt selecionado), colar de dragão, anel do poder; Sorcerer/Druid — chapéu do
   louco, capa de foco, pernas zaoan, botas de pressa, cajado/bastão (wand of starstorm / hailstorm
   rod), grimório do controle mental, colar de dragão, anel do poder. Mochila em todos.
-- **Ouro** para cerca de uma hora de suprimento — uma estimativa grosseira de teste local (uso a
-  cada ~30s, tiro a cada intervalo de ataque do conteúdo), somada só sobre o que o PRÓPRIO bot
-  config daquela vocação usa (`goldForOneHour` em `dragon-party-plan.ts`), não balanceamento.
-- **Bot v2** (AB-03): Knight puxa a rota e briga com Berserk (`exori` — `exori gran`/Fierce
-  Berserk ainda não existe no conteúdo); Paladin/Sorcerer/Druid seguem o Knight
-  (`botConfig.follow: 'leader'`); Druid cura o membro mais ferido com Exura Sio e lança Mass
-  Healing pelo próprio HP (o vocabulário do bot não tem uma condição de "N membros feridos" —
-  ver o comentário em `botConfigFor`); todos bebem a poção certa por vocação/level (Supreme
-  Health, Ultimate Spirit, Ultimate Mana) por limiar de HP/mana; Sorcerer e Druid usam a runa
-  Avalanche (gelo — o dragão é fraco a gelo) como ataque padrão, com uma magia de área maior
-  (Rage of the Skies / Eternal Winter) quando há alvo de sobra; Paladin alterna Divine Caldera
-  (área) e Divine Missile (alvo único) pela distância; todos recastam Haste sozinhos. Uma regra
-  de saída (`hp-below 10%`) evita que o personagem morra sozinho numa hunt sem ninguém olhando.
+- **Ouro** para cerca de uma hora de suprimento — uma estimativa grosseira de teste local, somada
+  só sobre o que o PRÓPRIO bot config daquela vocação usa (`goldForOneHour` em
+  `dragon-party-plan.ts`), não balanceamento. Poção bebe na cadência de "topar quando precisa"
+  (~120/h); runa de ataque (Avalanche) bebe na cadência de COMBATE, pelo `groupCooldownMs` dela
+  (~1800/h) — as duas cadências são bem diferentes, e tratá-las como uma só subestimava e muito
+  o gasto de quem ataca com runa.
+- **Bot v2** (AB-03), contra um dragão fogo-imune/gelo-fraco/terra-resistente (`mitigation` do
+  monstro, issue #526): Knight puxa a rota (não segue ninguém) e ataca do mais forte pro mais
+  barato — Fierce Berserk (`exori gran`) → Front Sweep (`exori min`) → Berserk (`exori`) →
+  Whirlwind Throw (`exori ico`), com Haste (`utito tempo`) sozinho; Paladin/Sorcerer/Druid seguem
+  o Knight (`botConfig.follow: 'leader'`). Paladin: Divine Caldera (`exevo mas san`, área) com
+  alvo de sobra, senão Strong Ethereal Spear (`exori gran con`) → Divine Missile (`exori san`) →
+  Ethereal Spear (`exori con`). Sorcerer: Rage of the Skies (energia) com alvo de sobra — não
+  Hell's Core, que é fogo e não faz nada no dragão —, e a runa Avalanche (gelo) como ataque de
+  base, já que o Sorcerer não tem magia de gelo própria no catálogo. Druid: cura o membro mais
+  ferido com Heal Friend e lança Mass Healing pelo próprio HP (o vocabulário do bot não tem uma
+  condição de "N membros feridos" — ver o comentário em `botConfigFor`), ataca com Eternal Winter
+  (gelo, a própria fraqueza do dragão) com alvo de sobra e Avalanche como base — nunca Terra Wave/
+  Wrath of Nature, terra é 80% resistida. Todos bebem a poção certa por vocação/level (Supreme
+  Health, Ultimate Spirit, Ultimate Mana) por limiar de HP/mana. Cada degrau da rotação só entra
+  se a magia existir no conteúdo desta branch (`spellCascade`) — o motor já cai para o próximo
+  quando o de cima está em cooldown ou sem mana, então não há limiar de mana escrito à mão. Uma
+  regra de saída (`hp-below 10%`) evita que o personagem morra sozinho numa hunt sem ninguém
+  olhando.
 
 ## 7. Entrar no navegador como o líder
 
@@ -173,10 +200,21 @@ hunt mostra a party pronta para o botão "Iniciar".
 pnpm dev:dragon-party --reset
 ```
 
-Tira os quatro da party (formulário em Redis) e força `characters.state = 'city'`,
-`session_id = null` no Postgres — um atalho deliberado fora do caminho normal (só a sessão dona
-escreve estado quente, invariante 9); serve para quando a sessão dona já não está rodando.
-**Não** encerra uma sessão de hunt que ainda esteja de pé no `game`: se o `--reset` não for
-suficiente, reinicie o processo `game` (`Ctrl+C` e `pnpm dev` de novo) — ele não guarda estado em
-Postgres no caminho quente, e a sessão de hunt não sobrevive ao processo cair sem snapshot válido
-para esta versão de conteúdo.
+**Precisa de `REDIS_URL`** (do `.env`, ou `--redis-url=`) — é ele que diz se a sessão de cada
+personagem está realmente viva antes de mexer em qualquer coisa. `characters.state`/`session_id`
+no Postgres NÃO são a fonte da verdade (`GET /api/characters` já documenta isso — a coluna
+"NÃO é escrita por ninguém" e ler nela "fazia a API responder 'city' para quem estava numa hunt
+havia seis horas"); quem manda é o diretório de sessão no Redis, e é ele que o `--reset` limpa.
+
+Para cada personagem, o comando confere no diretório se o NÓ dono ainda bate (a mesma pergunta
+que o `api` faz para decidir "está em jogo"):
+
+- **Nó vivo** (batimento presente): o `--reset` NÃO apaga nada dele e avisa — a sessão é de
+  verdade, e apagar o lease por baixo abriria a fresta de duas hospedagens do mesmo personagem
+  (invariante 8/9). Se ela estiver REALMENTE travada (não é só uma hunt legítima em andamento),
+  reinicie o processo `game` (`Ctrl+C` e `pnpm dev` de novo) — ele não guarda estado no Postgres
+  no caminho quente, e a sessão não sobrevive ao processo cair sem snapshot válido para esta
+  versão de conteúdo.
+- **Nó morto ou sem sessão registrada**: o `--reset` tira o personagem da party (formulário em
+  Redis) e limpa o lease órfão — o mesmo que o `jobs` faria sozinho em até dez segundos (FUN-28);
+  isto só adianta a espera.
