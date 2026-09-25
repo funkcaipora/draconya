@@ -2348,10 +2348,20 @@ export class HuntRuleset implements Ruleset {
     return result;
   }
 
-  /** Há OUTRO participante vivo parado em `at`? É o bloqueio que se contorna, não se espera. */
-  #companionAt(session: Session, self: CharacterRuntime, at: GridPoint): boolean {
+  /**
+   * Há OUTRO participante vivo parado em `at`? É o bloqueio que se contorna, não se espera.
+   *
+   * Confere o andar (#519) antes de x/y: `at` vem de `runner.walker.ahead()`/`.step()`, um tile
+   * da ROTA — que já carrega o `z` de verdade, mesmo quando o TIPO aqui só promete `GridPoint`
+   * —, e a hunt hospeda um personagem só hoje (§14, Fase 3 traz party), então isto é código
+   * morto POR ENQUANTO. Sem a checagem, o dia em que a party entrar numa hunt multiandar faria
+   * um companheiro dois andares abaixo "bloquear" o walker por coincidência de (x, y) — os três
+   * andares da Darashia Dragon Lair compartilham a mesma caixa.
+   */
+  #companionAt(session: Session, self: CharacterRuntime, at: FloorPoint): boolean {
     for (const other of session.participants) {
       if (other === self || !other.alive) continue;
+      if (!sameFloor(other.position.z, at.z)) continue;
       if (other.position.x === at.x && other.position.y === at.y) return true;
     }
     return false;
@@ -2795,6 +2805,12 @@ const slots = bot.groups.get(group);
    * a regra não age (§30 — nunca substitui por outro vivo). `lowest-hp-member` devolve todo
    * participante vivo ao alcance ordenado por percentual ASCENDENTE (§28); o próprio lançador
    * entra como candidato de si mesmo, então numa hunt solo "menor vida da party" é ele.
+   *
+   * Confere o andar (#519) antes do alcance: a hunt hospeda um personagem só hoje (§14 — party
+   * é Fase 3), então isto é código morto POR ENQUANTO — mas os três andares da Darashia Dragon
+   * Lair compartilham a mesma caixa (x, y), e sem a checagem um curandeiro curaria (ou um
+   * `heal-friend` miraria) um companheiro dois andares acima só por coincidência de coordenada,
+   * a primeira vez que uma party entrar numa hunt multiandar.
    */
   #resolveRuleTarget(
     session: Session, character: CharacterRuntime, rule: CompiledSlot,
@@ -2805,6 +2821,7 @@ const slots = bot.groups.get(group);
     if (rule.target.kind === 'member') {
       const member = findById(session.participants, rule.target.characterId);
       if (member === null || !member.alive) return NO_CANDIDATES;
+      if (!sameFloor(character.position.z, member.position.z)) return NO_CANDIDATES;
       if (distance(character.position, member.position) > range) return NO_CANDIDATES;
       return [member];
     }
@@ -2812,7 +2829,8 @@ const slots = bot.groups.get(group);
     // `session.participants` já está na ordem de entrada, e `Array#sort` é ESTÁVEL: o desempate
     // cai de graça.
     return session.participants
-      .filter((p) => p.alive && distance(character.position, p.position) <= range)
+      .filter((p) => p.alive && sameFloor(character.position.z, p.position.z)
+        && distance(character.position, p.position) <= range)
       .sort((a, b) => percentOf(a.health, a.maxHealth) - percentOf(b.health, b.maxHealth));
   }
 

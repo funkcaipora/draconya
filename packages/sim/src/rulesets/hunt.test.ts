@@ -337,6 +337,33 @@ describe('entrada', () => {
       id: 's', content: content(), huntId: 'arena', difficulty: 'reckless', createdAtMs: 0,
     })).toThrow(/não define a dificuldade "reckless"/);
   });
+
+  it('#companionAt confere o andar: um "companheiro" no MESMO (x, y) de outro andar não desvia a rota (#519)', () => {
+    // O monstro (sem agressão, para não interferir) trava o segundo tile da rota (2,1) — o
+    // herói fica genuinamente bloqueado por ELE, não por um companheiro. Um segundo
+    // personagem no MESMO (x, y) mas em outro andar (mutação direta — não existe rota que
+    // chegue lá nesta fixture) não pode ser confundido com quem bloqueia: antes desta issue,
+    // `#companionAt` ignorava o `z`, e o herói tentaria "contornar" um companheiro que não
+    // está nem perto — e SUCEDIA, porque a sala tem espaço para o desvio diagonal (2,2). A
+    // hunt hospeda um personagem só hoje (party é Fase 3), então isto é dormant até lá.
+    const loaded = content({
+      monsters: [{ ...rat, aggroRadius: 0 }],
+      routes: [{ ...route, spawnPoints: [{ routeIndex: 1, radius: 1, monsterId: 'rat' }] }],
+    });
+    const { session, hero } = start({ loaded });
+    const phantom = new CharacterRuntime({ ...character().getState(), id: 'phantom' });
+    session.enter(phantom);
+    // Mesmo (x, y) do tile que vai bloquear o herói (2,1), andar bem diferente — montagem de
+    // teste (como o resto do arquivo já faz), não um passo do `sim`.
+    phantom.position = { x: 2, y: 1, z: 99 };
+
+    session.advanceBy(600); // o suficiente para o rato nascer e o herói tentar o 2º tile.
+
+    // Com o desvio (o defeito), o herói estaria em (2,2) — vizinho livre que o passo guloso
+    // acharia. Com a checagem de andar, ele fica ONDE ESTAVA: bloqueado de verdade pelo rato,
+    // segurando o índice até o tile liberar.
+    expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
 });
 
 describe('a sessão em si', () => {
@@ -7230,6 +7257,49 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
     expect(healed[0]?.amount).toBe(60);
     expect(knight.health).toBe(2_060);
     expect(mage.health).toBe(1_000);
+  });
+
+  it('lowest-hp-member ignora quem está em OUTRO andar, mesmo dentro do alcance por (x, y) (#519)', () => {
+    // A hunt hospeda um personagem só hoje (party é Fase 3), mas o alvo de regra precisa
+    // conferir andar do MESMO jeito que `chooseTarget`/`selectTarget` já conferem para monstro
+    // — sem isso, a checagem "todo lugar que compara alvo confere o andar" seria falsa aqui.
+    const session = createHuntSession({
+      id: 'heal-target-floor', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: healRule({ kind: 'lowest-hp-member' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const knight = member('k', 20, 10_000); // 0,2 % — venceria por percentual se contasse.
+    session.enter(a);
+    session.enter(knight);
+    walkTo(session, ruleset, 'k', { x: 2, y: 1 });
+    // Mutação direta de posição: é montagem de teste (como `walkTo` já é), não um passo do
+    // `sim` — o andar do companheiro está fora do alcance de qualquer rota desta fixture.
+    knight.position = { ...knight.position, z: knight.position.z + 1 };
+
+    run(session, 100, 100);
+
+    expect(ofKind(session.drainEvents(), 'creature-healed')).toHaveLength(0);
+    expect(knight.health).toBe(20);
+  });
+
+  it('regra "member" com id específico também ignora o andar errado (#519)', () => {
+    const session = createHuntSession({
+      id: 'heal-target-floor-member', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: healRule({ kind: 'member', characterId: 'k' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const knight = member('k', 20, 10_000);
+    session.enter(a);
+    session.enter(knight);
+    walkTo(session, ruleset, 'k', { x: 2, y: 1 });
+    knight.position = { ...knight.position, z: knight.position.z + 1 };
+
+    run(session, 100, 100);
+
+    expect(ofKind(session.drainEvents(), 'creature-healed')).toHaveLength(0);
+    expect(knight.health).toBe(20);
   });
 
   it('membro específico morto não lança, e NÃO escolhe outro vivo no lugar (RF-02)', () => {
