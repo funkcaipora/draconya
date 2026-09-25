@@ -335,6 +335,38 @@ const NUDGE_YIELD_MS = 3_000;
 const MAX_CROSS_FLOOR_STUCK_MS = 240_000;
 
 /**
+ * A que distância (tiles, Chebyshev) do líder um seguidor ainda conta como "junto" para o líder
+ * seguir andando a rota (#527). Achado numa QA ao vivo com o bot config real (sem lure em
+ * ninguém): sem haste igual entre vocações, quem não é o líder cai para trás em combate — e o
+ * líder, que nunca espera, seguia sozinho por DEZENAS de tiles antes de qualquer seguidor
+ * alcançar de novo. Este é o raio "normal" — o mesmo raio de busca de alvo do follow
+ * (`targetSearchRadius`), a distância além da qual um seguidor já considera o líder
+ * "inalcançável" e cai para a própria rota (o que o `#leaderReservedTile`/`#crossesAwayFromLeader`
+ * cobrem depois disso acontecer) — então é também o ponto em que o LÍDER precisa parar de
+ * abrir distância antes que aconteça.
+ */
+const PARTY_REGROUP_RADIUS = 7;
+
+/**
+ * O raio MAIS APERTADO exigido antes do líder ATRAVESSAR ANDAR (#527) — nunca o mesmo do raio
+ * "normal" acima. Cruzar uma escada com um seguidor a 6 tiles de distância, no MESMO andar
+ * ainda, é o próprio cenário que gera "o líder sumiu escada acima e o seguidor foi atrás
+ * sozinho, sem saber que o resto ficou para trás" — o defeito original desta issue. Metade do
+ * raio normal é folga o bastante para o último passo antes da escada sem exigir todo mundo
+ * exatamente em cima do líder.
+ */
+const PARTY_REGROUP_FLOOR_CHANGE_RADIUS = 3;
+
+/**
+ * Válvula de ÚLTIMO RECURSO: quanto tempo LÓGICO o líder pode ficar esperando a party se juntar
+ * antes de seguir em frente de qualquer jeito (#527). Um seguidor genuinamente perdido (morto e
+ * saiu, preso numa parede que o motor nunca resolve, o que for) não pode travar o líder — e por
+ * extensão a hunt inteira — para sempre. Minutos, não segundos: regroup é para o caso comum de
+ * "ficou para trás lutando", que se resolve rápido; a válvula é só para quando não resolve.
+ */
+const MAX_REGROUP_WAIT_MS = 180_000;
+
+/**
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
@@ -383,6 +415,7 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.nudgedUntilMs === null ? {} : { nudgedUntilMs: runner.nudgedUntilMs }),
     ...(runner.crossFloorStuckSinceMs === null ? {} : { crossFloorStuckSinceMs: runner.crossFloorStuckSinceMs }),
     ...(runner.sameTileStreak === 0 ? {} : { sameTileStreak: runner.sameTileStreak }),
+    ...(runner.regroupSinceMs === null ? {} : { regroupSinceMs: runner.regroupSinceMs }),
   };
 }
 
@@ -961,6 +994,12 @@ interface Runner {
    * resultado (passo de verdade, `not-adjacent`, companheiro, parede).
    */
   sameTileStreak: number;
+  /**
+   * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_RADIUS`/
+   * `PARTY_REGROUP_FLOOR_CHANGE_RADIUS`, válvula `MAX_REGROUP_WAIT_MS`). `null` fora de uma
+   * espera — só o próprio líder escreve este campo.
+   */
+  regroupSinceMs: number | null;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
   ringReplaced: string | null;
   warnedExhausted: boolean;
@@ -1064,6 +1103,8 @@ export interface RunnerState {
   readonly crossFloorStuckSinceMs?: number | null;
   /** Quantas vezes SEGUIDAS o passo da rota bateu `same-tile` (#527). Ausente é zero. */
   readonly sameTileStreak?: number;
+  /** Desde quando o líder espera a party se juntar (#527). Ausente/`null` é fora. */
+  readonly regroupSinceMs?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1876,6 +1917,7 @@ export class HuntRuleset implements Ruleset {
       nudgedUntilMs: state?.nudgedUntilMs ?? null,
       crossFloorStuckSinceMs: state?.crossFloorStuckSinceMs ?? null,
       sameTileStreak: state?.sameTileStreak ?? 0,
+      regroupSinceMs: state?.regroupSinceMs ?? null,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2501,6 +2543,17 @@ export class HuntRuleset implements Ruleset {
     runner.walker.resume();
     const to = runner.walker.step();
     if (to === null) return null;
+    if (this.#partyRegroupBlocked(session, runner, character, to)) {
+      // O LÍDER esperando a party se juntar (#527) — achado numa QA ao vivo com o bot config
+      // real: sem haste igual entre vocações, quem não é o líder cai para trás em combate, e o
+      // líder — que nunca espera — seguia sozinho por dezenas de tiles antes de qualquer
+      // seguidor alcançar de novo, e às vezes atravessava andar com a party inteira ainda do
+      // outro lado. Segura o passo como faria com um tile bloqueado; ainda BATE em quem
+      // estiver ao alcance da arma (o combate roda ANTES disto, no topo de `#playerStep`) — só
+      // não avança sozinho.
+      runner.walker.hold();
+      return null;
+    }
     if (this.#crossesAwayFromLeader(session, runner, character, to)) {
       // A rota PRÓPRIA de um seguidor é um laço fechado (§14.4) — se ela cruza uma escada perto
       // de onde o `d > radius` de `#holdFollow` desistiu (o líder ficou > 8 tiles no MESMO
@@ -3037,6 +3090,53 @@ export class HuntRuleset implements Ruleset {
   /** `to`/`tile` é o tile reservado do líder (#527)? Comparação de coordenadas, sem alocar. */
   #isLeaderReservedTile(reserved: FloorPoint | null, tile: FloorPoint): boolean {
     return reserved !== null && tile.x === reserved.x && tile.y === reserved.y && tile.z === reserved.z;
+  }
+
+  /**
+   * O LÍDER deve segurar o próprio passo de rota para a party se reagrupar? (#527) `false` para
+   * quem não lidera ninguém (`#leader(session)` sempre devolve alguém — cai para
+   * `participants[0]` sem `#party` — mas um seguidor não tem "a party" para esperar, ele É quem
+   * se junta) e para quem lidera mas não tem NENHUM seguidor configurado (uma hunt de andar
+   * único sem follow, a mesma exceção de `#leaderReservedTile`/`#hasActiveFollow`).
+   *
+   * O raio exigido é mais apertado (`PARTY_REGROUP_FLOOR_CHANGE_RADIUS`) quando `to` é o tile
+   * de ORIGEM de uma escada — atravessar andar é exatamente como a party se perde de vista: um
+   * seguidor a 6 tiles ainda no MESMO andar se recupera sozinho em poucos passos, mas um que
+   * fica para trás quando o líder já trocou de andar precisa da travessia INTEIRA de
+   * `#holdFollow` para alcançar de novo, minutos depois.
+   *
+   * `MAX_REGROUP_WAIT_MS` é a válvula de último recurso (mesmo espírito de
+   * `MAX_CROSS_FLOOR_STUCK_MS`): um seguidor genuinamente perdido não pode travar o líder — e a
+   * hunt inteira atrás dele — para sempre.
+   */
+  #partyRegroupBlocked(
+    session: Session, runner: Runner, character: CharacterRuntime, to: FloorPoint,
+  ): boolean {
+    const leader = this.#leader(session);
+    if (leader === undefined || leader.id !== character.id) return false;
+    const followers = session.participants.filter((p) => {
+      if (p.id === character.id || !p.alive) return false;
+      const follow = this.#runnerOf(p.id).botConfig?.follow;
+      return follow !== undefined && follow.kind !== 'none';
+    });
+    if (followers.length === 0) return false;
+
+    const crossingFloor = floorChangeAt(this.#world.map, to.x, to.y, character.position.z) !== null;
+    const radius = crossingFloor ? PARTY_REGROUP_FLOOR_CHANGE_RADIUS : PARTY_REGROUP_RADIUS;
+    const cohesive = followers.every((follower) => sameFloor(follower.position.z, character.position.z)
+      && distance(character.position, follower.position) <= radius);
+    if (cohesive) {
+      runner.regroupSinceMs = null;
+      return false;
+    }
+
+    const since = runner.regroupSinceMs ?? session.nowMs;
+    runner.regroupSinceMs = since;
+    if (session.nowMs - since >= MAX_REGROUP_WAIT_MS) {
+      runner.regroupSinceMs = null;
+      return false;
+    }
+    return true;
   }
 
   /**
