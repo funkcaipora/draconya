@@ -290,7 +290,7 @@ interface Member {
 }
 
 describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
-  it('quatro vocações numa party compartilhada rendem 50 % cada, a bolsa vende e divide, e o ledger tem uma linha por membro', async () => {
+  it('quatro vocações numa party compartilhada rendem XP conservada (não last-hit), a bolsa vende e divide, e o ledger tem uma linha por membro', async () => {
     await startNode('party-exit-a');
     const db = (database as TestDatabase).database.db;
 
@@ -346,9 +346,18 @@ describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
     inbox = await open(mine.ticket?.wsUrl ?? '');
     inbox.send({ type: 'session-attach' });
     const seen = await inbox.waitFor('session-state');
-    // Cada rato de 5 XP rende 2 a cada um (pool 10 ÷ 4): a XP dele é PAR e é a dos outros.
+    // Cada rato de 5 XP compartilhada rende ceil(5 × 200 / 400) = 3 por cabeça (§525, ADR 0027
+    // emenda 2026-09-24) quando os quatro atendem a elegibilidade do TFS/Canary — mas o
+    // PRIMEIRO abate acontece no instante 0, antes de qualquer um ter agido (`Party::
+    // isPlayerActive`), e cai no rateio por DANO até então; hunts reais em 4 IAs independentes
+    // por 2 minutos também esbarram ocasionalmente no alcance/atividade. O total fica ENTRE
+    // 0 (rateio por dano pode zerar quem não bateu em nada) e `kills × 3` (o teto, se todo
+    // abate tivesse sido compartilhado) — não é `kills × 2` fixo como antes do #525, e não é
+    // um número exato: o id da sessão nasce de `randomUUID()` neste teste ponta a ponta, e a
+    // semente do RNG de combate (`Rng.fromSeed(session.id)`) varia com ele a cada execução.
     expect(seen.aggregates.kills).toBeGreaterThan(0);
-    expect(seen.aggregates.xpGained).toBe(seen.aggregates.kills * 2);
+    expect(seen.aggregates.xpGained).toBeGreaterThan(0);
+    expect(seen.aggregates.xpGained).toBeLessThanOrEqual(seen.aggregates.kills * 3);
     expect(seen.aggregates.goldGained).toBe(0);
     expect(seen.partyBag?.gold).toBeGreaterThan(0);
     const bagValue = (seen.partyBag?.gold ?? 0) + (seen.partyBag?.items.reduce((n, item) => n + item.quantity, 0) ?? 0) * 3;
@@ -377,9 +386,20 @@ describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
     const ofSession = pending.filter((receipt) => receipt.sessionId === started.sessionId);
     expect(ofSession.map((r) => r.characterId).sort()).toEqual(members.map((m) => m.characterId).sort());
     expect(new Set(ofSession.map((r) => r.seq)).size).toBe(4);
-    // Todo mundo com a mesma XP por rato — e o líder e `c` com a mesma contagem de ratos
-    // ATÉ a saída dele; depois só os três contam.
-    for (const receipt of ofSession) expect(receipt.aggregates.xpGained).toBe(receipt.aggregates.kills * 2);
+    // §525 (ADR 0027 emenda 2026-09-24): a XP compartilhada do TFS/Canary é TUDO OU NADA por
+    // abate — um elegível que nunca atacou nem curou é INATIVO (`Party::isPlayerActive`), e
+    // isso desliga a divisão igual para TODO o resto da party naquele abate, não só para ele.
+    // Estes quatro personagens não têm bot configurado (só a IA padrão de auto-alvo); com um
+    // deles nunca chegando a bater em nada nos 150 s simulados, a party inteira cai no rateio
+    // por DANO pelo resto da hunt — cada um recebe proporcional ao que causou. "Todo mundo com
+    // a mesma XP" deixou de ser garantia do sistema, e é isso que a fidelidade pede: dividir
+    // igual com quem ficou parado seria dar XP de graça, e as engines de origem não fazem isso.
+    // O que continua garantido — e é o que fecha o teste — é a CONSERVAÇÃO (ledger == ganho),
+    // conferida mais abaixo.
+    for (const receipt of ofSession) {
+      expect(receipt.aggregates.xpGained).toBeGreaterThanOrEqual(0);
+      expect(receipt.aggregates.xpGained).toBeLessThanOrEqual(receipt.aggregates.kills * 3);
+    }
 
     await writePendingReceipts({ database: db, receipts, logger, progression: content.progression });
     const rows = await db.select({ characterId: ledger.characterId, seq: ledger.seq, delta: ledger.delta })

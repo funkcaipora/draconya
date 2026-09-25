@@ -2,10 +2,11 @@
   "id": "baseline",
   "maxMembers": 8,
   "xpPoolPercentByUniqueVocations": {
-    "1": 125, "2": 150, "3": 175, "4": 200,
+    "1": 120, "2": 130, "3": 160, "4": 200,
     "5": 200, "6": 200, "7": 200, "8": 200
   },
   "matchmakingLevelRange": 0,
   "autoSellItemTypes": { "free": 5, "premium": 20 },
-  "_open": "§15.3: 25 % por vocação única, teto 100 % (ADR 0027) — teto batido em 4 vocações reais + \"nenhuma\", então 5..8 repetem 200 (PRD §2.1 sobe o teto de jogadores, não de vocações únicas: com null contando como vocação, o máximo continua 5). matchmakingLevelRange é §43.2, ainda aberto. autoSellItemTypes é §8/§42.1 — 5 Free / 20 Premium do personagem líder."
+  "sharedExperience": { "rangeTiles": 30, "floors": 1, "levelRangeDivisor": 1.5, "activityWindowMs": 120000 },
+  "_open": "§15.3 (ADR 0027 emenda 2026-09-24, #525): tabela do TFS/Canary — `1 + n × (5 × (n − 1) + 10) / 100` para n > 1, 1,20 para n ≤ 1 (`data/events/scripts/party.lua` do TFS `Party:onShareExperience`; o `onShareExperience` do Canary é uma fórmula quadrática diferente mas rende os MESMOS números para n = 1..4). \"Nenhuma\" vocação (level < 8) NÃO conta mais como vocação única — o TFS exclui `VOCATION_NONE` explicitamente; antes deste fix ela contava, e a tabela {125,150,175,200} era um palpite nunca sourced. Teto batido em 4 vocações reais (Knight/Paladin/Sorcerer/Druid, `packages/content/data/vocations/`); \"5\"..\"8\" repetem 200 só porque o schema exige uma chave por membro até `maxMembers` (matchmakingLevelRange é §43.2, ainda aberto). autoSellItemTypes é §8/§42.1 — 5 Free / 20 Premium do personagem líder. sharedExperience é `Party::canUseSharedExperience` do TFS/Canary — ver o comentário do schema em packages/content/src/schemas.ts."
 }

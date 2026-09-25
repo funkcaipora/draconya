@@ -1469,9 +1469,12 @@ export const staminaSchema = z.object({
 export type Stamina = z.infer<typeof staminaSchema>;
 
 /**
- * A party de hunt (§15, ADR 0027, #188): o teto de membros e o pool de XP por número de
- * VOCAÇÕES ÚNICAS entre os membros elegíveis — `pool% = min(100 + 25 × únicas, 200)` é como a
- * tabela foi preenchida, mas quem manda é a tabela. Indexada só por vocações únicas: o número
+ * A party de hunt (§15, ADR 0027, #188; fórmula e elegibilidade emendadas pelo ADR 0027 em
+ * 2026-09-24, #525, fidelidade TFS/Canary do ADR 0037): o teto de membros, o pool de XP por
+ * número de VOCAÇÕES ÚNICAS **reais** entre os membros elegíveis (sem vocação, level < 8, NÃO
+ * conta — `Party:onShareExperience` do TFS exclui `VOCATION_NONE`) e a elegibilidade de XP
+ * compartilhada (`Party::canUseSharedExperience` do TFS/Canary): nível dentro de 2/3 do maior da
+ * party, alcance/andar do líder e atividade recente. Indexada só por vocações únicas: o número
  * de membros não entra no pool, só na divisão (o PRD pedia as duas dimensões; a segunda seria
  * coluna repetida). Percentuais NÃO DECRESCENTES e uma chave para cada `1..maxMembers`.
  */
@@ -1491,6 +1494,25 @@ export const partySchema = z.object({
   autoSellItemTypes: z.object({
     free: z.number().int().nonnegative(),
     premium: z.number().int().nonnegative(),
+  }).optional(),
+  /**
+   * A elegibilidade de XP compartilhada (`Party::canUseSharedExperience`, ADR 0027 emenda
+   * 2026-09-24, #525). `rangeTiles`/`floors` são os `EXPERIENCE_SHARE_RANGE`/`FLOORS` do TFS
+   * (`src/party.h`) e o `Position::areInRange<30, 30, 1>` do Canary (`party.cpp`) — as duas
+   * engines concordam em 30 tiles / 1 andar. `levelRangeDivisor` é o `partyShareRangeMultiplier`
+   * do Canary (`configmanager.cpp`, default `1.5`): `minLevel = ceil(maiorLevel / divisor)`, que
+   * com `1.5` é o "2/3 do level" do TFS (`getMemberSharedExperienceStatus`, hardcoded). Sem
+   * TFS/Canary concordando num divisor CONFIGURÁVEL, fixamos `1.5` — o valor observado nas duas.
+   * `activityWindowMs` segue o CANARY (`Party::isPlayerActive`, 2 minutos) por precedência do
+   * ADR 0037 d.4: o TFS usa `pzLocked` (1 minuto por padrão), que é config de PZ, não de party.
+   * OPCIONAL e preenchido com os defaults acima no parse, pelo mesmo motivo de
+   * `autoSellItemTypes`: fixtures antigas continuam válidas sem o campo.
+   */
+  sharedExperience: z.object({
+    rangeTiles: z.number().int().positive(),
+    floors: z.number().int().nonnegative(),
+    levelRangeDivisor: z.number().positive(),
+    activityWindowMs: z.number().int().positive(),
   }).optional(),
   _open: z.string().optional(),
 }).superRefine((party, ctx) => {
@@ -1513,10 +1535,15 @@ export const partySchema = z.object({
   xpPoolPercentByUniqueVocations: Record<string, number>;
   matchmakingLevelRange: number;
   autoSellItemTypes?: { free: number; premium: number } | undefined;
+  sharedExperience?: {
+    rangeTiles: number; floors: number; levelRangeDivisor: number; activityWindowMs: number;
+  } | undefined;
   _open?: string | undefined;
 } => ({
   ...party,
   autoSellItemTypes: party.autoSellItemTypes ?? { free: 5, premium: 20 },
+  sharedExperience: party.sharedExperience
+    ?? { rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000 },
 }));
 
 export type PartyConfig = z.infer<typeof partySchema>;

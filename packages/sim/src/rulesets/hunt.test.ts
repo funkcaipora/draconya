@@ -99,7 +99,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 120, '2': 130, '3': 160, '4': 200 } };
 
 // Magia e supply de teste (FUN-74, FUN-77). Números redondos de propósito: `strike` tira 40 de
 // um rato de 50, então dois golpes matam e o terceiro é ruído — dá para conferir a olho.
@@ -5229,23 +5229,28 @@ describe('XP em party (#190, ADR 0027 decisão 3)', () => {
     expect(session.aggregates.xpGained).toBe(kills * 200);
   });
 
-  it('two knights get 62 each (125 % ÷ 2); knight + no vocation get 75 each (150 % ÷ 2)', () => {
+  it('two knights get 60 each (120 % ÷ 2); knight + no vocation ALSO get 60 (no vocation is not a unique vocation)', () => {
+    // §525: "nenhuma" (null) não soma à conta de vocações únicas — 1 knight + 1 sem vocação
+    // lê a MESMA linha "1" (120 %) que 2 knights, não a linha "2" (130 %) de antes do fix.
+    // (Sem `partyOptions`, `this.#party` fica indefinido — a fixture acima não usa o rateio
+    // TFS/Canary de `#xpShares`, só `xpShare` puro: a divisão continua igual em TODO abate.)
     const kk = party([member('a', 'knight'), member('b', 'knight')]);
-    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 62);
-    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 62);
+    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 60);
+    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 60);
     const kn = party([member('a', 'knight'), member('b', null)]);
-    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 75);
-    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 75);
+    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 60);
+    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 60);
   });
 
-  it('a dead member gets nothing and leaves the vocation count: 4 unique with one dead is 58 for three', () => {
+  it('a dead member gets nothing and leaves the vocation count: 3 unique (dead excluded) is 54 for three', () => {
     // O morto entra na sessão morto (fixture): nunca elegível, nunca conta como vocação única.
+    // 3 vocações reais (knight/druid/sorcerer) → 160 %; ceil(100 × 160 / 300) = 54 por cabeça.
     const session = party([member('k', 'knight'), member('d', 'druid'), member('s', 'sorcerer'), member('p', 'paladin', false)]);
     const kills = killsOf(session);
     expect(kills).toBeGreaterThan(0);
     expect(xpOf(session, 'p')).toBe(0);
     expect(findById(session.participants, 'p')?.bestiary.getState()).toEqual({});
-    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 58);
+    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 54);
   });
 
   it('solo is untouched: the killer gets the whole 100, with the level-up detail as before', () => {
@@ -6167,7 +6172,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       splitLoot: true,
       members: ['lead', 'b'],
       uniqueVocations: 2,
-      xpPoolPercent: 150,
+      xpPoolPercent: 130,
       bagValue: 0,
       bagWeight: 0,
       autoSell: { configured: 2, limit: 20 },
@@ -6279,6 +6284,11 @@ describe('entrada em hunt em curso (#397, ADR 0035 decisão 6)', () => {
     run(session, 60_000, 100);
     const levelUp = session.notableEvents.find((e) => e.type === 'level-up');
     expect(levelUp).toBeDefined();
+    // Um tick de folga antes de "late" entrar (§525 mudou o ritmo de XP da party — um level up
+    // pode cair EXATAMENTE no instante 60 000): sem isto, `notableEvents.atMs >= joinedAtMs`
+    // (inclusive) incluiria por coincidência de relógio um level-up que aconteceu ANTES de
+    // "late" existir, e o teste não é sobre esse limite.
+    run(session, 100, 100);
 
     session.enter(member('late'));
     const lateDeparture = session.leave('late', 'manual-exit');

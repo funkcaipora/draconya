@@ -41,16 +41,20 @@ describe('loadContent', () => {
   });
 
   it('carrega a tabela da party real, e todo item do repositório tem preço de venda (#188)', () => {
-    // A tabela é a do ADR 0027: 25 % por vocação única, teto 100 %. E `value` é obrigatório no
+    // A tabela é a do TFS/Canary (ADR 0027 emenda 2026-09-24, #525): +20/30/60/100 % por
+    // vocações únicas REAIS (sem vocação não conta), teto 200 %. E `value` é obrigatório no
     // schema — este teste prende que o conteúdo REAL passa, e diz quais itens ainda têm o
     // preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
     const content = loadContent(DATA);
     expect(content.party.maxMembers).toBe(8);
     expect(content.party.xpPoolPercentByUniqueVocations).toEqual({
-      '1': 125, '2': 150, '3': 175, '4': 200,
+      '1': 120, '2': 130, '3': 160, '4': 200,
       '5': 200, '6': 200, '7': 200, '8': 200,
     });
     expect(content.party.autoSellItemTypes).toEqual({ free: 5, premium: 20 });
+    expect(content.party.sharedExperience).toEqual({
+      rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000,
+    });
     for (const item of content.items.values()) {
       expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
     }
