@@ -100,7 +100,7 @@ const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
   xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-  ammo: unknown; vocation: string | null;
+  ammo: unknown; vocation: string | null; supplyStock: unknown; ammunitionStock: unknown;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -110,12 +110,14 @@ const characterRow = async (
       ammo: characters.ammo,
       vocation: characters.vocation,
       staminaMs: characters.staminaMs,
+      supplyStock: characters.supplyStock,
+      ammunitionStock: characters.ammunitionStock,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
   return row as {
     xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-    ammo: unknown; vocation: string | null;
+    ammo: unknown; vocation: string | null; supplyStock: unknown; ammunitionStock: unknown;
   };
 };
 
@@ -695,6 +697,92 @@ describe.runIf(ready)('a munição escolhida chega ao Postgres pelo extrato (#15
     await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     expect((await characterRow(database, characterId)).ammo).toEqual({ arrow: 'onyx-arrow' });
+  });
+});
+
+describe.runIf(ready)('o estoque de supply/munição do loot chega ao Postgres pelo extrato, e drenar até zero PERSISTE (#520, revisão do #536)', () => {
+  it('loot (+N) grava a coluna, e uma sessão que esgota o estoque grava {} em vez de deixar a coluna intocada', async () => {
+    // O achado [blocker] da revisão: `supplyStock`/`ammunitionStock`, ao contrário de `ammo`
+    // (só cresce), É consumido dentro da sessão — `useSupply`/`#strike` fazem `Map.delete`. Se o
+    // extrato omitisse a chave quando o Map ficasse vazio (como fazia antes desta correção), o
+    // `ledger` leria "sem o campo" e NÃO tocaria a coluna (mesma regra de "extrato de Cidade não
+    // apaga escolha de munição", correta para `ammo`, errada aqui) — a Postgres ficaria com o
+    // valor ANTIGO, não-vazio, e o próximo login ressuscitaria um estoque já gasto (poção
+    // infinita). Este teste prova as duas pontas: o crédito de loot grava a coluna, e drenar até
+    // zero grava `{}` — não deixa a linha antiga sobreviver.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).supplyStock).toBeNull();
+    expect((await characterRow(database, characterId)).ammunitionStock).toBeNull();
+    const receipts = new ReceiptStore(redis);
+
+    // Loot creditado numa sessão: a coluna passa a refletir o Map da sessão.
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      supplyStock: { 'strong-health-potion': 3 },
+      ammunitionStock: { 'burst-arrow': 5 },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).supplyStock)
+      .toEqual({ 'strong-health-potion': 3 });
+    expect((await characterRow(database, characterId)).ammunitionStock)
+      .toEqual({ 'burst-arrow': 5 });
+
+    // A sessão seguinte gasta as 3 poções e as 5 flechas: o Map fica vazio, e o extrato PRECISA
+    // gravar `{}` — não omitir o campo — para a linha do Postgres não ficar com o `{ 'strong-
+    // health-potion': 3 }` de antes.
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      seq: 2,
+      supplyStock: {},
+      ammunitionStock: {},
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).supplyStock).toEqual({});
+    expect((await characterRow(database, characterId)).ammunitionStock).toEqual({});
+
+    // Um extrato de Cidade (sem o campo — o personagem nem entrou em hunt) continua sem tocar a
+    // coluna: `{}` gravado acima sobrevive.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).supplyStock).toEqual({});
+    expect((await characterRow(database, characterId)).ammunitionStock).toEqual({});
+  });
+
+  it('uma sessão de verdade (createHuntSession) que drena o estoque no `useSupply` grava a coluna vazia, ponta a ponta', async () => {
+    // O teste acima cobre o contrato do `ledger` isolado; este cobre o caminho real —
+    // `CharacterRuntime.getState()` (character.ts) -> `#persistReceipt` (host.ts) -> o mesmo
+    // `writePendingReceipts` — sem simular o extrato à mão, para pegar uma regressão em
+    // qualquer um dos três elos, não só no `ledger`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    const receipts = new ReceiptStore(redis);
+    const content = testContent();
+    const sessionId = randomUUID();
+    const session = createHuntSession({
+      id: sessionId, content, huntId: TEST_HUNT.id, difficulty: 'cautious', createdAtMs: 0,
+    });
+    const character = createCitySessionFactory(content)(characterId).participants[0];
+    if (character === undefined) throw new Error('Missing test runtime');
+    character.supplyStock.set('strong-health-potion', 1);
+    session.enter(character);
+    const host = new SessionHost({
+      nodeId: 'stock-drain-test', contentVersion: content.version, logger, receipts,
+      createSession: () => session,
+    });
+    await host.prepare(characterId, undefined, owner.accountId);
+    expect((await characterRow(database, characterId)).supplyStock).toBeNull();
+
+    // Gasta a única poção — o Map da sessão fica vazio.
+    character.supplyStock.delete('strong-health-potion');
+
+    expect(await host.drainAll()).toBe(1);
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    expect((await characterRow(database, characterId)).supplyStock).toEqual({});
   });
 });
 

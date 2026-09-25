@@ -3469,11 +3469,15 @@ export class SessionHost {
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
-      // do Dragon sumiria a cada logout, mesmo sem ser gasta.
-      ...(owner === undefined || owner.supplyStock.size === 0
-        ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
-      ...(owner === undefined || owner.ammunitionStock.size === 0
-        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
+      // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
+      // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
+      // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
+      // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
+      // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
+      // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
+      ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
@@ -3868,9 +3872,13 @@ export class SessionHost {
         ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
         ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
         ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
-        // E o estoque de supply/munição do loot (#520), pela mesma razão da munição escolhida.
-        ...(owner?.supplyStock === undefined ? {} : { supplyStock: owner.supplyStock }),
-        ...(owner?.ammunitionStock === undefined ? {} : { ammunitionStock: owner.ammunitionStock }),
+        // E o estoque de supply/munição do loot (#520). `owner` aqui já veio de
+        // `CharacterRuntime.getState()` (via snapshot), que agora sempre inclui as duas chaves —
+        // então `?? {}` só cobre snapshot antigo, de antes desta correção, sem a chave gravada.
+        // Mesma razão do `#persistReceipt` acima: NÃO gatear por vazio, porque vazio é o valor
+        // correto de "esgotado nesta sessão", não de "nunca teve".
+        ...(owner === undefined ? {} : { supplyStock: owner.supplyStock ?? {} }),
+        ...(owner === undefined ? {} : { ammunitionStock: owner.ammunitionStock ?? {} }),
         // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
         // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
         ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),

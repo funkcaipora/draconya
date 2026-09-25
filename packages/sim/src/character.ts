@@ -415,8 +415,15 @@ export class CharacterRuntime {
       lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
-      ...(this.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(this.supplyStock) }),
-      ...(this.ammunitionStock.size === 0 ? {} : { ammunitionStock: Object.fromEntries(this.ammunitionStock) }),
+      // supplyStock/ammunitionStock NÃO seguem o mesmo `size === 0` do ammo: ammo só cresce
+      // dentro de uma sessão (`selectAmmo` nunca remove uma família escolhida), então vazio ali
+      // sempre quer dizer "nunca escolheu nada". O estoque de loot, ao contrário, É consumido
+      // (`spendStock`/`#strike` fazem `Map.delete`) — drenar até zero DENTRO da sessão é um
+      // resultado real, não "nunca teve". Omitir a chave aqui faria essa drenagem desaparecer no
+      // snapshot que `#creditUnrestorable` lê (achado da revisão da #536): sempre incluir, e
+      // deixar quem grava o extrato decidir se um objeto vazio é "drenado" ou "nunca tocado".
+      supplyStock: Object.fromEntries(this.supplyStock),
+      ammunitionStock: Object.fromEntries(this.ammunitionStock),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
