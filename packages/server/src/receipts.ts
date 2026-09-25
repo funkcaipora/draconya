@@ -70,6 +70,19 @@ export interface SessionReceipt {
    */
   readonly ammo?: Readonly<Record<string, string>>;
   /**
+   * O estoque de SUPPLY do loot (#520): `{ supplyId: quantidade }`. ABSOLUTO e
+   * última-escrita-vence, como `ammo` — mas NÃO é monotônico como o Bestiário: o estoque sobe
+   * por loot e desce por uso na mesma sessão (`useSupply`, revisão do #536), então um valor
+   * absoluto é o único que os dois lados podem concordar sobre.
+   */
+  readonly supplyStock?: Readonly<Record<string, number>>;
+  /**
+   * O estoque de MUNIÇÃO FÍSICA do loot (#520): `{ ammunitionId: quantidade }`, pela mesma
+   * razão e a mesma forma do `supplyStock` — munição continua abstrata no tiro (ADR 0026 d.7),
+   * mas o que caiu em loot precisa sobreviver à sessão para ser gasto antes do gold.
+   */
+  readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
    * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
    * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
    * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
@@ -297,6 +310,13 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
       ? { ammo: value['ammo'] as Record<string, string> }
+      : {}),
+    // O estoque de supply e de munição física (#520): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['supplyStock'] === 'object' && value['supplyStock'] !== null
+      ? { supplyStock: value['supplyStock'] as Record<string, number> }
+      : {}),
+    ...(typeof value['ammunitionStock'] === 'object' && value['ammunitionStock'] !== null
+      ? { ammunitionStock: value['ammunitionStock'] as Record<string, number> }
       : {}),
     // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0

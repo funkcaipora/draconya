@@ -156,6 +156,26 @@ export const characters = pgTable(
      */
     ammo: jsonb('ammo'),
 
+    /**
+     * O estoque de SUPPLY que caiu em loot (#520): `{ supplyId: quantidade }` — a Strong
+     * Health Potion que o Dragon solta, por exemplo. Nulável: quem nunca recebeu um drop lê
+     * `null`. Mesmo padrão de `ammo` — ABSOLUTO, última escrita vence (o estoque final da
+     * sessão substitui o da linha, nunca soma por cima): supply pode SUBIR por loot e DESCER
+     * por uso (`useSupply` gasta dele antes do gold, #520 review), então não é monotônico como
+     * o Bestiário, e mandar delta exigiria que os dois lados concordassem sobre o inicial.
+     * Escrita pelo ledger na transação do extrato; lida na emissão do ticket.
+     */
+    supplyStock: jsonb('supply_stock'),
+
+    /**
+     * O estoque de MUNIÇÃO FÍSICA que caiu em loot (#520): `{ ammunitionId: quantidade }` — o
+     * Burst Arrow/Power Bolt que o Dragon/Dragon Lord soltam. Munição continua ABSTRATA no
+     * disparo (ADR 0026 d.7: sem pilha, cada tiro debita `price` do gold) — este estoque é só o
+     * que o loot credita, gasto ANTES do gold no tiro (a mesma regra do supply). Mesmo padrão
+     * de `ammo`/`supplyStock`: nulável, absoluto, última escrita vence.
+     */
+    ammunitionStock: jsonb('ammunition_stock'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 
