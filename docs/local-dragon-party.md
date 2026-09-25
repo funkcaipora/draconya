@@ -105,7 +105,7 @@ Flags (todas opcionais):
 | `--hunt-id=` | `darashia-dragon-lair` | qual hunt configurar na party |
 | `--difficulty=` | `bold` | qual dificuldade daquela hunt |
 | `--start` | — | inicia a hunt depois de configurar, e ANEXA o ticket do líder para o `game` criar a sessão de verdade (#527; exclusivo com `--reset`) |
-| `--reset` | — | tira os quatro da party e os devolve à Cidade |
+| `--reset` | — | tira os quatro da party, devolve à Cidade e liquida snapshot pendente (#527) |
 | `--database-url=`, `--redis-url=`, `--content-dir=`, `--api-base=`, `--api-port=`, `--client-origin=` | do `.env`/padrão | sobrescrevem o que o `.env` traz, para rodar fora do fluxo acima |
 
 **A Darashia Dragon Lair ainda não existe como HUNT no conteúdo** enquanto a issue #520 (o
@@ -225,3 +225,13 @@ que o `api` faz para decidir "está em jogo"):
 - **Nó morto ou sem sessão registrada**: o `--reset` tira o personagem da party (formulário em
   Redis) e limpa o lease órfão — o mesmo que o `jobs` faria sozinho em até dez segundos (FUN-28);
   isto só adianta a espera.
+
+**Também liquida o snapshot de sessão pendente de cada personagem** (#527, ADR 0010): reiniciar o
+`game` no meio de uma hunt drena a sessão sem encerrar — o snapshot resumível continua de pé
+(§38.4), mesmo depois do lease do diretório expirar. Sem liquidá-lo, `POST /api/party/:id/start`
+recusaria o PRÓXIMO `--start` com `pending-session` (a mesma checagem que existe hoje justamente
+para o `game` não "resolver" sozinho qual sessão é a certa) — o loop "reiniciar o servidor →
+`--reset` → `--start`" travaria de novo, agora num ponto diferente. `--reset` credita o que o
+snapshot tem (XP, gold, itens) como extrato pela MESMA conta que `SessionHost#creditUnrestorable`
+usa dentro do `game` (`settleSnapshotAsReceipt`, `packages/server/src/snapshot-settlement.ts`) e
+só então apaga a chave — nunca um `DEL` às cegas, que jogaria fora o progresso da hunt anterior.

@@ -257,6 +257,8 @@ beforeAll(async () => {
     locateSession: (characterId) => directory.lookup(characterId),
     // A lotação viva e o nó do líder do `/join` em curso (#402).
     directory,
+    // O snapshot de cada personagem (#527) — `/start` recusa quem tem um pendente.
+    snapshots,
     settleProgress,
     listItemInstances: (characterId) => repository.listItemInstances(characterId),
     // A party (#195), montada como o `main.ts` monta.

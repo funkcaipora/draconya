@@ -4733,6 +4733,90 @@ describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com 
   });
 });
 
+describe('um ticket de party nunca retoma o snapshot de OUTRA sessão (#527)', () => {
+  // O snapshot é indexado por `characterId`, não por `sessionId` — e `/start` sempre emite um
+  // `sessionId` novo (`randomUUID`). Um personagem cujo nó reiniciou no meio de uma hunt (ADR
+  // 0010) tem um snapshot resumível dessa hunt ANTIGA; se ele entrar numa party NOVA antes de
+  // reconectar sozinho e resolver aquele snapshot, `#createAndRegister` não pode "resolver"
+  // escolhendo a sessão errada — o achado exato da QA ao vivo: `game` logava `Session resumed
+  // from snapshot gapMs 47781` (quase 13 horas) em vez de criar a hunt que o ticket pedia.
+  const party = {
+    sessionId: 's-nova', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
+    ],
+  };
+
+  /** Um snapshot próprio por personagem, de sessões DIFERENTES — nem uma nem outra é `s-nova`. */
+  const STALE_SESSION_ID: Record<string, string> = { a: 's-velha-a', b: 's-velha-b' };
+
+  function build() {
+    const { ruleset } = countingRuleset();
+    let createCalls = 0;
+    const snapshots = {
+      load: async (characterId: string) => {
+        const sessionId = STALE_SESSION_ID[characterId];
+        if (sessionId === undefined) return null;
+        return {
+          characterId, accountId: `acc-${characterId}`, nodeId: 'n0', savedAtMs: Date.now() - 47_781,
+          snapshot: { id: sessionId, type: 'hunt' } as unknown as SessionSnapshot,
+        };
+      },
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+    } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      directory, snapshots,
+      // Se `#resume` fosse chamado para QUALQUER personagem, é a sessão velha DELE que voltaria.
+      restoreSession: (snapshot) => new Session({
+        id: snapshot.id, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('old'), createdAtMs: 0,
+      }),
+      createSession: (characterId, _initial, ticket) => {
+        createCalls += 1;
+        const session = new Session({
+          id: ticket?.sessionId ?? `s-${characterId}`, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('p'), createdAtMs: 0,
+        });
+        for (const member of ticket?.members ?? [{ characterId }]) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+    });
+    return { host, createCalls: () => createCalls };
+  }
+
+  it("creates the ticket's hunt instead of resuming the leader's own unrelated snapshot", async () => {
+    const { host, createCalls } = build();
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('a')?.id).toBe('s-nova');
+    expect(host.sessionFor('a')?.id).not.toBe('s-velha-a');
+    // A fábrica FOI chamada — a retomada não interceptou a criação como fazia antes do #527.
+    expect(createCalls()).toBe(1);
+  });
+
+  it('applies the same rule to the other member of the ticket, who has a DIFFERENT stale snapshot', async () => {
+    // Prova que a checagem não é "só quem conectou importa": 'b' nunca abre o próprio socket
+    // aqui — ele entra pelo laço de `others` de `#createAndRegister`, com o snapshot dele
+    // (`s-velha-b`, diferente do de 'a') igualmente ignorado a favor do ticket.
+    const { host, createCalls } = build();
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('b')?.id).toBe('s-nova');
+    expect(host.sessionFor('b')?.id).not.toBe('s-velha-b');
+    expect(createCalls()).toBe(1);
+  });
+});
+
 describe('o ticket de party quando o personagem já está hospedado na Cidade (#527, invariante 8)', () => {
   // O líder clica "Iniciar com o time" DA PRÓPRIA Cidade (#195, #402): o socket antigo pode
   // nem ter fechado ainda quando o ticket da party chega. Antes do #527, `#prepare` via a

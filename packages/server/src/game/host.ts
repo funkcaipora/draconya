@@ -31,6 +31,7 @@ import type {
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
+import { settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
@@ -3814,10 +3815,19 @@ export class SessionHost {
     party?: PartyTicket,
   ): Promise<void> {
     // A party (#195): a sessão pode JÁ estar hospedada — outro membro chegou primeiro — e aí
-    // este só entra nela. Senão, ou é retomada de snapshot (que já traz os N), ou o primeiro
-    // ticket cria a hunt com todos.
+    // este só entra nela. Senão, o primeiro ticket cria a hunt com todos.
     const hostedParty = party === undefined ? undefined : this.#sessions.get(party.sessionId);
-    const resumed = hostedParty === undefined ? await this.#resume(characterId, accountId) : null;
+    // A retomada de snapshot (que já traz os N, quando ele é de uma party) só se aplica a um
+    // ticket SOLO reconectando — nunca a um ticket de party (#527, invariante 8): o snapshot é
+    // indexado por `characterId`, não por `sessionId`, e `/start` sempre emite um `sessionId`
+    // novo (`randomUUID`). Um personagem com QUALQUER snapshot pendente de outra sessão — a
+    // hunt em que ele estava quando o nó reiniciou (ADR 0010), por exemplo — nunca deveria
+    // chegar aqui com um ticket de party: `/start` recusa formar a party antes disso (ver
+    // `api/party.ts`). Se chegar mesmo assim, o ticket é AUTORITATIVO sobre qual sessão isto
+    // é — retomar o snapshot errado seria colocar o personagem na hunt de outra pessoa.
+    const resumed = (party === undefined && hostedParty === undefined)
+      ? await this.#resume(characterId, accountId)
+      : null;
     const session = hostedParty?.session
       ?? resumed?.session
       ?? this.#options.createSession(characterId, initialCharacter, party);
@@ -3933,10 +3943,12 @@ export class SessionHost {
   /**
    * Extrato de uma sessão que não volta mais, montado a partir do snapshot.
    *
-   * O `seq` sai de `ledgerSeq + 1`, que é a MESMA regra do caminho normal — e é ela que torna
-   * isto idempotente: se aquela sessão já tinha creditado esse `seq`, a chave única do ledger
-   * recusa o segundo, e o jogador não recebe duas vezes. Sem essa aritmética, um snapshot que
-   * sobreviveu a uma drenagem parcial creditaria o mesmo progresso de novo.
+   * A montagem em si — que campos do `CharacterState` viram extrato, `seq = ledgerSeq + 1`
+   * para a idempotência — é `settleSnapshotAsReceipt` (`../snapshot-settlement.js`, #527):
+   * compartilhada com `/api/party/:id/start` (recusa formar hunt para quem tem outro snapshot
+   * resumível pendente) e `pnpm dev:dragon-party --reset` (limpa o snapshot pelo MESMO
+   * caminho, nunca apagando a chave às cegas). Nenhum dos dois tem o resto do runtime de jogo
+   * para reconstruir a sessão — e não precisam: creditar não depende disso.
    */
   async #creditUnrestorable(
     characterId: string,
@@ -3945,54 +3957,13 @@ export class SessionHost {
   ): Promise<void> {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
-    const owner = snapshot.participants.find((participant) => participant.id === characterId);
     try {
-      await receipts.save({
-        sessionId: snapshot.id,
-        characterId,
-        accountId,
-        // `drain` porque foi o servidor que encerrou, não o jogador: é a mesma família de
-        // "sua sessão foi encerrada por manutenção", que é o que de fato aconteceu.
-        reason: 'drain',
-        seq: snapshot.ledgerSeq + 1,
-        // Os agregados DELE (#187); snapshot anterior só tem a soma, que era dele.
-        aggregates: snapshot.aggregatesByCharacter?.[characterId] ?? snapshot.aggregates,
-        notableEvents: snapshot.notableEvents,
-        ...(owner?.staminaMs === undefined || owner.staminaMs === null
-          ? {}
-          : {
-            staminaMs: owner.staminaMs,
-            staminaUpdatedAtMs: owner.staminaUpdatedAtMs ?? 0,
-          }),
-        // As skills e o Bestiário estão no `CharacterState` do snapshot, e sem eles aqui a
-        // progressão da sessão inteira sumia: a XP era creditada e o abate 9 999 voltava a
-        // ser o 5 000 (achado da revisão da FUN-113 — as skills sofriam o mesmo). Ambos são
-        // absolutos e monotônicos, e o ledger funde pelo maior: um snapshot velho não rebaixa.
-        ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
-        ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
-        ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
-        // E o estoque de supply/munição do loot (#520). `owner` aqui já veio de
-        // `CharacterRuntime.getState()` (via snapshot), que agora sempre inclui as duas chaves —
-        // então `?? {}` só cobre snapshot antigo, de antes desta correção, sem a chave gravada.
-        // Mesma razão do `#persistReceipt` acima: NÃO gatear por vazio, porque vazio é o valor
-        // correto de "esgotado nesta sessão", não de "nunca teve".
-        ...(owner === undefined ? {} : { supplyStock: owner.supplyStock ?? {} }),
-        ...(owner === undefined ? {} : { ammunitionStock: owner.ammunitionStock ?? {} }),
-        // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
-        // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
-        ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
-        ...(owner?.inventory === undefined ? {} : {
-          equipment: equipmentOfState(owner.inventory),
-          layout: layoutOfState(owner.inventory),
-          acquired: acquiredByState(owner.inventory, snapshot.id),
-        }),
-        ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
-      });
+      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.
       this.#logger.error(
-        { error, characterId, sessionId: snapshot.id },
+        { err: error, characterId, sessionId: snapshot.id },
         'Failed to credit an unrestorable snapshot',
       );
       throw error;

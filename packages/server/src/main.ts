@@ -139,6 +139,9 @@ async function main(): Promise<void> {
               locateSession: (characterId) => directory.lookup(characterId),
               // A lotação VIVA e o nó do líder do `/join` em curso (#402): o `api` só LÊ.
               directory,
+              // O snapshot de sessão de cada personagem (#527): `/start` recusa formar uma
+              // party nova para quem ainda tem um pendente de retomada (ADR 0010).
+              snapshots,
               // O `api` escreve a linha do personagem aqui — e isso NÃO é estado quente
               // (invariante 9): o extrato só existe depois que a sessão dona acabou, e é
               // exatamente a mesma escrita que o `jobs` faria dez segundos depois. Sem ela,

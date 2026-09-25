@@ -49,6 +49,9 @@ function build(over: {
   // Onde cada personagem está pelo diretório FAKE: sessão e nó. `locate` cobre o `type` que as
   // rotas antigas já usavam; `sessionId`/`nodeId` são a lotação viva e o nó do líder (#402).
   const locations = new Map<string, { sessionId: string; nodeId: string; type: string }>();
+  // Quem tem um snapshot de OUTRA sessão pendente de retomada (#527) — vazio por padrão, como
+  // o caso comum de ninguém ter uma hunt drenada esperando.
+  const pendingSnapshots = new Set<string>();
   const deps: PartyRouteDependencies = {
     party: new PartyStore(redis, over.now === undefined ? {} : { now: over.now }),
     tickets: {
@@ -80,6 +83,11 @@ function build(over: {
       lookup: async (characterId) => locations.get(characterId) ?? null,
       node: async (nodeId) => ({ nodeId, sessions: 0, url: `ws://${nodeId}:7171` }),
     },
+    snapshots: {
+      load: async (characterId) => (pendingSnapshots.has(characterId)
+        ? { characterId, accountId: characters.get(characterId)?.accountId ?? 'a?', nodeId: 'n0', savedAtMs: 0, snapshot: { id: `s-old-${characterId}` } as never }
+        : null),
+    },
     limits: {
       maxMembers: 4, contentVersion: 'v-test',
       vocations: ['knight', 'druid', 'sorcerer', 'paladin'],
@@ -102,7 +110,7 @@ function build(over: {
       headers: { 'x-account': characters.get(characterId)?.accountId ?? 'nobody' },
     }),
   });
-  return { app, as, issued, revoked, locations, characters, deps, redis };
+  return { app, as, issued, revoked, locations, pendingSnapshots, characters, deps, redis };
 }
 
 describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () => {
@@ -215,6 +223,27 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect(started.json()).toEqual({ error: 'not-in-city', characterId: 'p2' });
     expect(issued).toEqual([]);
     // A party continua de pé para tentar de novo.
+    expect(((await as('p1').mine()).json() as { party: unknown }).party).not.toBeNull();
+  });
+
+  it('refuses to start when a member has a snapshot from another session still pending resumption (#527)', async () => {
+    // ADR 0010: um nó que reinicia no meio de uma hunt deixa o REGISTRO no diretório morrer
+    // com o lease — `locateSession` volta `null`, e o personagem PARECE em repouso — mas o
+    // snapshot resumível continua de pé (§38.4). Sem esta checagem, `/start` formaria uma
+    // party nova para p2 enquanto a hunt anterior dele ainda espera retomada, e o `game`
+    // "resolveria" sozinho qual sessão é a certa quando o ticket chegasse — o achado da QA ao
+    // vivo (`Session resumed from snapshot` em vez de criar a hunt nova).
+    const { as, issued, pendingSnapshots } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'split' });
+    pendingSnapshots.add('p2');
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(409);
+    expect(started.json()).toEqual({ error: 'pending-session', characterId: 'p2' });
+    expect(issued).toEqual([]);
+    // A party continua de pé para tentar de novo — reconectar sozinho resolve o snapshot.
     expect(((await as('p1').mine()).json() as { party: unknown }).party).not.toBeNull();
   });
 

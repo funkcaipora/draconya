@@ -9,7 +9,10 @@
 // test.ts`) é `seedCharacterStats`, a parte que grava o banco.
 
 import { loadContent } from '@draconya/content/load';
-import { createDatabase, SessionDirectory, type Database } from '@draconya/server';
+import {
+  createDatabase, ReceiptStore, SessionDirectory, settleSnapshotAsReceipt, SnapshotStore,
+  type Database,
+} from '@draconya/server';
 import {
   DRAGON_PARTY_LEADER_VOCATION, DRAGON_PARTY_MEMBERS, type DragonPartyMemberPlan,
 } from './dragon-party-plan.js';
@@ -190,6 +193,32 @@ async function joinMissingMembers(
 }
 
 /**
+ * Liquida o snapshot pendente de retomada de UM personagem (#527, ADR 0010), pela MESMA conta
+ * que `SessionHost#creditUnrestorable` faz dentro do `game` (`settleSnapshotAsReceipt`) — nunca
+ * um `DEL` às cegas: o snapshot de uma hunt drenada carrega XP, gold e itens que `--reset` não
+ * pode jogar fora. Extraída de `resetDragonParty` para ser testável sem o resto da orquestração
+ * HTTP (`DragonPartyApi`) — só precisa do par snapshot/extrato, os dois Redis-only.
+ *
+ * `settled: false` é "não havia nada a liquidar", o caso comum. Lança se a liquidação falhar —
+ * quem chama decide manter o snapshot para a próxima tentativa, exatamente como o `game` faz.
+ */
+export async function settleStaleSnapshot(
+  characterId: string,
+  options: {
+    readonly snapshots: Pick<SnapshotStore, 'load' | 'remove'>;
+    readonly receipts: Pick<ReceiptStore, 'save'>;
+  },
+): Promise<{ readonly settled: boolean; readonly sessionId?: string }> {
+  const stored = await options.snapshots.load(characterId);
+  if (stored === null) return { settled: false };
+  await settleSnapshotAsReceipt(stored.snapshot, {
+    characterId, accountId: stored.accountId, receipts: options.receipts,
+  });
+  await options.snapshots.remove(characterId);
+  return { settled: true, sessionId: stored.snapshot.id };
+}
+
+/**
  * Devolve os quatro para a Cidade quando a party ficou travada.
  *
  * `characters.state`/`characters.session_id` NÃO são a resposta aqui (correção de revisão): a
@@ -207,6 +236,14 @@ async function joinMissingMembers(
  * 9 (duas hospedagens do mesmo personagem) na próxima vez que alguém desse `--start`. Só o
  * lease de um nó SEM batimento (o processo `game` caiu sem drenar) é apagado — e mesmo esse caso
  * o `jobs` varre sozinho em até dez segundos (FUN-28); isto só evita a espera.
+ *
+ * **Também liquida o snapshot de sessão pendente de cada personagem (#527, ADR 0010)**, pelo
+ * MESMO caminho que `SessionHost#creditUnrestorable` usa dentro do `game`
+ * (`settleSnapshotAsReceipt`) — nunca um `DEL` às cegas: o snapshot de uma hunt drenada (o `game`
+ * reiniciou no meio dela) carrega XP, gold e itens que `--reset` não pode simplesmente jogar
+ * fora. Sem isto, `/api/party/:id/start` (que agora recusa formar party para quem tem um
+ * snapshot pendente) travaria `--start` de novo logo em seguida, e o loop "reiniciar o servidor
+ * → --reset → --start" nunca fecharia — o próprio cenário que a QA ao vivo achou.
  */
 async function resetDragonParty(
   options: DragonPartyOptions, log: (message: string) => void,
@@ -224,6 +261,8 @@ async function resetDragonParty(
   const { default: Redis } = await import('ioredis');
   const redis = new Redis(options.redisUrl, { maxRetriesPerRequest: 1 });
   const directory = new SessionDirectory(redis);
+  const snapshots = new SnapshotStore(redis);
+  const receipts = new ReceiptStore(redis);
   let exitCode = 0;
 
   try {
@@ -255,6 +294,23 @@ async function resetDragonParty(
           log(`${plan.characterName}: lease órfão (nó "${location.nodeId}" sem batimento) limpo.`);
         }
         await redis.del(`party:by-char:${characterId}`);
+
+        // O snapshot resumível (#527): sem liquidá-lo aqui, o próximo `--start` tropeça na
+        // MESMA checagem que o `/start` agora faz (`pending-session`) — o personagem "parece"
+        // em repouso para o diretório (o lease acabou de ser limpo acima, ou já tinha morrido
+        // sozinho), mas ainda tem uma hunt anterior à espera de retomada.
+        try {
+          const settled = await settleStaleSnapshot(characterId, { snapshots, receipts });
+          if (settled.settled) {
+            log(`${plan.characterName}: snapshot da sessão "${settled.sessionId}" liquidado e limpo.`);
+          }
+        } catch (error) {
+          log(
+            `ERRO ao liquidar o snapshot de ${plan.characterName}: ${(error as Error).message} `
+              + '— ele fica de pé para a próxima tentativa (nada foi perdido).',
+          );
+          exitCode = 1;
+        }
       } catch (error) {
         log(`ERRO ao resetar ${plan.characterName}: ${(error as Error).message}`);
         exitCode = 1;
