@@ -109,6 +109,62 @@ Cada peça tem a própria matriz de oráculos escritos à mão, no mesmo formato
 | `packages/sim/src/rulesets/weapons.test.ts` (`combat-v2: chance de acerto à distância`) | o `#strike` fim a fim: skill baixa erra mais que skill alta à mesma distância, `combat-v1` continua sempre acertando, 1 Hz == 10 Hz com a chance ligada |
 | `packages/server/src/game/rat-cellars.test.ts`, `rotworm-caves.test.ts` | conformance do CONTEÚDO REAL sob `combat-v2` — inclusive frequência-invariância (`dez minutos a 1 Hz e a 10 Hz...`) |
 
+## O `combat-v3` (#548, M30-01, ADR 0040)
+
+O ADR 0031 exige registro aqui sempre que o contrato muda de propósito. O `combat-v3` é o
+próximo perfil livre depois do `combat-v2` (`packages/content/src/schemas.ts`, `COMBAT_V3`):
+`migrationPolicy: 'breaking'`, e o pipeline de RECEBIMENTO — o que o CMB-04/CMB-02/CMB-03 faziam
+com defesa, armadura e mitigação — vira a ordem do `Creature::blockHit` do Canary.
+`packages/content/data/combat/baseline.json` já declara `combat-v3`: é o perfil que toda hunt
+NOVA roda.
+
+O que muda, e o que NÃO muda:
+
+- **O lado OFENSIVO não muda.** A fórmula de arma e a chance de acerto à distância do
+  `combat-v2` continuam idênticas — `combat-v3` exige os MESMOS blocos `weaponDamage`/
+  `distanceHitChance` que o v2 exige, e `weapon-power.ts`/`distance-hit.ts` não sabem que o
+  perfil mudou de v2 para v3 (o despacho é só de `resolveDamage`).
+- **O lado DEFENSOR muda por completo.** `resolveBlockHitProfile` (`combat/damage.ts`) substitui
+  `resolveMitigation` para `combat-v3`: Dodge continua o primeiro ato (INALTERADO — é onde o
+  Tibia também nega o golpe, antes de chamar `blockHit`), mas o que vem depois é o novo estágio
+  `resolveBlockHit` (`combat/blockhit.ts`) — imunidade explícita, defesa com `blockCount` e
+  faixa aleatória, armadura em faixa (não mais flat) e mitigação percentual
+  (`defenseMitigation`, campo NOVO do monstro). A resistência/vulnerabilidade por tipo (CMB-03)
+  continua o MESMO mecanismo de antes, só reposicionada depois do estágio novo. O piso
+  (`minimumDamageFraction`) é mantido como salvaguarda de PRODUTO — o Canary não tem: lá um
+  bloqueio pode legitimamente reduzir o golpe a zero.
+- **O crítico foi REPOSICIONADO**, de propósito e documentado: no v1/v2 ele era o 3º sorteio,
+  entre defesa e armadura; no v3 ele rola DEPOIS de toda a mitigação (defesa, armadura,
+  mitigação percentual, resistência, piso), porque fatiar o estágio novo em dois para encaixar o
+  crítico no meio dele mudaria a decisão de "pular a armadura quando a defesa já zerou o golpe"
+  sem nenhum conteúdo real declarar `combat.modifiers` hoje para testar a interação. A posição
+  exata do crítico sob `combat-v3` é trabalho do M30-04.
+- **As cargas de bloqueio (`blockCount`) são calculadas SOB DEMANDA**, nunca por tick
+  (invariante 2) — `combat/block-charge.ts` é uma reescrita ORIGINAL do relógio-por-tick do
+  Canary (`creature.cpp`, `blockTicks += interval; if (blockTicks >= 1000) ...`) como duas
+  "vagas" independentes, cada uma um instante absoluto em que volta a ficar pronta. Equivalente
+  em EFEITO (no máximo duas cargas disponíveis, cada uma recarregando em 1000 ms depois de
+  gasta), não literal — a diferença só aparece num padrão de uso adversarial que nenhum vetor
+  desta issue exercita.
+- **As flags de bloqueio vêm da ORIGEM do dano, não do tipo** (diferente do CMB-04, que aprovava
+  por `damageType`): corpo a corpo bloqueia defesa E armadura; distância só armadura; magia,
+  runa, wand/rod e DOT não bloqueiam nenhum dos dois. `combat/damage.ts` deriva isso por
+  chamador (`MELEE_BLOCK_FLAGS`/`DISTANCE_BLOCK_FLAGS`/`MAGIC_BLOCK_FLAGS` em `blockhit.ts`), e
+  cada produtor (`#strike`, `#executeMonsterAbility`, `castSpell`, `useSupply`, DOT) declara o
+  próprio no `DamageIntent.blockable`.
+- **`resolveDamage` ganhou um parâmetro `nowMs` OBRIGATÓRIO** — o instante lógico da sessão, que
+  só o `combat-v3` lê (para o `blockCharge`). `combat-v1`/`v2` o ignoram, mas todo chamador
+  precisa passá-lo agora; um esquecimento erraria em silêncio só sob `combat-v3`.
+
+### Oráculos do `combat-v3`
+
+| Arquivo | O que prende |
+|---|---|
+| `packages/sim/src/combat/block-charge.test.ts` | disponibilidade e consumo das duas cargas; o vetor do #548 — segundo bloqueio no mesmo segundo gasta a última carga, terceiro não defende |
+| `packages/sim/src/combat/blockhit.test.ts` | os vetores à mão do #548 — defesa 30 → `[15,30]`; armadura 25 → `[12,23]`; armadura 3 → `−1`; armadura 0 → identidade; imunidade zera antes de tudo; mitigação percentual sobre o pós-armadura; a armadura é PULADA quando a defesa já zerou |
+| `packages/sim/src/combat/damage.test.ts` (`combat-v3`) | o pipeline fim a fim — Dodge primeiro, crítico reposicionado, piso poupando imunidade, `combat-v1`/`v2` continuam bit a bit |
+| `packages/content/src/content.test.ts` | `monsterSchema` aceita `defense`/`defenseMitigation`, default `0`; `combat-v3` exige `weaponDamage`/`distanceHitChance` como o v2 |
+
 ## Benchmark: o cenário misto
 
 ```

@@ -115,3 +115,48 @@ acumularia um perfil `breaking` congelado por milestone para sempre.
 Nenhum muda. O invariante 4 continua garantindo que o cliente nunca manda perfil, tipo de dano ou
 resultado. O invariante 7 é o que torna o perfil conteúdo versionado e congelado na sessão — a
 regra de aposentadoria da decisão 4 só é segura porque a fixação na sessão já existe.
+
+## Emenda — 2026-09-25: a implementação do M30-01 (#548)
+
+Esta emenda registra as decisões TÉCNICAS que a implementação do `combat-v3`/`blockHit`
+(`packages/sim/src/combat/blockhit.ts`) tomou dentro do espaço que a decisão original deixava
+aberto. O que ela NÃO muda: a ordem do estágio novo, o registro do perfil e a regra de
+aposentadoria continuam os da decisão original.
+
+- **M29-07 ainda não fechou.** A dependência que a seção "Consequências" registra é real: a
+  exceção de `mitigateDamage` para lifedrain/manadrain/agony não tem efeito hoje porque
+  `@draconya/content` ainda não declara esses tipos de dano. `resolveBlockHit` recebe um
+  `mitigationExempt` sempre `false`, documentado como um parâmetro à espera do M29-07 — nenhum
+  código foi escrito olhando um tipo que não existe.
+- **O `blockCount` é DUAS "vagas" independentes, não um contador com fase compartilhada.** O
+  Canary acumula um contador único por `onThink` (por tick — o que o invariante 2 proíbe aqui).
+  A reescrita original guarda dois instantes absolutos (quando cada vaga volta a ficar pronta);
+  consumir uma vaga a reagenda para 1000 ms depois do PRÓPRIO consumo, sem tocar a fase da outra.
+  Em qualquer padrão de uso não-adversarial isso é equivalente em efeito ao contador do Canary —
+  no máximo duas cargas disponíveis, cada uma recarregando em 1000 ms —, e é o que os vetores à
+  mão do #548 medem. Ver `packages/sim/src/combat/block-charge.ts`.
+- **As flags de bloqueio (`checkDefense`/`checkArmor`) são uma função da ORIGEM do dano,
+  derivada por quem CHAMA `resolveDamage`, não um campo de conteúdo.** Corpo a corpo (e o punho
+  desarmado) bloqueiam os dois; distância só armadura; magia, runa, wand/rod e DOT não bloqueiam
+  nenhum — a mesma tabela que `WeaponMelee`/`WeaponDistance`/`WeaponWand` do Canary fixam em
+  código, sem `Combat::setParam(COMBAT_PARAM_BLOCKARMOR/BLOCKSHIELD)` nenhum ainda exposto ao
+  conteúdo (spell/ability por-item continuam usando o default `false`/`false`). Uma ability de
+  monstro decide pela FORMA (`isMeleeAbility`), a mesma heurística que já existia para a
+  apresentação visual — não um campo novo.
+- **O crítico (CMB-08) foi REPOSICIONADO, não implementado de novo.** No v1/v2 ele era o 3º
+  sorteio, entre defesa e armadura; no `combat-v3` ele rola DEPOIS de toda a mitigação (defesa,
+  armadura, mitigação percentual, resistência, piso). Fatiar o estágio novo em dois para encaixar
+  o crítico no meio dele mudaria a decisão de "pular a armadura quando a defesa já zerou o golpe"
+  por uma junção que nenhum conteúdo real exercita — `combat.modifiers` continua não declarado. A
+  posição EXATA do crítico sob `combat-v3` é trabalho do M30-04, que pode reverter esta escolha
+  com o contexto de crítico/leech completo.
+- **O piso (`minimumDamageFraction`) foi MANTIDO**, mesmo o Canary não o tendo — lá um bloqueio
+  pode legitimamente reduzir um golpe a zero. É uma salvaguarda de PRODUTO do Draconya, anterior
+  a este ADR, e removê-la seria uma decisão de balanceamento que esta issue não foi pedida para
+  tomar. Ela poupa a imunidade explícita (não revoga um zero de imunidade), a mesma regra do
+  v1/v2.
+- **`resolveDamage` ganhou um `nowMs` com default `0`, não obrigatório.** A alternativa
+  (obrigatório, sem default) foi tentada e descartada: dezenas de fixtures de `combat-v1`/`v2`
+  em teste não têm relógio de sessão nenhum para passar, e nenhuma delas lê o parâmetro. Todo
+  CHAMADOR em produção passa `session.nowMs` explicitamente; o default só evita inventar um
+  instante nos testes que não precisam dele.
