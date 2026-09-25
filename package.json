@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "docs-check": "tsx scripts/docs-check.ts",
     "source-policy": "tsx scripts/source-policy.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check && pnpm catalog:import --check",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "tsc -b && pnpm --filter @draconya/tools content:check",
     "assets:library": "tsx scripts/build-asset-library.ts",
@@ -27,6 +27,7 @@
     "map:fetch": "tsx scripts/fetch-map.ts",
     "map:import": "tsx scripts/import-map.ts",
     "route:trace": "tsx scripts/trace-route.ts",
+    "catalog:import": "tsx scripts/catalog/import.ts",
     "bench:monster": "tsc -b && pnpm --filter @draconya/tools bench:monster",
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",
     "bench:combat": "tsc -b && pnpm --filter @draconya/tools bench:combat",
@@ -35,6 +36,7 @@
     "dev:dragon-party": "tsc -b && pnpm --filter @draconya/tools dev:dragon-party"
   },
   "devDependencies": {
+    "@types/luaparse": "^0.2.13",
     "@types/node": "^24.13.4",
     "@typescript-eslint/parser": "^8.70.0",
     "drizzle-kit": "^0.31.10",
@@ -47,7 +49,9 @@
     "vitest": "^5.0.0"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
+    "luaparse": "^0.3.1",
     "zod": "^4.6.2"
   }
 }
