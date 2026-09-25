@@ -336,17 +336,32 @@ const NUDGE_YIELD_MS = 3_000;
 const MAX_CROSS_FLOOR_STUCK_MS = 240_000;
 
 /**
- * A que distância (tiles, Chebyshev) do líder um seguidor ainda conta como "junto" para o líder
- * seguir andando a rota (#527). Achado numa QA ao vivo com o bot config real (sem lure em
- * ninguém): sem haste igual entre vocações, quem não é o líder cai para trás em combate — e o
- * líder, que nunca espera, seguia sozinho por DEZENAS de tiles antes de qualquer seguidor
- * alcançar de novo. Este é o raio "normal" — o mesmo raio de busca de alvo do follow
- * (`targetSearchRadius`), a distância além da qual um seguidor já considera o líder
- * "inalcançável" e cai para a própria rota (o que o `#leaderReservedTile`/`#crossesAwayFromLeader`
- * cobrem depois disso acontecer) — então é também o ponto em que o LÍDER precisa parar de
- * abrir distância antes que aconteça.
+ * A folga (tiles) ALÉM do `targetSearchRadius` de cada seguidor antes do líder considerar
+ * alguém "para trás demais" e segurar o passo da rota (#527). Achado numa QA ao vivo: um raio
+ * de regroup FIXO menor que `targetSearchRadius` (7 contra 8, a v1 desta constante) produzia
+ * um impasse mútuo — o seguidor, a distância 8, ainda está dentro do PRÓPRIO raio de follow
+ * (`d > radius` só desiste ALÉM de 8) e por isso `#holdFollow` continua tentando fechar a
+ * distância sozinho, ativamente, a cada vencimento; mas o líder, com um limiar MAIS APERTADO
+ * que o do seguidor, já achava "longe demais" e segurava — ninguém tinha motivo para se mexer
+ * mais rápido, e os dois só se resolviam pela válvula de último recurso (3 min) em vez do
+ * follow ativo do seguidor de fato alcançar. O limiar do líder tem que ser FOLGADO em relação
+ * ao do seguidor, não apertado: o líder só precisa segurar quando o seguidor JÁ desistiu de
+ * seguir sozinho (além do próprio raio) — dentro dele, o follow ativo do seguidor já resolve, e
+ * seguraria por segurar. Ver `#partyRegroupBlocked`.
  */
-const PARTY_REGROUP_RADIUS = 7;
+const PARTY_REGROUP_MARGIN = 0;
+
+/**
+ * A folga (tiles) ALÉM de `targetSearchRadius` antes do follow desistir por distância (#527).
+ * A distância RAW não é monotônica ao longo de um caminho do BFS limitado — um desvio em volta
+ * de parede pode aumentar a distância em linha reta antes de diminuir, e sem folga nenhuma o
+ * `d > radius` desistia exatamente no meio de uma travessia que o próprio BFS já tinha achado
+ * (achado com o bot config real: 8 → 9, um a mais que o `targetSearchRadius` padrão). Fixa e
+ * pequena, não "sempre que houver caminho em cache": uma primeira versão desta emenda soltava o
+ * teto de desistência por completo enquanto qualquer caminho velho existisse, e um seguidor
+ * genuinamente perdido nunca mais desistia — a coesão da varredura real desabou.
+ */
+const FOLLOW_UNREACHABLE_SLACK = 3;
 
 /**
  * O raio MAIS APERTADO exigido antes do líder ATRAVESSAR ANDAR (#527) — nunca o mesmo do raio
@@ -1022,7 +1037,7 @@ interface Runner {
    */
   sameTileStreak: number;
   /**
-   * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_RADIUS`/
+   * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_MARGIN`/
    * `PARTY_REGROUP_FLOOR_CHANGE_RADIUS`, válvula `MAX_REGROUP_WAIT_MS`). `null` fora de uma
    * espera — só o próprio líder escreve este campo.
    */
@@ -3023,7 +3038,17 @@ export class HuntRuleset implements Ruleset {
     const d = distance(from, target.position);
     const radius = this.#options.targetSearchRadius ?? 8;
 
-    if (d > radius) {
+    // A distância RAW (Chebyshev) não é monotônica ao longo de um caminho do BFS — rodear uma
+    // parede pode AUMENTAR a distância em linha reta antes de diminuir (#527, achado com o bot
+    // config real: o Druid tomava o primeiro passo de um desvio de dez passos, a distância raw
+    // subia de 8 para 9 — um a mais que `radius`/`targetSearchRadius` —, e `d > radius`
+    // desistia do follow exatamente no meio da travessia, jogando fora o caminho já calculado e
+    // caindo para a PRÓPRIA rota, sem nada a ver com onde o líder está). `FOLLOW_UNREACHABLE_SLACK`
+    // é a folga — pequena e FIXA, não "sempre que houver cache" (essa versão inicial soltava o
+    // teto de desistência por completo sempre que um caminho velho continuasse por perto,
+    // deixando seguidores genuinamente perdidos NUNCA desistirem, e a coesão da varredura
+    // desabou) — o bastante para um desvio típico não estourar o alcance, sem apagar o teto.
+    if (d > radius + FOLLOW_UNREACHABLE_SLACK) {
       this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
       return false;
     }
@@ -3056,17 +3081,7 @@ export class HuntRuleset implements Ruleset {
     // Guloso primeiro; só quando ele emperra o BFS limitado entra (`#followStep`, #527, emenda
     // ao ADR 0009) — o corredor em U que uma QA ao vivo achou, onde os três candidatos do
     // guloso eram todos parede mas havia caminho livre pelo lado OPOSTO.
-    if (character.id === 'b') {
-      (globalThis as unknown as { console: { error: (...a: unknown[]) => void } }).console.error(
-        'DEBUG_HOLDFOLLOW', 'from', from, 'target', target.position, 'reserved', reserved, 'd', d,
-      );
-    }
     const to = this.#followStep(session, runner, from, target.position, blocked, false, reserved, true);
-    if (character.id === 'b') {
-      (globalThis as unknown as { console: { error: (...a: unknown[]) => void } }).console.error(
-        'DEBUG_FOLLOWSTEP_RESULT', to,
-      );
-    }
     // Empacado — mesmo comportamento de `#holdPosture`: esperar este vencimento, não é
     // interrupção. "Sem caminho" vira `unreachable` só pela DISTÂNCIA (acima), não por um passo
     // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento. Já em cima do
@@ -3103,21 +3118,7 @@ export class HuntRuleset implements Ruleset {
     session: Session, runner: Runner, from: FloorPoint, goal: FloorPoint, blocked: Blocked,
     exact: boolean, reserved: FloorPoint | null, grounded: boolean,
   ): GridPoint | null {
-    const direct = greedyStep(from, goal, blocked);
-    if (direct !== null) {
-      runner.followStuckSinceMs = null;
-      return direct;
-    }
-
-    // Só entra no BFS depois de `FOLLOW_PATHFIND_DELAY_MS` de bloqueio SEGUIDO — não na
-    // primeira falha (#527, `FOLLOW_PATHFIND_DELAY_MS`): um monstro ou companheiro
-    // momentaneamente no caminho resolve sozinho, e path-find nele produzia um desvio inútil
-    // pela masmorra em vez de uma espera curta.
-    const stuckSince = runner.followStuckSinceMs ?? session.nowMs;
-    runner.followStuckSinceMs = stuckSince;
-    if (session.nowMs - stuckSince < FOLLOW_PATHFIND_DELAY_MS) return null;
-
-    // `blocked` (acima) é o predicado de `canOccupy` (#blockedFor/#blockedForGroundedStep) —
+    // `blocked` (abaixo) é o predicado de `canOccupy` (#blockedFor/#blockedForGroundedStep) —
     // ele SEMPRE compara contra a posição ATUAL do personagem (`not-adjacent` quando o tile
     // pedido não é vizinho imediato dela), o que faz sentido para o passo guloso — que só
     // avalia os três vizinhos IMEDIATOS de `from` — mas quebra um BFS: ele avalia vizinhos dos
@@ -3137,14 +3138,49 @@ export class HuntRuleset implements Ruleset {
       return false;
     };
 
+    // O CACHE de um caminho já em andamento vence o guloso (#527) — não o contrário. Tentar o
+    // guloso de novo a cada vencimento, mesmo com um caminho do BFS já resolvido, podia puxar
+    // quem segue para um tile LOCALMENTE mais perto do alvo em linha reta mas que não leva a
+    // lugar nenhum (o "bolso" à esquerda de uma QA ao vivo tinha vários desses) — abandonando o
+    // caminho real, reiniciando o atraso e o BFS do zero, repetidas vezes, sem nunca terminar
+    // de atravessar: o Druid ficou dois minutos "quase" chegando, sem nunca progredir de fato.
+    // Com o caminho comprometido, o guloso só volta a decidir quando ELE (o cache) falhar.
     const cache = runner.followPath;
     const sameGoal = cache !== null
       && cache.goal.x === goal.x && cache.goal.y === goal.y && cache.goal.z === goal.z;
     if (sameGoal) {
       const next = cache.path[0];
-      if (next !== undefined && distance(from, next) === 1 && !pathBlocked(next.x, next.y)) return next;
+      if (next !== undefined && distance(from, next) === 1 && !pathBlocked(next.x, next.y)) {
+        runner.followStuckSinceMs = null;
+        return next;
+      }
       runner.followPath = null;
     }
+
+    // O relógio de "empacado" conta a partir de PROGRESSO, não de "o guloso devolveu um tile"
+    // (#527, achado com o bot config real: um bolso da Darashia Dragon Lair deixava o guloso
+    // "ter sucesso" repetidas vezes, andando para dentro do bolso sem nunca se aproximar de
+    // verdade do alvo — cada sucesso zerava o relógio antes dele acumular os
+    // `FOLLOW_PATHFIND_DELAY_MS` seguidos que fariam o BFS entrar, e o Druid ficava minutos
+    // "andando" sem nunca progredir). Só reduzir a distância RAW até o alvo conta como
+    // progresso de verdade; um passo que anda para o lado ou para trás (o próprio caminho do
+    // BFS pode fazer isso, contornando uma parede) não reseta o relógio — só não é o guloso
+    // quem decide isso, e por isso o cache acima já zera o relógio só quando de fato avança.
+    const beforeDistance = distance(from, goal);
+    const direct = greedyStep(from, goal, blocked);
+    if (direct !== null) {
+      if (distance(direct, goal) < beforeDistance) runner.followStuckSinceMs = null;
+      else runner.followStuckSinceMs ??= session.nowMs;
+      return direct;
+    }
+
+    // Só entra no BFS depois de `FOLLOW_PATHFIND_DELAY_MS` de bloqueio/estagnação SEGUIDOS —
+    // não na primeira falha (#527, `FOLLOW_PATHFIND_DELAY_MS`): um monstro ou companheiro
+    // momentaneamente no caminho resolve sozinho, e path-find nele produzia um desvio inútil
+    // pela masmorra em vez de uma espera curta.
+    const stuckSince = runner.followStuckSinceMs ?? session.nowMs;
+    runner.followStuckSinceMs = stuckSince;
+    if (session.nowMs - stuckSince < FOLLOW_PATHFIND_DELAY_MS) return null;
 
     const isGoal = exact ? isExactly(goal) : isAdjacentTo(goal);
     const path = boundedPath(from, isGoal, pathBlocked, FOLLOW_PATHFIND_RADIUS);
@@ -3282,7 +3318,11 @@ export class HuntRuleset implements Ruleset {
     if (followers.length === 0) return false;
 
     const crossingFloor = floorChangeAt(this.#world.map, to.x, to.y, character.position.z) !== null;
-    const radius = crossingFloor ? PARTY_REGROUP_FLOOR_CHANGE_RADIUS : PARTY_REGROUP_RADIUS;
+    // FOLGADO em relação ao raio de follow de cada seguidor (#527, `PARTY_REGROUP_MARGIN`),
+    // nunca mais apertado — um raio menor que `targetSearchRadius` é o que produzia o impasse
+    // mútuo que motivou a emenda.
+    const followRadius = (this.#options.targetSearchRadius ?? 8) + PARTY_REGROUP_MARGIN;
+    const radius = crossingFloor ? PARTY_REGROUP_FLOOR_CHANGE_RADIUS : followRadius;
     const cohesive = followers.every((follower) => sameFloor(follower.position.z, character.position.z)
       && distance(character.position, follower.position) <= radius);
     if (cohesive) {
