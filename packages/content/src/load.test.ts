@@ -717,14 +717,16 @@ describe('the vocation spell catalogues (#156–#159)', () => {
   });
 
   it('toda runa de dano/cura com correspondente no Canary declara `formula` (#523)', () => {
-    // Poção (`amount` fixo — health-potion, mana-potion) não é runa e não tem fórmula no Canary
-    // real: é sempre um valor fixo por item, nunca uma faixa. Toda runa de verdade (as que têm
-    // `basePower`, o número de exibição que a fórmula substitui — ADR 0033) declara `formula`.
+    // Poção não é runa e não tem fórmula de level/ML no Canary: é um valor fixo (`amount` —
+    // health-potion, mana-potion) ou uma faixa fixa por item (`amountRange` — as poções do Tibia
+    // da #524). Toda runa de verdade (as que têm `basePower`, o número de exibição que a fórmula
+    // substitui — ADR 0033) declara `formula`.
     const missing: string[] = [];
     for (const supply of content.supplies.values()) {
       const effect = supply.effect;
       if (effect.kind !== 'damage' && effect.kind !== 'heal') continue;
-      const isFixedAmount = 'amount' in effect && effect.amount !== undefined;
+      const isFixedAmount = ('amount' in effect && effect.amount !== undefined)
+        || ('amountRange' in effect && effect.amountRange !== undefined);
       if (effect.formula === undefined && !isFixedAmount) missing.push(supply.id);
     }
     expect(missing).toEqual([]);
