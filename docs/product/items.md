@@ -434,14 +434,20 @@ duplicar o arquivo só para variar `vocationId` divergiria peso/preço no primei
 
 **Bônus passivo de equipamento.** `item.bonuses` (§21.2): `skill` (uma skill, um valor — o magic
 level do Tibia É a skill `magic` no Draconya, FUN-92) e `speed` (somado direto a
-`character.speed`, as boots of haste). Lido por `Inventory.skillBonus`/`speedBonus` — a MESMA
+`character.speed`, as boots of haste — 40 desde o #527, a escala TFS clássica do
+`forgottenserver` `items.xml` id 2195, a MESMA de `progression.startingSpeed`; o Canary guarda 20
+porque a base dele também é metade). Lido por `Inventory.skillBonus`/`speedBonus` — a MESMA
 forma de `armor()`/`mitigation()`, uma soma pelos poucos slots equipados, sem tabela por
 catálogo. `skillBonus` entra em `#weaponPower` (a Paladin Armor, +2 distância, bate mais forte
 com o crossbow), `#runeScaling` e `#spellScaling` (o Hat of the Mad/Focus Cape/Spellbook of Mind
 Control, +1/+1/+2 magic level, escalam runa e magia de cura/dano mais forte). `speedBonus` entra
-em TRÊS pontos: a entrada na hunt (`onEnter`), o snapshot antigo sem velocidade (`#onPlayerStep`)
-e o equipar/desequipar em voo (`#equipmentObserver` → `#recomputeSpeed`) — calçar a bota muda a
-velocidade no MESMO evento, sem esperar o próximo passo.
+em QUATRO pontos: a entrada na hunt (`onEnter`), o snapshot antigo sem velocidade
+(`#onPlayerStep`), o equipar/desequipar em voo (`#equipmentObserver` → `#recomputeSpeed` — calçar
+a bota muda a velocidade no MESMO evento, sem esperar o próximo passo) e, desde o #527, a entrada
+na CIDADE de quem nunca esteve numa sessão (`createCityRuleset`, mesma guarda de `speed <= 0`) —
+sem o quarto ponto, um personagem recém-criado com a bota já no kit (o level 200 do
+`dragon-party`, #526) mostrava a mesma velocidade com ou sem ela até a primeira entrada numa
+hunt.
 
 **Anel com carga**, além do colar (ver "Duração e carga do equipamento", acima): o Might Ring é
 `kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy/Life

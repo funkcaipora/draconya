@@ -126,7 +126,7 @@ export function createTicketHandler(
     try {
       settlement = await settleProgress(body.data.characterId);
     } catch (error) {
-      request.log.error({ error, characterId: body.data.characterId }, 'Settlement failed');
+      request.log.error({ err: error, characterId: body.data.characterId }, 'Settlement failed');
       return reply.code(503).send({ error: 'progress-not-settled' });
     }
     // Recusar em vez de deixar passar: entrar com um personagem que o servidor SABE estar

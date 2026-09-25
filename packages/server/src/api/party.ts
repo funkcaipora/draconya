@@ -127,6 +127,44 @@ async function liveMembers(
   return alive;
 }
 
+/**
+ * Carência entre o `start` e a primeira checagem de "ninguém conectou ainda" (#527). O `start`
+ * responde antes de qualquer socket abrir — o próprio líder só liga o WebSocket DEPOIS da
+ * resposta HTTP —, então `alive.length === 0` no primeiro instante é o normal, não um sintoma.
+ * Maior que o TTL padrão do ticket (30 s, `ticketTtlMs` do `registerPartyRoutes`) com folga para
+ * o `handshake` do `game`: sem carência, o teste que confere `state: 'hunting'` logo após o
+ * `start` (nenhuma sessão em `game` de verdade nos testes) desfaria a própria party que acabou
+ * de nascer.
+ */
+const DISBAND_GRACE_MS = 45_000;
+
+/**
+ * Uma party `hunting` cuja sessão NUNCA hospedou ninguém, ou já não hospeda mais (#527): o
+ * `sessionId` gravado no `start` não teve visualizador algum — o líder fechou o navegador antes
+ * de conectar (`pnpm dev:dragon-party --start` sem anexar o ticket era exatamente isto), ou o
+ * nó caiu antes do primeiro `session-attach`. `liveMembers` já sabe apurar quem ainda está de
+ * fato na sessão — mas só PODA cada um do ZSET; quando NINGUÉM sobra POR TEMPO SUFICIENTE
+ * (`DISBAND_GRACE_MS`), a party inteira é lixo, e sobra presa em `party:by-char` pelo TTL de
+ * 24h de uma sessão `hunting` (`HUNTING_TTL_MS`), travando os N personagens fora de formar
+ * outra. `remove` apaga os ponteiros dos quatro — inclusive o de tickets ainda não pegos
+ * (`ticketsKey`), que também não bloqueiam mais ninguém.
+ *
+ * Devolve `true` quando a party foi removida — quem chamou trata o registro como inexistente.
+ */
+async function disbandIfDead(
+  party: PartyRecord, deps: Pick<PartyRouteDependencies, 'party' | 'directory'>,
+): Promise<boolean> {
+  if (party.state !== 'hunting' || party.sessionId === null) return false;
+  if (party.startedAtMs === null || Date.now() - party.startedAtMs < DISBAND_GRACE_MS) return false;
+  const alive = await liveMembers(party, deps);
+  if (alive.length > 0) return false;
+  // `party.members` (a lista de ANTES do `liveMembers` podar o ZSET), não o ZSET de agora — que
+  // `liveMembers` já esvaziou podando cada um: sem isto, `remove` não acharia ninguém para
+  // limpar e `party:by-char` de cada um sobreviveria pelo TTL de 24h com a party já apagada.
+  await deps.party.remove(party.id, party.members);
+  return true;
+}
+
 /** A lista de vocações presentes, pela linha de cada membro — a mesma leitura de sempre. */
 async function vocationsOf(
   members: readonly string[],
@@ -366,7 +404,14 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     // pelos DOIS índices reversos — o tradicional e o social (RF-09, DT-06) — numa lista única,
     // para o polling do Shell continuar sendo um só.
     const ticket = await deps.party.takeTicket(query.data.characterId);
-    const record = await deps.party.of(query.data.characterId);
+    const found = await deps.party.of(query.data.characterId);
+    // Uma party `hunting` presa (#527) não pode continuar respondendo como se estivesse viva:
+    // sem isto, o personagem nunca sai de "já estou numa party" e não forma outra. O ticket
+    // acima já foi pego ANTES desta checagem de propósito — se ele ainda for válido (a sessão
+    // nunca nasceu porque NINGUÉM tentou ainda), usá-lo é o que finalmente cria a hunt; só
+    // quando ninguém mais pode usá-lo (`alive.length === 0`, de olho em TODOS os membros) é
+    // que a party é lixo de verdade.
+    const record = found !== null && await disbandIfDead(found, deps) ? null : found;
     const traditional = await Promise.all(
       (await deps.party.invitesOf(query.data.characterId)).map(async (id) => {
         const invited = await deps.party.get(id);
@@ -526,6 +571,21 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       if (query.data.huntId !== undefined && party.huntId !== query.data.huntId) continue;
       if (party.minLevel === null || candidate.level < party.minLevel) continue;
       const members = party.state === 'hunting' ? await liveMembers(party, deps) : party.members;
+      // Uma sala `hunting` presa (#527) não pode aparecer como se tivesse vaga: sem ninguém
+      // vivo nela, "Entrar" resolveria o nó do líder pela Cidade dele — ou por lugar nenhum —
+      // em vez de uma hunt que nunca nasceu. `members` já é a lista VIVA calculada acima, então
+      // a checagem some a sala sem repetir a leitura do diretório. A carência é a mesma de
+      // `disbandIfDead` — sem ela, a sala do PRÓPRIO líder sumiria da busca de quem mais
+      // procura no instante em que ele acabou de iniciar.
+      if (
+        party.state === 'hunting' && members.length === 0
+        && party.startedAtMs !== null && Date.now() - party.startedAtMs >= DISBAND_GRACE_MS
+      ) {
+        // `party.members` — a lista de ANTES do `liveMembers` podar o ZSET — pela mesma razão
+        // de `disbandIfDead`.
+        await deps.party.remove(party.id, party.members);
+        continue;
+      }
       if (members.length >= deps.limits.maxMembers) continue;
       const openSlots = await deps.party.openSlots(party.id, party.vocationTargets);
       if ((openSlots[candidateVocation] ?? 0) <= 0) continue;
@@ -725,7 +785,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       try {
         settlement = await deps.settleProgress(member);
       } catch (error) {
-        request.log.error({ error, characterId: member }, 'Settlement failed');
+        request.log.error({ err: error, characterId: member }, 'Settlement failed');
         return reply.code(503).send({ error: 'progress-not-settled' });
       }
       if (settlement.failed > 0) return reply.code(503).send({ error: 'progress-not-settled' });

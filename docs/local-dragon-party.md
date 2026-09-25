@@ -104,7 +104,7 @@ Flags (todas opcionais):
 |---|---|---|
 | `--hunt-id=` | `darashia-dragon-lair` | qual hunt configurar na party |
 | `--difficulty=` | `bold` | qual dificuldade daquela hunt |
-| `--start` | — | inicia a hunt depois de configurar (exclusivo com `--reset`) |
+| `--start` | — | inicia a hunt depois de configurar, e ANEXA o ticket do líder para o `game` criar a sessão de verdade (#527; exclusivo com `--reset`) |
 | `--reset` | — | tira os quatro da party e os devolve à Cidade |
 | `--database-url=`, `--redis-url=`, `--content-dir=`, `--api-base=`, `--api-port=`, `--client-origin=` | do `.env`/padrão | sobrescrevem o que o `.env` traz, para rodar fora do fluxo acima |
 
@@ -167,6 +167,12 @@ por membro. Cada personagem ("Draco Knight", "Draco Paladin", "Draco Sorcerer", 
 
 ## 7. Entrar no navegador como o líder
 
+**`--start` já cria a hunt** (#527): o script abre um WebSocket com o ticket do líder, manda
+`session-attach` e espera o `session-state` confirmar `sessionType: "hunt"` antes de imprimir a
+sessão e sair — a mesma sequência que o cliente faz ao reanexar (`net/connection.ts`). A hunt
+já está rodando no servidor nesse ponto, sem ninguém olhando (idle-first, ADR 0027); o navegador
+só serve para ACOMPANHAR, não para criar nada.
+
 Com o cliente em `http://localhost:5174` aberto, abra o console e faça o dev-login do Knight
 (o mesmo endpoint que o script usa, `POST /api/auth/dev-login` só aceita `AUTH_DEV_MODE=true` e
 a origem do cliente):
@@ -182,8 +188,9 @@ location.reload();
 ```
 
 Selecione "Draco Knight" na lista de personagens. Se a party já foi iniciada
-(`pnpm dev:dragon-party --start`), o cliente reencontra a hunt em andamento; senão, o menu de
-hunt mostra a party pronta para o botão "Iniciar".
+(`pnpm dev:dragon-party --start`), o cliente reanexa à hunt já em andamento — nenhum clique
+"Iniciar" é necessário; senão (rodou sem `--start`), o menu de hunt mostra a party pronta para o
+botão "Iniciar com o time".
 
 ## O que observar
 

@@ -262,7 +262,7 @@ async function main(): Promise<void> {
         try {
           await role.drain();
         } catch (error) {
-          logger.error({ error, role: role.name }, 'Failed to drain role');
+          logger.error({ err: error, role: role.name }, 'Failed to drain role');
         }
       }
       // Depois de todo mundo drenar: o `game` usa o Redis até o último crédito.
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
 
   // Estado inconsistente não pode continuar servindo: melhor cair e ser reiniciado.
   process.on('uncaughtException', (error) => {
-    logger.fatal({ error }, 'Uncaught exception');
+    logger.fatal({ err: error }, 'Uncaught exception');
     process.exit(1);
   });
   process.on('unhandledRejection', (reason) => {

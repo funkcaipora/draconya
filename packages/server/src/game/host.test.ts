@@ -4733,6 +4733,114 @@ describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com 
   });
 });
 
+describe('o ticket de party quando o personagem já está hospedado na Cidade (#527, invariante 8)', () => {
+  // O líder clica "Iniciar com o time" DA PRÓPRIA Cidade (#195, #402): o socket antigo pode
+  // nem ter fechado ainda quando o ticket da party chega. Antes do #527, `#prepare` via a
+  // sessão já hospedada e reanexava a ela direto — o ticket da party era descartado em
+  // silêncio, e a hunt nunca nascia.
+  const party = {
+    sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
+    ],
+  };
+  const cityRuleset: Ruleset = {
+    type: 'city',
+    // Como a Cidade de verdade (FUN-71): um shard, não uma sessão privada.
+    shared: true,
+    hz: () => 0,
+    onEnter: () => {},
+    onEvent: () => {},
+    onCreatureDied: () => {},
+    onEnd: () => {},
+  };
+
+  function build() {
+    const registered: string[] = [];
+    const { ruleset: huntRuleset } = countingRuleset();
+    // A Cidade é UMA sessão compartilhada, criada na hora do primeiro login e reutilizada
+    // pelos seguintes — o mesmo padrão de `CityShard.admit`, só que sem o conteúdo de verdade.
+    let city: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      directory: {
+        register: async (characterId: string) => { registered.push(characterId); return true; },
+        succeed: async () => true, release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+      } as unknown as SessionDirectory,
+      createSession: (characterId, _initial, ticket) => {
+        if (ticket === undefined) {
+          city ??= new Session({
+            id: 'city-1', contentVersion: 'v-test', ruleset: cityRuleset, rng: Rng.fromSeed('city'), createdAtMs: 0,
+          });
+          city.enter(new CharacterRuntime({
+            id: characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+          return city;
+        }
+        const session = new Session({
+          id: ticket.sessionId, contentVersion: 'v-test', ruleset: huntRuleset, rng: Rng.fromSeed('p'), createdAtMs: 0,
+        });
+        for (const member of ticket.members) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+    });
+    return { host, registered };
+  }
+
+  it('leaves the City and enters the party hunt when the leader was hosted here (#527)', async () => {
+    const { host, registered } = build();
+    // O líder loga primeiro, sem party — a Cidade de sempre.
+    const solo = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a');
+    expect(solo.created).toBe(true);
+    expect(host.sessionFor('a')?.ruleset.type).toBe('city');
+
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('a')?.ruleset.type).toBe('hunt');
+    // O diretório reflete a troca — não fica só no mapa local do nó.
+    expect(registered.filter((id) => id === 'a').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('also moves a second member who was independently hosted in the same City on this node (#527)', async () => {
+    const { host } = build();
+    await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a');
+    await host.prepare('b', party.members[1]?.initialCharacter, 'acc-b');
+    // Mutação que mata: os dois na MESMA sessão de Cidade — se `createSession` criasse uma
+    // Cidade por personagem, o teste passaria mesmo sem a correção do laço de `others`.
+    expect(host.sessionFor('a')?.id).toBe(host.sessionFor('b')?.id);
+    expect(host.sessionFor('b')?.ruleset.type).toBe('city');
+
+    // O ticket completo chega para 'a' e cria a hunt com os DOIS — inclusive 'b', que estava
+    // na MESMA Cidade deste nó: sem a checagem em `#createAndRegister`, o mapa local passaria
+    // a apontar 'b' para a hunt enquanto o `HostedSession` da Cidade continuaria com ele em
+    // `participants`, e o personagem ficaria em duas sessões ao mesmo tempo por dentro.
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('b')?.id).toBe('s-party');
+  });
+
+  it('reconnecting to the SAME hunt still short-circuits, without leaving anything (#527)', async () => {
+    const { host, registered } = build();
+    await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    registered.length = 0;
+    // O segundo ticket da MESMA party (o outro membro pegando o dele pelo `mine`, ou uma
+    // reconexão) não deve mexer em nada — é o caminho de sempre (#195).
+    const second = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(second.created).toBe(false);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(registered).toEqual(['a']);
+  });
+});
+
 describe('a entrada numa sessão em curso (#402, ADR 0035 D7)', () => {
   // A party já criou a hunt com dois donos; o terceiro chega por um ticket `join: true` para o
   // MESMO `sessionId`. O host admite (`session.enter`) sem criar uma segunda hunt, e recusa

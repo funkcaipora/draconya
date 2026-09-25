@@ -1031,12 +1031,22 @@ export class SessionHost {
   ): Promise<PrepareResult> {
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
-      await this.#register(characterId, existing, accountId);
-      return { created: false };
+      // O ticket é de PARTY e pede uma sessão diferente da que o personagem já ocupa aqui
+      // (#527, invariante 8): o líder clica "Iniciar com o time" DA Cidade, e o socket antigo
+      // pode nem ter fechado ainda quando o novo ticket chega. Sem isto, `#prepare` reanexava
+      // à Cidade e o ticket da party era descartado em silêncio — a hunt nunca nascia, e quem
+      // mandasse `session-attach` continuava recebendo `sessionType: "city"` para sempre.
+      if (party !== undefined && existing.id !== party.sessionId) {
+        await this.#leaveForParty(characterId, existing);
+      } else {
+        await this.#register(characterId, existing, accountId);
+        return { created: false };
+      }
     }
 
-    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso.
-    // A sessão é achada pelo id dela neste nó; sessão ausente é recusa tipada, não sessão nova.
+    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso —
+    // ou acabou de sair da Cidade pelo ramo acima. A sessão é achada pelo id dela neste nó;
+    // sessão ausente é recusa tipada, não sessão nova.
     if (party?.join === true) {
       return this.#admitLateJoiner(characterId, initialCharacter, accountId, party);
     }
@@ -1059,6 +1069,49 @@ export class SessionHost {
       }
     }
     return { created: true };
+  }
+
+  /**
+   * Tira o personagem da sessão que ele ocupa NESTE nó antes de a party assumir (#527,
+   * invariante 8: nunca duas sessões ao mesmo tempo). Espelha o ramo de shard de `release` —
+   * a Cidade não credita e não encerra por personagem (ADR 0023), mas guarda o que mudou
+   * (`#saveDurableReceipt`, #154) — só que sem tocar no diretório: quem escreve o registro
+   * novo é `#register`/`#createAndRegister`, chamado pelo MESMO `#prepare` logo em seguida, e
+   * `directory.register` já sabe tomar posse de um registro que aponta para outro lugar
+   * (`#takeOver`, pensado para retomada depois de nó morto — serve igual aqui).
+   *
+   * A sessão de origem só deveria ser um shard: a API só emite ticket de party para quem o
+   * diretório via na Cidade (ou em repouso) no instante da emissão — `/start` e o `/join` em
+   * curso conferem isso antes de reservar qualquer coisa. O ramo `else` é rede de segurança
+   * para essa suposição falhar — credita como uma saída normal em vez de arriscar apagar
+   * progresso em silêncio.
+   */
+  async #leaveForParty(characterId: string, existing: Session): Promise<void> {
+    const hosted = this.#sessions.get(existing.id);
+    if (hosted === undefined) {
+      this.#sessionIdByCharacter.delete(characterId);
+      return;
+    }
+    this.#dropViewers(hosted, characterId);
+    if (existing.ruleset.shared === true) {
+      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+      hosted.session.leave(characterId);
+      this.#announceDeparture(hosted, characterId);
+    } else {
+      let receipt: Receipt | null;
+      if (hosted.session.ended === null && hosted.session.participants.length > 1) {
+        const departure = hosted.session.leave(characterId, 'manual-exit');
+        receipt = departure?.receipt ?? null;
+      } else {
+        if (hosted.session.ended === null) hosted.session.end('manual-exit');
+        receipt = receiptOf(hosted, characterId);
+      }
+      if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
+    }
+    const remaining = this.#charactersOf(existing.id).filter((id) => id !== characterId);
+    if (remaining.length === 0) this.#sessions.delete(existing.id);
+    this.#sessionIdByCharacter.delete(characterId);
+    this.#restingSince.delete(characterId);
   }
 
   /**
@@ -1201,7 +1254,7 @@ export class SessionHost {
     try {
       await this.release(characterId, 1000, 'logout');
     } catch (error) {
-      this.#logger.error({ error, characterId }, 'Failed to log the character out');
+      this.#logger.error({ err: error, characterId }, 'Failed to log the character out');
     }
   }
 
@@ -1265,7 +1318,7 @@ export class SessionHost {
     } catch (error) {
       // Falhar aqui deixa o slot preso até o lease expirar, que é ruim mas se resolve
       // sozinho. Silenciar seria pior: é a única pista de por que uma conta ficou sem slot.
-      this.#logger.error({ error, characterId }, 'Failed to release session from the directory');
+      this.#logger.error({ err: error, characterId }, 'Failed to release session from the directory');
     }
     this.#logger.info({ characterId, sessionId: hosted.session.id }, 'Session released');
   }
@@ -2029,7 +2082,7 @@ export class SessionHost {
         hosted.session.advanceBy(overdueMs);
       } catch (error) {
         // Uma sessão que explode não pode derrubar as outras do nó.
-        this.#logger.error({ error, sessionId: hosted.session.id }, 'Session tick failed');
+        this.#logger.error({ err: error, sessionId: hosted.session.id }, 'Session tick failed');
       }
       // O ATRASO é quanto o tick passou do período que ele mesmo pediu, não o intervalo. Um
       // tick de 1 Hz que roda a cada 1000 ms está no prazo; o mesmo intervalo num tick de
@@ -3281,7 +3334,7 @@ export class SessionHost {
         'Collecting a resting character nobody is watching',
       );
       void this.release(characterId).catch((error: unknown) => {
-        this.#logger.error({ error, characterId }, 'Failed to collect a resting character');
+        this.#logger.error({ err: error, characterId }, 'Failed to collect a resting character');
       });
     }
   }
@@ -3401,7 +3454,7 @@ export class SessionHost {
         //
         // A que falhou FICA com snapshot e registro: é o caminho da FUN-28, e voltar
         // retomável é melhor que sumir sem crédito.
-        this.#logger.error({ error, characterId, sessionId }, 'Failed to drain a session');
+        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to drain a session');
       }
     }
     return ended;
@@ -3512,7 +3565,7 @@ export class SessionHost {
     if (owner === undefined || owner.lootBox.length === 0) return;
     await this.#options.lootBoxes?.save(sessionId, owner.lootBox)
       .catch((error: unknown) => {
-        this.#logger.error({ error, characterId, sessionId }, 'Failed to save the session loot box');
+        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to save the session loot box');
       });
   }
 
@@ -3571,7 +3624,7 @@ export class SessionHost {
       } catch (error) {
         // Falhar aqui é perder o próximo intervalo, não a sessão. Silenciar seria perder a
         // única pista de por que uma retomada voltou mais atrasada do que devia.
-        this.#logger.error({ error, characterId }, 'Failed to save session snapshot');
+        this.#logger.error({ err: error, characterId }, 'Failed to save session snapshot');
       }
     }
   }
@@ -3766,6 +3819,15 @@ export class SessionHost {
     }
     this.#createLocal(characterId, session, accountId);
     for (const other of others) {
+      // O outro membro pode estar hospedado AQUI, na Cidade, no mesmo nó (#527) — o cenário de
+      // duas caçadas locais logadas juntas: sem isto, o mapa local passaria a apontar para a
+      // hunt enquanto o `HostedSession` da Cidade continuaria com ele em `participants` e
+      // qualquer visualizador dele ainda em `viewers`, e o personagem ficaria em DUAS sessões
+      // ao mesmo tempo por dentro (invariante 8), mesmo com o diretório já certo.
+      const existingOther = this.sessionFor(other.id);
+      if (existingOther !== undefined && existingOther.id !== session.id) {
+        await this.#leaveForParty(other.id, existingOther);
+      }
       this.#sessionIdByCharacter.set(other.id, session.id);
       this.#restingSince.set(other.id, this.#now());
       // Nome, cores e bot dos outros membros vêm do bloco da party (#195): quem os vê no
@@ -3806,7 +3868,7 @@ export class SessionHost {
     try {
       stored = await snapshots.load(characterId);
     } catch (error) {
-      this.#logger.error({ error, characterId }, 'Failed to load session snapshot');
+      this.#logger.error({ err: error, characterId }, 'Failed to load session snapshot');
       return null;
     }
     if (stored === null) return null;
@@ -4007,7 +4069,7 @@ export class SessionHost {
     } catch (error) {
       // Lease não renovado vira sessão órfã para a FUN-28. Registrar alto: é o sintoma que
       // antecede uma sessão sendo retomada em outro nó sem necessidade.
-      this.#logger.error({ error }, 'Failed to renew session leases');
+      this.#logger.error({ err: error }, 'Failed to renew session leases');
     }
   }
 
@@ -4036,7 +4098,7 @@ export class SessionHost {
         const nodes = await directory.aliveNodes();
         total = nodes.reduce((sum, node) => sum + (node.players ?? 0), 0);
       } catch (error) {
-        this.#logger.error({ error }, 'Failed to aggregate online player count');
+        this.#logger.error({ err: error }, 'Failed to aggregate online player count');
         return;
       }
     }
