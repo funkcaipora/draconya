@@ -651,12 +651,13 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
   /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
   /**
-   * Os dois tiles ao LADO do lançador, perpendiculares à direção dele — não inclui o próprio
-   * tile (Front Sweep, Lesser Front Sweep). Corrigido no #523 contra a matriz real do Canary
-   * (`AREA_WAVE6` em `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
-   * {0,0,0,0,0}`, `3` é o lançador e os dois `1` ficam na MESMA fileira, não numa fileira à
-   * frente): o nome "cleave" ficou do desenho antigo (3 tiles um passo à frente), que
-   * confundia direção — Front Sweep é um giro ao redor do corpo, não um golpe adiante.
+   * Os três tiles imediatamente à frente (Front Sweep, Lesser Front Sweep). O Canary
+   * (`AREA_WAVE6`, `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
+   * {0,0,0,0,0}`) ancora essa fileira em `getNextPosition(dir, casterPos)` — um passo à frente
+   * do lançador, não na posição dele —, então em coordenadas do mundo os três tiles (os dois
+   * `1` e o `3`, que TAMBÉM conta como atingido) caem juntos, um passo adiante: exatamente
+   * `distance` 1, largura 3. #523 chegou a "corrigir" isto para os dois tiles ao LADO do
+   * lançador lendo só a matriz local, sem a âncora do motor — revertido numa revisão.
    */
   z.object({ shape: z.literal('cleave') }),
   /** Linha reta de `length` tiles à frente, largura 1. */

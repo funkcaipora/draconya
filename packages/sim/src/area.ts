@@ -90,9 +90,14 @@ export function areaTiles(
       return tiles;
     }
     case 'cleave':
-      // Os dois tiles ao LADO do lançador (#523, AREA_WAVE6 do Canary) — não o próprio tile,
-      // e não uma fileira à frente: `sideTiles` fica em `distance` 0, perpendicular.
-      return sideTiles(origin, s);
+      // Os três tiles um passo à frente do lançador (#523, revisão: AREA_WAVE6 do Canary tem o
+      // marcador do centro `3` — que TAMBÉM conta como tile atingido, `matrixarea.cpp` do TFS —
+      // na mesma fileira dos dois `1`; mas o motor ANCORA essa fileira em `getNextPosition(dir,
+      // casterPos)`, um passo à frente, não na posição do lançador — `Spells::getCasterPosition`/
+      // `InstantSpell::castSpell` com `needDirection`, `spells.cpp`. Então em coordenadas do
+      // mundo os três tiles caem juntos, a `distance` 1: `row(origin, f, s, 1, 3)` já dava isso
+      // certo antes desta magia ganhar fórmula própria no #523.
+      return row(origin, f, s, 1, 3);
     case 'beam': {
       const tiles: WorldPoint[] = [];
       for (let k = 1; k <= shape.length; k += 1) tiles.push(...row(origin, f, s, k, 1));
@@ -106,14 +111,6 @@ export function areaTiles(
       return tiles;
     }
   }
-}
-
-/** Os dois tiles perpendiculares ao lançador, na mesma fileira — nunca o próprio tile (`cleave`). */
-function sideTiles(origin: WorldPoint, s: WorldPoint): WorldPoint[] {
-  return [
-    { x: origin.x - s.x, y: origin.y - s.y, z: origin.z },
-    { x: origin.x + s.x, y: origin.y + s.y, z: origin.z },
-  ];
 }
 
 /** A fileira a `distance` tiles à frente, com `width` (ímpar) tiles centrados na linha da frente. */

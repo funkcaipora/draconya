@@ -114,8 +114,7 @@ function areaLabel(area: Area | undefined): string {
     }
     case 'wave': return `Onda ${String(area.length)}`;
     case 'beam': return `Feixe ${String(area.length)}`;
-    // Os dois tiles ao lado do personagem (#523) — não mais "à frente" (AREA_WAVE6 do Canary).
-    case 'cleave': return 'Lateral 2';
+    case 'cleave': return 'Frontal 3';
     case 'cross': return `Cruz ${String(area.radius)}`;
   }
 }
