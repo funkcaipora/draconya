@@ -80,6 +80,23 @@ hunt (ADR 0035 d.1).
     do ticket) desde o `start`, se NENHUM membro está de fato hospedado na sessão gravada, a
     party inteira é removida — não só podada — e os N ficam livres para formar outra sem esperar
     o TTL de 24h de uma `hunting`.
+  - **`/start` recusa (409 `pending-session`) quem tem um SNAPSHOT resumível de outra sessão**
+    (#527, ADR 0010): a "liquidação do progresso pendente" que este parágrafo menciona é sobre
+    EXTRATOS (`settleProgress`, sessões que já encerraram) — um snapshot é outra coisa, uma hunt
+    que foi DRENADA sem encerrar (o nó `game` reiniciou no meio dela) e ainda pode ser retomada
+    (§38.4, uma hunt AFK não some em silêncio). O registro dela no diretório morre com o lease do
+    nó, então o check "está na Cidade" acima passa mesmo assim — o personagem só PARECE em
+    repouso. Sem esta recusa, `#createAndRegister` (`game/host.ts`) "resolveria" sozinho qual
+    sessão é a certa quando o ticket da party chegasse, escolhendo a ERRADA: o achado da QA ao
+    vivo foi `game` logando `Session resumed from snapshot` (a hunt velha, de horas atrás) em vez
+    de criar a hunt nova que o ticket pedia — o snapshot é indexado por `characterId`, não por
+    `sessionId`, e um ticket de party NUNCA pode retomar o de outra sessão. A recusa é
+    retentável de graça: reconectar sozinho resume o snapshot (ou o encerra, saindo
+    normalmente), e depois disso `/start` funciona. `pnpm dev:dragon-party --reset` liquida o
+    snapshot pelo MESMO caminho (`settleSnapshotAsReceipt`, compartilhado com
+    `SessionHost#creditUnrestorable`) em vez de apagar a chave às cegas — perder XP/gold/itens de
+    uma hunt drenada só por resetar o ambiente local seria pior que o travamento que o reset
+    existe para resolver.
 - **Matchmaking** (#199) forma a party e nada mais: `POST /api/matchmaking/join` põe o personagem
   numa fila (`matchmaking:queue`, TTL de 10 min); o casamento roda no `join`, num script Lua só,
   e escolhe até `maxMembers − 1` companheiros compatíveis **preferindo vocações distintas** — o
