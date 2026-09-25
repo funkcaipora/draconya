@@ -382,6 +382,7 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.lureForceWalkUntilMs === null ? {} : { lureForceWalkUntilMs: runner.lureForceWalkUntilMs }),
     ...(runner.nudgedUntilMs === null ? {} : { nudgedUntilMs: runner.nudgedUntilMs }),
     ...(runner.crossFloorStuckSinceMs === null ? {} : { crossFloorStuckSinceMs: runner.crossFloorStuckSinceMs }),
+    ...(runner.sameTileStreak === 0 ? {} : { sameTileStreak: runner.sameTileStreak }),
   };
 }
 
@@ -952,6 +953,14 @@ interface Runner {
    * recurso, `MAX_CROSS_FLOOR_STUCK_MS`). `null` fora de uma travessia parada.
    */
   crossFloorStuckSinceMs: number | null;
+  /**
+   * Quantas vezes SEGUIDAS o passo da rota bateu `same-tile` (#527): o índice do walker um
+   * atrás da posição real (ver `#playerStep`). A primeira vez fecha sozinha sem `hold()`; a
+   * segunda vez SEGUIDA cai no `hold()` de sempre — a válvula que evita o índice girar um laço
+   * pequeno inteiro sem o personagem nunca dar um passo físico. Zera em qualquer outro
+   * resultado (passo de verdade, `not-adjacent`, companheiro, parede).
+   */
+  sameTileStreak: number;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
   ringReplaced: string | null;
   warnedExhausted: boolean;
@@ -1053,6 +1062,8 @@ export interface RunnerState {
   readonly nudgedUntilMs?: number | null;
   /** Desde quando a travessia de escada do follow está sem progredir (#527). Ausente/`null` é fora. */
   readonly crossFloorStuckSinceMs?: number | null;
+  /** Quantas vezes SEGUIDAS o passo da rota bateu `same-tile` (#527). Ausente é zero. */
+  readonly sameTileStreak?: number;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1864,6 +1875,7 @@ export class HuntRuleset implements Ruleset {
       lureForceWalkUntilMs: state?.lureForceWalkUntilMs ?? null,
       nudgedUntilMs: state?.nudgedUntilMs ?? null,
       crossFloorStuckSinceMs: state?.crossFloorStuckSinceMs ?? null,
+      sameTileStreak: state?.sameTileStreak ?? 0,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2505,6 +2517,18 @@ export class HuntRuleset implements Ruleset {
       runner.walker.hold();
       return null;
     }
+    if (this.#isLeaderReservedTile(this.#leaderReservedTile(session, character), to)) {
+      // A PRÓPRIA rota deste seguidor tem a MESMA coordenada do próximo tile do líder num
+      // índice TOTALMENTE diferente do índice atual do líder (#527, achado numa QA ao vivo: a
+      // Darashia Dragon Lair repete um corredor estreito em (56,30)/(56,31) em três pontos da
+      // rota, cada um andando numa direção). `#holdFollow` já reserva o tile quando este
+      // personagem está seguindo ATIVAMENTE — mas aqui ele desistiu de seguir (`d > radius`) e
+      // caiu na rota própria, que não sabe nada sobre onde o líder está agora. Segura como um
+      // tile bloqueado; o vencimento seguinte tenta de novo, e por enquanto o corredor continua
+      // livre para o líder.
+      runner.walker.hold();
+      return null;
+    }
     let result = this.#step(session, character, to, character.id);
     if (!result.ok) {
       if (result.reason === 'not-adjacent') {
@@ -2574,12 +2598,49 @@ export class HuntRuleset implements Ruleset {
           runner.walker.hold();
           result = this.#step(session, character, { ...around, z: character.position.z }, character.id);
         }
+      } else if (
+        result.reason === 'same-tile' && runner.sameTileStreak < 1 && this.#hasActiveFollow(session)
+      ) {
+        // O ÍNDICE do walker está UM ATRÁS da posição real do personagem — ele chegou neste
+        // tile por outro caminho (o fecha-distância do ramo `not-adjacent` acima, um empurrão,
+        // qualquer passo guloso que não passa por `walker.step()`) antes do walker achar que
+        // devia estar lá (#527, achado restaurando um snapshot ao vivo TRAVADO: o Knight
+        // ficava parado com `walker.index` sempre voltando ao MESMO valor — `walker.step()`
+        // pedia o PRÓXIMO tile, que já era onde o personagem estava, `move()` recusava por
+        // `same-tile`, e o `hold()` genérico do `else` abaixo desfazia o AVANÇO do índice,
+        // repetindo o MESMO passo recusado para sempre). O índice já avançou (`walker.step()`,
+        // no topo) para o tile onde o personagem JÁ ESTÁ — está CERTO ficar assim; `hold()`
+        // aqui seria o bug. **Só a PRIMEIRA vez seguida** (`sameTileStreak`, #527, achado
+        // varrendo `hunt.test.ts`: sem o limite, um laço pequeno e cheio de companheiros podia
+        // bater `same-tile` vencimento após vencimento, e o índice girava o laço INTEIRO sem o
+        // personagem nunca dar um passo físico — o desvio real de produção é sempre UM tile,
+        // nunca uma sequência).
+        //
+        // **Só com follow de verdade na hunt** (`#hasActiveFollow`, #527, achado quebrando dois
+        // testes que já existiam — `hunt.test.ts` "party-member-lost com exitDelayMs" e
+        // `darashia-dragon-lair.test.ts` o respawn de 90 s — nenhum dos dois com follow
+        // configurado): sem isto, o mesmo desvio de UM tile podia acontecer numa hunt SEM
+        // party, e desprender o índice mais cedo do que o `hold()` de sempre — mudando timing
+        // que esses testes fixam, sem relação nenhuma com o bug real (um seguidor atravessando
+        // andar atrás do líder). O caso de produção que motivou isto é sempre de follow; fora
+        // dele, `hold()` continua sendo o comportamento OBSERVADO e testado. Registrado como
+        // acompanhamento: uma hunt solo pode em teoria bater o MESMO desvio por outro caminho
+        // (um `walk` manual, por exemplo) e ficar presa — não coberto por este fix.
+        //
+        // A partir da segunda vez seguida, cai no `hold()` de sempre —
+        // parede/companheiro de verdade, não desvio de índice.
+        runner.sameTileStreak += 1;
       } else {
         // Rota bloqueada por monstro é normal, e o walker precisa saber: sem `hold` o índice
         // avançaria e o personagem "pularia" o tile ocupado na volta seguinte.
         runner.walker.hold();
       }
     }
+    // Fora do `same-tile` consecutivo é o único caso em que a sequência CONTINUA — qualquer
+    // outro resultado (passo de verdade, `not-adjacent`, companheiro, parede) zera a contagem
+    // (#527): a válvula de `sameTileStreak` existe para um desvio de índice PERSISTENTE, não
+    // para dois desvios de UM tile cada, minutos de simulação lógica à parte.
+    if (result.ok || result.reason !== 'same-tile') runner.sameTileStreak = 0;
     this.#armPlayerAttack(session, character);
     return result;
   }
@@ -2628,7 +2689,13 @@ export class HuntRuleset implements Ruleset {
     if (blocker === undefined || this.#attackTarget(blocker) !== null) return;
     // Foge de QUEM PEDIU passagem, nunca do próprio tile — `at` é a posição atual do bloqueio,
     // e fugir dela seria fugir de si mesmo (vetor nulo, `fleeStep` sempre devolveria `null`).
-    const blocked = this.#blockedForGroundedStep(blocker);
+    const base = this.#blockedForGroundedStep(blocker);
+    // O nudge NUNCA larga quem cedeu em cima do tile reservado do líder (#527) — sem isto, abrir
+    // espaço para UM bloqueio podia criar outro: empurrar alguém exatamente para onde o líder
+    // precisa pisar em seguida, a mesma trava com uma causa diferente.
+    const reserved = this.#leaderReservedTile(session, blocker);
+    const blocked: Blocked = (x, y, z, monsterId) => base(x, y, z, monsterId)
+      || this.#isLeaderReservedTile(reserved, { x, y, z: z ?? blocker.position.z });
     let away = fleeStep(blocker.position, requester, blocked);
     if (away === null) {
       // `fleeStep` só tenta os três candidatos alinhados com a direção OPOSTA a quem pediu
@@ -2936,6 +3003,40 @@ export class HuntRuleset implements Ruleset {
     if (targetFollow !== undefined && targetFollow.kind !== 'none') return null;
     const ahead = targetRunner.walker.ahead(1);
     return { ...ahead, z: target.position.z };
+  }
+
+  /**
+   * O tile reservado do LÍDER da party especificamente (#527) — não "de quem eu sigo agora"
+   * (`#reservedRouteTile`, usado só dentro de `#holdFollow`), mas do líder mesmo quando ESTE
+   * personagem não está em follow ativo no momento. A rota é UMA SÓ, compartilhada pelos
+   * quatro, e um corredor estreito pode aparecer nela em índices BEM diferentes — achado numa
+   * QA ao vivo com o plano de bot real: (56,30)/(56,31) na Darashia Dragon Lair aparece em três
+   * pontos da rota (índices ~44–46, ~165–168, ~1451–1454), cada um numa direção diferente. Um
+   * seguidor pode chegar no tile que travaria o líder por um caminho que NUNCA passa por
+   * `#holdFollow` — a PRÓPRIA rota dele (quando `d > radius` desiste de seguir) tem essa MESMA
+   * coordenada em ALGUM índice próprio, sem nenhuma relação com o índice atual do líder; ou um
+   * nudge que abria espaço para outra coisa pode, por coincidência, largar alguém bem ali.
+   * `null` para o próprio líder (sempre livre para a própria rota) e para quem está em outro
+   * andar (a reserva só faz sentido no mesmo andar do líder).
+   */
+  #leaderReservedTile(session: Session, character: CharacterRuntime): FloorPoint | null {
+    // Só entra em jogo para quem TEM follow configurado — nunca para uma hunt de vários
+    // personagens andando a MESMA rota sem nenhuma relação de líder (`follow.kind: 'none'` em
+    // todo mundo, como em `hunt.test.ts`). `#leader(session)` sempre devolve alguém (cai para
+    // `participants[0]` sem `#party`), e sem este guarda qualquer hunt de andar único viraria
+    // "ninguém pode pisar onde o primeiro personagem vai pisar" — a MESMA regressão que
+    // `#hasActiveFollow` existe para evitar em `#clearCompanionsAround`.
+    const follow = this.#runnerOf(character.id).botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return null;
+    const leader = this.#leader(session);
+    if (leader === undefined || leader.id === character.id) return null;
+    if (!sameFloor(character.position.z, leader.position.z)) return null;
+    return this.#reservedRouteTile(leader);
+  }
+
+  /** `to`/`tile` é o tile reservado do líder (#527)? Comparação de coordenadas, sem alocar. */
+  #isLeaderReservedTile(reserved: FloorPoint | null, tile: FloorPoint): boolean {
+    return reserved !== null && tile.x === reserved.x && tile.y === reserved.y && tile.z === reserved.z;
   }
 
   /**
