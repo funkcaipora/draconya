@@ -3,7 +3,9 @@ import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
 import { applyDamageOutcome } from './combat/outcome.js';
 import type { DamageOutcome } from './combat/damage.js';
-import { Conditions, conditionFromSpec, tickOf } from './conditions.js';
+import {
+  Conditions, conditionFromSpec, damageOverTimeTicks, generateDamageList, tickOf,
+} from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
 
@@ -96,14 +98,79 @@ describe('Conditions', () => {
     const condition = conditionFromSpec(
       {
         key: 'poison', merge: 'strongest', durationMs: 4_000,
-        effect: { kind: 'damage-over-time', amount: 7, intervalMs: 2_000, damageType: 'earth' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 2_000, damage: 7 }], damageType: 'earth',
+        },
       },
       'm:9', 'hero', 1_000, 'spell',
     );
     expect(condition.targetId).toBe('m:9');
     expect(condition.sourceId).toBe('hero');
     expect(condition.expiresAtMs).toBe(5_000);
-    expect(condition.tick).toEqual({ kind: 'damage', amount: 7, intervalMs: 2_000, damageType: 'earth', source: 'spell' });
+    expect(condition.tick).toEqual({
+      kind: 'damage', amount: 7, intervalMs: 2_000, damageType: 'earth', source: 'spell',
+      queue: [{ amount: 7, intervalMs: 2_000 }, { amount: 7, intervalMs: 2_000 }],
+    });
+  });
+
+  it('a lista GERADA do Tibia (M31-02, #557) decresce de `startDamage` e soma `totalDamage`', () => {
+    // Poison field do Canary (`items.xml` id 2121: `ticks=5000 start=5 damage=100`) — o vetor
+    // calculado à mão para `generateDamageList(100, 5)`.
+    expect(generateDamageList(100, 5)).toEqual([
+      5, 5, 5, 5, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]);
+    expect(generateDamageList(100, 5).reduce((sum, value) => sum + value, 0)).toBe(100);
+  });
+
+  it('`damageOverTimeTicks` expande as duas formas; `startDamage` ausente usa o default do Canary', () => {
+    const generated = damageOverTimeTicks({
+      kind: 'damage-over-time', form: 'generated', totalDamage: 100, startDamage: 5,
+      intervalMs: 5_000, damageType: 'earth',
+    });
+    expect(generated).toHaveLength(46);
+    expect(generated[0]).toEqual({ amount: 5, intervalMs: 5_000 });
+    expect(generated.at(-1)).toEqual({ amount: 1, intervalMs: 5_000 });
+
+    // Ausente, `startDamage` é `max(1, ceil(totalDamage/20))` — 5 para 100, o mesmo do campo.
+    const withDefault = damageOverTimeTicks({
+      kind: 'damage-over-time', form: 'generated', totalDamage: 100,
+      intervalMs: 5_000, damageType: 'earth',
+    });
+    expect(withDefault).toEqual(generated);
+
+    // Ignite do Canary: `addDamage(25, 3000, -45)` — 25 rodadas iguais de 45.
+    const rounds = damageOverTimeTicks({
+      kind: 'damage-over-time', form: 'rounds',
+      rounds: [{ count: 25, intervalMs: 3_000, damage: 45 }], damageType: 'fire',
+    });
+    expect(rounds).toHaveLength(25);
+    expect(new Set(rounds.map((tick) => tick.amount))).toEqual(new Set([45]));
+  });
+
+  it('reaplicação: `strongest` compara o TOTAL restante (tique + fila), não só o próximo tique', () => {
+    // A regra do Canary (`ConditionDamage::updateCondition`): o total NOVO só vence se for MAIOR
+    // que o total que falta do antigo — nunca o valor do próximo tique isolado. Sem somar a
+    // fila, o próximo tique de `weakButFrontHeavy` (50) pareceria mais forte que o de
+    // `strongerTotal` (10) — e a política manteria o antigo errado.
+    const conditions = new Conditions();
+    const weakButFrontHeavy: ConditionState = {
+      key: 'burn', expiresAtMs: 100_000, merge: 'strongest',
+      tick: { kind: 'damage', amount: 50, intervalMs: 1_000, damageType: 'fire', source: 'spell' },
+    };
+    const strongerTotal: ConditionState = {
+      key: 'burn', expiresAtMs: 100_000, merge: 'strongest',
+      tick: {
+        kind: 'damage', amount: 10, intervalMs: 1_000, damageType: 'fire', source: 'spell',
+        queue: Array.from({ length: 5 }, () => ({ amount: 10, intervalMs: 1_000 })),
+      },
+    };
+    expect(conditions.apply(weakButFrontHeavy)).toBeNull();
+    // Total de `strongerTotal`: 10 + 5×10 = 60, maior que os 50 (sem fila) de `weakButFrontHeavy`
+    // — o novo vence, mesmo com o PRÓXIMO tique (10) menor que o do antigo (50).
+    expect(conditions.apply(strongerTotal)).toBe(weakButFrontHeavy);
+    expect(conditions.get('burn')).toBe(strongerTotal);
   });
 });
 

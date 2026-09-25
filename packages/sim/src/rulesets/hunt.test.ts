@@ -7310,8 +7310,11 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
             id: 'dragon-lord-firefield', durationMs: 200_000,
             shape: { shape: 'circle' as const, radius: 4, centered: 'target' as const },
             condition: {
-              key: 'burning', merge: 'refresh' as const, durationMs: 70_000,
-              effect: { kind: 'damage-over-time' as const, amount: 20, intervalMs: 10_000, damageType: 'fire' as const },
+              key: 'burning', merge: 'strongest' as const, durationMs: 70_000,
+              effect: {
+                kind: 'damage-over-time' as const, form: 'rounds' as const,
+                rounds: [{ count: 7, intervalMs: 10_000, damage: 20 }], damageType: 'fire' as const,
+              },
             },
           },
         },
@@ -7432,7 +7435,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     shape: { shape: 'circle', radius: 1, centered: 'caster' },
     condition: {
       key: 'fire', merge: 'refresh', durationMs: 20_000,
-      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 40, intervalMs: 500, damage: 10 }], damageType: 'fire',
+      },
     },
   };
 
@@ -7457,7 +7463,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
         id: 'venom', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'physical',
         condition: {
           key: 'venom', merge: 'refresh', durationMs: 3_000,
-          effect: { kind: 'damage-over-time', amount: 15, intervalMs: 500, damageType: 'earth' },
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 6, intervalMs: 500, damage: 15 }], damageType: 'earth',
+          },
         },
       }],
     };
@@ -7589,7 +7598,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
       shape: { shape: 'circle', radius: 5, centered: 'caster' },
       condition: {
         key: 'wide-fire', merge: 'refresh', durationMs: 1_300,
-        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 500, damage: 10 }], damageType: 'fire',
+        },
       },
     };
     const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });

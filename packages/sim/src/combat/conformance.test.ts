@@ -373,14 +373,20 @@ const HUNT_MONSTER = {
     power: 100, damageType: 'fire',
     condition: {
       key: 'burn', merge: 'refresh', durationMs: 4_000,
-      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, damageType: 'fire' },
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 4, intervalMs: 1_000, damage: 10 }], damageType: 'fire',
+      },
     },
     field: {
       id: 'fire', durationMs: 3_000,
       shape: { shape: 'circle', radius: 1, centered: 'target' },
       condition: {
         key: 'fire', merge: 'refresh', durationMs: 3_000,
-        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, damageType: 'fire' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 1_000, damage: 10 }], damageType: 'fire',
+        },
       },
     },
   }],
