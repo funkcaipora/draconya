@@ -1,6 +1,6 @@
 # 0027 — Party de hunt: uma sessão com N donos, XP por vocação única e dois modos de loot e custo
 
-**Status:** aceito — decisão 5 emendada por #359 (custo e loot como dois eixos independentes) e pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisões 8 e 9 emendadas pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisão 8 emendada de novo pelo [ADR 0036](0036-party-standalone-surface-and-leader-start.md) (fim da aprovação pré-start); decisão 3 emendada em 2026-09-24 (#525) pela fidelidade TFS/Canary do ADR 0037 (ainda em outra branch, `docs/adr-0037-tibia-fidelity`, não mesclada nesta)
+**Status:** aceito — decisão 5 emendada por #359 (custo e loot como dois eixos independentes) e pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisões 8 e 9 emendadas pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisão 8 emendada de novo pelo [ADR 0036](0036-party-standalone-surface-and-leader-start.md) (fim da aprovação pré-start); decisão 3 emendada em 2026-09-24/25 (#525) pela fidelidade CANARY do ADR 0037 decisão 4 (ainda em outra branch, `docs/adr-0037-tibia-fidelity`, não mesclada nesta)
 **Data:** 2026-09-15
 **Contexto técnico:** `packages/sim` (session, hunt ruleset, novo `party.ts`), `packages/content`
 (`party/`, `item.value`), `packages/protocol` (party no ticket e no `session-state`),
@@ -141,65 +141,124 @@ sessão já decidiu, não como controle editável, até uma issue de produto sep
 edita e quando" — a proposta default, registrada aqui, é que a edição continue acontecendo na
 proposta do líder (como o `mode` faz hoje), não durante a hunt.
 
-## Emenda — 2026-09-24 (#525): XP compartilhada com a fórmula e a elegibilidade do TFS/Canary
+## Emenda — 2026-09-24/25 (#525): XP compartilhada com a fórmula e a elegibilidade do Canary
 
 A decisão 3 original (`pool% = min(100 + 25 × únicas, 200)`, "nenhuma" vocação contando como uma
 a mais, cota `floor(pool / elegíveis)`) foi um palpite razoável para a FUN-71, escrito antes do
 ADR 0037 fixar que mecânica de jogo copiada do Tibia usa o NÚMERO real das engines de origem, não
-uma aproximação nossa. A M28 (party de dragões, paridade TFS) pediu conferir os números contra o
-TFS e o Canary, e os dois divergem da decisão original em três pontos:
+uma aproximação nossa — e decisão 4 daquele ADR é explícita: **o Canary manda em fórmula**. Uma
+revisão adversarial da primeira versão desta emenda (2026-09-24) encontrou oito problemas, todos
+do mesmo tipo: ela tinha sido escrita contra o TFS, e o TFS e o Canary DIVERGEM aqui em três
+eixos. A versão abaixo reproduz o Canary — o que a decisão 4 pede — e registra onde o TFS diverge,
+sem misturar os dois.
 
-1. **"Nenhuma" vocação (level < 8) NÃO conta como vocação única.** `Party:onShareExperience` do
-   TFS (`data/events/scripts/party.lua`) exclui `VOCATION_NONE` de `vocationsIds` explicitamente.
-   A decisão original tratava "nenhuma" como uma vocação a mais — provavelmente para nunca ler
-   uma tabela sem a linha `"0"`, mas o efeito era inflar o pool de qualquer party com um membro
-   sem vocação. `uniqueVocations` (`packages/sim/src/party.ts`) agora exclui `null`, e a leitura
-   da tabela usa `max(1, únicas)` para continuar sem precisar da linha `"0"`.
-2. **A tabela correta é `{1: 120, 2: 130, 3: 160, 4: 200}`, não `{125, 150, 175, 200}`.** A fonte
-   é `1 + n × (5 × (n − 1) + 10) / 100` para `n > 1`, `1,20` para `n ≤ 1` — do TFS. O Canary
-   (`onShareExperience`, `data/events/scripts/party.lua` de lá) usa uma fórmula quadrática
-   diferente (`0,1n² − 0,2n + 1,3`, com ajuste de −0,1 em `partySize ≥ 4`) que rende os MESMOS
-   números para `n = 1..4` — as duas engines concordam no resultado, só não na forma de chegar
-   lá. A tabela antiga nunca foi *sourced*; era um palpite de "25 % por vocação única, teto 200".
-3. **A cota final ARREDONDA PARA CIMA (`ceil`), não descarta o resto.** `Party:onShareExperience`
-   do TFS e `Party::shareExperience`/`onShareExperience` do Canary fazem
-   `ceil(xp × multiplicador / (membros + 1))` — um cálculo só, não "pool flooreado, depois
-   dividido flooreado" como a implementação original fazia. A soma das cotas pode passar o pool
-   por até `n − 1`: é assim nas duas engines, e a fidelidade do ADR 0037 pede a regra observada,
-   não o hábito de "resto sempre descartado" que o resto deste arquivo (loot, gold) mantém por
-   uma razão diferente (§15.5, prioridade por golpe — que não se aplica aqui, porque a cota de
-   XP não escolhe QUEM leva o resto, ela dá um pouco mais para TODOS).
+### A fórmula real do Canary (`Party:onShareExperience`, `data/events/scripts/party.lua`)
 
-**Elegibilidade nova, que a decisão original não tinha**: o TFS e o Canary desligam a divisão
-igual do abate inteiro — não só para quem falhou — quando qualquer elegível não atende, ao mesmo
-tempo: nível dentro de `ceil(maiorLevel / 1,5)` ("2/3 do maior level da party", constante no TFS,
-`partyShareRangeMultiplier` configurável no Canary com default `1,5`); alcance de 30 tiles e 1
-andar do LÍDER (`EXPERIENCE_SHARE_RANGE`/`FLOORS` do TFS, `Position::areInRange<30, 30, 1>` do
-Canary); e atividade — atacou ou curou nos últimos 2 minutos, seguindo o CANARY
-(`Party::isPlayerActive`) por precedência do ADR 0037 decisão 4, porque o TFS usa `pzLocked`
-(config de Proteção contra PK, não de party, default 1 minuto). Quando a regra desliga, cada
-elegível recebe XP pelo DANO que causou no abate (`Creature::getGainedExperience`,
-`floor(dano/total × xp)`) — o mesmo caminho que o Tibia usa fora de party. A implementação vive
-em `canShareExperience`/`xpByDamage` (`packages/sim/src/party.ts`) e `#xpShares`
-(`packages/sim/src/rulesets/hunt.ts`); os parâmetros (30 tiles, 1 andar, divisor 1,5, janela de
-atividade) entram em `content/data/party/baseline.json` (`sharedExperience`), não hardcoded, pela
-mesma razão de `xpPoolPercentByUniqueVocations` já ser dado versionado.
+```
+n  = Party::getUniqueVocationsCount()                    (capado em 4, "nenhuma" CONTA)
+sz = getMemberCount() + 1                                 (o ROSTER inteiro: líder + membros)
+m  = 0,1 × n² − 0,2 × n + 1,3                              (fração; em percentual: 10n² − 20n + 130)
+m  = sz ≥ 4 ? m − 0,1 : m                                  (percentual: m − 10)
+cota = ceil(xp × m / sz)                                   (o DIVISOR é sz, não n nem "elegíveis")
+```
 
-**Simplificação registrada** (D13): o TFS/Canary avaliam a elegibilidade sobre o ROSTER inteiro
-da party — presente em qualquer lugar do mundo, continuamente, como um estado que liga/desliga
-por evento. O Draconya reavalia do zero a cada abate, sobre os elegíveis (vivo + stamina) da
-SESSÃO — que já É "quem está na hunt" nesta arquitetura: morrer em party é sair (`#depart`, #193),
-então não existe aqui o caso de um membro morto ainda contando como roster para o alcance/nível.
-`highestLevel`, porém, usa TODOS os participantes da sessão (não só os elegíveis desta chamada) —
-um membro exausto ainda é da party e ainda define a régua, mesmo sem receber cota nenhuma; é a
-leitura mais literal de "maior level da party" sem inventar um terceiro conjunto.
+Três pontos em que a versão de 2026-09-24 desta emenda errou, e a correção:
 
-**Consequência aceita, e não um defeito**: um membro que nunca ataca nem cura durante uma hunt
-inteira (sem bot configurado, por exemplo) desliga a divisão igual para a party inteira o tempo
-todo — inclusive o abate que acontece no instante 0 da sessão, antes de qualquer um ter tido a
-chance de agir. É o comportamento OBSERVADO nas duas engines de origem: dividir igual com quem
-ficou parado seria dar XP de graça, e nem o TFS nem o Canary fazem isso. `docs/product/party.md`
-registra o exemplo numérico.
+1. **"Nenhuma" vocação (level < 8) CONTA como vocação distinta — não exclui, ao contrário do que
+   a versão anterior desta emenda registrou citando só o TFS.** `Party::getUniqueVocationsCount`
+   (`src/creatures/players/grouping/party.cpp`) insere `vocation->getBaseId()` de todo jogador do
+   roster, com só uma guarda de ponteiro nulo (`if (!vocation) continue`) — sem excluir
+   `VOCATION_NONE`. A vocação "None" (`data/XML/vocations.xml`, `id="0" baseid="0"`) é um
+   `Vocation*` REAL, não um ponteiro nulo. **O TFS diverge**: `Party:onShareExperience` exclui
+   `VOCATION_NONE` de `vocationsIds` explicitamente — mas é o Canary que manda em fórmula (ADR
+   0037 d.4), e é o Canary que este código reproduz. `uniqueVocations`
+   (`packages/sim/src/party.ts`) capa em 4 (o próprio loop do Canary para de contar ao chegar em
+   4 distintas) e não exclui `null`.
+2. **O desconto de −0,1 (−10 pontos percentuais) é gatilhado pelo TAMANHO da party, não pela
+   contagem de vocações únicas.** O comentário do Canary ("subtract 0.1 if all vocations are
+   present, because on all vocations the multiplier is 2.1 and it should be 2.0") descreve a
+   INTENÇÃO — 4 vocações reais —, mas o CÓDIGO testa `partySize < 4`, o tamanho TOTAL da party.
+   Uma party de 4 knights (`n = 1`) TAMBÉM desconta (120 % → 110 %), porque tem 4 membros; uma de
+   2 knights + 2 druids (`n = 2`) desconta igual (130 % → 120 %). Este código reproduz o CÓDIGO,
+   não o comentário — é o que "fidelidade" significa quando os dois divergem, e é o achado #1 da
+   revisão: a versão de 24/09 indexava só por vocações únicas, sem termo de tamanho, e divergia
+   do Canary real em qualquer party de 4+ com vocação repetida.
+3. **O DIVISOR da cota final é o TAMANHO TOTAL da party (`getMemberCount() + 1`), não a
+   contagem de elegíveis.** O TFS faz o mesmo (`#self:getMembers() + 1`) — os dois concordam
+   nisto. A versão de 24/09 dividia por `eligible.length`; corrigido para `allMembers.length`, o
+   roster inteiro da sessão (ver "Duas populações", abaixo).
+
+A tabela `xpPoolPercentByUniqueVocations` SAIU do conteúdo (`packages/content/data/party/
+baseline.json`, schema em `packages/content/src/schemas.ts`): o desconto por TAMANHO não cabe
+numa tabela indexada só por vocações únicas sem uma segunda dimensão, e o número não é
+balanceamento — é mecanismo copiado, a mesma categoria de `movementDuration`/`resolveDamage`.
+`sharedExperiencePercent` (`packages/sim/src/party.ts`) é a fórmula em código; uma chave
+`xpPoolPercentByUniqueVocations` num `RawContent` antigo é ignorada (schema não estrito), sem
+precisar de migração.
+
+**As duas engines só concordam por coincidência, nunca por regra**: `n = 4` sempre implica
+`sz ≥ 4` nas duas, então o TFS (sem desconto) dá 200 % e o Canary (com desconto) dá 210 % − 10 % =
+200 % — coincidem NESTE caso só porque o desconto do Canary cancela exatamente a diferença da
+fórmula quadrática dele para a linear do TFS. Em QUALQUER outra composição (vocação repetida,
+"nenhuma" presente, tamanho ≠ vocações únicas) os números divergem, às vezes na mesma direção,
+às vezes não — não existe uma regra curta que diga quando batem.
+
+### Elegibilidade (`Party::canUseSharedExperience`, TFS e Canary concordam aqui)
+
+Nova nesta emenda, e ausente na decisão original: o TFS e o Canary desligam a divisão igual do
+abate inteiro — não só para quem falhou — quando qualquer membro do ROSTER (não só quem vai
+receber cota) não atende, ao mesmo tempo:
+
+- **nível**: dentro de `ceil(maiorLevel / 1,5)` ("2/3 do maior level da party", constante no TFS,
+  `partyShareRangeMultiplier` configurável no Canary com default `1,5`);
+- **alcance**: 30 tiles e 1 andar do LÍDER (`EXPERIENCE_SHARE_RANGE`/`FLOORS` do TFS,
+  `Position::areInRange<30, 30, 1>` do Canary);
+- **atividade**: atacou, ou curou OUTRO PARTICIPANTE (nunca a si mesmo — ver abaixo), nos
+  últimos 2 minutos, seguindo o CANARY (`Party::isPlayerActive`) por precedência do ADR 0037
+  decisão 4, porque o TFS usa `pzLocked` (config de Proteção contra PK, não de party, default 1
+  minuto).
+
+Quando a regra desliga, cada elegível recebe XP pelo DANO que causou no abate
+(`Creature::getGainedExperience`, `floor(dano/total × xp)`) — o mesmo caminho que o Tibia usa
+fora de party, SEM o teto da cota compartilhada: quem causa 100 % do dano leva o XP INTEIRO do
+monstro, não a cota dividida. A implementação vive em `canShareExperience`/`xpByDamage`
+(`packages/sim/src/party.ts`) e `#xpShares` (`packages/sim/src/rulesets/hunt.ts`); os parâmetros
+(30 tiles, 1 andar, divisor 1,5, janela de atividade) entram em
+`content/data/party/baseline.json` (`sharedExperience`), não hardcoded — este bloco, ao
+contrário do multiplicador, É balanceável sem redesenho (é um número por eixo, não uma fórmula
+com dimensão nova), então continua conteúdo versionado.
+
+**Curar A SI MESMO não conta como atividade** (achado #4 da revisão). `Player::isPartner`
+(`player.cpp`, TFS e Canary) exclui `player == this` antes de `updatePlayerTicks` por cura — só
+curar um PARCEIRO, ou atacar um monstro, prova engajamento com a party. `#emitHealed`
+(`packages/sim/src/rulesets/hunt.ts`) só chama `#markCombatActive` quando o recipiente da cura é
+DIFERENTE do healer; o HPS (`creditHealing`) continua contando o self-heal, porque é outra
+pergunta ("quanto curei", não "estou com a party"). O código do Canary para este caminho
+específico (`onTargetCreatureGainHealth`) tem uma variável não resolvida antes do uso que o torna
+inerte na versão observada — a INTENÇÃO de excluir a si mesmo é idêntica nas duas engines
+(mesmo `isPartner`), e é essa intenção, confirmada pelo TFS funcional, que este código reproduz.
+
+### Duas populações: `allMembers` (roster) e `eligible` (quem recebe)
+
+O TFS/Canary avaliam elegibilidade E calculam `n`/`sz` sobre o ROSTER inteiro da party
+(`getPlayers()`: líder + membros, presente ou não elegível para receber XP). O Draconya usa
+`session.participants` como esse roster — que já É "quem está na hunt" nesta arquitetura: morrer
+em party é sair (`#depart`, #193), então não existe aqui o caso Tibia de um membro morto ainda
+contando para o roster. Dentro desse roster, uma extensão SÓ do Draconya (sem equivalente nas
+engines de origem) é a stamina: um membro sem stamina continua no roster — ainda conta para `n`,
+para `sz` (o divisor) e para `highestLevel`/alcance/atividade em `canShareExperience` — mas não
+está em `eligible` e não recebe cota nenhuma, do mesmo jeito que sempre decidiu se o matador
+recebia em solo. As duas populações têm nomes DIFERENTES no código (`allMembers` vs. `eligible`)
+de propósito, para a distinção não se perder na próxima leitura.
+
+### Consequência aceita, e não um defeito
+
+Um membro que nunca ataca nem cura outro participante durante uma hunt inteira (sem bot
+configurado, por exemplo) desliga a divisão igual para a party inteira o tempo todo — inclusive o
+abate que acontece no instante 0 da sessão, antes de qualquer um ter tido a chance de agir. É o
+comportamento OBSERVADO (ou, no caso do self-heal do Canary, INTENCIONADO e confirmado pelo TFS)
+nas engines de origem: dividir igual com quem ficou parado seria dar XP de graça, e nem o TFS nem
+o Canary fazem isso. `docs/product/party.md` registra os exemplos numéricos.
 
 O rateio de loot/custo (decisão 5, a bolsa compartilhada) **não muda** — a #505 está em andamento
 nele, separadamente. Nenhum invariante é afetado: o 8 e o 9 continuam pela mesma leitura do texto

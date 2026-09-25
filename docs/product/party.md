@@ -8,10 +8,12 @@ pública, Amigos e convites visíveis, follow de membro e cura com alvo. Matchma
 faixa de level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`). **M26 (#501,
 #503; ADR 0036)**: superfície própria da party (`PartyModal`), fim da aprovação pré-start, sala
 com composição por vocação e busca filtrada no servidor, convite social e convite só fora de
-hunt. **M28 (#525; ADR 0027 emenda 2026-09-24, ADR 0037):** XP compartilhada com a fórmula e a
-elegibilidade do TFS/Canary — vocação real (sem vocação não soma), cota arredondada para cima, e
-o gate de nível/alcance/atividade que desliga a divisão igual do abate inteiro quando falha.
-**Última atualização:** 2026-09-24
+hunt. **M28 (#525; ADR 0027 emenda 2026-09-24/25, ADR 0037 d.4):** XP compartilhada com a
+fórmula e a elegibilidade do CANARY (não o TFS — as duas engines divergem, ver a emenda) —
+"nenhuma" vocação CONTA como distinta, o desconto de 10 pontos é por TAMANHO da party (não por
+vocações únicas), cota arredondada para cima, self-heal não conta como atividade, e o gate de
+nível/alcance/atividade que desliga a divisão igual do abate inteiro quando falha.
+**Última atualização:** 2026-09-25
 **PRD:** §15, §43.2
 **Épico:** E9
 
@@ -133,76 +135,102 @@ A party **sobrevive ao `start`** (`state: 'hunting'`, `sessionId`) em Redis, com
 passa a ser lazy: quando o `directory` não conhece mais a sessão, `/mine` e `rooms` apagam o
 registro.
 
-### XP (§15.3, emendado pelo ADR 0027 em 2026-09-24, #525, fidelidade TFS/Canary do ADR 0037)
+### XP (§15.3, emendado pelo ADR 0027 em 2026-09-24/25, #525, fidelidade CANARY do ADR 0037 d.4)
 
-A XP de cada abate vem de um **pool por vocações únicas REAIS**, dividido por igual entre os
+A XP de cada abate vem de um **pool por vocações únicas do ROSTER**, dividido por igual entre os
 elegíveis (vivo, stamina > 0, presente na sessão) — quando a party inteira atende a
-elegibilidade de XP compartilhada do TFS/Canary. A fórmula segue `Party:onShareExperience` (TFS)
-e `Party::canUseSharedExperience` (as duas engines):
+elegibilidade de XP compartilhada. A fórmula segue o **CANARY** (`Party:onShareExperience`,
+`Party::getUniqueVocationsCount`, `Party::canUseSharedExperience`) — não o TFS: as duas engines
+divergem aqui, e a decisão 4 do ADR 0037 é explícita sobre qual manda em fórmula.
 
 ```
-percent = tabela[max(1, vocações únicas REAIS entre os elegíveis)]
-cota    = ceil(xp × percent / (100 × elegíveis))     — arredonda PARA CIMA, não descarta o resto
+n       = vocações únicas do ROSTER inteiro, capadas em 4 — "nenhuma" (sem vocação) CONTA
+tamanho = quantos personagens há na party (roster inteiro, não só elegíveis)
+percent = 10 × n² − 20 × n + 130
+percent = tamanho ≥ 4 ? percent − 10 : percent
+cota    = ceil(xp × percent / (100 × tamanho))     — arredonda PARA CIMA, não descarta o resto
 ```
 
-A tabela é `{ 1: 120, 2: 130, 3: 160, 4: 200, 5: 200, 6: 200, 7: 200, 8: 200 }` % —
-`1 + n × (5 × (n − 1) + 10) / 100` para `n > 1`, `1,20` para `n ≤ 1`, sourced do
-`Party:onShareExperience` do TFS (`data/events/scripts/party.lua`; o Canary usa uma fórmula
-quadrática diferente que rende os MESMOS números para `n = 1..4`), com as chaves 5–8 repetindo o
-teto porque o schema exige uma linha por membro até `maxMembers` (o teto real de vocações
-distintas é 4: Knight, Paladin, Sorcerer, Druid). Solo (um elegível) é 100 %, sem tabela.
-**Personagem sem vocação (level < 8) NÃO conta mais como vocação única** — o TFS exclui
-`VOCATION_NONE` explicitamente, e antes deste fix "nenhuma" contava como uma a mais (a tabela
-`{125, 150, 175, 200}` era um palpite nunca *sourced*). Uma party inteira sem vocação real lê a
-mesma linha `"1"` que uma vocação real só (120 %), não `"0"` — a tabela não tem essa chave. O
-bônus de Bestiário de cada membro se aplica à **cota** dele, na ordem de sempre (`applyXpBonus` →
-`grantXp` → `record`), e o abate conta no Bestiário de **todo** elegível (decisão 4), não só do
-matador. Level up e marco de Bestiário são eventos notáveis que dizem de quem (`id/level`,
+Não é mais tabela: é `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do
+Canary copiada em código — o desconto por TAMANHO (não por vocações únicas) não cabe numa tabela
+de uma dimensão só, e o número não é balanceamento, é mecanismo. Solo (um elegível) é 100 %, sem
+ler a fórmula. **"Nenhuma" vocação (level < 8) CONTA como vocação distinta** —
+`Party::getUniqueVocationsCount` (`src/creatures/players/grouping/party.cpp`) insere o `baseId`
+de todo jogador sem excluir `VOCATION_NONE`; a vocação "None" é um `Vocation*` real, não um
+ponteiro nulo. **O TFS diverge** e exclui — mas o Canary manda em fórmula. O bônus de Bestiário
+de cada membro se aplica à **cota** dele, na ordem de sempre (`applyXpBonus` → `grantXp` →
+`record`), e o abate conta no Bestiário de **todo** elegível (decisão 4), não só do matador.
+Level up e marco de Bestiário são eventos notáveis que dizem de quem (`id/level`,
 `id/monstro/marco`).
 
-Exemplos com um monstro de 100 XP, com todos elegíveis para compartilhar: quatro vocações
-distintas → `ceil(200/4)` = **50 cada** (igual a antes: 200 % divide igual em 4); dois knights →
-`ceil(120×2/200)` = **60 cada** (era 62 — 125 % ÷ 2 com `floor`; agora 120 % ÷ 2 com `ceil`);
-knight + sem vocação → **60 cada** (era 75, porque "nenhuma" somava à conta — agora é 1 vocação
-real, não 2); knight + druid + um morto → 2 vocações reais entre os 2 elegíveis, `ceil(130×2/200)`
-= **65 cada**, o morto nada.
+O desconto de −10 pontos é gatilhado pelo TAMANHO da party (`n` de personagens), não pela
+contagem de vocações únicas — o comentário do próprio Canary fala em "todas as vocações
+presentes", mas o código testa o tamanho. Uma party de 4 knights (uma vocação só) TAMBÉM
+desconta, porque tem 4 membros; é o achado central da revisão que corrigiu esta emenda.
 
-#### Elegibilidade de XP compartilhada (`Party::canUseSharedExperience` do TFS/Canary)
+Exemplos com um monstro de 100 XP, com todos elegíveis para compartilhar:
 
-A divisão igual acima só vale quando a party INTEIRA atende, ao mesmo tempo, três condições —
-falhar QUALQUER uma delas desliga a divisão igual para o abate INTEIRO, não só para quem falhou:
+| Composição | `n` | tamanho | % | cota por cabeça |
+|---|---|---|---|---|
+| 4 vocações distintas | 4 | 4 | `10×16−80+130−10` = 200 | `ceil(200/4)` = **50** |
+| 2 knights | 1 | 2 | `10−20+130` = 120 | `ceil(120×2/200)` = **60** |
+| knight + druid | 2 | 2 | `40−40+130` = 130 | `ceil(130×2/200)` = **65** |
+| knight + sem vocação | 2 | 2 | 130 (mesmo que knight+druid — "nenhuma" É distinta) | **65** |
+| 4 knights | 1 | 4 | `120 − 10` = **110** | `ceil(110×4/400)` = **28** |
+| 2 knights + 2 druids | 2 | 4 | `130 − 10` = **120** (o TFS daria 130 — mesmo `n`, sem desconto por tamanho) | `ceil(120×4/400)` = **30** |
+| 2 knights + 2 druids + 1 sorcerer | 3 | 5 | `160 − 10` = **150** | `ceil(150×5/500)` = **30** |
+
+A linha "2 knights + 2 druids" é o exemplo que expõe a divergência TFS/Canary com mais clareza:
+mesma contagem de vocações únicas (2), resultado diferente (120 % no Canary, 130 % no TFS)
+porque só o Canary olha o TAMANHO da party.
+
+#### Elegibilidade de XP compartilhada (`Party::canUseSharedExperience` — TFS e Canary concordam aqui)
+
+A divisão igual acima só vale quando TODO membro do ROSTER (não só quem vai receber cota) atende,
+ao mesmo tempo, três condições — falhar QUALQUER uma delas desliga a divisão igual para o abate
+INTEIRO, não só para quem falhou:
 
 - **Nível**: `level ≥ ceil(maiorLevel / 1,5)` — "2/3 do maior level da party". `maiorLevel` é o
-  MAIOR level de TODA a sessão (elegível ou não: um membro exausto ainda define a régua). O
+  MAIOR level de TODO o roster (elegível ou não: um membro exausto ainda define a régua). O
   `1,5` é o `partyShareRangeMultiplier` do Canary (default) — o TFS fixa "2/3" no código; os dois
   concordam no valor observado.
 - **Alcance**: até 30 tiles em x/y e 1 andar de diferença do LÍDER (nunca entre membros entre
   si) — `EXPERIENCE_SHARE_RANGE`/`FLOORS` do TFS, `Position::areInRange<30, 30, 1>` do Canary. Com
   hunts multiandar (#519), `z` vem da posição de cada personagem.
-- **Atividade**: atacou ou curou nos últimos 2 minutos (`activityWindowMs`). Segue o CANARY
-  (`Party::isPlayerActive`) por precedência do ADR 0037 d.4 — o TFS usa `pzLocked` (1 minuto por
-  padrão), que é config de Proteção contra PK, não de party. Um membro que nunca agiu é INATIVO
-  desde a entrada (equivalente a não ter entrada no `ticksMap` das engines de origem).
+- **Atividade**: atacou, ou curou OUTRO PARTICIPANTE, nos últimos 2 minutos
+  (`activityWindowMs`). **Curar a si mesmo NÃO conta** — `Player::isPartner` (TFS e Canary)
+  exclui `player == this` antes de registrar atividade por cura; o HPS continua contando o
+  self-heal, só a atividade de XP compartilhada exige um recipiente diferente. Segue o CANARY
+  (`Party::isPlayerActive`, 2 minutos) por precedência do ADR 0037 d.4 — o TFS usa `pzLocked`
+  (1 minuto por padrão), que é config de Proteção contra PK, não de party. Um membro que nunca
+  agiu é INATIVO desde a entrada (equivalente a não ter entrada no `ticksMap` das engines de
+  origem).
 
 Quando a regra desliga, cada elegível recebe XP **pelo DANO que causou no abate**:
 `floor(dano do membro / dano total × xp)` — igual ao `Creature::getGainedExperience` do
-TFS/Canary. Quem não bateu recebe zero; a party não "cobre" quem ficou parado. `dano total`
-conta TODO `damageByActor`, inclusive de quem não é mais elegível (morreu, saiu) — como o
-`damageMap` das engines de origem, que não filtra por quem ainda pode receber XP.
+TFS/Canary, SEM o teto da cota compartilhada: quem causa 100 % do dano num abate leva o XP
+INTEIRO do monstro, não uma fração dividida. Quem não bateu recebe zero; a party não "cobre" quem
+ficou parado. `dano total` conta TODO `damageByActor`, inclusive de quem não é mais elegível
+(morreu, saiu) — como o `damageMap` das engines de origem, que não filtra por quem ainda pode
+receber XP.
 
 **Na prática**, isto tem uma consequência visível: o PRIMEIRO abate de uma hunt costuma cair no
 rateio por dano, porque ninguém teve tempo de "agir" ainda quando o golpe inicial (já
-ENGATILHADO) mata o primeiro monstro — e um membro que nunca chega a atacar nem curar durante
-toda a hunt (sem bot configurado, por exemplo) desliga a divisão igual para a party inteira o
-tempo todo, não só para ele. É o comportamento OBSERVADO nas duas engines de origem, não um
-efeito colateral do Draconya: dividir igual com quem ficou parado seria dar XP de graça.
+ENGATILHADO) mata o primeiro monstro — e um membro que nunca chega a atacar nem curar OUTRO
+durante toda a hunt (sem bot configurado, por exemplo) desliga a divisão igual para a party
+inteira o tempo todo, não só para ele. É o comportamento OBSERVADO (ou, no self-heal do Canary,
+INTENCIONADO e confirmado pelo TFS funcional) nas engines de origem, não um efeito colateral do
+Draconya: dividir igual com quem ficou parado seria dar XP de graça.
 
-**Simplificação registrada**: as duas engines de origem checam a elegibilidade de TODOS os
-membros do roster da party (presentes em qualquer lugar do mundo), continuamente, como um estado
-que liga/desliga por evento (entrada, saída, ataque). O Draconya reavalia do zero a cada abate,
-sobre os elegíveis (vivo + stamina) da sessão — que, nesta arquitetura, JÁ são "quem está na
-hunt": morrer em party é sair (`#depart`), então não existe aqui o caso Tibia de um membro morto
-ou fora da hunt ainda contando como parte do roster para este cálculo.
+**Simplificação registrada**: as engines de origem checam elegibilidade e calculam `n`/tamanho
+sobre o ROSTER inteiro da party (presente em qualquer lugar do mundo), continuamente, como um
+estado que liga/desliga por evento (entrada, saída, ataque). O Draconya usa `session.participants`
+como esse roster — que, nesta arquitetura, JÁ é "quem está na hunt": morrer em party é sair
+(`#depart`), então não existe aqui o caso Tibia de um membro morto ainda contando como roster.
+Uma extensão SÓ do Draconya, sem equivalente nas engines de origem, é a stamina: um membro
+exausto continua no roster — conta para `n`, tamanho e nível/alcance/atividade — mas não está
+entre os elegíveis e não recebe cota nenhuma, a mesma condição que sempre decidiu se o matador
+recebia em solo.
 
 ### Dois eixos mutáveis de loot e custo (§4, §5, §15.4, §15.5)
 
