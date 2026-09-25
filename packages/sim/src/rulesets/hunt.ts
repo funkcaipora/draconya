@@ -17,7 +17,7 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, floorChangeToward,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, floorChangeAt, floorChangeToward,
   isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
@@ -2449,7 +2449,19 @@ export class HuntRuleset implements Ruleset {
     // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
     // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
     const runner = this.#runnerOf(character.id);
-    if (this.#attackTarget(character) !== null && !this.#luring(runner, character, session.nowMs)) {
+    // **Exceto quando quem seguir está em OUTRO andar (#527).** Monstro ao alcance nunca falta
+    // perto de um spawn — é raro um seguidor chegar num andar novo sem NENHUM por perto — e
+    // parar para lutar aqui significa NUNCA reavaliar `#holdFollow` de novo, porque esta
+    // checagem vem ANTES dela a cada vencimento. Uma QA ao vivo com o plano de bot real
+    // flagrou exatamente isto: o Druid chegou sozinho num andar cheio de Dragon Lords, entrou
+    // em combate, e ficou "sentado" ali — sem nunca se mover — pelo resto da hunt, porque
+    // brigar sempre vencia da tentativa de voltar. Reunir a party pesa mais que uma luta que
+    // pode esperar; `#holdFollow` continua deixando `#armPlayerAttack` bater em quem estiver
+    // ao alcance da arma NO CAMINHO até a escada (ADR 0035 d.9) — isto só recusa GRUDAR ali.
+    if (
+      this.#attackTarget(character) !== null && !this.#luring(runner, character, session.nowMs)
+      && !this.#mustCrossFloorToFollow(session, runner, character)
+    ) {
       runner.walker.stop();
       this.#armPlayerAttack(session, character);
       return null;
@@ -2477,6 +2489,22 @@ export class HuntRuleset implements Ruleset {
     runner.walker.resume();
     const to = runner.walker.step();
     if (to === null) return null;
+    if (this.#crossesAwayFromLeader(session, runner, character, to)) {
+      // A rota PRÓPRIA de um seguidor é um laço fechado (§14.4) — se ela cruza uma escada perto
+      // de onde o `d > radius` de `#holdFollow` desistiu (o líder ficou > 8 tiles no MESMO
+      // andar, longe o bastante para "fora de alcance", perto o bastante para o ÍNDICE da rota
+      // do seguidor continuar sendo o de perto da mesma escada), o laço passa pela MESMA escada
+      // TODA VOLTA — e sem esta recusa o seguidor atravessa sozinho, volta, atravessa nulo de
+      // novo, dezenas de vezes numa hunt de 10 min (#527, achado com o bot config REAL — sem
+      // lure em ninguém — onde Sorcerer/Druid caem para trás em combate com frequência bem
+      // maior que o config sintético deste teste supunha). `#holdFollow` sozinho (`d > radius`)
+      // só cobre "sem alvo alcançável"; ele NÃO impede a rota própria, que roda LOGO DEPOIS
+      // dele devolver `false`, de atravessar andar por conta própria — a rota não sabe onde o
+      // líder está. Recusar aqui é a mesma regra do ramo de travessia de `#holdFollow`, só que
+      // do lado de quem NÃO tem follow ativo agora: nunca um andar diferente do líder sem ele.
+      runner.walker.hold();
+      return null;
+    }
     let result = this.#step(session, character, to, character.id);
     if (!result.ok) {
       if (result.reason === 'not-adjacent') {
@@ -2502,7 +2530,7 @@ export class HuntRuleset implements Ruleset {
         // não aparecia em NENHUM `#companionAt`/nudge, porque o passo nunca era de fato
         // tentado). `distance === 0` (já em cima dele) não tem o que fechar.
         if (distance(character.position, rejoined) > 0) {
-          const toward = greedyStep(character.position, rejoined, this.#blockedFor(character));
+          const toward = greedyStep(character.position, rejoined, this.#blockedForGroundedStep(character));
           if (toward !== null) {
             result = this.#step(session, character, { ...toward, z: character.position.z }, character.id);
           } else {
@@ -2519,7 +2547,7 @@ export class HuntRuleset implements Ruleset {
         // atrás dele a hunt inteira — foi o que aconteceu. Contorna com o passo guloso rumo
         // ao tile seguinte; o vencimento seguinte reentra pela rota (`not-adjacent` →
         // `rejoinNearest`). Cercado, segura como faria com um monstro.
-        const around = greedyStep(character.position, runner.walker.ahead(), this.#blockedFor(character));
+        const around = greedyStep(character.position, runner.walker.ahead(), this.#blockedForGroundedStep(character));
         if (around === null) {
           // Cercado dos dois lados: nem o tile original nem o contorno estão livres (#527,
           // achado reproduzindo a QA do M28 com conteúdo real — um SEGUIDOR satisfeito a
@@ -2600,7 +2628,7 @@ export class HuntRuleset implements Ruleset {
     if (blocker === undefined || this.#attackTarget(blocker) !== null) return;
     // Foge de QUEM PEDIU passagem, nunca do próprio tile — `at` é a posição atual do bloqueio,
     // e fugir dela seria fugir de si mesmo (vetor nulo, `fleeStep` sempre devolveria `null`).
-    const blocked = this.#blockedFor(blocker);
+    const blocked = this.#blockedForGroundedStep(blocker);
     let away = fleeStep(blocker.position, requester, blocked);
     if (away === null) {
       // `fleeStep` só tenta os três candidatos alinhados com a direção OPOSTA a quem pediu
@@ -2694,7 +2722,7 @@ export class HuntRuleset implements Ruleset {
 
     const from = character.position;
     const d = distance(from, target.position);
-    const blocked = this.#blockedFor(character);
+    const blocked = this.#blockedForGroundedStep(character);
     // `follow` persegue até poder bater; `keep-distance` mira a distância configurada. Os dois
     // são o mesmo cálculo com alvos diferentes, e escrever dois laços seria a mesma geometria
     // divergindo na terceira mudança.
@@ -2770,7 +2798,20 @@ export class HuntRuleset implements Ruleset {
         this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
         return false;
       }
-      const to = greedyStep(from, stair, this.#blockedFor(character));
+      // O DESTINO da escada — não o tile dela — decide se ela está livre (#527, achado numa QA
+      // ao vivo com o plano de bot real: `greedyStep` só confere ocupação do tile da escada em
+      // si, que quase nunca tem ninguém em cima; quem rejeita pelo tile de CHEGADA ocupado é
+      // `move`/`canOccupy`, chamado só DEPOIS — e o ramo abaixo devolvia esse resultado sem
+      // tratar, tentando o MESMO passo rejeitado a cada vencimento, para sempre, sem nunca
+      // cair nem no `#clearCompanionsAround` nem na válvula de último recurso, porque os dois
+      // só rodavam quando `greedyStep` devolvia `null` — nunca quando devolvia um tile que
+      // `#step` recusaria por outro motivo). Checar aqui, ANTES do passo guloso, faz a escada
+      // ocupada virar exatamente o mesmo "empacado" de parede — o mesmo caminho de espera +
+      // pedir passagem + válvula de último recurso já cobre os dois, e ninguém trava para
+      // sempre tentando repisar um degrau cuja chegada está ocupada.
+      const landing = floorChangeAt(this.#world.map, stair.x, stair.y, from.z);
+      const landingBlocked = landing !== null && this.#world.occupied(landing.x, landing.y, landing.z);
+      const to = landingBlocked ? null : greedyStep(from, stair, this.#blockedFor(character));
       if (to === null) {
         // Empacado a caminho da escada (parede, companheiro, monstro): espera, e PERMANECE
         // seguindo — nunca desiste para ir caçar sozinho em outro andar por um bloqueio
@@ -2816,16 +2857,85 @@ export class HuntRuleset implements Ruleset {
     // ter voltado ao alcance parado.
     this.#reportFollow(session, runner, character.id, target.id, true);
 
-    if (d === 1) return null;
+    // O tile em que o ALVO vai pisar no PRÓXIMO passo da rota DELE nunca é destino válido para
+    // quem o segue (#527, achado numa QA ao vivo com o plano de bot real: quatro seguidores
+    // convergindo por `greedyStep` podem ficar satisfeitos — `d === 1` — sentados exatamente
+    // nos tiles à volta do líder, e num corredor de 1 tile o ÚNICO tile adjacente na direção em
+    // que o líder anda É o próximo tile da rota dele. `d === 1` já significa "parado" — sem
+    // isto, o seguidor nunca mais sai dali, e o líder fica cercado pelo próprio bloco a hunt
+    // inteira, porque nudge/`#clearCompanionsAround` só reage DEPOIS que o líder já tentou e
+    // falhou, e num corredor sem outra saída eles também falham). Reservar aqui é PROATIVO: o
+    // seguidor nunca escolhe esse tile como destino, então nunca precisa ser desalojado dele.
+    const reserved = this.#reservedRouteTile(target);
+    const onReserved = reserved !== null
+      && from.x === reserved.x && from.y === reserved.y && from.z === reserved.z;
 
-    const to = greedyStep(from, target.position, this.#blockedFor(character));
+    if (d === 1 && !onReserved) return null;
+
+    const base = this.#blockedForGroundedStep(character);
+    const blocked: Blocked = reserved === null
+      ? base
+      : (x, y, z, monsterId) => base(x, y, z, monsterId)
+        || (x === reserved.x && y === reserved.y && (z ?? from.z) === reserved.z);
+
+    const to = greedyStep(from, target.position, blocked);
     // Empacado — mesmo comportamento de `#holdPosture`: esperar este vencimento, não é
     // interrupção. "Sem caminho" vira `unreachable` só pela DISTÂNCIA (acima), não por um passo
-    // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento.
+    // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento. Já em cima do
+    // tile reservado e sem candidato livre: espera ali mesmo (ainda adjacente ao líder) até o
+    // próximo vencimento, nunca fica MAIS longe só para desocupar.
     if (to === null) return null;
 
     runner.walker.stop();
     return this.#step(session, character, { ...to, z: from.z }, character.id);
+  }
+
+  /**
+   * O tile `to` — a rota PRÓPRIA do personagem, não um passo de follow — é uma escada que leva
+   * para um andar DIFERENTE do alvo seguido agora? (#527) `false` sem follow configurado: quem
+   * não segue ninguém (o líder de verdade) sempre pode atravessar pela própria rota. Ver o
+   * chamador, no ramo "ninguém ao alcance: anda" de `#playerStep`.
+   */
+  #crossesAwayFromLeader(
+    session: Session, runner: Runner, character: CharacterRuntime, to: FloorPoint,
+  ): boolean {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+    const change = floorChangeAt(this.#world.map, to.x, to.y, character.position.z);
+    if (change === null) return false;
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+    if (target === null || target.id === character.id) return false;
+    return change.z !== target.position.z;
+  }
+
+  /**
+   * Há follow ativo para alguém em OUTRO andar agora? (#527) Usado só para decidir se o
+   * combate pode segurar o personagem no topo de `#playerStep` — repete a mesma busca de alvo
+   * do início de `#holdFollow` de propósito: são poucas linhas, e as duas listas de motivo
+   * para "não" (sem follow, alvo ausente) precisam concordar — divergir aqui deixaria o
+   * combate segurar um seguidor que `#holdFollow` trataria como "sem follow nenhum".
+   */
+  #mustCrossFloorToFollow(session: Session, runner: Runner, character: CharacterRuntime): boolean {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+    if (target === null || target.id === character.id) return false;
+    return !sameFloor(character.position.z, target.position.z);
+  }
+
+  /**
+   * O próximo tile da ROTA do alvo seguido — `null` quando o alvo não anda rota nenhuma (ele
+   * próprio está em follow de outra pessoa, ou não tem `walker` relevante aqui). Ver o
+   * chamador (`#holdFollow`, ramo do mesmo andar) para o porquê de reservar.
+   */
+  #reservedRouteTile(target: CharacterRuntime): FloorPoint | null {
+    const targetRunner = this.#runnerOf(target.id);
+    const targetFollow = targetRunner.botConfig?.follow;
+    if (targetFollow !== undefined && targetFollow.kind !== 'none') return null;
+    const ahead = targetRunner.walker.ahead(1);
+    return { ...ahead, z: target.position.z };
   }
 
   /**
@@ -6113,6 +6223,31 @@ const slots = bot.groups.get(group);
   #blockedFor(mover: Movable<GridPoint>): Blocked {
     this.#mover = mover;
     return this.#moverBlocked;
+  }
+
+  /**
+   * `#blockedFor`, mas trata TAMBÉM qualquer tile de troca de andar como bloqueado (#527) — só
+   * para os passos gulosos INCIDENTAIS de um personagem: fechar distância até a rota, contornar
+   * um companheiro, ceder lugar a quem pediu passagem, perseguir por postura, aproximar do alvo
+   * de follow no MESMO andar. Nenhum deles PRETENDE atravessar andar — e como z10/z11/z12 da
+   * Darashia Dragon Lair compartilham a MESMA caixa x/y (nota de `RouteWalker.rejoinNearest`),
+   * um passo guloso comum pode, por coincidência geométrica, mirar exatamente o tile de ORIGEM
+   * de uma escada sem que NENHUM código ali soubesse que aquele tile era uma escada — `canOccupy`
+   * (por trás de `#blockedFor`) só confere se o DESTINO dela está livre, nunca se cruzar ali faz
+   * sentido para quem pediu o passo. Achado com o bot config REAL da party de dragões (sem lure
+   * em ninguém): Sorcerer/Druid cruzavam para z11 e voltavam dezenas de vezes numa hunt de 10
+   * min, sobrevivendo aos dois guardas que já tratam travessia INTENCIONAL (`#holdFollow`,
+   * ramo de andar diferente, e `#crossesAwayFromLeader` na rota própria) porque o passo que
+   * cruzava não vinha de nenhum dos dois — vinha de "fechar distância"/"contornar"/"ceder"/
+   * "perseguir"/"aproximar no mesmo andar". A travessia intencional continua usando
+   * `#blockedFor` puro — ali pisar na escada É o objetivo, e `landingBlocked` (`#holdFollow`)
+   * já cobre o caso de chegada ocupada.
+   */
+  #blockedForGroundedStep(mover: CharacterRuntime): Blocked {
+    const base = this.#blockedFor(mover);
+    const z = mover.position.z;
+    return (x, y, stepZ, monsterId) => base(x, y, stepZ, monsterId)
+      || floorChangeAt(this.#world.map, x, y, z) !== null;
   }
 
   /** Para o spawn não há quem se mova: só parede e ocupação. */
