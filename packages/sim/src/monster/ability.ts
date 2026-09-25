@@ -35,7 +35,9 @@ export function abilityTiles(
 ): WorldPoint[] {
   const area = ability.target.area;
   if (area === undefined) return [];
-  return areaTiles(area, caster, 'south', target);
+  // `'monster'` (#523): o raio de uma ability usa a tabela de anéis do Canary, não as
+  // `AREA_CIRCLEnXn` nomeadas que a magia do jogador usa — ver o comentário no topo de `area.ts`.
+  return areaTiles(area, caster, 'south', target, 'monster');
 }
 
 /**

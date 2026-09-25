@@ -103,9 +103,14 @@ describe('abilityTargets (puro)', () => {
   const single: MonsterAbility = {
     id: 'single', cadenceMs: 1, target: { range: 3 }, power: { min: 1, max: 1 }, damageType: 'physical',
   };
+  // Raio 2, não 1 (#523): o círculo de ABILITY usa a tabela de anéis do Canary
+  // (`AreaCombat::setupArea`, `src/creatures/combat/combat.cpp`), e nela o raio 1 é só o
+  // próprio tile do centro — não alcançaria 'b', um tile ao lado, que estes testes precisam
+  // colher para testar a ordem/filtro. Raio 2 dá 5 tiles (a fileira central com 3, mais uma de
+  // cada lado com 1).
   const area: MonsterAbility = {
     id: 'area', cadenceMs: 1, power: { min: 1, max: 1 }, damageType: 'fire',
-    target: { range: 3, area: { shape: 'circle', radius: 1, centered: 'target' } },
+    target: { range: 3, area: { shape: 'circle', radius: 2, centered: 'target' } },
   };
   const casterAt: WorldPoint = { x: 5, y: 5, z: 7 };
   interface Dummy { readonly id: string; readonly position: { readonly x: number; readonly y: number }; readonly alive: boolean }
@@ -136,16 +141,21 @@ describe('abilityTargets (puro)', () => {
   });
 
   it('círculo centrado no LANÇADOR pega quem está em volta dele', () => {
+    // Raio 2, não 1 (#523): o círculo de ABILITY usa a tabela de anéis do Canary, e nela o raio
+    // 1 é só o próprio tile do lançador — não alcançaria 'b', um tile ao lado.
     const casterArea: MonsterAbility = {
-      ...area, target: { range: 1, area: { shape: 'circle', radius: 1, centered: 'caster' } },
+      ...area, target: { range: 1, area: { shape: 'circle', radius: 2, centered: 'caster' } },
     };
     expect(abilityTargets(casterArea, casterAt, primary, prey).map((t) => t.id)).toEqual(['a', 'b']);
   });
 
   it('abilityTiles devolve a forma; alvo único devolve vazio', () => {
     expect(abilityTiles(single, casterAt, { x: 5, y: 5, z: 7 })).toEqual([]);
+    // `abilityTiles` sempre passa `source: 'monster'` (#523): o raio 2 de ability dá 5 tiles
+    // pela tabela de anéis do Canary — diferente do raio 2 de MAGIA (`AREA_CIRCLE2X2`, 21
+    // tiles). Mecanismos diferentes, mesmo número de raio.
     const tiles = abilityTiles(area, casterAt, { x: 5, y: 5, z: 7 });
-    expect(tiles).toHaveLength(9);
+    expect(tiles).toHaveLength(5);
   });
 
   it('alcance 1 sem área é corpo a corpo', () => {
@@ -228,9 +238,11 @@ describe('a ability de monstro no motor (CMB-06)', () => {
     const cast = events.find((e) => e.kind === 'monster-ability-cast');
     if (cast?.kind !== 'monster-ability-cast') throw new Error('sem lançamento de área');
     expect(cast.targets.map((t) => t.creatureId)).toEqual(['h1', 'h2']);
-    // Raio 20 com o recorte de Manhattan (`|dx| + |dy| <= 30`): 1.461 tiles, não o 41x41
-    // cheio — a mesma geometria da magia vale para a ability de monstro (#472).
-    expect(cast.tiles.length).toBe(1_461);
+    // Raio 20 satura na tabela de anéis do Canary (#523): ela só tem valores 1-8, então
+    // qualquer raio >= 8 dá a MESMA forma do raio 8 (101 tiles) — não cresce mais. A geometria
+    // da ABILITY não é a mesma da magia (essa, sim, cresceria com o recorte de Manhattan); é
+    // o que garante os dois heróis caírem dentro sem depender de posicionamento.
+    expect(cast.tiles.length).toBe(101);
 
     const monster = (session.ruleset as HuntRuleset).monsters[0];
     if (monster === undefined) throw new Error('sem monstro');
