@@ -55,3 +55,60 @@ alvo, se bloqueado tentam um adjacente, senão esperam. Nenhum dos dois usa A*.
 Nenhum. Os onze invariantes de `harness-plan.md` não tratam de pathfinding ou movimento de
 monstro; esta decisão opera inteiramente dentro deles (a lógica permanece em `sim/`, os dados de
 rota vêm de `content/`), sem alterar nenhum.
+
+## Emenda — 2026-09-25 (#527): o FOLLOW do bot pode path-find, limitado — a rota autorada e o
+passo guloso de monstro continuam intocados
+
+Uma QA ao vivo com a party de dragões (Knight, Paladin, Sorcerer, Druid, level 200, seguindo o
+líder) achou um corredor em U na Darashia Dragon Lair onde o passo guloso do FOLLOW (não da rota
+autorada — o seguidor tentando alcançar o líder) nunca resolvia: os três candidatos do guloso
+(direção + dois vizinhos, ADR 0009 acima) eram todos parede, mas havia caminho livre saindo pelo
+lado OPOSTO, a alguns tiles de distância. O seguidor ficava visivelmente perto do líder (oito
+tiles) e nunca andava — só a válvula de reagrupamento do líder (#527, `hunt.ts`) o soltava,
+minutos depois.
+
+A decisão original trata pathfinding como desnecessário porque a ROTA já é dado conhecido de
+antemão. Isso continua verdade — mas o FOLLOW não segue uma rota autorada: ele persegue um alvo
+que se move (o líder, ou outro membro), e não existe lista de tiles nenhuma para consultar. É
+mais parecido com a perseguição de monstro (que também usa passo guloso) do que com o percurso da
+hunt — só que a analogia quebra num ponto: um monstro empacado numa concavidade é o comportamento
+CERTO do Tibia, e "não conserte" continua valendo para ele. Um SEGUIDOR de party empacado do
+mesmo jeito é só um defeito — Tibia não tem o conceito de bot seguindo automaticamente, então não
+há comportamento de referência a preservar, e travar a party inteira por um detalhe de geometria
+do corredor não serve a ninguém.
+
+**Decisão da emenda:** o FOLLOW do bot (`#holdFollow`/`#followStep`, `hunt.ts`) tenta o passo
+guloso primeiro — continua sendo o caminho comum, O(1), sem estado — e só depois de
+`FOLLOW_PATHFIND_DELAY_MS` (alguns segundos) de bloqueio SEGUIDO recorre a um BFS limitado
+(`packages/sim/src/route/pathfind.ts`, raio ~30 tiles a partir de quem segue, ordem de vizinho
+fixa para determinismo, resultado cacheado por alvo até ele se mover). O atraso existe porque a
+maioria dos bloqueios do guloso é passageira — um monstro ou companheiro momentaneamente no
+caminho —, e path-find nesses casos produzia desvios inúteis pela masmorra em vez de uma espera
+curta (achado varrendo o bot config real: a coesão da party PIOROU com o BFS entrando na primeira
+falha). Path-find continua NÃO se aplicando a:
+
+- **A rota autorada da hunt** (`RouteWalker`/`walker.step()`) — continua só passo guloso, sem
+  cache de caminho, exatamente como a decisão original descreve. Quem puxa a rota (o líder,
+  `follow: 'none'`) nunca usa o BFS.
+- **O monstro perseguindo alvo** (`packages/sim/src/monster/step.ts`) — continua só passo guloso.
+  Empacar numa concavidade continua sendo o comportamento certo para ele.
+
+Isto é legítimo porque o BOT é automação PRÓPRIA de Draconya, não uma mecânica de jogo com
+fidelidade ao Tibia a preservar (ADR 0037: tudo segue TFS/Canary exceto a barra de ações e a
+automação, que são nossas). Path-find limitado no follow não move a simulação para mais perto ou
+mais longe da fidelidade que ADR 0037 promete — ele só torna o bot menos burro num corredor que
+um jogador humano, seguindo manualmente, contornaria sem pensar.
+
+### Consequências da emenda
+
+- `packages/sim/src/route/pathfind.ts` é um módulo novo, puro (invariante 1), sem I/O — só grafo
+  e busca em memória.
+- O follow ganha dois campos de estado por personagem em `Runner` (`followPath`, o cache do
+  caminho; `followStuckSinceMs`, o atraso antes do BFS) — nenhum dos dois persiste no snapshot:
+  são cache de desempenho/decisão, recalculáveis a qualquer momento sem mudar o resultado, não
+  estado de jogo.
+- O raio limitado (30 tiles) e o cache por alvo mantêm o custo baixo — nunca "path-finding de
+  verdade" sobre o mapa inteiro, nunca recalculado a cada vencimento enquanto o alvo não se move.
+- A ordem de vizinho fixa do BFS (a mesma garantia de determinismo do passo guloso) é o que
+  mantém a simulação reproduzível — dois nós que empatam em distância sempre resolvem para o
+  mesmo caminho, nunca dependem de ordem de iteração de `Map`/`Set`.
