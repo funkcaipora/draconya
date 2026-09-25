@@ -13,7 +13,8 @@ import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
-  HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
+  HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntRuleset, createHuntSession,
+  huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 
@@ -7089,6 +7090,70 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
       (e) => e.kind === 'creature-healed' && e.source === 'monster',
     )).toBe(true);
   });
+
+  describe('conformidade de RNG: `targetChange` sem `targetStrategy` (#541)', () => {
+    /** Conta só os sorteios de `Rng.integer` — o mesmo mecanismo do `rankTarget`, que é o
+     * sorteio que `#onMonsterTargetChange` faz para o reroll. */
+    class CountingRng extends Rng {
+      integerCalls = 0;
+
+      override integer(min: number, max: number): number {
+        this.integerCalls++;
+        return super.integer(min, max);
+      }
+    }
+
+    // Um monstro sem abilities/defenses declaradas (só a básica sintetizada do `rat`, sem
+    // `chance` — "ausente é sempre passa e NÃO consome sorteio") e uma `aggroRadius` enorme:
+    // os três membros da party ficam LONGE (100+ tiles), fora da salinha murada de `map`, e
+    // por isso NUNCA entram no alcance de ataque (1 tile) — o monstro fica preso na sala, e
+    // nenhum golpe (e o sorteio de POTÊNCIA que ele consumiria, `hunt.ts:5054`) chega a
+    // acontecer. O único `rng.integer` que sobra na cena inteira é o do PRÓPRIO reroll.
+    const distantRat = { ...rat, aggroRadius: 1_000, targetChange: { intervalMs: 1_000, chance: 1 } };
+    const loaded = content({ monsters: [distantRat] });
+
+    const member = (id: string): CharacterRuntime =>
+      new CharacterRuntime({ ...character().getState(), id });
+
+    it('a sequência de escolha entre candidatos fica EXATAMENTE como antes: um sorteio por reroll, nunca mais', () => {
+      const rng = new CountingRng(Rng.fromSeed('target-change-conformance').getState());
+      const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+      const session = new Session({
+        id: 'target-change-conformance', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+      });
+      const a = member('a');
+      const b = member('b');
+      const c = member('c');
+      session.enter(a);
+      session.enter(b);
+      session.enter(c);
+      // `session.enter` coloca o primeiro no início da rota e os demais no livre mais próximo
+      // (#203) — dentro da salinha murada. O reposicionamento para longe vem DEPOIS de entrar
+      // e ANTES de `advanceBy`: o `SPAWN` só avalia posição quando a fila roda, e a esta
+      // altura os três já estão longe (montagem de teste, como o `phantom` de outro describe).
+      a.position = { x: 100, y: 100, z: 7 };
+      b.position = { x: 200, y: 200, z: 7 };
+      c.position = { x: 300, y: 300, z: 7 };
+
+      session.advanceBy(100); // o rato nasce, preso na salinha murada — não alcança ninguém.
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      // Fixa o ponto de partida: o que se mede é a TROCA por tempo, não a aquisição inicial.
+      monster.targetId = a.id;
+      rng.integerCalls = 0;
+
+      // Cinco vencimentos de `targetChange` (5 × 1 000 ms), `chance: 1` — sempre reroll.
+      run(session, 5_500, 100);
+
+      // Um sorteio por reroll, nunca dois, nunca zero: a mesma linha de antes do #541
+      // (`candidates[session.rng.integer(0, candidates.length - 1)]`), agora só alcançada
+      // quando `targetStrategy` está ausente — como aqui.
+      expect(rng.integerCalls).toBe(5);
+      // E o alvo de fato trocou — não é só o sorteio girando no vazio.
+      expect(monster.targetId).not.toBe(a.id);
+      expect(['a', 'b', 'c']).toContain(monster.targetId);
+    });
+  });
 });
 
 describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#520)', () => {
@@ -7334,6 +7399,49 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     run(session, 3_000, 100);
     expect(ruleset.fields).toHaveLength(1);
     expect(ruleset.fields[0]?.tiles).toHaveLength(21);
+  });
+
+  describe('estratégia ponderada de alvo (#541)', () => {
+    it('numa party de 2, troca para o membro de MENOS vida quando `health` é sorteado', () => {
+      // Isola o critério `health` (peso 100): a distribuição real 70/10/10/10 do Dragon já
+      // está coberta em `target-strategy.test.ts` — o que este teste prova é a FIAÇÃO, que o
+      // vencimento de `MONSTER_TARGET_CHANGE` de fato repassa a vida de cada membro da party
+      // para `rankTarget`, e não só `chooseTarget` (a aquisição inicial).
+      const healthPickingDragon = {
+        ...dragon,
+        targetChange: { intervalMs: 1_000, chance: 1 },
+        targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
+      };
+      const loaded = buildContent(raw({
+        monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-target-health', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      const wounded = new CharacterRuntime({
+        id: 'wounded-ally', position: { x: 0, y: 0, z: 7 },
+        health: 1, maxHealth: 1_000_000, mana: 1_000, maxMana: 1_000,
+        level: 200, xp: 0, vocationId: null,
+        staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+        gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      });
+      session.enter(wounded);
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      // Fixa o alvo ANTES do vencimento de `targetChange`: o que se mede é a TROCA, não a
+      // aquisição inicial (que também usa `rankTarget`, mas por outro caminho — ver
+      // `chooseTarget` em `monster.ts`).
+      monster.targetId = knight.id;
+
+      run(session, 1_500, 100); // um vencimento de 1 000 ms cabe nesta janela.
+
+      expect(monster.targetId).toBe(wounded.id);
+    });
   });
 });
 

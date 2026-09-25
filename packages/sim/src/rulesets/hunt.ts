@@ -69,6 +69,8 @@ import {
   MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
+import { rankTarget } from '../monster/target-strategy.js';
+import type { TargetRankCandidate } from '../monster/target-strategy.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
@@ -4885,7 +4887,7 @@ const slots = bot.groups.get(group);
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
     // coletor rodando o tempo todo.
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
 
@@ -4931,7 +4933,7 @@ const slots = bot.groups.get(group);
     }
 
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
@@ -4969,7 +4971,7 @@ const slots = bot.groups.get(group);
 
     monster.scheduledAbilities.delete(ability.id);
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
@@ -5204,9 +5206,10 @@ const slots = bot.groups.get(group);
 
     if (!session.rng.chance(targetChange.chance)) return;
 
-    // TFS `searchTarget(TARGETSEARCH_RANDOM)`: um alvo válido ao acaso, DIFERENTE do atual —
-    // trocar para o mesmo não é troca. A estratégia ponderada do Canary (70/10/10/10) fica fora
-    // (§ "Fora do escopo" do #518).
+    // Um alvo válido DIFERENTE do atual — trocar para o mesmo não é troca. Sem
+    // `targetStrategy`, o TFS `searchTarget(TARGETSEARCH_RANDOM)` (#518); com ela (#541), o
+    // CRITÉRIO é sorteado pelos pesos do conteúdo — `rankTarget`, a mesma função que
+    // `chooseTarget` usa.
     const prey: readonly Prey[] = session.participants;
     // O mesmo andar primeiro (#519): um alvo em outro andar não é alvo válido — o `isTarget` do
     // TFS confere o `z` antes da distância, como `chooseTarget` já faz.
@@ -5215,7 +5218,21 @@ const slots = bot.groups.get(group);
       && sameFloor(monster.position.z, candidate.position.z)
       && distance(monster.position, candidate.position) <= definition.aggroRadius);
     if (candidates.length === 0) return;
-    const chosen = candidates[session.rng.integer(0, candidates.length - 1)];
+
+    const strategy = definition.targetStrategy;
+    const chosenId = strategy === undefined
+      // Sem estratégia (#541): a mesma escolha uniforme de sempre, zero sorteio a mais — é o
+      // que preserva a sequência de RNG do rato e do rotworm bit a bit.
+      ? candidates[session.rng.integer(0, candidates.length - 1)]?.id
+      : rankTarget(strategy, candidates.map((candidate): TargetRankCandidate => ({
+        id: candidate.id,
+        distance: distance(monster.position, candidate.position),
+        health: candidate.health,
+        damage: monster.contribution.damageBy(candidate.id),
+      })), session.rng);
+    const chosen = chosenId === undefined
+      ? undefined
+      : candidates.find((candidate) => candidate.id === chosenId);
     if (chosen === undefined) return;
     monster.targetId = chosen.id;
     this.#armMonsterAbilities(session, monster, definition, chosen);
