@@ -9,7 +9,7 @@
 // fila — um golpe que vence, uma magia que sai. A 1 Hz e a 10 Hz acontecem os mesmos usos nos
 // mesmos instantes lógicos, então a skill sobe igual.
 
-import type { Skill } from '@draconya/content';
+import type { Progression, Skill, Vocation } from '@draconya/content';
 
 /** Onde uma skill está: o nível e quanto já se acumulou rumo ao próximo. */
 export interface SkillState {
@@ -33,15 +33,48 @@ export type SkillsState = Readonly<Record<string, SkillState>>;
  * decidiu. O expoente conta a partir do nível INICIAL — sem isso, uma skill que começa em 10
  * cobraria pelo décimo nível já no primeiro uso.
  *
- * **O custo é INTEIRO**, e isso não é cosmético. `50 * 1.1` dá `55.000000000000007` em ponto
- * flutuante, e o resto que sobra ao fechar um nível carregaria esse lixo para o próximo, e
- * para o seguinte. Numa hunt de oito horas são milhares de níveis de resíduo somado — a mesma
- * armadilha que o `AGENTS.md` deste pacote registra sobre acumular `0,1` dez vezes. Com custo
- * inteiro e uso inteiro, a conta fecha exata.
+ * **O custo é INTEIRO, e é TRUNCADO, não arredondado** (#521, ADR 0037 — correção de revisão).
+ * `50 * 1.1` dá `55.000000000000007` em ponto flutuante; sem inteirar, o resto que sobra ao
+ * fechar um nível carregaria esse lixo para o próximo, e para o seguinte — a mesma armadilha
+ * que o `AGENTS.md` deste pacote registra sobre acumular `0,1` dez vezes. Mas o Tibia TRUNCA,
+ * não arredonda: `Vocation::getReqSkillTries` do Canary faz
+ * `static_cast<uint64_t>(skillBase[skill] * pow(multiplier, level - 11))`, e
+ * `Vocation::getReqMana` faz `std::floor<uint64_t>(1600 * pow(manaMultiplier, magLevel - 1))` —
+ * as duas descartam a fração, nunca arredondam para cima. `Math.round` aqui divergia do Tibia
+ * sempre que o resultado exato cai acima de `,5`: um Knight subindo corpo a corpo do level 15
+ * para o 16 precisa de `floor(50 × 1,1⁵) = 80` tries no Canary, e `Math.round` pedia 81 — um a
+ * mais, todo nível, em quase toda vocação (só quem tem fator inteiro, como o Sorcerer/Druid em
+ * algumas skills, escapava por coincidência). `Math.floor` é equivalente a `Math.trunc` aqui
+ * porque o valor nunca é negativo.
+ *
+ * `factor` é OPCIONAL e por padrão cai no `curve.factor` do próprio conteúdo — o comportamento
+ * de antes da #521. Quem sabe a vocação do personagem passa o fator dela (`skillFactorFor`,
+ * abaixo): é o `<skill id multiplier="…">` do Tibia por vocação, e é ONDE ele muda a conta —
+ * `base` continua vindo só do conteúdo da skill.
  */
-export function pointsForLevel(definition: Skill, level: number): number {
+export function pointsForLevel(
+  definition: Skill, level: number, factor: number = definition.curve.factor,
+): number {
   const steps = Math.max(0, level - definition.startingLevel);
-  return Math.round(definition.curve.base * definition.curve.factor ** steps);
+  return Math.floor(definition.curve.base * factor ** steps);
+}
+
+/**
+ * O fator de crescimento desta skill PARA a vocação dada — ou para "sem vocação nenhuma", à
+ * moda do Tibia (#521, ADR 0037): `vocations.xml` tem um `<skill id multiplier="…">` por
+ * vocação, e a vocação `None` (levels 1–7) tem o dela também. Aqui isso vira
+ * `vocation.skillMultipliers`/`progression.skillMultipliers`, indexados pelo `id` da skill —
+ * a mesma tabela cobre magic level, porque ML é só mais uma entrada dela no Canary
+ * (`manamultiplier`).
+ *
+ * Ausente para este `skillId` nos dois: cai no `curve.factor` do próprio conteúdo da skill — o
+ * padrão de quem não distingue vocação nenhuma (conteúdo de teste antigo).
+ */
+export function skillFactorFor(
+  definition: Skill, vocation: Vocation | null, progression: Progression,
+): number {
+  const table = vocation?.skillMultipliers ?? progression.skillMultipliers;
+  return table[definition.id] ?? definition.curve.factor;
 }
 
 export class Skills {
@@ -76,10 +109,10 @@ export class Skills {
     return this.#levels.get(definition.id) ?? definition.startingLevel;
   }
 
-  progressOf(definition: Skill): SkillProgress {
+  progressOf(definition: Skill, factor?: number): SkillProgress {
     const level = this.levelOf(definition);
     const points = this.#points.get(definition.id) ?? 0;
-    const needed = pointsForLevel(definition, level);
+    const needed = pointsForLevel(definition, level, factor);
     const percentToNext = needed > 0 ? Math.floor((points / needed) * 100) : 0;
     return { level, percentToNext: Math.min(99, percentToNext) };
   }
@@ -91,17 +124,17 @@ export class Skills {
    * pontos" não tem forma fechada barata. Na prática o laço roda zero ou uma vez — um golpe
    * não sobe dois níveis —, e o caso de muitos é um extrato antigo sendo aplicado.
    */
-  gain(definition: Skill, points: number): number {
+  gain(definition: Skill, points: number, factor?: number): number {
     if (points <= 0) return 0;
     let level = this.levelOf(definition);
     let total = (this.#points.get(definition.id) ?? 0) + points;
 
     let gained = 0;
-    for (let needed = pointsForLevel(definition, level); total >= needed;) {
+    for (let needed = pointsForLevel(definition, level, factor); total >= needed;) {
       total -= needed;
       level += 1;
       gained += 1;
-      needed = pointsForLevel(definition, level);
+      needed = pointsForLevel(definition, level, factor);
     }
 
     this.#levels.set(definition.id, level);

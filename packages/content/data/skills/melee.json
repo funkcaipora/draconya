@@ -2,8 +2,8 @@
   "id": "melee",
   "name": "Corpo a Corpo",
   "startingLevel": 10,
-  "curve": { "base": 50, "factor": 1.1 },
+  "curve": { "base": 50, "factor": 2.0 },
   "gain": { "on": "melee-hit", "points": 1 },
   "damagePerLevel": 0.02,
-  "_open": "Curva e contribuição de dano provisórias. O §9.4 decide que skill sobe por uso, e não os números — o Tibia é referência funcional, e o balanceamento real depende de quanto tempo uma hunt rende, que ainda não foi medido."
+  "_open": "Base 50 é a `skillBase` do club/sword/axe do Canary (`Vocation::skillBase`, #521, ADR 0037), verificada em `opentibiabr/canary` `main` 2026-09-24. `factor` 2.0 é só o FALLBACK de quem não distingue vocação (o valor da vocação `None` no `vocations.xml`) — cada vocação real sobe por `vocationSchema.skillMultipliers.melee` (`progression.ts`/`skills.ts`). `damagePerLevel` continua provisório: o §9.4 decide que skill sobe por uso, não o quanto ela pesa no dano — isso depende de quanto tempo uma hunt rende, que ainda não foi medido."
 }
