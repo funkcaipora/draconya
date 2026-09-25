@@ -5188,11 +5188,12 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     runFor(100);
     const state = lead.socket.received().find((m) => m.type === 'session-state');
     if (state?.type !== 'session-state') throw new Error('sem session-state');
-    // §525: os dois membros nascem sem vocação (level < 8) — "nenhuma" não conta mais como
-    // vocação única, então `uniqueVocations` é 0 (o número real), e `xpPercent` lê a MESMA
-    // linha "1" da tabela (120 %) que uma vocação real só, não a linha "2" de antes do fix.
+    // §525 (emenda 2026-09-25): os dois membros nascem sem vocação (level < 8) — "nenhuma"
+    // CONTA como vocação distinta no Canary (`Party::getUniqueVocationsCount` não exclui
+    // `VOCATION_NONE`, diferente do TFS), então os dois mapeiam para a MESMA "nenhuma" e
+    // `uniqueVocations` é 1, não 0. `xpPercent` = 10×1² − 20×1 + 130 = 120 (tamanho 2 < 4).
     expect(state.partySummary).toMatchObject({
-      players: 2, uniqueVocations: 0, xpPercent: 120, shareCosts: true, splitLoot: true,
+      players: 2, uniqueVocations: 1, xpPercent: 120, shareCosts: true, splitLoot: true,
       autoSell: { used: 0, limit: 5 },
     });
 
