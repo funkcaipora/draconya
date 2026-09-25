@@ -403,6 +403,55 @@ preserva a configuração salva (sem subir `BOT_VOCABULARY_VERSION`):
 
 No fio, o follow sai por `follow-state` (S2C, opcode 30) por personagem.
 
+### Follow através de andar, e por que ninguém fica preso sozinho (#527)
+
+Achado reproduzindo ao vivo o teste de saída do M28 (a party de dragões na Darashia Dragon Lair):
+o líder trocando de andar deixava o seguidor sem alvo alcançável, e ele caía na PRÓPRIA rota — que
+pode levar a um andar diferente do que o líder está agora. Foi assim que um membro foi sozinho
+para o meio dos Dragon Lords enquanto o resto da party continuava dois andares abaixo.
+
+`#holdFollow` (`packages/sim/src/rulesets/hunt.ts`) agora trata "andar diferente" como uma escada
+a atravessar, não como "inalcançável" na hora: `floorChangeToward` (`@draconya/content`,
+`packages/content/src/map.ts`) faz uma busca em largura sobre o grafo de escadas do mapa
+(`Tilemap.floorChangesByFloor`) e devolve o tile, NO ANDAR do seguidor, da primeira escada rumo
+ao andar do alvo. O seguidor dá `greedyStep` até esse tile — sem pathfinding real (ADR 0009
+continua valendo, é o mesmo passo guloso de sempre, só mirando a escada em vez do alvo) — e pisar
+nela já muda de andar sozinho; no vencimento seguinte a mesma busca acha a escada seguinte, ou já
+está perto o bastante do alvo para cair no caminho normal por distância. Só vira `unreachable`
+quando NENHUMA sequência de escadas liga os dois andares.
+
+### O gargalo de dois seguidores: empurrão e prazo de cessão (#527)
+
+Ainda no mesmo teste: um seguidor satisfeito (distância 1 do alvo) pode acabar parado exatamente
+em cima do PRÓXIMO tile da rota de outro personagem — um corredor estreito onde o único caminho
+livre é o tile que o companheiro ocupa. `#companionAt`/o contorno por `greedyStep` (#203) já
+existiam para o caso comum (contorna e segue); quando o contorno TAMBÉM falha (cercado dos dois
+lados), `#nudgeCompanion` pede ao bloqueio para abrir espaço — só quem não está em combate agora
+(sem alvo ao alcance) cede, com um passo `fleeStep` para longe de quem pediu passagem.
+
+Sem mais nada, o par empataria para sempre: quem cede sai do tile e, no PRÓPRIO vencimento
+seguinte, o follow já o trazia de volta — muitas vezes para o MESMO tile, antes de quem pediu
+conseguir atravessar. `Runner.nudgedUntilMs` é o prazo (`NUDGE_YIELD_MS`, 3 s lógicos) em que
+`#holdFollow` de quem cedeu devolve `false` (o mesmo que "inalcançável") em vez de tentar
+reocupar o alcance — o bastante para o líder passar, sem o follow parecer quebrado nem gerar
+`follow-state` por um empurrão tão curto.
+
+### O cerco do lure tem teto (#527)
+
+`#luring` (§13.7) já tinha a máquina de dois limiares (correr até `max`, limpar até `min`); o que
+faltava era um TETO de quanto tempo "lutando" pode durar. Numa zona densa, aggro fiel ao Tibia
+(raio maior, sem leash) atrai gente de FORA do raio de busca continuamente — quem morre é reposto
+por um recém-chegado antes do respawn do próprio ponto —, e `perto` pode nunca cair abaixo de
+`min`: a party fica "PARADA NA ROTA" acampando para sempre, mesmo matando sem parar. Isto não é
+fidelidade de Tibia (a automação é do Draconya, ADR 0037 decisão 2) — é o contrato do PRÓPRIO
+lure, que promete "junta, limpa, anda" e não "vira torre".
+
+`Runner.lureStoppedSinceMs` marca quando o cerco começou; estourado `MAX_LURE_HOLD_MS` (2 min
+lógicos) com a densidade ainda alta, `#luring` força `running = true` e abre uma janela de
+`LURE_FORCE_WALK_MS` (1 min lógico, `Runner.lureForceWalkUntilMs`) em que `lure.max` é ignorado —
+sem essa proteção, o vencimento seguinte via a densidade ainda alta e reengatilhava o cerco no
+MESMO tile, e o "resume" durava um único passo.
+
 ## Quando a hunt encerra sozinha (FUN-86)
 
 §13.9. A configuração tem uma lista `exit`, com teto de 4 slots em `bot/baseline.json` — regra de
