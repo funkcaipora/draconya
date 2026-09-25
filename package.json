@@ -31,7 +31,8 @@
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",
     "bench:combat": "tsc -b && pnpm --filter @draconya/tools bench:combat",
     "bench:city": "tsc -b && pnpm --filter @draconya/tools bench:city",
-    "load": "tsc -b && pnpm --filter @draconya/tools load"
+    "load": "tsc -b && pnpm --filter @draconya/tools load",
+    "dev:dragon-party": "tsc -b && pnpm --filter @draconya/tools dev:dragon-party"
   },
   "devDependencies": {
     "@types/node": "^24.13.4",
