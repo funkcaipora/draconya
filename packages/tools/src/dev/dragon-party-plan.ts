@@ -12,7 +12,7 @@ import {
   BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION,
   botConfigV2Schema,
   type BotActionV2, type BotConditionV2, type BotConfigV2, type BotFollow, type BotRuleTarget,
-  type Content,
+  type Content, type Supply,
 } from '@draconya/content';
 
 export type DragonPartyVocation = 'knight' | 'paladin' | 'sorcerer' | 'druid';
@@ -126,14 +126,28 @@ export function ammoFor(vocationId: DragonPartyVocation): Readonly<Record<string
 //
 // Suprimento é abstrato (ADR 0032 d.6): cada uso de poção/runa debita `price` do gold direto, e
 // cada tiro debita o `price` da munição. Não há como calcular "o custo real de uma hora" sem
-// medir uma hunt de verdade — os dois números abaixo são uma estimativa GROSSEIRA de teste local
-// (uma bebida a cada ~30 s, tiro a cada intervalo de ataque do conteúdo), não dado de
-// balanceamento. O orçamento soma só o que o PRÓPRIO bot config desta vocação usa, para nunca
-// divergir de silêncio do que o personagem realmente gasta.
+// medir uma hunt de verdade — os números abaixo são uma estimativa GROSSEIRA de teste local, não
+// dado de balanceamento. O orçamento soma só o que o PRÓPRIO bot config desta vocação usa, para
+// nunca divergir em silêncio do que o personagem realmente gasta.
 
-const ESTIMATED_SUPPLY_USES_PER_HOUR = 120;
+/** Cadência de quem bebe/cura — uma vez a cada ~30 s, o "topar quando precisa" de sempre. */
+const ESTIMATED_POTION_USES_PER_HOUR = 120;
 const MS_PER_HOUR = 3_600_000;
 const GOLD_SAFETY_MULTIPLIER = 1.25;
+
+/**
+ * Quantas vezes por hora este suprimento sai, na cadência que o PRÓPRIO conteúdo declara.
+ *
+ * Uma runa de grupo `attack` (Avalanche, por exemplo) NÃO bebe como poção — o schema é claro
+ * sobre isso: "a runa de `attack` declara o [`groupCooldownMs`] dela para se alinhar às magias
+ * de ataque" (`packages/content/src/schemas.ts`, comentário de `supplySchema.groupCooldownMs`).
+ * Ela sai a cada golpe possível, não a cada "preciso curar" — tratar as duas cadências como uma
+ * só subestimava o gasto de quem ataca com runa em várias vezes (Sorcerer/Druid nesta party).
+ */
+function usesPerHour(supply: Supply): number {
+  if (supply.group === 'attack') return Math.floor(MS_PER_HOUR / supply.groupCooldownMs);
+  return ESTIMATED_POTION_USES_PER_HOUR;
+}
 
 export function goldForOneHour(
   content: Content, config: BotConfigV2, ammo: Readonly<Record<string, string>> | null,
@@ -143,7 +157,7 @@ export function goldForOneHour(
     for (const slot of set.slots) {
       if (slot === null || slot.do.kind !== 'supply') continue;
       const supply = content.supplies.get(slot.do.supplyId);
-      if (supply !== undefined) total += supply.price * ESTIMATED_SUPPLY_USES_PER_HOUR;
+      if (supply !== undefined) total += supply.price * usesPerHour(supply);
     }
   }
   if (ammo !== null) {
@@ -189,6 +203,26 @@ function targetsAtLeast(count: number): BotConditionV2 {
   return { kind: 'targets', op: '>=', count };
 }
 
+/**
+ * Um slot por magia da lista que EXISTE no conteúdo desta branch, do mais forte pro mais barato,
+ * todos com a mesma condição.
+ *
+ * Não precisa de limiar de mana escrito à mão: `#perform` (`packages/sim/src/rulesets/hunt.ts`)
+ * já cai para o PRÓXIMO slot do mesmo ciclo quando o de cima está em cooldown ou sem mana
+ * (`recusa por COOLDOWN carrega prazo; as outras ENGATILHAM` — a recusa por mana não tranca
+ * nada, só passa para a próxima regra elegível). Listar do mais forte pro mais fraco monta a
+ * rotação sozinho: o personagem lança o melhor que consegue pagar naquele instante.
+ *
+ * Filtra contra `content.spells` em vez de presumir que a lista inteira existe — uma branch que
+ * ainda não integrou a magia mais nova (ex.: Fierce Berserk, #523) perde só aquele degrau da
+ * rotação, não o bot inteiro.
+ */
+function spellCascade(
+  content: Content, candidates: readonly string[], when: readonly BotConditionV2[],
+): SlotInput[] {
+  return candidates.filter((id) => content.spells.has(id)).map((id) => spell(id, when));
+}
+
 function padSlots(filled: readonly SlotInput[]): (SlotInput | null)[] {
   if (filled.length > BOT_SLOTS_PER_SET) {
     throw new Error(`dragon-party: ${filled.length} regras não cabem nos ${BOT_SLOTS_PER_SET} slots do conjunto`);
@@ -224,6 +258,13 @@ function buildConfig(follow: BotFollow, primarySlots: readonly SlotInput[]): Bot
  * ORDEM do slot"): cura vem antes de poção, poção antes de buff, buff antes de ataque — a
  * primeira regra cujo `when` bate é a que executa naquele ciclo.
  *
+ * Contra o dragão (issue #526): fogo é IMUNE, gelo é FRAQUEZA (−10 %), energia resiste 20 %,
+ * terra resiste 80 %. Isso risca Hell's Core (fogo) do Sorcerer e Terra Wave/Wrath of Nature
+ * (terra) do Druid — dano zero ou quase — e deixa a Avalanche Rune (gelo, sem restrição de
+ * vocação) como o ataque de base dos dois; Rage of the Skies (energia) e Eternal Winter (gelo,
+ * a própria fraqueza) entram como o nuke de área para grupo grande, um por vocação porque só o
+ * Druid tem magia de gelo de área no catálogo.
+ *
  * `mass-healing` do Druid dispara pelo HP do PRÓPRIO Druid, não por "dois ou mais feridos": o
  * vocabulário do bot (`botConditionSchema`, packages/content/src/schemas.ts) não tem condição de
  * contagem de feridos na party — só `hp`/`mana` do lançador ou do candidato resolvido por
@@ -231,24 +272,33 @@ function buildConfig(follow: BotFollow, primarySlots: readonly SlotInput[]): Bot
  * meio do mesmo respiro de área que fere o resto da party, o HP dele é o proxy disponível; um
  * vocabulário com contagem de feridos é trabalho de bot, fora do escopo desta issue.
  */
-export function botConfigFor(vocationId: DragonPartyVocation): BotConfigV2 {
+export function botConfigFor(content: Content, vocationId: DragonPartyVocation): BotConfigV2 {
   switch (vocationId) {
     case 'knight':
-      // Knight puxa a rota (não segue ninguém) e briga com `exori` (Berserk) — `exori gran`
-      // (Fierce Berserk) ainda não existe no conteúdo desta branch (auditoria 2026-09-24).
+      // Knight puxa a rota (não segue ninguém). Rotação de ataque do mais forte pro mais barato:
+      // exori gran (Fierce Berserk, #523) → exori min (Front Sweep) → exori (Berserk) → exori
+      // ico (Whirlwind Throw) como filler barato de mana. `spellCascade` já cai para o próximo
+      // degrau sozinho quando o de cima está em cooldown ou sem mana.
       return buildConfig({ kind: 'none' }, [
         supply('supreme-health-potion', [hpBelow(60)]),
         haste('haste-knight'),
-        spell('berserk', [targetsAtLeast(1)]),
+        ...spellCascade(
+          content, ['fierce-berserk', 'front-sweep', 'berserk', 'whirlwind-throw'],
+          [targetsAtLeast(1)],
+        ),
       ]);
     case 'paladin':
       return buildConfig({ kind: 'leader' }, [
         supply('ultimate-spirit-potion', [hpBelow(60)]),
         haste('haste-paladin'),
-        // exevo mas san (área) antes de exori san (alvo único): prioriza a área quando há gente
-        // o bastante para valer o mana.
-        spell('divine-caldera', [targetsAtLeast(3)]),
-        spell('divine-missile', [targetsAtLeast(1)]),
+        // exevo mas san (Divine Caldera, área) quando há gente o bastante para valer o mana;
+        // senão, alvo único do mais forte pro mais barato: exori gran con (Strong Ethereal
+        // Spear, #523) → exori san (Divine Missile) → exori con (Ethereal Spear).
+        ...spellCascade(content, ['divine-caldera'], [targetsAtLeast(3)]),
+        ...spellCascade(
+          content, ['strong-ethereal-spear', 'divine-missile', 'ethereal-spear'],
+          [targetsAtLeast(1)],
+        ),
       ]);
     case 'sorcerer':
       return buildConfig({ kind: 'leader' }, [
@@ -256,20 +306,24 @@ export function botConfigFor(vocationId: DragonPartyVocation): BotConfigV2 {
         supply('health-potion', [hpBelow(30)]),
         haste('haste-sorcerer'),
         spell('ultimate-healing-sorcerer', [hpBelow(60)]),
-        spell('rage-of-the-skies', [targetsAtLeast(4)]),
-        // Avalanche é gelo — o dragão é fraco a gelo (issue #526) — e é o ataque padrão do
-        // Sorcerer aqui: ele não tem magia de gelo própria (só o Druid tem, no Tibia real).
+        // Rage of the Skies (energia) para grupo grande — não Hell's Core: fogo não faz nada no
+        // dragão. Avalanche (gelo) é o ataque de base: o Sorcerer não tem magia de gelo própria
+        // no catálogo, só a runa.
+        ...spellCascade(content, ['rage-of-the-skies'], [targetsAtLeast(4)]),
         supply('avalanche-rune', [targetsAtLeast(1)]),
       ]);
     case 'druid':
       return buildConfig({ kind: 'leader' }, [
-        // Exura Sio no membro mais ferido da party.
+        // Heal Friend no membro mais ferido da party.
         spell('heal-friend-druid', [hpBelow(70)], { kind: 'lowest-hp-member' }),
         spell('mass-healing', [hpBelow(70)]),
         supply('ultimate-mana-potion', [manaBelow(40)]),
         supply('health-potion', [hpBelow(30)]),
         haste('haste-druid'),
-        spell('eternal-winter', [targetsAtLeast(4)]),
+        // Eternal Winter (gelo) para grupo grande — a própria fraqueza do dragão, e o único nuke
+        // de área do Druid que não é terra (Terra Wave/Wrath of Nature ficam de fora: 80 % de
+        // resistência). Avalanche (gelo) é o ataque de base.
+        ...spellCascade(content, ['eternal-winter'], [targetsAtLeast(4)]),
         supply('avalanche-rune', [targetsAtLeast(1)]),
       ]);
   }

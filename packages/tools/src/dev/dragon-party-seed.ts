@@ -56,7 +56,7 @@ export async function seedCharacterStats(
   const stats = statsForLevel(level, vocation, content.progression);
   const skills = skillsFor(vocationId);
   const ammo = ammoFor(vocationId);
-  const botConfig = botConfigFor(vocationId);
+  const botConfig = botConfigFor(content, vocationId);
 
   const botProblems = validateBotConfigV2(botConfig, content);
   if (botProblems.length > 0) {

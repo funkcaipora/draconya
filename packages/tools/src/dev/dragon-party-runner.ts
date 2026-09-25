@@ -8,9 +8,8 @@
 // integração completo aqui porque isso exigiria o `api` de pé; o que TEM teste (`*.postgres.
 // test.ts`) é `seedCharacterStats`, a parte que grava o banco.
 
-import { inArray } from 'drizzle-orm';
 import { loadContent } from '@draconya/content/load';
-import { createDatabase, schema, type Database } from '@draconya/server';
+import { createDatabase, SessionDirectory, type Database } from '@draconya/server';
 import {
   DRAGON_PARTY_LEADER_VOCATION, DRAGON_PARTY_MEMBERS, type DragonPartyMemberPlan,
 } from './dragon-party-plan.js';
@@ -37,12 +36,13 @@ export interface DragonPartyRunResult {
 
 export async function runDragonParty(options: DragonPartyOptions): Promise<DragonPartyRunResult> {
   const log = options.log ?? ((message: string) => console.log(message));
+  // `--reset` não toca o Postgres (ver `resetDragonParty`) — só abre a conexão quando ela é
+  // realmente usada, para não exigir `DATABASE_URL` de quem só quer destravar a party.
+  if (options.reset) return resetDragonParty(options, log);
   const database = createDatabase(options.databaseUrl);
   await database.ping();
   try {
-    return options.reset
-      ? await resetDragonParty(database.db, options, log)
-      : await seedAndFormParty(database.db, options, log);
+    return await seedAndFormParty(database.db, options, log);
   } finally {
     await database.close();
   }
@@ -155,57 +155,76 @@ async function joinMissingMembers(
 }
 
 /**
- * Devolve os quatro para a Cidade quando a party ficou travada. Best-effort e explicitamente
- * fora do caminho normal (ADR 0024, invariante 8/9): `characters.state`/`session_id` não são
- * escritos por ninguém fora da sessão dona em produção — aqui são, de propósito, porque este é
- * o utilitário de recuperação para quando a sessão dona já não está rodando. `leave` pela API
- * tira o personagem do FORMULÁRIO da party; se a sessão de hunt (no `game`) ainda estiver de pé,
- * ela não é encerrada por aqui — só reiniciar o processo `game`, ou esperar a sessão encerrar
- * sozinha, resolve esse caso.
+ * Devolve os quatro para a Cidade quando a party ficou travada.
+ *
+ * `characters.state`/`characters.session_id` NÃO são a resposta aqui (correção de revisão): a
+ * própria API já documenta que "a coluna `state` [...] NÃO é escrita por ninguém" e que confiar
+ * nela "fazia a API responder 'city' para quem estava numa hunt havia seis horas — uma mentira
+ * quieta" (`packages/server/src/api/characters.ts`, comentário de `locateSession`). Quem manda é
+ * o DIRETÓRIO (`SessionDirectory`, Redis) — `GET /api/characters` e o `/party/:id/start` leem
+ * `directory.lookup`, nunca a coluna. A recuperação de verdade é apagar o registro de lá, e só
+ * isso: por isso este utilitário não abre o Postgres (`runDragonParty`).
+ *
+ * **Antes de apagar qualquer coisa, confere se o nó dono ainda bate** (a MESMA pergunta que
+ * `directory.isActive`/FUN-53 fazem para decidir "está em jogo"): um lookup que resolve para um
+ * nó com batimento vivo é uma sessão de verdade, hospedada por um processo que ainda está de pé
+ * — apagar o lease dela por baixo seria o oposto de "travado", e abriria a fresta do invariante
+ * 9 (duas hospedagens do mesmo personagem) na próxima vez que alguém desse `--start`. Só o
+ * lease de um nó SEM batimento (o processo `game` caiu sem drenar) é apagado — e mesmo esse caso
+ * o `jobs` varre sozinho em até dez segundos (FUN-28); isto só evita a espera.
  */
 async function resetDragonParty(
-  db: Database, options: DragonPartyOptions, log: (message: string) => void,
+  options: DragonPartyOptions, log: (message: string) => void,
 ): Promise<DragonPartyRunResult> {
-  const api = buildApi(options);
-  let exitCode = 0;
-  const characterIds: string[] = [];
-
-  for (const plan of DRAGON_PARTY_MEMBERS) {
-    try {
-      const session = await api.devLogin(plan.email);
-      const characterId = await api.ensureCharacter(session, plan.characterName);
-      characterIds.push(characterId);
-      const mine = await api.myParty(session, characterId);
-      if (mine.party !== null) {
-        await api.leave(session, mine.party.id, characterId);
-        log(`${plan.characterName} saiu da party ${mine.party.id}`);
-      }
-    } catch (error) {
-      log(`ERRO ao resetar ${plan.characterName}: ${(error as Error).message}`);
-      exitCode = 1;
-    }
-  }
-
-  if (characterIds.length > 0) {
-    await db.update(schema.characters)
-      .set({ state: 'city', sessionId: null })
-      .where(inArray(schema.characters.id, characterIds));
-    log(`${characterIds.length} personagem(ns) marcado(s) de volta à Cidade no Postgres.`);
-  }
-
   if (options.redisUrl === undefined) {
-    log('REDIS_URL não informado — um lease de sessão preso some sozinho em até 30s (o teto do lease).');
-    return { exitCode };
+    log(
+      'ERRO: --reset precisa de REDIS_URL (ou --redis-url=) para conferir se a sessão de cada '
+        + 'personagem ainda está viva antes de mexer em qualquer coisa — sem isso, apagar o lease '
+        + 'às cegas arrisca duas sessões hospedadas para o MESMO personagem (invariante 8).',
+    );
+    return { exitCode: 1 };
   }
 
+  const api = buildApi(options);
   const { default: Redis } = await import('ioredis');
   const redis = new Redis(options.redisUrl, { maxRetriesPerRequest: 1 });
+  const directory = new SessionDirectory(redis);
+  let exitCode = 0;
+
   try {
-    for (const characterId of characterIds) {
-      await redis.del(`char:${characterId}:session`);
-      await redis.del(`party:by-char:${characterId}`);
+    for (const plan of DRAGON_PARTY_MEMBERS) {
+      try {
+        const session = await api.devLogin(plan.email);
+        const characterId = await api.ensureCharacter(session, plan.characterName);
+
+        const location = await directory.lookup(characterId);
+        if (location !== null && await directory.isNodeAlive(location.nodeId)) {
+          log(
+            `AVISO: ${plan.characterName} tem uma sessão viva no nó "${location.nodeId}" `
+              + `(tipo "${location.type}") — não vou apagar o lease dela. Espere a hunt encerrar `
+              + 'sozinha, ou reinicie o processo `game` se ela estiver realmente travada.',
+          );
+          exitCode = 1;
+          continue;
+        }
+
+        const mine = await api.myParty(session, characterId);
+        if (mine.party !== null) {
+          await api.leave(session, mine.party.id, characterId);
+          log(`${plan.characterName} saiu da party ${mine.party.id}`);
+        }
+        if (location !== null) {
+          // O nó registrado não bate mais: o lease é órfão (FUN-28), e apagá-lo aqui só adianta
+          // o que o `jobs` faria sozinho no próximo ciclo.
+          await redis.del(`char:${characterId}:session`);
+          log(`${plan.characterName}: lease órfão (nó "${location.nodeId}" sem batimento) limpo.`);
+        }
+        await redis.del(`party:by-char:${characterId}`);
+      } catch (error) {
+        log(`ERRO ao resetar ${plan.characterName}: ${(error as Error).message}`);
+        exitCode = 1;
+      }
     }
-    log('diretório de sessão e ponteiro de party limpos no Redis.');
   } finally {
     redis.disconnect();
   }
