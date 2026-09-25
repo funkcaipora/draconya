@@ -3,7 +3,7 @@
   "name": "Royal Crossbow",
   "kind": "weapon",
   "slot": "hand",
-  "weight": 60,
+  "weight": 120,
   "value": 0,
   "attack": 5,
   "twoHanded": true,
@@ -18,5 +18,5 @@
     "ammoFamily": "bolt",
     "hitChance": 3
   },
-  "_open": "Kit level 200 (#524), Paladin — besta de duas mãos, sem escudo (a issue já previa: \"— (besta de duas mãos)\"). Level 130, `attack` 5 (o dano de verdade é da munição — power-bolt), `range` 6 e `hitChance` +3 do Canary `items.xml` id 8023 (`<attribute key=\"hitchance\" value=\"3\"/>`, o bônus de acerto da ARMA, somado ao da munição — a chance de acerto por skill/distância é da issue #522; `hitChance` aqui é só o dado). `weight`: o Canary dá 12000 (120 oz), pesado demais para uma besta de duas mãos comparado a toda outra arma do kit — provável peculiaridade do `data-otservbr-global`; usado 60 oz, o valor consistente do TibiaWiki (tibiascape.com/library/items/royal-crossbow), com a divergência registrada aqui. `value` 0: nenhum NPC compra a Royal Crossbow no Tibia real (TibiaWiki — \"no buy/sell offers\")."
+  "_open": "Kit level 200 (#524), Paladin — besta de duas mãos, sem escudo (a issue já previa: \"— (besta de duas mãos)\"). Level 130, `attack` 5 (o dano de verdade é da munição — power-bolt), `weight` 12000 (120 oz), `range` 6 e `hitChance` +3 do Canary `items.xml` id 8023 (`<attribute key=\"weight\" value=\"12000\"/>`, `<attribute key=\"hitchance\" value=\"3\"/>`, o bônus de acerto da ARMA, somado ao da munição — a chance de acerto por skill/distância é da issue #522; `hitChance` aqui é só o dado). O TFS `items.xml` id 8851 concorda no peso (12000). ADR 0037 d.4: Canary é a fonte para atributo de item, TibiaWiki só para fato que nenhuma engine carrega (preço de NPC) — 120 oz fica, mesmo pesada para uma besta de duas mãos comparada ao resto do kit; não é o tipo de exceção que o d.4 reserva a TibiaWiki. `value` 0: nenhum NPC compra a Royal Crossbow no Tibia real (TibiaWiki — \"no buy/sell offers\")."
 }
