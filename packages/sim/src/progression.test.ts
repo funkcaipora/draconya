@@ -169,12 +169,31 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
       .toBe(esperado);
   });
 
-  it('abençoado (premium) perde menos — blessedReduction mapeia a bênção do Tibia', () => {
+  it('abençoado (premium) perde menos — TETADO em 50%, não os 56% crus, abaixo do limiar cúbico', () => {
+    // `Player::getLostPercent` do Canary (ramo `level < 24`):
+    // `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`. Sete bênçãos
+    // dão 56% — ≥ 40% —, e o Tibia teta isso em exatamente 50% NESTE ramo, não o valor bruto.
     const character = atLevel(20);
     const antes = character.xp;
-    const esperado = Math.round(
-      baseline.deathPenalty.flatFraction * antes * (1 - baseline.deathPenalty.blessedReduction),
-    );
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.50));
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
+  });
+
+  it('abaixo de 40% cru, o teto não mexe em nada — só entra quando a redução bateria 40% ou mais', () => {
+    const gentle: Progression = { ...baseline, deathPenalty: { ...baseline.deathPenalty, blessedReduction: 0.30 } };
+    const character = atLevel(20);
+    const antes = character.xp;
+    const esperado = Math.round(gentle.deathPenalty.flatFraction * antes * (1 - 0.30));
+    expect(applyDeathPenalty(character, { premium: true }, null, gentle).xpLost).toBe(esperado);
+  });
+
+  it('no limiar cúbico (level ≥ 24) a redução crua vale, sem teto: 56%, não 50%', () => {
+    // O teto do Canary só existe no ramo `else` (`level < 24`) de `getLostPercent` — a fórmula
+    // cúbica não passa por ele.
+    const character = atLevel(24);
+    const level = character.level; // atLevel deixa o personagem exatamente na fronteira do level.
+    const rawLoss = ((level + 50) / 100) * 50 * (level * level - 5 * level + 8);
+    const esperado = Math.round(rawLoss * (1 - baseline.deathPenalty.blessedReduction));
     expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
   });
 

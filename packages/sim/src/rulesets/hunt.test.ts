@@ -6117,9 +6117,12 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       return event.departure.receipt.aggregates.xpGained;
     };
     // Level 10 < `cubicFromLevel` (24): a perda é `flatFraction` da XP ACUMULADA (não mais uma
-    // fração de `xpToCompleteLevel`), reduzida por `blessedReduction` para quem está abençoado.
+    // fração de `xpToCompleteLevel`). Quem está abençoado tem a redução TETADA em 50% neste
+    // ramo (Canary `Player::getLostPercent`, `level < 24`) — `blessedReduction` (56%) é ≥ 40%,
+    // então o teto entra, não o valor bruto.
     const { flatFraction, blessedReduction } = (progression as Progression).deathPenalty;
-    expect(xpOf('premium')).toBe(-Math.round(flatFraction * startXp * (1 - blessedReduction)));
+    expect(blessedReduction).toBeGreaterThanOrEqual(0.40);
+    expect(xpOf('premium')).toBe(-Math.round(flatFraction * startXp * (1 - 0.50)));
     expect(xpOf('free')).toBe(-Math.round(flatFraction * startXp));
   });
 

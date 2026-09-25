@@ -33,11 +33,19 @@ export type SkillsState = Readonly<Record<string, SkillState>>;
  * decidiu. O expoente conta a partir do nível INICIAL — sem isso, uma skill que começa em 10
  * cobraria pelo décimo nível já no primeiro uso.
  *
- * **O custo é INTEIRO**, e isso não é cosmético. `50 * 1.1` dá `55.000000000000007` em ponto
- * flutuante, e o resto que sobra ao fechar um nível carregaria esse lixo para o próximo, e
- * para o seguinte. Numa hunt de oito horas são milhares de níveis de resíduo somado — a mesma
- * armadilha que o `AGENTS.md` deste pacote registra sobre acumular `0,1` dez vezes. Com custo
- * inteiro e uso inteiro, a conta fecha exata.
+ * **O custo é INTEIRO, e é TRUNCADO, não arredondado** (#521, ADR 0037 — correção de revisão).
+ * `50 * 1.1` dá `55.000000000000007` em ponto flutuante; sem inteirar, o resto que sobra ao
+ * fechar um nível carregaria esse lixo para o próximo, e para o seguinte — a mesma armadilha
+ * que o `AGENTS.md` deste pacote registra sobre acumular `0,1` dez vezes. Mas o Tibia TRUNCA,
+ * não arredonda: `Vocation::getReqSkillTries` do Canary faz
+ * `static_cast<uint64_t>(skillBase[skill] * pow(multiplier, level - 11))`, e
+ * `Vocation::getReqMana` faz `std::floor<uint64_t>(1600 * pow(manaMultiplier, magLevel - 1))` —
+ * as duas descartam a fração, nunca arredondam para cima. `Math.round` aqui divergia do Tibia
+ * sempre que o resultado exato cai acima de `,5`: um Knight subindo corpo a corpo do level 15
+ * para o 16 precisa de `floor(50 × 1,1⁵) = 80` tries no Canary, e `Math.round` pedia 81 — um a
+ * mais, todo nível, em quase toda vocação (só quem tem fator inteiro, como o Sorcerer/Druid em
+ * algumas skills, escapava por coincidência). `Math.floor` é equivalente a `Math.trunc` aqui
+ * porque o valor nunca é negativo.
  *
  * `factor` é OPCIONAL e por padrão cai no `curve.factor` do próprio conteúdo — o comportamento
  * de antes da #521. Quem sabe a vocação do personagem passa o fator dela (`skillFactorFor`,
@@ -48,7 +56,7 @@ export function pointsForLevel(
   definition: Skill, level: number, factor: number = definition.curve.factor,
 ): number {
   const steps = Math.max(0, level - definition.startingLevel);
-  return Math.round(definition.curve.base * factor ** steps);
+  return Math.floor(definition.curve.base * factor ** steps);
 }
 
 /**

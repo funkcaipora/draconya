@@ -184,6 +184,13 @@ export interface DeathPenalty {
  * tinha. Cobrança/promoção/PvP e o gradiente por NÚMERO de bênçãos ficam fora — fora do escopo
  * da #521, e o repo nunca teve blessing de verdade para gradiente nenhum.
  *
+ * **Abaixo de `cubicFromLevel` a redução do abençoado é TETADA em 50%, não os 56% crus**
+ * (correção de revisão — `Player::getLostPercent` do Canary, ramo `else` do `if (level >= 24)`:
+ * `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`). Sete bênçãos dão
+ * 56%, que é ≥ 40%, e o Tibia arredonda isso para exatamente 50% NESSE ramo — não é o valor
+ * bruto. O teto só existe no ramo da fração fixa; a fórmula cúbica (level ≥ 24) usa a redução
+ * crua, sem teto.
+ *
  * **O piso do level 8 protege, nunca promove.** Um personagem que já está abaixo dele não
  * perde nada; um acima dele nunca desce além. **Não tem equivalente no Tibia** — lá não existe
  * piso —, e é decisão de PRODUTO do Draconya (documentada em `docs/product/progression.md`) para
@@ -201,10 +208,14 @@ export function applyDeathPenalty(
   progression: Progression,
 ): DeathPenalty {
   const { flatFraction, cubicFromLevel, blessedReduction, levelFloor } = progression.deathPenalty;
-  const reduction = options.premium ? blessedReduction : 0;
   const level = character.level;
+  const belowCubic = level < cubicFromLevel;
+  // O teto de 50% é só do ramo `level < cubicFromLevel` (ver o comentário da função).
+  const reduction = options.premium
+    ? (belowCubic && blessedReduction >= 0.40 ? 0.50 : blessedReduction)
+    : 0;
 
-  const raw = level < cubicFromLevel
+  const raw = belowCubic
     ? flatFraction * character.xp
     : cubicLoss(level + fractionIntoLevel(character, progression));
   const loss = Math.round(raw * (1 - reduction));
