@@ -31,8 +31,27 @@ const catalog = new Map<string, Item>([
     id: 'druid-staff', kind: 'weapon', slot: 'hand', weight: 30, value: 0, attack: 12,
     requires: { vocationId: 'druid' },
   })],
+  // O kit level 200 (#524): peça usável por MAIS de uma vocação — a Magic Plate Armor
+  // (Knight+Paladin), a Focus Cape (Sorcerer+Druid).
+  ['shared-plate', define({
+    id: 'shared-plate', kind: 'armor', slot: 'chest', weight: 85, value: 0, armor: 17,
+    requires: { vocationId: ['knight', 'paladin'] },
+  })],
   ['energy-ring', define({ id: 'energy-ring', kind: 'ring', slot: 'finger', weight: 2, ringEffect: { kind: 'energy-shield' } })],
   ['plain-ring', define({ id: 'plain-ring', kind: 'ring', slot: 'finger', weight: 2 })],
+  // Bônus de equipamento (#524, kit level 200): skill e velocidade, ativos só enquanto vestido.
+  ['ml-hat', define({
+    id: 'ml-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
+    bonuses: { skill: { skillId: 'magic', amount: 1 } },
+  })],
+  ['dist-armor', define({
+    id: 'dist-armor', kind: 'armor', slot: 'chest', weight: 30, value: 0,
+    bonuses: { skill: { skillId: 'distance', amount: 2 } },
+  })],
+  ['haste-boots', define({
+    id: 'haste-boots', kind: 'armor', slot: 'feet', weight: 5, value: 0,
+    bonuses: { speed: 20 },
+  })],
 ]);
 
 const carried = (itemId: string, instanceId = itemId, quantity = 1): CarriedItem =>
@@ -169,6 +188,18 @@ describe('equipar (§21.4)', () => {
     expect(inventory.equip('druid-staff', wearer({ vocationId: 'knight' }), catalog).ok)
       .toBe(false);
     expect(inventory.equip('druid-staff', wearer({ vocationId: 'druid' }), catalog).ok)
+      .toBe(true);
+  });
+
+  it('`vocationId` aceita uma LISTA (#524): a peça de duas vocações veste as duas, e mais nenhuma', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('shared-plate'), catalog, wearer({ capacity: 1_000 }), rules);
+    expect(inventory.equip('shared-plate', wearer({ vocationId: 'sorcerer' }), catalog))
+      .toEqual({ ok: false, reason: 'wrong-vocation' });
+    expect(inventory.equip('shared-plate', wearer({ vocationId: 'knight' }), catalog).ok)
+      .toBe(true);
+    inventory.unequip('chest', rules);
+    expect(inventory.equip('shared-plate', wearer({ vocationId: 'paladin' }), catalog).ok)
       .toBe(true);
   });
 
@@ -351,6 +382,34 @@ describe('o que o combate lê', () => {
     inventory.add(carried('energy-ring'), catalog, wearer(), rules);
     inventory.equip('energy-ring', wearer(), catalog);
     expect(inventory.ringEffect(catalog)).toEqual({ kind: 'energy-shield' });
+  });
+
+  it('skillBonus soma o bônus do que está vestido, e só da skill pedida (#524)', () => {
+    const inventory = new Inventory();
+    // Zero sem nenhuma peça de bônus — o caso comum, sem alocar nada.
+    expect(inventory.skillBonus(catalog, 'magic')).toBe(0);
+    inventory.add(carried('ml-hat'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('dist-armor'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('ml-hat', wearer(), catalog);
+    inventory.equip('dist-armor', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'magic')).toBe(1);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(2);
+    // A skill que NENHUMA peça bonifica fica em zero — o item não soma na skill errada.
+    expect(inventory.skillBonus(catalog, 'melee')).toBe(0);
+    // Só enquanto vestido: tirar o chapéu apaga o bônus de magic level.
+    inventory.unequip('head', rules);
+    expect(inventory.skillBonus(catalog, 'magic')).toBe(0);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(2);
+  });
+
+  it('speedBonus soma a velocidade do que está vestido (#524, boots of haste)', () => {
+    const inventory = new Inventory();
+    expect(inventory.speedBonus(catalog)).toBe(0);
+    inventory.add(carried('haste-boots'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('haste-boots', wearer(), catalog);
+    expect(inventory.speedBonus(catalog)).toBe(20);
+    inventory.unequip('feet', rules);
+    expect(inventory.speedBonus(catalog)).toBe(0);
   });
 });
 

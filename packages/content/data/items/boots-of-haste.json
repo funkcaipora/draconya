@@ -1,0 +1,13 @@
+{
+  "id": "boots-of-haste",
+  "name": "Boots of Haste",
+  "kind": "armor",
+  "slot": "feet",
+  "weight": 7.5,
+  "value": 0,
+  "armor": 0,
+  "bonuses": {
+    "speed": 20
+  },
+  "_open": "Kit level 200 (#524), as quatro vocações. `speed` 20 e weight 750 (7,5 oz) do Canary `items.xml` id 3079 (`<attribute key=\"speed\" value=\"20\"/>`, somado direto a `character.speed` enquanto vestido — não é a `haste` condition da magia). Sem `level`/`vocation` no script de equip. `value` 0: nenhum NPC compra a Boots of Haste no Tibia real (TibiaWiki via tibiascape.com/library/items/boots-of-haste — \"no buy/sell offers\", item de quest/drop raro); o `sell 30000` do Nah'Bob é economia do `data-otservbr-global`, descartado pela mesma razão do Royal Helmet (ADR 0037 d.4)."
+}

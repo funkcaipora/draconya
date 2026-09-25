@@ -23,7 +23,8 @@ import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
   DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
-  Vocation, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
+  Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
+  WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { validateBotConfig, validateBotConfigV2 } from './bot.js';
@@ -381,6 +382,8 @@ export function compileItem(
         ...(raw.kind === 'distance' && raw.ammoFamily !== undefined
           ? { ammoFamily: raw.ammoFamily }
           : {}),
+        // O `hitChance` da arma (#524) é só dado — a chance de acerto à distância é a #522.
+        ...(raw.hitChance === undefined ? {} : { hitChance: raw.hitChance }),
       };
     }
   }
@@ -614,10 +617,14 @@ export function buildContent(raw: RawContent): Content {
     const where = `supply/${supply.id}`;
     const effect = supply.effect;
     if (effect.kind === 'heal') {
-      const fixed = effect.amount !== undefined;
+      // `amountRange` (#524, a poção do Tibia) conta como "fixo" ao lado de `amount`: as duas
+      // são um número SEM escalar por level/ML, ao contrário de `basePower`/`formula`.
+      const fixed = effect.amount !== undefined || effect.amountRange !== undefined;
       const scaled = effect.basePower !== undefined || effect.formula !== undefined;
       if (fixed === scaled) {
-        problems.push(`${where}: cura precisa de amount OU basePower/formula, um dos dois`);
+        problems.push(
+          `${where}: cura precisa de amount/amountRange OU basePower/formula, um dos dois`,
+        );
       }
     }
     if (effect.kind === 'damage'
@@ -630,6 +637,17 @@ export function buildContent(raw: RawContent): Content {
       }
       if (effect.target === 'self' && effect.range !== undefined) {
         problems.push(`${where}: efeito em si mesmo não tem alcance`);
+      }
+    }
+    // A vocação que o suprimento exige precisa existir (#524, como a magia em #156-159): a
+    // grande poção de mana pede Sorcerer/Druid/Paladin, e um id errado subiria mudo — recusado
+    // sempre, nunca lançável, sem nenhuma pista de por quê. Só quando HÁ vocações (a mesma
+    // tolerância do item, acima, e do `spellSkill`).
+    if (vocations.size > 0) {
+      for (const vocationId of vocationIdsOf(supply.requires.vocationId)) {
+        if (!vocations.has(vocationId)) {
+          problems.push(`${where}: requires.vocationId "${vocationId}" não existe`);
+        }
       }
     }
   }
@@ -741,6 +759,27 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
+    }
+    // A vocação que o item exige precisa existir (#524, como a magia em #156-159): a Magic
+    // Plate Armor pede Knight/Paladin, e um id errado tornaria o item ETERNAMENTE inacessível
+    // sem nenhuma pista de por quê — ninguém tem a vocação que não existe. Só quando HÁ
+    // vocações — o conteúdo de teste sem nenhuma (fixture sem sistema de vocação) não tem como
+    // conferir, a mesma tolerância do `spellSkill` (linha ~790).
+    if (vocations.size > 0) {
+      for (const vocationId of vocationIdsOf(item.requires.vocationId)) {
+        if (!vocations.has(vocationId)) {
+          problems.push(`item "${item.id}": requires.vocationId "${vocationId}" não existe`);
+        }
+      }
+    }
+    // O bônus de skill do item (#524) aponta uma skill que precisa existir — como a família de
+    // arma aponta a dela (linha ~620). Sem a conferência, "hat of the mad" bonificaria uma skill
+    // que ninguém lê, e o item pareceria funcionar sem fazer nada.
+    if (item.bonuses?.skill !== undefined && skills.size > 0
+      && !skills.has(item.bonuses.skill.skillId)) {
+      problems.push(
+        `item "${item.id}": bonuses.skill.skillId "${item.bonuses.skill.skillId}" não existe`,
+      );
     }
   }
   // A munição é abstrata (ADR 0026 d.3): NÃO existe munição grátis por família — cada tiro
@@ -1327,6 +1366,12 @@ function withCorpses(
     resolved.set(id, { ...monster, corpseAppearanceId: appearance });
   }
   return resolved;
+}
+
+/** Normaliza um `VocationRequirement` (#524) para a lista de ids que ele carrega. Ausente: nenhum. */
+function vocationIdsOf(requirement: VocationRequirement | undefined): readonly string[] {
+  if (requirement === undefined) return [];
+  return typeof requirement === 'string' ? [requirement] : requirement;
 }
 
 /** Os `_open` de um catálogo inteiro, prefixados pelo tipo. Ver `openValues`. */

@@ -1,0 +1,21 @@
+{
+  "id": "might-ring",
+  "name": "Might Ring",
+  "kind": "ring",
+  "slot": "finger",
+  "weight": 1,
+  "value": 250,
+  "charges": 20,
+  "mitigation": {
+    "resistances": {
+      "physical": 0.2,
+      "fire": 0.2,
+      "earth": 0.2,
+      "energy": 0.2,
+      "ice": 0.2,
+      "holy": 0.2,
+      "death": 0.2
+    }
+  },
+  "_open": "Kit level 200 (#524), as quatro vocações — o primeiro anel do catálogo com `mitigation`/`charges` (os dois já existiam no colar; o Energy/Life Ring usam `ringEffect`, um mecanismo diferente). `absorbpercent{physical,fire,poison,energy,ice,holy,death}` 20% cada, `charges` 20 e weight 100 (1 oz) do Canary `items.xml` id 3048 — sem `level`/`vocation`. `absorbpercentpoison` do Canary mapeia para `earth` no Draconya: o parser (`src/items/functions/item/item_parse.cpp`, `parseAbsorbPercent`) resolve `absorbpercentpoison`/`absorbpercentearth` para o MESMO `COMBAT_EARTHDAMAGE` — poison é o nome legado do tipo terra (conferido no fonte do Canary, 2026-09-24). Sem resistência a `arcane`: não é tipo do Tibia (§ schemas.ts). Gasta 1 carga por golpe de qualquer um dos sete tipos, no mesmo mecanismo do colar (`#consumeAmuletCharge`, alargado no #524 para o slot `finger`). `value` 250: Yaman compra por esse preço (TibiaWiki via tibiascape.com/library/items/might-ring)."
+}

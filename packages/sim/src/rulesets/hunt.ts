@@ -1558,10 +1558,13 @@ export class HuntRuleset implements Ruleset {
     this.#world.reset(session.participants.filter((p) => p !== character));
     // Velocidade e capacidade vêm da tabela, como `maxHealth` — e são repostas na entrada
     // porque snapshot anterior traz zero: zero é "não carrega nada" e "não anda" (FUN-119).
+    // A velocidade soma o bônus de equipamento (#524: boots of haste) — o item já está no
+    // inventário do personagem neste ponto (veio do ticket/snapshot), e é por isso que somar
+    // aqui, e não depois, dá o mesmo resultado de quem calçou a bota ANTES de entrar na hunt.
     const stats = statsForLevel(
       character.level, this.#vocationOf(character), this.#options.progression,
     );
-    character.speed = stats.speed;
+    character.speed = stats.speed + character.inventory.speedBonus(this.#options.items);
     if (character.capacity <= 0) character.capacity = stats.capacity;
     // Os containers ganham os tamanhos iniciais aqui (#160) — é onde o conteúdo existe, e é o
     // que migra um snapshot anterior sem bump: nunca encolhe.
@@ -2282,11 +2285,12 @@ export class HuntRuleset implements Ruleset {
   #onPlayerStep(session: Session, characterId: string): void {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
-    // Snapshot anterior à FUN-119 traz velocidade zero; a tabela repõe.
+    // Snapshot anterior à FUN-119 traz velocidade zero; a tabela repõe, com o bônus de
+    // equipamento (#524) — a mesma soma de `onEnter`, para quem calçou a bota antes do bump.
     if (character.speed <= 0) {
       character.speed = statsForLevel(
         character.level, this.#vocationOf(character), this.#options.progression,
-      ).speed;
+      ).speed + character.inventory.speedBonus(this.#options.items);
     }
     // O vencimento seguinte é a duração do passo que este evento der — e, quando ele não der
     // passo nenhum, a de um passo daqui (FUN-119): quem parou volta a olhar em volta no ritmo
@@ -3057,24 +3061,35 @@ const slots = bot.groups.get(group);
     return this.#aim;
   }
 
-  /** O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o BP já a conta). */
+  /**
+   * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
+   * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
+   * Mind Control) — o item soma no magic level como soma no dano da runa e na cura da poção.
+   */
   #runeScaling(character: CharacterRuntime): SpellScaling {
     const magic = this.#options.skills.get('magic');
-    const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+    const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
+      + character.inventory.skillBonus(this.#options.items, 'magic');
     return { skillLevel: magicLevel, powerScale: 1, magicLevel };
   }
 
-  /** O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por uso. */
+  /**
+   * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
+   * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
+   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   */
   #spellScaling(character: CharacterRuntime): SpellScaling {
     const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
     const skill = this.#options.skills.get(skillId);
     const magic = this.#options.skills.get('magic');
     return {
-      skillLevel: skill === undefined ? 0 : character.skills.levelOf(skill),
+      skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
+        + character.inventory.skillBonus(this.#options.items, skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
-      magicLevel: magic === undefined ? 0 : character.skills.levelOf(magic),
+      magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
+        + character.inventory.skillBonus(this.#options.items, 'magic'),
     };
   }
 
@@ -3838,7 +3853,7 @@ const slots = bot.groups.get(group);
     }
   }
 
-  /** O que agenda e cancela o vencimento por duração. É uma closure pura sobre a `Session`. */
+  /** O que agenda e cancela o vencimento por duração, e reavalia a velocidade. Closure pura sobre a `Session`. */
   #equipmentObserver(session: Session, characterId: string): EquipmentObserver {
     return {
       onEquip: (slot, item) => {
@@ -3847,15 +3862,33 @@ const slots = bot.groups.get(group);
         // para outro anel tem de perder o prazo antigo.
         session.cancelEvent(EQUIP_EXPIRE, subject);
         const definition = this.#options.items.get(item.itemId);
-        if (definition?.durationMs === undefined) return;
-        session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
-          priority: EventPriority.Housekeeping, subject,
-        });
+        if (definition?.durationMs !== undefined) {
+          session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+            priority: EventPriority.Housekeeping, subject,
+          });
+        }
+        this.#recomputeSpeed(session, characterId);
       },
       onUnequip: (slot) => {
         session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(characterId, slot));
+        this.#recomputeSpeed(session, characterId);
       },
     };
+  }
+
+  /**
+   * Reavalia `character.speed` pela tabela mais o bônus de equipamento (#524, boots of haste):
+   * vestir ou tirar a bota muda a velocidade NO MESMO evento — sem esperar o próximo passo, que
+   * já reagenda pela velocidade atual (`#onPlayerStep`). Recomputa do zero, e não soma/subtrai o
+   * item que entrou/saiu, porque `character.speed` não guarda a base separada do bônus — um
+   * recálculo é barato (poucos slots) e não arrisca divergir por conta dupla.
+   */
+  #recomputeSpeed(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    if (character === null || character.speed <= 0) return;
+    character.speed = statsForLevel(
+      character.level, this.#vocationOf(character), this.#options.progression,
+    ).speed + character.inventory.speedBonus(this.#options.items);
   }
 
   /**
@@ -3882,8 +3915,11 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Gasta uma carga do colar quando o golpe é de um tipo que ELE protege (ADR 0032 d.8). Olha a
-   * definição do item vestido, e não a mitigação somada: a soma não diz de quem é a proteção.
+   * Gasta uma carga do colar E do anel quando o golpe é de um tipo que eles protegem (ADR 0032
+   * d.8, alargado no #524 para o anel — o Might Ring do Tibia é exatamente isto no dedo). Olha a
+   * definição de CADA peça vestida, e não a mitigação somada: a soma não diz de quem é a
+   * proteção, e as duas gastam independente — um Dragon Necklace de fogo e um Might Ring que
+   * também resiste fogo gastam UMA carga cada no mesmo golpe de fogo.
    *
    * Gasta mesmo quando o golpe é esquivado (DT-03): a mitigação incide no cálculo antes do corte
    * do Dodge, então ela "trabalhou" no golpe. Resistência negativa é vulnerabilidade e não gasta.
@@ -3891,15 +3927,24 @@ const slots = bot.groups.get(group);
   #consumeAmuletCharge(
     session: Session, character: CharacterRuntime, damageType: DamageType,
   ): void {
-    const amulet = character.inventory.equippedAt('neck');
-    if (amulet === null) return;
-    const definition = this.#options.items.get(amulet.itemId);
+    this.#consumeProtectionCharge(session, character, 'neck', 'amulet-spent', damageType);
+    this.#consumeProtectionCharge(session, character, 'finger', 'ring-spent', damageType);
+  }
+
+  /** O corpo de `#consumeAmuletCharge`, por slot — ver o comentário lá. */
+  #consumeProtectionCharge(
+    session: Session, character: CharacterRuntime, slot: ItemSlot, recordType: string,
+    damageType: DamageType,
+  ): void {
+    const equipped = character.inventory.equippedAt(slot);
+    if (equipped === null) return;
+    const definition = this.#options.items.get(equipped.itemId);
     if (definition?.charges === undefined) return;
     const protects = definition.mitigation.immunities.has(damageType)
       || definition.mitigation.resistances[damageType] > 0;
     if (!protects) return;
-    if (character.inventory.consumeCharge('neck', definition.charges) > 0) return;
-    session.record('amulet-spent', amulet.itemId);
+    if (character.inventory.consumeCharge(slot, definition.charges) > 0) return;
+    session.record(recordType, equipped.itemId);
     session.emit({ kind: 'equipment-changed', characterId: character.id });
   }
 
@@ -4537,13 +4582,17 @@ const slots = bot.groups.get(group);
    * O poder bruto de um golpe pelo PERFIL (CMB-05), com a postura por último.
    *
    * A skill que escala é a da FAMÍLIA, não uma por nome: o ruleset lê `family.skillId` do
-   * conteúdo e o nível do personagem. Corpo a corpo e distância recebem a postura (`buff`);
-   * wand/rod têm faixa fixa e não passam por ela — como sempre.
+   * conteúdo e o nível do personagem, MAIS o bônus de equipamento da mesma skill (#524: a
+   * Paladin Armor soma em `distance` — o crossbow bate mais forte com ela vestida). Corpo a
+   * corpo e distância recebem a postura (`buff`); wand/rod têm faixa fixa e não passam por ela
+   * — como sempre, e o bônus entra sem efeito aí (`resolveWeaponPower` ignora `skillLevel` no
+   * caminho `fixedDamage`, ver o comentário de `weapon-power.ts`).
    */
   #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
     const family = this.#options.weaponFamilies.get(profile.family);
     const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
-    const skillLevel = skill === undefined ? 0 : character.skills.levelOf(skill);
+    const skillLevel = (skill === undefined ? 0 : character.skills.levelOf(skill))
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
     const power = resolveWeaponPower(profile, character.level, skillLevel, session.rng);
     if (family?.kind === 'distance') {
       return Math.round(power * character.conditions.damageDealtScale('distance'));

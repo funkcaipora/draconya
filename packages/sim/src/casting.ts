@@ -14,6 +14,7 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
+import { matchesVocationRequirement } from '@draconya/content';
 import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -408,6 +409,21 @@ function cast(condition: ConditionState): CastSuccess {
  * lugares decidindo a mesma coisa, e o dia em que eles divergissem ninguém saberia qual valia.
  * O início do livro é o mesmo ponto do `castSpell`: depois do pagamento, quando a ação SAIU.
  */
+/**
+ * O valor de um efeito FIXO de supply (#524): `amount` (número único) OU `amountRange` (faixa
+ * sorteada, a poção do Tibia — strong health potion cura 250-350, sempre, level 50 ou 200). O
+ * schema já garante que pelo menos um dos dois existe; sem `rng` (o caminho de fixture que prova
+ * o gold sem sorteio) a faixa cai no MÍNIMO — determinístico, nunca `undefined`.
+ */
+function fixedAmount(
+  amount: number | undefined,
+  range: { readonly min: number; readonly max: number } | undefined,
+  rng: Rng | undefined,
+): number {
+  if (range !== undefined) return rng === undefined ? range.min : rng.integer(range.min, range.max);
+  return amount ?? 0;
+}
+
 export function useSupply(
   user: CharacterRuntime,
   supply: Supply,
@@ -436,6 +452,11 @@ export function useSupply(
   if (supply.effect.kind === 'damage') {
     if (supply.requires.level !== undefined && user.level < supply.requires.level) {
       return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    // A vocação, como o level acima (#524): nunca melhora esperando, então vem antes do
+    // cooldown/alvo — a mesma ordem de `castSpell` para a magia.
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
     }
     if (supply.requires.magicLevel !== undefined && (scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
       return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
@@ -475,10 +496,14 @@ export function useSupply(
   // checagem vem ANTES do gold, pela ordem de sempre: recusar antes de debitar.
   if (supply.effect.kind === 'heal') {
     const effect = supply.effect;
-    // Requisitos da runa de cura (#475), na mesma ordem da runa de ataque: level e magic level
-    // são conferidos ANTES do gold. Poção não declara nenhum, e passa direto.
+    // Requisitos da runa de cura (#475), na mesma ordem da runa de ataque: level, vocação e
+    // magic level são conferidos ANTES do gold. Poção do v1 não declara nenhum, e passa direto;
+    // a poção do Tibia (#524) declara level e, na de espírito, vocação — só o Paladin bebe.
     if (supply.requires.level !== undefined && user.level < supply.requires.level) {
       return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
     }
     if (supply.requires.magicLevel !== undefined
       && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
@@ -502,14 +527,28 @@ export function useSupply(
     }
     purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
-    // Poção: número fixo, sem sorteio nem contexto de combate — o caminho de sempre.
+    // Poção: `amount` fixo OU `amountRange` sorteado (#524), sem contexto de combate — a runa
+    // de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
+    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava.
     return {
       ok: true,
-      healed: restore(recipient, 'health', effect.amount ?? 0),
-      manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
+      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng)),
+      manaRestored: effect.alsoMana === undefined
+        ? 0
+        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng)),
+      damage: 0, hits: NO_HITS, goldSpent: supply.price,
     };
   }
 
+  // Poção de mana (#524: requer level/vocação como a de vida — a strong mana potion pede level
+  // 50, a great mana potion Sorcerer/Druid/Paladin de level 80). Mesma ordem de sempre: level,
+  // vocação, e só então o gold.
+  if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+    return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+  }
+  if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+    return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+  }
   if (!purse.canAfford(supply.price)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
@@ -519,7 +558,7 @@ export function useSupply(
   return {
     ok: true,
     healed: 0,
-    manaRestored: restore(recipient, 'mana', supply.effect.amount),
+    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng)),
     damage: 0,
     hits: NO_HITS,
     goldSpent: supply.price,

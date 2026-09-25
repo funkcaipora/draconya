@@ -1609,6 +1609,88 @@ describe('magia de vocação (#156–#159)', () => {
   });
 });
 
+describe('requisito de mais de uma vocação em item e suprimento (#524, kit level 200)', () => {
+  const paladin = { ...knight, id: 'paladin', name: 'Paladin' };
+
+  it('item: `requires.vocationId` aceita uma LISTA, e cada id precisa existir', () => {
+    const sharedArmor = {
+      id: 'shared-armor', name: 'Shared Armor', kind: 'armor', slot: 'chest',
+      weight: 1, value: 0, requires: { vocationId: ['knight', 'monk'] },
+    };
+    expect(() => buildContent(base({ vocations: [knight, paladin], items: [sharedArmor] })))
+      .toThrow(/item "shared-armor": requires.vocationId "monk" não existe/);
+    const fixed = { ...sharedArmor, requires: { vocationId: ['knight', 'paladin'] } };
+    expect(() => buildContent(base({ vocations: [knight, paladin], items: [fixed] }))).not.toThrow();
+  });
+
+  it('item: sem NENHUMA vocação declarada no catálogo, a conferência é tolerante (conteúdo de teste sem sistema de vocação)', () => {
+    // A mesma tolerância de `spellSkill`: `vocations.size === 0` não tem como conferir nada.
+    const orphanArmor = {
+      id: 'orphan-armor', name: 'Orphan Armor', kind: 'armor', slot: 'chest',
+      weight: 1, value: 0, requires: { vocationId: ['sorcerer', 'druid'] },
+    };
+    expect(() => buildContent(base({ vocations: [], items: [orphanArmor] }))).not.toThrow();
+  });
+
+  it('item: `bonuses.skill.skillId` precisa existir no catálogo de skills', () => {
+    const mlHat = {
+      id: 'ml-hat', name: 'ML Hat', kind: 'armor', slot: 'head', weight: 1, value: 0,
+      bonuses: { skill: { skillId: 'nope', amount: 1 } },
+    };
+    expect(() => buildContent(base({ items: [mlHat] })))
+      .toThrow(/item "ml-hat": bonuses.skill.skillId "nope" não existe/);
+    const fixed = { ...mlHat, bonuses: { skill: { skillId: 'magic', amount: 1 } } };
+    expect(() => buildContent(base({ items: [fixed] }))).not.toThrow();
+  });
+
+  it('suprimento: `requires.vocationId` também aceita uma LISTA, com a mesma conferência', () => {
+    const greatMana = {
+      id: 'great-mana-potion', name: 'Great Mana Potion', price: 250, group: 'potion' as const,
+      groupCooldownMs: 1_000,
+      requires: { level: 80, vocationId: ['sorcerer', 'druid', 'monk'] },
+      effect: { kind: 'mana' as const, amountRange: { min: 150, max: 250 } },
+    };
+    expect(() => buildContent(base({ vocations: [knight, paladin], supplies: [greatMana] })))
+      .toThrow(/supply\/great-mana-potion: requires.vocationId "monk" não existe/);
+  });
+
+  it('suprimento: `effect.heal.amountRange` é a faixa fixa da poção do Tibia — min não passa de max', () => {
+    const broken = {
+      id: 'broken-potion', name: 'Broken Potion', price: 1, group: 'potion' as const,
+      groupCooldownMs: 1_000, requires: {},
+      effect: { kind: 'heal' as const, amountRange: { min: 350, max: 250 } },
+    };
+    expect(() => buildContent(base({ supplies: [broken] })))
+      .toThrow(/faixa invertida/);
+  });
+
+  it('suprimento: `effect.mana` exige `amount` OU `amountRange` — nenhum dos dois é recusado', () => {
+    const empty = {
+      id: 'empty-potion', name: 'Empty Potion', price: 1, group: 'potion' as const,
+      groupCooldownMs: 1_000, requires: {}, effect: { kind: 'mana' as const },
+    };
+    expect(() => buildContent(base({ supplies: [empty] })))
+      .toThrow(/mana precisa de "amount" ou "amountRange"/);
+  });
+
+  it('suprimento: `effect.heal.alsoMana` (a poção de espírito) exige `amount` OU `amountRange`', () => {
+    const emptySpirit = {
+      id: 'empty-spirit', name: 'Empty Spirit', price: 1, group: 'potion' as const,
+      groupCooldownMs: 1_000, requires: {},
+      effect: {
+        kind: 'heal' as const, amountRange: { min: 1, max: 2 }, alsoMana: {},
+      },
+    };
+    expect(() => buildContent(base({ supplies: [emptySpirit] })))
+      .toThrow(/alsoMana precisa de "amount" ou "amountRange"/);
+    const withMana = {
+      ...emptySpirit,
+      effect: { ...emptySpirit.effect, alsoMana: { amountRange: { min: 1, max: 2 } } },
+    };
+    expect(() => buildContent(base({ supplies: [withMana] }))).not.toThrow();
+  });
+});
+
 describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
   it('recusa secondaryGroup sem group, e cita o id', () => {
     // O secundário é o segundo livro (combat.md); sem o primeiro ele vira o único, com
@@ -1719,7 +1801,7 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
       .toMatchObject({ kind: 'heal', formula: { skillMin: 5.7 } });
     const both = { ...rune, effect: { ...rune.effect, amount: 10 } };
     expect(() => buildContent(base({ supplies: [both] })))
-      .toThrow(/supply\/ultimate-healing-rune: cura precisa de amount OU basePower\/formula/);
+      .toThrow(/supply\/ultimate-healing-rune: cura precisa de amount\/amountRange OU basePower\/formula/);
   });
 });
 

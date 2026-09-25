@@ -1,0 +1,13 @@
+{
+  "id": "magic-plate-armor",
+  "name": "Magic Plate Armor",
+  "kind": "armor",
+  "slot": "chest",
+  "weight": 85,
+  "value": 720,
+  "armor": 17,
+  "requires": {
+    "vocationId": ["knight", "paladin"]
+  },
+  "_open": "Kit level 200 (#524), Knight e Paladin. Armor 17 e weight 8500 (85 oz) do Canary `items.xml` id 3366; vocação (`Knight;true, Paladin;true, Elite Knight, Royal Paladin` no script de equip) mapeada para as duas vocações base do Draconya — promoção fica fora (`docs/product/progression.md`). `value` 720 é o preço do NPC H.L. (TibiaWiki, via tibiascape.com/library/items/magic-plate-armor); o Canary tem um segundo NPC (Rashid) oferecendo 90000 na sua própria economia, descartado pela mesma razão do Royal Helmet (ADR 0037 d.4)."
+}

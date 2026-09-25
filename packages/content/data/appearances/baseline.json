@@ -32,7 +32,25 @@
     "ham": 3582,
     "worm": 3492,
     "lump-of-dirt": 9692,
-    "legion-helmet": 3374
+    "legion-helmet": 3374,
+    "crusader-helmet": 3391,
+    "royal-helmet": 3392,
+    "hat-of-the-mad": 3210,
+    "magic-plate-armor": 3366,
+    "paladin-armor": 8063,
+    "focus-cape": 8043,
+    "knight-legs": 3371,
+    "crown-legs": 3382,
+    "zaoan-legs": 10387,
+    "boots-of-haste": 3079,
+    "mystic-blade": 7384,
+    "royal-crossbow": 8023,
+    "mastermind-shield": 3414,
+    "spellbook-of-mind-control": 8074,
+    "dragon-necklace": 3085,
+    "might-ring": 3048,
+    "wand-of-starstorm": 8092,
+    "hailstorm-rod": 3067
   },
   "ammunition": {
     "arrow": {
@@ -50,6 +68,10 @@
     "onyx-arrow": {
       "icon": 7365,
       "missile": 23
+    },
+    "power-bolt": {
+      "icon": 3450,
+      "missile": 14
     }
   },
   "weapons": {
@@ -58,6 +80,12 @@
     },
     "snakebite-rod": {
       "missile": 39
+    },
+    "wand-of-starstorm": {
+      "missile": 5
+    },
+    "hailstorm-rod": {
+      "missile": 29
     }
   },
   "corpses": {
@@ -337,6 +365,33 @@
     },
     "mana-potion": {
       "effect": 13
+    },
+    "strong-health-potion": {
+      "effect": 14
+    },
+    "great-health-potion": {
+      "effect": 14
+    },
+    "ultimate-health-potion": {
+      "effect": 14
+    },
+    "supreme-health-potion": {
+      "effect": 14
+    },
+    "strong-mana-potion": {
+      "effect": 13
+    },
+    "great-mana-potion": {
+      "effect": 13
+    },
+    "ultimate-mana-potion": {
+      "effect": 13
+    },
+    "great-spirit-potion": {
+      "effect": 14
+    },
+    "ultimate-spirit-potion": {
+      "effect": 14
     },
     "avalanche-rune": {
       "effect": 41,
