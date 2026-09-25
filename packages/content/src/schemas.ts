@@ -1285,7 +1285,19 @@ export const monsterSchema = z.strictObject({
    * `ceil50(chão × 1000 / speed)` ms, diagonal × 3. O rato do mapa real tem 172.
    */
   speed: z.number().int().positive(),
-  /** Raio de agressão, em tiles. */
+  /**
+   * Raio de agressão, em tiles — a distância em que `chooseTarget` (`monster/monster.ts`) aceita
+   * um candidato novo (Chebyshev, como `distance`). É o mesmo raio de `Monster::canSee` do
+   * TFS/Canary, que faz `updateTargetList`/`onCreatureFound` aceitar um jogador na lista de
+   * alvos (#527): TFS restringe a `Monster::canSee` própria — quadrado de
+   * `Map::maxClientViewportX + 1` = 9 (`src/monster.cpp`, `src/map.h`); o Canary NÃO sobrescreve
+   * `canSee` para monstro, então herda o quadrado de `Creature::canSee`,
+   * `MAP_MAX_VIEW_PORT_X`/`_Y` = 11 (`src/map/map_const.hpp`, `src/creatures/creature.cpp`) — os
+   * dois valores conferidos contra o código em 2026-09-25. Pela precedência do ADR 0037 d.4
+   * (Canary primeiro quando ele define algo, TFS só onde a escala é a clássica), o raio de
+   * agressão do Dragon e do Dragon Lord é 11, não o 9 do TFS nem o 8 que o conteúdo tinha antes
+   * desta issue.
+   */
   aggroRadius: z.number().int().nonnegative(),
   /**
    * Até onde o monstro alcança para atacar, em tiles. `1` é corpo a corpo.
@@ -1340,6 +1352,8 @@ export const monsterSchema = z.strictObject({
    * no determinismo; senão registrar como divergência").
    */
   staticAttack: z.number().min(0).max(1).optional(),
+  /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
+  _open: z.string().optional(),
 });
 
 /**

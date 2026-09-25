@@ -39,7 +39,20 @@ export interface Tilemap {
   readonly entryPoint?: Point;
   /** Escadas: chave de tile (`tileKey`) → destino. */
   readonly floorChanges: ReadonlyMap<number, Point>;
+  /**
+   * As mesmas escadas de `floorChanges`, agrupadas pelo ANDAR de origem (#527, follow de membro
+   * através de andar). `floorChanges` é indexado pela chave codificada do tile — útil para "há
+   * escada NESTE tile?", inútil para "quais escadas SAEM deste andar?", que exigiria decodificar
+   * a chave. Esta é a segunda forma do MESMO dado, não uma fonte nova.
+   */
+  readonly floorChangesByFloor: ReadonlyMap<number, readonly FloorChange[]>;
   readonly source?: TilemapData['source'];
+}
+
+/** Uma escada: `from` está no andar de origem, `to` pode estar em qualquer outro (FUN-119). */
+export interface FloorChange {
+  readonly from: Point;
+  readonly to: Point;
 }
 
 export interface SpawnPoint {
@@ -119,12 +132,17 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   }
 
   const floorChanges = new Map<number, Point>();
+  const floorChangesByFloor = new Map<number, FloorChange[]>();
   for (const change of data.floorChanges ?? []) {
     floorChanges.set(tileKey(change.from.x, change.from.y, change.from.z), change.to);
+    const byFloor = floorChangesByFloor.get(change.from.z);
+    if (byFloor === undefined) floorChangesByFloor.set(change.from.z, [change]);
+    else byFloor.push(change);
   }
 
   return {
     id: data.id, width, height, z: data.z, blocked: base.blocked, floors, floorChanges,
+    floorChangesByFloor,
     ...(data.entryPoint === undefined
       ? {}
       : { entryPoint: { x: data.entryPoint.x, y: data.entryPoint.y, z: data.entryPoint.z ?? data.z } }),
@@ -151,6 +169,42 @@ export function groundSpeed(map: Tilemap, x: number, y: number, z: number = map.
 /** Para onde pisar neste tile leva, ou `null` quando ele é um tile comum. */
 export function floorChangeAt(map: Tilemap, x: number, y: number, z: number): Point | null {
   return map.floorChanges.get(tileKey(x, y, z)) ?? null;
+}
+
+/**
+ * A escada que começa uma travessia de `fromZ` até `targetZ` (#527, follow de membro através de
+ * andar): o tile, NO ANDAR `fromZ`, onde pisar leva um hop mais perto de `targetZ`. `null` quando
+ * já se está lá, ou quando não existe sequência de escadas conectando os dois andares.
+ *
+ * Busca em LARGURA sobre o grafo de andares — nunca A* nem Dijkstra (ADR 0009 vale para o mesmo
+ * espírito aqui): o grafo de uma hunt tem poucas escadas ao todo (a Darashia Dragon Lair tem
+ * quatro, duas por par de andares), e toda aresta vale o mesmo hop — não há custo de travessia
+ * diferente entre uma escada e outra. Devolve o PRIMEIRO salto: quem chama dá `greedyStep` até
+ * esse tile, e pisar nele já leva ao próximo andar sozinho (`move`, `movement.ts`) — o resto do
+ * caminho se resolve reavaliando esta função do andar novo, no vencimento seguinte.
+ */
+export function floorChangeToward(map: Tilemap, fromZ: number, targetZ: number): Point | null {
+  if (fromZ === targetZ) return null;
+  const visited = new Set<number>([fromZ]);
+  // Cada entrada da fila guarda o PRIMEIRO salto do caminho, não o andar de onde ela partiu —
+  // é o que faz a resposta ser "por onde eu saio agora", em qualquer profundidade do grafo.
+  const queue: Array<{ readonly z: number; readonly first: Point }> = [];
+  for (const change of map.floorChangesByFloor.get(fromZ) ?? []) {
+    if (change.to.z === targetZ) return change.from;
+    if (visited.has(change.to.z)) continue;
+    visited.add(change.to.z);
+    queue.push({ z: change.to.z, first: change.from });
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const current = queue[i] as { readonly z: number; readonly first: Point };
+    for (const change of map.floorChangesByFloor.get(current.z) ?? []) {
+      if (change.to.z === targetZ) return current.first;
+      if (visited.has(change.to.z)) continue;
+      visited.add(change.to.z);
+      queue.push({ z: change.to.z, first: current.first });
+    }
+  }
+  return null;
 }
 
 export function buildRoute(data: RouteData, map: Tilemap): Route {

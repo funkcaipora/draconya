@@ -46,6 +46,17 @@ regra de "não mostra estimativa oficial" já descrita abaixo.
 identidade da hunt (SV-05) do parágrafo acima — e some, deixando só a contagem, nos mesmos dois
 casos em que o modal de detalhes omite o nome.
 
+**A contagem e o painel Batalha são do MESMO andar, sempre (#527).** Numa hunt privada não há
+AOI (FUN-33): o hospedeiro manda TODOS os monstros vivos da instância pelo `session-state`, dos
+três andares da Darashia Dragon Lair inclusive, porque o mundo espacial precisa deles para
+desenhar o que se vê através de escada e vão (ADR 0034). `battleRows`
+(`packages/client/src/shell/BattlePanel.tsx`) e a contagem do `WorldOverlay` filtram por
+`creature.position.z === própria posição` antes de contar — sem isto, quem estava em z10 via
+"35 criaturas no alcance" com Dragon Lords de z11/z12 somados, embora o bot (`countTargets`,
+`packages/sim/src/targeting.ts`) já contasse certo, só por andar, desde o #519. O mundo
+continua desenhando andares vizinhos (ADR 0034); só a LISTA de batalha e o contador são
+por andar — no Tibia a battle list também só mostra quem está no mesmo andar.
+
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
 pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido por

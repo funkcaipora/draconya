@@ -17,8 +17,8 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, isBlocked,
-  migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, floorChangeToward,
+  isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
@@ -282,6 +282,45 @@ const EXIT_RULE_INTERVAL_MS = 250;
 const SPAWN_RETRY_MS = 1000;
 
 /**
+ * Quanto tempo LÓGICO o lure pode ficar PARADO (§13.7, `#luring`) antes de retomar a rota mesmo
+ * sem a contagem ter caído abaixo de `min` (#527).
+ *
+ * A automação é do Draconya, não do TFS/Canary (ADR 0037 decisão 2) — este número não tem fonte
+ * de engine nenhuma para citar, é design nosso. Ele existe porque a densidade de agressão do
+ * Tibia de verdade (`aggroRadius` maior, `leashRadius: 0` — o Dragon nunca desiste) faz uma
+ * party parada numa zona cheia ATRAIR gente de fora do raio de busca continuamente: o abate local
+ * nunca esvazia por completo, porque enquanto ele cai um recém-chegado de longe substitui, e
+ * `perto` nunca cruza `lure.min` — a mesma regra que junta o bando também o mantém cheio para
+ * sempre, e o líder "PARADO NA ROTA" nunca mais anda (achado reproduzindo a QA do M28 com
+ * conteúdo real: a party ficava 29 minutos lógicos no mesmo tile, matando sem parar, sem nunca
+ * avançar). "A automação é legítima" (invariante 11) não significa "acampa para sempre": o bot
+ * que lidera PUXA — anda, junta, limpa, anda de novo —, nunca vira uma torre fixa. Dois minutos é
+ * generoso o bastante para esvaziar um aglomerado comum sem ser tão longo que a rota pare de
+ * progredir numa hunt cheia.
+ */
+const MAX_LURE_HOLD_MS = 120_000;
+
+/**
+ * Quanto tempo LÓGICO o "puxa à força" (acima) dura antes do lure poder reconsiderar a
+ * densidade de novo (#527). Sem isto, o `perto >= lure.max` do PRÓPRIO passo seguinte reengatilha
+ * o cerco na hora — a densidade de uma zona cheia não cai num tile só —, e o "resume" depois do
+ * teto durava um único passo antes de travar de novo pelos mesmos 120 s. Um minuto de rota é o
+ * bastante para o líder sair de verdade da zona (dezenas de tiles, na velocidade de qualquer
+ * personagem deste nível) antes do lure voltar a decidir.
+ */
+const LURE_FORCE_WALK_MS = 60_000;
+
+/**
+ * Quanto tempo LÓGICO quem foi empurrado (`#nudgeCompanion`) fica sem tentar reocupar o
+ * alcance de follow (#527). Achado reproduzindo a QA do M28: sem este prazo, o par (quem pediu
+ * passagem, quem cedeu) empatava para sempre — um saía do tile, e no PRÓPRIO vencimento
+ * seguinte do outro (a mesma cadência de passo, os dois eventos entrelaçados) ele reentrava
+ * nele antes de quem pediu conseguir passar. O prazo só precisa ser maior que uns poucos passos
+ * — o bastante para o líder atravessar o gargalo, não para o follow parecer quebrado.
+ */
+const NUDGE_YIELD_MS = 3_000;
+
+/**
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
@@ -325,6 +364,9 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.followTargetId === undefined ? {} : { followTargetId: runner.followTargetId }),
     ...(runner.followReason === undefined ? {} : { followReason: runner.followReason }),
     ...(runner.lastCombatActionAtMs === null ? {} : { lastCombatActionAtMs: runner.lastCombatActionAtMs }),
+    ...(runner.lureStoppedSinceMs === null ? {} : { lureStoppedSinceMs: runner.lureStoppedSinceMs }),
+    ...(runner.lureForceWalkUntilMs === null ? {} : { lureForceWalkUntilMs: runner.lureForceWalkUntilMs }),
+    ...(runner.nudgedUntilMs === null ? {} : { nudgedUntilMs: runner.nudgedUntilMs }),
   };
 }
 
@@ -869,6 +911,27 @@ interface Runner {
   botCandidate: string | null;
   /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
   running: boolean;
+  /**
+   * Desde QUANDO `running` é `false` sem interrupção (#527, `MAX_LURE_HOLD_MS`). `null` quando
+   * está correndo (o valor comum) ou sem lure configurado — só existe para o cerco não durar
+   * para sempre. Opcional no snapshot (ausente é `null`), sem bump de formato: um snapshot
+   * anterior a esta issue nunca tinha um cerco em curso mais longo que o normal.
+   */
+  lureStoppedSinceMs: number | null;
+  /**
+   * Até QUANDO o "puxa à força" ignora `lure.max` depois do teto de cerco estourar (#527,
+   * `LURE_FORCE_WALK_MS`). `null` fora desse trecho. Sem isto o `perto >= lure.max` do passo
+   * seguinte reengatilhava o cerco no mesmo tile em que o teto acabou de liberar o líder.
+   */
+  lureForceWalkUntilMs: number | null;
+  /**
+   * Até QUANDO este personagem foi EMPURRADO para abrir passagem (#527, `#nudgeCompanion`,
+   * `NUDGE_YIELD_MS`) e por isso não tenta reocupar o alcance de follow. Sem isto o seguidor
+   * empurrado volta a ficar adjacente ao alvo no PRÓPRIO vencimento seguinte — muitas vezes no
+   * MESMO tile de onde acabou de sair —, e o par (quem pediu passagem, quem cedeu) empata para
+   * sempre: um sai, o outro reentra, ninguém nunca passa.
+   */
+  nudgedUntilMs: number | null;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
   ringReplaced: string | null;
   warnedExhausted: boolean;
@@ -957,6 +1020,17 @@ export interface RunnerState {
    * mesmo efeito conservador de um `ticksMap` vazio no TFS/Canary logo após um restart.
    */
   readonly lastCombatActionAtMs?: number;
+  /**
+   * Desde quando `luring` é `false` sem interrupção (#527, `MAX_LURE_HOLD_MS`). Ausente/`null` é
+   * "correndo, ou sem cerco em curso" — um snapshot anterior a esta issue nunca tinha isto, e o
+   * efeito é o mesmo: o cerco retomado começa contando do zero, nunca de um estouro que já
+   * tivesse acontecido antes do restart.
+   */
+  readonly lureStoppedSinceMs?: number | null;
+  /** Até quando o "puxa à força" vale (#527, `LURE_FORCE_WALK_MS`). Ausente/`null` é fora dele. */
+  readonly lureForceWalkUntilMs?: number | null;
+  /** Até quando o empurrão (#527, `#nudgeCompanion`) suspende o follow. Ausente/`null` é fora. */
+  readonly nudgedUntilMs?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1764,6 +1838,9 @@ export class HuntRuleset implements Ruleset {
       botCandidate: state?.chosenTargetPinned === true ? null : (state?.chosenTarget ?? null),
       attackTargetPinned: state?.chosenTargetPinned === true,
       running: state?.luring ?? true,
+      lureStoppedSinceMs: state?.lureStoppedSinceMs ?? null,
+      lureForceWalkUntilMs: state?.lureForceWalkUntilMs ?? null,
+      nudgedUntilMs: state?.nudgedUntilMs ?? null,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2349,7 +2426,7 @@ export class HuntRuleset implements Ruleset {
     // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
     // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
     const runner = this.#runnerOf(character.id);
-    if (this.#attackTarget(character) !== null && !this.#luring(runner, character)) {
+    if (this.#attackTarget(character) !== null && !this.#luring(runner, character, session.nowMs)) {
       runner.walker.stop();
       this.#armPlayerAttack(session, character);
       return null;
@@ -2391,6 +2468,14 @@ export class HuntRuleset implements Ruleset {
         // `rejoinNearest`). Cercado, segura como faria com um monstro.
         const around = greedyStep(character.position, runner.walker.ahead(), this.#blockedFor(character));
         if (around === null) {
+          // Cercado dos dois lados: nem o tile original nem o contorno estão livres (#527,
+          // achado reproduzindo a QA do M28 com conteúdo real — um SEGUIDOR satisfeito a
+          // distância 1 do líder pode acabar parado bem em cima do próximo tile da rota dele,
+          // e os dois ficam parados para sempre, um esperando o outro sem que nenhum dos dois
+          // tenha motivo para se mexer). Em vez de segurar para sempre, pede ao companheiro
+          // que bloqueia para abrir espaço — só quem não está ocupado com nada mais
+          // importante agora cede.
+          this.#nudgeCompanion(session, character.position, to);
           runner.walker.hold();
         } else {
           runner.walker.hold();
@@ -2423,6 +2508,39 @@ export class HuntRuleset implements Ruleset {
       if (other.position.x === at.x && other.position.y === at.y) return true;
     }
     return false;
+  }
+
+  /**
+   * Pede ao companheiro parado em `at` que abra espaço — o desempate de "cercado dos dois
+   * lados" que `#playerStep` usa quando NEM o tile original nem o contorno estão livres (#527).
+   *
+   * Só cede quem não está ocupado com algo mais importante AGORA: em combate (alcance da arma)
+   * a decisão de lutar continua sendo dele, e esta função não a atropela. Quem cede dá um passo
+   * guloso para LONGE de quem pediu passagem — `fleeStep`, o mesmo algoritmo de recuo do resto
+   * do motor (ADR 0009) — e o walker dele para: o vencimento seguinte de QUALQUER coisa que
+   * mova este personagem (rota, follow) reavalia normalmente a partir da posição nova. Sem
+   * efeito quando ninguém está no tile, quando quem está lá não pode ceder, ou quando não há
+   * para onde ceder (cercado de verdade, e aí `hold()` no chamador continua sendo o certo).
+   *
+   * **`nudgedUntilMs` é o que faz o passo pegar** (achado reproduzindo a QA do M28: sem ele, o
+   * par empatava para sempre — o empurrado saía do tile e, no PRÓPRIO vencimento seguinte,
+   * `#holdFollow` já o trazia de volta, muitas vezes para o MESMO tile, antes de quem pediu
+   * passagem conseguir atravessar). Enquanto vale, `#holdFollow` do empurrado devolve `false`
+   * — o mesmo que "inalcançável" — e ele anda a PRÓPRIA rota por um instante, o bastante para
+   * abrir espaço de verdade.
+   */
+  #nudgeCompanion(session: Session, requester: FloorPoint, at: FloorPoint): void {
+    const blocker = session.participants.find((other) => other.alive
+      && sameFloor(other.position.z, at.z) && other.position.x === at.x && other.position.y === at.y);
+    if (blocker === undefined || this.#attackTarget(blocker) !== null) return;
+    // Foge de QUEM PEDIU passagem, nunca do próprio tile — `at` é a posição atual do bloqueio,
+    // e fugir dela seria fugir de si mesmo (vetor nulo, `fleeStep` sempre devolveria `null`).
+    const away = fleeStep(blocker.position, requester, this.#blockedFor(blocker));
+    if (away === null) return;
+    const blockerRunner = this.#runnerOf(blocker.id);
+    blockerRunner.walker.stop();
+    const nudged = this.#step(session, blocker, { ...away, z: blocker.position.z }, blocker.id);
+    if (nudged.ok) blockerRunner.nudgedUntilMs = session.nowMs + NUDGE_YIELD_MS;
   }
 
   /**
@@ -2478,10 +2596,35 @@ export class HuntRuleset implements Ruleset {
    *
    * Devolve `false` quando não há follow ativo — E quando o follow está INTERROMPIDO —, para
    * `#playerStep` cair na postura contra monstro e na rota, exatamente como sem follow nenhum.
+   *
+   * **Andar diferente atravessa ESCADA DE VERDADE, não vira `unreachable` na hora** (#527). Até
+   * aqui, o líder mudando de andar deixava o seguidor "sem alvo alcançável" para sempre — ele
+   * caía na PRÓPRIA rota, que pode levar a um andar DIFERENTE do que o líder está agora (foi
+   * assim que o Druid da QA do M28 foi sozinho para o meio dos Dragon Lords, atrás da própria
+   * rota, sem saber que o resto da party tinha ficado para trás). `floorChangeToward`
+   * (`@draconya/content`) acha a escada, NO ANDAR do seguidor, que começa a travessia até o
+   * andar do alvo — sem pathfinding real (ADR 0009 continua valendo): é o MESMO passo guloso de
+   * sempre, só que mirando o tile da escada em vez do alvo. Pisar nela já muda de andar sozinho
+   * (`move`, `movement.ts`); no vencimento seguinte o seguidor está no andar novo, e ou já está
+   * perto o bastante do alvo (cai no caminho de baixo, por distância) ou a MESMA busca acha a
+   * escada seguinte — "tomar a mesma escada que o líder tomou", sem guardar rota nem estado
+   * extra. Só vira `unreachable` quando NENHUMA sequência de escadas liga os dois andares — um
+   * mapa sem elas, ou hunt de andar único (onde `floorChangeToward` nunca é chamada, porque
+   * `sameFloor` já é `true`).
    */
   #holdFollow(session: Session, runner: Runner, character: CharacterRuntime): MoveResult | null | false {
     const follow = runner.botConfig?.follow;
     if (follow === undefined || follow.kind === 'none') return false;
+
+    // Acabou de ser empurrado para abrir passagem (#527, `#nudgeCompanion`): por
+    // `NUDGE_YIELD_MS`, o follow fica em suspenso — o mesmo `false` de "inalcançável" — para
+    // não voltar direto para cima de quem acabou de pedir passagem. Sem ISTO precisar emitir
+    // `follow-state`: a suspensão é curta demais para o jogador notar, e um evento por empurrão
+    // seria ruído no fio.
+    if (runner.nudgedUntilMs !== null) {
+      if (session.nowMs < runner.nudgedUntilMs) return false;
+      runner.nudgedUntilMs = null;
+    }
 
     const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
     const target = targetId === null ? null : findById(session.participants, targetId);
@@ -2492,16 +2635,28 @@ export class HuntRuleset implements Ruleset {
     if (target === null || target.id === character.id) return false;
 
     const from = character.position;
+
+    if (!sameFloor(from.z, target.position.z)) {
+      const stair = floorChangeToward(this.#world.map, from.z, target.position.z);
+      if (stair === null) {
+        this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+        return false;
+      }
+      // Ainda seguindo — só navegando até a escada, não interrompido. `d === 1`/parado não se
+      // aplica aqui: a distância contra um alvo em OUTRO andar não diz nada sobre proximidade.
+      this.#reportFollow(session, runner, character.id, target.id, true);
+      const to = greedyStep(from, stair, this.#blockedFor(character));
+      // Empacado a caminho da escada (parede, companheiro): espera este vencimento, como o
+      // resto do passo guloso — não é motivo para desistir do follow.
+      if (to === null) return null;
+      runner.walker.stop();
+      return this.#step(session, character, { ...to, z: from.z }, character.id);
+    }
+
     const d = distance(from, target.position);
     const radius = this.#options.targetSearchRadius ?? 8;
 
-    // Andar diferente é `unreachable` pela MESMA razão da distância (#519): sem pathfinding
-    // real (ADR 0009), o passo guloso não sabe atravessar escada nenhuma — ele só sabe reduzir
-    // (x, y). Caindo em `unreachable`, quem segue volta a percorrer a PRÓPRIA rota — que já
-    // atravessa as mesmas escadas que o líder atravessou —, e o follow retoma sozinho assim que
-    // os dois estiverem no mesmo andar de novo. É "o companheiro toma a mesma escada" sem
-    // precisar de pathfinding novo nenhum.
-    if (d > radius || !sameFloor(from.z, target.position.z)) {
+    if (d > radius) {
       this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
       return false;
     }
@@ -3788,19 +3943,51 @@ const slots = bot.groups.get(group);
    * (`#armPlayerAttack` é chamado no fim do passo). O que muda é ele não PARAR — e é assim que
    * "correr acumulando" funciona sem pathfinding novo, porque o passo guloso dos monstros já
    * os faz seguir.
+   *
+   * **O cerco tem um teto de tempo, `MAX_LURE_HOLD_MS`** (#527). Numa zona densa — aggro real
+   * (raio maior, sem leash) atrai gente de FORA do raio de busca continuamente —, `perto` pode
+   * nunca cair abaixo de `min`: quem morre é reposto por um recém-chegado de longe antes do
+   * respawn do próprio ponto, e a máquina de dois limiares fica presa em "lutando" para sempre —
+   * achado reproduzindo a QA do M28 com o conteúdo real (a party parada 29 minutos lógicos no
+   * mesmo tile). `lureStoppedSinceMs` marca QUANDO o cerco começou; estourado o teto, resume
+   * "correndo" mesmo com `perto >= min` — o líder retoma a rota e PUXA o que ainda está por
+   * perto, em vez de acampar. Isto não é fidelidade de Tibia (a automação é nossa, ADR 0037
+   * decisão 2): é o contrato do PRÓPRIO lure, que promete "junta, limpa, anda" e não "vira torre".
    */
-  #luring(runner: Runner, character: CharacterRuntime): boolean {
+  #luring(runner: Runner, character: CharacterRuntime, nowMs: number): boolean {
     const lure = runner.bot?.lure;
     if (lure === undefined) return false;
+
+    // Puxando à força (#527, `LURE_FORCE_WALK_MS`): o teto de cerco acabou de liberar o líder, e
+    // esta janela ignora `lure.max` de propósito. Sem ela, a densidade de uma zona cheia não cai
+    // num passo só — o vencimento seguinte veria `perto >= lure.max` de novo e reengatilharia o
+    // cerco no MESMO tile em que ele tinha acabado de ser liberado, e "resume" duraria um único
+    // passo antes de travar outra vez pelos mesmos `MAX_LURE_HOLD_MS`.
+    if (runner.lureForceWalkUntilMs !== null) {
+      if (nowMs < runner.lureForceWalkUntilMs) return true;
+      runner.lureForceWalkUntilMs = null;
+    }
 
     const perto = countTargets(
       targetingOf(runner), this.#monsters, character.position,
       this.#options.targetSearchRadius ?? 8,
     );
     if (runner.running) {
-      if (perto >= lure.max) runner.running = false;
+      if (perto >= lure.max) {
+        runner.running = false;
+        runner.lureStoppedSinceMs = nowMs;
+      }
     } else if (perto < lure.min) {
       runner.running = true;
+      runner.lureStoppedSinceMs = null;
+    } else if (
+      runner.lureStoppedSinceMs !== null && nowMs - runner.lureStoppedSinceMs >= MAX_LURE_HOLD_MS
+    ) {
+      // Estourou o teto com a densidade ainda alta: retoma e PROTEGE a retomada por
+      // `LURE_FORCE_WALK_MS` — ver o comentário no topo do método.
+      runner.running = true;
+      runner.lureStoppedSinceMs = null;
+      runner.lureForceWalkUntilMs = nowMs + LURE_FORCE_WALK_MS;
     }
     return runner.running;
   }

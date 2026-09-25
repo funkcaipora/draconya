@@ -103,15 +103,36 @@ export class RouteWalker {
    * Busca LINEAR na lista, não A*: a rota tem dezenas de tiles, e procurar o mais próximo
    * numa lista dessas é mais barato que montar a estrutura que um pathfinder precisaria.
    * Reentrar pelo tile mais próximo também é o que evita o personagem refazer meia volta.
+   *
+   * **O ANDAR entra no desempate primeiro, nunca só a distância em (x, y)** (#527). Na Darashia
+   * Dragon Lair os três andares compartilham a MESMA caixa — um tile em (36, 93) pode ser chão
+   * livre em z11 e parede em z10 —, e a distância antiga (só x/y) podia escolher um tile do
+   * andar ERRADO por estar geometricamente mais perto: o personagem continua fisicamente no
+   * andar de onde saiu, mas o walker passa a apontar para um índice de OUTRO andar. Dali em
+   * diante `canOccupy` confere o tile pelo andar de PARTIDA (o personagem, não a rota) — e um
+   * tile que é chão num andar e parede no outro rejeita o passo para sempre, sem nenhum dos
+   * outros desvios (`not-adjacent`, companheiro) reconhecer o problema: bug achado reproduzindo
+   * a QA do M28 com conteúdo real (o Paladin ficou preso 20+ minutos lógicos tentando um passo
+   * que a validação de conteúdo nunca aprovaria como rota, porque não era ELE quem tinha
+   * escolhido o índice — foi este método). Tile do MESMO andar sempre vence um de outro andar,
+   * não importa a distância; só cai para "qualquer andar" se a rota não tiver NENHUM tile no
+   * andar de `position` — o que não acontece numa hunt de verdade, mas evita devolver `null`
+   * onde o contrato promete um índice.
    */
   rejoinNearest(position: Point): number {
     let best = 0;
     let bestDistance = Number.POSITIVE_INFINITY;
+    let bestOnFloor = false;
     this.#route.tiles.forEach((tile, i) => {
+      const onFloor = tile.z === position.z;
+      // Um tile do andar CERTO sempre bate um de outro andar, mesmo mais perto em (x, y) — o
+      // desempate dentro do mesmo grupo continua sendo a distância.
+      if (bestOnFloor && !onFloor) return;
       const d = distance(position, tile);
-      if (d >= bestDistance) return;
+      if (onFloor === bestOnFloor && d >= bestDistance) return;
       best = i;
       bestDistance = d;
+      bestOnFloor = onFloor;
     });
     this.#index = best;
     return best;

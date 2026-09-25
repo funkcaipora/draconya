@@ -840,6 +840,18 @@ interface MonsterTargetChange { readonly intervalMs: number; readonly chance: nu
   ruído). A apresentação é a mesma chave semântica de `MonsterAbilityCast.impactKey`
   (`appearances.abilities`), agora carregada por `CreatureHealed.impactKey` — só em
   `source: 'monster'`.
+- **Raio de agressão (`monster.aggroRadius`)**: a distância em que `chooseTarget`
+  (`packages/sim/src/monster/monster.ts`) aceita um jogador NOVO como alvo (Chebyshev, como todo
+  o resto do movimento) — o mesmo raio de `Monster::canSee` do TFS/Canary, que gate-keeper
+  `updateTargetList`/`onCreatureFound` (só quem `canSee` vê entra na lista de alvos possíveis).
+  O Dragon e o Dragon Lord passaram de 8 para **11** (#527, achado reproduzindo a QA do M28 com
+  conteúdo real: a party não era notada a 17 tiles de distância, valor menor que o Tibia real). O
+  TFS restringe a `Monster::canSee` PRÓPRIA — um quadrado de `Map::maxClientViewportX + 1` = 9
+  (`src/monster.cpp`, `src/map.h`); o Canary NÃO sobrescreve `canSee` para monstro e herda o
+  quadrado de `Creature::canSee`, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11 (`src/map/map_const.hpp`,
+  `src/creatures/creature.cpp`) — os dois conferidos contra o código em 2026-09-25. Pela
+  precedência do ADR 0037 d.4 (Canary primeiro quando ele define algo; TFS só onde a escala é a
+  clássica — não é o caso aqui), o valor certo é o do Canary, 11.
 - **Troca de alvo (`monster.targetChange`)**: a cada `intervalMs` rola `chance`; se passa, escolhe
   um alvo válido AO ACASO dentro do `aggroRadius`, diferente do atual — o ramo
   `TARGETSEARCH_RANDOM` do TFS, que é o que o Dragon usa (`targetDistance <= 1`). O ramo
