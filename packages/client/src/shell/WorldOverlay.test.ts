@@ -114,6 +114,21 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
     expect(html).toContain('1 criaturas no alcance');
   });
 
+  it('only counts creatures on the SAME floor as the own character (#527)', async () => {
+    // A hunt privada manda os monstros dos três andares da Darashia Dragon Lair de uma vez
+    // (sem AOI, ADR 0034); a contagem "no alcance" é do andar em que se está, não do mundo
+    // inteiro que o cliente conhece.
+    world.selfId = 1;
+    world.creatures.set(1, creature(1, { name: 'você', position: { x: 5, y: 5, z: 10 } }));
+    world.creatures.set(2, creature(2, { name: 'Dragon', position: { x: 6, y: 5, z: 10 } }));
+    world.creatures.set(3, creature(3, { name: 'Dragon Lord', position: { x: 6, y: 5, z: 11 } }));
+    world.creatures.set(4, creature(4, { name: 'Dragon Lord 2', position: { x: 6, y: 5, z: 12 } }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+
+    expect(html).toContain('1 criaturas no alcance');
+  });
+
   it('never invents a hunt name or difficulty', async () => {
     const html = await render(createElement(WorldOverlay, { hunting: true }));
 

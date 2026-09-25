@@ -100,6 +100,32 @@ describe('o painel Batalha (#254)', () => {
     expect(html).toContain('battle-icon');
   });
 
+  it('só mostra criatura do MESMO andar do próprio personagem (#527)', async () => {
+    // Numa hunt privada não há AOI (FUN-33): o hospedeiro manda os monstros dos três andares da
+    // Darashia Dragon Lair para todo mundo, porque o mundo espacial precisa deles (ADR 0034).
+    // A lista de batalha não é o mundo: um dragão em z11 não é alvo de quem está em z10.
+    world.selfId = 99;
+    world.creatures.set(99, creature(99, { name: 'você', position: { x: 5, y: 5, z: 10 } }));
+    world.creatures.set(1, creature(1, { name: 'Dragon', position: { x: 6, y: 5, z: 10 } }));
+    world.creatures.set(2, creature(2, { name: 'Dragon Lord', position: { x: 6, y: 5, z: 11 } }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Dragon');
+    expect(html).not.toContain('Dragon Lord');
+  });
+
+  it('sem `selfId` ainda (antes do session-state), não filtra por andar', async () => {
+    world.selfId = null;
+    world.creatures.set(1, creature(1, { name: 'Dragon', position: { x: 6, y: 5, z: 10 } }));
+    world.creatures.set(2, creature(2, { name: 'Dragon Lord', position: { x: 6, y: 5, z: 11 } }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 2');
+  });
+
   it('quem está na party não aparece na lista de Batalha (RF-05)', async () => {
     world.selfId = 99;
     world.creatures.set(1, creature(1, { name: 'Companheiro' }));
