@@ -62,10 +62,12 @@ export const TEST_COMBAT = {
 };
 
 export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-/** A party de hunt (ADR 0027): a tabela real, para solo ser party de um. */
+/**
+ * A party de hunt (ADR 0027; multiplicador de XP saiu do conteúdo no #525 — é
+ * `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary em código).
+ */
 export const TEST_PARTY = {
   id: 'baseline', maxMembers: 4,
-  xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 },
   autoSellItemTypes: { free: 5, premium: 20 },
 };
 

@@ -40,17 +40,17 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
-  it('carrega a tabela da party real, e todo item do repositório tem preço de venda (#188)', () => {
-    // A tabela é a do ADR 0027: 25 % por vocação única, teto 100 %. E `value` é obrigatório no
-    // schema — este teste prende que o conteúdo REAL passa, e diz quais itens ainda têm o
-    // preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
+  it('carrega a party real, e todo item do repositório tem preço de venda (#188)', () => {
+    // O multiplicador de XP saiu do conteúdo no #525 (ADR 0027 emenda 2026-09-24/25) — é
+    // `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary. E `value`
+    // é obrigatório no schema — este teste prende que o conteúdo REAL passa, e diz quais itens
+    // ainda têm o preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
     const content = loadContent(DATA);
     expect(content.party.maxMembers).toBe(8);
-    expect(content.party.xpPoolPercentByUniqueVocations).toEqual({
-      '1': 125, '2': 150, '3': 175, '4': 200,
-      '5': 200, '6': 200, '7': 200, '8': 200,
-    });
     expect(content.party.autoSellItemTypes).toEqual({ free: 5, premium: 20 });
+    expect(content.party.sharedExperience).toEqual({
+      rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000,
+    });
     for (const item of content.items.values()) {
       expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
     }

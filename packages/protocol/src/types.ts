@@ -367,7 +367,13 @@ export const PartySpending = z.object({
 /** A seção PARTY do analisador (§32, ADR 0035 d.11) — o mesmo bloco nos dois lugares que o usam. */
 export const PartySummary = z.object({
   players: z.number().int().positive(),
-  uniqueVocations: z.number().int().positive(),
+  // `nonnegative`, não `positive` (§525): "nenhuma" vocação (level < 8) não conta mais como
+  // vocação única — uma party inteira sem vocação real mostra 0, o número verdadeiro, não 1
+  // fabricado para caber num schema que só previa o caso antigo (`uniqueVocations` sempre >= 1
+  // porque "nenhuma" era ela mesma uma vocação). `xpPercent` continua lendo a linha "1" da
+  // tabela para 0 (ver `xpPoolPercent` em `packages/sim/src/party.ts`) — os dois campos
+  // divergem de propósito: um é a CONTAGEM real, o outro é o multiplicador que ela paga.
+  uniqueVocations: z.number().int().nonnegative(),
   xpPercent: z.number().int().nonnegative(),
   totalXp: z.number().nonnegative(),
   totalSupplies: z.number().nonnegative(),

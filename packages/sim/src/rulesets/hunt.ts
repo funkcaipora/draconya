@@ -53,8 +53,9 @@ import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
-  autoSellLimit, bagValue, reserveProportionally, settleEntries, shareCostsOf, splitEqually,
-  splitLootOf, uniqueVocations, xpShare,
+  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
+  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
+  xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
@@ -322,6 +323,7 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.followInterrupted ? { followInterrupted: true } : {}),
     ...(runner.followTargetId === undefined ? {} : { followTargetId: runner.followTargetId }),
     ...(runner.followReason === undefined ? {} : { followReason: runner.followReason }),
+    ...(runner.lastCombatActionAtMs === null ? {} : { lastCombatActionAtMs: runner.lastCombatActionAtMs }),
   };
 }
 
@@ -882,6 +884,17 @@ interface Runner {
   followTargetId: string | undefined;
   /** Por que o follow está interrompido (#401): o `reason` do último `follow-state` inativo. */
   followReason: 'dead' | 'left' | 'unreachable' | undefined;
+  /**
+   * O instante LÓGICO do último ataque ou cura A OUTRO PARTICIPANTE (§525, ADR 0027 emenda
+   * 2026-09-24/25): é o que `canShareExperience` lê como atividade (`Party::isPlayerActive` do
+   * TFS/Canary). `null` é "nunca agiu" — o mesmo que não ter entrada no `ticksMap` de lá.
+   * Escrito só por `#markCombatActive`, chamado dos MESMOS pontos que já creditam dano/cura
+   * para o DPS/HPS (#431) — `#land`, `#applyHits` sempre; `#emitHealed` só quando o RECIPIENTE
+   * não é o próprio healer (`Player::isPartner` exclui `player == this` nas duas engines antes
+   * de registrar atividade por cura — curar a si mesmo continua valendo para o HPS, só não para
+   * esta atividade). Um quinto ponto de escrita divergiria do que já é creditado em algum lugar.
+   */
+  lastCombatActionAtMs: number | null;
 }
 
 /**
@@ -937,6 +950,12 @@ export interface RunnerState {
   readonly followTargetId?: string;
   /** A razão da interrupção do follow (#401). Opcional pelo mesmo motivo. */
   readonly followReason?: 'dead' | 'left' | 'unreachable';
+  /**
+   * O último ataque ou cura deste participante (§525). Ausente é "nunca" — a hunt retomada
+   * volta com a XP compartilhada avaliando este membro como INATIVO até ele agir de novo, o
+   * mesmo efeito conservador de um `ticksMap` vazio no TFS/Canary logo após um restart.
+   */
+  readonly lastCombatActionAtMs?: number;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1491,7 +1510,10 @@ export class HuntRuleset implements Ruleset {
     if (party === undefined) return undefined;
     const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
     const unique = uniqueVocations(present);
-    const xpPoolPercent = this.#options.party.xpPoolPercentByUniqueVocations[String(unique)] ?? 100;
+    // `sharedExperiencePercent` (party.ts) é a MESMA fórmula do Canary que `xpShare` usa ao
+    // pagar de verdade — ler qualquer outra conta aqui divergiria do que a party realmente
+    // recebe (§525).
+    const percent = sharedExperiencePercent(present);
     const value = this.#bag === null ? 0 : bagValue(this.#bag, this.#options.items);
     // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
     // tipo é opcional por causa das fixtures antigas de `RawContent`.
@@ -1504,7 +1526,7 @@ export class HuntRuleset implements Ruleset {
       splitLoot: party.splitLoot,
       members: session.participants.map((p) => p.id),
       uniqueVocations: unique,
-      xpPoolPercent,
+      xpPoolPercent: percent,
       bagValue: value,
       bagWeight: this.#bagWeight,
       autoSell: { configured: party.autoSell.length, limit },
@@ -1748,6 +1770,7 @@ export class HuntRuleset implements Ruleset {
       followInterrupted: state?.followInterrupted ?? false,
       followTargetId: state?.followTargetId,
       followReason: state?.followReason,
+      lastCombatActionAtMs: state?.lastCombatActionAtMs ?? null,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -3024,6 +3047,7 @@ const slots = bot.groups.get(group);
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied);
       recordDamage(monster.contribution, character.id, applied);
+      this.#markCombatActive(session, character.id);
       // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
       // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
       session.emit({
@@ -4419,6 +4443,12 @@ const slots = bot.groups.get(group);
     // (a condição de um monstro, por exemplo) — `creditHealing` somaria num id que não é dono.
     if (healerId !== undefined && session.participants.some((p) => p.id === healerId)) {
       session.creditHealing(healerId, amount);
+      // Atividade de XP compartilhada (§525) é OUTRA coisa que HPS: `Player::isPartner`
+      // (TFS/Canary) exclui `player == this` antes de registrar `updatePlayerTicks` por cura —
+      // curar A SI MESMO não prova que o personagem está engajado com a party, e as duas
+      // engines não contam. HPS continua contando o self-heal (linha acima); só a atividade
+      // que `canShareExperience` lê exige um RECIPIENTE diferente do healer.
+      if (character.id !== healerId) this.#markCombatActive(session, healerId);
     }
     session.emit({
       kind: 'creature-healed', creatureId: character.id, amount, source,
@@ -4697,6 +4727,17 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * Registra que `characterId` atacou ou curou agora (§525, ADR 0027 emenda 2026-09-24): a
+   * atividade que `canShareExperience` lê como `Party::isPlayerActive` do TFS/Canary. Sem
+   * `Runner` (id que não é participante — `healerId` de uma condição, por exemplo) é no-op, a
+   * mesma guarda de `session.creditHealing` em `#emitHealed`.
+   */
+  #markCombatActive(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner !== undefined) runner.lastCombatActionAtMs = session.nowMs;
+  }
+
+  /**
    * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
    * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
    * e o gatilho vem do conteúdo, nunca de um `if` por nome.
@@ -4724,6 +4765,7 @@ const slots = bot.groups.get(group);
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
     const applied = applyDamageOutcome(monster, outcome, character);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
+    this.#markCombatActive(session, character.id);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
     // cliente contando uma história que a barra desmente.
@@ -4871,7 +4913,7 @@ const slots = bot.groups.get(group);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible);
+    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible, credit);
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
@@ -4956,13 +4998,60 @@ const slots = bot.groups.get(group);
    * onde cada coisa ficou, e o extrato leva.
    */
   /**
-   * A XP de um abate, dividida pela party (#190, ADR 0027 decisão 3).
+   * A cota de XP de cada elegível para este abate (§525, ADR 0027 emenda 2026-09-24/25).
    *
-   * `pool = floor(xp × tabela[vocações únicas] / 100)`, `cota = floor(pool / elegíveis)`, resto
-   * descartado. Elegível é quem está VIVO com stamina — a condição que sempre decidiu se o
-   * matador recebia, aplicada a cada membro. Em solo, `xpShare` devolve a XP inteira sem ler
-   * a tabela, e o único elegível é o matador: nada muda, inclusive quando a fonte do golpe
-   * sumiu — aí o solo continua sem XP, porque o único candidato não é o matador (DT-04).
+   * Com 0/1 elegível, ou fora de party, `xpShare` já devolve a cota igual (a XP inteira em
+   * solo) sem ler mais nada — o `canShareExperience` do TFS/Canary não tem o que decidir com
+   * menos de dois. Com 2+, a XP compartilhada é TUDO OU NADA (`Party::getSharedExperienceStatus`):
+   * `canShareExperience` confere nível (2/3 do MAIOR level de TODA a sessão), alcance/andar do
+   * líder e atividade recente — checados sobre `allMembers`, o ROSTER INTEIRO da sessão
+   * (`getPlayers()` nas duas engines: líder + membros, presente ou não elegível para receber),
+   * não só `eligible`; se todos passam, a cota é igual (`xpShare`, cujo divisor TAMBÉM é
+   * `allMembers.length` — o tamanho total da party, como as duas engines fazem, não a contagem
+   * de elegíveis); se qualquer um falha, ninguém compartilha — cada elegível recebe pelo DANO
+   * que causou neste monstro (`xpByDamage`), como o Tibia sem party.
+   *
+   * `this.#party` ausente com `eligible.length > 1` não deveria acontecer (só a party hospeda
+   * mais de um dono), mas cai para a cota igual em vez de lançar — o mesmo espírito defensivo
+   * de `autoSellLimit` diante de conteúdo incompleto.
+   */
+  #xpShares(
+    session: Session, eligible: readonly CharacterRuntime[], experience: number, credit: KillCredit,
+  ): ReadonlyMap<string, number> {
+    const party = this.#party;
+    const allMembers = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    if (eligible.length <= 1 || party === undefined) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    const leader = session.participants.find((p) => p.id === party.leaderId);
+    const highestLevel = session.participants.reduce((max, p) => Math.max(max, p.level), 0);
+    const rules = this.#options.party.sharedExperience ?? DEFAULT_SHARED_EXPERIENCE_RULES;
+    const canShare = leader !== undefined && canShareExperience(
+      session.participants.map((member) => ({
+        id: member.id,
+        level: member.level,
+        position: member.position,
+        lastActionAtMs: this.#runners.get(member.id)?.lastCombatActionAtMs ?? null,
+      })),
+      highestLevel, leader.position, session.nowMs, rules,
+    );
+    if (canShare) {
+      const share = xpShare(experience, eligible, allMembers);
+      return new Map(eligible.map((member) => [member.id, share]));
+    }
+    return xpByDamage(experience, eligible, credit.damageByActor);
+  }
+
+  /**
+   * A XP de um abate, dividida pela party (#190, ADR 0027 decisões 3 e emenda 2026-09-24).
+   *
+   * A cota vem de `#xpShares` — pool por vocações únicas reais dividido por igual quando a
+   * party inteira atende a elegibilidade do TFS/Canary, por dano quando não atende. Elegível é
+   * quem está VIVO com stamina — a condição que sempre decidiu se o matador recebia, aplicada a
+   * cada membro. Em solo, a cota é a XP inteira sem ler a tabela, e o único elegível é o
+   * matador: nada muda, inclusive quando a fonte do golpe sumiu — aí o solo continua sem XP,
+   * porque o único candidato não é o matador (DT-04).
    *
    * A ordem é contrato: para cada elegível, na ordem de ENTRADA, `applyXpBonus` (o bônus de
    * Bestiário de ANTES deste abate — DT-04 da FUN-113) → `grantXp` → `record` no Bestiário.
@@ -4970,11 +5059,13 @@ const slots = bot.groups.get(group);
    */
   #grantPartyXp(
     session: Session, monster: MonsterRuntime, definition: Monster, eligible: readonly CharacterRuntime[],
+    credit: KillCredit,
   ): void {
     if (eligible.length === 0) return;
-    const share = xpShare(definition.experience, eligible, this.#options.party);
+    const shares = this.#xpShares(session, eligible, definition.experience, credit);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
+      const share = shares.get(member.id) ?? 0;
       const experience = member.bestiary.applyXpBonus(share, this.#options.bestiary);
       const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
       session.credit(member.id, 'xpGained', experience);

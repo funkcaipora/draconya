@@ -105,7 +105,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const party = { id: 'baseline', maxMembers: 4 };
 
 // Magia e supply de teste (FUN-74, FUN-77). Números redondos de propósito: `strike` tira 40 de
 // um rato de 50, então dois golpes matam e o terceiro é ruído — dá para conferir a olho.
@@ -5279,23 +5279,34 @@ describe('XP em party (#190, ADR 0027 decisão 3)', () => {
     expect(session.aggregates.xpGained).toBe(kills * 200);
   });
 
-  it('two knights get 62 each (125 % ÷ 2); knight + no vocation get 75 each (150 % ÷ 2)', () => {
+  it('two knights get 60 each (120 % ÷ 2); knight + no vocation get 65 each ("nenhuma" É vocação distinta no Canary)', () => {
+    // §525 (emenda 2026-09-25): o Canary NÃO exclui "nenhuma" (`Party::getUniqueVocationsCount`
+    // insere `baseId` sem filtrar `VOCATION_NONE`) — diferente do TFS, que exclui. A fidelidade
+    // do ADR 0037 d.4 segue o Canary: 1 knight + 1 sem vocação são DUAS vocações distintas (n=2,
+    // tamanho 2 < 4 → 130 %), não uma (120 %). (Sem `partyOptions`, `this.#party` fica
+    // indefinido — a fixture acima não usa o gate de elegibilidade de `#xpShares`, só `xpShare`
+    // puro sobre `allMembers = session.participants`: a divisão continua igual em TODO abate.)
     const kk = party([member('a', 'knight'), member('b', 'knight')]);
-    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 62);
-    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 62);
+    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 60);
+    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 60);
     const kn = party([member('a', 'knight'), member('b', null)]);
-    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 75);
-    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 75);
+    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 65);
+    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 65);
   });
 
-  it('a dead member gets nothing and leaves the vocation count: 4 unique with one dead is 58 for three', () => {
-    // O morto entra na sessão morto (fixture): nunca elegível, nunca conta como vocação única.
+  it('a dead member still counts for n/tamanho (ainda no roster), mas não recebe: 4 vocações (200 %) ÷ 4, pago só aos 3 vivos', () => {
+    // O morto entra na sessão morto (fixture) e nunca sai (não passou pelo pipeline de morte) —
+    // continua em `session.participants`, o `allMembers` que `sharedExperiencePercent` e o
+    // DIVISOR de `xpShare` leem (§525 emenda 2026-09-25: são o roster INTEIRO, como
+    // `getPlayers()` nas engines de origem, não só quem recebe). 4 vocações reais, tamanho 4 →
+    // 200 %; ceil(100 × 200 / 400) = 50 por cabeça — só que o morto não está em `eligible`, e os
+    // outros três dividem o TAMANHO de 4, não de 3.
     const session = party([member('k', 'knight'), member('d', 'druid'), member('s', 'sorcerer'), member('p', 'paladin', false)]);
     const kills = killsOf(session);
     expect(kills).toBeGreaterThan(0);
     expect(xpOf(session, 'p')).toBe(0);
     expect(findById(session.participants, 'p')?.bestiary.getState()).toEqual({});
-    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 58);
+    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 50);
   });
 
   it('solo is untouched: the killer gets the whole 100, with the level-up detail as before', () => {
@@ -5311,6 +5322,89 @@ describe('XP em party (#190, ADR 0027 decisão 3)', () => {
       return ['k', 'd', 's', 'p'].map((id) => [xpOf(session, id), findById(session.participants, id)?.health]);
     };
     expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('lastCombatActionAtMs sobrevive ao snapshot (§525, ADR 0027 emenda 2026-09-24/25)', () => {
+  // A elegibilidade de XP compartilhada depende deste campo sobreviver a uma retomada (nó
+  // reiniciado, hunt desanexada). Prende os DOIS sentidos do defeito: um refactor que droppasse
+  // o campo faria todo mundo voltar INATIVO (desliga a divisão igual até agir de novo); um que o
+  // reinicializasse com `session.nowMs` da retomada faria todo mundo voltar ATIVO mesmo tendo
+  // ficado parado por horas — os dois passam batido se o teste só confere "não é undefined".
+  const vocations = ['knight', 'druid'].map((id) => ({
+    id, name: id, healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10,
+  }));
+  const fat = { ...rat, experience: 100, health: 30 };
+  const loaded = () => content({ monsters: [fat], vocations });
+  const soldier = (id: string, vocationId: string | null) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  const runnersOf = (ruleset: HuntRuleset) => ruleset.getState().runners ?? {};
+
+  it('o valor exato (não só "não nulo") sobrevive à volta inteira — snapshot, JSON, e restore', () => {
+    const session = createHuntSession({
+      id: 'activity-snapshot', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'shared' },
+    });
+    session.enter(soldier('a', 'knight'));
+    session.enter(soldier('b', 'druid'));
+    // Um tick só (o golpe inicial já sai ENGATILHADO): "a" bate a tempo de registrar
+    // atividade, "b" ainda pode não ter agido — as duas pontas do campo (número e ausente)
+    // aparecem no MESMO teste, sem precisar de um segundo cenário.
+    run(session, 100, 100);
+    const before = runnersOf(session.ruleset as HuntRuleset);
+    const aBefore = before['a']?.lastCombatActionAtMs;
+    expect(typeof aBefore).toBe('number');
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('activity'),
+    );
+    const after = runnersOf(restored.ruleset as HuntRuleset);
+    // O valor RESTAURADO é o MESMO da captura — não `restored.nowMs` (provaria que não foi
+    // reinicializado com "agora") e não `undefined` (provaria que não foi dropado).
+    expect(after['a']?.lastCombatActionAtMs).toBe(aBefore);
+    expect(after['a']?.lastCombatActionAtMs).toBe(before['a']?.lastCombatActionAtMs);
+    expect(restored.nowMs).toBe(session.nowMs);
+    // "b" pode ter agido ou não neste único tick; o que importa é que o valor de ANTES e DEPOIS
+    // bate — presente ou ausente, o restore não o move para nenhum dos dois lados.
+    expect(after['b']?.lastCombatActionAtMs).toBe(before['b']?.lastCombatActionAtMs);
+  });
+
+  it('canShareExperience usa o valor RESTAURADO, não "agora": ativo continua ativo, e o efeito aparece no próximo abate', () => {
+    const session = createHuntSession({
+      id: 'activity-snapshot-2', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'shared' },
+    });
+    session.enter(soldier('a', 'knight'));
+    session.enter(soldier('b', 'druid'));
+    // 2 s: tempo de sobra para os dois terem agido ao menos uma vez (o rato de 30 HP não morre
+    // de um golpe só, então os dois alcançam e batem antes do primeiro abate).
+    run(session, 2_000, 100);
+    const beforeKills = session.aggregates.kills;
+    const beforeXp = { a: session.aggregatesOf('a').xpGained, b: session.aggregatesOf('b').xpGained };
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('activity2'),
+    );
+    // Bem dentro da janela de atividade (2 min): se o restore tivesse dropado ou zerado o
+    // campo, este abate cairia no rateio por dano (quase sempre assimétrico); sobrevivendo,
+    // continua a cota IGUAL de sempre.
+    run(restored, 3_000, 100);
+    const afterKills = restored.aggregates.kills - beforeKills;
+    expect(afterKills).toBeGreaterThan(0);
+    const aGain = restored.aggregatesOf('a').xpGained - beforeXp.a;
+    const bGain = restored.aggregatesOf('b').xpGained - beforeXp.b;
+    expect(aGain).toBe(bGain);
+    expect(aGain).toBeGreaterThan(0);
   });
 });
 
@@ -6223,7 +6317,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       splitLoot: true,
       members: ['lead', 'b'],
       uniqueVocations: 2,
-      xpPoolPercent: 150,
+      xpPoolPercent: 130,
       bagValue: 0,
       bagWeight: 0,
       autoSell: { configured: 2, limit: 20 },
@@ -6232,11 +6326,8 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
 });
 
 describe('entrada em hunt em curso (#397, ADR 0035 decisão 6)', () => {
-  const eightTable = {
-    '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
-  };
   const loadedEight = () => content({
-    party: [{ id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: eightTable }],
+    party: [{ id: 'baseline', maxMembers: 8 }],
   });
   const fat = { ...rat, experience: 100, health: 30 };
   const loadedFat = () => content({ monsters: [fat] });
@@ -6335,6 +6426,11 @@ describe('entrada em hunt em curso (#397, ADR 0035 decisão 6)', () => {
     run(session, 60_000, 100);
     const levelUp = session.notableEvents.find((e) => e.type === 'level-up');
     expect(levelUp).toBeDefined();
+    // Um tick de folga antes de "late" entrar (§525 mudou o ritmo de XP da party — um level up
+    // pode cair EXATAMENTE no instante 60 000): sem isto, `notableEvents.atMs >= joinedAtMs`
+    // (inclusive) incluiria por coincidência de relógio um level-up que aconteceu ANTES de
+    // "late" existir, e o teste não é sobre esse limite.
+    run(session, 100, 100);
 
     session.enter(member('late'));
     const lateDeparture = session.leave('late', 'manual-exit');
@@ -6448,9 +6544,7 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     // #397 o `onEnter` recusa acima de `maxMembers`, e este cenário é legal em party de 8.
     const roomy = content({
       monsters: [killer],
-      party: [{ id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: {
-        '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
-      } }],
+      party: [{ id: 'baseline', maxMembers: 8 }],
     });
     const session = createHuntSession({
       id: 'leave-session-five', content: roomy, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,

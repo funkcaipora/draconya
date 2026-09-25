@@ -95,7 +95,7 @@ const COMBAT = {
 };
 
 const STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const PARTY = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const PARTY = { id: 'baseline', maxMembers: 4 };
 
 const SPELLS = [
   { id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000, effect: { kind: 'heal', amount: 60 } },

@@ -1907,16 +1907,23 @@ export const staminaSchema = z.object({
 export type Stamina = z.infer<typeof staminaSchema>;
 
 /**
- * A party de hunt (§15, ADR 0027, #188): o teto de membros e o pool de XP por número de
- * VOCAÇÕES ÚNICAS entre os membros elegíveis — `pool% = min(100 + 25 × únicas, 200)` é como a
- * tabela foi preenchida, mas quem manda é a tabela. Indexada só por vocações únicas: o número
- * de membros não entra no pool, só na divisão (o PRD pedia as duas dimensões; a segunda seria
- * coluna repetida). Percentuais NÃO DECRESCENTES e uma chave para cada `1..maxMembers`.
+ * A party de hunt (§15, ADR 0027, #188; fórmula e elegibilidade emendadas pelo ADR 0027 em
+ * 2026-09-24 e 2026-09-25, #525, fidelidade Canary do ADR 0037 decisão 4): o teto de membros e
+ * a elegibilidade de XP compartilhada (`Party::canUseSharedExperience` do TFS/Canary) — nível
+ * dentro de 2/3 do maior level do roster, alcance/andar do líder e atividade recente.
+ *
+ * O MULTIPLICADOR de XP não é mais tabela: é `sharedExperiencePercent` em `packages/sim/src/
+ * party.ts`, a fórmula do Canary (`Party:onShareExperience`) copiada em código — não é número
+ * de balanceamento, é MECANISMO, a mesma categoria de `movementDuration`/`resolveDamage`. Uma
+ * tabela indexada só por vocações únicas não conseguiria expressar o desconto do Canary por
+ * TAMANHO da party (`≥ 4` membros, não `≥ 4` vocações — ver o comentário de `sharedExperiencePercent`),
+ * e é por isso que saiu do conteúdo: `xpPoolPercentByUniqueVocations` existiu aqui até o #525
+ * corrigir contra a fonte, e uma chave desse nome num `RawContent` antigo é ignorada (schema não
+ * estrito) — não precisa migração.
  */
 export const partySchema = z.object({
   id: z.literal('baseline'),
   maxMembers: z.number().int().min(2).max(8),
-  xpPoolPercentByUniqueVocations: z.record(z.string().regex(/^[1-9]\d*$/), z.number().int().min(100)),
   /** §43.2, ainda aberto. `0` desliga: qualquer level entra na mesma fila. */
   matchmakingLevelRange: z.number().int().nonnegative().default(0),
   /**
@@ -1930,31 +1937,40 @@ export const partySchema = z.object({
     free: z.number().int().nonnegative(),
     premium: z.number().int().nonnegative(),
   }).optional(),
+  /**
+   * A elegibilidade de XP compartilhada (`Party::canUseSharedExperience`, ADR 0027 emenda
+   * 2026-09-24, #525). `rangeTiles`/`floors` são os `EXPERIENCE_SHARE_RANGE`/`FLOORS` do TFS
+   * (`src/party.h`) e o `Position::areInRange<30, 30, 1>` do Canary (`party.cpp`) — as duas
+   * engines concordam em 30 tiles / 1 andar. `levelRangeDivisor` é o `partyShareRangeMultiplier`
+   * do Canary (`configmanager.cpp`, default `1.5`): `minLevel = ceil(maiorLevel / divisor)`, que
+   * com `1.5` é o "2/3 do level" do TFS (`getMemberSharedExperienceStatus`, hardcoded). Sem
+   * TFS/Canary concordando num divisor CONFIGURÁVEL, fixamos `1.5` — o valor observado nas duas.
+   * `activityWindowMs` segue o CANARY (`Party::isPlayerActive`, 2 minutos) por precedência do
+   * ADR 0037 d.4: o TFS usa `pzLocked` (1 minuto por padrão), que é config de PZ, não de party.
+   * OPCIONAL e preenchido com os defaults acima no parse, pelo mesmo motivo de
+   * `autoSellItemTypes`: fixtures antigas continuam válidas sem o campo.
+   */
+  sharedExperience: z.object({
+    rangeTiles: z.number().int().positive(),
+    floors: z.number().int().nonnegative(),
+    levelRangeDivisor: z.number().positive(),
+    activityWindowMs: z.number().int().positive(),
+  }).optional(),
   _open: z.string().optional(),
-}).superRefine((party, ctx) => {
-  let previous = 0;
-  for (let n = 1; n <= party.maxMembers; n++) {
-    const percent = party.xpPoolPercentByUniqueVocations[String(n)];
-    if (percent === undefined) {
-      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations sem a chave "${String(n)}"` });
-      return;
-    }
-    if (percent < previous) {
-      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations["${String(n)}"] é menor que a anterior` });
-      return;
-    }
-    previous = percent;
-  }
 }).transform((party): {
   id: 'baseline';
   maxMembers: number;
-  xpPoolPercentByUniqueVocations: Record<string, number>;
   matchmakingLevelRange: number;
   autoSellItemTypes?: { free: number; premium: number } | undefined;
+  sharedExperience?: {
+    rangeTiles: number; floors: number; levelRangeDivisor: number; activityWindowMs: number;
+  } | undefined;
   _open?: string | undefined;
 } => ({
   ...party,
   autoSellItemTypes: party.autoSellItemTypes ?? { free: 5, premium: 20 },
+  sharedExperience: party.sharedExperience
+    ?? { rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000 },
 }));
 
 export type PartyConfig = z.infer<typeof partySchema>;
