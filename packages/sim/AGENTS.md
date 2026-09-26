@@ -192,13 +192,15 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   primeiro teste reprovou. O último a sair encerra, com o motivo dele; solo continua `end`.
 - **O bônus do Bestiário é GLOBAL, e o abate que fecha o marco é pago pela regra de ANTES.**
   Global (DT-01) porque o PRD diz "XP PvE permanente", não "XP daquele monstro" — por monstro
-  seria uma segunda regra que ninguém escreveu. E `applyXpBonus` vem antes de `record` (DT-04)
+  seria uma segunda regra que ninguém escreveu. E `xpBonusPercent` é lido antes de `record` (DT-04)
   porque a ordem inversa faria o abate 10 000 ser o único da vida do personagem a render
-  diferente dos vizinhos. A XP com bônus é calculada em INTEIRO — `floor(xp × (100 + p × n) /
-  100)` —, nunca `floor(xp × 1,13)`: `100 × 1.13` é `112.99999999999999`, e um abate em cada
-  setenta perderia um ponto sem ninguém saber por quê. Por isso o conteúdo exige `p` inteiro,
-  e não existe método que devolva o multiplicador em ponto flutuante: quem mostra o bônus soma
-  os marcos e multiplica por `p` (é o que o cliente faz).
+  diferente dos vizinhos. **Os bônus SOMAM entre si** (#563): Bestiário + faixa de level + os que
+  vierem (VIP, evento), e a multiplicação acontece UMA vez (`applyExperienceBonus`, em INTEIRO —
+  `floor(xp × (100 + soma) / 100)`), nunca `floor(xp × 1,13)`: `100 × 1.13` é `112.99999999999999`,
+  e um abate em cada setenta perderia um ponto sem ninguém saber por quê. Encadear um `floor` por
+  bônus perde ponto na borda de cada um. Por isso o conteúdo exige percentuais inteiros, e
+  `Bestiary.xpBonusPercent` devolve o percentual, nunca um multiplicador em ponto flutuante: quem
+  mostra o bônus soma os marcos e multiplica por `p` (é o que o cliente faz).
 - **Regra de saída é compilada em `hunt.ts`, não em `bot.ts`** (FUN-86). O predicado lê a
   `HuntView`, e `bot.ts` não conhece ruleset nenhum — o mesmo bot vai valer para quest e boss.
   `CompiledBot.exit` sai cru de propósito; quem tem a view é quem fecha a closure.

@@ -63,40 +63,24 @@ describe('os marcos são GLOBAIS (DT-01)', () => {
   });
 });
 
-describe('o bônus de XP', () => {
+describe('o bônus de XP (percentual)', () => {
   it('cada marco acrescenta o que o conteúdo diz, somado sobre os monstros (DT-01)', () => {
     // Mutação que mata: contar os marcos do primeiro monstro só.
-    expect(Bestiary.fromState({ rat: 5, bat: 3 }).applyXpBonus(1_000, config)).toBe(1_030);
+    expect(Bestiary.fromState({ rat: 5, bat: 3 }).xpBonusPercent(config)).toBe(3);
     const generous = { ...config, xpBonusPercentPerMilestone: 20 };
-    expect(Bestiary.fromState({ rat: 3 }).applyXpBonus(100, generous)).toBe(120);
+    expect(Bestiary.fromState({ rat: 3 }).xpBonusPercent(generous)).toBe(20);
   });
 
-  it('a XP com bônus é arredondada para BAIXO (DT-04)', () => {
-    const one = Bestiary.fromState({ rat: 3 });
-    // 5 × 1,01 = 5,05 → 5. O rato de 5 XP não rende nada a mais com um marco só, e é isso
-    // mesmo: o bônus é de longo prazo, e o piso é o inteiro.
-    expect(one.applyXpBonus(5, config)).toBe(5);
-    expect(one.applyXpBonus(100, config)).toBe(101);
-    expect(one.applyXpBonus(150, config)).toBe(151);
+  it('sem config, e sem marco, não há bônus a somar', () => {
+    expect(Bestiary.fromState({ rat: 1_000 }).xpBonusPercent()).toBe(0);
+    expect(Bestiary.fromState({ rat: 2 }).xpBonusPercent(config)).toBe(0);
   });
 
-  it('sem config, e sem marco, a XP sai como entrou', () => {
-    expect(Bestiary.fromState({ rat: 1_000 }).applyXpBonus(7)).toBe(7);
-    expect(Bestiary.fromState({ rat: 2 }).applyXpBonus(7, config)).toBe(7);
-  });
-
-  it('a conta é em INTEIRO — 13 marcos sobre 100 XP dão 113, não 112', () => {
-    // `1 + 0,01 × 13` é `1.13`, e `100 × 1.13` é `112.99999999999999`: o `floor` da conta em
-    // ponto flutuante devolveria 112. Treze marcos são três monstros nos cinco e dois deles
-    // pela metade — o caso comum de quem joga há um ano, não uma borda.
+  it('acima do último marco soma todos os marcos, e só eles', () => {
     const thirteen: BestiaryConfig = {
       milestones: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], xpBonusPercentPerMilestone: 1,
     };
-    const bestiary = Bestiary.fromState({ rat: 13 });
-    expect(bestiary.milestonesReached(thirteen)).toBe(13);
-    // A conta em ponto flutuante — a que NÃO se faz — erraria por um.
-    expect(Math.floor(100 * (1 + 0.01 * 13))).toBe(112);
-    expect(bestiary.applyXpBonus(100, thirteen)).toBe(113);
+    expect(Bestiary.fromState({ rat: 13 }).xpBonusPercent(thirteen)).toBe(13);
   });
 });
 

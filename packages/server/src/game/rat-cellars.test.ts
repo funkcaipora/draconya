@@ -61,7 +61,9 @@ describe('a Rat Cellars real (FUN-123)', () => {
     run(session, 600_000, 100);
     expect(session.ended).toBeNull();
     expect(session.aggregates.kills).toBeGreaterThan(20);
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 5);
+    // 5 XP base por rato × 3: o bônus de level do conteúdo real é +200% até o level 300
+    // (o herói do teste nunca chega perto disso), #563.
+    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 5 * 3);
     expect(session.aggregates.goldGained).toBeGreaterThan(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThan(0);
     // A rota é um laço de 160 tiles: o walker deu a volta ao menos uma vez.

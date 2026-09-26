@@ -160,6 +160,40 @@ export function grantXp(
   return retarget(character, vocation, progression);
 }
 
+/**
+ * O bônus de XP da faixa de level (#563): a PRIMEIRA faixa cujo `maxLevel` alcança o level
+ * (teto INCLUSIVO); a faixa sem `maxLevel` é o catch-all. A ordenação é garantida pelo schema do
+ * conteúdo, e sem faixa nenhuma o bônus é zero.
+ *
+ * Mora aqui, com a curva, porque é definido EM FUNÇÃO do level, como a penalidade de morte. Não
+ * é o `lowLevelBonus` do Canary (50% até o level 50): é decisão de PRODUTO do Draconya — 200%
+ * até o level 300 e 100% acima —, documentada em `docs/product/progression.md`.
+ */
+export function levelExperienceBonusPercent(level: number, progression: Progression): number {
+  for (const bracket of progression.experienceBonusByLevel) {
+    if (bracket.maxLevel === undefined || level <= bracket.maxLevel) return bracket.bonusPercent;
+  }
+  return 0;
+}
+
+/**
+ * Aplica um bônus percentual ADITIVO à XP: `floor(exp × (100 + p) / 100)`.
+ *
+ * Os bônus deste jogo SOMAM entre si (Bestiário, level, e os que vierem: VIP, evento), e a
+ * multiplicação acontece UMA vez. Encadear um `floor` por bônus perde ponto na borda de cada um
+ * — e é justamente o que somar evita.
+ *
+ * Em INTEIRO pela mesma razão do Bestiário (FUN-113): `1 + 0,01 × p` em ponto flutuante põe
+ * resíduo na frente do `floor` e o resultado erra por um em abates comuns. Com `p` inteiro —
+ * o schema do conteúdo exige —, `exp × (100 + p)` é um inteiro exato, e a divisão por 100 fica a
+ * zero ou a pelo menos um centésimo acima de um inteiro, longe demais para o resíduo puxá-la
+ * para baixo.
+ */
+export function applyExperienceBonus(experience: number, bonusPercent: number): number {
+  if (bonusPercent === 0) return experience;
+  return Math.floor((experience * (100 + bonusPercent)) / 100);
+}
+
 export interface DeathPenalty {
   readonly xpLost: number;
   readonly levelChange: LevelChange | null;

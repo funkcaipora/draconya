@@ -191,8 +191,9 @@ ler a fórmula. **"Nenhuma" vocação (level < 8) CONTA como vocação distinta*
 `Party::getUniqueVocationsCount` (`src/creatures/players/grouping/party.cpp`) insere o `baseId`
 de todo jogador sem excluir `VOCATION_NONE`; a vocação "None" é um `Vocation*` real, não um
 ponteiro nulo. **O TFS diverge** e exclui — mas o Canary manda em fórmula. O bônus de Bestiário
-de cada membro se aplica à **cota** dele, na ordem de sempre (`applyXpBonus` → `grantXp` →
-`record`), e o abate conta no Bestiário de **todo** elegível (decisão 4), não só do matador.
+de cada membro se aplica à **cota** dele, somando-se aos demais bônus numa multiplicação só
+  (#563, `applyExperienceBonus`), e o abate conta no Bestiário de **todo** elegível (decisão 4),
+  não só do matador.
 Level up e marco de Bestiário são eventos notáveis que dizem de quem (`id/level`,
 `id/monstro/marco`).
 
@@ -437,6 +438,8 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 - Um nó por party; um ticket por membro, mesmo `sessionId`; tudo ou nada na emissão. Quem entra em
   curso recebe um ticket com `join: true` e um membro só.
 - XP: `floor(floor(xp × tabela[únicas] / 100) / elegíveis)`, resto descartado; solo é 100 %.
+  A cota é a base; os bônus (Bestiário, faixa de level, VIP, evento) **somam-se** e incidem
+  sobre ela numa multiplicação só (#563, ver `progression.md`).
 - Vocação nula conta como uma; Bestiário aplica-se à cota e conta o abate para todo elegível.
 - Os dois eixos (`shareCosts`/`splitLoot`) são mutáveis pelo líder em tempo de hunt via
   `party-settings` (C2S 17); `mode` continua no fio como derivado (ADR 0035 d.1). O cliente só

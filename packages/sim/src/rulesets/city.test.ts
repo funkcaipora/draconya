@@ -85,6 +85,7 @@ describe('chegar na Cidade (FUN-120)', () => {
       regen: { healthPerSecond: 1, manaPerSecond: 1 },
       xp: { kind: 'power', base: 20, exponent: 2 },
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+      experienceBonusByLevel: [],
       skillMultipliers: {},
     };
     const session = new Session({
@@ -118,6 +119,7 @@ describe('chegar na Cidade (FUN-120)', () => {
       regen: { healthPerSecond: 1, manaPerSecond: 1 },
       xp: { kind: 'power', base: 20, exponent: 2 },
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+      experienceBonusByLevel: [],
       skillMultipliers: {},
     };
     const items = new Map<string, Item>([[
