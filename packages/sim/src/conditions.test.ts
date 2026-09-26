@@ -80,6 +80,31 @@ describe('Conditions', () => {
     expect(conditions.get('poison')?.tick?.amount).toBe(5);
   });
 
+  it('`strongest` compara a MAGNITUDE do speedPercent, não o valor com sinal (#641)', () => {
+    // Um paralyze severo (-80) precisa vencer um haste fraco (+5) na comparação `strongest` —
+    // `speedPercent` tem sinal desde o CMB-11 (#556), e `strengthOf` compararia -80 > 5 como
+    // falso se lesse o valor cru, mantendo o haste trivial e descartando o paralyze severo.
+    const conditions = new Conditions();
+    const weakHaste: ConditionState = {
+      key: 'speed', targetId: 'm:1', expiresAtMs: 10_000, merge: 'strongest', speedPercent: 5,
+    };
+    const severeParalyze: ConditionState = {
+      key: 'speed', targetId: 'm:1', expiresAtMs: 5_000, merge: 'strongest', speedPercent: -80,
+    };
+    expect(conditions.apply(weakHaste)).toBeNull();
+    // Retorna o ANTERIOR (weakHaste) — a substituição aconteceu, é a leitura pós-apply abaixo
+    // que prova que o forte venceu, não o valor de retorno (que é sempre o estado anterior).
+    expect(conditions.apply(severeParalyze)).toBe(weakHaste);
+    expect(conditions.get('speed')).toBe(severeParalyze);
+    expect(conditions.get('speed')?.speedPercent).toBe(-80);
+
+    // E o caminho inverso: um paralyze severo já ativo não é derrubado por um haste fraco.
+    const conditions2 = new Conditions();
+    expect(conditions2.apply(severeParalyze)).toBeNull();
+    expect(conditions2.apply(weakHaste)).toBe(severeParalyze);
+    expect(conditions2.get('speed')?.speedPercent).toBe(-80);
+  });
+
   it('o tique de dano (DOT) viaja no estado e um snapshot antigo sem `kind` lê como cura', () => {
     const conditions = new Conditions();
     conditions.apply({
@@ -151,6 +176,19 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     // sobra, e essa fração × baseSpeed é sempre 40.
     expect((1 + at220 / 100) * 220).toBeCloseTo(40, 9);
     expect((1 + at300 / 100) * 300).toBeCloseTo(40, 9);
+  });
+
+  it('o piso vale MESMO com type errado (#641) — content mal rotulado não gera speedScale negativo', () => {
+    // O schema já recusa este par (`type` contradiz o sinal da fórmula), mas
+    // `resolveSpeedPercent` continua seguro por conta própria: com a runa de paralyze real
+    // rotulada por engano como `haste`, o piso ainda prende o resultado em exatamente speed 40
+    // — nunca um `speedDelta` correndo solto até um `speedScale` negativo (que congelaria o
+    // personagem via `Math.max(1, …)` de `movement.ts` em vez de só acelerar errado).
+    const mislabeled = { ...paralyzeRuneFormula, type: 'haste' as const };
+    const percent = resolveSpeedPercent(mislabeled, 220, Rng.fromSeed('mislabeled-a'));
+    expect(percent).toBeCloseTo(-81.818181818, 6); // idêntico ao paralyze corretamente rotulado
+    expect((1 + percent / 100) * 220).toBeCloseTo(40, 9);
+    expect(1 + percent / 100).toBeGreaterThan(0); // speedScale nunca fica negativo
   });
 
   it('speedChange nunca passa de -1000 ("Cant be slower than 100%") — abaixo disso o resultado empata', () => {

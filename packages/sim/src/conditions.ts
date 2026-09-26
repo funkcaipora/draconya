@@ -129,11 +129,14 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
 
 /**
  * A magnitude de uma condição, para a política `strongest`. É deliberadamente simples: um DOT
- * vale o dano por tique, haste o percentual, postura o que ela soma. Empate fica com o novo.
+ * vale o dano por tique, haste/paralyze o quanto DESVIA de 1× velocidade — em módulo, porque
+ * `speedPercent` agora tem SINAL (CMB-11, #556): um paralyze severo (`-80`) precisa vencer um
+ * haste fraco (`+5`) na comparação de `strongest`, não perder por ser numericamente menor.
+ * Postura o que ela soma. Empate fica com o novo.
  */
 function strengthOf(condition: ConditionState): number {
   if (condition.tick !== undefined) return condition.tick.amount;
-  if (condition.speedPercent !== undefined) return condition.speedPercent;
+  if (condition.speedPercent !== undefined) return Math.abs(condition.speedPercent);
   if (condition.damageTakenPercent !== undefined) return Math.abs(condition.damageTakenPercent);
   const dealt = condition.damageDealtPercent;
   if (dealt !== undefined) {
@@ -162,7 +165,9 @@ export interface SpeedContext {
 
 /**
  * Resolve o percentual de velocidade de um efeito `speed` (CMB-11, #556) reproduzindo
- * `ConditionSpeed` do Canary/TFS (`src/creatures/combat/condition.cpp`):
+ * `ConditionSpeed` do CANARY (`src/creatures/combat/condition.cpp`) — a classe existe também no
+ * TFS, mas o `−40` e o piso abaixo são mecanismo só do Canary; o TFS usa `baseSpeed` direto, sem
+ * deslocamento nem piso (`monsters.cpp`). A precedência é a do ADR 0037 decisão 4.
  *
  * - `delta` (o `speedChange` do ATAQUE/DEFESA de monstro, em milésimos) vira a MESMA fórmula
  *   aleatória que o Canary deriva sozinho em `Monsters::deserializeSpell` — nunca menos que
@@ -173,10 +178,19 @@ export interface SpeedContext {
  * As duas convergem no MESMO cálculo: `difference = baseSpeed − 40`; `min`/`max` são LINEARES
  * nele e TRUNCADOS para inteiro — como o C++ trunca ao atribuir um `float` a `int32_t`, nunca
  * arredonda —; o resultado é sorteado INTEIRO e inclusivo no intervalo (`min === max` não
- * consome sorteio, como `uniform_random` do Canary não consome quando os limites coincidem); e
- * o piso do `paralyze` (`speedDelta < 40 − baseSpeed`) é a MESMA trava — a escala do nosso
- * `speed` já é a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40" é o valor
- * real do Canary, não um número reescalado.
+ * consome sorteio, como `uniform_random` do Canary não consome quando os limites coincidem).
+ *
+ * O piso (`speedDelta < 40 − baseSpeed`) é aplicado SEMPRE, não só quando `effect.type ===
+ * 'paralyze'`: no Canary ele é condicionado ao `ConditionType_t`, mas aqui `type` é um campo de
+ * CONTEÚDO — nada impede um `formula`/`delta` de sinal de paralyze rotulado por engano como
+ * `haste` (o schema em `packages/content/src/schemas.ts` recusa a maioria desses casos, mas o
+ * caso geral de `formula` não é sempre decidível estaticamente). Sem o piso incondicional, esse
+ * erro de conteúdo produziria `speedDelta` arbitrariamente negativo e um `speedScale` NEGATIVO
+ * (`1 + percent/100 < 0`), que `movement.ts` (`Math.max(1, mover.speed * speedScale)`) trata como
+ * velocidade zero — o personagem congela em vez de só receber o rótulo errado. Aplicar sempre é
+ * seguro: para `haste`/formulas legítimas o resultado nunca chega perto de `40 − baseSpeed`, e a
+ * escala do nosso `speed` já é a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40"
+ * é o valor real do Canary, não um número reescalado.
  */
 export function resolveSpeedPercent(
   effect: Extract<ConditionEffect, { kind: 'speed' }>, baseSpeed: number, rng: Rng,
@@ -194,7 +208,7 @@ export function resolveSpeedPercent(
   let max = Math.trunc(maxa * difference + maxb);
   if (min > max) { const swap = min; min = max; max = swap; }
   let speedDelta = (min === max ? min : rng.integer(min, max)) - baseSpeed;
-  if (effect.type === 'paralyze' && speedDelta < 40 - baseSpeed) speedDelta = 40 - baseSpeed;
+  if (speedDelta < 40 - baseSpeed) speedDelta = 40 - baseSpeed;
   return baseSpeed === 0 ? 0 : (speedDelta / baseSpeed) * 100;
 }
 
