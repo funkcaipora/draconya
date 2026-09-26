@@ -1,9 +1,11 @@
 import { compileMonster, monsterSchema } from '@draconya/content';
-import type { Monster } from '@draconya/content';
+import type { ConditionSpec, Monster } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { Fields } from '../fields.js';
+import type { TileFieldState } from '../fields.js';
 import { Rng } from '../rng.js';
 import {
-  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, type Prey,
+  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing, type Prey,
 } from './monster.js';
 
 const rat: Monster = {
@@ -325,5 +327,135 @@ describe('decideMonsterAction fleeing (#518)', () => {
     const monster = monsterAt(0, 0, { health: 301 });
     expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, open))
       .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+});
+
+describe('canMonsterEnterField (M29-05)', () => {
+  const withDamage = (
+    id: string, tiles: readonly { x: number; y: number }[], damageType: 'fire' | 'earth' | 'energy',
+  ): TileFieldState => ({
+    id, expiresAtMs: 999_999,
+    tiles: tiles.map((t) => ({ x: t.x, y: t.y, z: 0 })),
+    condition: {
+      key: 'burning', merge: 'refresh', durationMs: 999_999,
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 1, intervalMs: 999_999, damage: 20 }], damageType,
+      },
+    } as ConditionSpec,
+  });
+
+  // Um campo de OUTRO efeito (aqui, uma paralisia) não tem `damageType` — só fogo/veneno/
+  // energia têm o par `canWalkOn*` do Tibia, e nenhum outro efeito conta.
+  const speedField: TileFieldState = {
+    id: 'slow', expiresAtMs: 999_999, tiles: [{ x: 1, y: 0, z: 0 }],
+    condition: {
+      key: 'speed', merge: 'refresh', durationMs: 999_999,
+      effect: { kind: 'speed', type: 'paralyze', delta: -300 },
+    } as ConditionSpec,
+  };
+
+  it('sem campo, sempre pode', () => {
+    expect(canMonsterEnterField(rat, false, null)).toBe(true);
+  });
+
+  it('campo sem tipo de dano nunca bloqueia, mesmo com os três canWalkOn* em false', () => {
+    const restricted = { ...rat, canWalkOnFire: false, canWalkOnPoison: false, canWalkOnEnergy: false };
+    expect(canMonsterEnterField(restricted, false, speedField)).toBe(true);
+  });
+
+  it('canWalkOnFire false bloqueia fogo; true, ou ausente (default), atravessa', () => {
+    const field = withDamage('wall', [{ x: 1, y: 0 }], 'fire');
+    expect(canMonsterEnterField({ ...rat, canWalkOnFire: false }, false, field)).toBe(false);
+    expect(canMonsterEnterField({ ...rat, canWalkOnFire: true }, false, field)).toBe(true);
+    expect(canMonsterEnterField(rat, false, field)).toBe(true);
+  });
+
+  it('veneno usa canWalkOnPoison, mas o elemento do campo é `earth` (CMB-03)', () => {
+    const field = withDamage('poison', [{ x: 1, y: 0 }], 'earth');
+    expect(canMonsterEnterField({ ...rat, canWalkOnPoison: false }, false, field)).toBe(false);
+    expect(canMonsterEnterField({ ...rat, canWalkOnFire: false }, false, field)).toBe(true);
+  });
+
+  it('energia usa canWalkOnEnergy', () => {
+    const field = withDamage('shock', [{ x: 1, y: 0 }], 'energy');
+    expect(canMonsterEnterField({ ...rat, canWalkOnEnergy: false }, false, field)).toBe(false);
+  });
+
+  it('imune ao tipo do campo sempre pode, mesmo com o canWalkOn* correspondente em false', () => {
+    const field = withDamage('wall', [{ x: 1, y: 0 }], 'fire');
+    const immune = {
+      ...rat, canWalkOnFire: false,
+      mitigation: { resistances: rat.mitigation.resistances, immunities: new Set(['fire' as const]) },
+    };
+    expect(canMonsterEnterField(immune, false, field)).toBe(true);
+  });
+
+  it('o bypass `ignoresFieldDamage` ignora canWalkOnFire por completo (TFS/Canary `ignoreFieldDamage`)', () => {
+    const field = withDamage('wall', [{ x: 1, y: 0 }], 'fire');
+    expect(canMonsterEnterField({ ...rat, canWalkOnFire: false }, true, field)).toBe(true);
+  });
+});
+
+describe('decideMonsterAction evita campo que não pode atravessar (M29-05)', () => {
+  const fireLine = (tiles: readonly { x: number; y: number }[]): Fields => Fields.fromState([{
+    id: 'wall', expiresAtMs: 999_999,
+    tiles: tiles.map((t) => ({ x: t.x, y: t.y, z: 0 })),
+    condition: {
+      key: 'burning', merge: 'refresh', durationMs: 999_999,
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 1, intervalMs: 999_999, damage: 20 }], damageType: 'fire',
+      },
+    } as ConditionSpec,
+  }]);
+
+  /** O `Blocked` que o `HuntRuleset#blockedForMonster` monta de verdade: ocupação (aqui, sempre
+   * livre) MAIS o campo que o monstro não pode atravessar. */
+  const blockedByField = (fields: Fields, monster: MonsterRuntime, definition: Monster) =>
+    (x: number, y: number): boolean => !canMonsterEnterField(
+      definition, monster.ignoresFieldDamage, fields.at({ x, y, z: 0 }),
+    );
+
+  it('contorna: um tile de fogo bem na frente, os dois vizinhos livres', () => {
+    const fields = fireLine([{ x: 1, y: 0 }]);
+    const avoidsFire = { ...rat, canWalkOnFire: false };
+    const monster = monsterAt(0, 0);
+    const action = decideMonsterAction(
+      monster, prey('p', 5, 0), avoidsFire, blockedByField(fields, monster, avoidsFire),
+    );
+    // A ordem dos dois vizinhos é fixa (horário antes de anti-horário, ADR 0009): o de baixo
+    // (1,1) sai antes do de cima (1,-1).
+    expect(action).toEqual({ kind: 'step', to: { x: 1, y: 1 } });
+  });
+
+  it('com canWalkOnFire true, atravessa reto — o mesmo campo não desvia mais ninguém', () => {
+    const fields = fireLine([{ x: 1, y: 0 }]);
+    const monster = monsterAt(0, 0);
+    const action = decideMonsterAction(
+      monster, prey('p', 5, 0), rat, blockedByField(fields, monster, rat),
+    );
+    expect(action).toEqual({ kind: 'step', to: { x: 1, y: 0 } });
+  });
+
+  it('sem rota alternativa (fogo nos três candidatos), fica preso — sem dano, para sempre', () => {
+    const fields = fireLine([{ x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 }]);
+    const avoidsFire = { ...rat, canWalkOnFire: false };
+    const monster = monsterAt(0, 0);
+    const blocked = blockedByField(fields, monster, avoidsFire);
+    expect(decideMonsterAction(monster, prey('p', 5, 0), avoidsFire, blocked).kind).toBe('idle');
+    // Perguntar de novo, do mesmo tile, dá a MESMA resposta — não há exploração escondida que
+    // acabasse achando a volta sozinha (decideMonsterAction é pura, sem estado de tempo).
+    expect(decideMonsterAction(monster, prey('p', 5, 0), avoidsFire, blocked).kind).toBe('idle');
+  });
+
+  it('com `ignoresFieldDamage` armado (concedido ao levar dano preso), atravessa a mesma parede', () => {
+    const fields = fireLine([{ x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 }]);
+    const avoidsFire = { ...rat, canWalkOnFire: false };
+    const monster = monsterAt(0, 0, { ignoresFieldDamage: true });
+    const action = decideMonsterAction(
+      monster, prey('p', 5, 0), avoidsFire, blockedByField(fields, monster, avoidsFire),
+    );
+    expect(action).toEqual({ kind: 'step', to: { x: 1, y: 0 } });
   });
 });

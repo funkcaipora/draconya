@@ -71,7 +71,7 @@ import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction 
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
+  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { rankTarget } from '../monster/target-strategy.js';
@@ -4038,6 +4038,10 @@ const slots = bot.groups.get(group);
       session.credit(character.id, 'bestSpellHit', damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       const applied = monster.receiveDamage(damage);
+      // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
+      // (`lastStepBlocked`) concede UMA passagem pelo campo que o prendia — nunca de graça, e
+      // nunca ao andar livre. Zero de dano (`chance: 0`/overkill de mira que já matou) não arma.
+      if (monster.lastStepBlocked && applied > 0) monster.ignoresFieldDamage = true;
       // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied);
@@ -5091,7 +5095,16 @@ const slots = bot.groups.get(group);
     const prey: readonly Prey[] = session.participants;
     monster.targetId = chooseTarget(monster, prey, definition, session.rng);
     const target = findById(prey, monster.targetId);
-    const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
+    const action = decideMonsterAction(
+      monster, target, definition, this.#blockedForMonster(monster, definition),
+    );
+    // O bypass de campo (M29-05) vale por UMA decisão — a que acabou de rodar, tenha usado ou
+    // não —, e é consumido aqui, como o Canary o gasta no primeiro recálculo de caminho depois
+    // de concedido (`Monster::doWalkBack`/`doFollowCreature`).
+    monster.ignoresFieldDamage = false;
+    // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
+    // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
+    monster.lastStepBlocked = target !== null && target.alive && action.kind === 'idle';
 
     // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
     // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
@@ -5884,6 +5897,9 @@ const slots = bot.groups.get(group);
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
     const applied = applyDamageOutcome(monster, outcome, character);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
+    // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
+    // pelo caminho de golpe corpo a corpo/wand.
+    if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
     this.#markCombatActive(session, character.id);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
@@ -6966,6 +6982,40 @@ const slots = bot.groups.get(group);
   #blockedFor(mover: Movable<GridPoint>): Blocked {
     this.#mover = mover;
     return this.#moverBlocked;
+  }
+
+  /**
+   * `#blockedFor`, mas ACRESCENTA o campo (M29-05, TFS `Monster::canWalkOnFieldType`): um tile
+   * com campo de fogo/veneno/energia que o MONSTRO não pode pisar conta como bloqueado — para o
+   * passo guloso E para a fuga (#518), porque as duas passam por este ÚNICO predicado dentro de
+   * `decideMonsterAction`. Só monstro: o jogador pode entrar em qualquer campo (e leva o dano),
+   * então nenhum call site de personagem usa isto.
+   *
+   * UMA closure reaproveitada com o monstro e a definição capturados em campo mutável — o mesmo
+   * desenho de `#moverBlocked`, e pela mesma razão: isto roda até três vezes por passo de cada
+   * monstro, e uma closure nova por vencimento é o coletor rodando o tempo todo com 5.000
+   * instâncias.
+   */
+  #fieldMonster: MonsterRuntime | null = null;
+  #fieldDefinition: Monster | null = null;
+  readonly #fieldProbe = { x: 0, y: 0, z: 0 };
+
+  readonly #monsterBlocked: Blocked = (x, y) => {
+    if (this.#moverBlocked(x, y)) return true;
+    const monster = this.#fieldMonster as MonsterRuntime;
+    const definition = this.#fieldDefinition as Monster;
+    this.#fieldProbe.x = x;
+    this.#fieldProbe.y = y;
+    this.#fieldProbe.z = this.#floorOf(monster);
+    const field = this.#fields.at(this.#fieldProbe);
+    return !canMonsterEnterField(definition, monster.ignoresFieldDamage, field);
+  };
+
+  #blockedForMonster(monster: MonsterRuntime, definition: Monster): Blocked {
+    this.#mover = monster;
+    this.#fieldMonster = monster;
+    this.#fieldDefinition = definition;
+    return this.#monsterBlocked;
   }
 
   /**
