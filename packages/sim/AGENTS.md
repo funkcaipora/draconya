@@ -423,6 +423,27 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `creature-hit` e a contribuição usam `healthDamage`; `bestBasicHit`/`bestSpellHit` continuam
   com o RESOLVIDO. O `AppliedDamageOutcome` é efêmero: não entra no snapshot nem no S2C, e não
   há campo de protocolo nem UI de breakdown (DT-03).
+- **Crítico e leech de item/monstro têm fonte e ordem PRÓPRIAS no `combat-v3`** (M30-04, #551).
+  A rolagem do crítico se MOVEU: em `combat-v3` ela agora acontece na GERAÇÃO do dano, ANTES do
+  `blockHit` (`resolveBlockHitProfile`, `combat/damage.ts`) — a mesma posição do Canary
+  (`Combat::applyExtensions`, chamado antes de `Creature::blockHit`), diferente de `combat-v1`/
+  `v2`, onde continua a ÚLTIMA (bit a bit, intocado). A FONTE deixou de ser só o
+  `combat.modifiers` estático: `Inventory.combatModifiers` (`inventory.ts`) soma o
+  `ItemCombatModifiers` do que está vestido, em pontos-base (×10000, a escala do Canary);
+  `monsterCriticalModifiers` (`combat/modifiers.ts`) lê `Monster.critChance` (percentual, não
+  pontos-base — a MESMA escala do Lua) para o ataque de monstro; `HuntRuleset#attackerModifiers`
+  soma as duas fontes com `combat.modifiers` (`combineCombatModifiers`) e alimenta `#strike`,
+  `castSpell` E `useSupply` (magia e runa também criticam, como no Canary — só ataque de monstro
+  nunca soma `combat.modifiers`, nem leecha: leech é mecanismo exclusivo do atacante JOGADOR).
+  **O leech NÃO é uma fração direta nem uma divisão simples por `targetsAffected`** —
+  `calculateLeechAmount` (`combat/modifiers.ts`) é `Game::calculateLeechAmount` do Canary:
+  `realDamage × leechFraction × (0,1n + 0,9) / n`, arredondada (não truncada) e limitada ao
+  `realDamage`. Para `n = 1` o fator é `1` (identidade); para `n = 5` é `0,28`, não `0,2` — quem
+  escrever "divide por targetsAffected" de novo em algum lugar está reintroduzindo a
+  simplificação errada. `applyLeech` (mesmo arquivo) é a peça COMPARTILHADA entre o golpe único
+  (`applyDamageOutcome`) e a magia em área (`HuntRuleset#applyHits`, que NÃO passava por
+  `applyDamageOutcome` — o leech ali é aplicado directo sobre o `healthDamage` de cada alvo, com
+  o MESMO `targetsAffected` para todos os alvos da mira).
 - **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,
   #336). `combat/conformance.test.ts` prende fórmula, ordem de RNG e arredondamento com dados
   escritos à mão, cada caso a 100 ms, a 1000 ms e com snapshot/retomada; o `RngState` é
