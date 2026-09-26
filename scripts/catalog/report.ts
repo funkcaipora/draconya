@@ -58,7 +58,15 @@ function skippedSection(report: CatalogReport): string {
     '| id | nome | motivo | fonte |',
     '|---|---|---|---|',
   ];
-  const sorted = [...report.skipped].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  // Id de item/monstro do Tibia é numérico de verdade (`SkippedEntity.id: string | number`) —
+  // comparar como TEXTO ordena "100, 30000, 5000" em vez de "100, 5000, 30000". Os dois numéricos
+  // comparam por valor; qualquer outro par (id textual, ou um de cada tipo) cai de volta para
+  // texto, e continua determinístico.
+  const sorted = [...report.skipped].sort((a, b) => (
+    typeof a.id === 'number' && typeof b.id === 'number'
+      ? a.id - b.id
+      : String(a.id).localeCompare(String(b.id))
+  ));
   for (const item of sorted) {
     lines.push(`| ${item.id} | ${item.name} | ${item.reason} | \`${item.source.path}\` |`);
   }
