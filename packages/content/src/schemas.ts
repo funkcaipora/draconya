@@ -1303,6 +1303,13 @@ export function damageOverTimeTotalMs(effect: DamageOverTimeEffect): number {
  * de QUALQUER fonte se substituírem (ver `SPEED_CONDITION_KEY`), como no Tibia. O efeito `drunk`
  * (M31-03) exige `key: 'drunk'` pelo mesmo motivo: sem campo próprio no estado, é a chave que o
  * `sim` reconhece (ver `DRUNK_CONDITION_KEY`).
+ *
+ * As duas checagens abaixo são as DUAS IMPLICAÇÕES, não só uma (achado da revisão do #651): sem
+ * a volta, `key: 'speed'`/`key: 'drunk'` com um `effect.kind` DIFERENTE passa batido — e
+ * `Conditions.hasDrunk`/o efeito de velocidade (`sim/conditions.ts`) reconhecem a condição só
+ * pela CHAVE, nunca pelo `effect.kind` dela. Um `buff` de dano copiado/colado com `key: 'drunk'`
+ * por engano ligaria o desvio de passo do bêbado em quem o carrega, sem NENHUMA relação com o
+ * autor pretendido.
  */
 export const conditionSpecSchema = z.object({
   key: z.string().min(1),
@@ -1322,11 +1329,11 @@ export const conditionSpecSchema = z.object({
     });
   }
 }).refine(
-  (spec) => spec.effect.kind !== 'speed' || spec.key === SPEED_CONDITION_KEY,
-  { message: `a condição speed precisa da chave reservada "${SPEED_CONDITION_KEY}"` },
+  (spec) => (spec.effect.kind === 'speed') === (spec.key === SPEED_CONDITION_KEY),
+  { message: `a condição speed precisa da chave reservada "${SPEED_CONDITION_KEY}", e só ela` },
 ).refine(
-  (spec) => spec.effect.kind !== 'drunk' || spec.key === DRUNK_CONDITION_KEY,
-  { message: `a condição drunk precisa da chave reservada "${DRUNK_CONDITION_KEY}"` },
+  (spec) => (spec.effect.kind === 'drunk') === (spec.key === DRUNK_CONDITION_KEY),
+  { message: `a condição drunk precisa da chave reservada "${DRUNK_CONDITION_KEY}", e só ela` },
 );
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
@@ -1466,6 +1473,16 @@ export const MONSTER_CLASSES = ['mammal', 'vermin', 'dragon'] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
+ * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
+ * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
+ * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
+ * `damage-over-time` ficam de fora por isso.
+ */
+const DEFENSE_SELF_CONDITION_KINDS = new Set<ConditionEffect['kind']>([
+  'speed', 'buff', 'mana-shield', 'heal-over-time',
+]);
+
+/**
  * Uma DEFESA de monstro (#518, TFS `Monster::onThinkDefense`, referência §15-19): cura própria,
  * como o Dragon (`interval 2000, chance 15%, +40..+70`), OU self-haste (CMB-11, #556), como o
  * Doom Deer (`{ name = "speed", interval 3000, chance 30%, speedChange 400, duration 8000 }`,
@@ -1511,6 +1528,20 @@ export const monsterDefenseSchema = z.strictObject({
   (defense) => defense.condition === undefined || defense.condition.effect.kind !== 'speed'
     || defense.condition.effect.type === 'haste',
   { message: 'a condition de uma defesa só usa speed do tipo haste (self-buff)' },
+).refine(
+  // O `effect.kind` de uma defesa é sempre um SELF-BUFF (achado da revisão do #651): sem esta
+  // lista, nada impedia `condition.effect.kind: 'drunk'` numa defesa — o Canary nunca aplica
+  // drunk como self-buff (é sempre um ataque do MONSTRO contra o jogador, `Monsters::
+  // deserializeSpell`), e um monstro que se embebedasse sozinho a cada `cadenceMs` desviaria o
+  // PRÓPRIO passo dele pelo mesmo `#drunkTarget` do jogador — um mecanismo que o Canary/TFS não
+  // tem. `damage-over-time` fica de fora pelo mesmo motivo: uma defesa nunca teria por que
+  // aplicar dano contínuo a si mesma.
+  (defense) => defense.condition === undefined
+    || DEFENSE_SELF_CONDITION_KINDS.has(defense.condition.effect.kind),
+  {
+    message: `a condition de uma defesa só aceita um efeito de self-buff `
+      + `(${[...DEFENSE_SELF_CONDITION_KINDS].join(', ')})`,
+  },
 );
 export type MonsterDefenseDefinition = z.infer<typeof monsterDefenseSchema>;
 
