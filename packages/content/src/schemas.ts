@@ -583,6 +583,35 @@ export const consumableEffectSchema = z.discriminatedUnion('kind', [
 export type ConsumableEffect = z.infer<typeof consumableEffectSchema>;
 
 /**
+ * Os modificadores de crítico e leech que o ATACANTE ganha por VESTIR o item (M30-04, #551).
+ *
+ * Pontos-base (×10000) — a MESMA escala do `criticalhitchance`/`criticalhitdamage`/
+ * `lifeleechamount`/`manaleechamount` do Canary (`data/items/items.xml`, conferido em
+ * 2026-09-26 contra `47dfd51`): `1000` é 10 %, `3500` é +35 % de dano. `Inventory.combatModifiers`
+ * (`sim`) SOMA os equipados, como já faz `armor`/`skillBonus`/`speedBonus` — um item só nunca é
+ * o total do personagem.
+ *
+ * `lifeleechchance`/`manaleechchance` do Canary (também em `items.xml`, 19/17 itens) **não**
+ * têm campo aqui de propósito: `Game::calculateLeechAmount` (`src/game/game.cpp:9058`) só lê a
+ * skill AMOUNT (`SKILL_LIFE_LEECH_AMOUNT`/`SKILL_MANA_LEECH_AMOUNT`) — a CHANCE não entra na
+ * fórmula —, e o próprio Canary pula as duas ao montar a descrição do item (`item.cpp:91`,
+ * `if (i == SKILL_MANA_LEECH_CHANCE || i == SKILL_LIFE_LEECH_CHANCE) continue;`): são
+ * atributos vestigiais nesta versão, sem consumidor na resolução de dano — conferido, não
+ * suposto (a pergunta do `_open` de `#548` "conferir se a chance ainda é lida" fica respondida
+ * aqui: não é).
+ *
+ * Ausente é o item comum de sempre, sem bônus nenhum — o total ZERO de todo conteúdo hoje, que
+ * preserva bit a bit o v1/v2/v3 (ver `combat/modifiers.ts` do `sim`).
+ */
+export const itemCombatModifiersSchema = z.strictObject({
+  criticalChance: z.number().int().min(0).max(10_000).optional(),
+  criticalDamage: z.number().int().min(0).optional(),
+  lifeLeech: z.number().int().min(0).optional(),
+  manaLeech: z.number().int().min(0).optional(),
+});
+export type ItemCombatModifiers = z.infer<typeof itemCombatModifiersSchema>;
+
+/**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
  *
  * **Estrito, ao contrário dos outros schemas** (FUN-94). Zod DESCARTA chave desconhecida em
@@ -698,6 +727,8 @@ export const itemSchema = z.strictObject({
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
   }).optional(),
+  /** Crítico e leech do item, enquanto vestido (M30-04, #551) — ver `itemCombatModifiersSchema`. */
+  combatModifiers: itemCombatModifiersSchema.optional(),
   /**
    * O que o EQUIPAMENTO resiste e ao que é imune (CMB-03). Ausente é o item neutro — o default
    * preserva o v1, em que nenhum item tinha mitigação. Soma com os outros equipados no boot do
@@ -1632,6 +1663,21 @@ export const monsterSchema = z.strictObject({
    * só tem quatro monstros hoje).
    */
   defenseMitigation: z.number().min(0).max(30).default(0),
+  /**
+   * O crítico do MONSTRO (M30-04, #551, `Monster::getCriticalChance`/`monsters.hpp:126`
+   * `critChance`, conferido em 2026-09-26 contra `47dfd51`). PERCENTUAL inteiro 0-100 — a
+   * MESMA escala do campo Lua (`critChance = 10` no `antenna.lua`) — porque é
+   * `getCriticalChance() * 100` (`combat.cpp:2766`) quem converte para pontos-base na rolagem;
+   * `sim/combat/modifiers.ts` faz a MESMA conversão. Ausente é `0`, a identidade de rato,
+   * rotworm, dragon e dragon lord: nenhum dos quatro declara `critChance` no Canary — só 6
+   * bosses o fazem (`antenna`, `mitmah_scout`, `mitmah_seer`, `the_monster`,
+   * `alchemist_container`, `doctor_marrow`), fora do bestiário do Draconya hoje. O Canary NÃO
+   * declara bônus de DANO crítico para monstro em conteúdo algum — `Monster::getCriticalDamage`
+   * é campo só de runtime (`criticalDamage`, `monster.cpp:307`, default `0`, sem script que o
+   * altere) — então um crítico de monstro ativa a FLAG sem multiplicar dano nenhum, fiel ao que
+   * o Canary de fato faz; por isso não há `criticalDamage` aqui.
+   */
+  critChance: z.number().int().min(0).max(100).default(0),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
   /**
