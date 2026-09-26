@@ -219,3 +219,37 @@ aposentadoria continuam os da decisão original.
   em teste não têm relógio de sessão nenhum para passar, e nenhuma delas lê o parâmetro. Todo
   CHAMADOR em produção passa `session.nowMs` explicitamente; o default só evita inventar um
   instante nos testes que não precisam dele.
+
+## Emenda — 2026-09-26: a implementação do M30-04 (#551) reverte a posição do crítico
+
+A emenda do M30-01 acima já previa isto: "a posição EXATA do crítico sob `combat-v3` é trabalho
+do M30-04, que pode reverter esta escolha com o contexto de crítico/leech completo." O M30-04
+reverteu — com o contexto completo, a posição do M30-01 não sobrevive à comparação com o Canary.
+
+- **O crítico voltou a rolar CEDO, mas não na mesma posição do v1/v2** (`resolveBlockHitProfile`,
+  `combat/damage.ts`). `Combat::applyExtensions` do Canary roda em `getCombatDamage`/`doCombat`,
+  ANTES de `Creature::blockHit` ser chamado — ou seja, o crítico multiplica `damage.primary.value`
+  antes de QUALQUER estágio de bloqueio ver o número. A posição do M30-01 (depois de toda a
+  mitigação) era o oposto disso, e o próprio texto da emenda anterior já registrava que era um
+  placeholder deliberado, não uma leitura do Canary — "nenhum conteúdo real declara
+  `combat.modifiers` hoje" era a justificativa, não uma fórmula. Com item e monstro agora
+  podendo declarar o modificador de verdade, a posição errada deixou de ser inofensiva.
+- **A imunidade não protege contra o multiplicador, e é fiel ao Canary por isso mesmo.**
+  `applyExtensions` decide o crítico olhando só o ATACANTE — o alvo, a imunidade dele e o
+  `blockHit` inteiro vêm DEPOIS, num código completamente separado (`game.cpp`, não
+  `combat.cpp`). Rolar o crítico cedo e deixar a imunidade zerar o resultado por cima (como já
+  acontecia) é a mesma coisa que o Canary faz: o crítico "aconteceu" (consumiu o sorteio,
+  multiplicou o número), a imunidade só decide que o número final é zero.
+- **O piso (`minimumDamageFraction`) continua sobre o PODER BRUTO ORIGINAL, sem o bônus do
+  crítico.** Isto NÃO é uma leitura do Canary — o piso inteiro é invenção do Draconya, registrada
+  acima como tal — mas uma decisão de produto tomada agora que a pergunta ficou concreta: deixar
+  o crítico inflar o piso faria a garantia de "pelo menos X% do ataque passa" também escalar com
+  sorte, o que nenhum pedido de produto pediu. Reversível sem mudar perfil: é aritmética interna
+  de uma função, não contrato externo.
+- **O leech não é um estágio deste pipeline, nem nunca foi cogitado como um.** Ele opera sobre o
+  HP EFETIVAMENTE removido (`healthDamage`), não sobre o `DamageOutcome` puro — `blockHit` não
+  sabe de leech, e `Game::calculateLeechAmount` roda bem depois, do lado de fora de
+  `Combat::doCombat`. A fórmula em si (`(0,1n + 0,9)/n`, não uma divisão simples por
+  `targetsAffected`) e a fonte dos modificadores (item somado por `Inventory.combatModifiers`,
+  monstro por `Monster.critChance`) são registradas em `docs/product/combat.md`, não aqui — não
+  mudam nada da ORDEM de `blockHit` que este ADR decide.
