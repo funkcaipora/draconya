@@ -772,6 +772,18 @@ para este estágio. A mitigação percentual (passo 5) é a ÚNICA que se aplica
 magia — é assim no Canary (`if (damage != 0) mitigateDamage(...)`, fora do bloco de
 `checkDefense`/`checkArmor`).
 
+**`manadrain` é a ÚNICA exceção: o TIPO, não a origem, decide.** Um mana-drain NUNCA bloqueia
+por defesa/escudo nem por armadura, mesmo quando a ability é corpo a corpo
+(`blockable: MELEE_BLOCK_FLAGS`) — o Canary chama `target->blockHit(attacker, COMBAT_MANADRAIN,
+manaLoss)` com só três argumentos (`game.cpp:9176`), e `checkDefense`/`checkArmor` default a
+`false` (`Creature::blockHit`, `creature.cpp:944`). `resolveBlockHitProfile`
+(`combat/damage.ts`) força `{ armor: false, shield: false }` sempre que `damageType ===
+'manadrain'`, por cima do `blockable` que a origem do golpe declararia — achado da revisão do PR
+#648: a suíte do #547 só exercitava manadrain com `MAGIC_BLOCK_FLAGS` (armadura e escudo já
+`false` por coincidência), e nunca provava a exceção contra uma ability corpo a corpo de
+verdade. Nenhuma carga de `blockCount` é gasta nesse caso — o Canary só decrementa o contador
+dentro do `checkDefense || checkArmor`, e os dois são falsos para manadrain.
+
 O treino de shielding (`#applyMonsterHit`, `hunt.ts`) segue a MESMA origem sob `combat-v3` —
 `blockable.shield`, não `combat.defense.blockTypes` — para não destreinar (ou treinar por
 engano) o dia em que o catálogo tiver uma ability corpo a corpo elemental (achado da revisão do
@@ -845,10 +857,27 @@ acima) fechou com o **#547 (M29-07)**: `combat/damage.ts` calcula `mitigationExe
 ### Manadrain resolve contra a mana, não a vida (#547, M29-07)
 
 `manadrain` é o único tipo de dano que `applyDamageOutcome` (`combat/outcome.ts`) desvia da
-vida: o golpe passa pelo MESMO pipeline de mitigação de qualquer outro tipo (Dodge, `blockHit`,
-resistência, piso — tudo igual), mas a aplicação final tira `min(mana, resolvido)` da MANA do
-alvo e nunca toca a vida (`healthDamage` fica em zero). Duas consequências que seguem do próprio
-Canary (`Game::combatChangeMana`, `game.cpp:9176`, `Creature::drainMana`):
+vida: a aplicação final tira `min(mana, resolvido)` da MANA do alvo e nunca toca a vida
+(`healthDamage` fica em zero). O pipeline que produz o `resolvido`, porém, **não é igual ao dos
+outros tipos** — dois pontos em que `manadrain` diverge, corrigidos na revisão do PR #648:
+
+- **defesa/escudo e armadura NUNCA se aplicam** — ver "`manadrain` é a ÚNICA exceção: o TIPO, não
+  a origem, decide" acima. Só Dodge (posição do Draconya), resistência/vulnerabilidade por tipo
+  (CMB-03) e o piso (`minimumDamageFraction`, salvaguarda do Draconya, sem equivalente no Canary)
+  seguem incidindo, como em qualquer outro tipo;
+- **a mana disponível capa o poder bruto ANTES da resistência**, não depois. O Canary computa
+  `manaLoss = min(mana atual, poder bruto)` (`game.cpp:9175`) e só então roda `blockHit` — que
+  aplica a resistência/absorção — sobre o valor JÁ capado (`creature.cpp:948`). Resolver a
+  resistência sobre o poder bruto inteiro e capar a mana só no fim (o que a aplicação sozinha
+  faria) dobraria o dreno sempre que a mana disponível for menor que o poder bruto e o alvo tiver
+  resistência ao tipo — exemplo: poder 100, mana 30, resistência 50 %; capar primeiro dá
+  30 × 0,5 = 15 (o certo), resistir primeiro dá 100 × 0,5 = 50, capado a 30 só no fim (o dobro).
+  `Defender.mana` (`combat/damage.ts`) existe só para isto: `resolveBlockHitProfile` o lê para
+  capar ANTES de aplicar `mitigation.resistances`, e fica ausente sem efeito nenhum contra um
+  monstro (que não tem mana — o dreno dele já é zerado depois, em `applyDamageOutcome`).
+
+Duas consequências que seguem do próprio Canary (`Game::combatChangeMana`, `game.cpp:9176`,
+`Creature::drainMana`):
 
 - **a mana shield NÃO entra** — ela existe para converter dano de VIDA em mana; aqui o golpe já é
   mana, e "absorver" duas vezes não faz sentido nenhum;
@@ -859,6 +888,18 @@ Canary (`Game::combatChangeMana`, `game.cpp:9176`, `Creature::drainMana`):
 `lifedrain` e `drown`, ao contrário, são dano de vida comum — passam por `applyDamageOutcome`
 sem desvio nenhum, mana shield e leech inclusos como qualquer outro tipo (leech nunca ocorre de
 qualquer forma num ataque de monstro, porque `attacker` chega `null`).
+
+**O desvio para a mana é uniforme nos CINCO produtores de dano, não só nos quatro que o #547
+original cobria.** DOT (`#applyConditionTick`), ability de monstro (`#applyMonsterHit`) e o golpe
+básico (`#land`) sempre passaram por `applyDamageOutcome`; magia e runa de dano (`castSpell`/
+`useSupply`, aplicadas por `HuntRuleset#applyHits`) foram corrigidas na revisão do PR #648 —
+antes, `#applyHits` chamava `monster.receiveDamage` direto sobre o `resolvedDamage`, sem olhar
+`damageType`, e um `manadrain` declarado numa magia ou runa bateria na vida do monstro como dano
+comum (o schema de `effect.damageType` sempre aceitou qualquer `DamageType`, `manadrain`
+incluso). `CastSuccess.hitOutcomes` (`casting.ts`) carrega o `DamageOutcome` inteiro de cada
+alvo, na mesma ordem de `hits`, para `#applyHits` poder chamar `applyDamageOutcome` como os
+outros quatro produtores — o mesmo fix foi replicado no palco de golden traces
+(`combat/traces/harness.ts`), que tinha a MESMA lacuna.
 
 O número flutuante do manadrain usa o novo `AppliedDamageOutcome.manaDamage` no lugar do
 `healthDamage` (`hunt.ts`, `amount: applied.healthDamage + applied.manaDamage` — exatamente um
