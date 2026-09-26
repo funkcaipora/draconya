@@ -1896,7 +1896,10 @@ describe('as runas de ataque do Canary (#476)', () => {
 });
 
 describe('condições e campos declarativos (CMB-07, #334)', () => {
-  const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
+  const dot = {
+    kind: 'damage-over-time', form: 'rounds',
+    rounds: [{ count: 4, intervalMs: 1_000, damage: 5 }], damageType: 'earth',
+  };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };
   const field = {
     id: 'fire', durationMs: 5_000,
@@ -1930,10 +1933,76 @@ describe('condições e campos declarativos (CMB-07, #334)', () => {
         ...rat,
         abilities: [{
           id: 'v', cadenceMs: 1_000, power: 1,
-          condition: { ...condition, effect: { kind: 'damage-over-time', amount: -1, intervalMs: 1_000 } },
+          condition: {
+            ...condition,
+            effect: {
+              kind: 'damage-over-time', form: 'rounds',
+              rounds: [{ count: 1, intervalMs: 1_000, damage: -1 }],
+            },
+          },
         }],
       }],
     }))).toThrow(ContentError);
+    // `startDamage` maior que `totalDamage` é recusado (a clamp do Canary vira erro de conteúdo).
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: {
+            ...condition,
+            effect: {
+              kind: 'damage-over-time', form: 'generated',
+              totalDamage: 10, startDamage: 20, intervalMs: 1_000,
+            },
+          },
+        }],
+      }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa `durationMs` menor que o total da própria fila de tiques (achado da revisão do #557)', () => {
+    // `rounds`: 4 tiques de 1000 ms = 4000 ms de fila (o `dot` de cima), mas `durationMs` só
+    // cobre 3000 — o quarto tique cairia depois do prazo e `#onConditionTick` (`hunt.ts`) o
+    // descartaria em silêncio, sem erro nem log. `condition` (o fixture de cima) usa 4000 e
+    // passa; só encurtar quebra.
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: { ...condition, durationMs: 3_000 },
+        }],
+      }],
+    }))).toThrow(/durationMs \(3000 ms\) é menor que o total de 4000 ms/);
+
+    // `generated`: totalDamage 100/startDamage 5 produz 46 tiques de 5000 ms (230000 ms no
+    // total) — o mesmo exemplo do corpo do PR. Um `durationMs` "razoável" de 60000 ms (que não
+    // denuncia nada de errado ao olho) truncaria a fila bem antes de entregar os 100 de dano.
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: {
+            key: 'poison', merge: 'strongest', durationMs: 60_000,
+            effect: {
+              kind: 'damage-over-time', form: 'generated',
+              totalDamage: 100, startDamage: 5, intervalMs: 5_000,
+            },
+          },
+        }],
+      }],
+    }))).toThrow(/durationMs \(60000 ms\) é menor que o total de 230000 ms/);
+
+    // `durationMs` MAIOR que o total é aceito — é o caso real do Dragon Lord (7×10000 = 70000):
+    // a condição só fica com a fila zerada até vencer, sem efeito observável.
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{ id: 'v', cadenceMs: 1_000, power: 1, condition: { ...condition, durationMs: 9_000 } }],
+      }],
+    }))).not.toThrow();
   });
 
   it('a magia de dano ao longo do tempo monta; sem `range` é recusada', () => {

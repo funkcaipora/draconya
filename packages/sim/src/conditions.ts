@@ -20,9 +20,22 @@
 // ruleset a compila para este estado, que é o que viaja no snapshot. A POLÍTICA de fusão
 // (`merge`) é declarada por condição, e não um campo por efeito: `refresh` (relançar reinicia,
 // o de sempre), `replace` (o novo substitui o antigo) e `strongest` (o mais forte vence).
+//
+// M31-02 (#557): o dano ao longo do tempo ganhou a forma do Tibia — uma FILA de tiques,
+// possivelmente com valores DIFERENTES (a lista decrescente do Canary), em vez de um valor único
+// repetido. `tick.amount`/`tick.intervalMs` continuam sendo o tique CORRENTE — todo código que já
+// lia os dois campos direto continua funcionando sem mudança —, e `tick.queue` é o QUE FALTA
+// depois dele, em ordem. Ausente é o tique antigo, infinito até `expiresAtMs` (cura ao longo do
+// tempo, e qualquer snapshot anterior a esta issue); presente, mesmo vazio, é a fila do Tibia —
+// esgotada, ela para de tiquetar ANTES do vencimento, como `ConditionDamage::executeCondition` do
+// Canary faz quando `damageList` esvazia.
 
 import type { ConditionEffect, ConditionSpec } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
+// `generateDamageList`/`damageOverTimeTicks` moram em `content` (achado da revisão do #557):
+// `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
+// duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
+import { damageOverTimeTicks, generateDamageList } from '@draconya/content';
 import type { DamageSource } from './combat/damage.js';
 
 export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
@@ -50,6 +63,13 @@ export interface DamagePercentBySource {
   readonly spell?: number | undefined;
 }
 
+/** Um tique AINDA por vir na fila do Tibia (M31-02) — sem `kind`/`damageType`/`source`: são os
+ * mesmos do tique corrente, `queue` não os repete. */
+export interface QueuedTick {
+  readonly amount: number;
+  readonly intervalMs: number;
+}
+
 /**
  * O tique de uma condição. `heal` repõe vida; `damage` (CMB-07) é um DANO AO LONGO DO TEMPO,
  * com tipo e origem próprios para entrar no MESMO resolver canônico do golpe.
@@ -57,6 +77,11 @@ export interface DamagePercentBySource {
  * `kind` é OPCIONAL de propósito: um snapshot anterior ao CMB-07 gravou só `{ amount,
  * intervalMs }`, e o único tique que existia era cura. Ausente é `heal`, e é o que mantém o
  * formato antigo legível sem bump.
+ *
+ * `queue` (M31-02) é o QUE FALTA depois deste tique, em ordem — a lista do Tibia gerada por
+ * `damageOverTimeTicks`. Ausente é o tique antigo, que se repete a `intervalMs` até
+ * `expiresAtMs`; presente, mesmo `[]`, é a fila nova, que PARA de tiquetar quando esgota, antes
+ * do vencimento se for o caso (`ConditionDamage::executeCondition` do Canary faz o mesmo).
  */
 export interface ConditionTick {
   readonly amount: number;
@@ -64,6 +89,7 @@ export interface ConditionTick {
   readonly kind?: 'heal' | 'damage';
   readonly damageType?: DamageType;
   readonly source?: DamageSource;
+  readonly queue?: readonly QueuedTick[];
 }
 
 export interface ConditionState {
@@ -100,6 +126,7 @@ export interface NormalizedTick {
   readonly kind: 'heal' | 'damage';
   readonly damageType?: DamageType;
   readonly source?: DamageSource;
+  readonly queue?: readonly QueuedTick[];
 }
 
 export function tickOf(condition: ConditionState): NormalizedTick | null {
@@ -111,7 +138,40 @@ export function tickOf(condition: ConditionState): NormalizedTick | null {
     kind: tick.kind ?? 'heal',
     ...(tick.damageType === undefined ? {} : { damageType: tick.damageType }),
     ...(tick.source === undefined ? {} : { source: tick.source }),
+    ...(tick.queue === undefined ? {} : { queue: tick.queue }),
   };
+}
+
+/**
+ * O PRÓXIMO tique, avançando a fila do Tibia (M31-02) — puro, sem mexer no estado. `null` é "a
+ * fila esgotou, pare de tiquetar": o chamador não reagenda, exatamente como o Canary faz quando
+ * `damageList` (ou o `getNextDamage` do `periodDamage`) fica vazio. Sem `queue` (tique antigo,
+ * infinito), devolve o MESMO tique — o comportamento de sempre, repetir até `expiresAtMs`.
+ */
+export function advanceTick(tick: NormalizedTick): { amount: number; intervalMs: number; queue?: readonly QueuedTick[] } | null {
+  const queue = tick.queue;
+  if (queue === undefined) return { amount: tick.amount, intervalMs: tick.intervalMs };
+  if (queue.length === 0) return null;
+  const [next, ...rest] = queue as [QueuedTick, ...QueuedTick[]];
+  return { amount: next.amount, intervalMs: next.intervalMs, queue: rest };
+}
+
+/**
+ * O estado de uma condição depois que seu AGENDAMENTO de tique termina — por exaustão da fila do
+ * Tibia (`advanceTick` devolvendo `null`) ou porque o próximo tique cairia depois de
+ * `expiresAtMs`. `nextTickAtMs` sai: não sobra evento de tique pendente para o #334 proteger.
+ *
+ * Quando o tique tem fila (`queue` presente), a força que falta também vai a zero: nenhum tique
+ * a mais será entregue por esta condição, e `strengthOf` precisa refletir isso — senão a
+ * política `strongest` protege uma condição já esgotada (com o `amount` do ÚLTIMO tique já
+ * entregue) contra uma reaplicação real com dano de fato pendente (M31-02, #557). Um tique
+ * PLANO (sem `queue`, o `amount` que nunca muda ao longo da vida da condição) fica como estava
+ * — não há nada obsoleto para limpar nele.
+ */
+export function retiredTick(condition: ConditionState): ConditionState {
+  const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
+  if (condition.tick?.queue === undefined) return withoutTick;
+  return { ...withoutTick, tick: { ...condition.tick, amount: 0, queue: [] } };
 }
 
 /**
@@ -127,11 +187,19 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
 }
 
 /**
- * A magnitude de uma condição, para a política `strongest`. É deliberadamente simples: um DOT
- * vale o dano por tique, haste o percentual, postura o que ela soma. Empate fica com o novo.
+ * A magnitude de uma condição, para a política `strongest`. Um DOT vale o dano TOTAL que falta
+ * — o tique corrente mais a fila (M31-02, a mesma comparação de `ConditionDamage::
+ * updateCondition` do Canary: `getTotalDamage()`, a soma do `damageList` inteiro, não só o
+ * próximo elemento). Sem fila (tique antigo, infinito), é só o tique — a simplicidade de sempre,
+ * porque não há total finito a somar. Haste vale o percentual, postura o que ela soma. Empate
+ * fica com o novo.
  */
 function strengthOf(condition: ConditionState): number {
-  if (condition.tick !== undefined) return condition.tick.amount;
+  const tick = condition.tick;
+  if (tick !== undefined) {
+    const remaining = tick.queue?.reduce((sum, queued) => sum + queued.amount, 0) ?? 0;
+    return tick.amount + remaining;
+  }
   if (condition.speedPercent !== undefined) return condition.speedPercent;
   if (condition.damageTakenPercent !== undefined) return Math.abs(condition.damageTakenPercent);
   const dealt = condition.damageDealtPercent;
@@ -140,6 +208,20 @@ function strengthOf(condition: ConditionState): number {
   }
   return 0;
 }
+
+/**
+ * `generateDamageList` (a lista DECRESCENTE do Tibia) e `damageOverTimeTicks` (a expansão das
+ * duas formas para a fila ordenada de tiques) moram em `@draconya/content`, não aqui — achado da
+ * revisão do #557: `conditionSpecSchema` também precisa delas para conferir `durationMs` contra
+ * o total que a própria fila soma, e `content` não pode importar de `sim`. Reimplementar aqui
+ * criaria DUAS contas para o mesmo número (o defeito que a DT-03 já nomeia no `content`), então
+ * este módulo importa as funções de lá em vez de as ter — `QueuedTick` e o
+ * `DamageOverTimeTick` de `content` têm a MESMA forma (`{ amount, intervalMs }`), então o retorno
+ * de `damageOverTimeTicks` continua compatível com todo código abaixo sem conversão. Reexportadas
+ * aqui porque quem já importava as duas de `./conditions.js` (o `sim` era a única origem antes do
+ * #557) não deveria precisar saber que a origem mudou.
+ */
+export { damageOverTimeTicks, generateDamageList };
 
 /**
  * Compila um `ConditionSpec` do conteúdo para o estado de runtime (CMB-07). `nowMs` é o relógio
@@ -180,23 +262,30 @@ export function conditionFromSpec(
       return { ...base };
     case 'heal-over-time':
       return { ...base, tick: { kind: 'heal', amount: effect.amount, intervalMs: effect.intervalMs } };
-    case 'damage-over-time':
+    case 'damage-over-time': {
+      // M31-02: a fila inteira sai pré-calculada AQUI, pura — o primeiro elemento é o tique
+      // corrente, o resto é `queue`. Sempre >= 1 elemento (`damageOverTimeTicks`).
+      const [first, ...rest] = damageOverTimeTicks(effect) as [QueuedTick, ...QueuedTick[]];
       return {
         ...base,
         tick: {
-          kind: 'damage', amount: effect.amount, intervalMs: effect.intervalMs,
-          damageType: effect.damageType, source,
+          kind: 'damage', amount: first.amount, intervalMs: first.intervalMs,
+          damageType: effect.damageType, source, queue: rest,
         },
       };
+    }
   }
 }
 
-/** O intervalo do tique de um `ConditionSpec`, para o campo agendar o próprio evento. */
+/** O intervalo do PRIMEIRO tique de um `ConditionSpec`, para o campo agendar o próprio evento —
+ * o campo (CMB-07) regenera a condição a cada pulso e nunca acompanha a fila (M31-02: um campo
+ * com a forma `generated` sempre bate o valor de `startDamage`, nunca decresce; o Dragon Lord usa
+ * `rounds` com valor constante, e por isso não diverge). */
 export function specTickIntervalMs(spec: ConditionSpec): number | null {
   const effect = spec.effect;
-  return effect.kind === 'heal-over-time' || effect.kind === 'damage-over-time'
-    ? effect.intervalMs
-    : null;
+  if (effect.kind === 'heal-over-time') return effect.intervalMs;
+  if (effect.kind !== 'damage-over-time') return null;
+  return effect.form === 'generated' ? effect.intervalMs : (effect.rounds[0]?.intervalMs ?? null);
 }
 
 export class Conditions {

@@ -7330,8 +7330,11 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
             id: 'dragon-lord-firefield', durationMs: 200_000,
             shape: { shape: 'circle' as const, radius: 4, centered: 'target' as const },
             condition: {
-              key: 'burning', merge: 'refresh' as const, durationMs: 70_000,
-              effect: { kind: 'damage-over-time' as const, amount: 20, intervalMs: 10_000, damageType: 'fire' as const },
+              key: 'burning', merge: 'strongest' as const, durationMs: 70_000,
+              effect: {
+                kind: 'damage-over-time' as const, form: 'rounds' as const,
+                rounds: [{ count: 7, intervalMs: 10_000, damage: 20 }], damageType: 'fire' as const,
+              },
             },
           },
         },
@@ -7452,7 +7455,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     shape: { shape: 'circle', radius: 1, centered: 'caster' },
     condition: {
       key: 'fire', merge: 'refresh', durationMs: 20_000,
-      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 40, intervalMs: 500, damage: 10 }], damageType: 'fire',
+      },
     },
   };
 
@@ -7477,7 +7483,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
         id: 'venom', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'physical',
         condition: {
           key: 'venom', merge: 'refresh', durationMs: 3_000,
-          effect: { kind: 'damage-over-time', amount: 15, intervalMs: 500, damageType: 'earth' },
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 6, intervalMs: 500, damage: 15 }], damageType: 'earth',
+          },
         },
       }],
     };
@@ -7487,6 +7496,40 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     expect(hero.conditions.get('venom')).toBeNull();
     expect(session.ended).toBe('death');
     expect(session.aggregates.deaths).toBe(1);
+  });
+
+  it('a fila do Tibia esgota ANTES do vencimento: a condição fica com força ZERO, nunca um fantasma que `strongest` levaria em conta (#557)', () => {
+    // Duas rodadas de 500 ms (a fila inteira) cabem bem dentro da duração de 5000 ms — a fila
+    // esgota bem antes do vencimento natural. `cadenceMs` alto garante que a ability só dispara
+    // UMA vez na janela do teste, então o estado observado é sempre o de uma única aplicação.
+    const shortToxinRat = {
+      ...rat, health: 100_000, attack: 0,
+      abilities: [{
+        id: 'toxin', cadenceMs: 60_000, target: { range: 3 }, power: 0, damageType: 'physical',
+        condition: {
+          key: 'toxin', merge: 'strongest' as const, durationMs: 5_000,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 2, intervalMs: 500, damage: 80 }], damageType: 'earth' as const,
+          },
+        },
+      }],
+    };
+    const { session, hero } = withSpells(botConfig(), {
+      health: 1_000_000, monstersRaw: [shortToxinRat],
+    });
+    run(session, 3_000, 100);
+
+    const toxin = hero.conditions.get('toxin');
+    expect(toxin).not.toBeNull();
+    // Achado da revisão do #557: sem `retiredTick`, `tick` ficaria com o `amount` dos ÚLTIMOS 80
+    // já entregues e `queue` vazio — `strengthOf` reportaria 80 de força pendente que não
+    // existe mais, e a política `strongest` recusaria uma reaplicação real (mesmo mais fraca em
+    // `amount` bruto) pelo resto da duração. Com a correção, a força cai a zero — e o
+    // `nextTickAtMs` fantasma (#334) também não sobra, porque não há mais evento agendado.
+    expect(toxin?.tick?.amount).toBe(0);
+    expect(toxin?.tick?.queue).toEqual([]);
+    expect(toxin?.nextTickAtMs).toBeUndefined();
   });
 
   it('relançar a condição cancela o vencimento antigo; a morte cancela tudo', () => {
@@ -7609,7 +7652,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
       shape: { shape: 'circle', radius: 5, centered: 'caster' },
       condition: {
         key: 'wide-fire', merge: 'refresh', durationMs: 1_300,
-        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 500, damage: 10 }], damageType: 'fire',
+        },
       },
     };
     const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });

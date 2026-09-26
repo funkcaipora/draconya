@@ -1034,6 +1034,76 @@ interface FieldSpec {                     // declarado em content
   ganha `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais. O monstro carrega
   `conditions`, e o vencimento/tique usam o mesmo sujeito (`<id>/<chave>`, com `m:<id>` no
   monstro) — cancelar no relançamento e na morte não varre a fila.
+- **O dano ao longo do tempo tem a forma do Tibia (M31-02, #557).** `ConditionEffect` do `kind
+  'damage-over-time'` aceita DUAS formas do conteúdo — a mesma divisão que
+  `ConditionDamage::init`/`ItemParse::parseFieldCombatDamage` do Canary fazem por `startDamage`
+  presente ou ausente (nunca as duas ao mesmo tempo, um `discriminatedUnion` por `form`):
+  - `generated`: `{ totalDamage, startDamage?, intervalMs }`, a lista DECRESCENTE de
+    `ConditionDamage::generateDamageList` (`condition.cpp:2143-2160`) — soma até `totalDamage`,
+    começando em `startDamage` (ausente, `max(1, ceil(totalDamage / 20))`, o default do próprio
+    Canary) e descendo até 1. O poison field do Canary (`items.xml` id 2121, `start=5 damage=100`)
+    rende `[5,5,5,5,4,4,4,4,4,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`
+    — soma exata 100, e `conditions.test.ts` prende esse vetor calculado à mão.
+  - `rounds`: `{ rounds: [{ count, intervalMs, damage }] }`, o `addDamage(rounds, interval,
+    value)` que os SCRIPTS de magia do Canary usam (Ignite: `addDamage(25, 3000, -45)`, 25
+    rodadas iguais de 45) e que o campo de fogo do Dragon Lord também usa (`count=7 damage=20
+    ticks=10000`, sem `start`) — várias rodadas do MESMO valor, concatenáveis em mais de um
+    grupo com cadência diferente.
+
+  O `sim` (`conditions.ts`) expande as duas para a MESMA fila ORDENADA de tiques
+  (`damageOverTimeTicks`, pura): o primeiro elemento é o tique CORRENTE de `ConditionTick`
+  (`amount`/`intervalMs`, sem mudança de contrato) e o resto é `tick.queue`, opcional — ausente
+  é o tique antigo (repete a `intervalMs` até `expiresAtMs`, cura ao longo do tempo e qualquer
+  snapshot anterior a esta issue); presente, mesmo `[]`, é a fila nova, que PARA de tiquetar
+  quando esgota, mesmo antes do vencimento (`advanceTick`, o mesmo `ConditionDamage::
+  executeCondition` esvaziando `damageList`). O campo de tile (`#onFieldTick`/`#enterField`)
+  **não acompanha a fila** — ele regenera a condição a cada pulso a partir do `ConditionSpec` e
+  usa só o primeiro elemento; um campo com a forma `generated` bateria sempre o valor de
+  `startDamage`, nunca decrescendo. Não é regressão: nenhum campo de conteúdo usa `generated`
+  hoje, e é o mesmo comportamento de antes desta issue para um `rounds` de valor constante.
+- **`durationMs` não pode ficar curto demais para a própria fila (achado da revisão do #557).**
+  No Canary, um `ConditionDamage` nunca tem essa divergência POR ESTRUTURA:
+  `ConditionDamage::addDamage` ESTENDE `ticks`/`endTime` a cada rodada somada
+  (`condition.cpp:1863-1889`), então o prazo da condição e o tempo que a fila de dano precisa são
+  sempre o MESMO número. Aqui `ConditionSpec.durationMs` é um campo solto (histórico, mantido por
+  compatibilidade) — sem conferência, um conteúdo com `form: 'generated'` e um `durationMs`
+  "razoável" mas curto demais para o número REAL de tiques que `generateDamageList` produz (a
+  contagem não é aritmética simples: 46 tiques para `totalDamage: 100, startDamage: 5`, não um
+  número redondo) truncava o DOT em silêncio — `#onConditionTick` (`hunt.ts`) para de agendar o
+  próximo tique assim que ele cairia depois de `expiresAtMs`, mesmo com tiques ainda por entregar.
+  `conditionSpecSchema` (`content/schemas.ts`) agora recusa no boot qualquer `durationMs` menor
+  que `damageOverTimeTotalMs(effect)` (a soma de `intervalMs` de toda a fila), nomeando o
+  déficit no erro; `durationMs` MAIOR que o total continua aceito, sem efeito observável — a
+  condição só carrega a fila zerada (`retiredTick`) até vencer. `generateDamageList`/
+  `damageOverTimeTicks` moraram em `sim/conditions.ts` até este achado; moveram para
+  `content` porque o schema também precisa delas, e `content` não pode importar de `sim` — `sim`
+  agora as importa de lá, para não haver duas contas do mesmo número (DT-03).
+- **A tabela de tipo do Tibia (M31-02).** `ConditionEffect.damageType` é o elemento
+  (`Combat::ConditionToDamageType` do Canary, `combat.cpp:245`):
+
+  | Condição Tibia | `damageType` do Draconya |
+  |---|---|
+  | poison | earth |
+  | fire (burning) | fire |
+  | energy (electrified) | energy |
+  | bleeding | physical |
+  | cursed | death |
+  | drown (drowning) | — **fora desta issue**: `drown` ainda não existe em `DAMAGE_TYPES`; entra pelo #547 (M29-07), que não estava mesclado em `tibia-parity` quando esta issue foi implementada. Até lá, um conteúdo de drowning não tem `damageType` correto a declarar. |
+  | freezing | ice |
+  | dazzled | holy |
+
+- **Reaplicação: `strongest` compara o TOTAL que falta, não o próximo tique isolado (M31-02).**
+  A regra de `ConditionDamage::updateCondition` do Canary — o total NOVO só substitui o antigo se
+  for MAIOR (`getTotalDamage()`, a soma do `damageList` inteiro) — vale para QUALQUER condição
+  com `tick`: `strengthOf` soma `tick.amount` mais `Σ tick.queue[].amount`. Sem fila (tique
+  antigo), a comparação continua sendo só o `amount`, como sempre foi — não há total finito a
+  somar. Uma condição de fila menor no PRÓXIMO tique mas maior no TOTAL vence uma de próximo
+  tique maior mas fila mais curta; `conditions.test.ts` prende os dois lados. Quando a fila
+  ESGOTA (achado da revisão do #557), `retiredTick` zera `tick.amount`/`queue` em vez de deixar o
+  `amount` do ÚLTIMO tique já entregue: sem isso, uma condição já esgotada — sem nenhum tique
+  agendado — reportaria força fantasma e `strongest` recusaria uma reaplicação real mais fraca em
+  `amount` bruto. Um tique PLANO (sem fila) nunca precisa dessa limpeza: o `amount` não muda ao
+  longo da vida da condição.
 - **O DOT entra pelo mesmo pipeline.** Cada tique chama `resolveDamage` com um `DamageIntent`
   tipado (`source` e `damageType`) e passa por `recordDamage` e `resolveDeath`/`session.kill`.
   Não existe escrita direta de vida: a armadura, a resistência e a esquiva valem no tique como
@@ -1066,7 +1136,15 @@ e a UI detalhada de buff.
 **O primeiro campo de conteúdo real é o do Dragon Lord (#520).** A ability `firefield`
 (`data/monsters/dragon-lord.json`) não causa dano direto (`power: 0`) — ela só larga o campo,
 círculo raio 4 (a tabela de anéis de MONSTRO, #523 — 21 tiles, não as `AREA_CIRCLEnXn` da
-magia) centrado no alvo, com uma condição `damage-over-time` de 20 de fogo a cada 10 s.
+magia) centrado no alvo, com uma condição `damage-over-time` de 20 de fogo a cada 10 s. Desde o
+M31-02 (#557) a condição usa a forma `rounds` — `{ rounds: [{ count: 7, intervalMs: 10000,
+damage: 20 }] }`, a leitura direta de `count=7 damage=20 ticks=10000` do item 2118 do Canary —
+em vez do `{ amount, intervalMs }` fixo de antes; o número final não muda (7 tiques iguais de 20
+a cada 10 s, 70 000 ms de queima), só a forma no schema. `merge` também passou de `refresh` para
+`strongest`, a regra real do Canary — sem efeito OBSERVÁVEL aqui porque o campo nunca persiste
+condição no alvo (ver "Condições generalizadas..." acima: `#onFieldTick`/`#enterField`
+recalculam a cada pulso), mas correto para quando uma ability aplicar a mesma condição direto
+(`ability.condition`, sem campo).
 
 **Dois números diferentes, duas fontes diferentes (achado da revisão do #536).**
 `condition.durationMs` (70 000 ms) é a QUEIMA no personagem: Canary `items.xml` id 2118 declara
@@ -1430,6 +1508,15 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
   Isso é uma LACUNA DE FIDELIDADE em aberto, não algo já resolvido por acidente — fica para a
   issue do catálogo de monstros do M28 planejar (armadura/mitigação de cada monstro é conteúdo
   que ainda não existe para o Dragon/Dragon Lord de qualquer forma).
+- `[ABERTO]` (M31-02, #557) A tabela de tipo drowning→`drown` não pôde ser LIGADA nesta issue:
+  `drown` ainda não existe em `DAMAGE_TYPES` (`packages/content/src/schemas.ts`), e entra pelo
+  #547 (M29-07, aberto — drown/lifedrain/manadrain), que a dependência desta issue lista mas que
+  não estava mesclado em `origin/tibia-parity` quando ela foi implementada. As DUAS formas de
+  dano ao longo do tempo (`generated`/`rounds`) e as outras seis entradas da tabela de tipo
+  (poison, fire, energy, bleeding, cursed, freezing, dazzled) foram implementadas e testadas
+  inteiras — só o mapeamento de drowning fica pendente até o #547 fechar. Quando fechar, ligar
+  é só declarar `damageType: 'drown'` no conteúdo que precisar; o mecanismo (`sim/conditions.ts`)
+  já aceita qualquer `DamageType` do enum.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.

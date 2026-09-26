@@ -36,7 +36,9 @@ import {
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
-import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
+import {
+  advanceTick, conditionFromSpec, retiredTick, sameTick, specTickIntervalMs, tickOf,
+} from '../conditions.js';
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
@@ -4040,15 +4042,37 @@ const slots = bot.groups.get(group);
     // `nextTickAtMs` guardado é o que permite o relançamento reaproveitar a cadência — mas só
     // quando HÁ de fato um evento pendente (#334): sem tique agendado, a chave fica AUSENTE do
     // estado, nunca com um valor fantasma que não corresponde a nenhum evento na fila.
-    const nextTickAtMs = session.nowMs + tick.intervalMs;
+    //
+    // M31-02 (#557): a fila do Tibia pode ter ACABADO — `advanceTick` devolve `null`, e a
+    // condição para de tiquetar (mesmo antes do vencimento), como o Canary faz quando
+    // `damageList` esvazia. Sem fila (tique antigo), `advanceTick` devolve o MESMO tique — o
+    // comportamento de sempre.
+    //
+    // Nos dois ramos abaixo o agendamento de tique acaba sem a condição vencer: `retiredTick`
+    // tira o `nextTickAtMs` fantasma E, quando o tique é a fila do Tibia, zera o que falta —
+    // senão o `amount` do ÚLTIMO tique já entregue fica reportando força pendente que não
+    // existe mais, e `strongest` recusa uma reaplicação real por causa de uma condição já
+    // esgotada (#557).
+    const advanced = advanceTick(tick);
+    if (advanced === null) {
+      target.conditions.replace(retiredTick(condition));
+      return;
+    }
+    const nextTickAtMs = session.nowMs + advanced.intervalMs;
     if (nextTickAtMs <= condition.expiresAtMs) {
-      target.conditions.replace({ ...condition, nextTickAtMs });
-      session.scheduleIn(CONDITION_TICK, tick.intervalMs, {
+      target.conditions.replace({
+        ...condition,
+        tick: {
+          ...condition.tick!, amount: advanced.amount, intervalMs: advanced.intervalMs,
+          ...(advanced.queue === undefined ? {} : { queue: advanced.queue }),
+        },
+        nextTickAtMs,
+      });
+      session.scheduleIn(CONDITION_TICK, advanced.intervalMs, {
         priority: TICK_PRIORITY, subject,
       });
     } else {
-      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
-      target.conditions.replace(withoutTick);
+      target.conditions.replace(retiredTick(condition));
     }
   }
 
