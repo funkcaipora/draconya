@@ -163,14 +163,22 @@ A #473 consolidou o pipeline sem mudar número nenhum — é aditiva sob o mesmo
   resolvido depois do primário inteiro. **Nenhum conteúdo o declara ainda**, e ausente ele não
   consome rolagem nenhuma: o v1 segue bit a bit.
 
-### A taxonomia de dano (CMB-03)
+### A taxonomia de dano (CMB-03; drown/lifedrain/manadrain pelo #547, M29-07)
 
-A lista canônica é a de Tibia 13.32 — físico, energia, terra, fogo, gelo, sagrado e morte — mais
-`arcane`, que é a magia **não-elemental** (ou cujo elemento o conteúdo ainda não declarou) e
-preserva o vocabulário `melee`/`magic` do v1. A fonte única é `DAMAGE_TYPES` em
+A lista canônica é a dos DEZ `CombatType` do Tibia 13.32 — físico, energia, terra, fogo, gelo,
+sagrado, morte, afogamento (`drown`), dreno de vida (`lifedrain`) e dreno de mana (`manadrain`)
+— mais `arcane`, que é a magia **não-elemental** (ou cujo elemento o conteúdo ainda não
+declarou) e preserva o vocabulário `melee`/`magic` do v1. A fonte única é `DAMAGE_TYPES` em
 `@draconya/content`; o `sim` importa `DamageType` e não redeclara o enum. A emenda de 2026-09-17
-no [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md) fixa a lista e a
-origem.
+no [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md) fixa a lista
+original de sete mais `arcane`; o #547 a estende com os três tipos de dreno/afogamento.
+
+`lifedrain` e `manadrain` são DANO, nunca cura de quem ataca — a correção que o #547 fez sobre o
+inventário de paridade: o Canary (`Creature::mitigateDamage`, `creature.cpp:911-921`) só os
+isenta da mitigação percentual, nunca soma vida ou mana em quem golpeia. `manadrain` resolve
+contra a MANA do alvo, não a vida (`min(mana, dano)`, sem mana shield — ver "Manadrain resolve
+contra a mana" abaixo); `drown` e `lifedrain` são dano de vida comum, indistinguível de
+`physical`/`fire`/etc. no pipeline.
 
 Tipo é separado de **origem** (`source`) e de **efeito visual** (`CreatureHit.source`): o mesmo
 elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem dizer qual fórmula
@@ -334,7 +342,7 @@ expectativa.
 |---|---|---|
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
-| Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `arcane`) | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
+| Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `drown`, `lifedrain`, `manadrain`, `arcane`) | 0 `[ABERTO — valor provisório: 0]`; inerte sob `combat-v3` (ver "combat.armorEffectiveness fica INERTE" acima) | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
 | Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary, #521, ADR 0037) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
@@ -740,8 +748,8 @@ CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁT
    zero não reduz nada;
 5. **mitigação percentual** (`defenseMitigation`, o campo NOVO do monstro — distinto de
    `mitigation`, que é resistência/imunidade por TIPO): `dano −= dano × defenseMitigation ÷ 100`,
-   sobre o que sobrou da armadura, para QUALQUER tipo de dano (a exceção de lifedrain/manadrain
-   do Canary ainda não tem tipo correspondente — M29-07 — e por isso nunca isenta hoje);
+   sobre o que sobrou da armadura, para QUALQUER tipo de dano EXCETO lifedrain e manadrain (#547,
+   M29-07: a mesma exceção do `Creature::mitigateDamage` do Canary — `drown` não é isento);
 6. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
    antes, intocado por esta issue, só reposicionado depois do estágio novo;
 7. piso (`minimumDamageFraction`), sobre o poder BRUTO — mantido como salvaguarda de PRODUTO do
@@ -830,8 +838,32 @@ Canary o capa em 30.
 Absorção/aumento por tipo (`applyAbsorbDamageModifications`, o PRIMEIRO estágio do `Creature::
 blockHit`) e reflexo são o **M30-05**. A fórmula própria de defesa/armadura/mitigação do jogador
 é o **M30-02**. Postura de luta é o **M30-03**. A posição exata do crítico/leech sob o
-`combat-v3` é o **M30-04**. A exceção de lifedrain/manadrain na mitigação percentual espera o
-**M29-07** (os tipos de dano ainda não existem em `@draconya/content`).
+`combat-v3` é o **M30-04**. A exceção de lifedrain/manadrain na mitigação percentual (passo 5
+acima) fechou com o **#547 (M29-07)**: `combat/damage.ts` calcula `mitigationExempt` do
+`intent.damageType`, e não fica mais fixo em `false`.
+
+### Manadrain resolve contra a mana, não a vida (#547, M29-07)
+
+`manadrain` é o único tipo de dano que `applyDamageOutcome` (`combat/outcome.ts`) desvia da
+vida: o golpe passa pelo MESMO pipeline de mitigação de qualquer outro tipo (Dodge, `blockHit`,
+resistência, piso — tudo igual), mas a aplicação final tira `min(mana, resolvido)` da MANA do
+alvo e nunca toca a vida (`healthDamage` fica em zero). Duas consequências que seguem do próprio
+Canary (`Game::combatChangeMana`, `game.cpp:9176`, `Creature::drainMana`):
+
+- **a mana shield NÃO entra** — ela existe para converter dano de VIDA em mana; aqui o golpe já é
+  mana, e "absorver" duas vezes não faz sentido nenhum;
+- **um alvo sem mana não perde nada.** Todo `MonsterRuntime` (monstro não tem mana no Draconya) e
+  um `CharacterRuntime` já com mana zerada tratam o manadrain como um no-op — o mesmo
+  `manaLoss <= 0` que o Canary já reporta como "nada aconteceu", sem mensagem nem efeito.
+
+`lifedrain` e `drown`, ao contrário, são dano de vida comum — passam por `applyDamageOutcome`
+sem desvio nenhum, mana shield e leech inclusos como qualquer outro tipo (leech nunca ocorre de
+qualquer forma num ataque de monstro, porque `attacker` chega `null`).
+
+O número flutuante do manadrain usa o novo `AppliedDamageOutcome.manaDamage` no lugar do
+`healthDamage` (`hunt.ts`, `amount: applied.healthDamage + applied.manaDamage` — exatamente um
+dos dois é não-zero para qualquer golpe), e a cor sai da mesma tabela de elemento do cliente
+(azul saturado, distinto do azul claro de `drown` e do azul-gelo de `ice`).
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 
@@ -1212,7 +1244,7 @@ interface FieldSpec {                     // declarado em content
   | energy (electrified) | energy |
   | bleeding | physical |
   | cursed | death |
-  | drown (drowning) | — **fora desta issue**: `drown` ainda não existe em `DAMAGE_TYPES`; entra pelo #547 (M29-07), que não estava mesclado em `tibia-parity` quando esta issue foi implementada. Até lá, um conteúdo de drowning não tem `damageType` correto a declarar. |
+  | drown (drowning) | `drown` — chegou ao enum pelo #547 (M29-07); `sim/conditions.ts` já aceita qualquer `DamageType`, então um conteúdo de afogamento pode declarar `damageType: 'drown'` sem mudança nenhuma de código. |
   | freezing | ice |
   | dazzled | holy |
 
@@ -1707,15 +1739,13 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
   Isso é uma LACUNA DE FIDELIDADE em aberto, não algo já resolvido por acidente — fica para a
   issue do catálogo de monstros do M28 planejar (armadura/mitigação de cada monstro é conteúdo
   que ainda não existe para o Dragon/Dragon Lord de qualquer forma).
-- `[ABERTO]` (M31-02, #557) A tabela de tipo drowning→`drown` não pôde ser LIGADA nesta issue:
-  `drown` ainda não existe em `DAMAGE_TYPES` (`packages/content/src/schemas.ts`), e entra pelo
-  #547 (M29-07, aberto — drown/lifedrain/manadrain), que a dependência desta issue lista mas que
-  não estava mesclado em `origin/tibia-parity` quando ela foi implementada. As DUAS formas de
-  dano ao longo do tempo (`generated`/`rounds`) e as outras seis entradas da tabela de tipo
-  (poison, fire, energy, bleeding, cursed, freezing, dazzled) foram implementadas e testadas
-  inteiras — só o mapeamento de drowning fica pendente até o #547 fechar. Quando fechar, ligar
-  é só declarar `damageType: 'drown'` no conteúdo que precisar; o mecanismo (`sim/conditions.ts`)
-  já aceita qualquer `DamageType` do enum.
+- **RESOLVIDO pelo #547 (M29-07).** A tabela de tipo drowning→`drown` do M31-02 (#557) não pôde
+  ser LIGADA naquela issue porque `drown` ainda não existia em `DAMAGE_TYPES`
+  (`packages/content/src/schemas.ts`). O #547 acrescentou `drown`/`lifedrain`/`manadrain` ao
+  enum; `sim/conditions.ts` já aceitava qualquer `DamageType`, então nenhuma mudança de mecanismo
+  foi necessária — um conteúdo de afogamento já pode declarar `damageType: 'drown'` na condição
+  `damage-over-time`. Nenhum monstro do catálogo atual declara um campo de afogamento ainda; a
+  ligação de fato ao primeiro monstro real fica para quando ele entrar no catálogo.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.
