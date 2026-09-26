@@ -18,7 +18,7 @@ import type { SpellAim, SpellScaling, SpellTarget } from '../../casting.js';
 import { CharacterRuntime } from '../../character.js';
 import type { CharacterState } from '../../character.js';
 import { resolveDamage } from '../damage.js';
-import type { Defender, DamageIntent } from '../damage.js';
+import type { Defender, DamageIntent, DamageOutcome } from '../damage.js';
 import { applyDamageOutcome } from '../outcome.js';
 import { MonsterRuntime } from '../../monster/monster.js';
 import type { MonsterState } from '../../monster/monster.js';
@@ -43,7 +43,7 @@ import type { CombatTraceEvent } from './types.js';
 export const TRACE_COMBAT: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
   armorEffectiveness: {
-    physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+    physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
   },
   minimumDamageFraction: 0.1,
   player: {
@@ -182,7 +182,7 @@ export class TraceRuleset implements Ruleset {
     if (target === null || !target.alive) return;
     const outcome = resolveDamage(
       { rawDamage: action.rawDamage, source: 'basic-attack', damageType: 'physical' },
-      this.#defenderOf(target), 'pve', TRACE_COMBAT, session.rng,
+      this.#defenderOf(target), 'pve', TRACE_COMBAT, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(target, outcome, hero);
     this.#emit(session, {
@@ -202,7 +202,7 @@ export class TraceRuleset implements Ruleset {
     };
     const outcome = resolveDamage(
       intent, this.#scenario.heroDefender ?? { armor: 0, dodgeChance: 0 },
-      'pve', TRACE_COMBAT, session.rng,
+      'pve', TRACE_COMBAT, session.rng, session.nowMs,
     );
     const applied = applyDamageOutcome(hero, outcome, null, hero.conditions.damageTakenScale());
     this.#emit(session, {
@@ -236,7 +236,7 @@ export class TraceRuleset implements Ruleset {
       targets: this.#spellHits.map((monster) => ({ creatureId: monster.subject, position: this.#pointOf(monster) })),
       tiles: [...this.#aimTiles],
     });
-    this.#applyHits(session, hero, result.hits);
+    this.#applyHits(session, hero, result.hitOutcomes ?? []);
   }
 
   #supply(
@@ -259,7 +259,7 @@ export class TraceRuleset implements Ruleset {
       tiles: [...this.#aimTiles],
     });
     if (aim === null) this.#emitHealed(session, hero, result.healed, 'supply');
-    else this.#applyHits(session, hero, result.hits);
+    else this.#applyHits(session, hero, result.hitOutcomes ?? []);
   }
 
   /**
@@ -313,15 +313,28 @@ export class TraceRuleset implements Ruleset {
     this.#spellTargets.push(this.#defenderOf(monster));
   }
 
-  #applyHits(session: Session, hero: CharacterRuntime, hits: readonly number[]): void {
+  /**
+   * Aplica pelo mesmo `applyDamageOutcome` que a `HuntRuleset` usa (#547, M29-07 — achado da
+   * revisão do PR #648): chamar `monster.receiveDamage` direto, como este método fazia antes,
+   * deixava o trace de magia/runa fora do desvio de `manadrain` para a mana — o mesmo bug que
+   * `HuntRuleset#applyHits` teve. O `amount` emitido continua o APLICADO, byte a byte igual ao
+   * de antes para qualquer outro tipo (monstro não tem mana, então não há mana shield). O leech
+   * da AÇÃO (M30-04, #551) sai de `applyDamageOutcome` com o `targetsAffected` da mira, o mesmo
+   * caminho único da `HuntRuleset#applyHits` — sem `modifiers` no intent, é zero e nada muda.
+   */
+  #applyHits(session: Session, hero: CharacterRuntime, hitOutcomes: readonly DamageOutcome[]): void {
+    const targetsAffected = this.#spellHits.length;
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
-      const applied = monster.receiveDamage(hits[i] ?? 0);
+      const outcome = hitOutcomes[i];
+      if (outcome === undefined) continue;
+      const applied = applyDamageOutcome(monster, outcome, hero, 1, false, targetsAffected);
       this.#emit(session, {
         kind: 'creature-hit', creatureId: monster.subject, attackerId: hero.id,
-        amount: applied, source: 'spell', position: this.#pointOf(monster),
+        amount: applied.healthDamage, source: 'spell', position: this.#pointOf(monster),
       });
       this.#emitMonsterHealth(session, monster);
+      this.#emitHealed(session, hero, applied.lifeLeechApplied, 'leech');
     }
   }
 

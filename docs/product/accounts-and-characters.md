@@ -38,7 +38,7 @@ Excluir um personagem usa soft delete para preservar identidade histórica e fut
 - Coins ficam em `account.coins`.
 - Personagem nasce com `vocation = NULL`; a escolha acontece a partir do level 8, uma vez, pela intenção `choose-vocation` (#154, ADR 0026 decisão 1).
 - Premium é por personagem (`premium_until`).
-- Stamina nasce em 24 horas e é representada por `stamina_ms` + `stamina_updated_at`.
+- Stamina nasce em 12 horas (teto revisado por M32-01, #562, [ADR 0043](../adr/0043-tibia-stamina-and-food-only-regeneration.md) emenda 2026-09-25) e é representada por `stamina_ms` + `stamina_updated_at`.
 - Personagens por conta são ilimitados; o teto de dois é de personagens ativos e fica no Redis.
 - Nome de personagem é único entre personagens não excluídos, sem diferenciar caixa.
 - Exclusão é soft delete (`deleted_at`) e é recusada enquanto o personagem estiver ativo/reservado.
@@ -84,7 +84,7 @@ repouso pode ir embora.
 | Parâmetro | Valor atual | Onde mora |
 |---|---|---|
 | TTL da sessão HTTP | 43.200 s (12 h) | `AUTH_SESSION_TTL_SECONDS` |
-| Stamina inicial | 86.400.000 ms (24 h) | `packages/server/src/db/schema.ts` |
+| Stamina inicial | 43.200.000 ms (12 h) | `packages/server/src/db/schema.ts` |
 | Capacidade inicial | 400 | `packages/server/src/db/schema.ts` |
 | Level inicial | 1 | `packages/server/src/db/schema.ts` |
 

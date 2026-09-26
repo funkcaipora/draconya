@@ -9,7 +9,7 @@ import { Rng } from './rng.js';
 // cuida da matemática do golpe é `combat/damage.test.ts`.
 const combat: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, arcane: 1 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, drown: 1, lifedrain: 1, manadrain: 1, arcane: 1 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
 };
@@ -332,6 +332,71 @@ describe('magia em ÁREA (FUN-92)', () => {
   });
 });
 
+describe('crítico do LANÇADOR (M30-04, #551): o Canary rola para magia como para o golpe básico', () => {
+  it('sem modificadores (o de sempre), o dano não muda com a semente do golpe crítico', () => {
+    const semCritico = castSpell(hero(), strike, near(), 0, combat, rng());
+    if (!semCritico.ok) throw new Error('esperava lançar');
+    expect(semCritico.damage).toBe(40);
+  });
+
+  it('modifiers declarado dobra o dano quando o crítico ativa', () => {
+    const comCritico = castSpell(
+      hero(), strike, near(), 0, combat, rng(), undefined, undefined,
+      { critical: { chance: 1, multiplier: 2 } },
+    );
+    if (!comCritico.ok) throw new Error('esperava lançar');
+    expect(comCritico.damage).toBe(80);
+  });
+
+  it('vale também para magia em ÁREA — a 100% de chance, TODO alvo critica junto', () => {
+    const blast = {
+      id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
+      effect: { kind: 'damage' as const, power: 30, range: 4, damageType: 'fire' as const, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
+    };
+    const aim = (targets: readonly { armor: number; dodgeChance: number }[], distance = 2) =>
+      ({ distance, targets });
+    const result = castSpell(
+      hero(), blast, aim([{ armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }]),
+      0, combat, rng(), undefined, undefined, { critical: { chance: 1, multiplier: 2 } },
+    );
+    if (!result.ok) throw new Error('esperava lançar');
+    expect(result.hits).toEqual([60, 60]);
+  });
+
+  it('o crítico é da AÇÃO, não do alvo: com chance PARCIAL os alvos da MESMA magia nunca '
+    + 'se dividem (achado da revisão do #551/#653)', () => {
+    // `Combat::applyExtensions` do Canary rola uma vez por `doCombat` inteiro (combat.cpp:2657) e
+    // aplica o MESMO resultado a todo alvo da área — nunca um crítico e outro não na mesma magia
+    // (fora do charm "low blow", fora de escopo). Com `chance: 0.5` e 3 alvos, um sorteio POR
+    // ALVO renderia misturas (~37,5% das vezes, por `1 - 0.5^3 - (1-0.5)^3`); a correção faz o
+    // resultado da rolagem única se repetir nos três `hits`.
+    const blast = {
+      id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
+      effect: { kind: 'damage' as const, power: 30, range: 4, damageType: 'fire' as const, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
+    };
+    const aim = (targets: readonly { armor: number; dodgeChance: number }[], distance = 2) =>
+      ({ distance, targets });
+    const targets = [
+      { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 },
+    ];
+    const outcomes = new Set<number>();
+    for (let seed = 0; seed < 40; seed += 1) {
+      const result = castSpell(
+        hero(), blast, aim(targets), 0, combat, Rng.fromSeed(`area-crit-shared-${seed}`),
+        undefined, undefined, { critical: { chance: 0.5, multiplier: 2 } },
+      );
+      if (!result.ok) throw new Error('esperava lançar');
+      // Os três alvos da MESMA magia sempre concordam: 30/30/30 (sem crítico) ou 60/60/60
+      // (crítico) — nunca uma mistura.
+      expect(new Set(result.hits).size).toBe(1);
+      outcomes.add(result.hits[0] as number);
+    }
+    // As duas saídas realmente ocorrem entre as sementes — não é sempre a mesma por acidente
+    // (o que esconderia um "sempre falso"/"sempre verdadeiro" como bug disfarçado de correção).
+    expect(outcomes).toEqual(new Set([30, 60]));
+  });
+});
+
 describe('requisito de VOCAÇÃO (FUN-92)', () => {
   const druidica = { ...heal, id: 'nature-heal', vocationId: 'druid' };
 
@@ -579,6 +644,28 @@ describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisã
     expect(at(30, 100, 4, null)).toEqual({ result: { ok: false, reason: 'no-target', retryInMs: 0 }, gold: 0 });
     expect(at(30, 100, 4, { ...three, distance: 5 })).toEqual({ result: { ok: false, reason: 'out-of-range', retryInMs: 0 }, gold: 0 });
     expect(at(30, 10, 4, three)).toEqual({ result: { ok: false, reason: 'not-enough-gold', retryInMs: 0 }, gold: 0 });
+  });
+
+  it('o crítico da runa em área é da AÇÃO — os três alvos nunca se dividem (#551/#653)', () => {
+    // A mesma correção de `castSpell`: `Combat::applyExtensions` do Canary rola o crítico uma
+    // vez por `doCombat`, área inclusive — a runa de ataque em área precisa da mesma garantia.
+    // `spellPower` sem fator nem espalhamento colapsa a faixa em `basePower` exato (45) nos três
+    // alvos, o que isola o crítico como a ÚNICA fonte de variação entre eles.
+    const fixedPower: Combat = { ...combat, spellPower: { levelFactor: 0, skillFactor: 0, spread: 0 } };
+    const outcomes = new Set<number>();
+    for (let seed = 0; seed < 40; seed += 1) {
+      const caster = hero({ level: 30, gold: 100 });
+      const result = useSupply(
+        caster, rune, three, fixedPower, Rng.fromSeed(`avalanche-crit-${seed}`), scaling(4),
+        undefined, undefined, undefined, { critical: { chance: 0.5, multiplier: 2 } },
+      );
+      if (!result.ok) throw new Error('esperava usar a runa');
+      // Os três alvos concordam sempre: 45/45/45 (sem crítico) ou 90/90/90 (crítico) — nunca uma
+      // mistura, como o Canary.
+      expect(new Set(result.hits).size).toBe(1);
+      outcomes.add(result.hits[0] as number);
+    }
+    expect(outcomes).toEqual(new Set([45, 90]));
   });
 
   it('without combat context the rune does not exist — never damage without an rng', () => {

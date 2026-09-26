@@ -56,6 +56,13 @@ hunt sem gold para pagar o próximo supply e pode morrer.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.
+- **A condição `drunk` (M31-03, #558, ADR 0041) desvia o passo do bot igual a qualquer outro
+  passo.** O bot continua mandando só a intenção de andar (invariante 4); é `HuntRuleset#step`
+  (`packages/sim/src/rulesets/hunt.ts`) quem resolve se o passo vai para onde a rota pediu ou é
+  desviado pelo sorteio da sessão — o MESMO `#step` do `walk` manual e do monstro. Um personagem
+  bêbado que se afasta da rota sozinho, ou perde um passo contra uma parede, não é bug do motor
+  de bot: é a mesma condição que afetaria o jogador jogando manualmente (invariante 11 — não há
+  exceção de automação). Ver "Drunk: desvio de passo" em `docs/product/combat.md`.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)
 

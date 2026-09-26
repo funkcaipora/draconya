@@ -9,7 +9,9 @@
     "min": 0,
     "max": 230
   },
-  "armor": 35,
+  "armor": 34,
+  "defense": 34,
+  "defenseMitigation": 1.29,
   "mitigation": {
     "resistances": {
       "earth": 0.8,
@@ -81,17 +83,17 @@
         "shape": { "shape": "circle", "radius": 4, "centered": "target" },
         "condition": {
           "key": "burning",
-          "merge": "refresh",
+          "merge": "strongest",
           "durationMs": 70000,
           "effect": {
             "kind": "damage-over-time",
-            "amount": 20,
-            "intervalMs": 10000,
+            "form": "rounds",
+            "rounds": [{ "count": 7, "intervalMs": 10000, "damage": 20 }],
             "damageType": "fire"
           }
         }
       },
-      "_open": "O campo fica no chão (`field.durationMs`) 200000 ms — a duração do PRÓPRIO item (Canary `items.xml` id 2118, `duration=\"200\"`, segundos × 1000 conforme `item.cpp` `newDuration = it.decayTime * 1000`), não os 70000 ms da queima (`condition.durationMs` — sete tiques de 10000 ms cada, `field ticks=10000 count=7`, número diferente e correto). O Tibia real decai o item em três estágios (2118 → 2119, mais fraco, → 2120, sem dano) ao longo de ~446 s; `FieldSpec` do Draconya não tem decaimento em estágios — o campo usa os números do estágio mais forte (2118) pelos 200000 ms inteiros, em vez de enfraquecer. Achado da revisão da #520/PR #536; ver `docs/product/combat.md`."
+      "_open": "O campo fica no chão (`field.durationMs`) 200000 ms — a duração do PRÓPRIO item (Canary `items.xml` id 2118, `duration=\"200\"`, segundos × 1000 conforme `item.cpp` `newDuration = it.decayTime * 1000`), não os 70000 ms da queima (`condition.durationMs` — sete tiques de 10000 ms cada, `field ticks=10000 count=7`, número diferente e correto). O Tibia real decai o item em três estágios (2118 → 2119, mais fraco, → 2120, sem dano) ao longo de ~446 s; `FieldSpec` do Draconya não tem decaimento em estágios — o campo usa os números do estágio mais forte (2118) pelos 200000 ms inteiros, em vez de enfraquecer. Achado da revisão da #520/PR #536; ver `docs/product/combat.md`. A forma `rounds` (M31-02, #557) é a leitura direta de `count=7 damage=20 ticks=10000` — sem `start`, o Canary usa `addDamage(count, ticks, damage)` (`ItemParse::parseFieldCombatDamage`), sete tiques IGUAIS, nunca a lista decrescente do `generated`. `merge: strongest` (era `refresh`) é a regra de `ConditionDamage::updateCondition` do Canary: um campo mais forte pisado por cima SUBSTITUI, um mais fraco NÃO — a `field` deste ability nunca persiste condição no alvo (`#onFieldTick`/`#enterField` recalculam a cada pulso, ver `conditions.ts`), então o campo aqui não exercita a política; ela fica correta para quando uma ability aplicar a condição direto (`ability.condition`, como o `venom` de exemplo)."
     },
     {
       "id": "firewave",
@@ -116,7 +118,8 @@
     }
   ],
   "targetChange": { "intervalMs": 4000, "chance": 0.10 },
+  "targetStrategy": { "nearest": 70, "health": 10, "damage": 10, "random": 10 },
   "runOnHealth": 300,
   "staticAttack": 0.80,
-  "_open": "aggroRadius 11 (#527, era 8): mesma fonte do Dragon — TFS `Monster::canSee` é um quadrado de `Map::maxClientViewportX + 1` = 9; o Canary herda o quadrado de `Creature::canSee` sem sobrescrever, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11. Precedência do ADR 0037 d.4: Canary vence."
+  "_open": "aggroRadius 11 (#527, era 8): mesma fonte do Dragon — TFS `Monster::canSee` é um quadrado de `Map::maxClientViewportX + 1` = 9; o Canary herda o quadrado de `Creature::canSee` sem sobrescrever, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11. Precedência do ADR 0037 d.4: Canary vence. `armor`/`defense`/`defenseMitigation` (#548, combat-v3): `monster.defenses = { defense = 34, armor = 34, mitigation = 1.29 }` em `data-otservbr-global/monster/dragons/dragon_lord.lua` do Canary local (47dfd51), conferido em 2026-09-25 — `armor` era 35 aqui (um palpite de antes desta issue) e passa a 34, o valor real."
 }

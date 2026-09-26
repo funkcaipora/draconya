@@ -344,10 +344,20 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   decide horizontal) — DIFERENTE de `directionOf`, que é do PASSO e sempre prioriza horizontal.
   `monster.defenses` (cura própria) é evento POR DEFESA, subject derivado `m:<id>:<defenseId>`,
   `scheduledDefenses` (opcional no snapshot); não depende de alvo, e de vida cheia não emite
-  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` troca para um alvo
-  ao acaso DIFERENTE do atual dentro do `aggroRadius` (TFS `TARGETSEARCH_RANDOM`); a estratégia
-  ponderada do Canary e o `TARGETSEARCH_NEAREST` ficam de fora — nenhum monstro do recorte
-  precisa deles. `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
+  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` (#645, ADR 0037
+  d.6) NUNCA consulta `targetStrategy` — o `targetDistance` do TIPO (`definition.
+  targetDistance`, #542 — o mesmo `info.targetDistance` que o Canary lê) decide sozinho entre
+  `TARGETSEARCH_RANDOM` (`targetDistance <= 1`: um alvo ao acaso DIFERENTE do atual dentro do
+  `aggroRadius`) e `TARGETSEARCH_NEAREST` fixo (`targetDistance > 1`, via `nearestPrey`, o mesmo
+  desempate estrito da aquisição). A estratégia ponderada do Canary só entra no ramo estreito de
+  `chooseTarget` equivalente a `TARGETSEARCH_DEFAULT`: um alvo JÁ retido, o monstro FUGINDO
+  (`isMonsterFleeing`) e sem conseguir atacá-lo agora (`rankTarget`, `target-strategy.ts`) — e
+  esse ramo reavalia no máximo uma vez por 1000 ms por monstro (`monster.cooldowns`, chave
+  `target-think`), a mesma cadência de `EVENT_CREATURE_THINK_INTERVAL`: os três eventos que
+  chamam `chooseTarget` (passo, ataque básico, ability declarada) não podem reentrar nele a cada
+  vencimento, achado da revisão do #654 — ver "Seleção ponderada de alvo" em
+  `docs/product/combat.md`.
+  `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
   a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
   aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
   alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no
@@ -423,6 +433,27 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `creature-hit` e a contribuição usam `healthDamage`; `bestBasicHit`/`bestSpellHit` continuam
   com o RESOLVIDO. O `AppliedDamageOutcome` é efêmero: não entra no snapshot nem no S2C, e não
   há campo de protocolo nem UI de breakdown (DT-03).
+- **Crítico e leech de item/monstro têm fonte e ordem PRÓPRIAS no `combat-v3`** (M30-04, #551).
+  A rolagem do crítico se MOVEU: em `combat-v3` ela agora acontece na GERAÇÃO do dano, ANTES do
+  `blockHit` (`resolveBlockHitProfile`, `combat/damage.ts`) — a mesma posição do Canary
+  (`Combat::applyExtensions`, chamado antes de `Creature::blockHit`), diferente de `combat-v1`/
+  `v2`, onde continua a ÚLTIMA (bit a bit, intocado). A FONTE deixou de ser só o
+  `combat.modifiers` estático: `Inventory.combatModifiers` (`inventory.ts`) soma o
+  `ItemCombatModifiers` do que está vestido, em pontos-base (×10000, a escala do Canary);
+  `monsterCriticalModifiers` (`combat/modifiers.ts`) lê `Monster.critChance` (percentual, não
+  pontos-base — a MESMA escala do Lua) para o ataque de monstro; `HuntRuleset#attackerModifiers`
+  soma as duas fontes com `combat.modifiers` (`combineCombatModifiers`) e alimenta `#strike`,
+  `castSpell` E `useSupply` (magia e runa também criticam, como no Canary — só ataque de monstro
+  nunca soma `combat.modifiers`, nem leecha: leech é mecanismo exclusivo do atacante JOGADOR).
+  **O leech NÃO é uma fração direta nem uma divisão simples por `targetsAffected`** —
+  `calculateLeechAmount` (`combat/modifiers.ts`) é `Game::calculateLeechAmount` do Canary:
+  `realDamage × leechFraction × (0,1n + 0,9) / n`, arredondada (não truncada) e limitada ao
+  `realDamage`. Para `n = 1` o fator é `1` (identidade); para `n = 5` é `0,28`, não `0,2` — quem
+  escrever "divide por targetsAffected" de novo em algum lugar está reintroduzindo a
+  simplificação errada. `applyLeech` (mesmo arquivo) é a peça COMPARTILHADA entre o golpe único
+  (`applyDamageOutcome`) e a magia em área (`HuntRuleset#applyHits`, que NÃO passava por
+  `applyDamageOutcome` — o leech ali é aplicado directo sobre o `healthDamage` de cada alvo, com
+  o MESMO `targetsAffected` para todos os alvos da mira).
 - **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,
   #336). `combat/conformance.test.ts` prende fórmula, ordem de RNG e arredondamento com dados
   escritos à mão, cada caso a 100 ms, a 1000 ms e com snapshot/retomada; o `RngState` é
@@ -464,3 +495,44 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
   para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
   1.640/1.656 do bestiário, não a exceção).
+- **A condição `speed` (CMB-11, #556) sempre nasce com a chave RESERVADA `SPEED_CONDITION_KEY`
+  (`'speed'`, exportada de `@draconya/content`), e `conditionFromSpec` confia nisso — não a
+  reescreve.** É o CONTEÚDO (`conditionSpecSchema`) quem recusa `key` diferente para
+  `effect.kind === 'speed'`, no boot; o `sim` não confere de novo em runtime. É essa chave
+  compartilhada — não uma lógica de exclusão mútua nova — que faz haste e paralyze de fontes
+  DIFERENTES (ability de ataque, defesa self-haste) se substituírem inteiro, como
+  `Creature::onAddCondition` do Canary/TFS faz com dois `ConditionType_t`. Um `ConditionSpec` de
+  `speed` fora desses dois caminhos (`ability.condition`/`defense.condition`) — um campo, por
+  exemplo — também precisa da mesma chave, ou o boot recusa.
+- **`resolveSpeedPercent` (`conditions.ts`) exige `SpeedContext` (`baseSpeed`, `rng`) para
+  `effect.kind === 'speed'`, e `conditionFromSpec` LANÇA sem ele** — nenhum default silencioso
+  que deixaria a velocidade em 1. Todo call site de `conditionFromSpec` no `hunt.ts` (ability,
+  defesa, campo) já passa `{ baseSpeed: target.speed, rng: session.rng }`; um call site NOVO
+  para uma condição que pode ser `speed` precisa do mesmo. `min`/`max` da fórmula são TRUNCADOS
+  (`Math.trunc`, como o C++ trunca `float` → `int32_t`), nunca arredondados, e `min === max` NÃO
+  consome sorteio — a mesma regra do `uniform_random` do Canary quando os limites coincidem.
+- **A haste do JOGADOR (as quatro magias de vocação, Swift Foot) continua em `casting.ts`, à
+  parte de `conditionFromSpec`.** `spellEffectSchema`'s `kind: 'haste'` (percentual FLAT, sem
+  fórmula) não mudou nesta issue — as duas mecânicas escrevem o MESMO campo de runtime
+  (`ConditionState.speedPercent`), mas por conteúdo e código diferentes; ver
+  `docs/product/combat.md` (CMB-11) para o porquê de não terem sido unificadas.
+- **`playerDefense`/`playerMitigation` (`combat/player-defense.ts`, #549, M30-02) conferem
+  escudo e arma em SEQUÊNCIA, não em exclusão mútua** — a arma pode SOBRESCREVER o que o escudo
+  já escreveu (`defenseValue`/`shieldFactor`/`distanceFactor`), na ordem exata do Canary
+  (`Player::getDefense`/`PlayerWheel::calculateMitigation`): trocar a ordem das duas checagens
+  muda o resultado do Knight com Mystic Blade + Mastermind Shield (as duas contribuem juntas).
+  **`fightMode` é sempre `'attack'` em produção** (`hunt.ts#playerDefenseV3`/`#playerMitigationV3`)
+  até a M30-03 ligar um seletor de postura de verdade — a mesma decisão que
+  `combat.weaponDamage.attackFactor` já tomou para o `combat-v2`. **`#playerDefender` bifurca por
+  `compatibilityProfile`**: `combat-v1`/`v2` continuam com os números antigos
+  (`combat.player.armor` + equipado; `#defenseSourceOf`), só `combat-v3` usa as três funções
+  novas — mexer nas duas sem entender a bifurcação quebra uma sessão v1/v2 congelada (ADR 0031).
+  **A skill da arma para `playerDefense` NÃO é `#skillLevelOf` cru quando a família é `wand`**
+  (achado de revisão, #549): a família `wand`/`rod` aponta `skillId: 'magic'` — usado para o
+  DANO (DT-02) —, mas `Player::getWeaponSkill` do Canary devolve `0` para `WEAPON_WAND`
+  (`default: attackSkill = 0`); `hunt.ts#playerDefenseV3` zera a skill nesse caso ANTES de
+  montar o input, senão um Sorcerer/Druid sem escudo cai na fórmula cheia com `defenseValue` 0
+  (wand/rod nunca declaram `defense`/`extraDefense`) em vez do piso fixo do Canary. **A skill de
+  escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
+  `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
+  `SKILL_SHIELD`.

@@ -114,10 +114,17 @@ describe('a Darashia Dragon Lair real (#520 fase 2)', () => {
     const trackedId = spawned.id;
     const homePosition = { ...spawned.position };
     const monsterId = spawned.monsterId;
+    // A ÂNCORA que importa é `.home` (a origem do PONTO, #519), não a posição CORRENTE: com 19
+    // Dragon no mesmo andar perseguindo a party, outro Dragon ainda vivo pode passar a um tile
+    // do ponto morto por pura coincidência de rota, sem que o ponto tenha respawnado nada — foi
+    // exatamente esse falso positivo, achado depurando o #549 (combat-v3 do jogador muda o
+    // instante exato de cada abate, e por tabela o passo de todo mundo, inclusive de quem não
+    // tem nada a ver com este ponto). `.home` é fixo desde o nascimento (`#spawnMonster`) e só
+    // um monstro NASCIDO neste ponto — o original ou o respawn — o carrega.
     const nearHome = (m: (typeof ruleset.monsters)[number]): boolean =>
       m.alive && m.monsterId === monsterId
-      && Math.abs(m.position.x - homePosition.x) <= 1 && Math.abs(m.position.y - homePosition.y) <= 1
-      && m.position.z === homePosition.z;
+      && Math.abs(m.home.x - homePosition.x) <= 1 && Math.abs(m.home.y - homePosition.y) <= 1
+      && m.home.z === homePosition.z;
 
     // Deixa a party engajar e o alvo escolhido chegar perto de morrer, depois esvazia o HP DELE
     // (pelo `id` rastreado, não "o primeiro vivo") para 1 — o próximo golpe da party o mata pelo

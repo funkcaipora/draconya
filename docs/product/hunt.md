@@ -129,6 +129,25 @@ reprocurar a cada tick. Numa instância com 48 monstros, procurar sempre é trab
 dezenas de vezes por segundo — e trocar de alvo porque outro jogador passou um tile mais perto
 não é o que os jogadores esperam.
 
+**Ele evita campo de fogo, veneno e energia que não pode atravessar (M29-05, TFS/Canary
+`Monster::canWalkOnFieldType`).** `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` são
+booleanos por monstro, ausentes é `true` — o default do Canary, o mesmo que 632/1.601 monstros
+do bestiário real sobrescrevem para `false` (é a base de Fire Field e GFB controlarem posição).
+Imune ao elemento, o monstro sempre pisa, como no Canary. O predicado vale igual no passo guloso
+e na fuga — e, por construção, em qualquer decisão futura de movimento que reaproveite o mesmo
+`Blocked` (ex.: uma postura de manter distância, ainda não implementada neste motor): um tile com
+o campo proibido conta como bloqueado, exatamente como parede — sem caminho guardado para
+invalidar (ADR 0009), então a checagem é O(1) pelo índice numérico de `Fields`.
+
+**Preso atrás de um campo que ele não pode cruzar, ele fica ali para sempre — a menos que
+apanhe.** É o `ignoreFieldDamage` do TFS/Canary: levar dano ENQUANTO preso (a decisão de
+movimento não achou passo, nem aproximando nem fugindo) concede uma passagem TEMPORÁRIA pelo
+campo, consumida na decisão seguinte, tenha ela precisado ou não. O Canary tem um segundo
+gatilho para o mesmo bypass — o passo aleatório de quem não tem alvo (`randomStepping`) — que
+não existe aqui: este motor não faz o monstro "andar à toa" sem alvo (§ acima, "mantém o
+alvo"), então essa metade da condição do Canary nunca fica satisfeita, não por escolha, mas
+porque a situação que ela descreve não ocorre neste motor.
+
 ### Custo medido
 
 `pnpm bench:monster`, com 48 monstros, 4 jogadores e paredes espalhadas para exercitar o desvio:
@@ -485,6 +504,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
 | A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 670 000 ms — soma da cadeia de decaimento do Canary `items.xml` (dead dragon/dead dragon lord: 10 s → 300 s → 300 s → 60 s, `decayTo` até sumir, não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
+| Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
 
 ## Em aberto
 

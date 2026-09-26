@@ -23,7 +23,8 @@
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageType, Item, ItemOrigin, ItemSlot, Progression, RingEffect,
+  CompiledMitigation, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot, Progression,
+  RingEffect,
 } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
@@ -527,6 +528,21 @@ export class Inventory {
   }
 
   /**
+   * A DEFINIÇÃO do que está no slot de escudo (mão secundária), ou `null` sem nada lá (#549,
+   * M30-02) — escudo, spellbook ou quiver, as três peças que só existem nesse slot. Irmã de
+   * `weapon()`: mesma checagem de requisito, mesma leitura de "não veste" para snapshot antigo
+   * ou instância fora de `equip`.
+   */
+  shield(catalog: ReadonlyMap<string, Item>, wearer: Requirements): Item | null {
+    const carried = this.#equipped.get('shield');
+    if (carried === undefined) return null;
+    const definition = catalog.get(carried.itemId);
+    if (definition === undefined) return null;
+    if (!this.#meets(definition, wearer)) return null;
+    return definition;
+  }
+
+  /**
    * A fonte de DEFESA do que está vestido (CMB-04, DT-01): escudo primeiro, depois a arma de
    * uma mão, e `none` quando não há nenhuma das duas.
    *
@@ -596,7 +612,8 @@ export class Inventory {
     if (!contributing) return NEUTRAL_MITIGATION;
 
     const resistances: Record<DamageType, number> = {
-      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+      drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
     };
     const immunities = new Set<DamageType>();
     for (const carried of this.#equipped.values()) {
@@ -645,11 +662,49 @@ export class Inventory {
     }
     return total;
   }
+
+  /**
+   * Os modificadores de crítico e leech do que está vestido, SOMADOS (M30-04, #551). Molde de
+   * `armor()`/`skillBonus()`/`speedBonus()` — uma varredura dos poucos slots equipados, cada
+   * campo ausente no item soma zero. Os quatro campos do item são pontos-base (×10000, a escala
+   * do Canary — `itemCombatModifiersSchema`); aqui já viram a FRAÇÃO que `DamageModifiers` usa.
+   *
+   * `undefined` quando NADA equipado declara `combatModifiers` — o item comum de sempre, o caso
+   * de todo o conteúdo hoje —, e é o que preserva bit a bit o v1/v2/v3 sem o chamador precisar
+   * confirmar "nada equipado" por fora. `critical` só existe quando a CHANCE somada é > 0: como
+   * `canApplyCritical = baseChance != 0 && ...` do Canary (`combat.cpp:2666`) curto-circuita —
+   * `criticalDamage` sozinho, sem chance nenhuma, nunca faz um golpe crítico nem consome sorteio.
+   */
+  combatModifiers(catalog: ReadonlyMap<string, Item>): DamageModifiers | undefined {
+    let criticalChance = 0;
+    let criticalDamage = 0;
+    let lifeLeech = 0;
+    let manaLeech = 0;
+    for (const carried of this.#equipped.values()) {
+      const modifiers = catalog.get(carried.itemId)?.combatModifiers;
+      if (modifiers === undefined) continue;
+      criticalChance += modifiers.criticalChance ?? 0;
+      criticalDamage += modifiers.criticalDamage ?? 0;
+      lifeLeech += modifiers.lifeLeech ?? 0;
+      manaLeech += modifiers.manaLeech ?? 0;
+    }
+    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0) return undefined;
+    return {
+      ...(criticalChance === 0 ? {} : {
+        critical: { chance: criticalChance / 10_000, multiplier: 1 + criticalDamage / 10_000 },
+      }),
+      ...(lifeLeech === 0 ? {} : { lifeLeech: lifeLeech / 10_000 }),
+      ...(manaLeech === 0 ? {} : { manaLeech: manaLeech / 10_000 }),
+    };
+  }
 }
 
 /** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */
 const NEUTRAL_MITIGATION: CompiledMitigation = {
-  resistances: { physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  resistances: {
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  },
   immunities: new Set(),
 };
 

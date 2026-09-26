@@ -55,7 +55,7 @@ import type {
 
 const COMBAT: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
@@ -360,6 +360,7 @@ const PROGRESSION: Progression = {
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
+  mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
 };
 
 /** O monstro que compõe o cenário: ability em área, DOT e campo, tudo com número fixo. */
@@ -373,14 +374,20 @@ const HUNT_MONSTER = {
     power: 100, damageType: 'fire',
     condition: {
       key: 'burn', merge: 'refresh', durationMs: 4_000,
-      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, damageType: 'fire' },
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 4, intervalMs: 1_000, damage: 10 }], damageType: 'fire',
+      },
     },
     field: {
       id: 'fire', durationMs: 3_000,
       shape: { shape: 'circle', radius: 1, centered: 'target' },
       condition: {
         key: 'fire', merge: 'refresh', durationMs: 3_000,
-        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, damageType: 'fire' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 1_000, damage: 10 }], damageType: 'fire',
+        },
       },
     },
   }],
@@ -515,7 +522,7 @@ describe('famílias de arma: o poder sai do perfil, sem RNG quando spread é zer
 
 const combatModifiers: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },

@@ -8,12 +8,14 @@ import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
 import { huntListings } from '../hunt/catalogue.js';
+import { MonsterRuntime } from '../monster/monster.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
-  HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
+  HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntRuleset, createHuntSession,
+  huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 
@@ -96,7 +98,7 @@ const progression = {
 
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   // **Esquiva zero neste conteúdo de teste, e é decisão.** Com ela, dano vira função só do
   // tempo decorrido, e a comparação 10 Hz / 1 Hz mede o que ela deveria medir — a matemática
   // do tempo — em vez de medir em que ordem os sorteios caíram. Quem cuida do dodge é
@@ -232,6 +234,13 @@ const items = [
   {
     id: 'sharp-hat', name: 'Sharp Hat', kind: 'armor', slot: 'head',
     weight: 1, value: 0, bonuses: { skill: { skillId: 'melee', amount: 20 } },
+  },
+  // Crítico e leech de EQUIPAMENTO (M30-04, #551): 100 % de chance, +100 % de dano e 50 % de
+  // life leech — números redondos para os testes medirem sem depender de sorteio.
+  {
+    id: 'crit-leech-ring', name: 'Crit Leech Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0,
+    combatModifiers: { criticalChance: 10_000, criticalDamage: 10_000, lifeLeech: 5_000 },
   },
 ];
 
@@ -1722,6 +1731,8 @@ const withSpells = (
     spells?: readonly unknown[]; items?: readonly unknown[]; supplies?: readonly unknown[];
     monsters?: boolean;
     combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
+    /** Equipamento inicial (M30-04, #551) — ausente é o herói nu de sempre. */
+    inventory?: InventoryState;
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -1752,6 +1763,7 @@ const withSpells = (
     level: 1, xp: 0, vocationId: null,
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
+    ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset, content: loaded };
@@ -1837,6 +1849,36 @@ describe('magia (FUN-74)', () => {
     // Loot fixo de 3 por rato: o gold ganho tem que bater com os abates.
     expect(session.aggregates.goldGained).toBe(session.aggregates.kills * 3);
     expect(hero.xp).toBeGreaterThan(0);
+  });
+
+  it('#547 (M29-07, achado da revisão do PR #648): magia de manadrain NUNCA tira vida do monstro', () => {
+    // Antes deste fix, `#applyHits` aplicava o `resolvedDamage` de QUALQUER magia direto em
+    // `monster.receiveDamage`, sem olhar `damageType` — só `applyDamageOutcome` (CMB-08) sabia
+    // desviar `manadrain` para a mana, e a magia de dano nunca passava por ali. Um monstro não
+    // tem mana (`MonsterRuntime` não declara o campo), então o dreno tem que ser um NO-OP total:
+    // nem vida, nem morte, por mais golpes que caiam — a mesma regra do Canary
+    // (`Game::combatChangeMana`, `manaLoss <= 0` já sem alvo).
+    const drenar = { id: 'drain', name: 'Dreno', manaCost: 5, cooldownMs: 100,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'manadrain' } };
+    const { session, ruleset } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'drain' },
+      }],
+    }), {
+      spells: [...spells, drenar], mana: 1_000,
+      // Ataque desarmado ZERADO: sem isto, o corpo a corpo AUTOMÁTICO (que roda independente
+      // do bot, como todo personagem perto de um alvo) mataria o rato sozinho e confundiria a
+      // asserção — este teste é sobre a MAGIA, não sobre o soco de sempre.
+      combat: [{ ...combat, player: { ...combat.player, attackPower: 0 } }],
+    });
+
+    // Poder 40 contra um rato de 50 de vida mataria em dois golpes se caísse na vida — dez
+    // segundos bastam para várias tentativas, mesmo com o cooldown de categoria do bot.
+    run(session, 10_000, 100);
+
+    expect(session.aggregates.kills).toBe(0);
+    expect(ruleset.monsters.every((m) => m.health === 50)).toBe(true);
   });
 
   it('magia que sumiu do conteúdo não derruba a hunt: a regra só não faz nada', () => {
@@ -3316,6 +3358,111 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     });
     run(session, 30_000, 100);
     expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('#548 (achado da revisão do PR #642): sob combat-v3 a ORIGEM decide, não o tipo de dano', () => {
+    // O MESMO rato de fogo do teste acima — corpo a corpo (`attackRange: 1`), dano elemental —
+    // mas agora sob `combat-v3`: `blockTypes` (que só aprova `physical`) não é mais quem decide
+    // a elegibilidade do dano em si, é a ORIGEM (`blockable.shield`, a mesma flag que
+    // `resolveBlockHit` usa). Um ataque corpo a corpo elemental É elegível, e o shield tem que
+    // treinar — o oposto do teste v1/v2 acima, de propósito.
+    const fireRat = { ...rat, damageType: 'fire' };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [fireRat], combat: [combatV3] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
+  it('#549 (achado de revisão): wand/rod sem escudo usa skill ZERO na defesa — o piso do Canary (1), não a fórmula com defenseValue zerado (0)', () => {
+    // Um Sorcerer/Druid com só a wand na mão e sem escudo (o caso comum antes do nível 50, ou
+    // de quem simplesmente não veste um spellbook): `Player::getWeaponSkill` do Canary devolve
+    // 0 para `WEAPON_WAND` (`default: attackSkill = 0`, player.cpp:474-509) — não a skill de
+    // magia, que a família `wand` aponta para o DANO (DT-02), quase sempre não-zero. Como a
+    // wand nunca declara `defense`/`extraDefense`, alimentar a skill de magia pularia o piso
+    // fixo (`defenseSkill === 0` → 1 ofensivo/2 defensivo) e devolveria 0 pela fórmula cheia com
+    // `defenseValue` zerado — o oposto do Canary.
+    vi.mocked(resolveDamage).mockClear();
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3',
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const comWand: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'wand', quantity: 1 } },
+    };
+    const { session } = start({
+      loaded: content({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      inventory: comWand, skills: { magic: { level: 50, points: 0 } },
+    });
+    run(session, 5_000, 100);
+
+    const hits = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'monster-attack');
+    expect(hits.length).toBeGreaterThan(0);
+    for (const [, defender] of hits) {
+      expect(defender.defense).toEqual({ kind: 'weapon', defense: 1 });
+    }
+  });
+
+  it('#549 (achado de revisão): a skill de escudo soma o bônus de equipamento, como a de arma já soma', () => {
+    // `getSkillLevel` do Canary soma `varSkills[skill]` (o bônus de EQUIPAMENTO) para TODA
+    // skill, sem exceção para `SKILL_SHIELD` (player.cpp:7480) — a mesma leitura que
+    // `#skillLevelOf` já faz para a skill de arma/punho (#524). Nenhum item do catálogo real
+    // declara hoje um bônus de `shielding`; este teste usa um item só-de-teste para provar que
+    // a fórmula honra o bônus quando ele existir, em vez de descartá-lo silenciosamente.
+    const shieldWithBonus = {
+      id: 'shield-of-focus', name: 'Shield of Focus', kind: 'shield', slot: 'shield',
+      weight: 40, value: 0, defense: 30,
+      bonuses: { skill: { skillId: 'shielding', amount: 20 } },
+    };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const loaded = defenseContent({ items: [...items, shieldWithBonus], combat: [combatV3] });
+    const comEscudoComBonus: InventoryState = {
+      backpack: [], equipped: { shield: { instanceId: 's1', itemId: 'shield-of-focus', quantity: 1 } },
+    };
+
+    // Skill de shielding NUNCA treinada (nível 0, sobrescrita — o conteúdo deste describe
+    // declara `startingLevel: 10`) — só os 20 do bônus do item de teste.
+    const comBonusSemSkill = start({
+      loaded, difficulty: 'bold', health: 5_000, inventory: comEscudoComBonus,
+      skills: { shielding: { level: 0, points: 0 } },
+    });
+    vi.mocked(resolveDamage).mockClear();
+    run(comBonusSemSkill.session, 5_000, 100);
+    const bonusHits = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'monster-attack');
+    expect(bonusHits.length).toBeGreaterThan(0);
+    const [, bonusDefender] = bonusHits[0]!;
+
+    // O escudo COMUM (mesma defesa 30, sem bônus) com a skill de shielding treinada até 20 —
+    // o MESMO total (0 + 20 bônus == 20 + 0 bônus) por um caminho diferente.
+    const comSkillSemBonus = start({
+      loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      inventory: comEscudo, skills: { shielding: { level: 20, points: 0 } },
+    });
+    vi.mocked(resolveDamage).mockClear();
+    run(comSkillSemBonus.session, 5_000, 100);
+    const skillHits = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'monster-attack');
+    expect(skillHits.length).toBeGreaterThan(0);
+    const [, skillDefender] = skillHits[0]!;
+
+    // Os dois caminhos chegam ao MESMO total de skill (20) — se o bônus de equipamento fosse
+    // ignorado (o bug), `bonusDefender` ficaria com o total de quem nunca treinou (0), mais
+    // baixo que `skillDefender`.
+    expect(bonusDefender.defense).toEqual(skillDefender.defense);
+    expect(bonusDefender.defenseMitigation).toEqual(skillDefender.defenseMitigation);
   });
 
   it('não é por TICK: sem ser atacado, a skill fica parada', () => {
@@ -7089,6 +7236,493 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
       (e) => e.kind === 'creature-healed' && e.source === 'monster',
     )).toBe(true);
   });
+
+  describe('conformidade de RNG: `targetChange` sem `targetStrategy` (#541)', () => {
+    /** Conta só os sorteios de `Rng.integer` — o mesmo mecanismo do `rankTarget`, que é o
+     * sorteio que `#onMonsterTargetChange` faz para o reroll. */
+    class CountingRng extends Rng {
+      integerCalls = 0;
+
+      override integer(min: number, max: number): number {
+        this.integerCalls++;
+        return super.integer(min, max);
+      }
+    }
+
+    // Um monstro sem abilities/defenses declaradas (só a básica sintetizada do `rat`, sem
+    // `chance` — "ausente é sempre passa e NÃO consome sorteio") e uma `aggroRadius` enorme:
+    // os três membros da party ficam LONGE (100+ tiles), fora da salinha murada de `map`, e
+    // por isso NUNCA entram no alcance de ataque (1 tile) — o monstro fica preso na sala, e
+    // nenhum golpe (e o sorteio de POTÊNCIA que ele consumiria, `hunt.ts:5054`) chega a
+    // acontecer. O único `rng.integer` que sobra na cena inteira é o do PRÓPRIO reroll.
+    const distantRat = { ...rat, aggroRadius: 1_000, targetChange: { intervalMs: 1_000, chance: 1 } };
+    const loaded = content({ monsters: [distantRat] });
+
+    const member = (id: string): CharacterRuntime =>
+      new CharacterRuntime({ ...character().getState(), id });
+
+    it('a sequência de escolha entre candidatos fica EXATAMENTE como antes: um sorteio por reroll, nunca mais', () => {
+      const rng = new CountingRng(Rng.fromSeed('target-change-conformance').getState());
+      const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+      const session = new Session({
+        id: 'target-change-conformance', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+      });
+      const a = member('a');
+      const b = member('b');
+      const c = member('c');
+      session.enter(a);
+      session.enter(b);
+      session.enter(c);
+      // `session.enter` coloca o primeiro no início da rota e os demais no livre mais próximo
+      // (#203) — dentro da salinha murada. O reposicionamento para longe vem DEPOIS de entrar
+      // e ANTES de `advanceBy`: o `SPAWN` só avalia posição quando a fila roda, e a esta
+      // altura os três já estão longe (montagem de teste, como o `phantom` de outro describe).
+      a.position = { x: 100, y: 100, z: 7 };
+      b.position = { x: 200, y: 200, z: 7 };
+      c.position = { x: 300, y: 300, z: 7 };
+
+      session.advanceBy(100); // o rato nasce, preso na salinha murada — não alcança ninguém.
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      // Fixa o ponto de partida: o que se mede é a TROCA por tempo, não a aquisição inicial.
+      monster.targetId = a.id;
+      rng.integerCalls = 0;
+
+      // Cinco vencimentos de `targetChange` (5 × 1 000 ms), `chance: 1` — sempre reroll.
+      run(session, 5_500, 100);
+
+      // Um sorteio por reroll, nunca dois, nunca zero: a mesma linha de antes do #541
+      // (`candidates[session.rng.integer(0, candidates.length - 1)]`), agora só alcançada
+      // quando `targetStrategy` está ausente — como aqui.
+      expect(rng.integerCalls).toBe(5);
+      // E o alvo de fato trocou — não é só o sorteio girando no vazio.
+      expect(monster.targetId).not.toBe(a.id);
+      expect(['a', 'b', 'c']).toContain(monster.targetId);
+    });
+  });
+});
+
+describe('condição de velocidade com sinal — paralyze de ataque e haste de defesa (CMB-11, #556)', () => {
+  // O ataque do mutated_rat (`data-otservbr-global/monster/mammals/mutated_rat.lua`):
+  // `{ name = "speed", speedChange = -600, duration = 30000, target = true }`. `power: 0` e sem
+  // ability básica (declarar `abilities` substitui a do boot) isola o teste do dano — o
+  // assunto é o PASSO, não a vida. `chance` ausente sai sempre, sem sorteio, o que faz o teste
+  // ser determinístico sem precisar rodar até a lei dos grandes números ajudar; `cadenceMs`
+  // maior que a janela do teste garante UM lançamento só, para a condição vencer sem ser
+  // relançada (`merge: refresh`, o padrão, reiniciaria os 30 s a cada vencimento da ability).
+  const paralyzingRat = {
+    ...rat, aggroRadius: 20,
+    // HP absurdo de propósito (como a fixture `busyRat`/`Dragon` faz): o herói ataca sozinho
+    // pelo bot, e um rato de 50 HP morreria dentro da janela do teste — o respawn (#518) traria
+    // OUTRO monstro que paralisaria o herói de novo perto dos 30 s, confundindo exatamente o
+    // instante que este teste mede.
+    health: 100_000,
+    abilities: [{
+      id: 'slow', cadenceMs: 60_000, target: { range: 20 }, power: 0, damageType: 'physical',
+      condition: {
+        key: 'speed', durationMs: 30_000,
+        effect: { kind: 'speed', type: 'paralyze', delta: -600 },
+      },
+    }],
+  };
+
+  it('o passo do alvo fica mais lento durante 30 s e volta ao normal depois', () => {
+    const loaded = content({ monsters: [paralyzingRat] });
+    const { session, hero, ruleset } = start({ loaded });
+    // O passo é medido por `requestMove` — o caminho do socket (`#step` direto, sem a
+    // decisão de "parar para lutar" do bot automático, `#playerStep`) —, porque o próprio
+    // alcance grande que faz a ability alcançar o herói também o alcança para o COMBATE dele:
+    // uma vez adjacente, o bot pararia de andar a rota para brigar com um rato de HP absurdo, e
+    // o teste ficaria sem passo NENHUM para medir. `requestMove` é o mesmo mecanismo que a
+    // rota usa por baixo (`movementDuration`), só chamado de fora.
+    const directions: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const moveDuration = (): number => {
+      for (const [dx, dy] of directions) {
+        const { x, y } = hero.position;
+        const result = ruleset.requestMove(session, hero.id, { x: x + dx, y: y + dy });
+        if (result.ok) return result.durationMs;
+      }
+      throw new Error('sem tile livre adjacente ao herói');
+    };
+
+    // A rota deste conteúdo anda em 500 ms por passo (chão 150 × 1000 / speed 300, ceil50) —
+    // é o número que o comentário de `movimento com escritor único` também usa como base.
+    expect(moveDuration()).toBe(500);
+
+    // O rato paralisa assim que arma a ability (alcance/aggro cobrem a arena inteira) — bem
+    // dentro desta janela curta.
+    for (let t = 0; t < 500 && session.ended === null; t += 100) session.advanceBy(100);
+    expect(hero.conditions.get('speed')?.speedPercent).toBeLessThan(0);
+    expect(moveDuration()).toBeGreaterThan(500);
+
+    // Passados os 30 s da condição, ela expira e o passo volta ao normal.
+    for (let t = 500; t < 31_000 && session.ended === null; t += 100) session.advanceBy(100);
+    expect(hero.conditions.get('speed')).toBeNull();
+    expect(moveDuration()).toBe(500);
+  });
+
+  it('uma defesa self-haste acelera o próprio monstro (Doom Deer, speedChange positivo)', () => {
+    // `delta: 2000` (bem acima do 400 real do Doom Deer, conferido à parte no teste de unidade
+    // de `resolveSpeedPercent` em `conditions.test.ts`) força `mina = multiplier/2 = 1,5` —
+    // acima de 1 mesmo no PIOR sorteio da faixa —, o que torna o sinal positivo
+    // DETERMINÍSTICO sem prender o teste a uma semente específica da sessão inteira.
+    const selfHasteDeer = {
+      ...rat, aggroRadius: 0, // nunca mira ninguém — o teste é só sobre a própria defesa.
+      // A defesa NÃO rola no nascimento — a primeira chance é só em `cadenceMs` (#518, "um
+      // monstro recém-nascido não se cura antes do primeiro vencimento"), então a cadência
+      // precisa caber dentro da janela do teste.
+      defenses: [{
+        id: 'haste', cadenceMs: 200, chance: 1,
+        condition: {
+          key: 'speed', durationMs: 8_000,
+          effect: { kind: 'speed', type: 'haste', delta: 2_000 },
+        },
+      }],
+    };
+    const loaded = content({ monsters: [selfHasteDeer] });
+    const { session, ruleset } = start({ loaded });
+    for (let t = 0; t < 500 && session.ended === null; t += 100) session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    expect(monster.conditions.get('speed')?.speedPercent).toBeGreaterThan(0);
+    expect(monster.speedScale).toBeGreaterThan(1);
+  });
+
+  it('haste substitui paralyze na mesma criatura, mesmo vindo de fontes diferentes', () => {
+    // A chave reservada ("speed") faz duas condições de fontes DIFERENTES (uma ability de
+    // OUTRO monstro que paralisa, a própria defesa que acelera) disputarem o MESMO slot — a
+    // mutual-exclusão do `Creature::onAddCondition` do Canary/TFS, sem lógica extra no `sim`.
+    // As duas condições aqui são estado de runtime já resolvido (o mesmo formato que
+    // `conditionFromSpec` devolveria); o teste isola só a política de substituição por chave,
+    // que `Conditions.apply` já prova em `conditions.test.ts` — aqui a prova é que o MONSTRO de
+    // verdade (com `speedScale` de `MonsterRuntime`) também obedece.
+    const monster = new MonsterRuntime({
+      id: 1, monsterId: 'rat', position: { x: 0, y: 0 }, home: { x: 0, y: 0 },
+      health: 100, targetId: null, cooldowns: {},
+    });
+    monster.conditions.apply({
+      key: 'speed', targetId: monster.subject, sourceId: 'm:2', expiresAtMs: 30_000,
+      speedPercent: -50,
+    });
+    expect(monster.speedScale).toBeLessThan(1);
+    monster.conditions.apply({
+      key: 'speed', targetId: monster.subject, sourceId: monster.subject, expiresAtMs: 8_000,
+      speedPercent: 200,
+    });
+    expect(monster.conditions.size).toBe(1);
+    expect(monster.speedScale).toBeGreaterThan(1);
+  });
+});
+
+describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
+  // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
+  // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
+  // monstro de verdade. `aggroRadius: 0` na INVOCAÇÃO isola o teste da IA de perseguição DELA:
+  // ela nunca sai do lugar nem bate em ninguém — quem invoca não pode ser confundido com quem é
+  // invocado. O MESTRE precisa de alvo de verdade (#546, TFS/Canary `hasFollowPath`): sem ele, a
+  // invocação nunca dispara — é o describe seguinte que prova isso isoladamente —, então aqui ele
+  // fica com o `aggroRadius` de sempre do `rat` (4), e a rota da fixture (herói entra em (1,1),
+  // ponto de spawn em (4,2)) garante o engajamento na primeira decisão do mestre: a distância
+  // máxima de qualquer tile de nascimento possível (raio 2 ao redor do ponto) até (1,1) é 3, e
+  // 3 ≤ 4. `pacifist` (o mesmo do describe do Dragon acima) zera o ataque do herói: sem ele, o
+  // herói mataria minions sozinho ao alcançar o ponto de spawn pela rota, e um abate incidental
+  // confundiria "o teto segura" com "o herói ajudou a esvaziar" — o mestre pode bater de volta
+  // (o herói tem HP absurdo, de propósito, na fixture-base), mas nunca o contrário.
+  const minion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 20, experience: 50, attack: 0, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
+  };
+  const summoner = {
+    ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
+    summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
+  };
+  const summonerHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
+    },
+  };
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+  const loaded = () => content({
+    monsters: [summoner, minion], hunts: [summonerHunt], combat: [pacifist],
+  });
+
+  it('nunca invoca sem alvo — mestre nunca engajado (aggroRadius: 0) fica no cadenciamento e nunca rola a chance (TFS/Canary hasFollowPath)', () => {
+    // O MESMO desenho da fixture acima, com uma diferença: `aggroRadius: 0` no MESTRE, não na
+    // invocação — `chooseTarget` nunca acha ninguém a distância ≤ 0 (tile é exclusivo,
+    // invariante 8), então `targetId` fica `null` para sempre. É exatamente a fixture que a
+    // versão anterior deste teste usava para o describe INTEIRO — provando, sem querer, que a
+    // implementação de então invocava com o mestre permanentemente sem alvo. Aqui ela vira o
+    // que deveria ser desde o início: a prova de que SEM alvo não nasce invocação nenhuma.
+    const neverEngaged = {
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+      summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
+    };
+    const neverEngagedContent = content({
+      monsters: [neverEngaged, minion], hunts: [summonerHunt], combat: [pacifist],
+    });
+    const { session, ruleset } = start({ loaded: neverEngagedContent });
+    run(session, 10_000, 100); // 10 vencimentos de cadência (1 000 ms cada) sem rolar nenhum.
+
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    expect(master.targetId).toBeNull();
+    // A CADÊNCIA continua se rearmando — `scheduledSummons` não é o gate, `targetId` é (a
+    // invariante "engatilhada OU agendada" continua valendo por entrada).
+    expect(master.scheduledSummons.size).toBeGreaterThan(0);
+    expect(ruleset.monsters.filter((m) => m.monsterId === 'minion')).toHaveLength(0);
+  });
+
+  it('1 Hz == 10 Hz: o timer da invocação não é "por tick" (invariante 2/3)', () => {
+    // 5 s de janela, teto 10: bem longe do teto, para medir só a cadência — não onde ela para.
+    const at = (hz: number): number => {
+      const { session, ruleset } = start({ loaded: loaded() });
+      run(session, 5_000, 1000 / hz);
+      return ruleset.monsters.filter((m) => m.alive && m.monsterId === 'minion').length;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+    expect(at(10)).toBeGreaterThan(0);
+  });
+
+  it('nasce perto do mestre, com masterId, e NÃO ocupa lugar do Spawner (TFS placeCreature force)', () => {
+    // O mestre agora tem alvo de verdade (#546, `hasFollowPath`) — e, engajado, ele ANDA. Se o
+    // teste rodasse mais tempo e comparasse com a posição ATUAL do mestre, um passo dele entre
+    // o instante da invocação e o instante da leitura faria a distância medida crescer por um
+    // motivo que não tem nada a ver com ONDE ela nasceu. Por isso o loop para no primeiro
+    // vencimento em que a invocação aparece, sem avançar mais um passo — a posição do mestre lida
+    // ali É a mesma que `#spawnSummon` usou para buscar o tile livre.
+    const { session, ruleset } = start({ loaded: loaded() });
+    let master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    let summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    let masterPositionAtBirth: { x: number; y: number; z?: number } | undefined;
+    for (let elapsed = 0; elapsed < 1_500 && summon === undefined && session.ended === null; elapsed += 50) {
+      session.advanceBy(50);
+      master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+      summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+      if (master !== undefined && summon !== undefined) masterPositionAtBirth = { ...master.position };
+    }
+    if (master === undefined) throw new Error('sem mestre');
+    if (summon === undefined) throw new Error('sem invocação');
+    if (masterPositionAtBirth === undefined) throw new Error('sem posição do mestre no nascimento');
+
+    expect(summon.masterId).toBe(master.id);
+    // A posição exata do mestre já está ocupada por ELE (tile é exclusivo, invariante 8): a
+    // invocação nasce num dos 8 vizinhos imediatos — `SUMMON_SPAWN_RADIUS` é 1, como
+    // `Map::placeCreature(..., extendedPos: false)` da fonte, nunca um anel mais largo.
+    expect(Math.max(
+      Math.abs(summon.position.x - masterPositionAtBirth.x),
+      Math.abs(summon.position.y - masterPositionAtBirth.y),
+    )).toBeLessThanOrEqual(1);
+
+    // O ÚNICO lugar do Spawner é do mestre (a hunt pede `monsterCount: 1`), e continua ocupado
+    // por ELE: a invocação nasceu por `#spawnMonster` direto, nunca por `#onSpawn`.
+    const slots = ruleset.getState().spawner.slots;
+    expect(slots).toHaveLength(1);
+    expect(slots[0]?.occupantId).toBe(master.id);
+  });
+
+  it('respeita o teto POR NOME e o teto DO MONSTRO, cada um separadamente', () => {
+    // `minion-a` para em 1 — o teto DELA (`count: 1`); `minion-b` para em 2 — o que SOBRA do
+    // teto do MONSTRO (`max: 3`) depois que `minion-a` já gastou 1, mesmo com `count: 5` de
+    // folga própria. Provar os dois juntos, com nomes diferentes, é o que distingue qual teto
+    // segurou cada um — um só monstro com os dois números iguais não distinguiria nada.
+    const minionA = { ...minion, id: 'minion-a' };
+    const minionB = { ...minion, id: 'minion-b' };
+    const capped = {
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
+      summons: {
+        max: 3,
+        entries: [
+          { monsterId: 'minion-a', chance: 1, intervalMs: 1_000, count: 1 },
+          { monsterId: 'minion-b', chance: 1, intervalMs: 1_000, count: 5 },
+        ],
+      },
+    };
+    const cappedHunt = {
+      ...hunt,
+      difficulties: {
+        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
+      },
+    };
+    const cappedContent = content({
+      monsters: [capped, minionA, minionB], hunts: [cappedHunt], combat: [pacifist],
+    });
+    const { session, ruleset } = start({ loaded: cappedContent });
+    const live = (id: string): number => ruleset.monsters.filter((m) => m.alive && m.monsterId === id).length;
+
+    run(session, 10_000, 100);
+    expect(live('minion-a')).toBe(1);
+    expect(live('minion-b')).toBe(2);
+
+    // Roda mais: os dois tetos SEGURAM — não é só "ainda não deu tempo de rolar de novo".
+    run(session, 10_000, 100);
+    expect(live('minion-a')).toBe(1);
+    expect(live('minion-b')).toBe(2);
+  });
+
+  it('a invocação não paga XP, nem loot, nem conta no Bestiário (TFS hasBeenSummoned)', () => {
+    const { session, hero, ruleset } = start({ loaded: loaded() });
+    run(session, 1_500, 100);
+    const summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    if (summon === undefined) throw new Error('sem invocação');
+
+    const killsBefore = session.aggregates.kills;
+    summon.receiveDamage(summon.health);
+    resolveDeath(session, { kind: 'monster', monster: summon });
+
+    // O abate CONTA no "matei N" do extrato (#190) — a mesma condição de sempre —, mas nada
+    // MAIS paga: sem XP, sem gold, sem Bestiário. `Player::onKilledMonster` do Canary devolve
+    // cedo para quem `hasBeenSummoned()`, antes de tocar hunting task ou Bestiário.
+    expect(session.aggregates.kills).toBe(killsBefore + 1);
+    expect(hero.xp).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldGained).toBe(0);
+    expect(session.aggregates.xpGained).toBe(0);
+    expect(hero.bestiary.getState()).toEqual({});
+  });
+
+  it('some quando o mestre morre: desaparece, nunca morre (TFS Game::removeCreature)', () => {
+    const { session, ruleset } = start({ loaded: loaded() });
+    run(session, 3_000, 100);
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    const summons = ruleset.monsters.filter((m) => m.masterId === master.id);
+    expect(summons.length).toBeGreaterThan(0);
+
+    session.drainEvents();
+    master.receiveDamage(master.health);
+    resolveDeath(session, { kind: 'monster', monster: master });
+
+    // Nenhuma invocação DESTE mestre continua indexada — e nenhum novo `masterId` órfão
+    // apareceu (a lista de agora é exatamente vazia para ele, não só "diminuiu").
+    expect(ruleset.monsters.filter((m) => m.masterId === master.id)).toHaveLength(0);
+    // O desaparecimento saiu para o mestre E para CADA invocação — nunca um golpe (`creature-hit`
+    // ausente), nunca um cadáver (`ground-item-appeared` ausente): é remoção, não abate.
+    const events = session.drainEvents();
+    const vanished = events
+      .filter((e) => e.kind === 'creature-vanished')
+      .map((e) => (e.kind === 'creature-vanished' ? e.creatureId : ''));
+    expect(vanished).toContain(master.subject);
+    for (const summon of summons) expect(vanished).toContain(summon.subject);
+    expect(vanished).toHaveLength(summons.length + 1);
+    expect(events.some((e) => e.kind === 'ground-item-appeared')).toBe(false);
+  });
+
+  it('scheduledSummons sobrevive ao snapshot, como scheduledDefenses (#518)', () => {
+    // Só o suficiente para o mestre nascer e armar a lista — ANTES do primeiro vencimento
+    // (1 000 ms), para o teste provar que o CAMPO sobreviveu, não que a invocação já aconteceu.
+    const { session } = start({ loaded: loaded() });
+    run(session, 500, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const master = (resumed.ruleset as HuntRuleset).monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    expect(master.scheduledSummons.size).toBeGreaterThan(0);
+
+    resumed.drainEvents();
+    run(resumed, 3_000, 100);
+    const summons = (resumed.ruleset as HuntRuleset).monsters.filter((m) => m.masterId === master.id);
+    expect(summons.length).toBeGreaterThan(0);
+  });
+});
+
+describe('magia em área mata o mestre E a invocação adjacente no MESMO lançamento (#546, achado pós-review)', () => {
+  // O mestre fica PARADO de propósito: `attackRange` bem acima de qualquer distância possível
+  // dentro da sala minúscula da fixture faz `decideMonsterAction` nunca escolher "aproximar" —
+  // `monsterAttackRange` já considera o alvo ao alcance desde o primeiro engajamento
+  // (`packages/content/src/schemas.ts`, `monsterAttackRange`). Sem isto o mestre andaria até o
+  // corpo a corpo entre o nascimento da invocação (que NUNCA o segue, `aggroRadius: 0`) e o
+  // lançamento — e ela ficaria para trás, fora do raio do `blast` quando ele saísse. Parado, ela
+  // nasce ao lado dele (`SUMMON_SPAWN_RADIUS = 1`) e continua ao lado dele até o fim do teste.
+  const masterWithSummon = {
+    ...rat, attackRange: 12,
+    summons: { max: 1, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 1 }] },
+  };
+  const minion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 20, experience: 50, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
+  };
+  // `blast` (raio 2 centrado no alvo, poder 80) só sai quando a ÁREA já tem 2 alvos — o mestre
+  // sozinho conta 1 (`countAreaTargets` inclui o primário). O gate atrasa o lançamento até
+  // depois de a invocação existir: sem ele, o primeiro vencimento mataria só o mestre, e o
+  // teste nunca exercitaria a cascata que remove a invocação NO MEIO do `#applyHits`.
+  const explodirComDois = botConfig({
+    attack: [{ when: { kind: 'targets', op: '>=', count: 2 }, do: { kind: 'spell', spellId: 'blast' } }],
+  });
+  // `attackPower: 0` (o mesmo `pacifist` do describe da invocação, acima): a sala é pequena o
+  // bastante para o mestre às vezes nascer a 1 tile do herói, e sem isto o corpo a corpo AUTOMÁTICO
+  // (fora do `#applyHits`, fora deste teste) somaria um `creature-hit` a mais no mestre — ruído
+  // que não tem nada a ver com a cascata que este teste mede.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+
+  it('um só abate, um só creature-vanished por criatura, e nenhum creature-hit para quem já sumiu na cascata', () => {
+    // O defeito que este teste fecha: `#aimFor` colhe o mestre e a invocação na MESMA mira,
+    // mestre primeiro (ele nasceu antes, `#collect(primary)` antes da varredura da forma).
+    // `#applyHits` aplica os golpes na ordem da colheita — ao processar o mestre, `resolveDeath`
+    // cascateia em `#removeSummon` para a invocação AINDA NA LISTA, que sai de
+    // `#monsterBySubject`/`#monsters` sem que `alive` vire falso (ela nunca morreu, ela sumiu).
+    // Sem a checagem de presença no início do laço, a iteração seguinte reprocessaria a
+    // invocação já removida: um `creature-hit` para um id que o cliente já viu sumir e, se o
+    // dano zerasse a vida dela, um SEGUNDO `resolveDeath` — abate duplicado e um `world.vacate`
+    // sobre um tile que já foi liberado (e que pode já ter outro ocupante).
+    const { session, ruleset } = withSpells(
+      explodirComDois,
+      { mana: 200, monstersRaw: [masterWithSummon, minion], combat: [pacifist] },
+      'cautious',
+    );
+    const killsBefore = session.aggregates.kills;
+
+    const events: DomainEvent[] = [];
+    for (let elapsed = 0; elapsed < 3_000; elapsed += 50) {
+      session.advanceBy(50);
+      events.push(...session.drainEvents());
+      if (ruleset.monsters.length === 0) break;
+    }
+
+    const casts = events.filter((e) => e.kind === 'spell-cast');
+    expect(casts.length).toBeGreaterThan(0);
+    const first = casts[0] as { targets: readonly { creatureId: string | number }[] };
+    // A mira colheu os DOIS no mesmo lançamento — é o que garante que este caso passou pelo
+    // caminho mestre-antes-da-invocação dentro do MESMO `#applyHits`, e não dois lançamentos
+    // separados (o que não exercitaria nada).
+    expect(first.targets).toHaveLength(2);
+    const targetSubjects = first.targets.map((t) => t.creatureId);
+
+    // Nenhum dos dois continua indexado — o mestre morreu, a invocação sumiu na cascata.
+    expect(ruleset.monsters).toHaveLength(0);
+
+    // UM abate só: a invocação nunca paga abate (#546), e — com a correção — nem reprocessa a
+    // própria remoção como se fosse uma morte nova. Sem a correção, o `resolveDeath` duplicado
+    // creditava um segundo 'kills' para uma invocação que ninguém matou de novo.
+    expect(session.aggregates.kills).toBe(killsBefore + 1);
+
+    // Cada um dos dois alvos some UMA vez só — nunca dois `creature-vanished` para o mesmo id.
+    const vanishedCounts = new Map<string | number, number>();
+    for (const event of events) {
+      if (event.kind !== 'creature-vanished') continue;
+      vanishedCounts.set(event.creatureId, (vanishedCounts.get(event.creatureId) ?? 0) + 1);
+    }
+    for (const subject of targetSubjects) expect(vanishedCounts.get(subject)).toBe(1);
+
+    // Só o mestre leva golpe de MAGIA de verdade — a invocação já tinha sumido quando a vez dela
+    // chegou no laço, então ela nunca deveria ganhar um `creature-hit` de `#applyHits` (sem a
+    // correção, ela ganhava um, para um id que o `creature-vanished` acima já anunciou como
+    // sumido). `source: 'spell'` isola o golpe do `#applyHits` sob teste do corpo a corpo
+    // AUTOMÁTICO que a sala pequena pode colocar ao alcance do herói (`pacifist` zera o dano
+    // dele, mas o evento sai de qualquer forma — código fora deste teste, e não o assunto dele).
+    const spellHitsOnEitherTarget = events.filter(
+      (event) => event.kind === 'creature-hit' && event.source === 'spell'
+        && targetSubjects.includes(event.creatureId),
+    );
+    expect(spellHitsOnEitherTarget).toHaveLength(1);
+  });
 });
 
 describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#520)', () => {
@@ -7310,8 +7944,11 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
             id: 'dragon-lord-firefield', durationMs: 200_000,
             shape: { shape: 'circle' as const, radius: 4, centered: 'target' as const },
             condition: {
-              key: 'burning', merge: 'refresh' as const, durationMs: 70_000,
-              effect: { kind: 'damage-over-time' as const, amount: 20, intervalMs: 10_000, damageType: 'fire' as const },
+              key: 'burning', merge: 'strongest' as const, durationMs: 70_000,
+              effect: {
+                kind: 'damage-over-time' as const, form: 'rounds' as const,
+                rounds: [{ count: 7, intervalMs: 10_000, damage: 20 }], damageType: 'fire' as const,
+              },
             },
           },
         },
@@ -7334,6 +7971,339 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     run(session, 3_000, 100);
     expect(ruleset.fields).toHaveLength(1);
     expect(ruleset.fields[0]?.tiles).toHaveLength(21);
+  });
+
+  describe('#645: `targetChange` NUNCA consulta `targetStrategy` (ADR 0037 d.6, TFS/Canary `onThinkTarget`)', () => {
+    // `onThinkTarget` real nunca lê `strategiesTarget*` — só `m_monsterType->info.targetDistance`
+    // (`definition.targetDistance` aqui, o campo do #542) decide entre
+    // `TARGETSEARCH_RANDOM` e `TARGETSEARCH_NEAREST` (`monster.cpp:2141-2192`, idêntico no TFS
+    // `monster.cpp:919-963`). A estratégia ponderada só entra no ramo estreito de `chooseTarget`
+    // (fuga bloqueada) — ver `monster.test.ts`.
+    const ally = (id: string, x: number, health: number): CharacterRuntime => new CharacterRuntime({
+      id, position: { x, y: 0, z: 7 }, health, maxHealth: 1_000_000, mana: 1_000, maxMana: 1_000,
+      level: 200, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+
+    it('melee (`targetDistance: 1`, o caso do Dragon): o reroll sorteia uniforme, não sempre o de menos vida', () => {
+      // Se o peso 100 % em `health` ainda fosse consultado, `wounded-ally` venceria SEMPRE.
+      // Rodando muitos vencimentos com os dois candidatos à MESMA posição (nenhum critério de
+      // distância os separa), `TARGETSEARCH_RANDOM` alcança os dois — a prova de que o critério
+      // é o sorteio uniforme, não o peso.
+      const healthPickingDragon = {
+        ...dragon,
+        targetChange: { intervalMs: 1_000, chance: 1 },
+        targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
+      };
+      const loaded = buildContent(raw({
+        monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-target-change-random', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      session.enter(ally('wounded-ally', 0, 1));
+      session.enter(ally('healthy-ally', 0, 900_000));
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+      const seen = new Set<string | null>();
+      for (let i = 0; i < 30; i++) {
+        // Fixa o alvo ANTES de cada vencimento: o que se mede é a TROCA, não a aquisição.
+        monster.targetId = knight.id;
+        run(session, 1_100, 100);
+        seen.add(monster.targetId);
+      }
+      expect(seen.has('healthy-ally')).toBe(true);
+      expect(seen.has('wounded-ally')).toBe(true);
+    });
+
+    it('alcance longo com `targetDistance: 1` continua RANDOM — quem decide é `targetDistance`, não `attackRange`', () => {
+      // O Canary lê `info.targetDistance` (`monster.cpp:2185-2186`); o alcance de ataque não
+      // entra. Com os dois campos DIFERENTES, um reroll que ainda olhasse `attackRange` cairia em
+      // NEAREST e nunca alcançaria o candidato empatado em distância que o sorteio alcança.
+      const longReachMelee = {
+        ...dragon, attackRange: 4, targetDistance: 1,
+        targetChange: { intervalMs: 1_000, chance: 1 },
+      };
+      const loaded = buildContent(raw({
+        monsters: [longReachMelee], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-target-change-long-reach', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      session.enter(ally('first-ally', 0, 900_000));
+      session.enter(ally('second-ally', 0, 900_000));
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+      const seen = new Set<string | null>();
+      for (let i = 0; i < 30; i++) {
+        monster.targetId = knight.id;
+        run(session, 1_100, 100);
+        seen.add(monster.targetId);
+      }
+      expect(seen.has('first-ally')).toBe(true);
+      expect(seen.has('second-ally')).toBe(true);
+    });
+
+    it('à distância (`targetDistance > 1`): o reroll resolve NEAREST fixo, mesmo com o peso favorecendo o mais ferido e mais longe', () => {
+      const rangedDragon = {
+        ...dragon, attackRange: 4, targetDistance: 4,
+        targetChange: { intervalMs: 1_000, chance: 1 },
+        targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 }, // favoreceria `wounded-far`
+      };
+      const loaded = buildContent(raw({
+        monsters: [rangedDragon], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-target-change-nearest', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      const near = ally('near-ally', 0, 900_000);
+      session.enter(near);
+      const woundedFar = ally('wounded-far-ally', 0, 1);
+      session.enter(woundedFar);
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      // Reposiciona os candidatos RELATIVOS ao Dragon (o spawn dele vem da rota da hunt, não é
+      // fixo) — o mesmo recurso do teste de conformidade de RNG acima (`distantRat`).
+      const monsterFloor = monster.position.z ?? 0;
+      near.position = { x: monster.position.x + 1, y: monster.position.y, z: monsterFloor };
+      woundedFar.position = { x: monster.position.x + 6, y: monster.position.y, z: monsterFloor };
+      monster.targetId = knight.id;
+
+      run(session, 1_500, 100); // um vencimento de 1 000 ms cabe nesta janela.
+
+      expect(monster.targetId).toBe('near-ally');
+    });
+  });
+
+  describe('#645: `rankTarget` só no ramo de fuga bloqueada de `chooseTarget` (ADR 0037 d.6)', () => {
+    it('Dragon fugindo com o alvo fora do alcance de toda ability troca pelo critério `health`', () => {
+      // `chooseTarget` unitária já cobre isto em `monster.test.ts`; aqui é a FIAÇÃO pela
+      // `Session` de verdade — o mesmo caminho que `#onMonsterStep`/`#onMonsterAttack` usam.
+      const healthPickingDragon = {
+        ...dragon,
+        targetChange: undefined, // isola do timer: só a reavaliação de `chooseTarget` importa aqui.
+        targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
+      };
+      const loaded = buildContent(raw({
+        monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-flee-rerank', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      const wounded = new CharacterRuntime({
+        id: 'wounded-ally', position: { x: 0, y: 0, z: 7 }, health: 5, maxHealth: 1_000_000,
+        mana: 1_000, maxMana: 1_000, level: 200, xp: 0, vocationId: null,
+        staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      });
+      session.enter(wounded);
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+      // Empurra para a faixa de fuga (runOnHealth 300) e coloca o alvo retido a 8 tiles — além
+      // do alcance da bola de fogo (7, a maior ability do Dragon), mas ainda dentro do
+      // `aggroRadius` (8, também de `dragon`), para não sair da lista de candidatos.
+      monster.receiveDamage(healthPickingDragon.health - 250);
+      const monsterFloor = monster.position.z ?? 0;
+      knight.position = { x: monster.position.x + 8, y: monster.position.y, z: monsterFloor };
+      wounded.position = { x: monster.position.x + 8, y: monster.position.y, z: monsterFloor };
+      monster.targetId = knight.id;
+      session.drainEvents();
+
+      run(session, 2_500, 100); // um passo do Dragon (movementDuration) cabe nesta janela.
+
+      expect(monster.targetId).toBe('wounded-ally');
+    });
+  });
+});
+
+describe('manter distância: um atirador recua quando o alvo chega perto (#542, targetDistance)', () => {
+  // Alcance de ataque igual ao `targetDistance`: o atirador não cola no jogador (attackRange
+  // maior não entraria em jogo aqui) nem para longe demais para atirar — o mesmo desenho que o
+  // Necromancer/Water Elemental do Canary usam de verdade (attackRange == targetDistance).
+  const shooter = {
+    id: 'shooter', name: 'Shooter', recommendedLevel: 1,
+    health: 50, experience: 5, attack: 10, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 3,
+    targetDistance: 3,
+    loot: { items: [] },
+  };
+
+  const shooterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: {
+        ...hunt.difficulties.cautious, composition: [{ monsterId: 'shooter', weight: 1 }],
+      },
+    },
+  };
+
+  // O alcance DESARMADO do herói também vira o `targetDistance`: sem isto, o herói nunca
+  // reconhece o atirador como alvo de ataque (ele nunca chega ao corpo a corpo DE PROPÓSITO) e
+  // continua andando o LOOP inteiro da rota, empurrando o atirador contra as quatro paredes de
+  // uma sala de 4×3 — o que mediria o tamanho da sala, não o recuo. Com o mesmo alcance dos
+  // dois lados, `#playerStep` reconhece o alvo e PARA assim que ele entra no alcance, o
+  // "jogador parado" que o #542 pede. `attackPower: 0` (o mesmo `pacifist` do describe do
+  // Dragon): sem ele, o herói parado bate de verdade e mata o atirador de 50 HP em dois golpes
+  // de 25 — o teste mediria a morte do monstro, não o recuo dele.
+  const stationaryCombat = {
+    ...combat, player: { ...combat.player, attackRange: 3, attackPower: 0 },
+  };
+
+  it('mantém pelo menos targetDistance tiles de um jogador parado, mesmo nascendo colado nele', () => {
+    const loaded = buildContent(raw({
+      monsters: [shooter], hunts: [shooterHunt], combat: [stationaryCombat],
+    }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // Teleporta os dois para um canto controlado, com sala de sobra na direção do recuo — e
+    // refaz a ocupação do mundo com um ciclo de snapshot/retomada, o MESMO que uma hunt
+    // retomada do Redis já usa (`Session.fromSnapshot`/`#rebuildOccupancy`). Sem isto, o tile
+    // onde o atirador nasceu de verdade continuaria "ocupado" por baixo, e um passo de recuo
+    // por cima dele seria recusado à toa.
+    hero.position = { x: 1, y: 2, z: 7 };
+    monster.position = { x: 2, y: 2, z: 7 };
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    const resumedHero = resumed.participants.find((p) => p.id === 'hero') as CharacterRuntime;
+    const resumedMonster = resumedRuleset.monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro após retomar');
+
+    run(resumed, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(resumedMonster.position.x - resumedHero.position.x),
+      Math.abs(resumedMonster.position.y - resumedHero.position.y),
+    );
+    expect(tiles).toBeGreaterThanOrEqual(shooter.targetDistance);
+    // E o herói ficou onde estava: reconheceu o atirador como alvo dentro do alcance e parou
+    // de andar a rota, em vez de rodear a sala inteira atrás dele.
+    expect(resumedHero.position).toEqual({ x: 1, y: 2, z: 7 });
+  });
+
+  it('com targetDistance 1 (default), continua colando no jogador parado — comportamento de sempre', () => {
+    // O mesmo cenário, só que com o rato de sempre (`targetDistance` ausente = 1): a mudança do
+    // #542 não afasta quem já era corpo a corpo. `pacifist` (attackPower 0): o rato tem só 50
+    // HP, e um herói parado batendo de verdade o mataria antes dos 6 s do teste — o corpo fica
+    // onde morreu, mas o herói já teria voltado a andar a rota, e a distância cresceria por um
+    // motivo que não tem nada a ver com `targetDistance`.
+    const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+    const loaded = buildContent(raw({ combat: [pacifist] }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { ...hero.position, x: hero.position.x + 2 };
+    session.drainEvents();
+
+    run(session, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(monster.position.x - hero.position.x),
+      Math.abs(monster.position.y - hero.position.y),
+    );
+    expect(tiles).toBeLessThanOrEqual(1);
+    expect(monster.alive).toBe(true);
+  });
+});
+
+describe('manter distância: a aproximação também para em targetDistance (revisão do #649)', () => {
+  // `attackRange` (5) BEM maior que `targetDistance` (2) de propósito — o oposto do `shooter`
+  // do describe acima, onde os dois coincidem. Antes desta revisão, `decideMonsterAction`
+  // ainda usava o MAIOR alcance de ability como ponto de parada da aproximação
+  // (`monsterAttackRange`, CMB-06): um atirador assim parava e atirava assim que entrava no
+  // alcance de 5, sem nunca fechar até o stand-off de 2 documentado — o que a issue original
+  // pedia era só a METADE do recuo (#542), e a revisão do #649 fechou a outra metade.
+  const longRangeShooter = {
+    id: 'long-range-shooter', name: 'Long Range Shooter', recommendedLevel: 1,
+    health: 50, experience: 5, attack: 10, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 5,
+    targetDistance: 2,
+    loot: { items: [] },
+  };
+
+  const shooterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: {
+        ...hunt.difficulties.cautious,
+        composition: [{ monsterId: 'long-range-shooter', weight: 1 }],
+      },
+    },
+  };
+
+  // O alcance desarmado do herói cobre a distância inicial inteira (3, os dois cantos opostos
+  // da sala 4×3) — reconhece o atirador como alvo desde o primeiro vencimento e para na hora,
+  // pelo mesmo motivo do describe acima: sem isto, o herói andaria a rota atrás de um alvo que
+  // ainda não está "ao alcance da arma", e o teste mediria o passo do herói, não o do monstro.
+  // `attackPower: 0` (pacifist): o atirador tem só 50 HP, e um herói parado batendo de verdade
+  // o mataria antes do monstro terminar de se aproximar.
+  const stationaryCombat = {
+    ...combat, player: { ...combat.player, attackRange: 3, attackPower: 0 },
+  };
+
+  it('fecha a distância além do próprio alcance de ability, até o targetDistance preferido', () => {
+    const loaded = buildContent(raw({
+      monsters: [longRangeShooter], hunts: [shooterHunt], combat: [stationaryCombat],
+    }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // Cantos opostos da sala (interior 1..4 × 1..3): distância Chebyshev 3 — dentro do alcance
+    // de ability (5), mas mais longe que o `targetDistance` (2). O mesmo ciclo de
+    // snapshot/retomada do describe acima refaz a ocupação do mundo a partir da posição nova.
+    hero.position = { x: 1, y: 1, z: 7 };
+    monster.position = { x: 4, y: 3, z: 7 };
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    const resumedHero = resumed.participants.find((p) => p.id === 'hero') as CharacterRuntime;
+    const resumedMonster = resumedRuleset.monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro após retomar');
+
+    run(resumed, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(resumedMonster.position.x - resumedHero.position.x),
+      Math.abs(resumedMonster.position.y - resumedHero.position.y),
+    );
+    // Exatamente no `targetDistance`: mais longe seria a aproximação parando cedo demais (o
+    // defeito revisado), mais perto disparia o ramo de recuo do #542 numa distância que já
+    // deveria estar estável.
+    expect(tiles).toBe(longRangeShooter.targetDistance);
+    expect(resumedHero.position).toEqual({ x: 1, y: 1, z: 7 });
   });
 });
 
@@ -7432,7 +8402,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     shape: { shape: 'circle', radius: 1, centered: 'caster' },
     condition: {
       key: 'fire', merge: 'refresh', durationMs: 20_000,
-      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        rounds: [{ count: 40, intervalMs: 500, damage: 10 }], damageType: 'fire',
+      },
     },
   };
 
@@ -7457,7 +8430,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
         id: 'venom', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'physical',
         condition: {
           key: 'venom', merge: 'refresh', durationMs: 3_000,
-          effect: { kind: 'damage-over-time', amount: 15, intervalMs: 500, damageType: 'earth' },
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 6, intervalMs: 500, damage: 15 }], damageType: 'earth',
+          },
         },
       }],
     };
@@ -7467,6 +8443,40 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     expect(hero.conditions.get('venom')).toBeNull();
     expect(session.ended).toBe('death');
     expect(session.aggregates.deaths).toBe(1);
+  });
+
+  it('a fila do Tibia esgota ANTES do vencimento: a condição fica com força ZERO, nunca um fantasma que `strongest` levaria em conta (#557)', () => {
+    // Duas rodadas de 500 ms (a fila inteira) cabem bem dentro da duração de 5000 ms — a fila
+    // esgota bem antes do vencimento natural. `cadenceMs` alto garante que a ability só dispara
+    // UMA vez na janela do teste, então o estado observado é sempre o de uma única aplicação.
+    const shortToxinRat = {
+      ...rat, health: 100_000, attack: 0,
+      abilities: [{
+        id: 'toxin', cadenceMs: 60_000, target: { range: 3 }, power: 0, damageType: 'physical',
+        condition: {
+          key: 'toxin', merge: 'strongest' as const, durationMs: 5_000,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 2, intervalMs: 500, damage: 80 }], damageType: 'earth' as const,
+          },
+        },
+      }],
+    };
+    const { session, hero } = withSpells(botConfig(), {
+      health: 1_000_000, monstersRaw: [shortToxinRat],
+    });
+    run(session, 3_000, 100);
+
+    const toxin = hero.conditions.get('toxin');
+    expect(toxin).not.toBeNull();
+    // Achado da revisão do #557: sem `retiredTick`, `tick` ficaria com o `amount` dos ÚLTIMOS 80
+    // já entregues e `queue` vazio — `strengthOf` reportaria 80 de força pendente que não
+    // existe mais, e a política `strongest` recusaria uma reaplicação real (mesmo mais fraca em
+    // `amount` bruto) pelo resto da duração. Com a correção, a força cai a zero — e o
+    // `nextTickAtMs` fantasma (#334) também não sobra, porque não há mais evento agendado.
+    expect(toxin?.tick?.amount).toBe(0);
+    expect(toxin?.tick?.queue).toEqual([]);
+    expect(toxin?.nextTickAtMs).toBeUndefined();
   });
 
   it('relançar a condição cancela o vencimento antigo; a morte cancela tudo', () => {
@@ -7589,7 +8599,10 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
       shape: { shape: 'circle', radius: 5, centered: 'caster' },
       condition: {
         key: 'wide-fire', merge: 'refresh', durationMs: 1_300,
-        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 3, intervalMs: 500, damage: 10 }], damageType: 'fire',
+        },
       },
     };
     const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
@@ -7647,6 +8660,123 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     const before = resumedHero.health;
     run(resumed, 1_000, 100);
     expect(resumedHero.health).toBeLessThan(before);
+  });
+});
+
+describe('monstro evita campo que não pode atravessar (M29-05)', () => {
+  // HP absurdo de propósito: o teste mede se ele SE MOVE, não se ele sobrevive à wand.
+  const fieldRat = { ...rat, id: 'field-rat', name: 'Field Rat', health: 100_000, canWalkOnFire: false };
+  // Rota mínima, SEM o herói passar perto do monstro: ele fica preso entre (1,1) e (2,1),
+  // sempre a 2 ou 3 tiles do monstro em (4,1) — nunca ao alcance do desarmado (1). O objetivo é
+  // isolar "o monstro tomou dano PRESO", sem o herói chegar perto o bastante para brigar corpo
+  // a corpo por acidente ao andar a rota inteira do resto do arquivo.
+  const stuckRoute = {
+    id: 'stuck-route', mapId: 'arena',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    spawnPoints: [{ routeIndex: 0 }],
+  };
+  const stuckHunt = {
+    ...hunt, routeId: 'stuck-route',
+    difficulties: {
+      cautious: {
+        monsterCount: 1, composition: [{ monsterId: 'field-rat', weight: 1 }], respawnDelayMs: 30_000,
+      },
+      bold: {
+        monsterCount: 1, composition: [{ monsterId: 'field-rat', weight: 1 }], respawnDelayMs: 30_000,
+      },
+    },
+  };
+  // Alcance 3, o bastante para bater no monstro PRESO sem o herói precisar se aproximar.
+  const rangeWand = {
+    id: 'range-wand', name: 'Range Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
+    weapon: { kind: 'wand', range: 3, manaPerHit: 5, damage: { min: 30, max: 30 }, damageType: 'physical' },
+  };
+  const wallOfFire: FieldSpec = {
+    id: 'wall', durationMs: 9_999_999,
+    shape: { shape: 'beam', length: 3 },
+    condition: {
+      key: 'burning', merge: 'refresh', durationMs: 9_999_999,
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        // Intervalo enorme: o tique do CAMPO nunca vence dentro da janela do teste — o único
+        // dano que pode armar o bypass é o da wand, nunca o do próprio campo.
+        rounds: [{ count: 1, intervalMs: 9_999_999, damage: 1 }], damageType: 'fire',
+      },
+    },
+  };
+
+  /**
+   * Um monstro `canWalkOnFire: false` em (4,1), rumo ao herói a oeste: o passo guloso tenta
+   * (3,1) [primário], (3,0) [vizinho horário — já é parede do MAPA] e (3,2) [anti-horário]. Um
+   * `beam` de 3 tiles partindo de (3,0) para o sul cobre exatamente (3,1) e (3,2) — as DUAS
+   * tentativas que a parede do mapa não cobre sozinha —, deixando o monstro sem NENHUMA rota.
+   */
+  const setup = (armed: boolean) => {
+    const loaded = content({
+      monsters: [fieldRat], routes: [stuckRoute], hunts: [stuckHunt],
+      items: armed ? [...items, rangeWand] : items,
+    });
+    const { session, hero, ruleset } = start({
+      loaded,
+      ...(armed ? {
+        inventory: {
+          backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'range-wand', quantity: 1 } },
+        },
+      } : {}),
+    });
+    if (armed) { hero.mana = 10_000; hero.maxMana = 10_000; }
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { x: 4, y: 1, z: 7 };
+    ruleset.applyField(session, wallOfFire, { x: 3, y: 0, z: 7 });
+    return { session, hero, ruleset };
+  };
+
+  it('sem arma de alcance, o herói nunca alcança o monstro preso — ele fica atrás do fogo para sempre', () => {
+    const { session, ruleset } = setup(false);
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Só o `x` importa: o monstro pode oscilar em y dentro da própria coluna sem NUNCA cruzar a
+    // parede (em x=3), e é isso — não a posição inteira — que prova que ele não atravessou.
+    expect(monster?.position.x).toBe(4);
+    expect(monster?.lastStepBlocked).toBe(true);
+    expect(monster?.ignoresFieldDamage).toBe(false);
+  });
+
+  it('com uma wand de alcance 3, o dano à distância concede UMA passagem pelo fogo (TFS/Canary `ignoreFieldDamage`)', () => {
+    const { session, ruleset } = setup(true);
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4.
+    expect(monster?.position.x).toBeLessThan(4);
+  });
+
+  it('o tique de um campo que ele PODE pisar (veneno) também concede a passagem pelo fogo que o prende (achado da revisão do #650)', () => {
+    // O rato só recusa FOGO (`canWalkOnFire: false`) — veneno (`earth`) continua livre, e é
+    // exatamente onde ele está PARADO, preso atrás da parede de fogo. Nenhuma wand, nenhum
+    // herói perto: o ÚNICO dano deste teste é o tique periódico do próprio campo de veneno, pelo
+    // caminho de `HuntRuleset#applyConditionTick`/`#onFieldTick` — não `#applyHits`/`#land`.
+    const puddleOfPoison: FieldSpec = {
+      id: 'puddle', durationMs: 9_999_999,
+      shape: { shape: 'beam', length: 1 },
+      condition: {
+        key: 'poisoned', merge: 'refresh', durationMs: 9_999_999,
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 1_000, intervalMs: 500, damage: 5 }], damageType: 'earth',
+        },
+      },
+    };
+    const { session, ruleset } = setup(false);
+    // `beam` de comprimento 1 partindo de (4,0) rumo ao sul cobre só (4,1) — o tile do próprio
+    // monstro —, sem tocar nenhum dos dois tiles da parede de fogo na coluna x=3.
+    ruleset.applyField(session, puddleOfPoison, { x: 4, y: 0, z: 7 });
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4 — o mesmo
+    // mecanismo do teste da wand acima, agora armado pelo tique de campo, não por um golpe.
+    expect(monster?.position.x).toBeLessThan(4);
   });
 });
 
@@ -7709,6 +8839,113 @@ describe('outcomes avançados na hunt (CMB-08)', () => {
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
       .toBe(false);
+  });
+
+  // M30-04 (#551): a MESMA mecânica, agora pelo EQUIPAMENTO (`Inventory.combatModifiers`), não
+  // pelo `combat.modifiers` estático do conteúdo — a fonte real que o item catalogado usa.
+  const critLeechInventory: InventoryState = {
+    backpack: [],
+    equipped: { finger: { instanceId: 'r1', itemId: 'crit-leech-ring', quantity: 1 } },
+  };
+
+  it('anel de crítico/leech (item, M30-04) tem o MESMO efeito do `combat.modifiers` estático', () => {
+    // Desarmado 25 ×2 (crit-leech-ring) = 50, a vida do rato: um golpe, e o leech de 50 % repõe
+    // 25 — os mesmos números do teste do `combat.modifiers`, agora vindos do equipamento.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, items: [...items], inventory: critLeechInventory,
+      monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    const before = hero.health;
+    run(session, 5_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.bestBasicHit).toBeGreaterThanOrEqual(50);
+    expect(hero.health).toBe(before + 25);
+    const healed = ofKind(session.drainEvents(), 'creature-healed')
+      .filter((e) => e.source === 'leech');
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed[0]).toMatchObject({ creatureId: 'hero', amount: 25 });
+  });
+
+  it('tirar o anel apaga o crítico/leech — o bônus é só enquanto VESTIDO', () => {
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, items: [...items], inventory: critLeechInventory,
+      monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    });
+    hero.inventory.unequip('finger', { backpackSlots: 0, satchelSlots: 10, row: 1 });
+    const before = hero.health;
+    run(session, 3_000, 100);
+    // Sem o anel, o golpe desarmado é 25 — nunca crítico, e sem leech nenhum.
+    expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
+      .toBe(false);
+    expect(hero.health).toBe(before);
+  });
+
+  it('a magia TAMBÉM rola o crítico do equipamento (M30-04) — não só o golpe básico', () => {
+    // `strike` (fire, poder 40) ×2 pelo anel = 80 num rato tanque, sem armadura: TODO golpe de
+    // magia crítica exatamente 80 — a chance é 100 %, então nenhum sai a 40.
+    const { session } = withSpells(botConfig({
+      attack: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' } }],
+    }), {
+      health: 100, mana: 1_000, items: [...items], inventory: critLeechInventory,
+      monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    });
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const hits = ofKind(events, 'creature-hit')
+      .filter((e) => String(e.creatureId).startsWith('m:') && e.source === 'spell');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.amount === 80)).toBe(true);
+  });
+
+  // `attackPower: 0` (só nestes dois testes, via `over.combat`) desliga o auto-ataque
+  // desarmado (`#armPlayerAttack`, sempre ativo — Tibia ataca corpo a corpo independente da
+  // rotação de magia do bot): sem isso, o golpe desarmado também criticaria com o mesmo anel e
+  // misturaria leech de outra origem nos mesmos eventos, cada vez maior conforme a skill
+  // `melee` sobe de nível durante a corrida. Zerado, ele nunca aplica dano e nunca gera leech —
+  // só a magia (`blast`) permanece.
+  const noMeleeCombat = [{ ...combat, player: { ...combat.player, attackPower: 0 } }];
+
+  it('leech de UM alvo (magia) é a identidade — fator (0,1×1+0,9)/1 = 1', () => {
+    const blastRule = {
+      when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
+      do: { kind: 'spell' as const, spellId: 'blast' },
+    };
+    const { session } = withSpells(botConfig({ attack: [blastRule] }), {
+      health: 100, mana: 2_000, items: [...items], inventory: critLeechInventory,
+      combat: noMeleeCombat, monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    }, 'cautious');
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const healed = ofKind(events, 'creature-healed').filter((e) => e.source === 'leech');
+    // O MESMO anel também critica (M30-04): 80 de `blast` ×2 = 160 de dano aplicado. Leech
+    // 50 % × fator 1 (um alvo só) = 80, sempre — cada lançamento acerta o mesmo alvo único.
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed.every((e) => e.amount === 80)).toBe(true);
+  });
+
+  it('leech de TRÊS alvos (magia em área) usa o fator do Canary, NÃO uma divisão simples', () => {
+    // `blast` (poder 80, raio 2) na dificuldade "bold": três ratos no mesmo ponto de nascimento,
+    // todos no raio (o mesmo cenário do teste "o maior hit de magia é POR ALVO"). O MESMO anel
+    // também critica: 80 ×2 = 160 de dano aplicado POR ALVO. O fator para n=3 é
+    // (0,1×3+0,9)/3 = 0,4, não 1/3 ≈ 0,333 — cada golpe de 160×50 % rende 32, não ~26,7.
+    const blastRule = {
+      when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
+      do: { kind: 'spell' as const, spellId: 'blast' },
+    };
+    const { session } = withSpells(botConfig({ attack: [blastRule] }), {
+      health: 100, mana: 2_000, items: [...items], inventory: critLeechInventory,
+      combat: noMeleeCombat, monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    }, 'bold');
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const healed = ofKind(events, 'creature-healed').filter((e) => e.source === 'leech');
+    // Um evento de leech POR ALVO, sempre 32 — nunca 26 (o quociente ingênuo de 160×50 %/3).
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed.every((e) => e.amount === 32)).toBe(true);
   });
 });
 describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {
@@ -8920,5 +10157,238 @@ describe('hunt multiandar (#519)', () => {
     session.advanceBy(10);
     expect(ruleset.monsters).toHaveLength(1);
     expect(ruleset.monsters[0]?.position).toEqual({ x: 1, y: 2, z: 6 });
+  });
+});
+
+describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
+  /** Conta toda rolagem de `Rng.integer` — o mesmo mecanismo do `CountingRng` acima, usado aqui
+   * para provar "a criatura sem drunk não consome sorteio" e "cada passo com drunk rola UMA vez
+   * só" diretamente, em vez de inferir pela taxa. */
+  class CountingRng extends Rng {
+    integerCalls = 0;
+
+    override integer(min: number, max: number): number {
+      this.integerCalls += 1;
+      return super.integer(min, max);
+    }
+  }
+
+  /**
+   * Sessão MANUAL (o mesmo molde da "conformidade de RNG" acima) para poder trocar o `Rng` por
+   * um que conta — `start()`/`createHuntSession` sempre derivam a semente do id da sessão.
+   * `aggroRadius: 0` isola o teste do PASSO: sem `session.advanceBy` nenhuma, o `Spawner` nunca
+   * chega a nascer o rato (o mesmo truque do describe de paralyze/haste, CMB-11, que já usa
+   * `requestMove` sem avançar tempo nenhum) — só o `walk` do socket roda, e ele passa pelo MESMO
+   * `#step` que o bot e o monstro (ADR 0041 decisão 3).
+   */
+  function manualSession(rng: Rng): { session: Session; hero: CharacterRuntime; ruleset: HuntRuleset } {
+    const loaded = content({ monsters: [{ ...rat, aggroRadius: 0 }] });
+    const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+    const session = new Session({
+      id: 'drunk-558', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+    });
+    const hero = character();
+    session.enter(hero);
+    return { session, hero, ruleset };
+  }
+
+  /** Anda para leste até a parede, depois para oeste até a outra — nunca pede um tile fora do
+   * quarto (a sala de `map` é `x: 1..4, y: 1..3`), então toda RECUSA observada num passo SEM
+   * desvio seria um bug nosso, não do teste. */
+  function bounce(hero: CharacterRuntime, dx: { value: number }): { readonly x: number; readonly y: number } {
+    if (hero.position.x <= 1) dx.value = 1;
+    else if (hero.position.x >= 4) dx.value = -1;
+    return { x: hero.position.x + dx.value, y: hero.position.y };
+  }
+
+  it('sem drunk, requestMove nunca consome sorteio nem desvia', () => {
+    const rng = new CountingRng(Rng.fromSeed('drunk-none').getState());
+    const { session, hero, ruleset } = manualSession(rng);
+    const dx = { value: 1 };
+    for (let i = 0; i < 200; i += 1) {
+      const target = bounce(hero, dx);
+      const result = ruleset.requestMove(session, hero.id, target);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.to).toEqual({ ...target, z: 7 });
+    }
+    expect(rng.integerCalls).toBe(0);
+  });
+
+  it('com drunk, cada passo rola exatamente UMA vez; o passo desviado bloqueado falha sem mover', () => {
+    const rng = new CountingRng(Rng.fromSeed('drunk-active').getState());
+    const { session, hero, ruleset } = manualSession(rng);
+    hero.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+
+    const dx = { value: 1 };
+    const total = 4_000;
+    let deviated = 0;
+    for (let i = 0; i < total; i += 1) {
+      const target = bounce(hero, dx);
+      const before = { ...hero.position };
+      const rollsBefore = rng.integerCalls;
+      const result = ruleset.requestMove(session, hero.id, target);
+      // Exatamente um sorteio por PASSO — a criatura tem drunk, então `#step` sempre rola, com
+      // sucesso ou não (a criatura SEM drunk do teste acima nunca rola nenhum).
+      expect(rng.integerCalls).toBe(rollsBefore + 1);
+      if (!result.ok) {
+        deviated += 1;
+        // O critério da issue: o passo desviado para um tile bloqueado FALHA e NÃO move —
+        // exatamente como `move()` já se comporta para qualquer outra recusa.
+        expect(hero.position).toEqual(before);
+        continue;
+      }
+      if (result.to.x !== target.x || result.to.y !== target.y) deviated += 1;
+    }
+    // A taxa EXATA (4/61 do enum do Canary) tem o teste de unidade dela em `conditions.test.ts`,
+    // sem ruído nenhum; aqui o que se mede é a integração — o desvio realmente ACONTECE pelo
+    // `#step` de verdade, e os dois ramos (livre/bloqueado) aparecem. A faixa é larga de
+    // propósito: quando a direção sorteada COINCIDE com a direção que o bounce já ia tomar
+    // (1 dos 4 cardeais, 1/61 dos casos), o desvio não é OBSERVÁVEL na posição — a taxa
+    // observada verdadeira é ~3/61 (4,9 %), não ~4/61 (6,6 %); a margem cobre as duas sem
+    // deixar passar uma rolagem com bounds errados (que erraria por uma ordem de grandeza).
+    expect(deviated).toBeGreaterThan(0);
+    expect(deviated / total).toBeGreaterThan(0.02);
+    expect(deviated / total).toBeLessThan(0.12);
+  });
+
+  it('o bot NUNCA rola drunk duas vezes no MESMO vencimento, mesmo com o contorno de companheiro (#651)', () => {
+    // Achado da revisão do #651: o teste acima só cobre `requestMove` (`#step` UMA vez por
+    // chamada) — mas `#playerStep`, o passo do PRÓPRIO bot, pode chamar `#step` uma SEGUNDA vez
+    // no MESMO vencimento quando o próximo tile da rota está ocupado por um COMPANHEIRO parado
+    // (#203): o contorno via `greedyStep` tenta de novo. Sem a correção, a segunda chamada
+    // rolava drunk de novo — um vencimento só de `PLAYER_STEP` consumindo DOIS sorteios
+    // independentes. O próprio Canary nunca faz isso: quando o passo primário de
+    // `Monster::doFollowCreature`/`doWalkBack` (`monster.cpp`) falha, o fallback
+    // (`getDanceStep`/`getRandomStep`) NUNCA volta a chamar `Creature::getNextStep`/`onWalk` —
+    // o sorteio é UM por DECISÃO de movimento, nunca um por tentativa física de chegar lá.
+    class ScriptedDrunkRng extends Rng {
+      drunkRolls = 0;
+
+      override integer(min: number, max: number): number {
+        if (min === 0 && max === 60) {
+          this.drunkRolls += 1;
+          // Sempre > DIRECTION_DIAGONAL_MASK (4): nunca desvia nem fala, então o alvo original
+          // não muda entre rolagens — o companheiro trava o MESMO tile em toda tentativa. Este
+          // teste mede a CONTAGEM de sorteios, não a taxa de desvio (já coberta acima).
+          return 10;
+        }
+        return super.integer(min, max);
+      }
+    }
+    const rng = new ScriptedDrunkRng(Rng.fromSeed('drunk-companion-651').getState());
+    // Sem `spawnPoints`: nenhum monstro nasce para interferir — só a geometria de rota e
+    // companheiro importa aqui.
+    const loaded = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+    const session = new Session({
+      id: 'drunk-companion-651', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+    });
+    const hero = character();
+    const blocker = new CharacterRuntime({ ...character().getState(), id: 'blocker' });
+    session.enter(hero);
+    session.enter(blocker);
+    // `placeNear`/`tilesAround` (#203) colocam o SEGUNDO participante no tile LIVRE mais
+    // próximo do início da rota, em ordem fixa de anel — para esta sala e esta rota, isso é
+    // exatamente (2,1): o PRÓXIMO tile da rota do herói. Confirma a premissa da geometria antes
+    // de travar o bloqueador nela — se o algoritmo de posicionamento mudar, este teste falha
+    // aqui, alto e claro, em vez de silenciosamente deixar de cobrir o ramo que existe para
+    // testar.
+    expect(blocker.position).toEqual({ x: 2, y: 1, z: 7 });
+    // Trava o bloqueador ONDE está: sem passo próprio, ele nunca sai da frente sozinho (o mesmo
+    // `stand()` do describe de follow, mais abaixo, sem precisar importar o helper de lá).
+    session.cancelEvent('player-step', 'blocker');
+    hero.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+
+    // UM vencimento do PLAYER_STEP do herói: a rota pede (2,1), o bloqueador está lá, o ramo de
+    // contorno (`#companionAt`/`greedyStep`) chama `#step` uma segunda vez.
+    session.advanceBy(1);
+
+    expect(rng.drunkRolls).toBe(1);
+    // O contorno realmente rodou: o herói saiu de (1,1) para um tile ADJACENTE que não é o do
+    // bloqueador — a prova de que o ramo certo foi exercitado, não só "nada aconteceu".
+    expect(hero.position).not.toEqual({ x: 1, y: 1, z: 7 });
+    expect(hero.position).not.toEqual(blocker.position);
+  });
+
+  it('o MONSTRO com drunk também desvia (ADR 0041 decisão 3, invariante 11) — mesmo `#step`', () => {
+    // O teste acima já prova a mecânica no PERSONAGEM; este prova o outro lado do invariante 11:
+    // o passo do PRÓPRIO monstro, guiado pela IA (nunca pelo bot do jogador), passa pelo MESMO
+    // `#step` — `#drunkTarget` confere `Conditions`, que personagem e monstro têm igual, sem
+    // tratamento por tipo de criatura.
+    //
+    // A `map`/`route` da fixture do arquivo é PEQUENA demais para este teste: o spawn nasce a
+    // distância 3 do herói e o passo guloso do monstro é DIAGONAL (#9, oito direções) — o
+    // primeiro `MONSTER_STEP` (agendado com atraso ZERO no nascimento) já fecha a distância até
+    // adjacente, ANTES de o teste conseguir aplicar drunk depois do `advanceBy` que faz o rato
+    // nascer. Um mapa MAIOR, com o spawn bem mais longe do herói, garante distância sobrando
+    // depois desse primeiro passo "de graça" — o suficiente para vários passos DEPOIS de drunk
+    // aplicado.
+    const bigMap = {
+      id: 'big-arena', z: 7,
+      grid: [
+        '################',
+        ...Array.from({ length: 14 }, () => '#..............#'),
+        '################',
+      ],
+    };
+    const bigRoute = {
+      id: 'big-arena-loop', mapId: 'big-arena',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+      spawnPoints: [{ routeIndex: 0, radius: 1, at: { x: 14, y: 14, z: 7 }, monsterId: 'rat' }],
+    };
+    const bigHunt = {
+      id: 'big-arena', name: 'Big Arena', recommendedLevel: 1,
+      mapId: 'big-arena', routeId: 'big-arena-loop',
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+        },
+      },
+    };
+    class FilteringRng extends Rng {
+      drunkRolls = 0;
+
+      override integer(min: number, max: number): number {
+        // `rollDrunkDeviation` é o ÚNICO chamador deste pacote que pede exatamente [0, 60] —
+        // dano, alcance e índice de alvo usam faixas bem menores nesta fixture.
+        if (min === 0 && max === 60) this.drunkRolls += 1;
+        return super.integer(min, max);
+      }
+    }
+    // `aggroRadius` grande cobre o mapa inteiro. HP absurdo (a mesma fixture `paralyzingRat` do
+    // CMB-11 acima): o herói ataca sozinho pelo reflexo de "alguém ao alcance", e um rato de 50
+    // HP morreria assim que chegasse perto — o RESPAWN traria um monstro NOVO sem a condição que
+    // este teste aplicou à mão, confundindo exatamente o que ele mede.
+    const loaded = content({
+      monsters: [{ ...rat, aggroRadius: 50, health: 100_000 }],
+      maps: [bigMap], routes: [bigRoute], hunts: [bigHunt],
+    });
+
+    const withoutDrunk = new FilteringRng(Rng.fromSeed('monster-drunk-a').getState());
+    const rulesetA = createHuntRuleset(loaded, 'big-arena', 'cautious');
+    const sessionA = new Session({
+      id: 'monster-drunk-a', contentVersion: loaded.version, ruleset: rulesetA,
+      rng: withoutDrunk, createdAtMs: 0,
+    });
+    sessionA.enter(character());
+    run(sessionA, 20_000, 200);
+    expect(withoutDrunk.drunkRolls).toBe(0);
+
+    const withDrunk = new FilteringRng(Rng.fromSeed('monster-drunk-b').getState());
+    const rulesetB = createHuntRuleset(loaded, 'big-arena', 'cautious');
+    const sessionB = new Session({
+      id: 'monster-drunk-b', contentVersion: loaded.version, ruleset: rulesetB,
+      rng: withDrunk, createdAtMs: 0,
+    });
+    sessionB.enter(character());
+    sessionB.advanceBy(10); // o rato nasce e dá o primeiro passo (sem drunk ainda).
+    const monster = rulesetB.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    // Ainda longe do herói (spawn a distância 13 do início da rota) — sobra passo de sobra
+    // depois do primeiro "de graça" para provar o desvio com drunk já ativo.
+    expect(monster.health).toBe(100_000);
+    monster.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+    run(sessionB, 20_000, 200);
+    expect(withDrunk.drunkRolls).toBeGreaterThan(0);
   });
 });

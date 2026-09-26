@@ -1,6 +1,11 @@
 # 0043 — Sustento do Tibia: stamina de 42 h com faixas e regeneração só com comida
 
-**Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
+**Status:** proposto; decisão 1 (teto de stamina) revisada em 2026-09-25 de 42 h para **12 h**
+(Huntera) — o TETO já **implementado** em M32-01 (#562); decisão 2 (recuperação por faixa 1:3/1:6)
+NÃO adotada — mantém 1:1 provisório até captura; decisão 3 (regeneração só com comida) **REVERTIDA** em 2026-09-25 — regeneração ligada
+só a "estar em hunt", sem comida (Huntera); questão do bônus de level baixo RESOLVIDA em
+2026-09-25 a favor da forma multiplicativa decrescente do Huntera, não do aditivo fixo do
+TFS/Canary (ver emenda) — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 decisão 1; revisita a decisão de 2026-09-18 ("sem regen por comida", anterior ao ADR 0037) e o
 adiamento de comida do [ADR 0032](0032-the-rendered-hud-is-the-game-contract.md); bloqueada por
 três questões em aberto (ver seção própria)
@@ -57,6 +62,11 @@ corte em `>= 1200`).
 
 ## Questões em aberto (decisão do dono)
 
+**Nota (2026-09-25):** a emenda no fim deste documento resolve ou revisa as três questões abaixo
+à luz da resposta do dono ("copie do Huntera") — teto de stamina, forma da regeneração e forma do
+bônus de level baixo. O texto original abaixo é preservado como registro do que estava em aberto
+até a resposta.
+
 - **A Cidade conta como offline para a recuperação 1:3 (até 2.340) / 1:6 (até 2.520), com 10 min
   de carência? O 1,5× de XP fica só para Premium, como no Canary? E o impacto no teto de sessões
   do ADR 0001 precisa ser medido antes do deploy?** As três perguntas vêm juntas porque a razão
@@ -105,3 +115,88 @@ corte em `>= 1200`).
 Nenhum muda de texto. O invariante 2 (nada por tick) é quem exige que a stamina continue calculada
 sob demanda, mesmo com faixas novas. O invariante 11 é quem decide a questão do bot comer sozinho
 sem tratamento especial.
+
+## Emenda — 2026-09-25: decisões do dono ("copie do Huntera") — teto de 12 h, sem comida, bônus de level multiplicativo
+
+Em 2026-09-25 o dono respondeu as doze questões abertas do `docs/tibia-parity-plan.md` §5 com
+"copie do Huntera": onde o Huntera (o Tibia-idle observado em `docs/reference/huntera-observed.md`)
+foi observado fazendo algo, a decisão segue o Huntera; onde não foi observado, a regra provisória
+permanece e a captura fica registrada (`docs/tibia-parity-plan.md` §6). Esta emenda toca as
+questões 4, 5 e 11 do plano.
+
+### Stamina (questão 4; decisões 1 e 2 acima)
+
+O Huntera mostra teto de stamina de **12 h** (`staminaMs: 43.200.000`, cheio na Cidade — Parte II
+§15, linhas 361-362) e drena **1:1** com o tempo de hunt — a tela do personagem diz "a stamina
+drena 1 min por minuto de caçada" (Parte I §8, linha 147).
+
+**Decisão:** o teto muda de 2.520 min (42 h, decisão 1 acima) para **720 min (12 h,
+43.200.000 ms)**. O consumo em hunt já era 1:1 dos dois lados — nenhuma mudança aí. A
+recuperação por faixa (1:180 s até 2.340 min, depois 1:360 s até 2.520, decisão 2 acima) **não é
+adotada**: nenhuma captura do Huntera mediu a razão de recuperação passiva (offline/Cidade), e as
+faixas do Canary foram calculadas contra um teto de 42 h que esta emenda está abandonando —
+aplicá-las a um teto de 12 h exigiria reescalar sem fonte para o novo número. Fica **mantida a
+recuperação atual do Draconya, 1:1**, como valor provisório, com a fórmula real marcada
+`[ABERTO]` em `docs/product/stamina.md` até uma captura medir. Pela mesma razão, os limiares de
+faixa de XP (1,5× acima de 2.340 min, só Premium; 0,5× em 840 min ou menos) e o corte de loot em
+840 min ficam também `[ABERTO]`: são números do Canary calculados contra o teto de 42 h — não
+confirmados pelo Huntera (a conta capturada tinha "Bônus de Premium" inativo, `—`, Parte I §5
+linha 88) — e não fazem sentido sem reescalonamento contra os novos 720 min.
+
+Fica registrado, à parte e sem decisão própria ainda, um mecanismo do Huntera sem equivalente
+declarado em nenhuma das duas fontes: `player-stats` expõe
+`staminaRefillCost`/`staminaRefillGainMs`/`staminaRefillsLeft` (Parte II §15, linhas 362-363) —
+uma recarga paga e limitada em quantidade. A moeda de `staminaRefillCost` nunca apareceu como
+gold especificamente na captura.
+
+### Comida e regeneração (questão 5; decisão 3 acima) — REVERTIDA
+
+A tela de personagem do Huntera diz, duas vezes: "Regeneração de vida: só em caçadas" e
+"Regeneração de mana: só em caçadas" (Parte I §4, linhas 71-72). O socket confirma
+estruturalmente: `player-stats.healthRegen`/`manaRegen` é 10/5 em hunt e exatamente zero na
+Cidade, sem campo de condição de comida (Parte II §15, linha 353). O único item parecido com
+comida na captura (queijo, item 3607) só sobe de contagem por loot ao longo de toda a captura —
+nunca desce (Parte III §18-19, linhas 395-441) — consistente com nunca ser consumido como regen.
+
+**Decisão:** reverte a decisão 3 acima. Regeneração de vida/mana é condicionada só a "estar em
+hunt agora" — ligada dentro da hunt, zero na Cidade —, sem condição de comida, sem item de comida
+no inventário, sem estoque abstrato de comida. Isto restaura a postura de 2026-09-18 ("sem regen
+por comida"), anterior ao ADR 0037, agora com evidência direta do Huntera em vez de ser uma
+escolha sem fonte. `docs/product/stamina.md` não ganha item de comida em `content/items`; a
+questão em aberto acima ("comida abstrata vs. física") fica sem objeto — não há comida para
+decidir a forma.
+
+Confiança: alta — duas confirmações independentes (texto da tela + campo do socket) mais uma
+ausência explícita no tráfego de item decodificado. **Captura residual de baixa prioridade:**
+varrer o `catalog-content.json` (4.175 itens) por qualquer item marcado como consumível de
+comida/regen, para descartar por completo um subsistema não usado.
+
+### Bônus de level baixo (questão 11; a mesma que bloqueava M32-02/#563)
+
+O Huntera aplica um "Bônus de level": um multiplicador percentual sobre o ganho de XP, maior no
+level baixo e decrescente devagar por level. Medido diretamente: level 1 = **+200%**, level 2 =
+**+199%**, level 3 = **+197%** (Parte I §9, linhas 174-188); uma captura posterior, em outro
+personagem, mostra `levelBonusPercent: 192` no level 7 (Parte II §15, linha 358) — consistente
+com a mesma decadência lenta.
+
+**Decisão:** implementar o formato do Huntera — um campo `levelBonusPercent`, decrescente e
+MULTIPLICATIVO sobre a XP — em vez do `lowLevelBonusExp = 50` fixo e ADITIVO do TFS/Canary (até
+level 50) que a questão em aberto original estava pesando. Isto desbloqueia M32-02 (#563) com um
+mecanismo concreto. A curva exata e o level em que ela chega a zero não podem ser derivados de só
+quatro pontos (L1=200%, L2=199%, L3=197%, L7=192%) — implementar provisoriamente com uma curva
+ajustada a esses pontos, com a fórmula exata marcada `[ABERTO]` em `docs/product/progression.md`.
+
+Confiança: alta para a FORMA do mecanismo (multiplicativo, decrescente, observado em quatro
+levels distintos ao longo de duas sessões de captura); a fórmula exata precisa de mais pontos.
+
+### Captura pendente (consolidada)
+
+- **Stamina:** observar `staminaMs` de um personagem do Huntera parado/desconectado na Cidade por
+  uma janela medida de tempo real (30-60 min) para calcular a razão de recuperação passiva, e
+  repetir numa conta Premium para ver se teto, razão ou alguma faixa de XP muda com o status.
+  Checar em que moeda `staminaRefillCost` é cobrado.
+- **Bônus de level:** capturar `levelBonusPercent` em mais levels — sobretudo por volta de 20 e
+  50 — e onde ele chega a 0% ou a um piso.
+
+(Evidência: `docs/reference/huntera-observed.md` Parte I §3 linhas 57, 62-65; §4 linhas 71-77;
+§5 linhas 81-88; §8 linha 147; §9 linhas 174-188; Parte II §15 linhas 352-363.)

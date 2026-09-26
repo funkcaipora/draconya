@@ -98,6 +98,14 @@ sessão (invariante 8): "a hunt acabou" nunca pode significar "ficou sem sessão
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
 
+- **Perda de item na morte** `[ABERTO]`: o [ADR 0042](../adr/0042-tibia-death-promotion-blessings-and-item-loss.md)
+  propõe destruir o item perdido e registrar no extrato (invariante 10), em vez de "nunca perde
+  item" (§3.8 acima). A resposta do dono de 2026-09-25 ("copie do Huntera") não encontrou nenhuma
+  morte de personagem em `docs/reference/huntera-observed.md` — o documento nunca captura uma
+  morte —, então esta questão não tem evidência do Huntera para se apoiar e segue exatamente como
+  o ADR 0042 a deixou: em aberto, aguardando decisão do dono, não uma captura. `docs/tibia-parity-plan.md`
+  §6 lista o que uma captura de morte precisaria mostrar, se uma acontecer.
+
 ## Divergências do PRD
 
 **A penalidade mora em `progression/baseline.json`, não num arquivo de economia.** Ela é definida

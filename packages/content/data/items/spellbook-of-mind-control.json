@@ -6,6 +6,7 @@
   "weight": 24.5,
   "value": 2000,
   "defense": 16,
+  "spellbook": true,
   "requires": {
     "level": 50,
     "vocationId": ["sorcerer", "druid"]
@@ -13,5 +14,5 @@
   "bonuses": {
     "skill": { "skillId": "magic", "amount": 2 }
   },
-  "_open": "Kit level 200 (#524), Sorcerer e Druid — o \"escudo\" que se veste com wand/rod na outra mão (slot `shield` no Canary, `weaponType=\"spellbook\"`). Defense 16, weight 2450 (24,5 oz), level 50 e `magiclevelpoints` +2 do `items.xml` id 8074 (`Sorcerer;true, Druid;true, Master Sorcerer, Elder Druid`). Soma +2 na skill `magic` (FUN-92), o dobro do Hat of the Mad/Focus Cape. `value` 2000: Haroun compra por esse preço (TibiaWiki via tibiascape.com/library/items/spellbook-of-mind-control)."
+  "_open": "Kit level 200 (#524), Sorcerer e Druid — o \"escudo\" que se veste com wand/rod na outra mão (slot `shield` no Canary, `weaponType=\"spellbook\"`). Defense 16, weight 2450 (24,5 oz), level 50 e `magiclevelpoints` +2 do `items.xml` id 8074 (`Sorcerer;true, Druid;true, Master Sorcerer, Elder Druid`). Soma +2 na skill `magic` (FUN-92), o dobro do Hat of the Mad/Focus Cape. `value` 2000: Haroun compra por esse preço (TibiaWiki via tibiascape.com/library/items/spellbook-of-mind-control). `spellbook: true` (#549, M30-02) é o `Item::isSpellBook` do Canary — em `playerMitigation`, usa o `secondaryShield` da vocação como `distanceFactor` em vez do `primaryShield`."
 }

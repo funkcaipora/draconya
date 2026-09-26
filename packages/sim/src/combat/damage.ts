@@ -18,6 +18,9 @@ import { COMBAT_PROFILES } from '@draconya/content';
 import type { Combat, CompiledMitigation, DamageModifiers, DamageType } from '@draconya/content';
 import { resolveDefense } from './defense.js';
 import type { DefenseSource } from './defense.js';
+import { FULL_BLOCK_CHARGE, type BlockChargeState } from './block-charge.js';
+import { MELEE_BLOCK_FLAGS, resolveBlockHit } from './blockhit.js';
+import type { BlockFlags } from './blockhit.js';
 import type { Rng } from '../rng.js';
 
 /**
@@ -40,8 +43,44 @@ export interface Defender {
   /**
    * A fonte de defesa do defensor (CMB-04): escudo, arma de uma mão, ou nenhuma. Ausente é
    * `none`, e é o que preserva o v1 — o estágio é identidade e não consome sorteio.
+   *
+   * O `combat-v3` (#548) REUSA o `defense.defense` numérico daqui como a magnitude do estágio
+   * novo (`blockhit.ts`) — "o jogador defensor usa os números atuais de defesa e armadura até
+   * o M30-02" — e ganha o `kind: 'monster'` para a defesa inata do monstro (`Monster.defense`,
+   * sem peça nenhuma envolvida).
    */
   readonly defense?: DefenseSource | undefined;
+  /**
+   * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): em [0, 30] para
+   * um MONSTRO que declara — a QUEM não declara (e a todo defensor em `combat-v1`/`v2`, onde o
+   * campo é ignorado), ausente vale `0`. Aplicada por ÚLTIMO no estágio novo, sobre QUALQUER
+   * tipo, exceto lifedrain e manadrain (#547, M29-07, a exceção do Canary — `mitigationExempt`
+   * em `blockhit.ts`). Desde o #549 (M30-02) o JOGADOR sob `combat-v3` NÃO cai mais neste
+   * "ausente": ele sempre chega aqui com um percentual REAL, calculado por `playerMitigation`
+   * (sem o teto de 30 do schema do monstro — a fórmula do jogador não tem esse limite).
+   */
+  readonly defenseMitigation?: number | undefined;
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548, `blockCount` do Canary — `block-charge.ts`).
+   * Ausente é `FULL_BLOCK_CHARGE`: o defensor que nunca bloqueou ainda (as duas cargas já
+   * disponíveis, o caso comum — ver o comentário de `FULL_BLOCK_CHARGE`). Ignorado em
+   * `combat-v1`/`v2`. Só a chamada de `applyDamageOutcome` (CMB-08) ESCREVE o estado novo de
+   * volta no personagem ou monstro dono (invariante 9); este resolver é puro e só o CALCULA.
+   */
+  readonly blockCharge?: BlockChargeState | undefined;
+  /**
+   * A MANA atual do defensor (#547, M29-07 — achado da revisão do PR #648): só existe para
+   * quem TEM mana (`CharacterRuntime`), e só importa para um golpe `manadrain`. O Canary
+   * calcula `manaLoss = min(mana atual, -manaChange)` ANTES de rodar `blockHit` — isto é, ANTES
+   * da resistência/absorção (`applyAbsorbDamageModifications`, `game.cpp:9175-9176`) — e não
+   * depois, como um dreno normal seria tentado a fazer. Sem este campo, `resolveBlockHitProfile`
+   * aplicaria a resistência sobre o poder BRUTO e só limitaria à mana no fim
+   * (`applyDamageOutcome`), dobrando o dreno sempre que a mana disponível for menor que o poder
+   * bruto e o alvo tiver resistência a `manadrain`. Ausente é "não capar aqui" — um monstro
+   * (sem mana) não precisa: `applyDamageOutcome` já zera o dreno dele por outro caminho (mana
+   * sempre 0). Ignorado para qualquer outro tipo de dano.
+   */
+  readonly mana?: number | undefined;
 }
 
 /**
@@ -92,6 +131,14 @@ export interface DamageIntent {
    * MESMOS estágios do primário contra o mesmo defensor — inclusive a própria rolagem de Dodge.
    */
   readonly secondary?: SecondaryDamage | undefined;
+  /**
+   * Se este golpe bloqueia por defesa/escudo e por armadura no `combat-v3` (#548,
+   * `checkDefense`/`checkArmor` do Canary — `blockhit.ts`): depende da ORIGEM do dano, não do
+   * tipo. Ausente é `MELEE_BLOCK_FLAGS` (`{ armor: true, shield: true }`) — o físico corpo a
+   * corpo e o ataque básico de monstro, os produtores mais comuns; quem chama com origem
+   * mágica ou à distância declara o próprio. Ignorado em `combat-v1`/`v2`.
+   */
+  readonly blockable?: BlockFlags | undefined;
 }
 
 /**
@@ -135,6 +182,19 @@ export interface DamageOutcome {
    * tipo); quem aplica continua somando os dois `resolvedDamage`. Ausente no v1.
    */
   readonly secondaryOutcome?: DamageOutcome;
+  /**
+   * Quanto a mitigação percentual do `combat-v3` tirou (#548, `defenseMitigation`). Ausente em
+   * `combat-v1`/`v2` (a função nem o calcula); em `combat-v3` sem o campo declarado, ou com o
+   * golpe imune/não elegível, o valor é `0` — a identidade.
+   */
+  readonly defenseMitigationRemoved?: number;
+  /**
+   * As cargas de bloqueio DEPOIS deste golpe (#548, `blockCharge`/`blockCount`) — o que
+   * `applyDamageOutcome` grava de volta no dono do estado (invariante 9). Presente sempre que o
+   * `combat-v3` resolve (mesmo imune, ou com origem que não bloqueia nada: o valor sai IGUAL ao
+   * de entrada, e a escrita de volta é um no-op). Ausente em `combat-v1`/`v2`.
+   */
+  readonly blockCharge?: BlockChargeState;
 }
 
 /** Chance de esquiva que de fato vale, dado onde a luta acontece. */
@@ -177,6 +237,7 @@ function resolveMitigation(
   context: CombatContext,
   combat: Combat,
   rng: Rng,
+  nowMs: number,
 ): DamageOutcome {
   // A rolagem acontece SEMPRE, mesmo com chance zero.
   //
@@ -235,7 +296,7 @@ function resolveMitigation(
         source: intent.source,
         damageType: intent.secondary.damageType,
       },
-      defender, context, combat, rng,
+      defender, context, combat, rng, nowMs,
     );
 
   // Arredonda no FIM: arredondar antes do dodge faria 50% de 3 virar 2, e o jogador veria
@@ -253,6 +314,163 @@ function resolveMitigation(
     dodged,
     critical,
     resolvedDamage: Math.max(0, Math.round(damage)),
+    ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
+  };
+}
+
+/**
+ * O pipeline de recebimento do `combat-v3` (#548, M30-01; #551, M30-04; ADR 0040) — o
+ * `Creature::blockHit` do Canary, na ordem:
+ *
+ *   1. uma única rolagem de Dodge, SEMPRE consumida, primeiro ato (INALTERADO do v1/v2: o Tibia
+ *      nega o golpe inteiro ANTES de chamar `blockHit`, a mesma posição que o Draconya já usa —
+ *      ver o `Skill dodge (ruse)` de `Game::combatChangeHealth`);
+ *   2. crítico (CMB-08, M30-04), quando o intent declara o modificador — na GERAÇÃO do dano,
+ *      ANTES do `blockHit`: é onde o Canary de fato rola (`Combat::applyExtensions`, chamado de
+ *      `getCombatDamage`/`doCombat`, roda ANTES de `Creature::blockHit` multiplicar
+ *      `damage.primary.value`). O multiplicador incide sobre o PODER BRUTO, e o que segue
+ *      (imunidade, defesa, armadura, mitigação) age sobre o dano JÁ com o bônus — um crítico não
+ *      é "desperdiçado" por imunidade, porque o Canary também não sabe de imunidade neste ponto:
+ *      `applyExtensions` só olha o ATACANTE, nunca o alvo. Esta é a correção do M30-04: a
+ *      posição anterior (depois da mitigação inteira) era um placeholder documentado como tal —
+ *      nenhum teste a travava, e nenhum conteúdo real declarava `combat.modifiers` ainda;
+ *   3. imunidade explícita, defesa com `blockCount` e faixa, armadura em faixa e mitigação
+ *      percentual — o estágio `resolveBlockHit` (`blockhit.ts`), que substitui o bloqueio
+ *      binário do CMB-04 inteiro (defesa) e a subtração flat de armadura do CMB-02/03, agora
+ *      sobre o dano JÁ crítico;
+ *   4. resistência/vulnerabilidade por tipo (CMB-03, `mitigation.resistances`) — INTOCADO, e
+ *      continua um estágio à parte: o Canary a resolve como absorção percentual (o PRIMEIRO
+ *      estágio de `blockHit`, fora do escopo do #548, M30-05), e o Draconya já tinha este
+ *      mecanismo antes desta issue — não duplicado aqui, só reposicionado depois do estágio
+ *      novo por não ter razão para vir antes dele;
+ *   5. piso (`minimumDamageFraction`), sobre o PODER BRUTO ORIGINAL (sem o crítico) — mantido
+ *      como salvaguarda de PRODUTO do Draconya (nunca existiu no Canary: lá um bloqueio pode
+ *      legitimamente zerar um golpe, e o crítico não existe no Canary como conceito de "piso").
+ *      Pulado quando IMUNE — o piso nunca revoga imunidade explícita;
+ *   6. corte do Dodge, se a rolagem ativou;
+ *   7. arredondamento só no fim, com piso em zero;
+ *   8. componente secundário (#473), se declarado — mesma regra do v1/v2, e o secundário
+ *      continua SEM crítico nem leech próprios (`intent` sintetizado não herda `modifiers`).
+ *
+ * O LEECH (M30-04) não mora aqui: ele opera sobre o HP EFETIVAMENTE removido, não sobre o
+ * `DamageOutcome`, e por isso é aplicado depois — em `applyDamageOutcome`/`applyLeech`
+ * (`combat/outcome.ts`/`combat/modifiers.ts`) —, dividido por `targetsAffected` pela fórmula do
+ * Canary (`Game::calculateLeechAmount`).
+ *
+ * As cargas de bloqueio (`blockCharge`) do resultado são as NOVAS — quem aplica o outcome
+ * (`applyDamageOutcome`, CMB-08) as grava de volta no personagem ou monstro dono (invariante 9);
+ * este resolver é puro e só as CALCULA a partir do que `defender.blockCharge` trouxe.
+ */
+function resolveBlockHitProfile(
+  intent: DamageIntent,
+  defender: Defender,
+  context: CombatContext,
+  combat: Combat,
+  rng: Rng,
+  nowMs: number,
+): DamageOutcome {
+  // Idêntico ao v1/v2: primeiro ato, sempre consumido.
+  const dodged = rng.chance(effectiveDodge(defender, context));
+
+  // Crítico (M30-04): o SEGUNDO sorteio, na GERAÇÃO do dano — ANTES do `blockHit`, a mesma
+  // posição do Canary (ver o comentário da função). Declarado com `chance: 0`, ainda consome —
+  // a mesma regra aditiva do bloqueio (ADR 0031); ausente, nenhum sorteio novo e o resultado é
+  // bit a bit o de sempre.
+  const criticalModifier = intent.modifiers?.critical;
+  const critical = criticalModifier !== undefined && rng.chance(criticalModifier.chance);
+  const criticalRawDamage = critical
+    ? intent.rawDamage * (criticalModifier?.multiplier ?? 1)
+    : intent.rawDamage;
+
+  const immune = defender.mitigation?.immunities.has(intent.damageType) ?? false;
+  // Manadrain NUNCA bloqueia por defesa/escudo nem por armadura (#547, M29-07 — achado da
+  // revisão do PR #648): o Canary chama `target->blockHit(attacker, COMBAT_MANADRAIN,
+  // manaLoss)` com só 3 argumentos (`game.cpp:9176`), e `checkDefense`/`checkArmor` default a
+  // `false` (`Creature::blockHit`, `creature.cpp:944`) — os dois estágios ficam de fora para
+  // TODO mana-drain, corpo a corpo ou à distância, independente da origem do golpe. A ORIGEM
+  // (`intent.blockable`) continua decidindo para qualquer outro tipo; só manadrain a ignora.
+  const blockable = intent.damageType === 'manadrain'
+    ? { armor: false, shield: false }
+    : intent.blockable ?? MELEE_BLOCK_FLAGS;
+  const blockHit = resolveBlockHit({
+    // O dano JÁ crítico entra no estágio de bloqueio — defesa, armadura e o "pular armadura
+    // quando a defesa absorveu tudo" decidem sobre o número que o alvo de fato recebe, não
+    // sobre o poder bruto sem o bônus.
+    rawDamage: criticalRawDamage,
+    damageType: intent.damageType,
+    immune,
+    blockable,
+    defense: defender.defense?.defense ?? 0,
+    armor: defender.armor,
+    defenseMitigationPercent: defender.defenseMitigation ?? 0,
+    // A exceção do `mitigateDamage` do Canary (#547, M29-07, `creature.cpp:911-921`): a
+    // mitigação percentual NUNCA se aplica a lifedrain nem manadrain. `drown` não é isento —
+    // só os dois tipos de dreno ficam de fora, os únicos que o Canary pula ali (`agony` não
+    // existe no Draconya).
+    mitigationExempt: intent.damageType === 'lifedrain' || intent.damageType === 'manadrain',
+    blockCharge: defender.blockCharge ?? FULL_BLOCK_CHARGE,
+    nowMs,
+  }, rng);
+
+  // Manadrain capa para a mana ATUAL do alvo ANTES da resistência (#547, M29-07 — achado da
+  // revisão do PR #648): o Canary computa `manaLoss = min(mana atual, -manaChange)` e só DEPOIS
+  // roda `blockHit` (que aplica `applyAbsorbDamageModifications`, a resistência/absorção) sobre
+  // o valor já capado (`game.cpp:9175-9176`). Resistir primeiro e capar depois (a ordem que
+  // `applyDamageOutcome` sozinho produziria) dobra o dreno sempre que a mana disponível for
+  // menor que o poder bruto e o alvo tiver resistência — ver o exemplo no comentário de
+  // `Defender.mana`. Sem `defender.mana` (monstro, que não tem), nada muda aqui: o dreno dele já
+  // é zerado depois, em `applyDamageOutcome` (mana sempre 0).
+  const manaCapped = intent.damageType === 'manadrain' && defender.mana !== undefined
+    ? Math.min(defender.mana, blockHit.damage)
+    : blockHit.damage;
+
+  // Resistência/vulnerabilidade por tipo (CMB-03): o mesmo mecanismo do v1/v2, intocado — ver o
+  // comentário acima sobre por que ele continua separado do estágio novo.
+  const resistance = defender.mitigation?.resistances[intent.damageType] ?? 0;
+  const afterResistance = manaCapped * (1 - resistance);
+
+  // Piso, sobre o PODER BRUTO ORIGINAL (sem o crítico) — como no v1/v2 — mas nunca revogando
+  // imunidade explícita. O crítico é bônus do atacante; o piso é a garantia de que nem a maior
+  // mitigação zera o golpe BASE, e as duas coisas não precisam se multiplicar juntas.
+  const minimumDamage = intent.rawDamage * combat.minimumDamageFraction;
+  const afterFloor = immune ? 0 : Math.max(minimumDamage, afterResistance);
+
+  const damage = dodged ? afterFloor * combat.dodgeMultiplier : afterFloor;
+
+  // O secundário roda contra o defensor JÁ COM a carga que o primário gastou (#548, achado da
+  // revisão do PR #642): sem isto, o secundário sortearia o estágio novo como se o primário
+  // nunca tivesse consumido nada, e uma carga extra seria descontada em memória sem nunca voltar
+  // ao dono — `applyDamageOutcome` só lê o `blockCharge` de NÍVEL SUPERIOR do outcome (ver
+  // abaixo), então o consumo do secundário tem que terminar ali.
+  const secondaryOutcome = intent.secondary === undefined
+    ? undefined
+    : resolveDamage(
+      {
+        rawDamage: intent.secondary.rawDamage,
+        source: intent.source,
+        damageType: intent.secondary.damageType,
+        ...(intent.blockable === undefined ? {} : { blockable: intent.blockable }),
+      },
+      { ...defender, blockCharge: blockHit.blockCharge }, context, combat, rng, nowMs,
+    );
+
+  return {
+    profile: combat.compatibilityProfile,
+    intent,
+    damageType: intent.damageType,
+    afterDefense: blockHit.afterDefense,
+    afterArmor: blockHit.afterArmor,
+    armorReduction: blockHit.armorReduction,
+    minimumDamage,
+    afterResistance,
+    immune,
+    dodged,
+    critical,
+    resolvedDamage: Math.max(0, Math.round(damage)),
+    defenseMitigationRemoved: blockHit.mitigationRemoved,
+    // O estado que `applyDamageOutcome` grava de volta (invariante 9) tem que refletir o QUE O
+    // SECUNDÁRIO ainda gastou por cima do primário — sem isto, o consumo dele nunca persistiria.
+    blockCharge: secondaryOutcome?.blockCharge ?? blockHit.blockCharge,
     ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
   };
 }
@@ -276,6 +494,14 @@ export function resolveDamage(
   context: CombatContext,
   combat: Combat,
   rng: Rng,
+  /**
+   * O instante lógico da sessão (`session.nowMs`) — o `combat-v3` (#548) o usa para calcular as
+   * cargas de bloqueio SOB DEMANDA (`blockCharge`, invariante 2), sem escrever nada por tick.
+   * Ignorado em `combat-v1`/`v2`. Todo chamador em PRODUÇÃO passa `session.nowMs`; o default
+   * `0` só existe para não obrigar a dezena de fixtures de `combat-v1`/`v2` (que nunca leem
+   * este parâmetro) a inventar um instante que não têm.
+   */
+  nowMs = 0,
 ): DamageOutcome {
   if (!COMBAT_PROFILES.has(combat.compatibilityProfile)) {
     throw new Error(
@@ -289,7 +515,12 @@ export function resolveDamage(
       // O pipeline de mitigação é o MESMO nos dois perfis (ver o comentário de
       // `resolveMitigation`) — o que o `combat-v2` muda é o `rawDamage` que chega aqui (fórmula
       // de arma do Canary) e a chance de acerto à distância, resolvidos ANTES pelo chamador.
-      return resolveMitigation(intent, defender, context, combat, rng);
+      return resolveMitigation(intent, defender, context, combat, rng, nowMs);
+    case 'combat-v3':
+      // O pipeline de RECEBIMENTO muda (ver `resolveBlockHitProfile`); o que o `combat-v2`
+      // mudou no lado ofensivo continua valendo — o `rawDamage` que chega aqui já é a fórmula
+      // de arma do Canary, resolvida ANTES pelo chamador, como no v2.
+      return resolveBlockHitProfile(intent, defender, context, combat, rng, nowMs);
     default:
       // Inalcançável enquanto o registro do conteúdo e este despacho conhecerem o mesmo
       // conjunto; existe para um perfil novo não virar uma fórmula silenciosamente ausente.

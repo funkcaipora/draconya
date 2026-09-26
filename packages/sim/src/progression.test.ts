@@ -15,6 +15,7 @@ const baseline: Progression = {
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
+  mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
 };
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25, spellSkill: 'magic',

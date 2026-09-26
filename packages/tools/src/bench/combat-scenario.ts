@@ -74,14 +74,20 @@ function rawCombatContent(): RawContent {
             presentation: { missileKey: 'fire-missile', impactKey: 'fire-impact' },
             condition: {
               key: 'burn', merge: 'refresh', durationMs: 4_000,
-              effect: { kind: 'damage-over-time', amount: 4, intervalMs: 1_000, damageType: 'fire' },
+              effect: {
+                kind: 'damage-over-time', form: 'rounds',
+                rounds: [{ count: 4, intervalMs: 1_000, damage: 4 }], damageType: 'fire',
+              },
             },
             field: {
               id: 'fire-field', durationMs: 5_000,
               shape: { shape: 'circle', radius: 1, centered: 'target' },
               condition: {
                 key: 'fire-field', merge: 'refresh', durationMs: 5_000,
-                effect: { kind: 'damage-over-time', amount: 3, intervalMs: 1_000, damageType: 'fire' },
+                effect: {
+                  kind: 'damage-over-time', form: 'rounds',
+                  rounds: [{ count: 5, intervalMs: 1_000, damage: 3 }], damageType: 'fire',
+                },
               },
             },
           },
@@ -125,7 +131,7 @@ function rawCombatContent(): RawContent {
     }],
     combat: [{
       id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-      armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+      armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
       minimumDamageFraction: 0.1,
       player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 4, dodgeChance: 0.05, damageType: 'physical' },
       // CMB-04: o estágio de defesa do perfil, com a skill que sobe por bloqueio.

@@ -1,7 +1,9 @@
 # Stamina
 
 **Status:** implementado — cálculo, consumo em hunt e bloqueio de XP, de loot (FUN-63) **e do
-abate no Bestiário** (FUN-113), os três pelo mesmo portão.
+abate no Bestiário** (FUN-113), os três pelo mesmo portão. Teto revisado para 12 h em M32-01
+(#562, [ADR 0043](../adr/0043-tibia-stamina-and-food-only-regeneration.md) emenda 2026-09-25 —
+"copie do Huntera").
 **PRD:** §10
 **Épico:** E2 (stamina como função do tempo decorrido, sem tick); E3 (bloqueio de XP, loot e Bestiário com stamina zero)
 
@@ -13,7 +15,8 @@ Quando a stamina chega a zero, a hunt não é interrompida: o personagem continu
 
 ## Regras
 
-- Stamina máxima: 24 horas.
+- Stamina máxima: 12 horas (43.200.000 ms) — o teto que o Huntera mostra cheio na Cidade
+  (M32-01, #562). Eram 24 horas antes desta issue, um número nosso sem fonte no Tibia.
 - Recuperação fora de hunt: 1 minuto de tempo real recupera 1 minuto de stamina (proporção 1:1).
 - Treino conta como "fora de hunt" para fins de recuperação de stamina.
 - Em stamina zero, dentro da hunt: personagem continua se movendo, atacando, consumindo supplies/gold e pode morrer; não recebe XP; não recebe loot; abates não contam para a Bestiário.
@@ -41,7 +44,7 @@ A separação é o que permite as duas coisas ao mesmo tempo. O consumo dentro d
 no instante de materialização: aquele campo é o marco da recuperação de fora, e mexer nele faria
 o tempo de hunt contar duas vezes — uma consumindo, outra recuperando.
 
-**O teto de 24 h é aplicado na leitura**, não só na escrita. Aplicar só na escrita funciona
+**O teto de 12 h é aplicado na leitura**, não só na escrita. Aplicar só na escrita funciona
 enquanto alguém escreve, e o caso inteiro é ninguém ter escrito nada.
 
 **Relógio para trás não devolve stamina.** Acontece com ajuste de horário e com NTP; deixar a
@@ -65,17 +68,57 @@ seria mentira. O que ele deixa de ganhar é XP.
 
 ## Parâmetros de balanceamento
 
-| Parâmetro | Valor previsto | Onde mora em packages/content |
+| Parâmetro | Valor | Onde mora em packages/content |
 |---|---|---|
-| Stamina máxima | 24h | `packages/content/data/stamina/baseline.json`, `maxMs` |
-| Taxa de recuperação fora de hunt | 1:1 (1 min = 1 min) | `packages/content/data/stamina/baseline.json`, `recoveryRatio` |
+| Stamina máxima | 12h (43.200.000 ms) | `packages/content/data/stamina/baseline.json`, `maxMs` |
+| Taxa de recuperação fora de hunt | 1:1 (1 min = 1 min) — `[ABERTO — valor provisório: 1:1]` | `packages/content/data/stamina/baseline.json`, `recoveryRatio` |
 | Taxa de recuperação em treino | 1:1 (1 min = 1 min) | mesma taxa: treino é "fora de hunt" e não tem entrada própria |
+
+## M32 (ADR 0043, emenda 2026-09-25 — "copie do Huntera")
+
+M32-01 (#562) já entregou o teto: **12 h** (`staminaMs: 43.200.000`), não os 42 h que a
+proposta original do ADR 0043 previa nem as 24 h com que o Draconya subiu — é o valor que o
+Huntera mostra cheio na Cidade (`docs/reference/huntera-observed.md` Parte II §15, linhas
+361-362). O consumo em hunt continuou 1:1, sem mudança. Dado persistido migrou (ADR 0014,
+migração `0011_562-huntera-stamina-cap.sql`): quem já tinha mais que o novo teto guardado foi
+CLAMPADO para ele, preservando o tempo absoluto de quem estava abaixo.
+
+O resto da proposta original do ADR 0043 segue **fora do escopo desta issue**, registrado como
+pendência do marco:
+
+- **Recuperação fora de hunt:** `[ABERTO — valor provisório: 1:1]`. A razão por faixa do Canary
+  (1 min a cada 180 s, depois a cada 360 s) NÃO foi adotada — ela era calculada contra o teto de
+  42 h que caiu, e o Huntera nunca teve sua razão de recuperação passiva medida. Fica mantida a
+  recuperação atual, 1:1, até uma captura medir a razão real.
+- **Faixas de XP/loot por stamina baixa:** `[ABERTO]`. As faixas do Canary (1,5× Premium acima de
+  2.340 min, 0,5× em 840 min ou menos, corte de loot em 840 min ou menos) também eram calculadas
+  contra o teto de 42 h; sem reescalonamento contra os novos 720 min, e sem confirmação do
+  Huntera (a conta observada tinha "Bônus de Premium" inativo), ficam como pendência — o portão
+  único atual (XP, loot e Bestiário juntos, zero na stamina zerada) continua valendo.
+- **Sem comida** (M32-03/M32-04, issues à parte). A regeneração de vida/mana (hoje um sistema
+  separado, fora do escopo deste documento) passará a depender só de "estar em hunt agora" — a
+  tela do Huntera diz "Regeneração de vida/mana: só em caçadas", e o socket confirma
+  `healthRegen`/`manaRegen` zerados na Cidade. Isto reverte a proposta anterior do ADR 0043 de
+  condicionar a regeneração a um item de comida; nenhum consumível de comida entra em
+  `content/items`.
+
+Ver a emenda "2026-09-25: decisões do dono" no fim do ADR 0043 para a citação completa da
+evidência (parte/linha de `huntera-observed.md`) e a captura que falta para fechar a recuperação
+e as faixas.
 
 ## Em aberto
 
-Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
+Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Duas pendências seguem do M32,
+aguardando captura do Huntera (ver `docs/tibia-parity-plan.md` §6):
+
+- A razão de recuperação fora de hunt `[ABERTO — valor provisório: 1:1]`.
+- As faixas de XP/loot por stamina baixa `[ABERTO]`.
 
 ## Divergências do PRD
+
+**Teto de 24 h (§10) substituído por 12 h.** M32-01 (#562, ADR 0043 emenda 2026-09-25) trocou o
+número do PRD pelo valor observado no Huntera — ver a seção "M32" acima para a fonte e o que
+ainda falta do resto da proposta do ADR 0043.
 
 **Não existe taxa de consumo configurável**, e é decisão: dentro da hunt a stamina cai 1:1 com o
 tempo simulado. Um multiplicador viraria a tentação de "queimar mais rápido nas hunts difíceis",

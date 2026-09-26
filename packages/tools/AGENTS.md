@@ -8,6 +8,24 @@ Ferramentas de desenvolvimento e operação: o cliente sintético de carga, benc
 `build-asset-library.ts`), porque importam `packages/client/src/assets` por caminho relativo
 sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 
+O importador do CATÁLOGO do Tibia (item, monstro, magia — ADR 0038) mora em `scripts/catalog/`,
+pelo mesmo motivo e ao lado do importador de mapa, e não aqui: `pnpm catalog:import <tipo>
+[--check]` lê `things/sources/canary` (`CANARY_DIR`) e escreve `packages/content/data/<tipo>/
+generated/*.json`, nunca `packages/tools`. `scripts/catalog/xml.ts` (XML → árvore própria,
+`fast-xml-parser` por baixo), `lua-table.ts` (tabela Lua → JS, `luaparse` por baixo — os dois
+MIT, JS puro, sem binário nativo, ADR 0013) e `enums.ts` (enum C++ → `Map<string, number>`, para
+resolver `COMBAT_*`/`BESTY_RACE_*`/`CONST_ME_*`) são as três peças que um importador de `<tipo>`
+novo usa; `registry.ts` é onde ele se registra (`registerCatalogType`) para o comando aceitar o
+nome. Nenhum `<tipo>` está registrado ainda nesta issue (#572) — é infraestrutura pura, os
+importadores de verdade (itens em #573, monstros em M35) entram depois. Limite de licença sem
+exceção (ADR 0019/0038): o que sai do Canary é NÚMERO e FATO, nunca uma linha de Lua ou C++
+reproduzida — `lua-table.ts` só AVALIA expressão literal, nunca executa Lua de verdade.
+
+`generated/<fatia>.json` é SEMPRE a transcrição pura do Canary — quem aplica `overrides/*.json`
+por cima não é este comando, é `@draconya/content` (`load.ts`), toda vez que o conteúdo é
+CARREGADO, não só quando é importado. É o que faz uma correção sobreviver a uma reimportação sem
+precisar ser reaplicada à mão: ver "O catálogo importado" em `packages/content/AGENTS.md`.
+
 ## Fronteiras
 
 **Pode importar:** todos os pacotes. É o topo da pilha e não tem restrição.

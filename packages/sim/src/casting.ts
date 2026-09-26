@@ -15,10 +15,15 @@
 // cuida do LANÇADOR: portão, custo e cooldown.
 
 import { matchesVocationRequirement } from '@draconya/content';
-import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
+import type {
+  Combat, CompiledMitigation, DamageModifiers, Spell, SpellFormula, Supply,
+} from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
+import type { DamageOutcome } from './combat/damage.js';
+import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
+import { rollSharedCriticalOutcome } from './combat/modifiers.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
 
@@ -65,6 +70,17 @@ export interface CastSuccess {
    * qual sorteio cai em quem — o que faz a mesma semente render uma hunt diferente.
    */
   readonly hits: readonly number[];
+  /**
+   * O `DamageOutcome` INTEIRO de cada alvo, na MESMA ordem de `hits` (#547, M29-07 — achado da
+   * revisão do PR #648). `hits` guarda só o número resolvido, que basta para o extrato — mas
+   * quem APLICA o golpe (`HuntRuleset#applyHits`) precisa do outcome completo para rodar
+   * `applyDamageOutcome` (CMB-08), o único lugar que sabe desviar `manadrain` para a MANA do
+   * alvo em vez da vida. Sem isto, um `damageType: 'manadrain'` num efeito de dano bateria
+   * direto na vida — o mesmo bug que este campo fecha nos outros quatro produtores de dano
+   * (DOT, ability de monstro, golpe básico). Presente só quando `hits` também está — os demais
+   * sucessos (cura, condição, restauração) nunca aplicam golpe nenhum.
+   */
+  readonly hitOutcomes?: readonly DamageOutcome[];
   /** Gold debitado. Vira `aggregates.goldSpent` em quem chama. */
   readonly goldSpent: number;
   /**
@@ -97,6 +113,13 @@ export interface SpellTarget {
   readonly dodgeChance: number;
   /** Mitigação compilada do alvo (CMB-03). Ausente é o alvo neutro. */
   readonly mitigation?: CompiledMitigation | undefined;
+  /**
+   * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): magia NÃO
+   * bloqueia por defesa nem armadura (`MAGIC_BLOCK_FLAGS`), mas a mitigação percentual do
+   * Canary se aplica a QUALQUER origem — é por isso que ela viaja aqui e defesa/armadura não
+   * precisam. Ausente é `0`. Ignorado em `combat-v1`/`v2`.
+   */
+  readonly defenseMitigation?: number | undefined;
 }
 
 /**
@@ -277,6 +300,17 @@ export function castSpell(
    * ADR 0035 d.10).
    */
   recipient: CharacterRuntime = caster,
+  /**
+   * Os modificadores avançados do LANÇADOR (CMB-08; M30-04, #551): crítico do equipamento
+   * vestido (`Inventory.combatModifiers`) somado ao `combat.modifiers` estático, se houver
+   * (`HuntRuleset#attackerModifiers`). Ausente é o de sempre — nenhum sorteio novo, resultado
+   * bit a bit — porque quem monta o intent aqui é EXTERNO ao catálogo (este arquivo não conhece
+   * `Inventory`), e magia sem atacante equipado (a fixture de teste, por exemplo) não precisa
+   * declarar nada. O Canary rola crítico para QUALQUER combate do jogador — magia inclusive
+   * (`Combat::applyExtensions`, chamado de `doCombat`/`doAreaCombatHealth`, não só do golpe
+   * básico) —, e é isso que este parâmetro passa adiante para `resolveDamage`.
+   */
+  modifiers: DamageModifiers | undefined = undefined,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -343,22 +377,43 @@ export function castSpell(
       // (`combat/baseline.json`) — não motor. A postura (Swift Foot, Protector) multiplica o
       // poder ANTES da armadura, como faz com o golpe.
       const dealt = caster.conditions.damageDealtScale('spell');
+      // O crítico é da AÇÃO, não do alvo (achado da revisão do #551/#653): `Combat::
+      // applyExtensions` do Canary rola uma vez por `doCombat`/`doAreaCombatHealth` inteiro, e
+      // TODO alvo da mesma magia em área compartilha o mesmo resultado. Rolar aqui, ANTES do
+      // laço, e forçar o mesmo resultado em cada `resolveDamage` por alvo (via
+      // `rollSharedCriticalOutcome`) é o que impede um alvo criticar e outro não na MESMA magia.
+      const actionModifiers = rollSharedCriticalOutcome(modifiers, rng);
       const hits: number[] = [];
+      const hitOutcomes: DamageOutcome[] = [];
       let total = 0;
       for (let i = 0; i < targets.length; i += 1) {
         const target = targets[i] as SpellTarget;
         const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
         const result = resolveDamage(
-          { rawDamage: power, source: 'spell', damageType: effect.damageType },
-          { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
+          {
+            rawDamage: power, source: 'spell', damageType: effect.damageType,
+            // Magia não bloqueia por defesa nem armadura no `combat-v3` (#548) — o default de
+            // `CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ignorado em v1/v2.
+            blockable: MAGIC_BLOCK_FLAGS,
+            // O crítico do LANÇADOR (M30-04, #551): o mesmo `DamageModifiers` do golpe básico —
+            // o Canary rola para qualquer combate do jogador, magia inclusive — já com o
+            // resultado da AÇÃO fixado acima, não um sorteio novo por alvo.
+            ...(actionModifiers === undefined ? {} : { modifiers: actionModifiers }),
+          },
+          {
+            armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
+            defenseMitigation: target.defenseMitigation,
+          },
           'pve',
           combat,
           rng,
+          nowMs,
         );
         hits.push(result.resolvedDamage);
+        hitOutcomes.push(result);
         total += result.resolvedDamage;
       }
-      return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
+      return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, hitOutcomes, goldSpent: 0 };
     }
     case 'heal':
       return {
@@ -475,6 +530,11 @@ export function useSupply(
    * que faz o uso trancar o grupo como o lançamento de magia.
    */
   nowMs?: number,
+  /**
+   * Os modificadores avançados do USUÁRIO (M30-04, #551, CMB-08) — só a runa de ataque os lê;
+   * ver o comentário do mesmo parâmetro em `castSpell`.
+   */
+  modifiers?: DamageModifiers,
 ): CastResult {
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
@@ -502,7 +562,11 @@ export function useSupply(
     const paidFromStockDamage = hasStockDamage && spendStock(user, supply.id);
     if (!paidFromStockDamage) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
+    // O crítico é da AÇÃO (a mesma correção de `castSpell`, #551/#653): uma runa de área rola o
+    // crítico UMA vez, e cada alvo herda o mesmo resultado via `rollSharedCriticalOutcome`.
+    const actionModifiers = rollSharedCriticalOutcome(modifiers, rng);
     const hits: number[] = [];
+    const hitOutcomes: DamageOutcome[] = [];
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
       const target = aim.targets[i] as SpellTarget;
@@ -515,15 +579,25 @@ export function useSupply(
       );
       const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
       const result = resolveDamage(
-        { rawDamage: power, source: 'rune', damageType: supply.effect.damageType },
-        { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
-        'pve', combat, rng,
+        {
+          rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
+          blockable: MAGIC_BLOCK_FLAGS,
+          ...(actionModifiers === undefined ? {} : { modifiers: actionModifiers }),
+        },
+        {
+          armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
+          defenseMitigation: target.defenseMitigation,
+        },
+        // `nowMs` é opcional aqui (fixture sem relógio, ver o comentário do parâmetro); o
+        // `combat-v3` só o lê para o `blockCharge`, e `0` é o instante de quem nunca bloqueou.
+        'pve', combat, rng, nowMs ?? 0,
       );
       hits.push(result.resolvedDamage);
+      hitOutcomes.push(result);
       total += result.resolvedDamage;
     }
     return {
-      ok: true, healed: 0, manaRestored: 0, damage: total, hits,
+      ok: true, healed: 0, manaRestored: 0, damage: total, hits, hitOutcomes,
       goldSpent: paidFromStockDamage ? 0 : supply.price,
     };
   }

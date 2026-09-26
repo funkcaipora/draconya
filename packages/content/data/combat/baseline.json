@@ -1,6 +1,6 @@
 {
   "id": "baseline",
-  "compatibilityProfile": "combat-v2",
+  "compatibilityProfile": "combat-v3",
   "dodgeMultiplier": 0.5,
   "armorEffectiveness": {
     "physical": 1,
@@ -10,6 +10,9 @@
     "ice": 0,
     "holy": 0,
     "death": 0,
+    "drown": 0,
+    "lifedrain": 0,
+    "manadrain": 0,
     "arcane": 0
   },
   "minimumDamageFraction": 0.1,
@@ -76,5 +79,5 @@
       }
     ]
   },
-  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque, piso de dano e a `blockChance` de 0,6 do escudo (CMB-04) são provisórios, com o Tibia como referência funcional. O bloco `player` é o personagem desarmado no level 1 e não vem do PRD: são os números que fazem a hunt de Rat Cellars render sem virar impasse, e saem daqui no dia em que existir equipamento. `spellPower` (#155, ADR 0026 decisão 5) é a conversão do Base Power das magias do Tibia, nossa e provisória: calibrada para Light Healing (BP 40) render ~59 no level 8 com magic 0, o que o `heal` genérico cura hoje; `distance` começa em 10 e `magic` em 0, então o Paladin nasce com magia de ataque mais forte até alguém recalibrar. `defense` (CMB-04, emenda do ADR 0031) declara o bloqueio físico: escudo ou arma de uma mão, uma rolagem depois do Dodge, escalada pela skill `shielding`. `weaponDamage`/`distanceHitChance` (#522, `combat-v2`, ADR 0037 d.5): coeficientes e os TRÊS baldes de acerto à distância do Canary (`Weapons::getMaxWeaponDamage`, `WeaponDistance::useWeapon` — 75 uma mão, 90 duas mãos, 100; só o de 90% tem munição no catálogo hoje, os outros dois esperam a primeira arma de arremesso ou o balde raro); `attackFactor` 1,0 é o modo de luta ofensivo (`FIGHTMODE_ATTACK`) — o Draconya não tem seletor de postura ainda, então é uma constante até essa UI existir. `meleeDamageMultiplier`/`distDamageMultiplier` das quatro vocações são 1,0, como em `vocations.xml` do Canary hoje."
+  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque, piso de dano e a `blockChance` de 0,6 do escudo (CMB-04) são provisórios, com o Tibia como referência funcional. O bloco `player` é o personagem desarmado no level 1 e não vem do PRD: são os números que fazem a hunt de Rat Cellars render sem virar impasse, e saem daqui no dia em que existir equipamento. `spellPower` (#155, ADR 0026 decisão 5) é a conversão do Base Power das magias do Tibia, nossa e provisória: calibrada para Light Healing (BP 40) render ~59 no level 8 com magic 0, o que o `heal` genérico cura hoje; `distance` começa em 10 e `magic` em 0, então o Paladin nasce com magia de ataque mais forte até alguém recalibrar. `defense` (CMB-04, emenda do ADR 0031) declara o bloqueio físico: escudo ou arma de uma mão, uma rolagem depois do Dodge, escalada pela skill `shielding`. `weaponDamage`/`distanceHitChance` (#522, `combat-v2`, ADR 0037 d.5): coeficientes e os TRÊS baldes de acerto à distância do Canary (`Weapons::getMaxWeaponDamage`, `WeaponDistance::useWeapon` — 75 uma mão, 90 duas mãos, 100; só o de 90% tem munição no catálogo hoje, os outros dois esperam a primeira arma de arremesso ou o balde raro); `attackFactor` 1,0 é o modo de luta ofensivo (`FIGHTMODE_ATTACK`) — o Draconya não tem seletor de postura ainda, então é uma constante até essa UI existir. `meleeDamageMultiplier`/`distDamageMultiplier` das quatro vocações são 1,0, como em `vocations.xml` do Canary hoje. `combat-v3` (#548, M30-01, ADR 0040): o perfil default passa a ser o `blockHit` do Canary — a defesa/armadura/mitigação do JOGADOR aqui em cima (`defense`, `player.armor`) continuam os mesmos números de antes, só o MECANISMO que os consome muda (blockCount + faixa aleatória, em vez de `blockChance` + subtração flat); a fórmula própria de defesa/armadura do 13.x para o jogador é o M30-02, fora do escopo do #548. O monstro ganha `defense`/`defenseMitigation` (schema do monstro, não deste arquivo). `drown`/`lifedrain`/`manadrain` (#547, M29-07) entram em 0 como todo tipo não-físico — nenhum conteúdo os declara ainda, e o `combat-v3` de qualquer forma não lê este campo para a armadura (ver `blockhit.ts`)."
 }

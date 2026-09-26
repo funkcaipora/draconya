@@ -87,7 +87,7 @@ const PROGRESSION = {
 const COMBAT = {
   id: 'baseline', dodgeMultiplier: 0.5,
   armorEffectiveness: {
-    physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+    physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
   },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },

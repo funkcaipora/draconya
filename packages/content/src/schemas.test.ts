@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema, spellFormulaSchema } from './schemas.js';
+import {
+  ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
+  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, spellFormulaSchema,
+} from './schemas.js';
 
 describe('spellFormulaSchema — a fórmula canônica do #474', () => {
   it('aplica o default do levelFactor (1/5) e os bases 0', () => {
@@ -109,6 +112,49 @@ describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)',
     expect(() => itemSchema.parse({ ...ring, price: 10 })).toThrow();
     expect(() => itemSchema.parse({ ...ring, group: 'potion' })).toThrow();
     expect(() => itemSchema.parse({ ...ring, restock: { batch: 1, min: 0 } })).toThrow();
+  });
+});
+
+// A proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2, #572):
+// `itemSchema`/`monsterSchema`/`ammunitionSchema` são `z.strictObject` — sem um `source` EXPLÍCITO,
+// a primeira entidade que #573 (itens) ou M35 (monstros) gerar derrubaria o boot inteiro.
+describe('o campo "source" da entidade GERADA (ADR 0038 decisão 2)', () => {
+  const source = { engine: 'canary' as const, commit: 'a'.repeat(40), path: 'items.xml' };
+
+  it('itemSchema aceita `source` — a forma que scripts/catalog/generated-writer.ts escreve', () => {
+    const item = {
+      id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1, source,
+    };
+    expect(itemSchema.parse(item).source).toEqual(source);
+  });
+
+  it('monsterSchema aceita `source`', () => {
+    const monster = {
+      id: 'imported-rat', name: 'Imported Rat', recommendedLevel: 1, health: 20, experience: 5,
+      attack: 5, armor: 0, attackIntervalMs: 2000, speed: 172, aggroRadius: 11,
+      source: { ...source, path: 'monster/rodents/rat.lua' },
+    };
+    expect(monsterSchema.parse(monster).source).toEqual({ ...source, path: 'monster/rodents/rat.lua' });
+  });
+
+  it('ammunitionSchema aceita `source`', () => {
+    const ammo = {
+      id: 'imported-arrow', name: 'Imported Arrow', family: 'arrow', attack: 5, price: 1, source,
+    };
+    expect(ammunitionSchema.parse(ammo).source).toEqual(source);
+  });
+
+  it('`source` continua opcional — item autoral (sem importador) não precisa dele', () => {
+    const item = { id: 'backpack', name: 'Backpack', kind: 'container', weight: 1, value: 0 };
+    expect(itemSchema.parse(item).source).toBeUndefined();
+  });
+
+  it('`source` incompleto (sem "commit") é recusado — proveniência não é "o que der"', () => {
+    const item = {
+      id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1,
+      source: { engine: 'canary', path: 'items.xml' },
+    };
+    expect(() => itemSchema.parse(item)).toThrow();
   });
 });
 

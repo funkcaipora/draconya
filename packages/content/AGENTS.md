@@ -25,6 +25,44 @@ esse tipo de violação difícil de enxergar em revisão.
 Regra prática: se a função lê arquivo, ela vai para `load.ts`. Se ela só valida ou monta
 estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
+## O catálogo importado (ADR 0038, #572)
+
+Qualquer `data/<tipo>/` (hoje `items/`, mais tarde `monsters/`) aceita, além do arquivo autoral
+direto na pasta, duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em
+`content.ts`:
+
+```
+data/items/backpack.json          # autoral, uma entidade por arquivo (de sempre)
+data/items/generated/weapons.json # gerado por `pnpm catalog:import items` — um ARRAY por fatia
+data/items/overrides/*.json       # correção nossa: { id, reason, patch }
+```
+
+Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
+continua sendo uma entidade só, como sempre foi. **Id repetido entre autoral e gerado é erro no
+boot** (a mesma checagem de duplicata que `parseAll` já fazia, sem código novo: as duas listas só
+se juntam antes de chegar lá).
+
+Um `overrides/*.json` **nunca** vira entidade nova — é `{ id, reason, patch }` aplicado por cima
+da entidade de mesmo id (autoral OU gerada) toda vez que o conteúdo é CARREGADO, nunca uma vez só
+na hora de importar. `reason` é obrigatório e sem default (o boot recusa sem ele): correção sem
+motivo é indistinguível de erro de digitação na próxima revisão. Override para um id que não
+existe em lugar nenhum é erro — correção órfã quase sempre significa que o id mudou. O patch é
+**raso**: sobrescreve os campos que lista, não troca o objeto inteiro nem faz merge profundo em
+campo aninhado.
+
+Por que a correção não entra em `generated/` direto: `pnpm catalog:import` regenera essa pasta a
+cada reimportação, sempre como transcrição PURA do Canary — um campo editado ali seria
+sobrescrito em silêncio na próxima vez. `overrides/` é o único lugar em que uma correção
+sobrevive a uma reimportação. Ver `scripts/catalog/` para quem escreve `generated/`.
+
+Toda entidade em `generated/` carrega um bloco `source: { engine, commit, path }` (ADR 0038
+decisão 2, `CatalogSource` em `scripts/catalog/generated-writer.ts`). Como cada schema de
+entidade é `z.strictObject`, isso só chega até `sim`/`server` sem derrubar o boot porque o
+schema declara `source: catalogSourceSchema.optional()` explicitamente — a MESMA forma que
+`tilemapSchema` já usa para o `source` do mapa importado (ADR 0025 decisão 3). Todo schema novo
+que passar a hospedar entidade gerada precisa do mesmo campo; esquecê-lo só aparece quando a
+primeira entidade de verdade for importada, e o erro (`Unrecognized key: "source"`) não aponta
+para cá.
 
 ## Mapa e rota
 
@@ -283,6 +321,25 @@ recusa `defense > 0` fora daí. O perfil declara `combat.defense` (`blockChance`
 catálogo de skills E subir por `shield-block` — as duas coisas são conferidas no boot, porque uma
 referência torta deixaria o escudo sem treinar ou uma skill que nunca sobe.
 
+**`extraDefense`/`spellbook`/`quiver` só existem para a conta do JOGADOR** (#549, M30-02;
+`sim/combat/player-defense.ts`) — diferente de `defense` acima, nenhum dos três entra no
+`combat-v3` de monstro nem no bloqueio do CMB-04. `extraDefense` (só `kind: 'weapon'`) é o
+`extradef` do Canary, somado ao `defense` do ESCUDO (ou da própria arma, se for de duas mãos) —
+a Mystic Blade do kit level 200 é o único item que o declara hoje. `spellbook`/`quiver` (só
+`kind: 'shield'`, mutuamente exclusivos) marcam o "escudo" que usa `secondaryShield` da vocação
+em vez de `primaryShield` na mitigação — o Spellbook of Mind Control (Sorcerer/Druid) declara o
+primeiro; nenhum item hoje declara o segundo (a Royal Crossbow do Paladin é de duas mãos e usa
+`Weapon.ammoFamily` para o mesmo efeito, não um item de escudo).
+
+**`vocation.mitigation`/`progression.mitigation`** (#549, M30-02) são o `<mitigation multiplier
+primaryShield secondaryShield>` de `vocations.xml` — SEM relação com `mitigationSchema`
+(resistência/imunidade por tipo, CMB-03) nem com `Monster.defenseMitigation` (ADR 0040), apesar
+do nome repetido (o próprio Canary também reusa "mitigação" para os três). O de `progression` tem
+DEFAULT (os números da vocação `None`) — diferente de `regen`, que fica sem um de propósito —
+porque aqui o número É o do Canary, verificado, e o default só existe para não reabrir a dúzia de
+fixtures de teste que constroem `Progression` sem falar de combate; o conteúdo REAL declara os
+três de qualquer forma.
+
 **O kit de nascimento e as armas de vocação** (#151, ADR 0026) são os primeiros itens com
 que o jogo se compromete, e cada id de aparência foi **conferido de olho** — o índice da
 biblioteca (`things/<versão>/library/appearances/object.jsonl`) não tem nome, e um id errado
@@ -384,5 +441,29 @@ entre arquivos resolvem.
   monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`
   (#236) da hunt só vale para quem declara `blockable: true` — Rat e Rotworm o fazem, porque o
   comportamento deles vem do Huntera observado, não do Canary, e não podia mudar aqui.
+- **A condição `speed` (CMB-11, #556) é `delta` OU `formula`, nunca os dois nem nenhum, e a
+  `key` é FIXA** (`conditionEffectSchema`/`conditionSpecSchema`). `delta` (inteiro, milésimos) é
+  o formato do `speedChange` de ATAQUE/DEFESA de monstro, copiado sem conversão do Lua; `formula`
+  (`{ mina, minb, maxa, maxb }`) é o formato de RUNA/MAGIA, o `setFormula` do Canary/TFS
+  transcrito. `type` (`'haste' | 'paralyze'`) é o nome do Tibia — não é derivado do sinal
+  calculado, porque só o `sim` sabe o resultado depois de sortear. `SPEED_CONDITION_KEY`
+  (`'speed'`) é OBRIGATÓRIA em `conditionSpecSchema.key` sempre que `effect.kind === 'speed'` —
+  `buildContent` recusa qualquer outra —, e é essa chave única compartilhada que faz haste e
+  paralyze de fontes diferentes se substituírem no `sim`, sem lógica de exclusão mútua a mais.
+- **`monsterDefenseSchema.heal` virou OPCIONAL, e `condition` é a alternativa** (CMB-11, #556) —
+  `buildContent` exige pelo menos um dos dois; uma `condition` de defesa só aceita `type:
+  'haste'` (o self-haste do Doom Deer), nunca `paralyze` — uma defesa que se paralisa sozinha
+  não é o mecanismo que o bestiário observado usa.
+- **`item.combatModifiers` é pontos-base (×10000); `monster.critChance` é PERCENTUAL** (M30-04,
+  #551) — unidades DIFERENTES de propósito, cada uma a escala do campo correspondente no Canary
+  (`items.xml` já usa ×10000; o Lua do monstro usa `critChance = 10` direto). Quem soma os dois
+  em pontos-base é o `sim` (`Inventory.combatModifiers`/`monsterCriticalModifiers`,
+  `combat/modifiers.ts`), não este pacote — `content` só valida a forma. `lifeleechchance`/
+  `manaleechchance` do Canary (`items.xml`) NÃO têm campo aqui: `Game::calculateLeechAmount` só
+  lê a skill AMOUNT, e o próprio Canary as pula na descrição do item — são vestigiais, sem
+  consumidor na resolução de dano (a pergunta do `_open` do #548 "conferir se a chance ainda é
+  lida" está respondida: não é). Nenhum item ou monstro do catálogo real declara os campos novos
+  ainda — os quatro monstros do bestiário (rat, rotworm, dragon, dragon lord) ficam no default
+  `critChance: 0`, a identidade; só 6 bosses do Canary declaram, fora do recorte hoje.
 
 Issue: FUN-8.

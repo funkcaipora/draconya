@@ -184,7 +184,8 @@ export interface CompiledWeaponFamily extends WeaponFamilyDefinition {
  */
 export function compileMitigation(profile: MitigationProfile | undefined): CompiledMitigation {
   const resistances: Record<DamageType, number> = {
-    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
   };
   if (profile !== undefined) {
     for (const type of DAMAGE_TYPES) {
@@ -264,7 +265,10 @@ export function normalizeMonsterDefenses(monster: MonsterDefinition): readonly M
     id: defense.id,
     cadenceMs: defense.cadenceMs,
     chance: defense.chance,
-    heal: { min: defense.heal.min, max: defense.heal.max },
+    ...(defense.heal === undefined ? {} : { heal: { min: defense.heal.min, max: defense.heal.max } }),
+    // A condição (CMB-11, #556) passa direto, como `condition`/`field` de `normalizeMonsterAbilities`
+    // abaixo: já vem na forma que o `sim` lê, e copiar aqui mantém a normalização do BOOT (DT-02).
+    ...(defense.condition === undefined ? {} : { condition: defense.condition }),
     ...(defense.presentation === undefined ? {} : {
       presentation: {
         ...(defense.presentation.impactKey === undefined
@@ -757,6 +761,18 @@ export function buildContent(raw: RawContent): Content {
         `item "${item.id}": defense só vale em escudo ou arma corpo a corpo de uma mão`,
       );
     }
+    // extraDefense/spellbook/quiver (#549, M30-02): a mesma disciplina do `defense` acima —
+    // um campo que só a conta do JOGADOR lê não pode aparecer num item que não é arma ou
+    // escudo, porque o schema de campo opcional não sabe do `kind`.
+    if (item.extraDefense > 0 && item.kind !== 'weapon') {
+      problems.push(`item "${item.id}": extraDefense só faz sentido em arma`);
+    }
+    if ((item.spellbook || item.quiver) && item.kind !== 'shield') {
+      problems.push(`item "${item.id}": spellbook/quiver só fazem sentido em escudo`);
+    }
+    if (item.spellbook && item.quiver) {
+      problems.push(`item "${item.id}": spellbook e quiver são exclusivos — o escudo é um ou outro`);
+    }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
     }
@@ -1078,6 +1094,29 @@ export function buildContent(raw: RawContent): Content {
             + 'existe no catálogo',
         );
       }
+    }
+  }
+
+  // A invocação (#546): cada entrada aponta um monstro que precisa existir no catálogo — a
+  // mesma referência cruzada de `loot.items` acima, agora contra `monsterDefinitions` (o
+  // Slime pode invocar a si mesmo; o boot não recusa self-reference, o TFS também não). E o
+  // `monsterId` precisa ser único dentro da lista: duas entradas do mesmo nome dividiriam o
+  // MESMO `(kind, subject)` na fila do `sim` — uma sobrescreveria o vencimento da outra, e o
+  // erro certo é recusar no boot, não descobrir num monstro que para de invocar pela metade.
+  for (const monster of monsterDefinitions.values()) {
+    const seenSummons = new Set<string>();
+    for (const entry of monster.summons?.entries ?? []) {
+      if (seenSummons.has(entry.monsterId)) {
+        problems.push(
+          `monstro "${monster.id}": summons.entries "${entry.monsterId}" duplicada`,
+        );
+      }
+      seenSummons.add(entry.monsterId);
+      if (monsterDefinitions.has(entry.monsterId)) continue;
+      problems.push(
+        `monstro "${monster.id}": summons.entries referencia monstro "${entry.monsterId}", que `
+          + 'não existe no catálogo',
+      );
     }
   }
 

@@ -3,7 +3,8 @@
 **Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 decisão 1, que revoga para mecânica de jogo o limite 2 do [ADR 0019](0019-opentibia-as-domain-specification.md)
 sob o qual `docs/product/bestiary.md`, `prey.md` e `training.md` foram escritos; bloqueada por uma
-questão em aberto (ver seção própria)
+questão em aberto (ver seção própria); em 2026-09-25 o Huntera contestou a decisão 1 (bônus de XP
+do Bestiário) — conflito para o dono resolver, ver emenda
 **Data:** 2026-09-25
 **Contexto técnico:** `packages/content` (`bestiary/`, charms, prey, task hunting, `training/`),
 `packages/sim` (contadores de abate existentes, motor de treino), `docs/product/bestiary.md`,
@@ -91,3 +92,46 @@ torna o teste de paridade incomparável.
 Nenhum muda de texto. Nenhum dos três sistemas toca estado quente fora do `CharacterRuntime` da
 sessão dona (invariante 9), e nenhum introduz I/O em `sim` (invariante 1) — contadores e slots
 continuam dado de conteúdo/estado de personagem, como já são hoje.
+
+## Emenda — 2026-09-25: decisões do dono ("copie do Huntera") — o Bestiário do Huntera dá bônus de XP, conflito em aberto
+
+Em 2026-09-25 o dono respondeu as doze questões abertas do `docs/tibia-parity-plan.md` §5 com
+"copie do Huntera". Para a questão 7 do plano ("confirmar a remoção do +1% de XP por marco sem
+compensação?"), a resposta puxa na direção OPOSTA à decisão 1 acima.
+
+A tela de personagem do Huntera lista cinco fontes de bônus de XP lado a lado: "Progresso no
+Bestiary, Experience Scroll, Bônus da guild, Bônus de Premium, Bônus de level" (Parte I §5-6,
+linha 85: "Progresso no Bestiary | —"). Na conta observada (level 1), o valor estava inativo
+(`—`) porque nenhum marco de Bestiário tinha sido alcançado — a porcentagem exata por marco, se
+ela escala por monstro ou globalmente, e um eventual teto nunca foram observados com valor
+diferente de zero.
+
+**O Huntera trata "Progresso no Bestiary" como um item de linha dentro do bônus de XP TOTAL do
+personagem** — o mesmo grupo de level/guild/Premium —, não como um sistema de Charm points sem XP
+direta. Isto contraria a leitura direta da decisão 1 acima (Bestiário vira estágios + Charms,
+**sem** o +1% de XP global do Draconya) e a própria questão em aberto original, que perguntava
+"confirmar a remoção", não "reconsiderar".
+
+**Sob "copie do Huntera": não remover o bônus de XP do Bestiário do Draconya (FUN-113) sem uma
+compensação equivalente.** O rótulo da caixa de progresso do Huntera ("Progresso no Bestiary")
+inclusive é quase idêntico ao já usado no Draconya ("Progresso no Bestiário",
+`docs/product/bestiary.md` linha 31) — o formato "Bestiário como item de bônus de XP total" é
+ANTERIOR à primeira captura do Huntera (o PRD §18 é de 2026-09-07, três dias antes da captura de
+2026-09-10 do Huntera), e a observação do Huntera corrobora a FORMA de forma independente, sem
+decidir o número exato.
+
+**Isto é um conflito genuíno para o dono, não uma resposta limpa.** As opções ficam registradas
+em aberto: manter o +1%/marco do FUN-113 ao lado dos Charms novos (os dois sistemas convivendo),
+manter o +1%/marco e adiar Charms, ou seguir a decisão 1 original (remover, Charms puro) — a
+diretriz "copie do Huntera" pesa CONTRA a remoção sem compensação, mas não decide sozinha o
+desenho final entre as opções que sobram. A questão em aberto original permanece aberta; M39-01
+(#601) não remove o bônus até o dono decidir à luz desta emenda.
+
+Confiança: média. **Captura pendente:** uma conta do Huntera com progresso real de Bestiário
+(muitas mortes de um monstro fácil, ou uma conta veterana) para ler o valor numérico real da
+linha "Progresso no Bestiary" e ver como ele escala com a contagem de abates — de preferência
+cruzando um ou mais marcos enquanto se observa o total de bônus de XP mudar, e checando se o
+bônus é por monstro ou global.
+
+(Evidência: `docs/reference/huntera-observed.md` Parte I §5-6 linhas 79-89; decisão 1 acima;
+`docs/product/bestiary.md` linha 31; `docs/prd-v0.9.md` §18, 2026-09-07.)

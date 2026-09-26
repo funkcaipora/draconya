@@ -44,8 +44,12 @@ export type Direction = 'north' | 'east' | 'south' | 'west';
  */
 export type AreaSource = 'spell' | 'monster';
 
-/** Para onde "à frente" aponta, por direção. */
-const FORWARD: Readonly<Record<Direction, WorldPoint>> = {
+/**
+ * Para onde "à frente" aponta, por direção. Exportado (M31-03, #558) para o desvio de passo do
+ * drunk (`conditions.ts`/`rulesets/hunt.ts`), que precisa do MESMO deslocamento cardeal — a
+ * mesma ordem de direção que `Direction` já usa em toda a área.
+ */
+export const FORWARD: Readonly<Record<Direction, WorldPoint>> = {
   north: { x: 0, y: -1, z: 0 },
   south: { x: 0, y: 1, z: 0 },
   east: { x: 1, y: 0, z: 0 },

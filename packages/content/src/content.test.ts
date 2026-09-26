@@ -31,7 +31,7 @@ const baseline = {
 
 const combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
 
@@ -270,6 +270,135 @@ describe('combat baseline', () => {
   });
 });
 
+describe('combat-v3: defesa/armadura/mitigação do blockHit (#548, M30-01)', () => {
+  const v3Combat = {
+    ...combat,
+    compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+
+  it('exige weaponDamage/distanceHitChance, como o combat-v2 já exigia', () => {
+    expect(() => buildContent(base({
+      combat: [{ ...combat, compatibilityProfile: 'combat-v3' }],
+    }))).toThrow(/combat-v3 exige o bloco "weaponDamage"/);
+    expect(() => buildContent(base({
+      combat: [{ ...combat, compatibilityProfile: 'combat-v3', weaponDamage: v3Combat.weaponDamage }],
+    }))).toThrow(/combat-v3 exige o bloco "distanceHitChance"/);
+  });
+
+  it('sobe com os dois blocos presentes', () => {
+    expect(buildContent(base({ combat: [v3Combat] })).combat.compatibilityProfile)
+      .toBe('combat-v3');
+  });
+
+  it('monster.defense/defenseMitigation são opcionais, default 0 (identidade do rato)', () => {
+    const content = buildContent(base());
+    const monster = content.monsters.get('rat');
+    expect(monster?.defense).toBe(0);
+    expect(monster?.defenseMitigation).toBe(0);
+  });
+
+  it('monster.defense/defenseMitigation aceitam os números do Dragon (#548)', () => {
+    const dragon = { ...rat, id: 'dragon', name: 'Dragon', defense: 30, defenseMitigation: 0.99 };
+    const content = buildContent(base({ monsters: [rat, dragon] }));
+    expect(content.monsters.get('dragon')).toMatchObject({ defense: 30, defenseMitigation: 0.99 });
+  });
+
+  it('defense negativo, ou mitigation fora de [0, 30], derrubam o boot', () => {
+    expect(() => buildContent(base({ monsters: [{ ...rat, defense: -1 }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, defenseMitigation: 31 }] })))
+      .toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, defenseMitigation: -0.1 }] })))
+      .toThrow(ContentError);
+  });
+});
+
+describe('crítico e leech de item e de monstro (M30-04, #551)', () => {
+  const espada = {
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
+    slot: 'hand', weight: 50, value: 0, attack: 24, requires: { level: 15 },
+  };
+
+  it('item sem combatModifiers é o de sempre — o campo fica ausente', () => {
+    const content = buildContent(base({ items: [espada] }));
+    expect(content.items.get('spike-sword')?.combatModifiers).toBeUndefined();
+  });
+
+  it('item aceita combatModifiers em pontos-base (os números do wand of darkness, #43)', () => {
+    const wand = {
+      ...espada, id: 'wand-of-darkness', name: 'Wand of Darkness',
+      combatModifiers: { criticalChance: 1000, criticalDamage: 3500 },
+    };
+    const content = buildContent(base({ items: [wand] }));
+    expect(content.items.get('wand-of-darkness')?.combatModifiers)
+      .toEqual({ criticalChance: 1000, criticalDamage: 3500 });
+  });
+
+  it('lifeLeech/manaLeech também são pontos-base, e os quatro campos são independentes', () => {
+    const ring = {
+      ...espada, id: 'grand-sanguine-ring', name: 'Grand Sanguine Ring', kind: 'ring', slot: 'finger',
+      combatModifiers: { lifeLeech: 1000, manaLeech: 500 },
+    };
+    const content = buildContent(base({ items: [ring] }));
+    expect(content.items.get('grand-sanguine-ring')?.combatModifiers)
+      .toEqual({ lifeLeech: 1000, manaLeech: 500 });
+  });
+
+  it('combatModifiers negativo, não inteiro, ou criticalChance acima de 10000, derrubam o boot', () => {
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { criticalChance: -1 } }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { lifeLeech: 1.5 } }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { criticalChance: 10_001 } }],
+    }))).toThrow(ContentError);
+  });
+
+  it('combatModifiers é `strictObject` — chave desconhecida (a `criticalhitchance` do XML) derruba', () => {
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { criticalhitchance: 1000 } }],
+    }))).toThrow(ContentError);
+  });
+
+  it('monster.critChance é opcional, default 0 (identidade de rato/rotworm/dragon/dragon-lord)', () => {
+    const content = buildContent(base());
+    expect(content.monsters.get('rat')?.critChance).toBe(0);
+  });
+
+  it('monster.critChance aceita o número do Canary (antenna.lua: critChance 10)', () => {
+    const boss = { ...rat, id: 'antenna', name: 'Antenna', critChance: 10 };
+    const content = buildContent(base({ monsters: [rat, boss] }));
+    expect(content.monsters.get('antenna')?.critChance).toBe(10);
+  });
+
+  it('critChance fora de [0, 100], ou não inteiro, derrubam o boot', () => {
+    expect(() => buildContent(base({ monsters: [{ ...rat, critChance: -1 }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, critChance: 101 }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, critChance: 1.5 }] }))).toThrow(ContentError);
+  });
+});
+
+describe('canWalkOnFire/Poison/Energy (M29-05)', () => {
+  it('ausentes são `true` — o default do Canary, identidade do rato', () => {
+    const content = buildContent(base());
+    const monster = content.monsters.get('rat');
+    expect(monster?.canWalkOnFire).toBe(true);
+    expect(monster?.canWalkOnPoison).toBe(true);
+    expect(monster?.canWalkOnEnergy).toBe(true);
+  });
+
+  it('aceita `false` por tipo, independente dos outros dois', () => {
+    const avoidsFire = { ...rat, id: 'avoids-fire', name: 'Avoids Fire', canWalkOnFire: false };
+    const content = buildContent(base({ monsters: [rat, avoidsFire] }));
+    expect(content.monsters.get('avoids-fire')).toMatchObject({
+      canWalkOnFire: false, canWalkOnPoison: true, canWalkOnEnergy: true,
+    });
+  });
+});
+
 describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
   const withMitigation = (mitigation: unknown) => base({ monsters: [{ ...rat, mitigation }] });
 
@@ -310,7 +439,7 @@ describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
     expect(mitigation?.immunities.has('fire')).toBe(false);
   });
 
-  it('a tabela de armadura exige os OITO tipos — um só não basta', () => {
+  it('a tabela de armadura exige os ONZE tipos — um só não basta', () => {
     // `z.record` de chave enum é exaustivo no zod 4: o conteúdo declara tudo, sem default em
     // código. É o que impede a efetividade de um elemento novo nascer zero por esquecimento.
     expect(() => buildContent(base({ combat: [{ ...combat, armorEffectiveness: { physical: 1 } }] })))
@@ -507,6 +636,103 @@ describe('abilities de monstro (CMB-06)', () => {
         abilities: { 'nunca-usada': { missile: 5 } },
       }],
     }))).not.toThrow();
+  });
+});
+
+describe('a estratégia ponderada de alvo (`monster.targetStrategy`, #541)', () => {
+  it('ausente é `undefined` — o comportamento de sempre, sem sorteio de critério', () => {
+    const content = buildContent(base());
+    expect(content.monsters.get('rat')?.targetStrategy).toBeUndefined();
+  });
+
+  it('aceita os quatro pesos do Dragon (70/10/10/10) e os expõe intactos ao `sim`', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 70, health: 10, damage: 10, random: 10 } }],
+    }));
+    expect(content.monsters.get('rat')?.targetStrategy)
+      .toEqual({ nearest: 70, health: 10, damage: 10, random: 10 });
+  });
+
+  it('recusa soma zero — nenhum peso maior que zero não sorteia critério nenhum', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 0, health: 0, damage: 0, random: 0 } }],
+    }))).toThrow(/peso maior que zero/);
+  });
+
+  it('recusa peso negativo', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: -1, health: 0, damage: 0, random: 100 } }],
+    }))).toThrow();
+  });
+
+  it('recusa peso fracionário — o sorteio é inteiro em `rankTarget`', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 0.5, health: 0, damage: 0, random: 100 } }],
+    }))).toThrow();
+  });
+
+  it('recusa quando falta um dos quatro pesos — os quatro são obrigatórios, sem default implícito', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, targetStrategy: { nearest: 100 } }],
+    }))).toThrow();
+  });
+});
+
+describe('invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
+  // O rato invoca a SI MESMO — mesma forma do Slime real (`slimes/slime.lua`, `monster.summon
+  // = { maxSummons = 3, summons = {{ name = "Slime", chance = 10, interval = 2000, count = 3
+  // }} }`, fonte local do #546), e mantém a hunt padrão (`cellars`, que aponta `rat`) montando
+  // sem precisar de um segundo monstro na fixture só para isto.
+  const summon = { monsterId: 'rat', chance: 0.10, intervalMs: 2_000, count: 3 };
+
+  it('ausência é nenhuma invocação — o comportamento de sempre', () => {
+    expect(buildContent(base()).monsters.get('rat')?.summons).toBeUndefined();
+  });
+
+  it('aceita a invocação declarada e propaga em FRAÇÃO, como as outras chances do monstro', () => {
+    // `chance = 10` (1–100 na fonte) vira `0.10` aqui, como `monsterDefenseSchema.chance` já
+    // faz para a cura do Dragon (#518) — a mesma convenção, a mesma conversão.
+    const withSummon = { ...rat, summons: { max: 3, entries: [summon] } };
+    const content = buildContent(base({ monsters: [withSummon] }));
+    expect(content.monsters.get('rat')?.summons).toEqual({ max: 3, entries: [summon] });
+  });
+
+  it('uma entrada pode apontar para o PRÓPRIO monstro — o Slime invoca Slime', () => {
+    const withSummon = { ...rat, summons: { max: 3, entries: [summon] } };
+    expect(() => buildContent(base({ monsters: [withSummon] }))).not.toThrow();
+  });
+
+  it('recusa entrada que aponta monstro inexistente — a mesma referência cruzada do loot.items', () => {
+    const withSummon = {
+      ...rat,
+      summons: { max: 1, entries: [{ monsterId: 'fantasma', chance: 1, intervalMs: 1_000, count: 1 }] },
+    };
+    expect(() => buildContent(base({ monsters: [withSummon] })))
+      .toThrow(/summons\.entries referencia monstro "fantasma", que não existe no catálogo/);
+  });
+
+  it('recusa duas entradas do mesmo monsterId: duas dividiriam o mesmo (kind, subject) na fila', () => {
+    const withSummon = {
+      ...rat,
+      summons: {
+        max: 2,
+        entries: [
+          { monsterId: 'rat', chance: 0.5, intervalMs: 1_000, count: 1 },
+          { monsterId: 'rat', chance: 0.3, intervalMs: 2_000, count: 1 },
+        ],
+      },
+    };
+    expect(() => buildContent(base({ monsters: [withSummon] })))
+      .toThrow(/summons\.entries "rat" duplicada/);
+  });
+
+  it('recusa entries vazio e chance fora de 0–1, como as outras chances do monstro', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, summons: { max: 1, entries: [] } }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, summons: { max: 1, entries: [{ ...summon, chance: 1.5 }] } }],
+    }))).toThrow(ContentError);
   });
 });
 
@@ -1852,7 +2078,10 @@ describe('as runas de ataque do Canary (#476)', () => {
 });
 
 describe('condições e campos declarativos (CMB-07, #334)', () => {
-  const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
+  const dot = {
+    kind: 'damage-over-time', form: 'rounds',
+    rounds: [{ count: 4, intervalMs: 1_000, damage: 5 }], damageType: 'earth',
+  };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };
   const field = {
     id: 'fire', durationMs: 5_000,
@@ -1886,10 +2115,76 @@ describe('condições e campos declarativos (CMB-07, #334)', () => {
         ...rat,
         abilities: [{
           id: 'v', cadenceMs: 1_000, power: 1,
-          condition: { ...condition, effect: { kind: 'damage-over-time', amount: -1, intervalMs: 1_000 } },
+          condition: {
+            ...condition,
+            effect: {
+              kind: 'damage-over-time', form: 'rounds',
+              rounds: [{ count: 1, intervalMs: 1_000, damage: -1 }],
+            },
+          },
         }],
       }],
     }))).toThrow(ContentError);
+    // `startDamage` maior que `totalDamage` é recusado (a clamp do Canary vira erro de conteúdo).
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: {
+            ...condition,
+            effect: {
+              kind: 'damage-over-time', form: 'generated',
+              totalDamage: 10, startDamage: 20, intervalMs: 1_000,
+            },
+          },
+        }],
+      }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa `durationMs` menor que o total da própria fila de tiques (achado da revisão do #557)', () => {
+    // `rounds`: 4 tiques de 1000 ms = 4000 ms de fila (o `dot` de cima), mas `durationMs` só
+    // cobre 3000 — o quarto tique cairia depois do prazo e `#onConditionTick` (`hunt.ts`) o
+    // descartaria em silêncio, sem erro nem log. `condition` (o fixture de cima) usa 4000 e
+    // passa; só encurtar quebra.
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: { ...condition, durationMs: 3_000 },
+        }],
+      }],
+    }))).toThrow(/durationMs \(3000 ms\) é menor que o total de 4000 ms/);
+
+    // `generated`: totalDamage 100/startDamage 5 produz 46 tiques de 5000 ms (230000 ms no
+    // total) — o mesmo exemplo do corpo do PR. Um `durationMs` "razoável" de 60000 ms (que não
+    // denuncia nada de errado ao olho) truncaria a fila bem antes de entregar os 100 de dano.
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: {
+            key: 'poison', merge: 'strongest', durationMs: 60_000,
+            effect: {
+              kind: 'damage-over-time', form: 'generated',
+              totalDamage: 100, startDamage: 5, intervalMs: 5_000,
+            },
+          },
+        }],
+      }],
+    }))).toThrow(/durationMs \(60000 ms\) é menor que o total de 230000 ms/);
+
+    // `durationMs` MAIOR que o total é aceito — é o caso real do Dragon Lord (7×10000 = 70000):
+    // a condição só fica com a fila zerada até vencer, sem efeito observável.
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{ id: 'v', cadenceMs: 1_000, power: 1, condition: { ...condition, durationMs: 9_000 } }],
+      }],
+    }))).not.toThrow();
   });
 
   it('a magia de dano ao longo do tempo monta; sem `range` é recusada', () => {
@@ -1903,6 +2198,236 @@ describe('condições e campos declarativos (CMB-07, #334)', () => {
       spells: [{
         ...spell,
         effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, durationMs: 3_000, damageType: 'earth' },
+      }],
+    }))).toThrow(ContentError);
+  });
+});
+
+describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
+  // O ataque do mutated_rat (`data-otservbr-global/monster/mammals/mutated_rat.lua`):
+  // `{ name = "speed", speedChange = -600, duration = 30000, target = true }`.
+  const paralyzeAttack = {
+    key: 'speed', merge: 'refresh' as const, durationMs: 30_000,
+    effect: { kind: 'speed', type: 'paralyze', delta: -600 },
+  };
+  // A defesa do Doom Deer (`data-otservbr-global/monster/mammals/doom_deer.lua`):
+  // `{ name = "speed", speedChange = 400, duration = 8000 }`, self-haste.
+  const hasteDefense = {
+    key: 'speed', merge: 'refresh' as const, durationMs: 8_000,
+    effect: { kind: 'speed', type: 'haste', delta: 400 },
+  };
+
+  it('monsterAbilitySchema aceita a condição speed, com a chave reservada', () => {
+    const ability = { id: 'slow', cadenceMs: 2_000, power: 0, condition: paralyzeAttack };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'slow')?.condition)
+      .toEqual(paralyzeAttack);
+  });
+
+  it('recusa speed sem delta e sem formula, ou com os dois ao mesmo tempo', () => {
+    const semNenhum = { ...paralyzeAttack, effect: { kind: 'speed', type: 'paralyze' } };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: semNenhum }] }],
+    }))).toThrow(ContentError);
+
+    const osDois = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'paralyze', delta: -600,
+        formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: osDois }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa type que contradiz o sinal de delta — haste negativo ou paralyze positivo', () => {
+    const hasteNegativo = {
+      ...paralyzeAttack,
+      effect: { kind: 'speed', type: 'haste', delta: -600 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: hasteNegativo }] }],
+    }))).toThrow(ContentError);
+
+    const paralyzePositivo = {
+      ...paralyzeAttack,
+      effect: { kind: 'speed', type: 'paralyze', delta: 400 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: paralyzePositivo }] }],
+    }))).toThrow(ContentError);
+
+    // delta zero cai no `else` de `Monsters::deserializeSpell` do Canary — é paralyze, não haste.
+    const hasteZero = {
+      ...paralyzeAttack,
+      effect: { kind: 'speed', type: 'haste', delta: 0 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: hasteZero }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa type que contradiz o sinal de formula — a runa de paralyze rotulada como haste', () => {
+    // A runa real (`data/scripts/runes/paralyze_rune.lua`: `setFormula(-1, 0, -1, 0)`) só pode
+    // REDUZIR velocidade; rotulá-la `haste` é exatamente o erro de conteúdo que #641 encontrou.
+    const paralyzeRotuladoHaste = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'haste',
+        formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: paralyzeRotuladoHaste }] }],
+    }))).toThrow(ContentError);
+
+    // O inverso: a fórmula do haste (`setFormula(1.3, 40, 1.3, 40)`) só pode SUBIR velocidade;
+    // rotulá-la `paralyze` também é recusado.
+    const hasteRotuladoParalyze = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'paralyze',
+        formula: { mina: 1.3, minb: 40, maxa: 1.3, maxb: 40 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: hasteRotuladoParalyze }] }],
+    }))).toThrow(ContentError);
+
+    // A fórmula real, com o type CERTO, continua aceita.
+    const paralyzeCorreto = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'paralyze',
+        formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: paralyzeCorreto }] }],
+    }))).not.toThrow();
+  });
+
+  it('recusa a chave errada — speed exige a chave reservada "speed"', () => {
+    const chaveErrada = { ...paralyzeAttack, key: 'slow' };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveErrada }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa a VOLTA também — a chave reservada "speed" com um efeito que NÃO é speed (#651)', () => {
+    // `conditionSpecSchema` só checava `effect.kind === 'speed' → key === 'speed'`; a implicação
+    // inversa (`key === 'speed' → effect.kind === 'speed'`) passava batido. `Conditions` (`sim/
+    // conditions.ts`) reconhece a condição pela CHAVE, nunca pelo `effect.kind` — um `buff`
+    // copiado/colado com `key: 'speed'` por engano ligaria a leitura de velocidade de quem o
+    // carrega sem NENHUMA relação com o autor pretendido.
+    const chaveReservadaComEfeitoErrado = {
+      key: 'speed', merge: 'refresh' as const, durationMs: 5_000,
+      effect: { kind: 'buff' as const, damageTakenPercent: -20 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveReservadaComEfeitoErrado }],
+      }],
+    }))).toThrow(ContentError);
+  });
+
+  it('monsterDefenseSchema aceita heal, condition, ou os dois — mas recusa nenhum dos dois', () => {
+    const withHeal = { id: 'h', cadenceMs: 2_000, chance: 0.15, heal: { min: 40, max: 70 } };
+    const withCondition = { id: 's', cadenceMs: 3_000, chance: 0.3, condition: hasteDefense };
+    const content = buildContent(base({ monsters: [{ ...rat, defenses: [withHeal, withCondition] }] }));
+    const defenses = content.monsters.get('rat')?.defenses;
+    expect(defenses).toHaveLength(2);
+    expect(defenses?.[1]?.condition).toEqual(hasteDefense);
+    expect(defenses?.[1]?.heal).toBeUndefined();
+    expect(defenses?.[0]?.heal).toEqual({ min: 40, max: 70 });
+
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, defenses: [{ id: 'vazia', cadenceMs: 1_000, chance: 1 }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('a condition de uma defesa só usa speed do tipo haste (self-buff) — paralyze é recusado', () => {
+    const selfParalyze = { id: 'p', cadenceMs: 1_000, chance: 1, condition: paralyzeAttack };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, defenses: [selfParalyze] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('a condition de uma defesa nunca aceita drunk — drunk é sempre efeito de ATACANTE (#651)', () => {
+    // Achado da revisão do #651: `monsterDefenseSchema` só recusava `speed` do tipo paralyze —
+    // nada impedia `condition.effect.kind: 'drunk'` numa defesa. O Canary nunca aplica drunk
+    // como self-buff (`Monsters::deserializeSpell` só o usa em ATAQUE), e um monstro que se
+    // embebedasse sozinho a cada `cadenceMs` desviaria o PRÓPRIO passo pelo mesmo `#drunkTarget`
+    // do jogador — um mecanismo que o Canary/TFS não tem.
+    const selfDrunk = {
+      id: 'd', cadenceMs: 1_000, chance: 1,
+      condition: {
+        key: 'drunk', merge: 'refresh' as const, durationMs: 5_000, effect: { kind: 'drunk' as const },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, defenses: [selfDrunk] }],
+    }))).toThrow(ContentError);
+  });
+});
+
+describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => {
+  // O ataque do demon parrot (`data-otservbr-global/monster/birds/demon_parrot.lua`):
+  // `{ name = "drunk", interval = 1000, chance = 30, length = 5, spread = 0, target = false }`.
+  // A ÁREA (`length`/`spread`/`radius`) já é `target.area` de `monsterAbilitySchema` — o mesmo
+  // mecanismo de toda ability em área (#523); só o EFEITO da condição é novo aqui.
+  const drunkAttack = {
+    key: 'drunk', merge: 'refresh' as const, durationMs: 10_000,
+    effect: { kind: 'drunk' as const },
+  };
+
+  it('monsterAbilitySchema aceita a condição drunk, com a chave reservada', () => {
+    const ability = {
+      id: 'hicks', cadenceMs: 1_000, power: 0,
+      target: { range: 1, area: { shape: 'wave' as const, length: 5 } },
+      condition: drunkAttack,
+    };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'hicks')?.condition)
+      .toEqual(drunkAttack);
+  });
+
+  it('drunk não aceita campo nenhum além do que toda condição já tem — só `kind`', () => {
+    // Ao contrário de `speed` (delta/formula) e dos DOT (totalDamage/rounds), o efeito drunk não
+    // tem parâmetro do Tibia: o mecanismo inteiro é o sorteio [0, 60] do `sim`. Um campo estranho
+    // é descartado pelo `z.object` (como `mana-shield`), nunca vira erro de conteúdo.
+    const comCampoEstranho = { ...drunkAttack, effect: { kind: 'drunk' as const, delta: -600 } };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: comCampoEstranho }],
+      }],
+    }))).not.toThrow();
+  });
+
+  it('recusa a chave errada — drunk exige a chave reservada "drunk"', () => {
+    const chaveErrada = { ...drunkAttack, key: 'hicks' };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveErrada }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa a VOLTA também — a chave reservada "drunk" com um efeito que NÃO é drunk (#651)', () => {
+    // O mesmo achado do describe de speed acima, do lado do drunk: `Conditions.hasDrunk`
+    // (`sim/conditions.ts`) reconhece a condição SÓ pela chave — um efeito qualquer copiado com
+    // `key: 'drunk'` por engano (por exemplo editando uma condição de drunk para outra coisa e
+    // esquecendo de trocar a chave) ligaria o desvio de passo em quem o carrega, sem relação
+    // nenhuma com o autor pretendido.
+    const chaveReservadaComEfeitoErrado = {
+      key: 'drunk', merge: 'refresh' as const, durationMs: 5_000,
+      effect: { kind: 'buff' as const, damageTakenPercent: -20 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveReservadaComEfeitoErrado }],
       }],
     }))).toThrow(ContentError);
   });

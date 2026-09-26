@@ -7,7 +7,7 @@
 //   pnpm bench:monster
 
 import { performance } from 'node:perf_hooks';
-import { MonsterRuntime, chooseTarget, decideMonsterAction, type Prey } from '@draconya/sim';
+import { MonsterRuntime, Rng, chooseTarget, decideMonsterAction, type Prey } from '@draconya/sim';
 import { BASIC_ABILITY_ID, compileMitigation } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 
@@ -19,9 +19,12 @@ const DT_MS = 100;
 
 const definition: Monster = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
-  health: 20, experience: 5, attack: 6, armor: 0, damageType: 'physical',
+  health: 20, experience: 5, attack: 6, armor: 0, defense: 0, defenseMitigation: 0,
+  critChance: 0,
+  damageType: 'physical',
   attackIntervalMs: 2_000, speed: 300, aggroRadius: 8,
-  attackRange: 1, leashRadius: 0, blockable: false, loot: { items: [] },
+  attackRange: 1, targetDistance: 1, leashRadius: 0, blockable: false, loot: { items: [] },
+  canWalkOnFire: true, canWalkOnPoison: true, canWalkOnEnergy: true,
   mitigation: compileMitigation(undefined),
   abilities: [{
     id: BASIC_ABILITY_ID, cadenceMs: 2_000, target: { range: 1 },
@@ -46,8 +49,11 @@ const monsters = Array.from({ length: MONSTERS }, (_, i) => new MonsterRuntime({
   cooldowns: {},
 }));
 const prey: Prey[] = Array.from({ length: PLAYERS }, (_, i) => ({
-  id: `p${i}`, position: { x: 20 + i, y: 20 }, alive: true,
+  id: `p${i}`, position: { x: 20 + i, y: 20 }, alive: true, health: 100,
 }));
+// `definition` não declara `targetStrategy` (#541): esta semente nunca é consultada —
+// `chooseTarget` só sorteia quando o conteúdo pede a estratégia ponderada.
+const rng = Rng.fromSeed('bench-monster-step');
 
 let steps = 0;
 let attacks = 0;
@@ -58,7 +64,7 @@ for (let tick = 0; tick < TICKS; tick++) {
     prey[i] = { ...p, position: { x: 5 + ((tick + i * 7) % 30), y: 5 + ((tick >> 3) % 30) } };
   }
   for (const monster of monsters) {
-    monster.targetId = chooseTarget(monster, prey, definition);
+    monster.targetId = chooseTarget(monster, prey, definition, rng, tick * DT_MS);
     const target = prey.find((p) => p.id === monster.targetId) ?? null;
     const action = decideMonsterAction(monster, target, definition, blocked);
     if (action.kind === 'step') {

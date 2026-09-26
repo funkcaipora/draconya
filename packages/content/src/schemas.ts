@@ -5,23 +5,48 @@
 import { z } from 'zod';
 
 /**
- * A taxonomia CANÔNICA de tipos de dano (CMB-03, emenda do ADR 0031). É a fonte ÚNICA: o
- * `sim` importa `DamageType` daqui e não redeclara o enum.
+ * A taxonomia CANÔNICA de tipos de dano (CMB-03, emenda do ADR 0031; drown/lifedrain/manadrain
+ * pelo #547, M29-07). É a fonte ÚNICA: o `sim` importa `DamageType` daqui e não redeclara o enum.
  *
- * Os sete primeiros são os tipos de dano do Tibia 13.32 (`CombatType` do TFS/Canary — só os
- * NOMES, que são fato de domínio; nenhum código GPL é copiado, ADR 0019): físico, energia,
- * terra, fogo, gelo, sagrado e morte. `arcane` é o tipo NÃO-ELEMENTAL da magia cujo elemento o
- * conteúdo ainda não declarou — é o vocabulário do `combat-v1` (`melee`/`magic`) preservado
- * para que a ausência de tipo continue rendendo bit a bit o mesmo dano (DT-03).
+ * Os dez primeiros são os `CombatType` do Tibia 13.32 (TFS/Canary — só os NOMES, que são fato de
+ * domínio; nenhum código GPL é copiado, ADR 0019): físico, energia, terra, fogo, gelo, sagrado,
+ * morte, afogamento (`drown`), dreno de vida (`lifedrain`) e dreno de mana (`manadrain`).
+ * `lifedrain` e `manadrain` são dano — o Canary NUNCA os usa para curar quem ataca
+ * (`Creature::mitigateDamage`, `creature.cpp:911-921`, os pula da mitigação percentual; nenhum
+ * dos dois soma vida ou mana em quem golpeia). `manadrain` resolve contra a MANA do alvo, não a
+ * vida (`sim/combat/outcome.ts`); `drown` e `lifedrain` são dano de vida comum. `arcane` é o
+ * OITAVO/último tipo, NÃO-ELEMENTAL, da magia cujo elemento o conteúdo ainda não declarou — é o
+ * vocabulário do `combat-v1` (`melee`/`magic`) preservado para que a ausência de tipo continue
+ * rendendo bit a bit o mesmo dano (DT-03); seu destino no catálogo (ADR 0040) é uma issue à parte.
  *
  * Tipo é separado de ORIGEM (`DamageSource`) e de EFEITO VISUAL (`CreatureHit.source`), pela
  * DT-01: o mesmo elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem
  * dizer qual fórmula resolveu.
  */
 export const DAMAGE_TYPES = [
-  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death',
+  'drown', 'lifedrain', 'manadrain', 'arcane',
 ] as const;
 export type DamageType = (typeof DAMAGE_TYPES)[number];
+
+/**
+ * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
+ * engine, commit e arquivo do Canary/TFS o número saiu — o mesmo `CatalogSource` que
+ * `scripts/catalog/generated-writer.ts` grava por entidade em `<tipo>/generated/*.json`, e o
+ * mesmo espírito do `source` que `tilemapSchema` já declara para o mapa importado (ADR 0025
+ * decisão 3). Opcional: só entidade GERADA carrega isto — uma autoral não tem `source` porque
+ * nasceu aqui, não foi importada.
+ *
+ * Precisa ser um campo EXPLÍCITO em cada schema que hospeda entidade gerada, e não um `_open`
+ * qualquer: todo schema de entidade (`itemSchema`, `monsterSchema`, `ammunitionSchema`, …) é
+ * `z.strictObject`, e chave não declarada derruba o boot na primeira entidade gerada de
+ * verdade — exatamente o motivo de `tilemapSchema` já declarar o dela.
+ */
+export const catalogSourceSchema = z.object({
+  engine: z.enum(['canary', 'forgottenserver']),
+  commit: z.string().min(1),
+  path: z.string().min(1),
+});
 
 /**
  * O perfil de mitigação de uma entidade (CMB-03): o que ela RESISTE e ao que é IMUNE.
@@ -71,13 +96,16 @@ export interface CompiledMitigation {
 
 /**
  * A tabela de efetividade de armadura que reproduz o `combat-v1` bit a bit (CMB-03): `physical`
- * vale o antigo `melee` (1), e todo tipo não-físico vale o antigo `magic` (0). É a REFERÊNCIA
- * da migração e o valor que uma fixture pode reusar; o conteúdo real declara a sua, porque o
- * schema exige os oito tipos e um default em código faria o balanceamento morar onde ninguém
- * procura.
+ * vale o antigo `melee` (1), e todo tipo não-físico vale o antigo `magic` (0), inclusive
+ * drown/lifedrain/manadrain (#547, M29-07: nenhum conteúdo v1/v2 os declara, e o `combat-v3`
+ * nem lê este campo — `blockhit.ts` usa a armadura em faixa, sem efetividade por tipo). É a
+ * REFERÊNCIA da migração e o valor que uma fixture pode reusar; o conteúdo real declara a sua,
+ * porque o schema exige os onze tipos e um default em código faria o balanceamento morar onde
+ * ninguém procura.
  */
 export const V1_ARMOR_EFFECTIVENESS: Readonly<Record<DamageType, number>> = {
-  physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+  physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+  drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
 };
 
 /** Referência a uma aparência no pacote de assets. NUNCA um caminho de arquivo (invariante 6). */
@@ -564,6 +592,35 @@ export const consumableEffectSchema = z.discriminatedUnion('kind', [
 export type ConsumableEffect = z.infer<typeof consumableEffectSchema>;
 
 /**
+ * Os modificadores de crítico e leech que o ATACANTE ganha por VESTIR o item (M30-04, #551).
+ *
+ * Pontos-base (×10000) — a MESMA escala do `criticalhitchance`/`criticalhitdamage`/
+ * `lifeleechamount`/`manaleechamount` do Canary (`data/items/items.xml`, conferido em
+ * 2026-09-26 contra `47dfd51`): `1000` é 10 %, `3500` é +35 % de dano. `Inventory.combatModifiers`
+ * (`sim`) SOMA os equipados, como já faz `armor`/`skillBonus`/`speedBonus` — um item só nunca é
+ * o total do personagem.
+ *
+ * `lifeleechchance`/`manaleechchance` do Canary (também em `items.xml`, 19/17 itens) **não**
+ * têm campo aqui de propósito: `Game::calculateLeechAmount` (`src/game/game.cpp:9058`) só lê a
+ * skill AMOUNT (`SKILL_LIFE_LEECH_AMOUNT`/`SKILL_MANA_LEECH_AMOUNT`) — a CHANCE não entra na
+ * fórmula —, e o próprio Canary pula as duas ao montar a descrição do item (`item.cpp:91`,
+ * `if (i == SKILL_MANA_LEECH_CHANCE || i == SKILL_LIFE_LEECH_CHANCE) continue;`): são
+ * atributos vestigiais nesta versão, sem consumidor na resolução de dano — conferido, não
+ * suposto (a pergunta do `_open` de `#548` "conferir se a chance ainda é lida" fica respondida
+ * aqui: não é).
+ *
+ * Ausente é o item comum de sempre, sem bônus nenhum — o total ZERO de todo conteúdo hoje, que
+ * preserva bit a bit o v1/v2/v3 (ver `combat/modifiers.ts` do `sim`).
+ */
+export const itemCombatModifiersSchema = z.strictObject({
+  criticalChance: z.number().int().min(0).max(10_000).optional(),
+  criticalDamage: z.number().int().min(0).optional(),
+  lifeLeech: z.number().int().min(0).optional(),
+  manaLeech: z.number().int().min(0).optional(),
+});
+export type ItemCombatModifiers = z.infer<typeof itemCombatModifiersSchema>;
+
+/**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
  *
  * **Estrito, ao contrário dos outros schemas** (FUN-94). Zod DESCARTA chave desconhecida em
@@ -638,6 +695,34 @@ export const itemSchema = z.strictObject({
    */
   defense: z.number().int().nonnegative().default(0),
   /**
+   * O `extradef` da ARMA (#549, M30-02; `Player::getDefense`, Canary `player.cpp:776-813`) — a
+   * defesa ADICIONAL que só conta na fórmula de defesa/mitigação do JOGADOR (`playerDefense`/
+   * `playerMitigation`, `sim/combat/player-defense.ts`), somada ao `defense` do escudo (ou da
+   * própria arma, se ela for de duas mãos). Diferente de `defense` (CMB-04: o que a peça BLOQUEIA
+   * no `combat-v1`/`v2`, e a magnitude do estágio novo do `combat-v3`), `extraDefense` só existe
+   * dentro da conta do jogador — nunca aparece isolado. `0` é o default que preserva toda arma
+   * sem o atributo (a maioria: só a Mystic Blade do kit level 200 o declara, Canary `items.xml`
+   * id 7384, `extradef value="2"`). Só em `kind: 'weapon'` — `buildContent` recusa o resto,
+   * como já faz com `defense`.
+   */
+  extraDefense: z.number().int().nonnegative().default(0),
+  /**
+   * O escudo é um SPELLBOOK (#549, M30-02; `Item::isSpellBook`, Canary `item.hpp:553-555`) — o
+   * "escudo" de Sorcerer/Druid, vestido com wand/rod na outra mão. Só muda `playerMitigation`:
+   * em vez do `primaryShield` da vocação, ele usa o `secondaryShield` como `distanceFactor`
+   * (a mesma leitura que o `quiver` do Paladin usa, por um mecanismo diferente — arco/besta).
+   * Só em `kind: 'shield'`, e nunca junto de `quiver` — `buildContent` recusa as duas.
+   */
+  spellbook: z.boolean().default(false),
+  /**
+   * O escudo é um QUIVER (#549, M30-02; `Item::isQuiver`, Canary `item.hpp:544-546`) — o
+   * carcás que segura munição na mão secundária. Mesma leitura do `spellbook` em
+   * `playerMitigation` (`secondaryShield` como `distanceFactor`); nenhum item do catálogo atual
+   * o declara (a Royal Crossbow do Paladin é de duas mãos, sem escudo — o `ammoFamily` da ARMA
+   * já cobre o `distanceFactor` dela). Só em `kind: 'shield'`, e nunca junto de `spellbook`.
+   */
+  quiver: z.boolean().default(false),
+  /**
    * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
    *
    * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
@@ -679,6 +764,8 @@ export const itemSchema = z.strictObject({
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
   }).optional(),
+  /** Crítico e leech do item, enquanto vestido (M30-04, #551) — ver `itemCombatModifiersSchema`. */
+  combatModifiers: itemCombatModifiersSchema.optional(),
   /**
    * O que o EQUIPAMENTO resiste e ao que é imune (CMB-03). Ausente é o item neutro — o default
    * preserva o v1, em que nenhum item tinha mitigação. Soma com os outros equipados no boot do
@@ -689,6 +776,8 @@ export const itemSchema = z.strictObject({
   ringEffect: ringEffectSchema.optional(),
   /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
   effect: consumableEffectSchema.optional(),
+  /** De onde um item IMPORTADO veio (ADR 0038 decisão 2). Ausente em item autorado à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
   // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
@@ -966,6 +1055,8 @@ export const ammunitionSchema = z.strictObject({
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),
+  /** De onde uma munição IMPORTADA veio (ADR 0038 decisão 2). Ausente em munição autorada à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 });
 
@@ -1009,15 +1100,96 @@ export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
 export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
 
 /**
+ * A fórmula de `ConditionSpeed::setFormula` (CMB-11, #556) — o método existe tanto no Canary
+ * quanto no TFS (`condition.cpp`), mas o `−40` abaixo é só do CANARY: o TFS usa `baseSpeed`
+ * direto, sem esse deslocamento (`monsters.cpp`: `minSpeedChange / 1000.0` como `mina`/`maxa`,
+ * `minb = maxb = 0`). O formato é o da RUNA/MAGIA, declarado direto no Lua (`paralyze_rune.lua`:
+ * `setFormula(-1, 0, -1, 0)`; `haste.lua`: `setFormula(1.3, 40, 1.3, 40)`). O `sim` lê como o
+ * CANARY lê — `min/max = a × (baseSpeed − 40) + b`, truncado para inteiro — nunca reescalada
+ * aqui; a precedência é a do ADR 0037 decisão 4 (Canary `main` para fórmula).
+ */
+export const conditionSpeedFormulaSchema = z.object({
+  mina: z.number(),
+  minb: z.number(),
+  maxa: z.number(),
+  maxb: z.number(),
+});
+export type ConditionSpeedFormula = z.infer<typeof conditionSpeedFormulaSchema>;
+
+/**
+ * A chave RESERVADA de uma condição `speed` (CMB-11, #556). Haste e paralyze do Tibia são dois
+ * `ConditionType_t` que se REMOVEM um ao outro (`Creature::onAddCondition` do Canary/TFS); aqui
+ * os dois vivem na MESMA chave, e a política de fusão do `Conditions.apply` (que sempre
+ * substitui, exceto `strongest`) já os torna mutuamente exclusivos sem lógica extra — é por
+ * isso que `conditionSpecSchema` exige esta chave exata para o efeito `speed`.
+ */
+export const SPEED_CONDITION_KEY = 'speed' as const;
+
+/**
+ * A chave RESERVADA de uma condição `drunk` (M31-03, #558). O efeito não carrega campo nenhum
+ * além do `durationMs` que `conditionSpecSchema` já dá a QUALQUER condição — nada no estado de
+ * runtime (`ConditionState`) o distingue de um `buff`/`mana-shield` vazio, então o `sim`
+ * (`Conditions.hasDrunk`) reconhece a condição pela CHAVE, como já faz para `mana-shield`. A
+ * chave reservada é o que garante que essa chave seja SEMPRE a mesma, qualquer que seja a
+ * ability/defesa/campo que a declare.
+ */
+export const DRUNK_CONDITION_KEY = 'drunk' as const;
+
+/**
+ * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
+ * cada `intervalMs` — o `addDamage(rounds, interval, value)` que os scripts de magia do Canary
+ * usam (Ignite: `addDamage(25, 3000, -45)`) e que o campo de fogo do Dragon Lord também usa
+ * (`items.xml` id 2118: `ticks 10000 count 7 damage 20`). O `form: 'rounds'` de
+ * `conditionEffectSchema` aceita mais de uma rodada, para concatenar grupos com cadência
+ * diferente — o caso comum (Dragon Lord) é uma rodada só.
+ */
+const damageOverTimeRoundSchema = z.object({
+  count: z.number().int().positive(),
+  intervalMs: z.number().int().positive(),
+  damage: z.number().int().positive(),
+});
+
+/**
  * O efeito declarativo de uma condição (CMB-07). É o `ConditionEffect` do contrato da issue: um
- * estado com prazo que muda uma leitura (haste, postura, magic shield) ou dispara um tique (cura
+ * estado com prazo que muda uma leitura (velocidade, postura, magic shield) ou dispara um tique (cura
  * ou DANO ao longo do tempo). O dano contínuo NÃO traz origem — quem aplica decide (`spell`,
  * `monster-attack`), e é a mesma divisão do `DamageSource` canônico (CMB-02).
+ *
+ * O dano ao longo do tempo tem DUAS formas do Tibia (M31-02, ADR 0037), a mesma divisão que
+ * `ConditionDamage::init`/`ItemParse::parseFieldCombatDamage` do Canary fazem por `startDamage`
+ * presente ou ausente — nunca as DUAS ao mesmo tempo:
+ * - `generated`: a lista DECRESCENTE que `ConditionDamage::generateDamageList`
+ *   (`src/creatures/combat/condition.cpp:2143-2160`) soma até `totalDamage`, começando em
+ *   `startDamage` e descendo até 1 (poison field do Canary: `start=5 damage=100`). Ausente,
+ *   `startDamage` é `max(1, ceil(totalDamage / 20))`, o default do próprio Canary.
+ * - `rounds`: a lista de RODADAS explícitas de cima. `generateDamageList`/`damageOverTimeTicks`,
+ *   abaixo, expandem as duas para a MESMA fila de tiques (`sim/conditions.ts` importa as duas em
+ *   vez de reimplementá-las) — o conteúdo só escolhe a forma mais perto da fonte.
+ *
+ * `damageType` é o ELEMENTO do Tibia (poison→earth, fire→fire, energy→energy, bleeding→physical,
+ * cursed→death, freezing→ice, dazzled→holy, drowning→drown — tabela em `docs/product/combat.md`;
+ * `drown` chegou ao enum pelo #547/M29-07, e um conteúdo de afogamento já pode declará-lo).
+ * Ausente é `physical`, o default que preserva o v1.
  */
 export const conditionEffectSchema = z.discriminatedUnion('kind', [
+  /**
+   * Velocidade com SINAL (CMB-11, #556, `ConditionSpeed` — a classe existe no Canary e no TFS,
+   * mas o PISO abaixo é mecanismo do CANARY, o TFS não tem: `type` é o nome do Tibia (`haste`
+   * acelera, `paralyze` desacelera) — não é derivado do sinal calculado, porque só ele decide o
+   * PISO (paralyze nunca desce a velocidade abaixo de 40; "40" está na escala do TFS que o nosso
+   * `speed` já usa — ADR 0037 decisão 4 — mas o próprio piso é do Canary). O `type` também
+   * precisa CONCORDAR com o sinal de `delta`/`formula` — ver os `.refine` abaixo: um `type`
+   * que contradiz a magnitude escapa do piso (a defesa que o protege só olha `type ===
+   * 'paralyze'`) e pode produzir `speedScale` negativo. Duas formas mutuamente exclusivas:
+   * `delta`, o `speedChange` do ATAQUE/DEFESA de monstro copiado em MILÉSIMOS, sem conversão
+   * (`Monsters::deserializeSpell` deriva a fórmula sozinho a partir dele); `formula`, a fórmula
+   * da RUNA/MAGIA copiada direto do Lua. Nunca os dois, nunca nenhum.
+   */
   z.object({
-    kind: z.literal('haste'),
-    speedPercent: z.number().int().positive(),
+    kind: z.literal('speed'),
+    type: z.enum(['haste', 'paralyze']),
+    delta: z.number().int().optional(),
+    formula: conditionSpeedFormulaSchema.optional(),
     damageDealtPercent: damagePercentBySource.optional(),
   }),
   z.object({
@@ -1026,32 +1198,212 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
     damageTakenPercent: z.number().int().optional(),
   }),
   z.object({ kind: z.literal('mana-shield') }),
+  /**
+   * O desvio de passo do bêbado (M31-03, #558, `CONDITION_DRUNK` — `Creature::onWalk` do
+   * Canary/TFS, `creatures/creature.cpp:291-301`). Sem campo próprio: o `sim`
+   * (`rollDrunkDeviation`, `conditions.ts`) sorteia a direção A CADA PASSO com o `Rng` da
+   * sessão — só `durationMs` (comum a toda condição) importa aqui. A área do ATAQUE que aplica
+   * a condição (`radius`/`length`+`spread` do Canary) já é o `target.area` de
+   * `monsterAbilitySchema`, o mesmo mecanismo de toda ability em área — nada de novo aqui.
+   */
+  z.object({ kind: z.literal('drunk') }),
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
     intervalMs: z.number().int().positive(),
   }),
-  z.object({
-    kind: z.literal('damage-over-time'),
-    amount: z.number().int().positive(),
-    intervalMs: z.number().int().positive(),
-    /** O tipo do tique (CMB-03). Ausente é `physical`, o default que preserva o v1. */
-    damageType: z.enum(DAMAGE_TYPES).default('physical'),
-  }),
-]);
+  z.discriminatedUnion('form', [
+    z.object({
+      kind: z.literal('damage-over-time'),
+      form: z.literal('generated'),
+      totalDamage: z.number().int().positive(),
+      startDamage: z.number().int().positive().optional(),
+      intervalMs: z.number().int().positive(),
+      damageType: z.enum(DAMAGE_TYPES).default('physical'),
+    }).refine(
+      (effect) => effect.startDamage === undefined || effect.startDamage <= effect.totalDamage,
+      { message: 'startDamage não pode passar de totalDamage', path: ['startDamage'] },
+    ),
+    z.object({
+      kind: z.literal('damage-over-time'),
+      form: z.literal('rounds'),
+      rounds: z.array(damageOverTimeRoundSchema).min(1),
+      damageType: z.enum(DAMAGE_TYPES).default('physical'),
+    }),
+  ]),
+]).refine(
+  (effect) => effect.kind !== 'speed' || (effect.delta !== undefined) !== (effect.formula !== undefined),
+  { message: 'o efeito speed exige delta OU formula, nunca os dois nem nenhum' },
+).refine(
+  (effect) => {
+    if (effect.kind !== 'speed' || effect.delta === undefined) return true;
+    // `Monsters::deserializeSpell` do Canary: `speedChange > 0 ? CONDITION_HASTE :
+    // CONDITION_PARALYZE` — delta zero cai no `else` (paralyze), nunca haste.
+    return effect.type === 'haste' ? effect.delta > 0 : effect.delta <= 0;
+  },
+  {
+    message: 'o type do efeito speed precisa concordar com o sinal de delta (haste > 0, '
+      + 'paralyze <= 0, como Monsters::deserializeSpell do Canary) — um type que contradiz o '
+      + 'delta escapa do piso do paralyze e pode gerar speedScale negativo',
+  },
+).refine(
+  (effect) => {
+    if (effect.kind !== 'speed' || effect.formula === undefined) return true;
+    const { mina, minb, maxa, maxb } = effect.formula;
+    // Sinal ESTATICAMENTE decidível: se todos os coeficientes têm o mesmo sinal (ou são zero),
+    // o resultado pré-piso só pode ir numa direção para qualquer baseSpeed >= 40 — o mínimo que
+    // o conteúdo usa hoje. Uma fórmula que só pode SUBIR velocidade não pode ser `paralyze`, e
+    // uma que só pode DESCER não pode ser `haste`: é o caso real da runa de paralyze (`-1, 0,
+    // -1, 0`) rotulada por engano como `haste`, que produziria um `speedScale` negativo (#556).
+    const onlyNonPositive = mina <= 0 && minb <= 0 && maxa <= 0 && maxb <= 0;
+    const onlyNonNegative = mina >= 0 && minb >= 0 && maxa >= 0 && maxb >= 0;
+    if (effect.type === 'haste' && onlyNonPositive && !onlyNonNegative) return false;
+    if (effect.type === 'paralyze' && onlyNonNegative && !onlyNonPositive) return false;
+    return true;
+  },
+  {
+    message: 'o type do efeito speed precisa concordar com o sinal da formula — coeficientes '
+      + 'que só podem reduzir velocidade não podem ser type "haste", e coeficientes que só '
+      + 'podem aumentar não podem ser type "paralyze"',
+  },
+);
 export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
+export type DamageOverTimeEffect = Extract<ConditionEffect, { kind: 'damage-over-time' }>;
+
+/**
+ * A lista DECRESCENTE do Tibia (M31-02): o mecanismo de `ConditionDamage::generateDamageList` do
+ * Canary (`src/creatures/combat/condition.cpp:2143-2160`), reescrito em TypeScript a partir do
+ * comportamento descrito — nunca copiado (ADR 0019). Mora AQUI, e não em `sim`, porque
+ * `conditionSpecSchema` (abaixo) também precisa saber quantos tiques uma lista `generated`
+ * produz, para recusar um `durationMs` curto demais para a própria fila que ele declara — achado
+ * da revisão do #557: nada cruzava os dois, e um `durationMs` "razoável" mas curto truncava o DOT
+ * em silêncio, sem erro nem teste que acusasse. `sim/conditions.ts` importa esta função em vez de
+ * reimplementá-la: duas contas para o mesmo número é o defeito que a DT-03 já nomeia noutro lugar
+ * deste pacote.
+ *
+ * Soma até `totalDamage`, começando em `startDamage` e descendo até 1: para cada "banda" `n` (de
+ * 1 até `startDamage`), a média-alvo é `n × totalDamage / startDamage`, e o valor da banda
+ * (`startDamage + 1 − n`) é repetido enquanto isso aproxima a soma acumulada dessa média — pelo
+ * menos uma vez. `startDamage` maior que `totalDamage` divide por um número maior que o total (o
+ * Canary clampa antes de chamar); o schema já recusa essa combinação, então aqui é só a
+ * matemática.
+ *
+ * Exemplo (poison field do Canary, `items.xml` id 2121, `start=5 damage=100`):
+ * `[5,5,5,5,4,4,4,4,4,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`
+ * — soma exata 100; `conditions.test.ts` (sim) e `content.test.ts` prendem esse vetor.
+ */
+export function generateDamageList(totalDamage: number, startDamage: number): readonly number[] {
+  const amount = Math.abs(totalDamage);
+  const start = Math.abs(startDamage);
+  const list: number[] = [];
+  let sum = 0;
+  for (let i = start; i > 0; i -= 1) {
+    const band = start + 1 - i;
+    const target = Math.trunc((band * amount) / start);
+    let closerWithOneMore: boolean;
+    do {
+      sum += i;
+      list.push(i);
+      const ifOneMore = Math.abs(1 - (sum + i) / target);
+      const asIs = Math.abs(1 - sum / target);
+      closerWithOneMore = ifOneMore < asIs;
+    } while (closerWithOneMore);
+  }
+  return list;
+}
+
+/** O `startDamage` default do Canary quando o conteúdo o omite: `max(1, ceil(totalDamage/20))`. */
+function defaultStartDamage(totalDamage: number): number {
+  return Math.max(1, Math.ceil(totalDamage / 20));
+}
+
+/** Um tique da fila do Tibia já expandido — a MESMA forma que `sim` consome (`QueuedTick`, sem
+ * `kind`/`damageType`/`source`, que não variam dentro da fila de uma condição). */
+export interface DamageOverTimeTick {
+  readonly amount: number;
+  readonly intervalMs: number;
+}
+
+/**
+ * Expande um `DamageOverTimeEffect` (as duas formas do Tibia) para a fila ORDENADA de tiques —
+ * puro, sem I/O, a mesma lista para a mesma entrada (invariante 1). A forma `generated` vira UMA
+ * lista decrescente, cada elemento com o `intervalMs` declarado; `rounds` concatena os grupos na
+ * ordem em que aparecem. Sempre pelo menos um elemento — o schema exige `totalDamage`/`count`
+ * positivos. `sim/conditions.ts` importa esta função para compilar o `ConditionState` de runtime
+ * a partir do MESMO cálculo que `conditionSpecSchema`, abaixo, usa para conferir `durationMs`.
+ */
+export function damageOverTimeTicks(effect: DamageOverTimeEffect): readonly DamageOverTimeTick[] {
+  if (effect.form === 'generated') {
+    const start = Math.min(effect.startDamage ?? defaultStartDamage(effect.totalDamage), effect.totalDamage);
+    return generateDamageList(effect.totalDamage, start)
+      .map((amount) => ({ amount, intervalMs: effect.intervalMs }));
+  }
+  return effect.rounds.flatMap((round) => Array.from(
+    { length: round.count }, () => ({ amount: round.damage, intervalMs: round.intervalMs }),
+  ));
+}
+
+/**
+ * O tempo TOTAL (ms) que a fila de `damageOverTimeTicks` precisa para esgotar — a soma do
+ * `intervalMs` de cada tique, na ordem em que disparam. É contra este número que
+ * `conditionSpecSchema`, abaixo, confere `durationMs` (achado da revisão do #557): no Canary os
+ * dois nunca podem divergir porque `ConditionDamage::addDamage` ESTENDE `ticks` a cada rodada
+ * somada — não existe campo de duração independente da fila. Aqui `durationMs` é um campo solto
+ * (histórico, e mantido por compatibilidade de conteúdo já autorado), então a mesma garantia
+ * precisa vir de CONFERÊNCIA em vez de vir de estrutura.
+ */
+export function damageOverTimeTotalMs(effect: DamageOverTimeEffect): number {
+  return damageOverTimeTicks(effect).reduce((sum, tick) => sum + tick.intervalMs, 0);
+}
 
 /**
  * A condição declarativa do conteúdo (CMB-07): chave, política de fusão, prazo e efeito. O
  * `sim` a compila para o estado de runtime com prazo LÓGICO absoluto. Nunca carrega arte
  * (invariante 6) — a apresentação, quando existir, é resolvida por id na tabela de aparências.
+ *
+ * Para `damage-over-time`, `durationMs` não pode ser menor que `damageOverTimeTotalMs(effect)`
+ * (achado da revisão do #557): sem esta conferência, um `durationMs` autorado à mão que fica
+ * curto demais para a própria fila de tiques trunca o DOT em silêncio — `#onConditionTick`
+ * (`sim/rulesets/hunt.ts`) para de agendar o próximo tique assim que ele cairia depois do prazo,
+ * mesmo com tiques ainda por entregar na fila. `durationMs` MAIOR que o total é aceito: a
+ * condição só fica com a fila zerada (`retiredTick`) até vencer, sem efeito observável.
+ *
+ * O efeito `speed` (CMB-11) exige `key: 'speed'` — a chave RESERVADA que faz haste e paralyze
+ * de QUALQUER fonte se substituírem (ver `SPEED_CONDITION_KEY`), como no Tibia. O efeito `drunk`
+ * (M31-03) exige `key: 'drunk'` pelo mesmo motivo: sem campo próprio no estado, é a chave que o
+ * `sim` reconhece (ver `DRUNK_CONDITION_KEY`).
+ *
+ * As duas checagens abaixo são as DUAS IMPLICAÇÕES, não só uma (achado da revisão do #651): sem
+ * a volta, `key: 'speed'`/`key: 'drunk'` com um `effect.kind` DIFERENTE passa batido — e
+ * `Conditions.hasDrunk`/o efeito de velocidade (`sim/conditions.ts`) reconhecem a condição só
+ * pela CHAVE, nunca pelo `effect.kind` dela. Um `buff` de dano copiado/colado com `key: 'drunk'`
+ * por engano ligaria o desvio de passo do bêbado em quem o carrega, sem NENHUMA relação com o
+ * autor pretendido.
  */
 export const conditionSpecSchema = z.object({
   key: z.string().min(1),
   merge: conditionMergeSchema.default('refresh'),
   durationMs: z.number().int().positive(),
   effect: conditionEffectSchema,
-});
+}).superRefine((spec, context) => {
+  if (spec.effect.kind !== 'damage-over-time') return;
+  const totalMs = damageOverTimeTotalMs(spec.effect);
+  if (spec.durationMs < totalMs) {
+    context.addIssue({
+      code: 'custom',
+      path: ['durationMs'],
+      message: `durationMs (${spec.durationMs} ms) é menor que o total de ${totalMs} ms que a `
+        + `própria fila de tiques do efeito precisa para esgotar — faltariam `
+        + `${totalMs - spec.durationMs} ms de dano no fim da condição`,
+    });
+  }
+}).refine(
+  (spec) => (spec.effect.kind === 'speed') === (spec.key === SPEED_CONDITION_KEY),
+  { message: `a condição speed precisa da chave reservada "${SPEED_CONDITION_KEY}", e só ela` },
+).refine(
+  (spec) => (spec.effect.kind === 'drunk') === (spec.key === DRUNK_CONDITION_KEY),
+  { message: `a condição drunk precisa da chave reservada "${DRUNK_CONDITION_KEY}", e só ela` },
+);
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
 /**
@@ -1190,26 +1542,45 @@ export const MONSTER_CLASSES = ['mammal', 'vermin', 'dragon'] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
+ * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
+ * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
+ * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
+ * `damage-over-time` ficam de fora por isso.
+ */
+const DEFENSE_SELF_CONDITION_KINDS = new Set<ConditionEffect['kind']>([
+  'speed', 'buff', 'mana-shield', 'heal-over-time',
+]);
+
+/**
  * Uma DEFESA de monstro (#518, TFS `Monster::onThinkDefense`, referência §15-19): cura própria,
- * como o Dragon (`interval 2000, chance 15%, +40..+70`). É uma lista independente da de ataque —
+ * como o Dragon (`interval 2000, chance 15%, +40..+70`), OU self-haste (CMB-11, #556), como o
+ * Doom Deer (`{ name = "speed", interval 3000, chance 30%, speedChange 400, duration 8000 }`,
+ * `data-otservbr-global/monster/mammals/doom_deer.lua`). É uma lista independente da de ataque —
  * cada defesa tem a própria cadência e a própria chance, um evento na fila por defesa (o mesmo
  * desenho de `monsterAbilitySchema`), nunca um cálculo por tick.
  *
  * Campo NOVO e opcional no monstro: nenhum conteúdo existente declara `defenses`, então `chance`
  * aqui é OBRIGATÓRIA — declarar a lista já é conteúdo novo, sem concessão de compatibilidade a
- * preservar.
+ * preservar. `heal` e `condition` são cada um opcional, mas `buildContent` exige pelo menos um —
+ * uma defesa que não cura nem muda velocidade não tem o que fazer.
  */
 export const monsterDefenseSchema = z.strictObject({
   id: z.string().min(1),
   /** Milissegundos entre tentativas. Tempo decorrido, nunca contagem de tick (invariante 2). */
   cadenceMs: z.number().int().positive(),
-  /** A chance de curar quando o `cadenceMs` vence — uma rolagem por vencimento. */
+  /** A chance de agir quando o `cadenceMs` vence — uma rolagem por vencimento. */
   chance: z.number().min(0).max(1),
   /** Quanto repõe, sorteado com o `Rng` da sessão a cada cura — nunca passa do HP máximo. */
   heal: z.object({
     min: z.number().int().nonnegative(),
     max: z.number().int().nonnegative(),
-  }).refine((range) => range.min <= range.max, 'heal.min não pode passar de heal.max'),
+  }).refine((range) => range.min <= range.max, 'heal.min não pode passar de heal.max').optional(),
+  /**
+   * A condição que a defesa aplica a SI MESMO (CMB-11, #556) — o self-haste do Doom Deer.
+   * `effect.type` precisa ser `haste` aqui: uma defesa que se paralisa sozinha não é o
+   * mecanismo que o Canary usa (`speedChange` positivo nas defesas do bestiário observado).
+   */
+  condition: conditionSpecSchema.optional(),
   /**
    * A chave SEMÂNTICA de apresentação (CMB-06): o mesmo `impactKey` da ability, resolvido pelo
    * host em `appearances.abilities` — o `blueshimmer` do Dragon, por exemplo. Chave sem linha é
@@ -1219,7 +1590,28 @@ export const monsterDefenseSchema = z.strictObject({
     impactKey: z.string().min(1).optional(),
   }).optional(),
   _open: z.string().optional(),
-});
+}).refine(
+  (defense) => defense.heal !== undefined || defense.condition !== undefined,
+  { message: 'a defesa precisa de heal ou condition' },
+).refine(
+  (defense) => defense.condition === undefined || defense.condition.effect.kind !== 'speed'
+    || defense.condition.effect.type === 'haste',
+  { message: 'a condition de uma defesa só usa speed do tipo haste (self-buff)' },
+).refine(
+  // O `effect.kind` de uma defesa é sempre um SELF-BUFF (achado da revisão do #651): sem esta
+  // lista, nada impedia `condition.effect.kind: 'drunk'` numa defesa — o Canary nunca aplica
+  // drunk como self-buff (é sempre um ataque do MONSTRO contra o jogador, `Monsters::
+  // deserializeSpell`), e um monstro que se embebedasse sozinho a cada `cadenceMs` desviaria o
+  // PRÓPRIO passo dele pelo mesmo `#drunkTarget` do jogador — um mecanismo que o Canary/TFS não
+  // tem. `damage-over-time` fica de fora pelo mesmo motivo: uma defesa nunca teria por que
+  // aplicar dano contínuo a si mesma.
+  (defense) => defense.condition === undefined
+    || DEFENSE_SELF_CONDITION_KINDS.has(defense.condition.effect.kind),
+  {
+    message: `a condition de uma defesa só aceita um efeito de self-buff `
+      + `(${[...DEFENSE_SELF_CONDITION_KINDS].join(', ')})`,
+  },
+);
 export type MonsterDefenseDefinition = z.infer<typeof monsterDefenseSchema>;
 
 /** A defesa como o `sim` a consome — mesma forma do arquivo, sem defaults a resolver. */
@@ -1227,7 +1619,9 @@ export interface MonsterDefense {
   readonly id: string;
   readonly cadenceMs: number;
   readonly chance: number;
-  readonly heal: { readonly min: number; readonly max: number };
+  readonly heal?: { readonly min: number; readonly max: number };
+  /** A condição que a defesa aplica a SI MESMO (CMB-11). Ausente: defesa só de cura. */
+  readonly condition?: ConditionSpec;
   readonly presentation?: { readonly impactKey?: string };
 }
 
@@ -1244,6 +1638,70 @@ export const monsterTargetChangeSchema = z.object({
   chance: z.number().min(0).max(1),
 });
 export type MonsterTargetChange = z.infer<typeof monsterTargetChangeSchema>;
+
+/**
+ * A seleção PONDERADA de alvo (#541, Canary `Monster::searchTargetImmediate`,
+ * `monster.cpp:906-931`, e `MonsterTargetRanker::rank`, `monster_targeting.cpp:17-83`): o
+ * CRITÉRIO usado por `chooseTarget` e pelo vencimento de `targetChange` é sorteado pelos pesos
+ * declarados — mais perto, menos vida, mais dano causado NO monstro, ou aleatório — em vez de
+ * fixo. Ausente preserva o comportamento de sempre: `chooseTarget` só pelo mais perto, e a troca
+ * por tempo só pelo `TARGETSEARCH_RANDOM` do #518.
+ *
+ * Inteiros não-negativos, soma > 0. O Canary sorteia com `uniform_random(1, 100)` contra os
+ * QUATRO campos de `monsters.hpp:127-130`, mas `strategiesTargetRandom` nunca entra na soma do
+ * `.cpp` — "aleatório" é implicitamente "o que sobra até 100". Aqui `random` é um peso
+ * EXPLÍCITO como os outros três: a soma não precisa ser 100, e `rankTarget`
+ * (`packages/sim/src/monster/target-strategy.ts`) sorteia proporcionalmente à soma real.
+ */
+export const monsterTargetStrategySchema = z.object({
+  nearest: z.number().int().nonnegative(),
+  health: z.number().int().nonnegative(),
+  damage: z.number().int().nonnegative(),
+  random: z.number().int().nonnegative(),
+}).refine(
+  (strategy) => strategy.nearest + strategy.health + strategy.damage + strategy.random > 0,
+  { message: 'targetStrategy precisa de ao menos um peso maior que zero' },
+);
+export type MonsterTargetStrategy = z.infer<typeof monsterTargetStrategySchema>;
+
+/**
+ * Uma entrada de invocação de monstro por monstro (#546, TFS/Canary `Monster::onThinkDefense`,
+ * `monster.summon`/`summons`, referência §15-19): o MESMO laço que avalia `defenses`, um
+ * `monsterId` por entrada — o `summonBlock.name`/`summonName` da fonte. Cada entrada tem a
+ * PRÓPRIA cadência e a PRÓPRIA chance, um evento na fila por entrada (o desenho de
+ * `monsterDefenseSchema`), nunca um cálculo por tick.
+ */
+export const monsterSummonEntrySchema = z.strictObject({
+  monsterId: z.string().min(1),
+  /** Milissegundos entre tentativas. Tempo decorrido, nunca contagem de tick (invariante 2). */
+  intervalMs: z.number().int().positive(),
+  /**
+   * A chance de nascer quando o `intervalMs` vence — uma rolagem por vencimento, em FRAÇÃO 0–1
+   * como o resto do conteúdo (`monsterDefenseSchema.chance`, `monsterAbilitySchema.chance`). A
+   * fonte guarda 1–100 (`summonChance`/`chance`, TFS `summonChance < uniform_random(1, 100)`) —
+   * o Slime declara `chance = 10`, e aqui vira `0.10`.
+   */
+  chance: z.number().min(0).max(1),
+  /**
+   * Teto de invocações VIVAS deste NOME (`summonBlock.max`/`summonCount`), não do monstro
+   * inteiro — esse é `monsterSummonsSchema.max` (`maxSummons`).
+   */
+  count: z.number().int().positive(),
+  _open: z.string().optional(),
+});
+export type MonsterSummonEntry = z.infer<typeof monsterSummonEntrySchema>;
+
+/**
+ * A invocação de um monstro (#546, `monster.summon`/`maxSummons`): quantas invocações vivas ele
+ * tolera NO TOTAL, entre todos os nomes, e a lista do que pode nascer. Campo NOVO e opcional —
+ * nenhum monstro do recorte atual (rat, rotworm, dragon, dragon-lord) declara `monster.summon`
+ * na fonte (conferido em 2026-09-25); ausente é nenhuma invocação, o comportamento de sempre.
+ */
+export const monsterSummonsSchema = z.strictObject({
+  max: z.number().int().positive(),
+  entries: z.array(monsterSummonEntrySchema).min(1),
+});
+export type MonsterSummons = z.infer<typeof monsterSummonsSchema>;
 
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
@@ -1269,6 +1727,14 @@ export const monsterSchema = z.strictObject({
   ]),
   armor: z.number().int().nonnegative(),
   /**
+   * A defesa do monstro no `combat-v3` (#548, `Monster::getDefense`/`monster.defenses.defense`
+   * do Canary) — a peça que o `blockHit` subtrai em faixa (`uniform_random(defense/2,
+   * defense)`) enquanto o `blockCount` tiver carga, ANTES da armadura. Ausente é `0`: sem
+   * defesa, o estágio nunca reduz nada (a mesma identidade que preserva rato/rotworm). Dragon
+   * (30) e Dragon Lord (34), `dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25.
+   */
+  defense: z.number().int().nonnegative().default(0),
+  /**
    * O TIPO de dano do ataque do monstro (CMB-03). Ausente é `physical`, o default que preserva
    * o v1 — o rato morde, e mordida era dano físico. As abilities por tipo são do CMB-06.
    */
@@ -1278,6 +1744,52 @@ export const monsterSchema = z.strictObject({
    * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
    */
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * A mitigação PERCENTUAL do `combat-v3` (#548, `Monster::getMitigation`/`monster.defenses.
+   * mitigation` do Canary — nome DISTINTO de `mitigation` acima de propósito: aquele é
+   * resistência/imunidade POR TIPO, `Creature::mitigateDamage` é um percentual ÚNICO aplicado
+   * por ÚLTIMO, depois da armadura, sobre QUALQUER tipo de dano — exceto lifedrain e manadrain
+   * (`agony` não existe no Draconya). A exceção chegou com o #547 (M29-07): `resolveBlockHit`
+   * (`sim/combat/blockhit.ts`) recebe `mitigationExempt` calculado do `damageType`, nunca mais
+   * fixo em `false`. O valor É o percentual direto — `0.99` tira 0,99 % do dano, não 99 % — e o
+   * Canary o CAPA em 30. Ausente é `0`, a identidade de rato/rotworm e de todo monstro que o
+   * Canary não declara (a maioria: 1394/1655 no bestiário real DECLARAM, mas o Draconya só tem
+   * quatro monstros hoje).
+   */
+  defenseMitigation: z.number().min(0).max(30).default(0),
+  /**
+   * O crítico do MONSTRO (M30-04, #551, `Monster::getCriticalChance`/`monsters.hpp:126`
+   * `critChance`, conferido em 2026-09-26 contra `47dfd51`). PERCENTUAL inteiro 0-100 — a
+   * MESMA escala do campo Lua (`critChance = 10` no `antenna.lua`) — porque é
+   * `getCriticalChance() * 100` (`combat.cpp:2766`) quem converte para pontos-base na rolagem;
+   * `sim/combat/modifiers.ts` faz a MESMA conversão. Ausente é `0`, a identidade de rato,
+   * rotworm, dragon e dragon lord: nenhum dos quatro declara `critChance` no Canary — só 6
+   * bosses o fazem (`antenna`, `mitmah_scout`, `mitmah_seer`, `the_monster`,
+   * `alchemist_container`, `doctor_marrow`), fora do bestiário do Draconya hoje. O Canary NÃO
+   * declara bônus de DANO crítico para monstro em conteúdo algum — `Monster::getCriticalDamage`
+   * é campo só de runtime (`criticalDamage`, `monster.cpp:307`, default `0`, sem script que o
+   * altere) — então um crítico de monstro ativa a FLAG sem multiplicar dano nenhum, fiel ao que
+   * o Canary de fato faz; por isso não há `criticalDamage` aqui.
+   */
+  critChance: z.number().int().min(0).max(100).default(0),
+  /**
+   * Pode pisar em campo de FOGO mesmo sem ser imune a `fire` (M29-05, TFS `Monster::
+   * canWalkOnFieldType`/`Tile::queryAdd`, Canary `monsters.hpp:150`, `canWalkOnFire`)? Ausente é
+   * `true` — o default do próprio Canary, e o que preserva rato/rotworm/Dragon/Dragon Lord (os
+   * quatro monstros de hoje declaram `true`, ou não declaram nada — `dragon.lua`/`dragon_lord.
+   * lua`, conferidos em 2026-09-25). `false` é a EXCEÇÃO real (632/1601 no bestiário do Canary):
+   * o passo guloso e a fuga (`monster/step.ts`) tratam um tile com campo de fogo como bloqueado
+   * para quem declara `false` e não é imune a `fire` — a base de um Fire Field/GFB controlar
+   * posição de monstro.
+   */
+  canWalkOnFire: z.boolean().default(true),
+  /**
+   * O mesmo, para campo de VENENO — TFS/Canary `canWalkOnPoison`. O elemento do Tibia aqui é
+   * `earth` (CMB-03: `terra→canWalkOnPoison`), não um tipo `poison` à parte.
+   */
+  canWalkOnPoison: z.boolean().default(true),
+  /** O mesmo, para campo de ENERGIA — TFS/Canary `canWalkOnEnergy`. */
+  canWalkOnEnergy: z.boolean().default(true),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
   /**
@@ -1306,6 +1818,27 @@ export const monsterSchema = z.strictObject({
    * colado é comportamento diferente de um que atira à distância, e a diferença é conteúdo.
    */
   attackRange: z.number().int().positive().default(1),
+  /**
+   * A distância que o monstro tenta MANTER do alvo, em tiles (#542, TFS/Canary `targetDistance`,
+   * `Monster::getDistanceStep`/`getPathSearchParams`). Um atirador com `targetDistance > 1` recua
+   * um passo quando o alvo chega mais perto que isto — independente da fuga por vida baixa
+   * (`runOnHealth`), que já afasta por outro motivo — e também governa até onde a APROXIMAÇÃO
+   * avança (revisão do #649): o monstro para de se aproximar ao alcançar `targetDistance`, e não
+   * no maior alcance de ability. Ausente é `1`: o corpo a corpo de sempre, que nunca recua por
+   * este campo nem muda onde a aproximação para — rato, rotworm, Dragon e Dragon Lord
+   * (`dragon.lua`/`dragon_lord.lua`, que declaram o campo IGUAL ao default `1`) continuam
+   * idênticos.
+   *
+   * Separado de `attackRange` de propósito: `attackRange` é até onde o monstro ALCANÇA para
+   * bater; `targetDistance` é a distância que ele PREFERE manter enquanto persegue — e no
+   * bestiário real do Canary os dois raramente coincidem: um atirador tipicamente declara
+   * `targetDistance` bem MENOR que o alcance da ability mais longa (Necromancer `targetDistance`
+   * 4 com abilities de alcance 1/1/7; Priestess `targetDistance` 4 com abilities de alcance 7).
+   * Um monstro de `attackRange`/ability 7 e `targetDistance` 4 continua fechando a distância até
+   * 4 tiles mesmo já podendo atirar de mais longe — só o oposto (`targetDistance` ausente ou `1`)
+   * usa o maior alcance de ability como ponto de parada da aproximação.
+   */
+  targetDistance: z.number().int().positive().default(1),
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
   /**
@@ -1336,6 +1869,11 @@ export const monsterSchema = z.strictObject({
    * alvo atual morre ou sai do `leashRadius` (`chooseTarget`). */
   targetChange: monsterTargetChangeSchema.optional(),
   /**
+   * O critério de seleção ponderada (#541) que `chooseTarget` e o vencimento de `targetChange`
+   * sorteiam. Ausente é o comportamento de sempre — ver `monsterTargetStrategySchema`.
+   */
+  targetStrategy: monsterTargetStrategySchema.optional(),
+  /**
    * O HP em que o monstro passa a fugir (#518, TFS `runonhealth`, referência §15-19): abaixo ou
    * igual a este valor, ele se afasta do alvo em vez de aproximar, não dá golpe corpo a corpo,
    * mas continua usando as abilities à distância que alcançam. Ausente é nunca foge — o
@@ -1352,6 +1890,13 @@ export const monsterSchema = z.strictObject({
    * no determinismo; senão registrar como divergência").
    */
   staticAttack: z.number().min(0).max(1).optional(),
+  /** De onde um monstro IMPORTADO veio (ADR 0038 decisão 2). Ausente em monstro autorado à mão. */
+  source: catalogSourceSchema.optional(),
+  /**
+   * A invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`,
+   * referência §15-19). Ausente é nenhuma — o comportamento de sempre.
+   */
+  summons: monsterSummonsSchema.optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
   _open: z.string().optional(),
 });
@@ -1465,6 +2010,22 @@ export const vocationSchema = z.object({
     manaPerSecond: z.number().nonnegative(),
   }).optional(),
   /**
+   * A mitigação percentual do JOGADOR desta vocação (#549, M30-02; `PlayerWheel::
+   * calculateMitigation`, Canary `player_wheel.cpp:4072-4124`) — o `<mitigation multiplier
+   * primaryShield secondaryShield>` de `vocations.xml`. SEM RELAÇÃO com `mitigationSchema`
+   * (resistência/imunidade por tipo, CMB-03) nem com `Monster.defenseMitigation` (ADR 0040): os
+   * três se chamam "mitigação" porque o Canary também repete o nome para conceitos diferentes.
+   * `multiplier` escala a skill de escudo; `primaryShield`/`secondaryShield` escalam a defesa da
+   * peça — o segundo é o que spellbook, quiver e arma de duas mãos usam em vez do primeiro.
+   * Ausente: quem monta a sessão cai em `progression.mitigation` (a vocação `None`), a mesma
+   * regra de `regen` acima. `playerMitigation` (`sim/combat/player-defense.ts`) consome os três.
+   */
+  mitigation: z.object({
+    multiplier: z.number().nonnegative(),
+    primaryShield: z.number().nonnegative(),
+    secondaryShield: z.number().nonnegative(),
+  }).optional(),
+  /**
    * Quanto esta vocação demora para subir cada skill (#521, ADR 0037): o `factor` de
    * `pointsForLevel` (`skills.ts`) por `skillId`, substituindo o da tabela do conteúdo da
    * skill. É o `<skill id multiplier="…">` do Canary `vocations.xml` — a mesma chave cobre
@@ -1551,6 +2112,25 @@ export const progressionSchema = z.object({
     healthPerSecond: z.number().nonnegative(),
     manaPerSecond: z.number().nonnegative(),
   }),
+  /**
+   * A mitigação percentual BASE (#549, M30-02) — a vocação `None` do Canary `vocations.xml`
+   * (`<mitigation multiplier="1.3" primaryShield="2.05" secondaryShield="1.25">`), para quem
+   * ainda não tem vocação (níveis 1–7, §7.4) e para o conteúdo de teste que não declara uma.
+   *
+   * Ausente aqui é o default ABAIXO — os mesmos três números —, e não a lacuna que `regen`
+   * (sem default, acima) marca de propósito: `regen` ficou sem default porque o Canary não tem
+   * "regeneração de quem não tem vocação" nenhuma para copiar (§9.3 é number provisório, por
+   * decisão). Aqui o número É o do Canary, verificado, e não uma lacuna de balanceamento — o
+   * default existe só para não reabrir a dúzia de fixtures de teste que já constroem
+   * `progressionSchema` sem falar de combate. `content/data/progression/baseline.json` (o
+   * conteúdo REAL) declara os três de qualquer forma, como o `weaponSchema.family` já declara o
+   * que teria default.
+   */
+  mitigation: z.object({
+    multiplier: z.number().nonnegative(),
+    primaryShield: z.number().nonnegative(),
+    secondaryShield: z.number().nonnegative(),
+  }).default(() => ({ multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 })),
   /**
    * Com o que todo personagem nasce, já VESTIDO (ADR 0026, decisão 2; #153): o item e o slot
    * em que ele entra. É número de conteúdo, como o bot padrão — trocar a machete por outra
@@ -1676,11 +2256,36 @@ export const COMBAT_V2: CombatCompatibilityProfile = {
 };
 
 /**
+ * O perfil `combat-v3` (#548, M30-01; ADR 0040): o próximo id livre depois do `combat-v2`.
+ * **Rompimento**: o bloqueio binário do defensor (`combat.defense.blockChance` do CMB-04) é
+ * substituído pela ORDEM e pela MATEMÁTICA do `Creature::blockHit` do Canary —
+ * imunidade explícita → defesa/escudo com `blockCount` (uma carga por golpe elegível, até duas,
+ * recarregando com o tempo) → armadura numa FAIXA aleatória (não mais flat) → mitigação
+ * percentual (`defenseMitigation`, campo novo do monstro, distinto de `mitigation`). O que o
+ * `combat-v2` mudou (fórmula de arma, chance de acerto à distância) continua valendo — `combat-
+ * v3` exige os MESMOS blocos `weaponDamage`/`distanceHitChance` do v2, porque não os substitui.
+ *
+ * As exceções de produto continuam as do `combat-v2`: Dodge fica (é o Draconya, não o Tibia, e
+ * o Tibia nega o golpe inteiro ANTES do `blockHit` — a mesma posição que o Draconya já usa), e
+ * `player-always-hit-melee` não muda (a chance de acerto ofensivo é FORA do escopo do #548).
+ *
+ * Absorção/aumento por tipo (`applyAbsorbDamageModifications`) e reflexo ficam de fora — são o
+ * M30-05 (ADR 0040). Defesa e mitigação do JOGADOR continuam os números atuais (o que muda é só
+ * o MECANISMO que os consome): a fórmula própria do 13.x é o M30-02.
+ */
+export const COMBAT_V3: CombatCompatibilityProfile = {
+  id: 'combat-v3',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'breaking',
+};
+
+/**
  * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
  * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
  */
 export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
-  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2]]);
+  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2], [COMBAT_V3.id, COMBAT_V3]]);
 
 /**
  * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
@@ -1719,9 +2324,10 @@ export const combatSchema = z.object({
    * Quanto da armadura do alvo é subtraído, POR TIPO DE DANO (CMB-03, emenda do ADR 0031).
    *
    * Antes eram duas colunas (`melee`/`magic`). A migração que preserva o v1 é:
-   * `physical` fica com o antigo `melee`; TODO tipo não-físico fica com o antigo `magic`.
-   * O `z.record` de chave enum é EXAUSTIVO no zod 4: o conteúdo declara os oito tipos, sem
-   * default em código — mudar a efetividade de um elemento é editar JSON, nunca lógica.
+   * `physical` fica com o antigo `melee`; TODO tipo não-físico fica com o antigo `magic` —
+   * inclusive drown/lifedrain/manadrain (#547, M29-07). O `z.record` de chave enum é EXAUSTIVO
+   * no zod 4: o conteúdo declara os ONZE tipos, sem default em código — mudar a efetividade de
+   * um elemento é editar JSON, nunca lógica.
    */
   armorEffectiveness: z.record(z.enum(DAMAGE_TYPES), z.number().min(0).max(1)),
   /** Piso de dano, como fração do ataque: nem a armadura mais alta zera um golpe. */
@@ -1909,12 +2515,19 @@ export const combatSchema = z.object({
 }).superRefine((combat, context) => {
   // A #522/ADR 0037: perfil `combat-v2` sem os blocos novos é conteúdo que o resolver de poder
   // de arma não sabe executar — recusar no boot, nunca por um `??` silencioso no caminho quente.
-  if (combat.compatibilityProfile === 'combat-v2') {
+  // O `combat-v3` (#548, ADR 0040) HERDA a exigência: ele não substitui o lado ofensivo do v2,
+  // só o pipeline de RECEBIMENTO (defesa/armadura/mitigação) — um conteúdo v3 sem esses blocos
+  // continua sem fórmula de dano de arma nenhuma.
+  if (combat.compatibilityProfile === 'combat-v2' || combat.compatibilityProfile === 'combat-v3') {
     if (combat.weaponDamage === undefined) {
-      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "weaponDamage"' });
+      context.addIssue({
+        code: 'custom', message: `${combat.compatibilityProfile} exige o bloco "weaponDamage"`,
+      });
     }
     if (combat.distanceHitChance === undefined) {
-      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "distanceHitChance"' });
+      context.addIssue({
+        code: 'custom', message: `${combat.compatibilityProfile} exige o bloco "distanceHitChance"`,
+      });
     }
   }
 });
@@ -1931,7 +2544,11 @@ export type Combat = z.infer<typeof combatSchema>;
  */
 export const staminaSchema = z.object({
   id: z.literal('baseline'),
-  /** Teto, em milissegundos. §10: 24 horas. Aplicado na LEITURA, não só na escrita. */
+  /**
+   * Teto, em milissegundos. Aplicado na LEITURA, não só na escrita. §10 previa 24 h; desde
+   * M32-01 (#562, ADR 0043 emenda 2026-09-25) o valor real é 12 h — o teto que o Huntera mostra
+   * cheio na Cidade.
+   */
   maxMs: z.number().int().positive(),
   /** Milissegundos recuperados por milissegundo fora de hunt. §10: 1:1. */
   recoveryRatio: z.number().positive(),

@@ -10,8 +10,14 @@ requisito de vocação (FUN-74, FUN-92), skills
 por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de monstro do TFS —
 chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
 implementados
-por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e o dano de arma do Canary
-com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031), o dano de arma do Canary
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`), o
+pipeline de recebimento do `Creature::blockHit` — defesa com `blockCount`, armadura em faixa e
+mitigação percentual (#548, M30-01, ADR 0040, perfil `combat-v3`), a condição de velocidade
+com sinal — paralyze/slow de ataque de monstro e haste de defesa (CMB-11, #556) —, o desvio de
+passo da condição drunk (M31-03, #558, ADR 0041) —, a seleção
+ponderada de alvo do Canary (nearest/health/damage/random, #541) e a invocação de monstro por
+monstro (#546, TFS/Canary `monster.summon`/`maxSummons`) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -23,15 +29,18 @@ com o mecanismo lido de TFS/Canary (GPL v2 — só mecanismo e caso de borda, nu
 e os números observados no TibiaWiki. O perfil semântico de combate é conteúdo versionado: a
 sessão o congela na criação e não o troca no meio da hunt.
 
-Dois perfis existem hoje. `combat-v1` foi o primeiro, aditivo, e continua servindo sessão
+Três perfis existem hoje. `combat-v1` foi o primeiro, aditivo, e continua servindo sessão
 gravada antes do #522 (retomada de perfil `breaking` diferente é recusada, nunca reinterpretada
-— ADR 0031). `combat-v2` (#522) é o que `packages/content/data/combat/baseline.json` declara
-desde então: dano de arma pela fórmula do Canary, com variância pela normal truncada, e chance
-de acerto à distância por skill e tile — o que o ADR 0037 decisão 5 pediu para o M28
-(`docs/adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md`, mesclado ao main por
-outra branch do M28, ainda ausente nesta). A MITIGAÇÃO (Dodge, defesa/escudo, crítico, armadura,
-piso, resistência, imunidade) é **a mesma** nos dois perfis — o que o `combat-v2` muda vive
-antes dela, na seção "Como cada arma bate" adiante.
+— ADR 0031). `combat-v2` (#522) trocou o lado OFENSIVO: dano de arma pela fórmula do Canary, com
+variância pela normal truncada, e chance de acerto à distância por skill e tile — o que o ADR
+0037 decisão 5 pediu para o M28. `combat-v3` (#548, M30-01, ADR 0040) — o que
+`packages/content/data/combat/baseline.json` declara desde esta issue — troca o lado DEFENSOR: o
+bloqueio binário do CMB-04 vira a ordem e a matemática do `Creature::blockHit` do Canary (defesa
+com `blockCount`, armadura em faixa, mitigação percentual) — ver a seção "O pipeline de
+recebimento do combat-v3" adiante. A MITIGAÇÃO (Dodge, defesa/escudo, crítico, armadura, piso,
+resistência, imunidade) continua **a mesma** entre `combat-v1` e `combat-v2` — o que o
+`combat-v2` muda vive antes dela, na seção "Como cada arma bate" adiante; o `combat-v3` é quem
+finalmente muda esse pipeline.
 
 Este documento separa três coisas: o que está **entregue** (comportamento atual), o que é
 **exceção de produto aprovada** e o que ainda é **lacuna**. Nenhuma hipótese entra como
@@ -155,14 +164,22 @@ A #473 consolidou o pipeline sem mudar número nenhum — é aditiva sob o mesmo
   resolvido depois do primário inteiro. **Nenhum conteúdo o declara ainda**, e ausente ele não
   consome rolagem nenhuma: o v1 segue bit a bit.
 
-### A taxonomia de dano (CMB-03)
+### A taxonomia de dano (CMB-03; drown/lifedrain/manadrain pelo #547, M29-07)
 
-A lista canônica é a de Tibia 13.32 — físico, energia, terra, fogo, gelo, sagrado e morte — mais
-`arcane`, que é a magia **não-elemental** (ou cujo elemento o conteúdo ainda não declarou) e
-preserva o vocabulário `melee`/`magic` do v1. A fonte única é `DAMAGE_TYPES` em
+A lista canônica é a dos DEZ `CombatType` do Tibia 13.32 — físico, energia, terra, fogo, gelo,
+sagrado, morte, afogamento (`drown`), dreno de vida (`lifedrain`) e dreno de mana (`manadrain`)
+— mais `arcane`, que é a magia **não-elemental** (ou cujo elemento o conteúdo ainda não
+declarou) e preserva o vocabulário `melee`/`magic` do v1. A fonte única é `DAMAGE_TYPES` em
 `@draconya/content`; o `sim` importa `DamageType` e não redeclara o enum. A emenda de 2026-09-17
-no [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md) fixa a lista e a
-origem.
+no [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md) fixa a lista
+original de sete mais `arcane`; o #547 a estende com os três tipos de dreno/afogamento.
+
+`lifedrain` e `manadrain` são DANO, nunca cura de quem ataca — a correção que o #547 fez sobre o
+inventário de paridade: o Canary (`Creature::mitigateDamage`, `creature.cpp:911-921`) só os
+isenta da mitigação percentual, nunca soma vida ou mana em quem golpeia. `manadrain` resolve
+contra a MANA do alvo, não a vida (`min(mana, dano)`, sem mana shield — ver "Manadrain resolve
+contra a mana" abaixo); `drown` e `lifedrain` são dano de vida comum, indistinguível de
+`physical`/`fire`/etc. no pipeline.
 
 Tipo é separado de **origem** (`source`) e de **efeito visual** (`CreatureHit.source`): o mesmo
 elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem dizer qual fórmula
@@ -241,6 +258,12 @@ O conteúdo real declara defesa nas armas corpo a corpo de uma mão (machete, st
 sword) e no perfil; não existe item de escudo no catálogo ainda — o mecanismo do escudo é
 exercitado por fixture, e um escudo real entra quando houver arte conferida (invariante 6).
 
+**Este estágio é o do `combat-v1`/`combat-v2`.** Desde o `combat-v3` (#548, ver a seção "O
+pipeline de recebimento do combat-v3" adiante), o bloqueio binário acima é SUBSTITUÍDO pela
+ordem e pela matemática do `Creature::blockHit` do Canary — `combat.defense.blockChance` deixa
+de ser lido. `resolveDefense`/`defense.ts` continuam existindo, intocados, para as sessões
+fixadas em `combat-v1`/`v2`.
+
 ### Perfil, boot e retomada
 
 O perfil mora no conteúdo (`combat.compatibilityProfile`, default `combat-v1` para legado e
@@ -305,10 +328,14 @@ expectativa.
 - Dodge, quando ativa no defensor, reduz o dano recebido em 50%.
 - Dodge pode ativar contra qualquer ataque recebido, incluindo magia e ataques de boss.
 - Bônus permanentes de Bestiário valem só em PvE; não se aplicam em Guild War.
-- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe **físico**; o bloqueio nunca
-  zera o golpe, e ataque elemental não é bloqueado nem treina shielding (CMB-04).
-- Shielding sobe uma vez por ataque físico elegível recebido, nunca por tick e nunca pelo HP
-  perdido (CMB-04).
+- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe (CMB-04). Em `combat-v1`/`v2`
+  só o golpe **físico** é elegível — ataque elemental não é bloqueado nem treina shielding. Sob
+  `combat-v3` (o perfil default desde #548) a elegibilidade é pela ORIGEM do golpe, não pelo
+  tipo de dano: corpo a corpo bloqueia (e treina) mesmo elemental; distância só bloqueia
+  armadura; magia/runa não bloqueiam nada — ver "O pipeline de recebimento do combat-v3" adiante.
+  O bloqueio nunca zera o golpe sozinho (o piso de dano continua valendo).
+- Shielding sobe uma vez por ataque elegível recebido, nunca por tick e nunca pelo HP perdido
+  (CMB-04) — "elegível" segue a mesma regra do bullet acima, por perfil.
 
 ## Parâmetros de balanceamento
 
@@ -316,7 +343,7 @@ expectativa.
 |---|---|---|
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
-| Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `arcane`) | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
+| Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `drown`, `lifedrain`, `manadrain`, `arcane`) | 0 `[ABERTO — valor provisório: 0]`; inerte sob `combat-v3` (ver "combat.armorEffectiveness fica INERTE" acima) | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
 | Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary, #521, ADR 0037) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
@@ -326,6 +353,8 @@ expectativa.
 | Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
 | Shielding — início, curva (base), defesa por nível | 10 / 100 / +2 % `[ABERTO — defesa por nível provisória]` (base = `skillBase` do escudo no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/shielding.json` |
 | Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]` | `packages/content/data/combat/baseline.json`, `modifiers` |
+| Crítico/leech de ITEM (M30-04, #551) | pontos-base (×10000), NÚMEROS REAIS do Canary — não provisórios: wand of darkness 1000/3500 (chance/dano); nenhum item do catálogo atual declara ainda | `packages/content/src/schemas.ts`, `item.combatModifiers` |
+| Crítico de MONSTRO (M30-04, #551) | percentual 0-100, a escala do Lua do Canary (`critChance`); ausente/`0` em rat, rotworm, dragon e dragon lord — os únicos 6 monstros do Canary que declaram são bosses fora do recorte | `packages/content/src/schemas.ts`, `monster.critChance` |
 
 As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
 perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
@@ -698,6 +727,274 @@ não gasta a munição de graça: o preço já saiu antes da rolagem (o tiro exi
 | Tabela de acerto à distância (baldes 75/90/100) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
 | `ammunition.hitChance` / `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #522/#524, `packages/content/src/schemas.ts` |
 
+## O pipeline de recebimento do combat-v3 (#548, M30-01, ADR 0040)
+
+`packages/content/data/combat/baseline.json` declara `combat-v3` desde esta issue: é o perfil
+que toda hunt NOVA roda. O lado OFENSIVO não muda — a fórmula de arma e a chance de acerto à
+distância do `combat-v2` (seção acima) continuam valendo; o `combat-v3` exige os mesmos blocos
+`weaponDamage`/`distanceHitChance`. O que muda é o lado do DEFENSOR: o bloqueio binário do
+CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁTICA do
+`Creature::blockHit` do Canary (`packages/sim/src/combat/blockhit.ts`).
+
+### A ordem
+
+1. uma rolagem de Dodge, sempre consumida — o Draconya continua na frente de tudo, porque o
+   Tibia nega o golpe inteiro ANTES de chamar `blockHit` (a mesma posição, não coincidência);
+2. **crítico** (CMB-08; M30-04, #551), quando `modifiers.critical` é declarado — na GERAÇÃO do
+   dano, ANTES de tudo o que segue: é onde o Canary de fato rola
+   (`Combat::applyExtensions`, chamado de `getCombatDamage`/`doCombat`, roda ANTES de
+   `Creature::blockHit` multiplicar `damage.primary.value`). O multiplicador incide sobre o
+   PODER BRUTO, e o defensor recebe o dano JÁ com o bônus — um crítico não é "desperdiçado" por
+   imunidade, porque o Canary também não sabe de imunidade neste ponto (`applyExtensions` só olha
+   o ATACANTE). Esta é a posição FINAL, decidida no M30-04: a versão do #548 (M30-01) a colocava
+   depois de toda a mitigação como placeholder documentado — nenhum teste a travava, e nenhum
+   conteúdo real declarava `combat.modifiers` ainda;
+3. imunidade explícita ao tipo (`mitigation.immunities`) — zera e para tudo, sem defesa, sem
+   armadura, sem mitigação percentual;
+4. **defesa**: só enquanto o defensor tem CARGA de bloqueio (`blockCount`, no máximo duas,
+   recarregando com o tempo — ver adiante). Com carga, `uniform_random(defesa/2, defesa)` sai do
+   golpe JÁ crítico; zerou, a ARMADURA é pulada. A carga é gasta sempre que a origem do dano
+   bloqueia ALGUMA coisa (defesa OU armadura), mesmo que a defesa em si não tire nada;
+5. **armadura**, INDEPENDENTE da carga de bloqueio: `armor > 3` sorteia
+   `uniform_random(armor/2, armor − (armor % 2 + 1))`; `armor` de 1 a 3 é sempre `−1`; `armor`
+   zero não reduz nada;
+6. **mitigação percentual** (`defenseMitigation`, o campo NOVO do monstro — distinto de
+   `mitigation`, que é resistência/imunidade por TIPO): `dano −= dano × defenseMitigation ÷ 100`,
+   sobre o que sobrou da armadura, para QUALQUER tipo de dano EXCETO lifedrain e manadrain (#547,
+   M29-07: a mesma exceção do `Creature::mitigateDamage` do Canary — `drown` não é isento);
+7. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
+   antes, intocado por esta issue, só reposicionado depois do estágio novo;
+8. piso (`minimumDamageFraction`), sobre o poder BRUTO ORIGINAL — SEM o bônus do crítico —
+   mantido como salvaguarda de PRODUTO do Draconya (o Canary não tem: lá um bloqueio pode
+   legitimamente zerar um golpe, e não existe "piso" nenhum para o crítico reforçar). Pulado
+   quando imune — o piso nunca revoga imunidade explícita;
+9. corte do Dodge, arredondamento só no fim.
+
+O LEECH (M30-04) não é um estágio deste pipeline: ele opera sobre o HP EFETIVAMENTE removido, não
+sobre o `DamageOutcome`, e é aplicado depois — ver a seção do CMB-08 mais abaixo.
+
+### As flags de bloqueio vêm da ORIGEM, não do tipo
+
+Diferente do CMB-04 (que aprovava por `damageType`), o `combat-v3` decide se defesa e armadura
+valem pela ORIGEM do golpe — `checkDefense`/`checkArmor` do Canary: corpo a corpo (e o punho
+desarmado) bloqueiam os dois; distância só armadura (`WeaponDistance` do Canary não seta
+`blockedByShield`); magia, runa, wand/rod e DOT não bloqueiam nenhum dos dois — o default de
+`CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ability de monstro segue o mesmo critério
+pela FORMA dela (`isMeleeAbility`): corpo a corpo bloqueia os dois, a de alcance/área é magia
+para este estágio. A mitigação percentual (passo 5) é a ÚNICA que se aplica sempre, mesmo à
+magia — é assim no Canary (`if (damage != 0) mitigateDamage(...)`, fora do bloco de
+`checkDefense`/`checkArmor`).
+
+**`manadrain` é a ÚNICA exceção: o TIPO, não a origem, decide.** Um mana-drain NUNCA bloqueia
+por defesa/escudo nem por armadura, mesmo quando a ability é corpo a corpo
+(`blockable: MELEE_BLOCK_FLAGS`) — o Canary chama `target->blockHit(attacker, COMBAT_MANADRAIN,
+manaLoss)` com só três argumentos (`game.cpp:9176`), e `checkDefense`/`checkArmor` default a
+`false` (`Creature::blockHit`, `creature.cpp:944`). `resolveBlockHitProfile`
+(`combat/damage.ts`) força `{ armor: false, shield: false }` sempre que `damageType ===
+'manadrain'`, por cima do `blockable` que a origem do golpe declararia — achado da revisão do PR
+#648: a suíte do #547 só exercitava manadrain com `MAGIC_BLOCK_FLAGS` (armadura e escudo já
+`false` por coincidência), e nunca provava a exceção contra uma ability corpo a corpo de
+verdade. Nenhuma carga de `blockCount` é gasta nesse caso — o Canary só decrementa o contador
+dentro do `checkDefense || checkArmor`, e os dois são falsos para manadrain.
+
+O treino de shielding (`#applyMonsterHit`, `hunt.ts`) segue a MESMA origem sob `combat-v3` —
+`blockable.shield`, não `combat.defense.blockTypes` — para não destreinar (ou treinar por
+engano) o dia em que o catálogo tiver uma ability corpo a corpo elemental (achado da revisão do
+PR #642; hoje nenhuma tem, então as duas regras ainda concordam por coincidência do catálogo).
+
+**`combat.armorEffectiveness` fica INERTE sob `combat-v3`.** O passo 4 (armadura) não olha mais
+`armorEffectiveness[damageType]` — a coluna que o `combat-v1`/`v2` usa para decidir SE a
+armadura vale para cada tipo de dano; sob `combat-v3` a armadura vale sempre que a ORIGEM permite
+(`checkArmor`), para QUALQUER tipo, exatamente como o `Creature::blockHit` do Canary (que não
+tem ramo por `combatType` nenhum no estágio de armadura). O schema continua exigindo o campo
+para todo perfil, inclusive `combat-v3` — editar `armorEffectiveness.fire` num conteúdo `v3`
+não muda resultado nenhum, e é o mesmo tipo de configuração morta que
+`combat.defense.blockChance` já é para esses conteúdos (parágrafo abaixo).
+
+### As cargas de bloqueio (`blockCount`)
+
+O Canary acumula uma carga a cada 1000 ms de relógio de jogo (`blockTicks`/`onThink`), até um
+teto de 2 — literalmente "por tick" (`creature.cpp`), e esse relógio é COMPARTILHADO pelas duas
+vagas e roda INDEPENDENTE de bloqueio nenhum ter acontecido: `Creature::blockHit` só decrementa
+o contador, nunca reinicia o relógio. O invariante 2 proíbe escrever assim: `packages/sim/src/
+combat/block-charge.ts` calcula as cargas disponíveis SOB DEMANDA, a partir de um banco guardado
+(quantas cargas já estão creditadas) e do instante a partir do qual o relógio ainda não creditou
+nada — sem nenhum evento nem soma por tick, e equivalente ao contador do Canary: um relógio
+ÚNICO, que credita no máximo uma carga por período de 1000 ms decorrido, até o teto de 2,
+independente de QUANDO cada carga foi gasta (achado da revisão do PR #642: uma versão anterior
+deste arquivo modelava duas vagas INDEPENDENTES, cada uma reagendando o próprio relógio a partir
+do próprio consumo — um mecanismo diferente, que podia recusar um bloqueio que o relógio
+compartilhado do Canary já teria recarregado, num padrão comum de mais de um atacante, não só
+adversarial). `CharacterState.blockCharge`/`MonsterState.blockCharge` viajam no snapshot
+(opcionais, sem bump de `SNAPSHOT_FORMAT_VERSION`); ausente é o banco já no teto desde o
+instante 0 — uma simplificação deliberada para o caso comum (uma criatura quase sempre existe há
+mais de 2 s antes do primeiro golpe de uma hunt), que NÃO reproduz a janela inicial do Canary
+(uma criatura nasce com `blockCount = 0` e sobe até o teto em ~2 s) — ninguém pediu essa janela
+de vulnerabilidade ainda, e fica em aberto para quando pedirem. Só `applyDamageOutcome` (CMB-08)
+escreve o estado de volta no dono (invariante 9); o resolver é puro e só o calcula.
+
+### A defesa, a armadura e a mitigação do JOGADOR (#549, M30-02)
+
+Sob `combat-v3`, o jogador para de usar os números ad hoc que `combat-v1`/`v2` calculavam
+(`combat.player.armor` mais o equipado; a defesa de `Inventory.defenseSource` escalada pela skill
+`shielding` via `powerMultiplier` — uma fórmula PRÓPRIA do Draconya, não do Tibia) e passa a usar
+as três funções puras de `packages/sim/src/combat/player-defense.ts`, transcritas do MECANISMO
+descrito pelo Canary 13.x (ADR 0019 — nunca código copiado):
+
+- **`playerDefense`** → `Player::getDefense` (`player.cpp:776-813`): sem nada na mão, a defesa
+  vem do PUNHO (`defenseValue` 7, escalado pela skill `melee` — Draconya consolidou fist/sword/
+  axe/club numa skill só, #521/ADR 0037); uma arma na mão troca os dois pelos DELA; um escudo
+  troca os dois de novo — `defenseValue` vira o do escudo MAIS o `extraDefense` da arma (se
+  houver uma), e a skill vira `shielding`. O resultado é o número que `resolveBlockHit`
+  (`blockhit.ts`) rola em faixa (`uniform_random(defense/2, defense)`) enquanto o `blockCount`
+  tiver carga — o jogador SEMPRE tem uma defesa residual agora (mesmo desarmado), diferente do
+  `combat-v1`/`v2` (`Inventory.defenseSource` devolvia `none`/`0` sem peça nenhuma).
+  **Achado de revisão (#549):** "a skill DELA" para uma wand/rod não é a skill de magia que a
+  família aponta para o DANO — `Player::getWeaponSkill` do Canary devolve `0` para
+  `WEAPON_WAND` (nenhum case no switch, `default: attackSkill = 0`, `player.cpp:474-509`).
+  `hunt.ts#playerDefenseV3` zera a skill quando a família da arma é `wand` antes de montar o
+  input, exatamente para reproduzir esse `default` — sem o zero, um Sorcerer/Druid sem escudo
+  cairia na fórmula cheia com `defenseValue` 0 (wand/rod nunca declaram `defense`/
+  `extraDefense`) e teria defesa 0 em vez do piso fixo (1 ofensivo/equilibrado, 2 defensivo).
+  A skill de escudo (`#shieldSkillLevelOf`) também soma o bônus de EQUIPAMENTO da mesma skill
+  (`Inventory.skillBonus`, #524) — a mesma leitura que a skill de arma/punho já fazia, e que
+  `getSkillLevel` do Canary aplica sem exceção para `SKILL_SHIELD` (`player.cpp:7480`).
+- **`playerArmor`** → `Player::getArmor` (`player.cpp:658-667`): a soma do equipado, sem o
+  baseline de 4 que `combat.player.armor` inventava para "o personagem desarmado no level 1" —
+  esse número nunca existiu no Tibia. Um personagem sem NADA vestido agora tem armadura ZERO,
+  como no Canary.
+- **`playerMitigation`** → `PlayerWheel::calculateMitigation` (`player_wheel.cpp:4072-4124`): a
+  mitigação percentual (`Defender.defenseMitigation`) que antes só o monstro tinha. Escudo e arma
+  contribuem em SEQUÊNCIA (não em exclusão mútua) — `vocation.mitigation.{multiplier,
+  primaryShield, secondaryShield}` (`vocations.xml` `<mitigation>`) escalam a skill de escudo e a
+  defesa da peça; spellbook e quiver (os dois novos campos de item, `Item.spellbook`/`.quiver`)
+  usam `secondaryShield` como `distanceFactor` em vez de `primaryShield`, como faz uma arma de
+  duas mãos ou uma que atira munição (`Item.extraDefense`, `Weapon.ammoFamily`).
+
+`fightMode` é PARÂMETRO das duas primeiras (a postura do Canary — ofensiva/equilibrada/
+defensiva). **Sem seletor ainda** (M30-03): todo chamador em `hunt.ts` passa `'attack'` fixo, a
+mesma decisão que `combat.weaponDamage.attackFactor` já tomou para o dano de arma do
+`combat-v2`. As duas fórmulas usam a metade ESTÁTICA dos fatores do Canary
+(`getDefenseFactor(sendToClient = true)`: 0,5/0,75/1,0; `getCombatTacticsMitigation`: 0,8/1,0/
+1,2) — a metade DINÂMICA (se o jogador bateu "recentemente", via `lastAttack`/`attackSpeed`) fica
+para a M30-03, que é quem vai desenhar o relógio de "último ataque" que essa metade pede; nenhum
+estado foi inventado só para esta issue.
+
+**Fora do escopo, de propósito** (ADR 0040 decisão 1, "o multiplicador da Roda é 0 até o M41"): o
+bônus `Combat Mastery` (soma em `defenseValue` quando um escudo tem `defense > 0`) e o
+`mitigation += mitigation × getMitigationMultiplier() ÷ 100` no fim de `calculateMitigation` — os
+dois são exclusivamente da Wheel of Destiny, zero sem gema.
+
+`vocation->defenseMultiplier`/`armorMultiplier` (`<formula defense="1.0" armor="1.0">`) ficam de
+FORA do conteúdo: as cinco vocações e todas as promoções do `vocations.xml` declaram `1.0`
+(conferido em 2026-09-26) — as duas funções aplicam a identidade e documentam a citação, em vez
+de uma tabela de conteúdo que nunca diverge de 1.
+
+`combat.player.armor`/`combat.player.dodgeChance` continuam existindo no schema e valendo para
+`combat-v1`/`v2` (`#playerDefender` em `hunt.ts` agora BIFURCA pelo perfil: números antigos em
+v1/v2, `playerDefense`/`playerArmor`/`playerMitigation` só em v3). `combat.defense.blockChance`
+(o percentual do CMB-04) continua sem uso sob `combat-v3`; `combat.defense.skillId` passa a ser
+REUSADO por `playerDefense`/`playerMitigation` como a skill de escudo do jogador — a mesma
+entrada de conteúdo, dois consumidores.
+
+### Parâmetros de conteúdo (#549)
+
+| Campo | Onde | Knight | Paladin | Sorcerer | Druid | Base (sem vocação) |
+|---|---|---|---|---|---|---|
+| `mitigation.multiplier` | `vocations/*.json` | 1,3 | 1,28 | 1,26 | 1,26 | 1,3 |
+| `mitigation.primaryShield` | `vocations/*.json` | 2,05 | 2,08 | 2,0 | 2,0 | 2,05 |
+| `mitigation.secondaryShield` | `vocations/*.json` | 1,25 | 1,2 | 1,2 | 1,2 | 1,25 |
+
+Fonte: Canary `data/XML/vocations.xml`, `<mitigation multiplier primaryShield secondaryShield>`
+das entradas `id="4"` (Knight), `id="3"` (Paladin), `id="1"` (Sorcerer), `id="2"` (Druid) e
+`id="0"` (None — a base de `progression/baseline.json`), conferido em 2026-09-26. A base repete
+os números do Knight por coincidência do arquivo real, não erro de cópia — Sorcerer e Druid
+também coincidem entre si.
+
+| Item | `extraDefense` | `spellbook`/`quiver` | Fonte |
+|---|---|---|---|
+| Mystic Blade (Knight) | 2 | — | Canary `items.xml` id 7384, `extradef value="2"` |
+| Spellbook of Mind Control (Sorcerer/Druid) | — | `spellbook: true` | `Item::isSpellBook`, `item.hpp:553-555` |
+
+Nenhum item do catálogo atual declara `quiver: true` — a Royal Crossbow (Paladin) é de duas mãos
+e usa `Weapon.ammoFamily` (não um item de escudo) para o mesmo efeito em `playerMitigation`.
+
+### O monstro ganha `defense` e `defenseMitigation`
+
+`monsterSchema` ganha os dois campos novos (ambos opcionais, default `0` — a identidade de rato e
+rotworm, que não os declaram). Os únicos dois monstros do catálogo real com o par declarado hoje
+são o Dragon e o Dragon Lord, conferidos contra `dragon.lua`/`dragon_lord.lua` do Canary local
+(47dfd51) em 2026-09-25:
+
+| Monstro | `armor` | `defense` | `defenseMitigation` |
+|---|---|---|---|
+| Dragon | 25 | 30 | 0,99 |
+| Dragon Lord | 34 (era 35 — um palpite anterior a esta issue, corrigido aqui) | 34 | 1,29 |
+
+`defenseMitigation` é o valor DIRETO que o Canary usa — `0,99` tira 0,99 % do dano, não 99 %; o
+Canary o capa em 30.
+
+### O que fica para depois
+
+Absorção/aumento por tipo (`applyAbsorbDamageModifications`, o PRIMEIRO estágio do `Creature::
+blockHit`) e reflexo são o **M30-05**. Postura de luta de VERDADE (um seletor por personagem, em
+vez do `'attack'` fixo que `playerDefense`/`playerMitigation` recebem desde o #549) é o
+**M30-03**. A exceção de lifedrain/manadrain na mitigação percentual (passo 6 acima) fechou com
+o **#547 (M29-07)**: `combat/damage.ts` calcula `mitigationExempt` do `intent.damageType`, e não
+fica mais fixo em `false`.
+
+### Manadrain resolve contra a mana, não a vida (#547, M29-07)
+
+`manadrain` é o único tipo de dano que `applyDamageOutcome` (`combat/outcome.ts`) desvia da
+vida: a aplicação final tira `min(mana, resolvido)` da MANA do alvo e nunca toca a vida
+(`healthDamage` fica em zero). O pipeline que produz o `resolvido`, porém, **não é igual ao dos
+outros tipos** — dois pontos em que `manadrain` diverge, corrigidos na revisão do PR #648:
+
+- **defesa/escudo e armadura NUNCA se aplicam** — ver "`manadrain` é a ÚNICA exceção: o TIPO, não
+  a origem, decide" acima. Só Dodge (posição do Draconya), resistência/vulnerabilidade por tipo
+  (CMB-03) e o piso (`minimumDamageFraction`, salvaguarda do Draconya, sem equivalente no Canary)
+  seguem incidindo, como em qualquer outro tipo;
+- **a mana disponível capa o poder bruto ANTES da resistência**, não depois. O Canary computa
+  `manaLoss = min(mana atual, poder bruto)` (`game.cpp:9175`) e só então roda `blockHit` — que
+  aplica a resistência/absorção — sobre o valor JÁ capado (`creature.cpp:948`). Resolver a
+  resistência sobre o poder bruto inteiro e capar a mana só no fim (o que a aplicação sozinha
+  faria) dobraria o dreno sempre que a mana disponível for menor que o poder bruto e o alvo tiver
+  resistência ao tipo — exemplo: poder 100, mana 30, resistência 50 %; capar primeiro dá
+  30 × 0,5 = 15 (o certo), resistir primeiro dá 100 × 0,5 = 50, capado a 30 só no fim (o dobro).
+  `Defender.mana` (`combat/damage.ts`) existe só para isto: `resolveBlockHitProfile` o lê para
+  capar ANTES de aplicar `mitigation.resistances`, e fica ausente sem efeito nenhum contra um
+  monstro (que não tem mana — o dreno dele já é zerado depois, em `applyDamageOutcome`).
+
+Duas consequências que seguem do próprio Canary (`Game::combatChangeMana`, `game.cpp:9176`,
+`Creature::drainMana`):
+
+- **a mana shield NÃO entra** — ela existe para converter dano de VIDA em mana; aqui o golpe já é
+  mana, e "absorver" duas vezes não faz sentido nenhum;
+- **um alvo sem mana não perde nada.** Todo `MonsterRuntime` (monstro não tem mana no Draconya) e
+  um `CharacterRuntime` já com mana zerada tratam o manadrain como um no-op — o mesmo
+  `manaLoss <= 0` que o Canary já reporta como "nada aconteceu", sem mensagem nem efeito.
+
+`lifedrain` e `drown`, ao contrário, são dano de vida comum — passam por `applyDamageOutcome`
+sem desvio nenhum, mana shield e leech inclusos como qualquer outro tipo (leech nunca ocorre de
+qualquer forma num ataque de monstro, porque `attacker` chega `null`).
+
+**O desvio para a mana é uniforme nos CINCO produtores de dano, não só nos quatro que o #547
+original cobria.** DOT (`#applyConditionTick`), ability de monstro (`#applyMonsterHit`) e o golpe
+básico (`#land`) sempre passaram por `applyDamageOutcome`; magia e runa de dano (`castSpell`/
+`useSupply`, aplicadas por `HuntRuleset#applyHits`) foram corrigidas na revisão do PR #648 —
+antes, `#applyHits` chamava `monster.receiveDamage` direto sobre o `resolvedDamage`, sem olhar
+`damageType`, e um `manadrain` declarado numa magia ou runa bateria na vida do monstro como dano
+comum (o schema de `effect.damageType` sempre aceitou qualquer `DamageType`, `manadrain`
+incluso). `CastSuccess.hitOutcomes` (`casting.ts`) carrega o `DamageOutcome` inteiro de cada
+alvo, na mesma ordem de `hits`, para `#applyHits` poder chamar `applyDamageOutcome` como os
+outros quatro produtores — o mesmo fix foi replicado no palco de golden traces
+(`combat/traces/harness.ts`), que tinha a MESMA lacuna.
+
+O número flutuante do manadrain usa o novo `AppliedDamageOutcome.manaDamage` no lugar do
+`healthDamage` (`hunt.ts`, `amount: applied.healthDamage + applied.manaDamage` — exatamente um
+dos dois é não-zero para qualquer golpe), e a cor sai da mesma tabela de elemento do cliente
+(azul saturado, distinto do azul claro de `drown` e do azul-gelo de `ice`).
+
 ## Famílias de arma e proficiências (CMB-05, #333)
 
 `Weapon.kind` continua sendo o DESPACHO (`melee`, `distance`, `wand`), mas a fórmula e a
@@ -789,9 +1086,11 @@ interface MonsterAbility {
 - **`scheduledAbilities` viaja no snapshot** (opcional, sem bump de formato). Sem ele, a hunt
   retomada reagendaria a ability que já tinha evento na fila e bateria em dobro no primeiro
   vencimento.
-- **Fora do escopo**, por decisão (CMB-08): invocação, scripts de boss e o detalhamento visual do
-  dano. Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a seção seguinte). A cura
-  própria (defesa) saiu do escopo do CMB-08 e entrou no #518 — ver a seção seguinte a esta.
+- **Fora do escopo**, por decisão (CMB-08): scripts de boss e o detalhamento visual do dano.
+  Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a seção seguinte). A cura própria
+  (defesa) saiu do escopo do CMB-08 e entrou no #518; a invocação de monstro por monstro também
+  saiu do escopo do CMB-08 e entrou no #546 — ver a seção "Invocação de monstro por monstro"
+  abaixo.
 
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
@@ -813,6 +1112,13 @@ interface MonsterDefense {
   readonly presentation?: { readonly impactKey?: string };
 }
 interface MonsterTargetChange { readonly intervalMs: number; readonly chance: number; }
+// #541 — inteiros não-negativos, soma > 0. Dragon/Dragon Lord: { 70, 10, 10, 10 }.
+interface MonsterTargetStrategy {
+  readonly nearest: number;
+  readonly health: number;
+  readonly damage: number;
+  readonly random: number;
+}
 ```
 
 - **`chance` por ability** (`monsterAbilitySchema.chance`, `[0, 1]`): a cada vencimento do
@@ -852,11 +1158,69 @@ interface MonsterTargetChange { readonly intervalMs: number; readonly chance: nu
   `src/creatures/creature.cpp`) — os dois conferidos contra o código em 2026-09-25. Pela
   precedência do ADR 0037 d.4 (Canary primeiro quando ele define algo; TFS só onde a escala é a
   clássica — não é o caso aqui), o valor certo é o do Canary, 11.
-- **Troca de alvo (`monster.targetChange`)**: a cada `intervalMs` rola `chance`; se passa, escolhe
-  um alvo válido AO ACASO dentro do `aggroRadius`, diferente do atual — o ramo
-  `TARGETSEARCH_RANDOM` do TFS, que é o que o Dragon usa (`targetDistance <= 1`). O ramo
-  `TARGETSEARCH_NEAREST` (monstro de alcance maior) fica de fora: nenhum monstro do recorte
-  precisa dele, e o #518 não introduz o campo `targetDistance` só para essa distinção.
+- **Aquisição sem alvo (`chooseTarget`, #645)**: SEMPRE `TARGETSEARCH_NEAREST` fixo — o mesmo
+  passo único de sempre, mais perto dentro do `aggroRadius`, desempate estrito por ordem de
+  candidatos — e o `targetStrategy` do conteúdo NUNCA é consultado aqui, nem para o Dragon
+  (`Monster::onThink_async`, ramo "sem `followCreature`/`hasFollowPath`",
+  `monster.cpp:1736,1741-1742`). Zero sorteio, zero alocação nova.
+- **Troca de alvo (`monster.targetChange`, #518/#645)**: a cada `intervalMs` rola `chance`; se
+  passa, escolhe um alvo válido diferente do atual dentro do `aggroRadius` — e, desde o #645,
+  **também NUNCA consulta `targetStrategy`**, como `Monster::onThinkTarget`
+  (`monster.cpp:2141-2192`, idêntico no TFS `forgottenserver/src/monster.cpp:919-963`): o
+  critério é `useRandomSearch = targetDistance <= 1` — o `targetDistance` do TIPO do monstro
+  (`definition.targetDistance`, o campo do #542 — NÃO a distância corrida até o alvo agora, nem
+  o `attackRange`), lido uma vez do conteúdo. Corpo a corpo (Dragon, Dragon Lord, rato, rotworm
+  — todos `targetDistance = 1` nos `.lua` do Canary, mesmo o Dragon tendo bola/onda de alcance
+  7) é sempre `TARGETSEARCH_RANDOM`; um monstro que mantém distância (`targetDistance > 1`,
+  nenhum no recorte hoje) é `TARGETSEARCH_NEAREST` fixo.
+- **Seleção ponderada de alvo (`monster.targetStrategy`, #541/#645)**: o CRITÉRIO da escolha é
+  sorteado pelos pesos declarados — mais perto, menos vida, mais dano causado no monstro, ou
+  aleatório —, com a MESMA matemática de `MonsterTargetRanker::rank`
+  (`monster_targeting.cpp:17-83`): `rankTarget` (`packages/sim/src/monster/target-strategy.ts`)
+  reproduz a ordem fixa de sorteio (um para o critério, um segundo SÓ quando o critério é
+  `random`) e o desempate por redução determinística (nearest/health/damage ficam com quem
+  aparece primeiro na lista de candidatos — o mesmo `<`/`>` estrito do `.cpp`). O schema
+  (`monsterTargetStrategySchema`) exige os quatro pesos como inteiros não-negativos com soma >
+  0; ao contrário do Canary (que trata `random` como "o que sobra até 100", e nunca soma o
+  campo), aqui `random` é um peso EXPLÍCITO como os outros três, e a soma não precisa ser 100 —
+  `rankTarget` sorteia proporcionalmente à soma real. Dragon e Dragon Lord declaram
+  `{ nearest: 70, health: 10, damage: 10, random: 10 }` (`dragon.lua`/`dragon_lord.lua`,
+  conferidos em 2026-09-25); os outros 644 monstros do bestiário do Canary só declaram
+  `nearest: 100` — fora do recorte desta issue (ver "Fora do escopo" do #541), então o rato e o
+  rotworm continuam sem o campo.
+
+  **O gatilho é o mesmo do Canary desde o #645 (ADR 0037 d.6) — não é mais divergência.**
+  `rankTarget` só entra no ramo estreito equivalente a `TARGETSEARCH_DEFAULT`
+  (`Monster::searchTargetImmediate`, `monster.cpp:906-931`), cujo ÚNICO chamador é
+  `Monster::onThink_async`: o monstro já tem um alvo perseguido (esta função ia RETER o
+  `current`), está FUGINDO (`isFleeing()`) E não consegue atacá-lo agora (`!canUseAttack`)
+  (`monster.cpp:1737-1739`). O sim não tem linha de visão nem `followCreature`/`hasFollowPath`;
+  "não consegue atacar agora" é derivado do único estado equivalente que já existe —
+  `distance(monstro, alvo) > monsterAttackRange(definição)` (o alcance combinado de TODAS as
+  abilities, a mesma métrica que `canUseAttack` real usa: qualquer spell cujo alcance cubra a
+  distância). Fora desse corner case — a aquisição e o reroll periódico acima —, o critério é
+  SEMPRE o mais perto (aquisição) ou o sorteio uniforme/mais perto por `targetDistance`
+  (reroll), nunca o peso; nenhum script de monstro do bestiário chama `self:searchTarget()`
+  (conferido com grep em `data-otservbr-global/`), então na prática esse ramo só dispara quando
+  o Dragon/Dragon Lord já está fugindo E o alvo perseguido saiu do alcance de toda ability dele.
+
+  **A CADÊNCIA do ramo também é a do Canary, corrigida na revisão do #654.** `chooseTarget` é
+  chamada de três eventos independentes em `hunt.ts` (`#onMonsterStep`, `#onMonsterAttack`, e
+  cada `#onMonsterAbility` declarada) — um Dragon com três abilities a `cadenceMs: 2000` gera
+  4-5 vencimentos a cada 2 s, e o passo sozinho vence bem mais rápido que isso. Sem um gate, cada
+  um desses vencimentos reentraria no ramo estreito acima e consumiria um sorteio NOVO do
+  critério — contra o Canary real, em que `Monster::onThink_async` roda sozinho, uma vez, a cada
+  `EVENT_CREATURE_THINK_INTERVAL` = 1000 ms (`creature.hpp:47`), e nunca é chamado por
+  `doAttacking` (o caminho de ataque/spell). Isso faria um Dragon fugindo e bloqueado reavaliar o
+  peso — e queimar sorteio do `rng` da sessão — várias vezes mais rápido que o Canary para o
+  MESMO estado de HP/posição, ainda que o ALVO final quase sempre convirja (os pesos do Dragon
+  favorecem `nearest` a 70 %). `chooseTarget` agora impõe "no máximo uma reavaliação por
+  1000 ms por monstro" com um cooldown de sessão (`monster.cooldowns`, chave `target-think`,
+  `packages/sim/src/monster/monster.ts`): os três eventos continuam chamando a função a cada
+  vencimento deles, mas só o primeiro dentro de cada janela de 1000 ms de fato entra no ramo —
+  os demais devolvem o alvo retido, como o Canary faria entre um `onThink_async` e o próximo.
+  Coberto por `packages/sim/src/monster/monster.test.ts` (descreve "gate de cadência"), com um
+  `Rng` que estoura se consultado provando que as reentradas dentro da janela não sorteiam nada.
 - **Fuga (`monster.runOnHealth`)**: `HP <= runOnHealth` é fugindo (`isMonsterFleeing`,
   `packages/sim/src/monster/monster.ts`) — pura, recalculada a cada decisão a partir do HP atual,
   nunca um booleano guardado à parte. Fugindo, `decideMonsterAction` SEMPRE devolve um passo para
@@ -875,6 +1239,143 @@ interface MonsterTargetChange { readonly intervalMs: number; readonly chance: nu
   fila e curaria em dobro no primeiro vencimento.
 - Rato e rotworm não declaram nenhum destes campos — o comportamento entregue não muda.
 
+## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
+
+O M29-02 dá ao monstro um segundo número de alcance, distinto de `attackRange`: `monster.
+targetDistance`, a distância que ele PREFERE manter do alvo (TFS/Canary `targetDistance`,
+`Monster::getDistanceStep`, `monster.cpp:2632`). Com `targetDistance > 1`, um monstro que persegue
+alguém que chegou mais perto do que isso dá um passo para AUMENTAR a distância, em vez de colar
+como um corpo a corpo — o comportamento de 175 dos 1.601 monstros do `data-otservbr-global/
+monster` real (Necromancer, Priestess, Monk Familiar), verificado contra o código em 2026-09-26.
+
+- **Independente da fuga por vida baixa (`runOnHealth`)**: as duas são decisões de movimento
+  separadas em `decideMonsterAction` — a fuga dispara SEMPRE que o HP cai no limiar, o recuo de
+  `targetDistance` só quando o monstro NÃO está fugindo. O Dragon e o Dragon Lord continuam com
+  `targetDistance` declarado IGUAL ao default `1` (`dragon.lua`/`dragon_lord.lua` declaram o
+  campo, só que com o mesmo valor que o schema já assume quando ausente) — corpo a corpo de
+  sempre, sem o novo ramo.
+- **`attackRange` continua sendo até onde o monstro ALCANÇA para bater**; `targetDistance` é a
+  distância que ele PREFERE manter enquanto persegue. Ao contrário do que a versão anterior desta
+  seção afirmava, os dois RARAMENTE coincidem no bestiário real: um atirador tipicamente declara
+  `targetDistance` bem menor que o alcance da ability mais longa — Necromancer `targetDistance` 4
+  com abilities de alcance 1/1/7; Priestess `targetDistance` 4 com abilities de alcance 7×3; Monk
+  Familiar `targetDistance` 2 com abilities de alcance 5 — e não o oposto (schema não os acopla;
+  são campos independentes, como já eram `attackRange` e `aggroRadius`).
+- **A APROXIMAÇÃO também para em `targetDistance`, não no maior alcance de ability** (revisão do
+  #649): a primeira versão desta issue só implementava a METADE do recuo de
+  `Monster::getPathSearchParams` (`monster.cpp:3830`, `fpp.maxTargetDist = targetDistance`) — um
+  atirador com ability de alcance maior que o `targetDistance` preferido (a norma real, ver item
+  acima) parava e atirava assim que entrava no alcance da ability, sem nunca fechar até o
+  stand-off documentado. Com `targetDistance > 1`, `decideMonsterAction` agora usa `targetDistance`
+  como alcance de parada da aproximação em vez de `monsterAttackRange`; sem o campo (ou com `1`),
+  o alcance de parada continua sendo o maior alcance de ability, como sempre (CMB-06, rato e
+  rotworm). As abilities continuam armando pela PRÓPRIA faixa (`#armMonsterAbilities`,
+  independente de `decideMonsterAction`) — um atirador de alcance 7 e `targetDistance` 4 já pode
+  disparar a partir de 7 tiles enquanto ainda está se aproximando, exatamente como o Canary real
+  (passo e ataque são decisões separadas, ver abaixo).
+- **O passo é o `fleeStep` que a fuga já usava** (o guloso com o alvo espelhado, FUN-85) — a
+  MESMA função, reaproveitada como "o mecanismo que aumenta distância" em vez de reescrever a
+  árvore de direções do `getDistanceStep` real do Canary linha a linha (GPL v2, ADR 0019). Sem
+  passo livre (parede atrás), o monstro ataca parado em vez de ficar preso tentando um recuo
+  impossível — a MESMA regra de "encurralado, fica" que a fuga já tinha (ADR 0009).
+- **Precisa do MESMO andar** (`sameFloor`, #519): um alvo em outro piso nunca é "perto demais" —
+  a Darashia Dragon Lair tem três andares na mesma caixa `(x, y)`, e sem esta checagem um monstro
+  de `targetDistance > 1` recuaria de um alvo que nem está no andar dele.
+- **`retreat` é um resultado NOVO de `decideMonsterAction`** (`MonsterAction`), distinto de
+  `step`: o TILE que ele pisa é executado do MESMO jeito (`#onMonsterStep` trata os dois igual ao
+  decidir SE anda), mas o nome deixa explícito, para quem lê a decisão ou uma telemetria futura,
+  que o monstro se afastou por escolha — não é preciso comparar posições para saber.
+- **O cadence de ATAQUE não é consumido pelo recuo**: `decideMonsterAction` só decide o que o
+  `MONSTER_STEP` faz — se o monstro anda ou fica parado —, e é uma decisão TOTALMENTE separada do
+  vencimento de ataque (`MONSTER_ATTACK`/`MONSTER_ABILITY`, com a própria cadência). Um atirador
+  pode recuar E atirar no MESMO instante, como o Dragon já foge E lança bola de fogo ao mesmo
+  tempo (`isMeleeAbility` só bloqueia o corpo a corpo durante a fuga) — passo e ataque continuam
+  sendo decisões independentes, a mesma separação do TFS entre `getNextStep` e `doAttacking`.
+
+`targetDistance: int ≥ 1`, default `1` (`monsterSchema`), preserva rato, rotworm, Dragon e Dragon
+Lord bit a bit — rato e rotworm não declaram o campo (caem no default), Dragon e Dragon Lord
+declaram (`dragon.lua`/`dragon_lord.lua:69`), mas com o MESMO valor `1` que o default já assume —
+e `1` nunca aciona nem o ramo de recuo (a condição é `distance < targetDistance`, sempre falsa
+quando `targetDistance` é `1` e a distância Chebyshev nunca é negativa) nem muda onde a
+aproximação para (o alcance de parada continua sendo o maior alcance de ability, CMB-06).
+
+**Divergência aceita: sem exigência de linha de visão** (ver "Divergências do PRD" abaixo). O
+Canary só entra no ramo de recuo com `isSightClear(creaturePos, targetPos, true)` verdadeiro —
+sem visão livre, ele cai no caminho normal (A*, aproxima) mesmo com o alvo mais perto que
+`targetDistance`. O `sim` ainda não tem esse conceito (chega com o M30-06, linha de visão do
+`combat-v3`); até lá, o recuo do Draconya dispara só pela distância, sem checar parede entre os
+dois — o mesmo corredor bloqueado que já vale para toda a IA de monstro hoje (nenhuma ability
+verifica linha de visão ainda).
+
+## Invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`)
+
+Um monstro que declara `monster.summon` cria monstros próprios durante o combate, até o teto,
+seguindo a referência §15-19 e o mecanismo TFS/Canary `Monster::onThinkDefense` — o MESMO laço
+que avalia `defenses` (#518), mais um bloco (código GPL v2 lido, nunca copiado — ADR 0019).
+
+```ts
+interface MonsterSummonEntry {
+  readonly monsterId: string;
+  readonly intervalMs: number;
+  readonly chance: number;   // fração 0–1, como monsterDefenseSchema.chance
+  readonly count: number;    // teto de invocações VIVAS deste NOME
+}
+interface MonsterSummons {
+  readonly max: number;      // teto de invocações VIVAS, no TOTAL, entre todos os nomes
+  readonly entries: readonly MonsterSummonEntry[];
+}
+```
+
+- **Uma entrada por NOME**, cada uma com a própria cadência e a própria chance — um evento NA
+  FILA por entrada (o desenho das defesas), subject derivado `m:<id>:<monsterId>`. A CADÊNCIA
+  reagenda SEMPRE, como a defesa — mas a rolagem em si só acontece com o mestre ENGAJADO
+  (`targetId !== null`): é o equivalente do Draconya para `hasFollowPath`, que embrulha o laço
+  `summons` inteiro na fonte (`!isSummon() && summons.size() < maxSummons && hasFollowPath`,
+  TFS `monster.cpp:991`, idêntico no Canary `monster.cpp:2224`) — um monstro que nunca viu
+  ninguém não invoca nada, mesmo tendo `monster.summon` declarado. `chance` é sempre declarada
+  (conteúdo novo, sem concessão de compatibilidade) e consome UMA rolagem por vencimento, mesmo
+  em 1, SÓ quando engajado — sem alvo, nem a rolagem acontece, e a sequência de RNG não muda.
+- **Dois tetos independentes.** `summons.max` é o do MONSTRO inteiro (TFS `m_summons.size() <
+  maxSummons`); `entries[].count` é o DESTA entrada, por nome (`summonCount >=
+  summonBlock.max`/`summonsCount >= summonCount`). Os dois seguram ao mesmo tempo: uma entrada
+  pode ter folga própria (`count` alto) e ainda assim parar porque o monstro já está no teto
+  geral, contando toda invocação viva de QUALQUER nome.
+- **Nasce perto do mestre, só nos 8 vizinhos imediatos** (TFS/Canary `Map::placeCreature(...,
+  extendedPos: false)`, chamado com `false` pelo `Game::placeCreature` de `monster.summon`): a
+  posição exata dele já está ocupada por ELE — tile é exclusivo (invariante 8) —, então a busca
+  tenta os vizinhos, como `Spawner.#freeTile` (`tilesAround`, raio 1 — o `normalRelList` de 8
+  posições da fonte, sem expansão nenhuma além dele). Sem tile livre, a tentativa se perde — a
+  próxima cadência da entrada tenta de novo, como o respawn adiado do Spawner. O bloqueio é
+  PRÓPRIO da invocação (`#summonBlockedFor`: só parede e ocupação) — nunca o
+  `spawnClearRadius`/`blockable` de `#spawnBlockedFor`, que é a supressão do SPAWNER perto de um
+  jogador vivo e que a fonte não aplica a `Map::placeCreature` nenhuma.
+- **Não ocupa lugar do Spawner.** A invocação nasce por um caminho direto (`#spawnMonster`, o
+  mesmo que o Spawner usa por baixo, sem o registro de lugar) — o `monsterCount`/`composition` da
+  dificuldade continuam contando só quem o Spawner de fato administra.
+- **Nunca paga XP, loot nem Bestiário** (TFS `setDropLoot(false)`/`setSkillLoss(false)`, Canary
+  `Player::onKilledMonster` → `hasBeenSummoned()` devolve cedo, antes de tocar hunting task ou
+  Bestiário). O abate ainda conta no "matei N" do extrato (#190) — a mesma condição de sempre —,
+  mas o sorteio de destinatário do loot NUNCA roda para ela: rolar para quem nunca ganha nada
+  moveria a sequência de RNG de toda a hunt (FUN-63) por um abate que o Tibia nem registra.
+- **Some quando o mestre morre ou é removido** (TFS `Game::removeCreature`, que remove cada
+  `creature->summons` do dono que some). É uma REMOÇÃO, não um abate: sem golpe, sem cadáver, sem
+  entrada no "matei N" — libera o tile e cancela os eventos dela (ability, defesa e a própria
+  lista de invocação — vazia nela mesma, que nunca arma), e emite `creature-vanished` como
+  qualquer desaparecimento. `#onMonsterDied` faz a cascata: ao processar a morte do mestre,
+  remove toda invocação viva com aquele `masterId`.
+- **Uma invocação não invoca** (TFS `!isSummon()` em `onThinkDefense`): só quem nasce SEM mestre
+  arma a própria lista de `summons`. Sem isto, uma invocação declarando `summons` encadearia
+  mestre → invocação → invocação da invocação — o TFS não deixa, e nenhum monstro do recorte
+  precisa disso.
+- **`masterId`/`scheduledSummons` viajam no snapshot** (opcionais, sem bump de formato), como
+  `scheduledDefenses`/`scheduledAbilities`. `masterId` ausente é "não é invocação" — o
+  comportamento de sempre.
+- Nenhum monstro do recorte atual (rat, rotworm, dragon, dragon-lord) declara `monster.summon` na
+  fonte (conferido em 2026-09-25) — a mecânica existe e tem cobertura de teste com fixture, mas
+  nenhum monstro real do catálogo a usa ainda.
+- **Fora do escopo** (#546): invocação pelo JOGADOR (magia/item que convoca uma criatura própria
+  — M38), scripts de boss e o `staticAttack` que já ficava de fora do #518.
+
 ## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
 
 O #155 criou as condições como estado temporário do PERSONAGEM com quatro chaves fixas (haste,
@@ -887,7 +1388,7 @@ interface ConditionSpec {                 // declarado em content
   readonly key: string;
   readonly merge: 'replace' | 'refresh' | 'strongest';
   readonly durationMs: number;
-  readonly effect: ConditionEffect;       // haste | buff | mana-shield | heal-over-time | damage-over-time
+  readonly effect: ConditionEffect;       // speed | buff | mana-shield | heal-over-time | damage-over-time
 }
 
 interface FieldSpec {                     // declarado em content
@@ -902,6 +1403,76 @@ interface FieldSpec {                     // declarado em content
   ganha `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais. O monstro carrega
   `conditions`, e o vencimento/tique usam o mesmo sujeito (`<id>/<chave>`, com `m:<id>` no
   monstro) — cancelar no relançamento e na morte não varre a fila.
+- **O dano ao longo do tempo tem a forma do Tibia (M31-02, #557).** `ConditionEffect` do `kind
+  'damage-over-time'` aceita DUAS formas do conteúdo — a mesma divisão que
+  `ConditionDamage::init`/`ItemParse::parseFieldCombatDamage` do Canary fazem por `startDamage`
+  presente ou ausente (nunca as duas ao mesmo tempo, um `discriminatedUnion` por `form`):
+  - `generated`: `{ totalDamage, startDamage?, intervalMs }`, a lista DECRESCENTE de
+    `ConditionDamage::generateDamageList` (`condition.cpp:2143-2160`) — soma até `totalDamage`,
+    começando em `startDamage` (ausente, `max(1, ceil(totalDamage / 20))`, o default do próprio
+    Canary) e descendo até 1. O poison field do Canary (`items.xml` id 2121, `start=5 damage=100`)
+    rende `[5,5,5,5,4,4,4,4,4,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`
+    — soma exata 100, e `conditions.test.ts` prende esse vetor calculado à mão.
+  - `rounds`: `{ rounds: [{ count, intervalMs, damage }] }`, o `addDamage(rounds, interval,
+    value)` que os SCRIPTS de magia do Canary usam (Ignite: `addDamage(25, 3000, -45)`, 25
+    rodadas iguais de 45) e que o campo de fogo do Dragon Lord também usa (`count=7 damage=20
+    ticks=10000`, sem `start`) — várias rodadas do MESMO valor, concatenáveis em mais de um
+    grupo com cadência diferente.
+
+  O `sim` (`conditions.ts`) expande as duas para a MESMA fila ORDENADA de tiques
+  (`damageOverTimeTicks`, pura): o primeiro elemento é o tique CORRENTE de `ConditionTick`
+  (`amount`/`intervalMs`, sem mudança de contrato) e o resto é `tick.queue`, opcional — ausente
+  é o tique antigo (repete a `intervalMs` até `expiresAtMs`, cura ao longo do tempo e qualquer
+  snapshot anterior a esta issue); presente, mesmo `[]`, é a fila nova, que PARA de tiquetar
+  quando esgota, mesmo antes do vencimento (`advanceTick`, o mesmo `ConditionDamage::
+  executeCondition` esvaziando `damageList`). O campo de tile (`#onFieldTick`/`#enterField`)
+  **não acompanha a fila** — ele regenera a condição a cada pulso a partir do `ConditionSpec` e
+  usa só o primeiro elemento; um campo com a forma `generated` bateria sempre o valor de
+  `startDamage`, nunca decrescendo. Não é regressão: nenhum campo de conteúdo usa `generated`
+  hoje, e é o mesmo comportamento de antes desta issue para um `rounds` de valor constante.
+- **`durationMs` não pode ficar curto demais para a própria fila (achado da revisão do #557).**
+  No Canary, um `ConditionDamage` nunca tem essa divergência POR ESTRUTURA:
+  `ConditionDamage::addDamage` ESTENDE `ticks`/`endTime` a cada rodada somada
+  (`condition.cpp:1863-1889`), então o prazo da condição e o tempo que a fila de dano precisa são
+  sempre o MESMO número. Aqui `ConditionSpec.durationMs` é um campo solto (histórico, mantido por
+  compatibilidade) — sem conferência, um conteúdo com `form: 'generated'` e um `durationMs`
+  "razoável" mas curto demais para o número REAL de tiques que `generateDamageList` produz (a
+  contagem não é aritmética simples: 46 tiques para `totalDamage: 100, startDamage: 5`, não um
+  número redondo) truncava o DOT em silêncio — `#onConditionTick` (`hunt.ts`) para de agendar o
+  próximo tique assim que ele cairia depois de `expiresAtMs`, mesmo com tiques ainda por entregar.
+  `conditionSpecSchema` (`content/schemas.ts`) agora recusa no boot qualquer `durationMs` menor
+  que `damageOverTimeTotalMs(effect)` (a soma de `intervalMs` de toda a fila), nomeando o
+  déficit no erro; `durationMs` MAIOR que o total continua aceito, sem efeito observável — a
+  condição só carrega a fila zerada (`retiredTick`) até vencer. `generateDamageList`/
+  `damageOverTimeTicks` moraram em `sim/conditions.ts` até este achado; moveram para
+  `content` porque o schema também precisa delas, e `content` não pode importar de `sim` — `sim`
+  agora as importa de lá, para não haver duas contas do mesmo número (DT-03).
+- **A tabela de tipo do Tibia (M31-02).** `ConditionEffect.damageType` é o elemento
+  (`Combat::ConditionToDamageType` do Canary, `combat.cpp:245`):
+
+  | Condição Tibia | `damageType` do Draconya |
+  |---|---|
+  | poison | earth |
+  | fire (burning) | fire |
+  | energy (electrified) | energy |
+  | bleeding | physical |
+  | cursed | death |
+  | drown (drowning) | `drown` — chegou ao enum pelo #547 (M29-07); `sim/conditions.ts` já aceita qualquer `DamageType`, então um conteúdo de afogamento pode declarar `damageType: 'drown'` sem mudança nenhuma de código. |
+  | freezing | ice |
+  | dazzled | holy |
+
+- **Reaplicação: `strongest` compara o TOTAL que falta, não o próximo tique isolado (M31-02).**
+  A regra de `ConditionDamage::updateCondition` do Canary — o total NOVO só substitui o antigo se
+  for MAIOR (`getTotalDamage()`, a soma do `damageList` inteiro) — vale para QUALQUER condição
+  com `tick`: `strengthOf` soma `tick.amount` mais `Σ tick.queue[].amount`. Sem fila (tique
+  antigo), a comparação continua sendo só o `amount`, como sempre foi — não há total finito a
+  somar. Uma condição de fila menor no PRÓXIMO tique mas maior no TOTAL vence uma de próximo
+  tique maior mas fila mais curta; `conditions.test.ts` prende os dois lados. Quando a fila
+  ESGOTA (achado da revisão do #557), `retiredTick` zera `tick.amount`/`queue` em vez de deixar o
+  `amount` do ÚLTIMO tique já entregue: sem isso, uma condição já esgotada — sem nenhum tique
+  agendado — reportaria força fantasma e `strongest` recusaria uma reaplicação real mais fraca em
+  `amount` bruto. Um tique PLANO (sem fila) nunca precisa dessa limpeza: o `amount` não muda ao
+  longo da vida da condição.
 - **O DOT entra pelo mesmo pipeline.** Cada tique chama `resolveDamage` com um `DamageIntent`
   tipado (`source` e `damageType`) e passa por `recordDamage` e `resolveDeath`/`session.kill`.
   Não existe escrita direta de vida: a armadura, a resistência e a esquiva valem no tique como
@@ -931,10 +1502,90 @@ interface FieldSpec {                     // declarado em content
 **Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
 e a UI detalhada de buff.
 
+## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
+
+O #155 só tinha `haste`, sempre positivo (`speedPercent` inteiro positivo). O CMB-11 generaliza
+o `ConditionEffect` de velocidade para `speed`, reproduzindo `ConditionSpeed` — a classe existe
+tanto no Canary quanto no TFS (`src/creatures/combat/condition.cpp`), mas o mecanismo do `−40` e
+do piso abaixo é só do CANARY (o TFS usa `baseSpeed` direto, sem deslocamento nem piso —
+`monsters.cpp`); a precedência é a do ADR 0037 decisão 4. `type: 'haste' | 'paralyze'` é o nome
+do Tibia, não derivado do sinal calculado, porque só ele decide o PISO — e uma magnitude por UMA
+das duas formas, nunca as duas:
+
+- **`delta`** (inteiro, em MILÉSIMOS): o formato do ATAQUE/DEFESA de monstro — o `speedChange`
+  copiado sem conversão do Lua (`{ name = "speed", speedChange = -600, duration = 30000, target
+  = true }` do mutated_rat; `speedChange = 400` do Doom Deer, como defesa self-haste). O `sim`
+  deriva a MESMA fórmula que `Monsters::deserializeSpell` deriva sozinho: nunca menos que -1000
+  ("Cant be slower than 100%"), `multiplier = 1 + delta/1000`, `mina = multiplier/2`,
+  `maxa = multiplier`, `minb = maxb = 40`.
+- **`formula`** (`{ mina, minb, maxa, maxb }`): o formato da RUNA/MAGIA, copiado direto do
+  `setFormula` do Lua (a runa de paralyze usa `-1, 0, -1, 0`) — fora do escopo desta issue como
+  CONTEÚDO real (a runa de paralyze do jogador é a M37-05), mas o mecanismo já existe para ela.
+
+As duas convergem no MESMO cálculo (`resolveSpeedPercent`, `packages/sim/src/conditions.ts`):
+`difference = baseSpeed − 40`; `min`/`max` são LINEARES nele e TRUNCADOS para inteiro — como o
+C++ trunca ao atribuir um `float` a `int32_t`, nunca arredonda —; o resultado é sorteado INTEIRO
+e inclusivo no intervalo com o `Rng` da sessão (`min === max` não consome sorteio, como
+`uniform_random` do Canary não consome quando os limites coincidem); e o piso
+(`speedDelta < 40 − baseSpeed`) é a MESMA trava do Canary — a escala do `speed` do Draconya já é
+a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40" é o valor REAL do Canary, não
+um número reescalado. `baseSpeed` é o `speed` do ALVO no instante da aplicação (o `mover.speed`
+de `movement.ts`), como `Creature::getBaseSpeed()` lê o de quem recebe a condição.
+
+**O piso vale SEMPRE, não só quando `type === 'paralyze'`.** No Canary o clamp é condicionado ao
+`ConditionType_t`; aqui `type` é um campo de CONTEÚDO, e nada além de disciplina impediria um
+`delta`/`formula` de sinal de paralyze rotulado por engano como `haste`. Sem o piso incondicional
+isso produziria `speedDelta` arbitrariamente negativo e um `speedScale` NEGATIVO — que
+`movement.ts` trata como velocidade zero (congelado), o oposto e pior do que o efeito rotulado.
+O schema (`packages/content/src/schemas.ts`) reforça isso na origem com dois `.refine` sobre
+`conditionEffectSchema`: `type` precisa concordar com o sinal de `delta` (`haste` exige > 0,
+`paralyze` exige <= 0, como `Monsters::deserializeSpell` do Canary decide) e, para `formula`,
+uma fórmula cujos quatro coeficientes só podem reduzir velocidade não pode ser `type: 'haste'`
+(e vice-versa) — o caso real que motivou isto é a runa de paralyze (`-1, 0, -1, 0`) rotulada como
+`haste`. O piso incondicional continua como rede de segurança para o caso de `formula` cujo sinal
+não é estaticamente decidível pelo schema.
+
+**A política `strongest` compara MAGNITUDE, não o valor com sinal.** `speedPercent` passou a ter
+sinal com este efeito (paralyze é negativo); `strengthOf` (`packages/sim/src/conditions.ts`) usa
+`Math.abs(speedPercent)` para a condição `speed`, senão um paralyze severo (`-80`) perderia para
+um haste fraco (`+5`) numa comparação `strongest` — o inverso do que a política promete.
+
+**A chave é RESERVADA** (`SPEED_CONDITION_KEY = 'speed'`, `packages/content/src/schemas.ts`):
+`conditionSpecSchema` recusa `key` diferente de `"speed"` quando `effect.kind === 'speed'`. É o
+que faz haste e paralyze de QUALQUER fonte — ability de ataque, defesa self-haste, magia futura —
+se SUBSTITUÍREM inteiro um ao outro, sem lógica de exclusão mútua nova: `Conditions.apply` já
+substitui por chave, e é a MESMA propriedade de `Creature::onAddCondition` do Canary/TFS
+(aplicar `CONDITION_HASTE` remove `CONDITION_PARALYZE` e vice-versa) — só que aqui as duas
+nascem no mesmo slot em vez de precisar de dois tipos que se removem.
+
+`monsterAbilitySchema.condition` (CMB-07) já aceitava qualquer `ConditionSpec`, `speed`
+inclusive — nenhuma mudança lá. `monsterDefenseSchema` ganhou `condition` como ALTERNATIVA a
+`heal` (`buildContent` exige pelo menos um dos dois), para o self-haste de defesa; uma
+`condition` de defesa só aceita `type: 'haste'` — uma defesa que paralisa a SI MESMA não é o
+mecanismo que o bestiário observado usa.
+
+**A haste do JOGADOR (as quatro magias de vocação e Swift Foot) não muda.** Elas continuam no
+`spellEffectSchema`/`casting.ts` — um `kind: 'haste'` com `speedPercent` FLAT, sem relação com o
+`conditionEffectSchema` do CMB-07/CMB-11 —, e o resultado delas é idêntico ao de antes desta
+issue: nenhum arquivo de `data/spells/` mudou. As duas mecânicas produzem o MESMO campo de
+runtime (`ConditionState.speedPercent`, lido por `Conditions.speedScale()`), mas por caminhos de
+conteúdo diferentes — a #556 é sobre paralyze/slow e haste de MONSTRO (mecânica de caça, ADR
+0037 decisão 6); unificar a haste do jogador com o mecanismo `delta`/`formula` do Canary é
+trabalho novo, não coberto por esta issue, e fica registrado aqui como divergência PENDENTE, não
+decidida — puxada por trabalho quando alguém precisar (ADR 0019 limite 3).
+
 **O primeiro campo de conteúdo real é o do Dragon Lord (#520).** A ability `firefield`
 (`data/monsters/dragon-lord.json`) não causa dano direto (`power: 0`) — ela só larga o campo,
 círculo raio 4 (a tabela de anéis de MONSTRO, #523 — 21 tiles, não as `AREA_CIRCLEnXn` da
-magia) centrado no alvo, com uma condição `damage-over-time` de 20 de fogo a cada 10 s.
+magia) centrado no alvo, com uma condição `damage-over-time` de 20 de fogo a cada 10 s. Desde o
+M31-02 (#557) a condição usa a forma `rounds` — `{ rounds: [{ count: 7, intervalMs: 10000,
+damage: 20 }] }`, a leitura direta de `count=7 damage=20 ticks=10000` do item 2118 do Canary —
+em vez do `{ amount, intervalMs }` fixo de antes; o número final não muda (7 tiques iguais de 20
+a cada 10 s, 70 000 ms de queima), só a forma no schema. `merge` também passou de `refresh` para
+`strongest`, a regra real do Canary — sem efeito OBSERVÁVEL aqui porque o campo nunca persiste
+condição no alvo (ver "Condições generalizadas..." acima: `#onFieldTick`/`#enterField`
+recalculam a cada pulso), mas correto para quando uma ability aplicar a mesma condição direto
+(`ability.condition`, sem campo).
 
 **Dois números diferentes, duas fontes diferentes (achado da revisão do #536).**
 `condition.durationMs` (70 000 ms) é a QUEIMA no personagem: Canary `items.xml` id 2118 declara
@@ -953,6 +1604,64 @@ cadeia. Um jogador que pisa tarde no campo do Tibia real levaria menos dano (est
 fraco) e o campo sumiria mais cedo (a soma dos três estágios, não só o primeiro); aqui o campo
 fica no chão os 200 000 ms cheios com a força do primeiro estágio o tempo todo.
 
+## Drunk: desvio de passo (M31-03, #558, ADR 0041)
+
+`Creature::onWalk` (`src/creatures/creature.cpp:291-301`) do Canary/TFS desvia o passo de quem
+carrega `CONDITION_DRUNK`: a cada passo, sorteia `r = uniform_random(0, 60)` (61 valores, os dois
+extremos inclusive); `r <= 4` (`DIRECTION_DIAGONAL_MASK`, `game/movement/position.hpp`) faz a
+criatura falar "Hicks!", e só `r < 4` troca a direção do passo — para a CARDEAL do PRÓPRIO `r`
+(`NORTH=0, EAST=1, SOUTH=2, WEST=3` no enum do Canary), nunca relacionada à direção que o passo já
+ia tomar. `r === 4` representaria a diagonal `DIRECTION_SOUTHWEST` — o próprio Canary NÃO troca a
+direção nesse caso (só fala); é o algoritmo dele que nunca pede uma diagonal aqui, não uma
+limitação do Draconya, que TEM passo diagonal de criatura (`packages/sim/src/monster/step.ts`,
+ADR 0009 — o passo guloso do monstro anda nas oito direções, e `movement.ts` cobra ×3 de duração
+numa diagonal). Taxa observável: 4/61 (~6,6 %) de desvio de direção, 5/61 (~8,2 %) de fala.
+
+**`rollDrunkDeviation` (`packages/sim/src/conditions.ts`) reproduz exatamente esse sorteio**, com
+o `Rng` da sessão (`rng.integer(0, 60)`, inclusive nos dois extremos como o `uniform_random` do
+Canary) — sem campo de conteúdo nenhum: o mecanismo INTEIRO é este sorteio, e por isso o efeito
+`drunk` de `conditionEffectSchema` (`packages/content/src/schemas.ts`) não carrega parâmetro
+próprio, só `kind: 'drunk'`. A ÁREA do ataque que aplica a condição (`radius`/`length`+`spread` do
+Canary, ex. `{ name = "drunk", length = 5, spread = 0 }` do demon parrot) já é o `target.area` de
+`monsterAbilitySchema` — o MESMO mecanismo de toda ability em área (#523); nada de novo precisou
+entrar aí.
+
+**A chave é RESERVADA** (`DRUNK_CONDITION_KEY = 'drunk'`, `packages/content/src/schemas.ts`), pelo
+MESMO motivo de `speed`: o estado (`ConditionState`) da condição não tem nenhum campo de leitura
+próprio — é `{ key, targetId, sourceId, expiresAtMs, merge }` e nada mais —, então nada além da
+chave distingue "esta criatura está bêbada" de qualquer outra condição vazia. `Conditions.hasDrunk`
+(`packages/sim/src/conditions.ts`) lê exatamente essa chave, como `hasManaShield` já lê
+`'mana-shield'`.
+
+**O desvio acontece em `HuntRuleset#step` (`packages/sim/src/rulesets/hunt.ts`), o ÚNICO lugar por
+onde todo passo da hunt passa** — bot, monstro e o `walk` do socket (ver "Movimentação com
+escritor único" nas notas de arquitetura do `sim`). `#drunkTarget` confere `Conditions.hasDrunk`
+de quem vai andar (personagem OU monstro — os dois únicos tipos que `#step` recebe) e, se ativo,
+sorteia e troca só x/y do destino a partir da posição ATUAL, preservando o `z` que o chamador já
+resolveu; uma criatura sem drunk nunca chama `rollDrunkDeviation`, e por isso nunca consome esse
+sorteio (a mesma disciplina do `chance` ausente de uma ability, CMB-06). Um tile desviado
+bloqueado FALHA como `move()` já falha por qualquer outro motivo — sem tratamento especial: o bot
+replaneja sozinho no vencimento seguinte, e um `walk` manual do jogador simplesmente não anda.
+
+**Isso vale IGUAL para o passo conduzido pelo bot** (ADR 0041 decisão 3, invariante 11): como
+`#step` é o mesmo choke point para o `walk` do socket, a rota do bot e o passo guloso do monstro,
+não existe um caminho de automação que escape do desvio — o jogador embriagado sofre o mesmo
+sorteio jogando manualmente ou automatizado. Excluir o bot seria dar à automação uma vantagem que
+o jogo real não dá ao jogador manual, o tipo de assimetria que o invariante 11 proíbe.
+
+**"Hicks!" (a fala da criatura) fica sem consumidor.** O Draconya ainda não tem evento de fala de
+criatura no protocolo; `rollDrunkDeviation` devolve `speak` (verdadeiro sempre que `r <= 4`, mesmo
+quando a direção não muda) para quando esse evento existir, mas hoje nada o lê. Isso é
+apresentação, não regra de hunt (ADR 0037 decisão 6) — a divergência é aceitável e fica registrada
+aqui, não no passo em si.
+
+**Nenhum monstro do catálogo (`rat`, `rotworm`, `dragon`, `dragon-lord`) declara `drunk` hoje** —
+é mecanismo puro, sem conteúdo real associado ainda (o ataque `drunk` é dos 77 usos do Canary,
+concentrados em bosses de quest fora do recorte atual). `conditions.test.ts` prende a taxa exata
+(4/61 de desvio, 5/61 de fala, com seed fixa e 61 000 rolagens) e o mapeamento `r → direção`;
+`hunt.test.ts` prova a integração — o desvio passa pelo `#step` de verdade, para personagem e para
+monstro, sem consumir sorteio de quem não tem a condição.
+
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 
 O #518 desenhou o mecanismo; o #520 é quem o usa pela primeira vez em conteúdo real, e por isso
@@ -965,13 +1674,16 @@ raio; achado da revisão do #536, que também corrigiu `applyField` — o campo 
 Lord usava a tabela errada por padrão e cobria 69 tiles em vez de 21, ver "Condições
 generalizadas..." acima), `firewave` (onda comprimento 8, sem alvo — sai do
 monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
-— `paralyze` e `invisible` do TFS não têm mecanismo equivalente no Draconya (não há condição de
-paralisia nem invisibilidade, ver CMB-07 "Fora do escopo"), então a imunidade a eles não tem o
-que ser declarada. Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable`
-do Canary (`monster.flags`) e a `strategiesTarget` ponderada (nearest 70 % / health 10 % /
-damage 10 % / random 10 %) não existem no schema — `monsterTargetChangeSchema` só tem o ramo
-`TARGETSEARCH_RANDOM` do TFS (ver acima), e o resto fica registrado aqui como o que falta ao
-motor, não implementado por esta issue.
+— desde o CMB-11 (#556) existe MECANISMO de `paralyze` (a condição `speed`, ver abaixo), mas
+nenhum monstro do recorte o declara em `mitigation.immunities`: a IMUNIDADE por condição é a
+M31-04, fora desta issue, e `invisible` do TFS continua sem mecanismo equivalente no Draconya.
+Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable` do Canary
+(`monster.flags`) não existem no schema — ficam registrados aqui como o que falta ao motor, não
+implementado por esta issue. A `strategiesTarget` ponderada (nearest 70 % / health 10 % / damage
+10 % / random 10 %) deixou de ser divergência de CONTEÚDO com o #541: `monster.targetStrategy`
+existe no schema, e Dragon/Dragon Lord já declaram os mesmos quatro pesos. Desde o #645 (ADR
+0037 d.6) o GATILHO também é o do Canary — `rankTarget` só entra no ramo estreito de fuga
+bloqueada, não mais nos dois vencimentos de sempre — ver "Seleção ponderada de alvo" acima.
 
 ## Outcomes avançados: crítico, leech e mana shield (CMB-08, #335)
 
@@ -979,7 +1691,7 @@ O CMB-02 devolvia um outcome; o CMB-04 tornou a defesa um estágio; o CMB-08 com
 com os modificadores aprovados e torna a **absorção de mana** um estágio visível. Nada disso
 recalcula dano fora do resolver canônico, e nada entra no snapshot nem no S2C (DT-03).
 
-### A ordem, congelada na emenda do ADR 0031
+### A ordem em `combat-v1`/`v2`, congelada na emenda do ADR 0031
 
 ```text
 raw power
@@ -990,8 +1702,10 @@ raw power
   -> corte do Dodge -> multiplicador do crítico -> arredondamento
 ```
 
-As três posições de sorteio são contrato. O crítico é o **último**: um estágio novo que precise
-de sorteio próprio entra depois dele, e mover qualquer posição exige perfil novo.
+As três posições de sorteio são contrato PARA `combat-v1`/`v2` — perfis antigos, mantidos bit a
+bit para sessão nenhuma quebrar. O crítico é o **último** multiplicador ali. Em `combat-v3`
+(M30-04, abaixo) a posição é OUTRA, e fiel ao Canary: ver "O pipeline de recebimento do
+combat-v3" mais acima.
 
 ### Defaults neutros: a ausência preserva o v1
 
@@ -1004,14 +1718,24 @@ de sorteio próprio entra depois dele, e mover qualquer posição exige perfil n
   a sequência não depende do VALOR;
 - `lifeLeech`/`manaLeech` são fração do HP aplicado e **não consomem RNG**.
 
-### Leech: base, clamp e evento
+### Leech: base, fórmula, clamp e evento
 
 - A base é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill não rende
   leech, e dano absorvido pela mana não rende leech nenhum.
 - `lifeLeechApplied`/`manaLeechApplied` são o que de fato entrou — a vida limitada ao teto, a
   mana ao espaço livre. Atacante cheio informa zero, e o `creature-healed` de leech **não sai**:
   o número verde não mente.
-- A fração é truncada (`floor`), nunca arredondada para cima.
+- **A fórmula (M30-04, #551) é `Game::calculateLeechAmount` do Canary** (`game.cpp:9058`), não
+  uma fração direta: `realDamage × leechFraction × (0,1 × n + 0,9) / n`, arredondada
+  (`std::lround`, meio para cima — `Math.round`) e limitada a `[0, realDamage]`, onde `n` é
+  `targetsAffected` — o total de criaturas que a MESMA ação atingiu (`damage.affected` do
+  Canary), não só as elegíveis a leech. Para `n = 1` o fator vale exatamente `1` — o golpe de
+  alvo único de sempre, e a fórmula reduz à fração pura. Para `n = 5` vale `0,28`, **não** `0,2`:
+  uma magia em área rende, POR ALVO, mais que um quinto do que renderia sozinha — a "divisão
+  pelos alvos" é a descrição solta do produto, o número real vem da fórmula. Vive em
+  `calculateLeechAmount`/`applyLeech` (`packages/sim/src/combat/modifiers.ts`), compartilhada
+  entre o golpe de alvo único (`applyDamageOutcome`, `targetsAffected` `1` por padrão) e a magia
+  em área (`HuntRuleset#applyHits`, um `targetsAffected` só para todos os alvos da MESMA mira).
 
 ### Mana shield como estágio visível (DT-02)
 
@@ -1045,12 +1769,48 @@ o extrato conseguirem auditar o golpe sem recalcular (DT-01).
 - **Nenhum cliente calcula ou modifica o outcome** (DT-03): não há campo novo no protocolo nem
   janela de breakdown. O detalhamento é CMB-10.
 
-### Escopo
+### Escopo, e de onde os modificadores vêm (M30-04, #551)
 
-Os modificadores entram pelo `DamageIntent` e o CMB-08 os liga aos **ataques básicos** (corpo a
-corpo, distância e wand/rod), onde a fonte é `combat.modifiers`. Magia, runa, ability de monstro
-e DOT seguem sem modificadores — declará-los é conteúdo novo sob o mesmo contrato. Reflect,
-imbuements não aprovados, PvP e a janela de breakdown ficam fora.
+Os modificadores entram pelo `DamageIntent` — o contrato do CMB-08 não muda —, mas a FONTE deixou
+de ser só `combat.modifiers` (o andaime original, um valor estático de conteúdo que nenhum
+conteúdo real declara, e que a conformance ainda exercita):
+
+- **Item** (`ItemCombatModifiers`, `packages/content/src/schemas.ts`): `criticalChance`,
+  `criticalDamage`, `lifeLeech`, `manaLeech`, em pontos-base (×10000) — a MESMA escala do
+  `criticalhitchance`/`criticalhitdamage`/`lifeleechamount`/`manaleechamount` do Canary
+  (`items.xml`, conferido em 2026-09-26 contra `47dfd51`). `Inventory.combatModifiers` soma os
+  EQUIPADOS, como já faz `armor`/`skillBonus`/`speedBonus` — o mesmo molde. O `criticalhitchance`/
+  `criticalhitdamage` do wand of darkness (1000/3500) são o vetor de conteúdo do CMB-08.
+  **`lifeleechchance`/`manaleechchance`** (também no `items.xml`, 19/17 itens) **não têm campo
+  aqui de propósito**: `Game::calculateLeechAmount` só lê a skill AMOUNT — a CHANCE não entra na
+  fórmula —, e o próprio Canary pula as duas ao montar a descrição do item (`item.cpp:91`); são
+  vestigiais nesta versão, sem consumidor na resolução de dano.
+- **Monstro** (`Monster.critChance`): PERCENTUAL inteiro 0-100, a escala do Lua do Canary
+  (`critChance = 10`), convertido para pontos-base por `monsterCriticalModifiers`
+  (`combat/modifiers.ts`) — `getCriticalChance() * 100` do Canary. Sem `criticalDamage`
+  declarável: o Canary não tem esse campo em conteúdo nenhum (só runtime, sempre `0`), então um
+  crítico de monstro ativa a FLAG sem multiplicar dano — fiel ao que o Canary de fato faz.
+  Nenhum dos quatro monstros do bestiário atual (rat, rotworm, dragon, dragon lord) declara
+  `critChance` — só 6 bosses do Canary o fazem, fora do recorte hoje.
+- `combat.modifiers` continua existindo e SOMA com as fontes acima (`combineCombatModifiers`,
+  em pontos-base) — é o que mantém a conformance do CMB-08 original passando sem mudança.
+
+`HuntRuleset#attackerModifiers` agrega equipamento + `combat.modifiers` uma vez por ação, e
+alimenta o golpe básico (`#strike`), a magia (`castSpell`) e a runa (`useSupply`) — o Canary rola
+crítico para qualquer combate do JOGADOR, magia inclusive (`Combat::applyExtensions`, chamado de
+`doCombat`/`doAreaCombatHealth`, não só o golpe básico). Ataque de monstro (básico ou ability) usa
+só `monsterCriticalModifiers`, nunca leech — leech é mecanismo exclusivo do atacante JOGADOR no
+Canary (`applyLifeLeech`/`applyManaLeech` exigem `attackerPlayer`). DOT/condição seguem sem
+modificadores. Reflect, imbuements (M40), charms (M39), PvP e a janela de breakdown ficam fora.
+
+**A ROLAGEM em si é da AÇÃO, não do alvo** (correção pós-#551/#653): `Combat::applyExtensions` do
+Canary decide o crítico UMA vez por `doCombat`/ability inteira, antes de o dano se dividir pelos
+alvos (`combat.cpp:2657`/`2757`) — nunca um alvo criticando e outro não na MESMA magia em área,
+runa em área ou ability de monstro que acerta vários personagens. `rollSharedCriticalOutcome`
+(`combat/modifiers.ts`) é quem garante isso: `castSpell`, `useSupply` e
+`HuntRuleset#executeMonsterAbility` rolam o crítico uma vez ANTES do laço por alvo, e cada
+`resolveDamage` por alvo recebe o resultado já decidido (`chance` fixado em `0` ou `1`) — o
+sorteio de MAGNITUDE (a faixa de poder) continua por alvo, só o crítico é compartilhado.
 
 ## Conformance e benchmark (CMB-10, #336)
 
@@ -1298,12 +2058,27 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
   Isso é uma LACUNA DE FIDELIDADE em aberto, não algo já resolvido por acidente — fica para a
   issue do catálogo de monstros do M28 planejar (armadura/mitigação de cada monstro é conteúdo
   que ainda não existe para o Dragon/Dragon Lord de qualquer forma).
+- **RESOLVIDO pelo #547 (M29-07).** A tabela de tipo drowning→`drown` do M31-02 (#557) não pôde
+  ser LIGADA naquela issue porque `drown` ainda não existia em `DAMAGE_TYPES`
+  (`packages/content/src/schemas.ts`). O #547 acrescentou `drown`/`lifedrain`/`manadrain` ao
+  enum; `sim/conditions.ts` já aceitava qualquer `DamageType`, então nenhuma mudança de mecanismo
+  foi necessária — um conteúdo de afogamento já pode declarar `damageType: 'drown'` na condição
+  `damage-over-time`. Nenhum monstro do catálogo atual declara um campo de afogamento ainda; a
+  ligação de fato ao primeiro monstro real fica para quando ele entrar no catálogo.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
+- **O recuo de `targetDistance` não exige linha de visão** (#542, M29-02; M30-06 fecha a
+  divergência). O Canary só entra no ramo de recuo de `Monster::getDistanceStep` com
+  `isSightClear` verdadeiro entre monstro e alvo — sem visão livre, ele cai no caminho normal
+  mesmo com o alvo mais perto que `targetDistance`. O `sim` ainda não modela linha de visão em
+  lugar nenhum da IA de monstro (nenhuma ability verifica, e o combate corpo a corpo/à distância
+  atravessa parede tanto quanto sempre atravessou); adicionar a checagem só para o recuo, sem o
+  resto da IA, criaria uma exceção só ele — o M30-06 (combate do Canary, `combat-v3`) é onde essa
+  peça de infraestrutura entra para valer, e o recuo passa a usá-la no mesmo commit.
 - **`monster.staticAttack` é aceito no schema, mas não muda comportamento nenhum** (#518). O
   TFS usa este número para decidir se o monstro, podendo atacar, fica parado ou dá um passo
   aleatório colado no alvo (`randomStepping`/`getDanceStep`) — puramente cosmético, não afeta
