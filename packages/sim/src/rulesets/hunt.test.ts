@@ -8,6 +8,7 @@ import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
 import { huntListings } from '../hunt/catalogue.js';
+import { MonsterRuntime } from '../monster/monster.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
@@ -7108,6 +7109,118 @@ describe('IA de monstro do TFS: chance, defesa e troca de alvo (#518)', () => {
     expect(resumed.drainEvents().some(
       (e) => e.kind === 'creature-healed' && e.source === 'monster',
     )).toBe(true);
+  });
+});
+
+describe('condição de velocidade com sinal — paralyze de ataque e haste de defesa (CMB-11, #556)', () => {
+  // O ataque do mutated_rat (`data-otservbr-global/monster/mammals/mutated_rat.lua`):
+  // `{ name = "speed", speedChange = -600, duration = 30000, target = true }`. `power: 0` e sem
+  // ability básica (declarar `abilities` substitui a do boot) isola o teste do dano — o
+  // assunto é o PASSO, não a vida. `chance` ausente sai sempre, sem sorteio, o que faz o teste
+  // ser determinístico sem precisar rodar até a lei dos grandes números ajudar; `cadenceMs`
+  // maior que a janela do teste garante UM lançamento só, para a condição vencer sem ser
+  // relançada (`merge: refresh`, o padrão, reiniciaria os 30 s a cada vencimento da ability).
+  const paralyzingRat = {
+    ...rat, aggroRadius: 20,
+    // HP absurdo de propósito (como a fixture `busyRat`/`Dragon` faz): o herói ataca sozinho
+    // pelo bot, e um rato de 50 HP morreria dentro da janela do teste — o respawn (#518) traria
+    // OUTRO monstro que paralisaria o herói de novo perto dos 30 s, confundindo exatamente o
+    // instante que este teste mede.
+    health: 100_000,
+    abilities: [{
+      id: 'slow', cadenceMs: 60_000, target: { range: 20 }, power: 0, damageType: 'physical',
+      condition: {
+        key: 'speed', durationMs: 30_000,
+        effect: { kind: 'speed', type: 'paralyze', delta: -600 },
+      },
+    }],
+  };
+
+  it('o passo do alvo fica mais lento durante 30 s e volta ao normal depois', () => {
+    const loaded = content({ monsters: [paralyzingRat] });
+    const { session, hero, ruleset } = start({ loaded });
+    // O passo é medido por `requestMove` — o caminho do socket (`#step` direto, sem a
+    // decisão de "parar para lutar" do bot automático, `#playerStep`) —, porque o próprio
+    // alcance grande que faz a ability alcançar o herói também o alcança para o COMBATE dele:
+    // uma vez adjacente, o bot pararia de andar a rota para brigar com um rato de HP absurdo, e
+    // o teste ficaria sem passo NENHUM para medir. `requestMove` é o mesmo mecanismo que a
+    // rota usa por baixo (`movementDuration`), só chamado de fora.
+    const directions: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const moveDuration = (): number => {
+      for (const [dx, dy] of directions) {
+        const { x, y } = hero.position;
+        const result = ruleset.requestMove(session, hero.id, { x: x + dx, y: y + dy });
+        if (result.ok) return result.durationMs;
+      }
+      throw new Error('sem tile livre adjacente ao herói');
+    };
+
+    // A rota deste conteúdo anda em 500 ms por passo (chão 150 × 1000 / speed 300, ceil50) —
+    // é o número que o comentário de `movimento com escritor único` também usa como base.
+    expect(moveDuration()).toBe(500);
+
+    // O rato paralisa assim que arma a ability (alcance/aggro cobrem a arena inteira) — bem
+    // dentro desta janela curta.
+    for (let t = 0; t < 500 && session.ended === null; t += 100) session.advanceBy(100);
+    expect(hero.conditions.get('speed')?.speedPercent).toBeLessThan(0);
+    expect(moveDuration()).toBeGreaterThan(500);
+
+    // Passados os 30 s da condição, ela expira e o passo volta ao normal.
+    for (let t = 500; t < 31_000 && session.ended === null; t += 100) session.advanceBy(100);
+    expect(hero.conditions.get('speed')).toBeNull();
+    expect(moveDuration()).toBe(500);
+  });
+
+  it('uma defesa self-haste acelera o próprio monstro (Doom Deer, speedChange positivo)', () => {
+    // `delta: 2000` (bem acima do 400 real do Doom Deer, conferido à parte no teste de unidade
+    // de `resolveSpeedPercent` em `conditions.test.ts`) força `mina = multiplier/2 = 1,5` —
+    // acima de 1 mesmo no PIOR sorteio da faixa —, o que torna o sinal positivo
+    // DETERMINÍSTICO sem prender o teste a uma semente específica da sessão inteira.
+    const selfHasteDeer = {
+      ...rat, aggroRadius: 0, // nunca mira ninguém — o teste é só sobre a própria defesa.
+      // A defesa NÃO rola no nascimento — a primeira chance é só em `cadenceMs` (#518, "um
+      // monstro recém-nascido não se cura antes do primeiro vencimento"), então a cadência
+      // precisa caber dentro da janela do teste.
+      defenses: [{
+        id: 'haste', cadenceMs: 200, chance: 1,
+        condition: {
+          key: 'speed', durationMs: 8_000,
+          effect: { kind: 'speed', type: 'haste', delta: 2_000 },
+        },
+      }],
+    };
+    const loaded = content({ monsters: [selfHasteDeer] });
+    const { session, ruleset } = start({ loaded });
+    for (let t = 0; t < 500 && session.ended === null; t += 100) session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    expect(monster.conditions.get('speed')?.speedPercent).toBeGreaterThan(0);
+    expect(monster.speedScale).toBeGreaterThan(1);
+  });
+
+  it('haste substitui paralyze na mesma criatura, mesmo vindo de fontes diferentes', () => {
+    // A chave reservada ("speed") faz duas condições de fontes DIFERENTES (uma ability de
+    // OUTRO monstro que paralisa, a própria defesa que acelera) disputarem o MESMO slot — a
+    // mutual-exclusão do `Creature::onAddCondition` do Canary/TFS, sem lógica extra no `sim`.
+    // As duas condições aqui são estado de runtime já resolvido (o mesmo formato que
+    // `conditionFromSpec` devolveria); o teste isola só a política de substituição por chave,
+    // que `Conditions.apply` já prova em `conditions.test.ts` — aqui a prova é que o MONSTRO de
+    // verdade (com `speedScale` de `MonsterRuntime`) também obedece.
+    const monster = new MonsterRuntime({
+      id: 1, monsterId: 'rat', position: { x: 0, y: 0 }, home: { x: 0, y: 0 },
+      health: 100, targetId: null, cooldowns: {},
+    });
+    monster.conditions.apply({
+      key: 'speed', targetId: monster.subject, sourceId: 'm:2', expiresAtMs: 30_000,
+      speedPercent: -50,
+    });
+    expect(monster.speedScale).toBeLessThan(1);
+    monster.conditions.apply({
+      key: 'speed', targetId: monster.subject, sourceId: monster.subject, expiresAtMs: 8_000,
+      speedPercent: 200,
+    });
+    expect(monster.conditions.size).toBe(1);
+    expect(monster.speedScale).toBeGreaterThan(1);
   });
 });
 

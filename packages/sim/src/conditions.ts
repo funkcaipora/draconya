@@ -37,8 +37,9 @@ import type { DamageType } from '@draconya/content';
 // duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
 import { damageOverTimeTicks, generateDamageList } from '@draconya/content';
 import type { DamageSource } from './combat/damage.js';
+import type { Rng } from './rng.js';
 
-export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
+export type ConditionKind = 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -187,12 +188,14 @@ export function sameTick(a: ConditionState, b: ConditionState): boolean {
 }
 
 /**
+/**
  * A magnitude de uma condição, para a política `strongest`. Um DOT vale o dano TOTAL que falta
  * — o tique corrente mais a fila (M31-02, a mesma comparação de `ConditionDamage::
  * updateCondition` do Canary: `getTotalDamage()`, a soma do `damageList` inteiro, não só o
- * próximo elemento). Sem fila (tique antigo, infinito), é só o tique — a simplicidade de sempre,
- * porque não há total finito a somar. Haste vale o percentual, postura o que ela soma. Empate
- * fica com o novo.
+ * próximo elemento). Sem fila (tique antigo, infinito), é só o tique. Haste/paralyze valem o
+ * quanto DESVIAM de 1× velocidade — em módulo, porque `speedPercent` tem SINAL (CMB-11, #556):
+ * um paralyze severo (`-80`) precisa vencer um haste fraco (`+5`) na comparação de `strongest`.
+ * Postura o que ela soma. Empate fica com o novo.
  */
 function strengthOf(condition: ConditionState): number {
   const tick = condition.tick;
@@ -200,7 +203,7 @@ function strengthOf(condition: ConditionState): number {
     const remaining = tick.queue?.reduce((sum, queued) => sum + queued.amount, 0) ?? 0;
     return tick.amount + remaining;
   }
-  if (condition.speedPercent !== undefined) return condition.speedPercent;
+  if (condition.speedPercent !== undefined) return Math.abs(condition.speedPercent);
   if (condition.damageTakenPercent !== undefined) return Math.abs(condition.damageTakenPercent);
   const dealt = condition.damageDealtPercent;
   if (dealt !== undefined) {
@@ -230,12 +233,73 @@ export { damageOverTimeTicks, generateDamageList };
  * `source` só entra no tique de dano — é o que decide de ONDE o DOT veio (magia, ability,
  * runa). Cura e leitura ignoram.
  */
+/**
+ * O contexto que só a condição `speed` (CMB-11, #556) precisa: a velocidade BASE do alvo no
+ * instante da aplicação (`Creature::getBaseSpeed()` do Canary/TFS — o `mover.speed` de
+ * `movement.ts`, antes de qualquer `speedScale`) e o `Rng` da sessão, para a mesma rolagem que
+ * `ConditionSpeed::startCondition` faz. Nenhum outro efeito usa isto.
+ */
+export interface SpeedContext {
+  readonly baseSpeed: number;
+  readonly rng: Rng;
+}
+
+/**
+ * Resolve o percentual de velocidade de um efeito `speed` (CMB-11, #556) reproduzindo
+ * `ConditionSpeed` do CANARY (`src/creatures/combat/condition.cpp`) — a classe existe também no
+ * TFS, mas o `−40` e o piso abaixo são mecanismo só do Canary; o TFS usa `baseSpeed` direto, sem
+ * deslocamento nem piso (`monsters.cpp`). A precedência é a do ADR 0037 decisão 4.
+ *
+ * - `delta` (o `speedChange` do ATAQUE/DEFESA de monstro, em milésimos) vira a MESMA fórmula
+ *   aleatória que o Canary deriva sozinho em `Monsters::deserializeSpell` — nunca menos que
+ *   -1000 ("Cant be slower than 100%"), `multiplier = 1 + delta/1000`, `mina = multiplier/2`,
+ *   `maxa = multiplier`, `minb = maxb = 40`.
+ * - `formula` (a RUNA/MAGIA) é usada como está, copiada direto do `setFormula` do Lua.
+ *
+ * As duas convergem no MESMO cálculo: `difference = baseSpeed − 40`; `min`/`max` são LINEARES
+ * nele e TRUNCADOS para inteiro — como o C++ trunca ao atribuir um `float` a `int32_t`, nunca
+ * arredonda —; o resultado é sorteado INTEIRO e inclusivo no intervalo (`min === max` não
+ * consome sorteio, como `uniform_random` do Canary não consome quando os limites coincidem).
+ *
+ * O piso (`speedDelta < 40 − baseSpeed`) é aplicado SEMPRE, não só quando `effect.type ===
+ * 'paralyze'`: no Canary ele é condicionado ao `ConditionType_t`, mas aqui `type` é um campo de
+ * CONTEÚDO — nada impede um `formula`/`delta` de sinal de paralyze rotulado por engano como
+ * `haste` (o schema em `packages/content/src/schemas.ts` recusa a maioria desses casos, mas o
+ * caso geral de `formula` não é sempre decidível estaticamente). Sem o piso incondicional, esse
+ * erro de conteúdo produziria `speedDelta` arbitrariamente negativo e um `speedScale` NEGATIVO
+ * (`1 + percent/100 < 0`), que `movement.ts` (`Math.max(1, mover.speed * speedScale)`) trata como
+ * velocidade zero — o personagem congela em vez de só receber o rótulo errado. Aplicar sempre é
+ * seguro: para `haste`/formulas legítimas o resultado nunca chega perto de `40 − baseSpeed`, e a
+ * escala do nosso `speed` já é a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40"
+ * é o valor real do Canary, não um número reescalado.
+ */
+export function resolveSpeedPercent(
+  effect: Extract<ConditionEffect, { kind: 'speed' }>, baseSpeed: number, rng: Rng,
+): number {
+  let mina: number; let minb: number; let maxa: number; let maxb: number;
+  if (effect.formula !== undefined) {
+    ({ mina, minb, maxa, maxb } = effect.formula);
+  } else {
+    const speedChange = Math.max(-1000, effect.delta ?? 0);
+    const multiplier = 1 + speedChange / 1000;
+    mina = multiplier / 2; minb = 40; maxa = multiplier; maxb = 40;
+  }
+  const difference = baseSpeed - 40;
+  let min = Math.trunc(mina * difference + minb);
+  let max = Math.trunc(maxa * difference + maxb);
+  if (min > max) { const swap = min; min = max; max = swap; }
+  let speedDelta = (min === max ? min : rng.integer(min, max)) - baseSpeed;
+  if (speedDelta < 40 - baseSpeed) speedDelta = 40 - baseSpeed;
+  return baseSpeed === 0 ? 0 : (speedDelta / baseSpeed) * 100;
+}
+
 export function conditionFromSpec(
   spec: ConditionSpec,
   targetId: string,
   sourceId: string,
   nowMs: number,
   source: DamageSource,
+  speed?: SpeedContext,
 ): ConditionState {
   const base = {
     key: spec.key,
@@ -246,12 +310,16 @@ export function conditionFromSpec(
   } as const;
   const effect: ConditionEffect = spec.effect;
   switch (effect.kind) {
-    case 'haste':
+    case 'speed': {
+      if (speed === undefined) {
+        throw new Error(`condição speed "${spec.key}" precisa do contexto de velocidade (baseSpeed/rng)`);
+      }
       return {
         ...base,
-        speedPercent: effect.speedPercent,
+        speedPercent: resolveSpeedPercent(effect, speed.baseSpeed, speed.rng),
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
       };
+    }
     case 'buff':
       return {
         ...base,

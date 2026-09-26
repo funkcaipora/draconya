@@ -11,9 +11,10 @@ por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de mons
 chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
 implementados
 por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031), o dano de arma do Canary
-com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) e o
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`), o
 pipeline de recebimento do `Creature::blockHit` — defesa com `blockCount`, armadura em faixa e
-mitigação percentual (#548, M30-01, ADR 0040, perfil `combat-v3`) implementados
+mitigação percentual (#548, M30-01, ADR 0040, perfil `combat-v3`) — e a condição de velocidade
+com sinal — paralyze/slow de ataque de monstro e haste de defesa (CMB-11, #556) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -1019,7 +1020,7 @@ interface ConditionSpec {                 // declarado em content
   readonly key: string;
   readonly merge: 'replace' | 'refresh' | 'strongest';
   readonly durationMs: number;
-  readonly effect: ConditionEffect;       // haste | buff | mana-shield | heal-over-time | damage-over-time
+  readonly effect: ConditionEffect;       // speed | buff | mana-shield | heal-over-time | damage-over-time
 }
 
 interface FieldSpec {                     // declarado em content
@@ -1133,6 +1134,78 @@ interface FieldSpec {                     // declarado em content
 **Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
 e a UI detalhada de buff.
 
+## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
+
+O #155 só tinha `haste`, sempre positivo (`speedPercent` inteiro positivo). O CMB-11 generaliza
+o `ConditionEffect` de velocidade para `speed`, reproduzindo `ConditionSpeed` — a classe existe
+tanto no Canary quanto no TFS (`src/creatures/combat/condition.cpp`), mas o mecanismo do `−40` e
+do piso abaixo é só do CANARY (o TFS usa `baseSpeed` direto, sem deslocamento nem piso —
+`monsters.cpp`); a precedência é a do ADR 0037 decisão 4. `type: 'haste' | 'paralyze'` é o nome
+do Tibia, não derivado do sinal calculado, porque só ele decide o PISO — e uma magnitude por UMA
+das duas formas, nunca as duas:
+
+- **`delta`** (inteiro, em MILÉSIMOS): o formato do ATAQUE/DEFESA de monstro — o `speedChange`
+  copiado sem conversão do Lua (`{ name = "speed", speedChange = -600, duration = 30000, target
+  = true }` do mutated_rat; `speedChange = 400` do Doom Deer, como defesa self-haste). O `sim`
+  deriva a MESMA fórmula que `Monsters::deserializeSpell` deriva sozinho: nunca menos que -1000
+  ("Cant be slower than 100%"), `multiplier = 1 + delta/1000`, `mina = multiplier/2`,
+  `maxa = multiplier`, `minb = maxb = 40`.
+- **`formula`** (`{ mina, minb, maxa, maxb }`): o formato da RUNA/MAGIA, copiado direto do
+  `setFormula` do Lua (a runa de paralyze usa `-1, 0, -1, 0`) — fora do escopo desta issue como
+  CONTEÚDO real (a runa de paralyze do jogador é a M37-05), mas o mecanismo já existe para ela.
+
+As duas convergem no MESMO cálculo (`resolveSpeedPercent`, `packages/sim/src/conditions.ts`):
+`difference = baseSpeed − 40`; `min`/`max` são LINEARES nele e TRUNCADOS para inteiro — como o
+C++ trunca ao atribuir um `float` a `int32_t`, nunca arredonda —; o resultado é sorteado INTEIRO
+e inclusivo no intervalo com o `Rng` da sessão (`min === max` não consome sorteio, como
+`uniform_random` do Canary não consome quando os limites coincidem); e o piso
+(`speedDelta < 40 − baseSpeed`) é a MESMA trava do Canary — a escala do `speed` do Draconya já é
+a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40" é o valor REAL do Canary, não
+um número reescalado. `baseSpeed` é o `speed` do ALVO no instante da aplicação (o `mover.speed`
+de `movement.ts`), como `Creature::getBaseSpeed()` lê o de quem recebe a condição.
+
+**O piso vale SEMPRE, não só quando `type === 'paralyze'`.** No Canary o clamp é condicionado ao
+`ConditionType_t`; aqui `type` é um campo de CONTEÚDO, e nada além de disciplina impediria um
+`delta`/`formula` de sinal de paralyze rotulado por engano como `haste`. Sem o piso incondicional
+isso produziria `speedDelta` arbitrariamente negativo e um `speedScale` NEGATIVO — que
+`movement.ts` trata como velocidade zero (congelado), o oposto e pior do que o efeito rotulado.
+O schema (`packages/content/src/schemas.ts`) reforça isso na origem com dois `.refine` sobre
+`conditionEffectSchema`: `type` precisa concordar com o sinal de `delta` (`haste` exige > 0,
+`paralyze` exige <= 0, como `Monsters::deserializeSpell` do Canary decide) e, para `formula`,
+uma fórmula cujos quatro coeficientes só podem reduzir velocidade não pode ser `type: 'haste'`
+(e vice-versa) — o caso real que motivou isto é a runa de paralyze (`-1, 0, -1, 0`) rotulada como
+`haste`. O piso incondicional continua como rede de segurança para o caso de `formula` cujo sinal
+não é estaticamente decidível pelo schema.
+
+**A política `strongest` compara MAGNITUDE, não o valor com sinal.** `speedPercent` passou a ter
+sinal com este efeito (paralyze é negativo); `strengthOf` (`packages/sim/src/conditions.ts`) usa
+`Math.abs(speedPercent)` para a condição `speed`, senão um paralyze severo (`-80`) perderia para
+um haste fraco (`+5`) numa comparação `strongest` — o inverso do que a política promete.
+
+**A chave é RESERVADA** (`SPEED_CONDITION_KEY = 'speed'`, `packages/content/src/schemas.ts`):
+`conditionSpecSchema` recusa `key` diferente de `"speed"` quando `effect.kind === 'speed'`. É o
+que faz haste e paralyze de QUALQUER fonte — ability de ataque, defesa self-haste, magia futura —
+se SUBSTITUÍREM inteiro um ao outro, sem lógica de exclusão mútua nova: `Conditions.apply` já
+substitui por chave, e é a MESMA propriedade de `Creature::onAddCondition` do Canary/TFS
+(aplicar `CONDITION_HASTE` remove `CONDITION_PARALYZE` e vice-versa) — só que aqui as duas
+nascem no mesmo slot em vez de precisar de dois tipos que se removem.
+
+`monsterAbilitySchema.condition` (CMB-07) já aceitava qualquer `ConditionSpec`, `speed`
+inclusive — nenhuma mudança lá. `monsterDefenseSchema` ganhou `condition` como ALTERNATIVA a
+`heal` (`buildContent` exige pelo menos um dos dois), para o self-haste de defesa; uma
+`condition` de defesa só aceita `type: 'haste'` — uma defesa que paralisa a SI MESMA não é o
+mecanismo que o bestiário observado usa.
+
+**A haste do JOGADOR (as quatro magias de vocação e Swift Foot) não muda.** Elas continuam no
+`spellEffectSchema`/`casting.ts` — um `kind: 'haste'` com `speedPercent` FLAT, sem relação com o
+`conditionEffectSchema` do CMB-07/CMB-11 —, e o resultado delas é idêntico ao de antes desta
+issue: nenhum arquivo de `data/spells/` mudou. As duas mecânicas produzem o MESMO campo de
+runtime (`ConditionState.speedPercent`, lido por `Conditions.speedScale()`), mas por caminhos de
+conteúdo diferentes — a #556 é sobre paralyze/slow e haste de MONSTRO (mecânica de caça, ADR
+0037 decisão 6); unificar a haste do jogador com o mecanismo `delta`/`formula` do Canary é
+trabalho novo, não coberto por esta issue, e fica registrado aqui como divergência PENDENTE, não
+decidida — puxada por trabalho quando alguém precisar (ADR 0019 limite 3).
+
 **O primeiro campo de conteúdo real é o do Dragon Lord (#520).** A ability `firefield`
 (`data/monsters/dragon-lord.json`) não causa dano direto (`power: 0`) — ela só larga o campo,
 círculo raio 4 (a tabela de anéis de MONSTRO, #523 — 21 tiles, não as `AREA_CIRCLEnXn` da
@@ -1175,9 +1248,10 @@ raio; achado da revisão do #536, que também corrigiu `applyField` — o campo 
 Lord usava a tabela errada por padrão e cobria 69 tiles em vez de 21, ver "Condições
 generalizadas..." acima), `firewave` (onda comprimento 8, sem alvo — sai do
 monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
-— `paralyze` e `invisible` do TFS não têm mecanismo equivalente no Draconya (não há condição de
-paralisia nem invisibilidade, ver CMB-07 "Fora do escopo"), então a imunidade a eles não tem o
-que ser declarada. Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable`
+— desde o CMB-11 (#556) existe MECANISMO de `paralyze` (a condição `speed`, ver abaixo), mas
+nenhum monstro do recorte o declara em `mitigation.immunities`: a IMUNIDADE por condição é a
+M31-04, fora desta issue, e `invisible` do TFS continua sem mecanismo equivalente no Draconya.
+Pela mesma razão, os flags `canPushItems`/`canPushCreatures`/`isBlockable`
 do Canary (`monster.flags`) e a `strategiesTarget` ponderada (nearest 70 % / health 10 % /
 damage 10 % / random 10 %) não existem no schema — `monsterTargetChangeSchema` só tem o ramo
 `TARGETSEARCH_RANDOM` do TFS (ver acima), e o resto fica registrado aqui como o que falta ao

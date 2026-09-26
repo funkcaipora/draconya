@@ -422,5 +422,18 @@ entre arquivos resolvem.
   monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`
   (#236) da hunt só vale para quem declara `blockable: true` — Rat e Rotworm o fazem, porque o
   comportamento deles vem do Huntera observado, não do Canary, e não podia mudar aqui.
+- **A condição `speed` (CMB-11, #556) é `delta` OU `formula`, nunca os dois nem nenhum, e a
+  `key` é FIXA** (`conditionEffectSchema`/`conditionSpecSchema`). `delta` (inteiro, milésimos) é
+  o formato do `speedChange` de ATAQUE/DEFESA de monstro, copiado sem conversão do Lua; `formula`
+  (`{ mina, minb, maxa, maxb }`) é o formato de RUNA/MAGIA, o `setFormula` do Canary/TFS
+  transcrito. `type` (`'haste' | 'paralyze'`) é o nome do Tibia — não é derivado do sinal
+  calculado, porque só o `sim` sabe o resultado depois de sortear. `SPEED_CONDITION_KEY`
+  (`'speed'`) é OBRIGATÓRIA em `conditionSpecSchema.key` sempre que `effect.kind === 'speed'` —
+  `buildContent` recusa qualquer outra —, e é essa chave única compartilhada que faz haste e
+  paralyze de fontes diferentes se substituírem no `sim`, sem lógica de exclusão mútua a mais.
+- **`monsterDefenseSchema.heal` virou OPCIONAL, e `condition` é a alternativa** (CMB-11, #556) —
+  `buildContent` exige pelo menos um dos dois; uma `condition` de defesa só aceita `type:
+  'haste'` (o self-haste do Doom Deer), nunca `paralyze` — uma defesa que se paralisa sozinha
+  não é o mecanismo que o bestiário observado usa.
 
 Issue: FUN-8.
