@@ -1224,6 +1224,74 @@ interface MonsterTargetStrategy {
   fila e curaria em dobro no primeiro vencimento.
 - Rato e rotworm não declaram nenhum destes campos — o comportamento entregue não muda.
 
+## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
+
+O M29-02 dá ao monstro um segundo número de alcance, distinto de `attackRange`: `monster.
+targetDistance`, a distância que ele PREFERE manter do alvo (TFS/Canary `targetDistance`,
+`Monster::getDistanceStep`, `monster.cpp:2632`). Com `targetDistance > 1`, um monstro que persegue
+alguém que chegou mais perto do que isso dá um passo para AUMENTAR a distância, em vez de colar
+como um corpo a corpo — o comportamento de 175 dos 1.601 monstros do `data-otservbr-global/
+monster` real (Necromancer, Priestess, Monk Familiar), verificado contra o código em 2026-09-26.
+
+- **Independente da fuga por vida baixa (`runOnHealth`)**: as duas são decisões de movimento
+  separadas em `decideMonsterAction` — a fuga dispara SEMPRE que o HP cai no limiar, o recuo de
+  `targetDistance` só quando o monstro NÃO está fugindo. O Dragon e o Dragon Lord continuam com
+  `targetDistance` declarado IGUAL ao default `1` (`dragon.lua`/`dragon_lord.lua` declaram o
+  campo, só que com o mesmo valor que o schema já assume quando ausente) — corpo a corpo de
+  sempre, sem o novo ramo.
+- **`attackRange` continua sendo até onde o monstro ALCANÇA para bater**; `targetDistance` é a
+  distância que ele PREFERE manter enquanto persegue. Ao contrário do que a versão anterior desta
+  seção afirmava, os dois RARAMENTE coincidem no bestiário real: um atirador tipicamente declara
+  `targetDistance` bem menor que o alcance da ability mais longa — Necromancer `targetDistance` 4
+  com abilities de alcance 1/1/7; Priestess `targetDistance` 4 com abilities de alcance 7×3; Monk
+  Familiar `targetDistance` 2 com abilities de alcance 5 — e não o oposto (schema não os acopla;
+  são campos independentes, como já eram `attackRange` e `aggroRadius`).
+- **A APROXIMAÇÃO também para em `targetDistance`, não no maior alcance de ability** (revisão do
+  #649): a primeira versão desta issue só implementava a METADE do recuo de
+  `Monster::getPathSearchParams` (`monster.cpp:3830`, `fpp.maxTargetDist = targetDistance`) — um
+  atirador com ability de alcance maior que o `targetDistance` preferido (a norma real, ver item
+  acima) parava e atirava assim que entrava no alcance da ability, sem nunca fechar até o
+  stand-off documentado. Com `targetDistance > 1`, `decideMonsterAction` agora usa `targetDistance`
+  como alcance de parada da aproximação em vez de `monsterAttackRange`; sem o campo (ou com `1`),
+  o alcance de parada continua sendo o maior alcance de ability, como sempre (CMB-06, rato e
+  rotworm). As abilities continuam armando pela PRÓPRIA faixa (`#armMonsterAbilities`,
+  independente de `decideMonsterAction`) — um atirador de alcance 7 e `targetDistance` 4 já pode
+  disparar a partir de 7 tiles enquanto ainda está se aproximando, exatamente como o Canary real
+  (passo e ataque são decisões separadas, ver abaixo).
+- **O passo é o `fleeStep` que a fuga já usava** (o guloso com o alvo espelhado, FUN-85) — a
+  MESMA função, reaproveitada como "o mecanismo que aumenta distância" em vez de reescrever a
+  árvore de direções do `getDistanceStep` real do Canary linha a linha (GPL v2, ADR 0019). Sem
+  passo livre (parede atrás), o monstro ataca parado em vez de ficar preso tentando um recuo
+  impossível — a MESMA regra de "encurralado, fica" que a fuga já tinha (ADR 0009).
+- **Precisa do MESMO andar** (`sameFloor`, #519): um alvo em outro piso nunca é "perto demais" —
+  a Darashia Dragon Lair tem três andares na mesma caixa `(x, y)`, e sem esta checagem um monstro
+  de `targetDistance > 1` recuaria de um alvo que nem está no andar dele.
+- **`retreat` é um resultado NOVO de `decideMonsterAction`** (`MonsterAction`), distinto de
+  `step`: o TILE que ele pisa é executado do MESMO jeito (`#onMonsterStep` trata os dois igual ao
+  decidir SE anda), mas o nome deixa explícito, para quem lê a decisão ou uma telemetria futura,
+  que o monstro se afastou por escolha — não é preciso comparar posições para saber.
+- **O cadence de ATAQUE não é consumido pelo recuo**: `decideMonsterAction` só decide o que o
+  `MONSTER_STEP` faz — se o monstro anda ou fica parado —, e é uma decisão TOTALMENTE separada do
+  vencimento de ataque (`MONSTER_ATTACK`/`MONSTER_ABILITY`, com a própria cadência). Um atirador
+  pode recuar E atirar no MESMO instante, como o Dragon já foge E lança bola de fogo ao mesmo
+  tempo (`isMeleeAbility` só bloqueia o corpo a corpo durante a fuga) — passo e ataque continuam
+  sendo decisões independentes, a mesma separação do TFS entre `getNextStep` e `doAttacking`.
+
+`targetDistance: int ≥ 1`, default `1` (`monsterSchema`), preserva rato, rotworm, Dragon e Dragon
+Lord bit a bit — rato e rotworm não declaram o campo (caem no default), Dragon e Dragon Lord
+declaram (`dragon.lua`/`dragon_lord.lua:69`), mas com o MESMO valor `1` que o default já assume —
+e `1` nunca aciona nem o ramo de recuo (a condição é `distance < targetDistance`, sempre falsa
+quando `targetDistance` é `1` e a distância Chebyshev nunca é negativa) nem muda onde a
+aproximação para (o alcance de parada continua sendo o maior alcance de ability, CMB-06).
+
+**Divergência aceita: sem exigência de linha de visão** (ver "Divergências do PRD" abaixo). O
+Canary só entra no ramo de recuo com `isSightClear(creaturePos, targetPos, true)` verdadeiro —
+sem visão livre, ele cai no caminho normal (A*, aproxima) mesmo com o alvo mais perto que
+`targetDistance`. O `sim` ainda não tem esse conceito (chega com o M30-06, linha de visão do
+`combat-v3`); até lá, o recuo do Draconya dispara só pela distância, sem checar parede entre os
+dois — o mesmo corredor bloqueado que já vale para toda a IA de monstro hoje (nenhuma ability
+verifica linha de visão ainda).
+
 ## Invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`)
 
 Um monstro que declara `monster.summon` cria monstros próprios durante o combate, até o teto,
@@ -1988,6 +2056,14 @@ ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
+- **O recuo de `targetDistance` não exige linha de visão** (#542, M29-02; M30-06 fecha a
+  divergência). O Canary só entra no ramo de recuo de `Monster::getDistanceStep` com
+  `isSightClear` verdadeiro entre monstro e alvo — sem visão livre, ele cai no caminho normal
+  mesmo com o alvo mais perto que `targetDistance`. O `sim` ainda não modela linha de visão em
+  lugar nenhum da IA de monstro (nenhuma ability verifica, e o combate corpo a corpo/à distância
+  atravessa parede tanto quanto sempre atravessou); adicionar a checagem só para o recuo, sem o
+  resto da IA, criaria uma exceção só ele — o M30-06 (combate do Canary, `combat-v3`) é onde essa
+  peça de infraestrutura entra para valer, e o recuo passa a usá-la no mesmo commit.
 - **`monster.staticAttack` é aceito no schema, mas não muda comportamento nenhum** (#518). O
   TFS usa este número para decidir se o monstro, podendo atacar, fica parado ou dá um passo
   aleatório colado no alvo (`randomStepping`/`getDanceStep`) — puramente cosmético, não afeta

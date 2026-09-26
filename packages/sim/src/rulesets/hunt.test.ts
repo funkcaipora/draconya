@@ -8017,6 +8017,174 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
   });
 });
 
+describe('manter distância: um atirador recua quando o alvo chega perto (#542, targetDistance)', () => {
+  // Alcance de ataque igual ao `targetDistance`: o atirador não cola no jogador (attackRange
+  // maior não entraria em jogo aqui) nem para longe demais para atirar — o mesmo desenho que o
+  // Necromancer/Water Elemental do Canary usam de verdade (attackRange == targetDistance).
+  const shooter = {
+    id: 'shooter', name: 'Shooter', recommendedLevel: 1,
+    health: 50, experience: 5, attack: 10, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 3,
+    targetDistance: 3,
+    loot: { items: [] },
+  };
+
+  const shooterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: {
+        ...hunt.difficulties.cautious, composition: [{ monsterId: 'shooter', weight: 1 }],
+      },
+    },
+  };
+
+  // O alcance DESARMADO do herói também vira o `targetDistance`: sem isto, o herói nunca
+  // reconhece o atirador como alvo de ataque (ele nunca chega ao corpo a corpo DE PROPÓSITO) e
+  // continua andando o LOOP inteiro da rota, empurrando o atirador contra as quatro paredes de
+  // uma sala de 4×3 — o que mediria o tamanho da sala, não o recuo. Com o mesmo alcance dos
+  // dois lados, `#playerStep` reconhece o alvo e PARA assim que ele entra no alcance, o
+  // "jogador parado" que o #542 pede. `attackPower: 0` (o mesmo `pacifist` do describe do
+  // Dragon): sem ele, o herói parado bate de verdade e mata o atirador de 50 HP em dois golpes
+  // de 25 — o teste mediria a morte do monstro, não o recuo dele.
+  const stationaryCombat = {
+    ...combat, player: { ...combat.player, attackRange: 3, attackPower: 0 },
+  };
+
+  it('mantém pelo menos targetDistance tiles de um jogador parado, mesmo nascendo colado nele', () => {
+    const loaded = buildContent(raw({
+      monsters: [shooter], hunts: [shooterHunt], combat: [stationaryCombat],
+    }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // Teleporta os dois para um canto controlado, com sala de sobra na direção do recuo — e
+    // refaz a ocupação do mundo com um ciclo de snapshot/retomada, o MESMO que uma hunt
+    // retomada do Redis já usa (`Session.fromSnapshot`/`#rebuildOccupancy`). Sem isto, o tile
+    // onde o atirador nasceu de verdade continuaria "ocupado" por baixo, e um passo de recuo
+    // por cima dele seria recusado à toa.
+    hero.position = { x: 1, y: 2, z: 7 };
+    monster.position = { x: 2, y: 2, z: 7 };
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    const resumedHero = resumed.participants.find((p) => p.id === 'hero') as CharacterRuntime;
+    const resumedMonster = resumedRuleset.monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro após retomar');
+
+    run(resumed, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(resumedMonster.position.x - resumedHero.position.x),
+      Math.abs(resumedMonster.position.y - resumedHero.position.y),
+    );
+    expect(tiles).toBeGreaterThanOrEqual(shooter.targetDistance);
+    // E o herói ficou onde estava: reconheceu o atirador como alvo dentro do alcance e parou
+    // de andar a rota, em vez de rodear a sala inteira atrás dele.
+    expect(resumedHero.position).toEqual({ x: 1, y: 2, z: 7 });
+  });
+
+  it('com targetDistance 1 (default), continua colando no jogador parado — comportamento de sempre', () => {
+    // O mesmo cenário, só que com o rato de sempre (`targetDistance` ausente = 1): a mudança do
+    // #542 não afasta quem já era corpo a corpo. `pacifist` (attackPower 0): o rato tem só 50
+    // HP, e um herói parado batendo de verdade o mataria antes dos 6 s do teste — o corpo fica
+    // onde morreu, mas o herói já teria voltado a andar a rota, e a distância cresceria por um
+    // motivo que não tem nada a ver com `targetDistance`.
+    const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+    const loaded = buildContent(raw({ combat: [pacifist] }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { ...hero.position, x: hero.position.x + 2 };
+    session.drainEvents();
+
+    run(session, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(monster.position.x - hero.position.x),
+      Math.abs(monster.position.y - hero.position.y),
+    );
+    expect(tiles).toBeLessThanOrEqual(1);
+    expect(monster.alive).toBe(true);
+  });
+});
+
+describe('manter distância: a aproximação também para em targetDistance (revisão do #649)', () => {
+  // `attackRange` (5) BEM maior que `targetDistance` (2) de propósito — o oposto do `shooter`
+  // do describe acima, onde os dois coincidem. Antes desta revisão, `decideMonsterAction`
+  // ainda usava o MAIOR alcance de ability como ponto de parada da aproximação
+  // (`monsterAttackRange`, CMB-06): um atirador assim parava e atirava assim que entrava no
+  // alcance de 5, sem nunca fechar até o stand-off de 2 documentado — o que a issue original
+  // pedia era só a METADE do recuo (#542), e a revisão do #649 fechou a outra metade.
+  const longRangeShooter = {
+    id: 'long-range-shooter', name: 'Long Range Shooter', recommendedLevel: 1,
+    health: 50, experience: 5, attack: 10, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 5,
+    targetDistance: 2,
+    loot: { items: [] },
+  };
+
+  const shooterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: {
+        ...hunt.difficulties.cautious,
+        composition: [{ monsterId: 'long-range-shooter', weight: 1 }],
+      },
+    },
+  };
+
+  // O alcance desarmado do herói cobre a distância inicial inteira (3, os dois cantos opostos
+  // da sala 4×3) — reconhece o atirador como alvo desde o primeiro vencimento e para na hora,
+  // pelo mesmo motivo do describe acima: sem isto, o herói andaria a rota atrás de um alvo que
+  // ainda não está "ao alcance da arma", e o teste mediria o passo do herói, não o do monstro.
+  // `attackPower: 0` (pacifist): o atirador tem só 50 HP, e um herói parado batendo de verdade
+  // o mataria antes do monstro terminar de se aproximar.
+  const stationaryCombat = {
+    ...combat, player: { ...combat.player, attackRange: 3, attackPower: 0 },
+  };
+
+  it('fecha a distância além do próprio alcance de ability, até o targetDistance preferido', () => {
+    const loaded = buildContent(raw({
+      monsters: [longRangeShooter], hunts: [shooterHunt], combat: [stationaryCombat],
+    }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // Cantos opostos da sala (interior 1..4 × 1..3): distância Chebyshev 3 — dentro do alcance
+    // de ability (5), mas mais longe que o `targetDistance` (2). O mesmo ciclo de
+    // snapshot/retomada do describe acima refaz a ocupação do mundo a partir da posição nova.
+    hero.position = { x: 1, y: 1, z: 7 };
+    monster.position = { x: 4, y: 3, z: 7 };
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    const resumedHero = resumed.participants.find((p) => p.id === 'hero') as CharacterRuntime;
+    const resumedMonster = resumedRuleset.monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro após retomar');
+
+    run(resumed, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(resumedMonster.position.x - resumedHero.position.x),
+      Math.abs(resumedMonster.position.y - resumedHero.position.y),
+    );
+    // Exatamente no `targetDistance`: mais longe seria a aproximação parando cedo demais (o
+    // defeito revisado), mais perto disparia o ramo de recuo do #542 numa distância que já
+    // deveria estar estável.
+    expect(tiles).toBe(longRangeShooter.targetDistance);
+    expect(resumedHero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+});
+
 describe('estoque de supply/munição do loot: solo, split e shared não enviesado (#520, revisão do #536)', () => {
   // Um monstro fraco (morre num golpe do herói desarmado) que sempre solta 1 de supply E 1 de
   // munição — chance 1 tira o sorteio da conta, e a quantidade 1 é o caso comum (Strong Health

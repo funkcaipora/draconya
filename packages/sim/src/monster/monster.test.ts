@@ -327,3 +327,96 @@ describe('decideMonsterAction fleeing (#518)', () => {
       .toEqual({ kind: 'attack', targetId: 'p' });
   });
 });
+
+describe('decideMonsterAction: manter distância (#542, targetDistance)', () => {
+  // Alcance de ataque igual ao `targetDistance`: o atirador para exatamente onde prefere ficar
+  // e atira de lá, em vez de colar como um corpo a corpo (attackRange 1 desligaria a checagem
+  // de alcance ANTES do recuo entrar, e o teste não provaria nada sobre o campo novo).
+  const shooter = { ...rat, targetDistance: 4, attackRange: 4 };
+
+  it('does not declare targetDistance in the fixture rat — default is 1', () => {
+    expect(rat.targetDistance).toBe(1);
+  });
+
+  it('retreats one tile when the target gets closer than targetDistance', () => {
+    const monster = monsterAt(5, 5);
+    const action = decideMonsterAction(monster, prey('p', 7, 5), shooter, open);
+    expect(action).toEqual({ kind: 'retreat', to: { x: 4, y: 5 } });
+  });
+
+  it('stands and attacks exactly at targetDistance, without retreating further', () => {
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 9, 5), shooter, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('attacks in place instead of getting stuck when retreat is blocked (wall behind)', () => {
+    const monster = monsterAt(0, 0);
+    // Encurralado no canto (0,0), como no describe da fuga por vida baixa: recuar de um alvo
+    // a leste (1,0) empurraria para x=-1, fora do mapa desta grade de teste.
+    const corner = (x: number, y: number) => x < 0 || y < 0;
+    expect(decideMonsterAction(monster, prey('p', 1, 0), shooter, corner))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('never retreats across floors — the SAME distance that retreats on one floor attacks on another', () => {
+    const monster = new MonsterRuntime({
+      id: 1, monsterId: 'rat', position: { x: 5, y: 5, z: 7 }, home: { x: 5, y: 5, z: 7 },
+      health: 20, targetId: null, cooldowns: {},
+    });
+    // Mesma distância (2) do teste de recuo acima — só o andar do alvo muda, de 7 para 8.
+    const sameFloorTarget: Prey = { id: 'p', position: { x: 7, y: 5, z: 7 }, alive: true, health: 100 };
+    const otherFloorTarget: Prey = { id: 'p', position: { x: 7, y: 5, z: 8 }, alive: true, health: 100 };
+    expect(decideMonsterAction(monster, sameFloorTarget, shooter, open))
+      .toEqual({ kind: 'retreat', to: { x: 4, y: 5 } });
+    // Andar diferente: o portão de `sameFloor` desliga o recuo — cai para a checagem de
+    // alcance de sempre, que não olha `z` (o mesmo comportamento que `distance`/`greedyStep`
+    // já tinham antes desta issue, preservado de propósito).
+    expect(decideMonsterAction(monster, otherFloorTarget, shooter, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('does not retreat with the default targetDistance (1) — same behaviour as before #542', () => {
+    // `distance < targetDistance` só é possível com `targetDistance` acima de 1: com o default,
+    // o ramo novo nunca roda, e a sequência de decisões do rato continua idêntica.
+    expect(decideMonsterAction(monsterAt(0, 0), prey('p', 1, 0), rat, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+    expect(decideMonsterAction(monsterAt(0, 0), prey('p', 5, 0), rat, open))
+      .toEqual({ kind: 'step', to: { x: 1, y: 0 } });
+  });
+
+  // Revisão do #649: a primeira versão desta issue só implementava a metade do recuo de
+  // `Monster::getPathSearchParams` — um atirador cuja ability alcança mais longe que o
+  // `targetDistance` preferido (a norma real: Necromancer `targetDistance` 4 com ability de
+  // alcance 7, Monk Familiar `targetDistance` 2 com abilities de alcance 5) parava assim que
+  // entrava no alcance da ability, sem nunca fechar até o stand-off documentado. Este describe
+  // usa um `attackRange` (5) maior que o `targetDistance` (2) de propósito: com os dois iguais
+  // (o `shooter` do describe acima), o defeito e o conserto produzem o MESMO resultado, e o
+  // teste não provaria nada sobre a metade que estava faltando.
+  const longRangeShooter = { ...rat, targetDistance: 2, attackRange: 5 };
+
+  it('keeps closing past its own ability range until it reaches targetDistance', () => {
+    // Alvo a 4 tiles: dentro do alcance da ability (5), mas ainda mais longe que o
+    // `targetDistance` (2) preferido. Antes do #649, isto já disparava `attack` parado a 4
+    // tiles — o defeito que a revisão encontrou.
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 9, 5), longRangeShooter, open))
+      .toEqual({ kind: 'step', to: { x: 6, y: 5 } });
+  });
+
+  it('stands and attacks exactly at targetDistance, even with an ability that reaches farther', () => {
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 7, 5), longRangeShooter, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('still stops at the largest ability range when targetDistance is the default (1) — CMB-06 unchanged', () => {
+    // Sem `targetDistance` declarado (> 1), o alcance de parada da aproximação continua sendo o
+    // maior alcance de ability, como sempre — a mudança do #649 só vale para quem declara
+    // `targetDistance > 1`.
+    const monster = monsterAt(5, 5);
+    const rangedNoPreference = { ...rat, attackRange: 4 };
+    expect(decideMonsterAction(monster, prey('p', 9, 5), rangedNoPreference, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+});

@@ -5133,8 +5133,12 @@ const slots = bot.groups.get(group);
 
     // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
     // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
-    // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
-    const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
+    // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119). `retreat` (#542,
+    // manter distância) pisa o tile do MESMO jeito que `step` — a diferença entre os dois é só
+    // de onde a decisão veio, não de como o passo em si é executado.
+    const result = action.kind === 'step' || action.kind === 'retreat'
+      ? this.#step(session, monster, action.to, subject)
+      : null;
     const cadence = result !== null && result.ok
       ? result.durationMs
       : movementDuration(this.#world, monster, monster.position, this.#at(monster));
