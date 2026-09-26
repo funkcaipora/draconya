@@ -929,6 +929,23 @@ interface FieldSpec {                     // declarado em content
   usa só o primeiro elemento; um campo com a forma `generated` bateria sempre o valor de
   `startDamage`, nunca decrescendo. Não é regressão: nenhum campo de conteúdo usa `generated`
   hoje, e é o mesmo comportamento de antes desta issue para um `rounds` de valor constante.
+- **`durationMs` não pode ficar curto demais para a própria fila (achado da revisão do #557).**
+  No Canary, um `ConditionDamage` nunca tem essa divergência POR ESTRUTURA:
+  `ConditionDamage::addDamage` ESTENDE `ticks`/`endTime` a cada rodada somada
+  (`condition.cpp:1863-1889`), então o prazo da condição e o tempo que a fila de dano precisa são
+  sempre o MESMO número. Aqui `ConditionSpec.durationMs` é um campo solto (histórico, mantido por
+  compatibilidade) — sem conferência, um conteúdo com `form: 'generated'` e um `durationMs`
+  "razoável" mas curto demais para o número REAL de tiques que `generateDamageList` produz (a
+  contagem não é aritmética simples: 46 tiques para `totalDamage: 100, startDamage: 5`, não um
+  número redondo) truncava o DOT em silêncio — `#onConditionTick` (`hunt.ts`) para de agendar o
+  próximo tique assim que ele cairia depois de `expiresAtMs`, mesmo com tiques ainda por entregar.
+  `conditionSpecSchema` (`content/schemas.ts`) agora recusa no boot qualquer `durationMs` menor
+  que `damageOverTimeTotalMs(effect)` (a soma de `intervalMs` de toda a fila), nomeando o
+  déficit no erro; `durationMs` MAIOR que o total continua aceito, sem efeito observável — a
+  condição só carrega a fila zerada (`retiredTick`) até vencer. `generateDamageList`/
+  `damageOverTimeTicks` moraram em `sim/conditions.ts` até este achado; moveram para
+  `content` porque o schema também precisa delas, e `content` não pode importar de `sim` — `sim`
+  agora as importa de lá, para não haver duas contas do mesmo número (DT-03).
 - **A tabela de tipo do Tibia (M31-02).** `ConditionEffect.damageType` é o elemento
   (`Combat::ConditionToDamageType` do Canary, `combat.cpp:245`):
 

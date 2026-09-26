@@ -1035,9 +1035,9 @@ const damageOverTimeRoundSchema = z.object({
  *   (`src/creatures/combat/condition.cpp:2143-2160`) soma até `totalDamage`, começando em
  *   `startDamage` e descendo até 1 (poison field do Canary: `start=5 damage=100`). Ausente,
  *   `startDamage` é `max(1, ceil(totalDamage / 20))`, o default do próprio Canary.
- * - `rounds`: a lista de RODADAS explícitas de cima. O sim expande as duas para a MESMA fila de
- *   tiques (`generateDamageList`/`damageOverTimeTicks` em `sim/conditions.ts`) — o conteúdo só
- *   escolhe a forma mais perto da fonte.
+ * - `rounds`: a lista de RODADAS explícitas de cima. `generateDamageList`/`damageOverTimeTicks`,
+ *   abaixo, expandem as duas para a MESMA fila de tiques (`sim/conditions.ts` importa as duas em
+ *   vez de reimplementá-las) — o conteúdo só escolhe a forma mais perto da fonte.
  *
  * `damageType` é o ELEMENTO do Tibia (poison→earth, fire→fire, energy→energy, bleeding→physical,
  * cursed→death, freezing→ice, dazzled→holy — tabela em `docs/product/combat.md`; `drown` fica de
@@ -1084,15 +1084,120 @@ export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
 export type DamageOverTimeEffect = Extract<ConditionEffect, { kind: 'damage-over-time' }>;
 
 /**
+ * A lista DECRESCENTE do Tibia (M31-02): o mecanismo de `ConditionDamage::generateDamageList` do
+ * Canary (`src/creatures/combat/condition.cpp:2143-2160`), reescrito em TypeScript a partir do
+ * comportamento descrito — nunca copiado (ADR 0019). Mora AQUI, e não em `sim`, porque
+ * `conditionSpecSchema` (abaixo) também precisa saber quantos tiques uma lista `generated`
+ * produz, para recusar um `durationMs` curto demais para a própria fila que ele declara — achado
+ * da revisão do #557: nada cruzava os dois, e um `durationMs` "razoável" mas curto truncava o DOT
+ * em silêncio, sem erro nem teste que acusasse. `sim/conditions.ts` importa esta função em vez de
+ * reimplementá-la: duas contas para o mesmo número é o defeito que a DT-03 já nomeia noutro lugar
+ * deste pacote.
+ *
+ * Soma até `totalDamage`, começando em `startDamage` e descendo até 1: para cada "banda" `n` (de
+ * 1 até `startDamage`), a média-alvo é `n × totalDamage / startDamage`, e o valor da banda
+ * (`startDamage + 1 − n`) é repetido enquanto isso aproxima a soma acumulada dessa média — pelo
+ * menos uma vez. `startDamage` maior que `totalDamage` divide por um número maior que o total (o
+ * Canary clampa antes de chamar); o schema já recusa essa combinação, então aqui é só a
+ * matemática.
+ *
+ * Exemplo (poison field do Canary, `items.xml` id 2121, `start=5 damage=100`):
+ * `[5,5,5,5,4,4,4,4,4,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`
+ * — soma exata 100; `conditions.test.ts` (sim) e `content.test.ts` prendem esse vetor.
+ */
+export function generateDamageList(totalDamage: number, startDamage: number): readonly number[] {
+  const amount = Math.abs(totalDamage);
+  const start = Math.abs(startDamage);
+  const list: number[] = [];
+  let sum = 0;
+  for (let i = start; i > 0; i -= 1) {
+    const band = start + 1 - i;
+    const target = Math.trunc((band * amount) / start);
+    let closerWithOneMore: boolean;
+    do {
+      sum += i;
+      list.push(i);
+      const ifOneMore = Math.abs(1 - (sum + i) / target);
+      const asIs = Math.abs(1 - sum / target);
+      closerWithOneMore = ifOneMore < asIs;
+    } while (closerWithOneMore);
+  }
+  return list;
+}
+
+/** O `startDamage` default do Canary quando o conteúdo o omite: `max(1, ceil(totalDamage/20))`. */
+function defaultStartDamage(totalDamage: number): number {
+  return Math.max(1, Math.ceil(totalDamage / 20));
+}
+
+/** Um tique da fila do Tibia já expandido — a MESMA forma que `sim` consome (`QueuedTick`, sem
+ * `kind`/`damageType`/`source`, que não variam dentro da fila de uma condição). */
+export interface DamageOverTimeTick {
+  readonly amount: number;
+  readonly intervalMs: number;
+}
+
+/**
+ * Expande um `DamageOverTimeEffect` (as duas formas do Tibia) para a fila ORDENADA de tiques —
+ * puro, sem I/O, a mesma lista para a mesma entrada (invariante 1). A forma `generated` vira UMA
+ * lista decrescente, cada elemento com o `intervalMs` declarado; `rounds` concatena os grupos na
+ * ordem em que aparecem. Sempre pelo menos um elemento — o schema exige `totalDamage`/`count`
+ * positivos. `sim/conditions.ts` importa esta função para compilar o `ConditionState` de runtime
+ * a partir do MESMO cálculo que `conditionSpecSchema`, abaixo, usa para conferir `durationMs`.
+ */
+export function damageOverTimeTicks(effect: DamageOverTimeEffect): readonly DamageOverTimeTick[] {
+  if (effect.form === 'generated') {
+    const start = Math.min(effect.startDamage ?? defaultStartDamage(effect.totalDamage), effect.totalDamage);
+    return generateDamageList(effect.totalDamage, start)
+      .map((amount) => ({ amount, intervalMs: effect.intervalMs }));
+  }
+  return effect.rounds.flatMap((round) => Array.from(
+    { length: round.count }, () => ({ amount: round.damage, intervalMs: round.intervalMs }),
+  ));
+}
+
+/**
+ * O tempo TOTAL (ms) que a fila de `damageOverTimeTicks` precisa para esgotar — a soma do
+ * `intervalMs` de cada tique, na ordem em que disparam. É contra este número que
+ * `conditionSpecSchema`, abaixo, confere `durationMs` (achado da revisão do #557): no Canary os
+ * dois nunca podem divergir porque `ConditionDamage::addDamage` ESTENDE `ticks` a cada rodada
+ * somada — não existe campo de duração independente da fila. Aqui `durationMs` é um campo solto
+ * (histórico, e mantido por compatibilidade de conteúdo já autorado), então a mesma garantia
+ * precisa vir de CONFERÊNCIA em vez de vir de estrutura.
+ */
+export function damageOverTimeTotalMs(effect: DamageOverTimeEffect): number {
+  return damageOverTimeTicks(effect).reduce((sum, tick) => sum + tick.intervalMs, 0);
+}
+
+/**
  * A condição declarativa do conteúdo (CMB-07): chave, política de fusão, prazo e efeito. O
  * `sim` a compila para o estado de runtime com prazo LÓGICO absoluto. Nunca carrega arte
  * (invariante 6) — a apresentação, quando existir, é resolvida por id na tabela de aparências.
+ *
+ * Para `damage-over-time`, `durationMs` não pode ser menor que `damageOverTimeTotalMs(effect)`
+ * (achado da revisão do #557): sem esta conferência, um `durationMs` autorado à mão que fica
+ * curto demais para a própria fila de tiques trunca o DOT em silêncio — `#onConditionTick`
+ * (`sim/rulesets/hunt.ts`) para de agendar o próximo tique assim que ele cairia depois do prazo,
+ * mesmo com tiques ainda por entregar na fila. `durationMs` MAIOR que o total é aceito: a
+ * condição só fica com a fila zerada (`retiredTick`) até vencer, sem efeito observável.
  */
 export const conditionSpecSchema = z.object({
   key: z.string().min(1),
   merge: conditionMergeSchema.default('refresh'),
   durationMs: z.number().int().positive(),
   effect: conditionEffectSchema,
+}).superRefine((spec, context) => {
+  if (spec.effect.kind !== 'damage-over-time') return;
+  const totalMs = damageOverTimeTotalMs(spec.effect);
+  if (spec.durationMs < totalMs) {
+    context.addIssue({
+      code: 'custom',
+      path: ['durationMs'],
+      message: `durationMs (${spec.durationMs} ms) é menor que o total de ${totalMs} ms que a `
+        + `própria fila de tiques do efeito precisa para esgotar — faltariam `
+        + `${totalMs - spec.durationMs} ms de dano no fim da condição`,
+    });
+  }
 });
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 

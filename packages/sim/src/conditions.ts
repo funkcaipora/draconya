@@ -30,8 +30,12 @@
 // esgotada, ela para de tiquetar ANTES do vencimento, como `ConditionDamage::executeCondition` do
 // Canary faz quando `damageList` esvazia.
 
-import type { ConditionEffect, ConditionSpec, DamageOverTimeEffect } from '@draconya/content';
+import type { ConditionEffect, ConditionSpec } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
+// `generateDamageList`/`damageOverTimeTicks` moram em `content` (achado da revisão do #557):
+// `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
+// duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
+import { damageOverTimeTicks, generateDamageList } from '@draconya/content';
 import type { DamageSource } from './combat/damage.js';
 
 export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
@@ -206,61 +210,18 @@ function strengthOf(condition: ConditionState): number {
 }
 
 /**
- * A lista DECRESCENTE do Tibia (M31-02): o mecanismo de `ConditionDamage::generateDamageList`
- * do Canary (`src/creatures/combat/condition.cpp:2143-2160`), reescrito em TypeScript a partir do
- * comportamento descrito — nunca copiado (ADR 0019). Soma até `totalDamage`, começando em
- * `startDamage` e descendo até 1: para cada "banda" `n` (de 1 até `startDamage`), a média-alvo é
- * `n × totalDamage / startDamage`, e o valor da banda (`startDamage + 1 − n`) é repetido enquanto
- * isso aproxima a soma acumulada dessa média — pelo menos uma vez. `startDamage` maior que
- * `totalDamage` divide por um número maior que o total (o Canary clampa antes de chamar); o
- * schema já recusa essa combinação, então aqui é só a matemática.
- *
- * Exemplo (poison field do Canary, `items.xml` id 2121, `start=5 damage=100`):
- * `[5,5,5,5,4,4,4,4,4,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`
- * — soma exata 100, `conditions.test.ts` prende esse vetor calculado à mão.
+ * `generateDamageList` (a lista DECRESCENTE do Tibia) e `damageOverTimeTicks` (a expansão das
+ * duas formas para a fila ordenada de tiques) moram em `@draconya/content`, não aqui — achado da
+ * revisão do #557: `conditionSpecSchema` também precisa delas para conferir `durationMs` contra
+ * o total que a própria fila soma, e `content` não pode importar de `sim`. Reimplementar aqui
+ * criaria DUAS contas para o mesmo número (o defeito que a DT-03 já nomeia no `content`), então
+ * este módulo importa as funções de lá em vez de as ter — `QueuedTick` e o
+ * `DamageOverTimeTick` de `content` têm a MESMA forma (`{ amount, intervalMs }`), então o retorno
+ * de `damageOverTimeTicks` continua compatível com todo código abaixo sem conversão. Reexportadas
+ * aqui porque quem já importava as duas de `./conditions.js` (o `sim` era a única origem antes do
+ * #557) não deveria precisar saber que a origem mudou.
  */
-export function generateDamageList(totalDamage: number, startDamage: number): readonly number[] {
-  const amount = Math.abs(totalDamage);
-  const start = Math.abs(startDamage);
-  const list: number[] = [];
-  let sum = 0;
-  for (let i = start; i > 0; i -= 1) {
-    const band = start + 1 - i;
-    const target = Math.trunc((band * amount) / start);
-    let closerWithOneMore: boolean;
-    do {
-      sum += i;
-      list.push(i);
-      const ifOneMore = Math.abs(1 - (sum + i) / target);
-      const asIs = Math.abs(1 - sum / target);
-      closerWithOneMore = ifOneMore < asIs;
-    } while (closerWithOneMore);
-  }
-  return list;
-}
-
-/** O `startDamage` default do Canary quando o conteúdo o omite: `max(1, ceil(totalDamage/20))`. */
-function defaultStartDamage(totalDamage: number): number {
-  return Math.max(1, Math.ceil(totalDamage / 20));
-}
-
-/**
- * Expande um `DamageOverTimeEffect` (as duas formas do Tibia) para a fila ORDENADA de tiques que
- * o `sim` consome — puro, sem I/O, a mesma lista para a mesma entrada (invariante 1). A forma
- * `generated` vira UMA lista decrescente, cada elemento com o `intervalMs` declarado; `rounds`
- * concatena os grupos na ordem em que aparecem. Sempre pelo menos um elemento — o schema exige
- * `totalDamage`/`count` positivos.
- */
-export function damageOverTimeTicks(effect: DamageOverTimeEffect): readonly QueuedTick[] {
-  if (effect.form === 'generated') {
-    const start = Math.min(effect.startDamage ?? defaultStartDamage(effect.totalDamage), effect.totalDamage);
-    return generateDamageList(effect.totalDamage, start)
-      .map((amount) => ({ amount, intervalMs: effect.intervalMs }));
-  }
-  return effect.rounds.flatMap((round) => Array.from(
-    { length: round.count }, () => ({ amount: round.damage, intervalMs: round.intervalMs }),
-  ));
-}
+export { damageOverTimeTicks, generateDamageList };
 
 /**
  * Compila um `ConditionSpec` do conteúdo para o estado de runtime (CMB-07). `nowMs` é o relógio
