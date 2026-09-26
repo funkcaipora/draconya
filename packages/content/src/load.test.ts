@@ -840,6 +840,29 @@ describe('loadContent — generated/ e overrides/ (ADR 0038)', () => {
     );
   });
 
+  it('items/generated/<fatia>.json com o bloco "source" por entidade (ADR 0038 decisão 2) carrega — schema estrito não recusa a proveniência', () => {
+    // A mesma forma que `scripts/catalog/generated-writer.ts` (`CatalogEntity`) escreve de
+    // verdade: `source: { engine, commit, path }` embutido em CADA entidade. `itemSchema` é
+    // `z.strictObject` — sem um campo `source` explícito, isto derrubaria o boot na primeira
+    // entidade que #573 gerar.
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'generated'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'generated', 'imported.json'), JSON.stringify([
+          {
+            id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1,
+            source: { engine: 'canary', commit: 'a'.repeat(40), path: 'items.xml' },
+          },
+        ]));
+        givePlaceholderAppearance(dir, 'imported-a');
+      },
+      (dir) => {
+        const content = loadContent(dir);
+        expect(content.items.get('imported-a')?.name).toBe('Imported A');
+      },
+    );
+  });
+
   it('id duplicado entre AUTORAL e GERADO falha no boot', () => {
     withCopy(
       (dir) => {

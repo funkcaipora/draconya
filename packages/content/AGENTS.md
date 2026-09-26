@@ -55,6 +55,15 @@ cada reimportação, sempre como transcrição PURA do Canary — um campo edita
 sobrescrito em silêncio na próxima vez. `overrides/` é o único lugar em que uma correção
 sobrevive a uma reimportação. Ver `scripts/catalog/` para quem escreve `generated/`.
 
+Toda entidade em `generated/` carrega um bloco `source: { engine, commit, path }` (ADR 0038
+decisão 2, `CatalogSource` em `scripts/catalog/generated-writer.ts`). Como cada schema de
+entidade é `z.strictObject`, isso só chega até `sim`/`server` sem derrubar o boot porque o
+schema declara `source: catalogSourceSchema.optional()` explicitamente — a MESMA forma que
+`tilemapSchema` já usa para o `source` do mapa importado (ADR 0025 decisão 3). Todo schema novo
+que passar a hospedar entidade gerada precisa do mesmo campo; esquecê-lo só aparece quando a
+primeira entidade de verdade for importada, e o erro (`Unrecognized key: "source"`) não aponta
+para cá.
+
 ## Mapa e rota
 
 O mapa é **grade de caracteres**, uma string por linha: `#` bloqueia, o resto é livre. Escolha
