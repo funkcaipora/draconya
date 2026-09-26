@@ -1,8 +1,8 @@
 # 0043 — Sustento do Tibia: stamina de 42 h com faixas e regeneração só com comida
 
 **Status:** proposto; decisão 1 (teto de stamina) revisada em 2026-09-25 de 42 h para **12 h**
-(Huntera); decisão 2 (recuperação por faixa 1:3/1:6) NÃO adotada — mantém 1:1 provisório até
-captura; decisão 3 (regeneração só com comida) **REVERTIDA** em 2026-09-25 — regeneração ligada
+(Huntera) — o TETO já **implementado** em M32-01 (#562); decisão 2 (recuperação por faixa 1:3/1:6)
+NÃO adotada — mantém 1:1 provisório até captura; decisão 3 (regeneração só com comida) **REVERTIDA** em 2026-09-25 — regeneração ligada
 só a "estar em hunt", sem comida (Huntera); questão do bônus de level baixo RESOLVIDA em
 2026-09-25 a favor da forma multiplicativa decrescente do Huntera, não do aditivo fixo do
 TFS/Canary (ver emenda) — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
