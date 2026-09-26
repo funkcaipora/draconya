@@ -107,7 +107,7 @@ Cada peça tem a própria matriz de oráculos escritos à mão, no mesmo formato
 | `packages/sim/src/combat/weapon-power.test.ts` | tabela (attack, skill, level, attackFactor, vocationMultiplier) → faixa `[min, max]` igual à conta do Canary; distribuição (média/desvio) da normal truncada numa amostra grande; retrocompatibilidade — sem `combat`, ou com `combat-v1`, a fórmula não muda |
 | `packages/sim/src/combat/distance-hit.test.ts` | a tabela por skill/distância (1–7); o balde `ammunition.maxHitChance` (#524) — tabela ou chance fixa; o bônus/malus `weapon.hitChance` (#524); a rolagem sempre consumida |
 | `packages/sim/src/rulesets/weapons.test.ts` (`combat-v2: chance de acerto à distância`) | o `#strike` fim a fim: skill baixa erra mais que skill alta à mesma distância, `combat-v1` continua sempre acertando, 1 Hz == 10 Hz com a chance ligada |
-| `packages/server/src/game/rat-cellars.test.ts`, `rotworm-caves.test.ts` | conformance do CONTEÚDO REAL sob `combat-v2` — inclusive frequência-invariância (`dez minutos a 1 Hz e a 10 Hz...`) |
+| `packages/server/src/game/rat-cellars.test.ts`, `rotworm-caves.test.ts` | conformance do CONTEÚDO REAL — inclusive frequência-invariância (`dez minutos a 1 Hz e a 10 Hz...`). Carregam `packages/content/data` direto (`loadContent(DATA)`), então rodam sob QUALQUER perfil que `combat/baseline.json` declarar no momento — `combat-v2` até esta issue, `combat-v3` desde que `baseline.json` passou a declará-lo (seção seguinte); a suite não fixa o perfil, só prova que o conteúdo real continua verde sob o que estiver em vigor |
 
 ## O `combat-v3` (#548, M30-01, ADR 0040)
 
@@ -141,20 +141,35 @@ O que muda, e o que NÃO muda:
   exata do crítico sob `combat-v3` é trabalho do M30-04.
 - **As cargas de bloqueio (`blockCount`) são calculadas SOB DEMANDA**, nunca por tick
   (invariante 2) — `combat/block-charge.ts` é uma reescrita ORIGINAL do relógio-por-tick do
-  Canary (`creature.cpp`, `blockTicks += interval; if (blockTicks >= 1000) ...`) como duas
-  "vagas" independentes, cada uma um instante absoluto em que volta a ficar pronta. Equivalente
-  em EFEITO (no máximo duas cargas disponíveis, cada uma recarregando em 1000 ms depois de
-  gasta), não literal — a diferença só aparece num padrão de uso adversarial que nenhum vetor
-  desta issue exercita.
+  Canary (`creature.cpp`, `blockTicks += interval; if (blockTicks >= 1000) ...`), que no Canary é
+  um relógio ÚNICO e COMPARTILHADO pelas duas vagas, independente de quando cada uma foi gasta.
+  A reescrita guarda um BANCO (quantas cargas já estão creditadas) e o instante a partir do qual
+  o relógio ainda não creditou nada; consumir só desconta do banco, nunca reinicia o relógio —
+  a mesma propriedade do `blockTicks`, que nunca reseta por causa de um consumo. (Achado da
+  revisão do PR #642: a primeira versão deste arquivo modelava duas vagas INDEPENDENTES, cada
+  uma reagendando o PRÓPRIO relógio a partir do PRÓPRIO consumo — um mecanismo diferente que
+  podia recusar, num combate comum com mais de um atacante, um bloqueio que o relógio
+  compartilhado do Canary já teria recarregado; a diferença não era limitada a um padrão
+  adversarial, como uma versão anterior deste parágrafo chegou a registrar.) O ausente do
+  snapshot (banco no teto desde o instante 0) continua uma simplificação deliberada para quem
+  nunca bloqueou — não reproduz a janela inicial do Canary (`blockCount = 0` no spawn, subindo
+  em ~2 s), que fica em aberto para quando o produto pedir essa fidelidade.
 - **As flags de bloqueio vêm da ORIGEM do dano, não do tipo** (diferente do CMB-04, que aprovava
   por `damageType`): corpo a corpo bloqueia defesa E armadura; distância só armadura; magia,
   runa, wand/rod e DOT não bloqueiam nenhum dos dois. `combat/damage.ts` deriva isso por
   chamador (`MELEE_BLOCK_FLAGS`/`DISTANCE_BLOCK_FLAGS`/`MAGIC_BLOCK_FLAGS` em `blockhit.ts`), e
   cada produtor (`#strike`, `#executeMonsterAbility`, `castSpell`, `useSupply`, DOT) declara o
   próprio no `DamageIntent.blockable`.
-- **`resolveDamage` ganhou um parâmetro `nowMs` OBRIGATÓRIO** — o instante lógico da sessão, que
-  só o `combat-v3` lê (para o `blockCharge`). `combat-v1`/`v2` o ignoram, mas todo chamador
-  precisa passá-lo agora; um esquecimento erraria em silêncio só sob `combat-v3`.
+- **`resolveDamage` ganhou um parâmetro `nowMs`, OPCIONAL com default `0`** — não obrigatório: a
+  alternativa (sem default) foi tentada e descartada (ADR 0040, emenda), porque dezenas de
+  fixtures de `combat-v1`/`v2` em teste não têm relógio de sessão nenhum para passar, e nenhuma
+  delas lê o parâmetro. É o instante lógico da sessão, que só o `combat-v3` lê (para o
+  `blockCharge`); `combat-v1`/`v2` o ignoram. TODO CHAMADOR EM PRODUÇÃO precisa passar
+  `session.nowMs` explicitamente mesmo assim — o default só existe para o teste que não precisa
+  dele. Um esquecimento em produção COMPILA (o parâmetro é opcional) e erraria em silêncio só sob
+  `combat-v3`: o `blockCharge` do defensor ficaria sempre avaliado em `nowMs = 0`, e uma vez que
+  o banco já tivesse creditado alguma carga além do instante 0 o defensor perderia o estágio de
+  defesa/armadura permanentemente a partir dali.
 
 ### Oráculos do `combat-v3`
 
@@ -164,6 +179,8 @@ O que muda, e o que NÃO muda:
 | `packages/sim/src/combat/blockhit.test.ts` | os vetores à mão do #548 — defesa 30 → `[15,30]`; armadura 25 → `[12,23]`; armadura 3 → `−1`; armadura 0 → identidade; imunidade zera antes de tudo; mitigação percentual sobre o pós-armadura; a armadura é PULADA quando a defesa já zerou |
 | `packages/sim/src/combat/damage.test.ts` (`combat-v3`) | o pipeline fim a fim — Dodge primeiro, crítico reposicionado, piso poupando imunidade, `combat-v1`/`v2` continuam bit a bit |
 | `packages/content/src/content.test.ts` | `monsterSchema` aceita `defense`/`defenseMitigation`, default `0`; `combat-v3` exige `weaponDamage`/`distanceHitChance` como o v2 |
+| `packages/sim/src/rulesets/hunt.test.ts` (`defesa, escudo e prática de shielding`) | shielding treina por ORIGEM sob `combat-v3` — um ataque corpo a corpo elemental (que `combat.defense.blockTypes` recusaria) ainda treina, o oposto do `combat-v1`/`v2` |
+| `packages/sim/src/combat/damage.test.ts` (achado da revisão do PR #642) | o componente secundário (#473) herda a carga que o primário já gastou, e o `blockCharge` de nível superior — o único que `applyDamageOutcome` grava de volta — reflete o total consumido pelos dois |
 
 ## Benchmark: o cenário misto
 

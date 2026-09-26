@@ -128,13 +128,25 @@ aposentadoria continuam os da decisão original.
   `@draconya/content` ainda não declara esses tipos de dano. `resolveBlockHit` recebe um
   `mitigationExempt` sempre `false`, documentado como um parâmetro à espera do M29-07 — nenhum
   código foi escrito olhando um tipo que não existe.
-- **O `blockCount` é DUAS "vagas" independentes, não um contador com fase compartilhada.** O
-  Canary acumula um contador único por `onThink` (por tick — o que o invariante 2 proíbe aqui).
-  A reescrita original guarda dois instantes absolutos (quando cada vaga volta a ficar pronta);
-  consumir uma vaga a reagenda para 1000 ms depois do PRÓPRIO consumo, sem tocar a fase da outra.
-  Em qualquer padrão de uso não-adversarial isso é equivalente em efeito ao contador do Canary —
-  no máximo duas cargas disponíveis, cada uma recarregando em 1000 ms —, e é o que os vetores à
-  mão do #548 medem. Ver `packages/sim/src/combat/block-charge.ts`.
+- **Correção (revisão do PR #642): o `blockCount` é um BANCO com relógio COMPARTILHADO, não duas
+  "vagas" independentes.** O Canary acumula um contador único por `onThink` (por tick — o que o
+  invariante 2 proíbe aqui), e esse relógio roda INDEPENDENTE de bloqueio nenhum ter acontecido:
+  `Creature::blockHit` só decrementa `blockCount`, nunca reinicia `blockTicks`. A primeira versão
+  desta reescrita guardava dois instantes absolutos independentes (quando CADA vaga volta a
+  ficar pronta), reagendando um deles para 1000 ms depois do PRÓPRIO consumo — um mecanismo
+  DIFERENTE do Canary, não uma equivalência: duas cargas gastas em instantes próximos (um padrão
+  comum de combate com mais de um atacante, não um padrão adversarial de RNG) podiam recusar um
+  bloqueio que o relógio COMPARTILHADO do Canary já teria recarregado, porque nenhuma das duas
+  vagas tinha completado o próprio período ainda. A reescrita corrigida guarda um banco (quantas
+  cargas já estão creditadas) e o instante a partir do qual o relógio ainda não creditou
+  nenhuma nova; consumir só desconta do banco, nunca reinicia o relógio — a mesma propriedade do
+  `blockTicks`, que segue contando (inclusive "girando em falso" quando o banco já está no teto)
+  independente de consumo. Isso é o que faz os vetores à mão do #548 continuarem batendo, e é uma
+  equivalência de MECANISMO, não só de efeito na amostra medida. Ver
+  `packages/sim/src/combat/block-charge.ts`. Continua uma simplificação deliberada, e não
+  corrigida por este achado, que o estado AUSENTE do snapshot (quem nunca bloqueou) valha o banco
+  já no teto desde o instante 0 — o Canary nasce com `blockCount = 0` e sobe em ~2 s —; ninguém
+  pediu essa janela de vulnerabilidade inicial ainda.
 - **As flags de bloqueio (`checkDefense`/`checkArmor`) são uma função da ORIGEM do dano,
   derivada por quem CHAMA `resolveDamage`, não um campo de conteúdo.** Corpo a corpo (e o punho
   desarmado) bloqueiam os dois; distância só armadura; magia, runa, wand/rod e DOT não bloqueiam

@@ -316,10 +316,14 @@ expectativa.
 - Dodge, quando ativa no defensor, reduz o dano recebido em 50%.
 - Dodge pode ativar contra qualquer ataque recebido, incluindo magia e ataques de boss.
 - Bônus permanentes de Bestiário valem só em PvE; não se aplicam em Guild War.
-- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe **físico**; o bloqueio nunca
-  zera o golpe, e ataque elemental não é bloqueado nem treina shielding (CMB-04).
-- Shielding sobe uma vez por ataque físico elegível recebido, nunca por tick e nunca pelo HP
-  perdido (CMB-04).
+- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe (CMB-04). Em `combat-v1`/`v2`
+  só o golpe **físico** é elegível — ataque elemental não é bloqueado nem treina shielding. Sob
+  `combat-v3` (o perfil default desde #548) a elegibilidade é pela ORIGEM do golpe, não pelo
+  tipo de dano: corpo a corpo bloqueia (e treina) mesmo elemental; distância só bloqueia
+  armadura; magia/runa não bloqueiam nada — ver "O pipeline de recebimento do combat-v3" adiante.
+  O bloqueio nunca zera o golpe sozinho (o piso de dano continua valendo).
+- Shielding sobe uma vez por ataque elegível recebido, nunca por tick e nunca pelo HP perdido
+  (CMB-04) — "elegível" segue a mesma regra do bullet acima, por perfil.
 
 ## Parâmetros de balanceamento
 
@@ -757,19 +761,41 @@ para este estágio. A mitigação percentual (passo 5) é a ÚNICA que se aplica
 magia — é assim no Canary (`if (damage != 0) mitigateDamage(...)`, fora do bloco de
 `checkDefense`/`checkArmor`).
 
+O treino de shielding (`#applyMonsterHit`, `hunt.ts`) segue a MESMA origem sob `combat-v3` —
+`blockable.shield`, não `combat.defense.blockTypes` — para não destreinar (ou treinar por
+engano) o dia em que o catálogo tiver uma ability corpo a corpo elemental (achado da revisão do
+PR #642; hoje nenhuma tem, então as duas regras ainda concordam por coincidência do catálogo).
+
+**`combat.armorEffectiveness` fica INERTE sob `combat-v3`.** O passo 4 (armadura) não olha mais
+`armorEffectiveness[damageType]` — a coluna que o `combat-v1`/`v2` usa para decidir SE a
+armadura vale para cada tipo de dano; sob `combat-v3` a armadura vale sempre que a ORIGEM permite
+(`checkArmor`), para QUALQUER tipo, exatamente como o `Creature::blockHit` do Canary (que não
+tem ramo por `combatType` nenhum no estágio de armadura). O schema continua exigindo o campo
+para todo perfil, inclusive `combat-v3` — editar `armorEffectiveness.fire` num conteúdo `v3`
+não muda resultado nenhum, e é o mesmo tipo de configuração morta que
+`combat.defense.blockChance` já é para esses conteúdos (parágrafo abaixo).
+
 ### As cargas de bloqueio (`blockCount`)
 
-O Canary acumula uma carga a cada 1000 ms de relógio de jogo, até um teto de 2 — literalmente
-"por tick" (`creature.cpp`). O invariante 2 proíbe escrever assim: `packages/sim/src/combat/
-block-charge.ts` calcula as cargas disponíveis SOB DEMANDA, a partir de um par de instantes
-guardados (quando cada uma das duas "vagas" volta a ficar pronta) e do relógio da SESSÃO — sem
-nenhum evento nem soma por tick, e equivalente em efeito ao contador do Canary: no máximo duas
-cargas disponíveis a qualquer momento, cada uma levando 1000 ms para voltar depois de gasta.
-`CharacterState.blockCharge`/`MonsterState.blockCharge` viajam no snapshot (opcionais, sem bump
-de `SNAPSHOT_FORMAT_VERSION`); ausente é as duas cargas já disponíveis — o caso comum, porque uma
-criatura quase sempre existe há mais de 2 s antes do primeiro golpe de uma hunt. Só
-`applyDamageOutcome` (CMB-08) escreve o estado de volta no dono (invariante 9); o resolver é puro
-e só o calcula.
+O Canary acumula uma carga a cada 1000 ms de relógio de jogo (`blockTicks`/`onThink`), até um
+teto de 2 — literalmente "por tick" (`creature.cpp`), e esse relógio é COMPARTILHADO pelas duas
+vagas e roda INDEPENDENTE de bloqueio nenhum ter acontecido: `Creature::blockHit` só decrementa
+o contador, nunca reinicia o relógio. O invariante 2 proíbe escrever assim: `packages/sim/src/
+combat/block-charge.ts` calcula as cargas disponíveis SOB DEMANDA, a partir de um banco guardado
+(quantas cargas já estão creditadas) e do instante a partir do qual o relógio ainda não creditou
+nada — sem nenhum evento nem soma por tick, e equivalente ao contador do Canary: um relógio
+ÚNICO, que credita no máximo uma carga por período de 1000 ms decorrido, até o teto de 2,
+independente de QUANDO cada carga foi gasta (achado da revisão do PR #642: uma versão anterior
+deste arquivo modelava duas vagas INDEPENDENTES, cada uma reagendando o próprio relógio a partir
+do próprio consumo — um mecanismo diferente, que podia recusar um bloqueio que o relógio
+compartilhado do Canary já teria recarregado, num padrão comum de mais de um atacante, não só
+adversarial). `CharacterState.blockCharge`/`MonsterState.blockCharge` viajam no snapshot
+(opcionais, sem bump de `SNAPSHOT_FORMAT_VERSION`); ausente é o banco já no teto desde o
+instante 0 — uma simplificação deliberada para o caso comum (uma criatura quase sempre existe há
+mais de 2 s antes do primeiro golpe de uma hunt), que NÃO reproduz a janela inicial do Canary
+(uma criatura nasce com `blockCount = 0` e sobe até o teto em ~2 s) — ninguém pediu essa janela
+de vulnerabilidade ainda, e fica em aberto para quando pedirem. Só `applyDamageOutcome` (CMB-08)
+escreve o estado de volta no dono (invariante 9); o resolver é puro e só o calcula.
 
 ### O jogador continua com os números de antes
 
