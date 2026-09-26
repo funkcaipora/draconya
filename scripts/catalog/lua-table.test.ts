@@ -101,4 +101,73 @@ describe('evaluateAssignments', () => {
   it('erro de sintaxe Lua vira LuaEvalError, não uma exceção crua do luaparse', () => {
     expect(() => evaluateAssignments('monster.x = }{', 'monster', NO_CONSTANTS)).toThrow(LuaEvalError);
   });
+
+  it('local NOME = <literal> vira identificador reaproveitável depois — o nome interno do NPC', () => {
+    // O padrão real de 1028 dos 1036 `npc/*.lua` do Canary: o nome "de verdade" mora num
+    // `local` fora de `npcConfig`, e `npcConfig.name` só referencia o identificador.
+    const source = `
+      local internalNpcName = "Nicholas"
+      local npcConfig = {}
+      npcConfig.name = internalNpcName
+    `;
+    expect(evaluateAssignments(source, 'npcConfig', NO_CONSTANTS)).toEqual({ name: 'Nicholas' });
+  });
+
+  it('local que não é avaliável como dado (chamada de função) é ignorado, não lança', () => {
+    // `local mType = Game.createMonsterType("Rat")` é a primeira linha de praticamente todo
+    // `monster.lua` real — não é dado, e nada o referencia depois como identificador.
+    const source = `
+      local mType = Game.createMonsterType("Rat")
+      monster.health = 20
+    `;
+    expect(evaluateAssignments(source, 'monster', NO_CONSTANTS)).toEqual({ health: 20 });
+  });
+
+  it('raiz.campo pode se referir a outro campo JÁ atribuído da mesma raiz (auto-referência)', () => {
+    // `npcConfig.maxHealth = npcConfig.health` é real em 1033 dos 1036 `npc/*.lua`, e o mesmo
+    // padrão aparece em `monster.maxHealth = monster.health` (5 `monster.lua`, ex.
+    // `lycanthropes/werehyaena_shaman.lua`).
+    const source = `
+      local npcConfig = {}
+      npcConfig.health = 100
+      npcConfig.maxHealth = npcConfig.health
+    `;
+    expect(evaluateAssignments(source, 'npcConfig', NO_CONSTANTS)).toEqual({
+      health: 100, maxHealth: 100,
+    });
+  });
+
+  it('auto-referência a um campo AINDA não atribuído lança — nunca vira undefined em silêncio', () => {
+    const source = 'npcConfig.maxHealth = npcConfig.health';
+    expect(() => evaluateAssignments(source, 'npcConfig', NO_CONSTANTS)).toThrow(LuaEvalError);
+    expect(() => evaluateAssignments(source, 'npcConfig', NO_CONSTANTS)).toThrow(/auto-referência/);
+  });
+
+  it('auto-referência contra outra raiz (não a que evaluateAssignments está lendo) lança', () => {
+    const source = 'monster.x = outraCoisa.y';
+    expect(() => evaluateAssignments(source, 'monster', NO_CONSTANTS)).toThrow(LuaEvalError);
+  });
+
+  it('a continuação de linha "\\z" (Lua 5.2+/LuaJIT) é aceita — real em 166 dos 1656 monster.lua', () => {
+    // `Locations = "Tyrsung ..., \z\n\t\tMammoth Shearing Factory..."`, formato real de
+    // `data-otservbr-global/monster/giants/frost_giant.lua`. `luaVersion: '5.1'` rejeitaria
+    // isto com "unfinished string" — LuaJIT (o que Canary/TFS de fato embutem) aceita.
+    const source = 'monster.description = "parte um \\z\n        parte dois"';
+    expect(evaluateAssignments(source, 'monster', NO_CONSTANTS)).toEqual({
+      description: 'parte um parte dois',
+    });
+  });
+
+  it('o arquivo precisa ser decodificado como UTF-8, nunca Latin-1 — o encoding real do Canary/TFS', () => {
+    // Um caractere acentuado (o "ö" de "Bröre", `giants/frost_giant.lua`) é DOIS bytes em UTF-8
+    // (0xC3 0xB6). `evaluateAssignments` não lê arquivo — quem chama decide o encoding — mas o
+    // valor que chega aqui já carrega o defeito se o arquivo tiver sido decodificado errado:
+    // decodificar como 'latin1' (byte a byte) separa o caractere em DOIS (mojibake); como
+    // 'utf8' funde os dois bytes de volta no único caractere correto.
+    const bytes = Buffer.from('monster.description = "Bröre"', 'utf8');
+    const decodedCorrectly = evaluateAssignments(bytes.toString('utf8'), 'monster', NO_CONSTANTS);
+    expect(decodedCorrectly['description']).toBe('Bröre');
+    const decodedWrong = evaluateAssignments(bytes.toString('latin1'), 'monster', NO_CONSTANTS);
+    expect(decodedWrong['description']).not.toBe('Bröre');
+  });
 });

@@ -35,6 +35,16 @@ export const MIXED_TABLE_ITEMS_KEY = '$items';
 export interface ConstantResolver {
   /** Devolve o valor do identificador, ou `undefined` quando ele não é conhecido. */
   resolve(name: string): string | number | undefined;
+  /**
+   * Devolve o valor de `raiz.campo` — auto-referência a um campo JÁ atribuído da MESMA raiz
+   * (ex.: `npcConfig.maxHealth = npcConfig.health`, real em 1033 dos 1036 `npc/*.lua` do Canary,
+   * e em 5 `monster.lua` como `werehyaena_shaman.lua`: `monster.maxHealth = monster.health`).
+   * Opcional: só o resolvedor que `evaluateAssignments` monta implementa isto, porque só ele
+   * conhece a raiz e o que já foi lido nas linhas anteriores do mesmo arquivo. `undefined`
+   * é "não suportado" OU "campo ainda não atribuído" — os dois viram `LuaEvalError`, nunca
+   * `undefined` em silêncio (a mesma regra de `resolve`).
+   */
+  resolveMember?(base: string, field: string): LuaValue | undefined;
 }
 
 /** Um mapa simples (`Map`/`Record`) também serve como resolvedor. */
@@ -90,6 +100,20 @@ export function evaluateExpression(node: Expression, constants: ConstantResolver
     }
     case 'TableConstructorExpression':
       return evaluateTable(node, constants);
+    case 'MemberExpression': {
+      // `raiz.campo` do lado DIREITO de uma atribuição — auto-referência, nunca navegação de
+      // objeto de verdade (isto não executa Lua). `constants.resolveMember` é quem sabe
+      // resolver; sem ele (ou base que não é um identificador simples), é expressão não
+      // suportada, igual a qualquer outra forma que este avaliador não reconhece.
+      if (node.base.type !== 'Identifier' || constants.resolveMember === undefined) {
+        throw new LuaEvalError(`expressão "MemberExpression" não suportada${locationOf(node)}`);
+      }
+      const value = constants.resolveMember(node.base.name, node.identifier.name);
+      if (value === undefined) {
+        throw new LuaEvalError(`"${node.base.name}.${node.identifier.name}" sem valor conhecido (auto-referência não resolvida)${locationOf(node)}`);
+      }
+      return value;
+    }
     default:
       throw new LuaEvalError(`expressão "${node.type}" não suportada — tabela de dado não chama função${locationOf(node)}`);
   }
@@ -154,41 +178,71 @@ export function evaluateAssignments(source: string, rootName: string, constants:
   try {
     // `encodingMode` PRECISA ser explícito: o padrão do luaparse é `'none'`, que descarta o
     // CONTEÚDO de toda string literal e devolve `value: null` — ótimo para só validar sintaxe,
-    // catastrófico para ler dado. `'pseudo-latin1'` é o que o próprio README do luaparse
-    // recomenda para texto comum (identity-map de ISO-8859-1, o mesmo encoding que o
-    // `items.xml` já declara no prólogo).
-    chunk = luaparse.parse(source, { luaVersion: '5.1', locations: true, encodingMode: 'pseudo-latin1' });
+    // catastrófico para ler dado. `'pseudo-latin1'` é o modo que NÃO descarta conteúdo e aceita
+    // qualquer caractere já decodificado até `\xff` (Latin-1 Supplement, onde mora todo acento
+    // do português/alemão que os `.lua` do Canary usam) como identidade — sem exigir que o
+    // ARQUIVO tenha sido lido como Latin-1. Quem chama `evaluateAssignments` decodifica o
+    // arquivo como **UTF-8** (o encoding real do checkout — `file data-otservbr-global/monster/
+    // giants/frost_giant.lua` confirma "UTF-8 text"; ISO-8859-1 é o que o `items.xml`
+    // declara no próprio prólogo, um arquivo diferente, sem relação com Lua). Decodificar como
+    // Latin-1 byte a byte quebraria qualquer caractere multibyte de verdade em dois caracteres
+    // (mojibake) ANTES mesmo do parser rodar — `pseudo-latin1` não notaria, porque os dois
+    // bytes resultantes também ficam ≤ 0xff.
+    //
+    // `luaVersion` é `'LuaJIT'` porque é o que Canary/TFS de fato embutem (`#if LUA_VERSION_NUM
+    // >= 502`/`>= 503` em `src/config/configmanager.cpp`/`src/lua/scripts/luascript.cpp`) —
+    // `'5.1'` rejeita a continuação de linha `\z` que 166 dos 1656 `monster/**/*.lua` reais
+    // usam (`Locations = "... \z\n\t\tMammoth Shearing Factory..."`, `giants/frost_giant.lua`),
+    // derrubando o arquivo inteiro por causa de uma string descritiva.
+    chunk = luaparse.parse(source, { luaVersion: 'LuaJIT', locations: true, encodingMode: 'pseudo-latin1' });
   } catch (erro) {
     throw new LuaEvalError(`erro de sintaxe Lua: ${(erro as Error).message}`);
   }
   const result: Record<string, LuaValue> = {};
+  // `local NOME = <expr>` que não é `local <rootName> = { … }` (tratado à parte, abaixo) —
+  // por exemplo `local internalNpcName = "Nicholas"`, presente em 1028 dos 1036 `npc/*.lua`
+  // reais, sempre seguido de `npcConfig.name = internalNpcName`. Só entra aqui quando avalia
+  // para `string`/`number`: é exatamente o que `scope.resolve` abaixo devolve, e nada mais
+  // precisa reconhecer um identificador local.
+  const locals = new Map<string, string | number>();
+  const scope: ConstantResolver = {
+    resolve: (name) => {
+      const local = locals.get(name);
+      return local === undefined ? constants.resolve(name) : local;
+    },
+    // Auto-referência `raiz.campo` contra o que ESTE arquivo já atribuiu antes desta linha
+    // (`npcConfig.maxHealth = npcConfig.health`, real em 1033/1036 `npc/*.lua`, e em
+    // `monster.maxHealth = monster.health` de 5 `monster.lua` como `werehyaena_shaman.lua`).
+    resolveMember: (base, field) => (base === rootName ? result[field] : undefined),
+  };
   for (const statement of chunk.body) {
-    collectAssignments(statement, rootName, constants, result);
+    collectAssignments(statement, rootName, scope, locals, result);
   }
   return result;
 }
 
 function collectAssignments(
-  statement: Statement, rootName: string, constants: ConstantResolver, into: Record<string, LuaValue>,
+  statement: Statement, rootName: string, scope: ConstantResolver,
+  locals: Map<string, string | number>, into: Record<string, LuaValue>,
 ): void {
   if (statement.type === 'AssignmentStatement') {
-    applyAssignment(statement, rootName, constants, into);
+    applyAssignment(statement, rootName, scope, into);
   } else if (statement.type === 'LocalStatement') {
-    applyLocal(statement, rootName, constants, into);
+    applyLocal(statement, rootName, scope, locals, into);
   }
   // Outros tipos (CallStatement como `mType:register(monster)`, comentários, etc.) não
   // interessam: não são atribuição a `raiz.campo`.
 }
 
 function applyAssignment(
-  statement: AssignmentStatement, rootName: string, constants: ConstantResolver, into: Record<string, LuaValue>,
+  statement: AssignmentStatement, rootName: string, scope: ConstantResolver, into: Record<string, LuaValue>,
 ): void {
   statement.variables.forEach((target, index) => {
     const field = fieldNameOf(target, rootName);
     if (field === null) return;
     const value = statement.init[index];
     if (value === undefined) return;
-    into[field] = evaluateExpression(value, constants);
+    into[field] = evaluateExpression(value, scope);
   });
 }
 
@@ -196,16 +250,35 @@ function applyAssignment(
  * `local monster = { … }` também é uma forma válida (alguns arquivos preenchem tudo de uma vez
  * em vez de campo por campo); tratamos como se fosse `monster = { … }` quando o nome bate com
  * `rootName` e o valor inicial é uma tabela — o conteúdo dela vira os campos de `into`.
+ *
+ * Qualquer OUTRO `local NOME = <expr>` (nome diferente de `rootName`, ou `rootName` com um
+ * valor que não é tabela) é candidato a identificador reaproveitável mais adiante — registrado
+ * em `locals` quando avalia para `string`/`number`. Quando a expressão não é avaliável como
+ * dado puro (`local mType = Game.createMonsterType("Rat")`, uma CHAMADA — a primeira linha de
+ * praticamente todo arquivo), o erro é engolido de propósito: nada aqui garante que o
+ * identificador seja referenciado depois, e travar o arquivo inteiro por causa de um `local`
+ * que ninguém usa contradiz o resto deste módulo (avaliar só o que é dado, ignorar o resto).
  */
 function applyLocal(
-  statement: LocalStatement, rootName: string, constants: ConstantResolver, into: Record<string, LuaValue>,
+  statement: LocalStatement, rootName: string, scope: ConstantResolver,
+  locals: Map<string, string | number>, into: Record<string, LuaValue>,
 ): void {
   statement.variables.forEach((variable, index) => {
-    if (variable.name !== rootName) return;
     const value = statement.init[index];
-    if (value === undefined || value.type !== 'TableConstructorExpression') return;
-    const table = evaluateTable(value, constants);
-    if (!Array.isArray(table)) Object.assign(into, table);
+    if (value === undefined) return;
+    if (variable.name === rootName && value.type === 'TableConstructorExpression') {
+      const table = evaluateTable(value, scope);
+      if (!Array.isArray(table)) Object.assign(into, table);
+      return;
+    }
+    try {
+      const evaluated = evaluateExpression(value, scope);
+      if (typeof evaluated === 'string' || typeof evaluated === 'number') {
+        locals.set(variable.name, evaluated);
+      }
+    } catch {
+      // Ignorado de propósito — ver o comentário do doc-block acima.
+    }
   });
 }
 
