@@ -76,11 +76,10 @@ import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction 
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
+  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing,
+  monsterSubject, nearestPrey,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
-import { rankTarget } from '../monster/target-strategy.js';
-import type { TargetRankCandidate } from '../monster/target-strategy.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
@@ -5136,7 +5135,7 @@ const slots = bot.groups.get(group);
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
     // coletor rodando o tempo todo.
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(
       monster, target, definition, this.#blockedForMonster(monster, definition),
@@ -5202,7 +5201,7 @@ const slots = bot.groups.get(group);
     }
 
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
@@ -5240,7 +5239,7 @@ const slots = bot.groups.get(group);
 
     monster.scheduledAbilities.delete(ability.id);
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
@@ -5505,9 +5504,20 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * A troca de alvo por tempo de um monstro venceu (#518, TFS `Monster::onThinkTarget`,
-   * referência §15-19). Um timer da instância, como a defesa — não depende do alvo atual estar
-   * vivo ou no alcance, e reagenda-se sempre enquanto o monstro viver.
+   * A troca de alvo por tempo de um monstro venceu (#518, TFS/Canary `Monster::onThinkTarget`,
+   * `monster.cpp:2141-2192`, idêntico em `forgottenserver/src/monster.cpp:919-963`). Um timer
+   * da instância, como a defesa — não depende do alvo atual estar vivo ou no alcance, e
+   * reagenda-se sempre enquanto o monstro viver.
+   *
+   * **Nunca consulta `targetStrategy` (#645, ADR 0037 d.6).** `onThinkTarget` resolve o
+   * critério só pelo `targetDistance` do TIPO do monstro — a classificação melee/à-distância
+   * declarada no conteúdo, `definition.attackRange`, não a distância corrida até o alvo —,
+   * nunca pelos pesos: `useRandomSearch = targetDistance <= 1` (`monster.cpp:2185-2186`). Para
+   * o Dragon (`attackRange: 1`, melee mesmo com bola/onda de alcance 7 — `targetDistance` é a
+   * classificação BASE, o Canary não a reescreve por causa de uma spell adicional), isso é
+   * SEMPRE `RANDOM`; a estratégia ponderada só entra no ramo estreito de `chooseTarget`
+   * (`monster.ts`, "fuga bloqueada") — ver "Seleção ponderada de alvo" em
+   * `docs/product/combat.md`.
    */
   #onMonsterTargetChange(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
@@ -5522,34 +5532,22 @@ const slots = bot.groups.get(group);
 
     if (!session.rng.chance(targetChange.chance)) return;
 
-    // Um alvo válido DIFERENTE do atual — trocar para o mesmo não é troca. Sem
-    // `targetStrategy`, o TFS `searchTarget(TARGETSEARCH_RANDOM)` (#518); com ela (#541), o
-    // CRITÉRIO é sorteado pelos pesos do conteúdo — `rankTarget`, a mesma função que
-    // `chooseTarget` usa.
+    // Um alvo válido DIFERENTE do atual — trocar para o mesmo não é troca. O mesmo andar
+    // primeiro (#519): um alvo em outro andar não é alvo válido — o `isTarget` do TFS confere o
+    // `z` antes da distância, como `chooseTarget` já faz.
     const prey: readonly Prey[] = session.participants;
-    // O mesmo andar primeiro (#519): um alvo em outro andar não é alvo válido — o `isTarget` do
-    // TFS confere o `z` antes da distância, como `chooseTarget` já faz.
     const candidates = prey.filter((candidate) => candidate.alive
       && candidate.id !== monster.targetId
       && sameFloor(monster.position.z, candidate.position.z)
       && distance(monster.position, candidate.position) <= definition.aggroRadius);
     if (candidates.length === 0) return;
 
-    const strategy = definition.targetStrategy;
-    const chosenId = strategy === undefined
-      // Sem estratégia (#541): a mesma escolha uniforme de sempre, zero sorteio a mais — é o
-      // que preserva a sequência de RNG do rato e do rotworm bit a bit.
-      ? candidates[session.rng.integer(0, candidates.length - 1)]?.id
-      : rankTarget(strategy, candidates.map((candidate): TargetRankCandidate => ({
-        id: candidate.id,
-        distance: distance(monster.position, candidate.position),
-        health: candidate.health,
-        damage: monster.contribution.damageBy(candidate.id),
-      })), session.rng);
-    const chosen = chosenId === undefined
-      ? undefined
-      : candidates.find((candidate) => candidate.id === chosenId);
-    if (chosen === undefined) return;
+    // RANDOM para melee (`attackRange <= 1`, o caso do rato/rotworm/Dragon/Dragon Lord),
+    // NEAREST fixo para à distância — zero peso consultado, como `onThinkTarget` real.
+    const chosen = definition.attackRange <= 1
+      ? candidates[session.rng.integer(0, candidates.length - 1)] ?? null
+      : nearestPrey(monster.position, candidates);
+    if (chosen === null) return;
     monster.targetId = chosen.id;
     this.#armMonsterAbilities(session, monster, definition, chosen);
   }

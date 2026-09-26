@@ -344,10 +344,20 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   decide horizontal) — DIFERENTE de `directionOf`, que é do PASSO e sempre prioriza horizontal.
   `monster.defenses` (cura própria) é evento POR DEFESA, subject derivado `m:<id>:<defenseId>`,
   `scheduledDefenses` (opcional no snapshot); não depende de alvo, e de vida cheia não emite
-  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` troca para um alvo
-  ao acaso DIFERENTE do atual dentro do `aggroRadius` (TFS `TARGETSEARCH_RANDOM`); a estratégia
-  ponderada do Canary e o `TARGETSEARCH_NEAREST` ficam de fora — nenhum monstro do recorte
-  precisa deles. `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
+  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` (#645, ADR 0037
+  d.6) NUNCA consulta `targetStrategy` — a classificação melee/à-distância do TIPO
+  (`definition.attackRange`, a métrica de `targetDistance` do Canary) decide sozinha entre
+  `TARGETSEARCH_RANDOM` (`attackRange <= 1`: um alvo ao acaso DIFERENTE do atual dentro do
+  `aggroRadius`) e `TARGETSEARCH_NEAREST` fixo (`attackRange > 1`, via `nearestPrey`, o mesmo
+  desempate estrito da aquisição). A estratégia ponderada do Canary só entra no ramo estreito de
+  `chooseTarget` equivalente a `TARGETSEARCH_DEFAULT`: um alvo JÁ retido, o monstro FUGINDO
+  (`isMonsterFleeing`) e sem conseguir atacá-lo agora (`rankTarget`, `target-strategy.ts`) — e
+  esse ramo reavalia no máximo uma vez por 1000 ms por monstro (`monster.cooldowns`, chave
+  `target-think`), a mesma cadência de `EVENT_CREATURE_THINK_INTERVAL`: os três eventos que
+  chamam `chooseTarget` (passo, ataque básico, ability declarada) não podem reentrar nele a cada
+  vencimento, achado da revisão do #654 — ver "Seleção ponderada de alvo" em
+  `docs/product/combat.md`.
+  `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
   a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
   aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
   alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no

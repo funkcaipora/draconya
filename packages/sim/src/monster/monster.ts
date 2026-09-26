@@ -284,18 +284,52 @@ export class MonsterRuntime {
 }
 
 /**
+ * A cadência do "think" do Canary (`EVENT_CREATURE_THINK_INTERVAL`, `creature.hpp:47`) — o
+ * único relógio que chama `Monster::onThink_async`, e portanto o único que pode reavaliar o
+ * ramo `TARGETSEARCH_DEFAULT`. Ver o comentário de `chooseTarget` para o porquê de existir aqui.
+ */
+const TARGET_THINK_INTERVAL_MS = 1_000;
+
+/** A chave de `monster.cooldowns` que implementa o gate acima — ver `chooseTarget`. */
+const TARGET_THINK_COOLDOWN_KEY = 'target-think';
+
+/**
  * Escolhe alvo, e só quando precisa.
  *
  * Manter o alvo até ele morrer ou sair do raio de desistência é o que impede a varredura de
  * acontecer a cada tick: numa instância com 48 monstros, procurar sempre é trabalho jogado
  * fora dezenas de vezes por segundo. É também o comportamento do Tibia — o monstro não troca
  * de alvo porque outro jogador passou um tile mais perto.
+ *
+ * **O gatilho da estratégia ponderada é IDÊNTICO ao Canary desde o #645** (ADR 0037 d.6):
+ * `rankTarget` só entra no ramo estreito equivalente a `TARGETSEARCH_DEFAULT`
+ * (`Monster::onThink_async`, `monster.cpp:1737-1739`) — o alvo atual já está sendo perseguido
+ * (esta função ia RETER ele), o monstro está FUGINDO (`isMonsterFleeing`) e não consegue
+ * atacá-lo AGORA. O sim não tem linha de visão nem `followCreature`/`hasFollowPath`; "não
+ * consegue atacar agora" é derivado do único estado equivalente que já existe — a distância
+ * excede `monsterAttackRange` (o alcance combinado de todas as abilities, a mesma métrica de
+ * `canUseAttack` real: qualquer spell cujo alcance cubra a distância). Fora desse corner case
+ * — aquisição (sem alvo retido) e o vencimento de `targetChange` em `hunt.ts` — o critério é
+ * SEMPRE o mais perto, nunca o peso; ver "Seleção ponderada de alvo" em `docs/product/combat.md`.
+ *
+ * **A CADÊNCIA do ramo também é a do Canary, desde a revisão do #645.** `chooseTarget` é chamada
+ * de três eventos independentes em `hunt.ts` (`#onMonsterStep`, `#onMonsterAttack`,
+ * `#onMonsterAbility`) — um Dragon com três abilities a `cadenceMs: 2000` gera 4-5 vencimentos a
+ * cada 2 s, contra o `Monster::onThink_async` real, que roda sozinho a `EVENT_CREATURE_THINK_INTERVAL`
+ * = 1000 ms e nunca é chamado por `doAttacking` (`creature.hpp:47`). Reentrar no ramo a cada
+ * vencimento reavaliaria o peso — e consumiria `rng` — várias vezes mais rápido que o Canary
+ * para o MESMO estado de HP/posição. O gate em `nowMs`/`TARGET_THINK_COOLDOWN_KEY` reproduz o
+ * "só uma vez por think" sem inventar um quarto evento agendado: cada vencimento continua
+ * chamando `chooseTarget`, mas só o primeiro dentro de cada janela de 1000 ms de fato reavalia —
+ * os demais devolvem o `current` retido, como o Canary faria entre um `onThink_async` e o
+ * próximo.
  */
 export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
   definition: Monster,
   rng: Rng,
+  nowMs: number,
 ): string | null {
   const current = monster.targetId === null
     ? undefined
@@ -305,46 +339,77 @@ export function chooseTarget(
     const leash = definition.leashRadius;
     // Zero significa "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK
     // faria o jogador voltar e encontrar tudo parado sem explicação.
-    if (leash === 0 || distance(monster.home, current.position) <= leash) return current.id;
-  }
-
-  const strategy = definition.targetStrategy;
-  if (strategy === undefined) {
-    // Sem estratégia (#541): só o mais perto, no MESMO passo único de sempre — zero sorteio,
-    // zero alocação nova. É o que preserva a sequência de RNG do rato e do rotworm bit a bit;
-    // a estratégia ponderada só entra quando o CONTEÚDO a declara.
-    let closest: Prey | null = null;
-    let closestDistance = Number.POSITIVE_INFINITY;
-    for (const candidate of prey) {
-      if (!candidate.alive) continue;
-      // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
-      // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair
-      // compartilham a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima
-      // através do chão.
-      if (!sameFloor(monster.position.z, candidate.position.z)) continue;
-      const d = distance(monster.position, candidate.position);
-      if (d > definition.aggroRadius || d >= closestDistance) continue;
-      closest = candidate;
-      closestDistance = d;
+    if (leash === 0 || distance(monster.home, current.position) <= leash) {
+      const strategy = definition.targetStrategy;
+      // O ramo estreito (#645, ver o comentário da função): só quando HÁ pesos declarados, o
+      // monstro FOGE, o alvo retido está fora do alcance de toda ability dele agora, E já
+      // passou pelo menos um `TARGET_THINK_INTERVAL_MS` desde a última reavaliação — o gate que
+      // faz o ramo disparar no máximo uma vez por think do Canary, não uma vez por vencimento.
+      if (strategy !== undefined
+        && isMonsterFleeing(monster, definition)
+        && distance(monster.position, current.position) > monsterAttackRange(definition)
+        && monster.cooldowns.isReady(TARGET_THINK_COOLDOWN_KEY, nowMs)) {
+        monster.cooldowns.start(TARGET_THINK_COOLDOWN_KEY, nowMs, TARGET_THINK_INTERVAL_MS);
+        // Os mesmos candidatos válidos de sempre (vivo, mesmo andar, dentro do raio de
+        // agressão) — `rankTarget` pode devolver o PRÓPRIO `current` de volta, e é o esperado:
+        // reavaliar não é o mesmo que trocar.
+        const candidates: TargetRankCandidate[] = [];
+        for (const candidate of prey) {
+          if (!candidate.alive) continue;
+          if (!sameFloor(monster.position.z, candidate.position.z)) continue;
+          const d = distance(monster.position, candidate.position);
+          if (d > definition.aggroRadius) continue;
+          candidates.push({
+            id: candidate.id, distance: d, health: candidate.health,
+            damage: monster.contribution.damageBy(candidate.id),
+          });
+        }
+        if (candidates.length > 0) return rankTarget(strategy, candidates, rng);
+      }
+      return current.id;
     }
-    return closest?.id ?? null;
   }
 
-  // Estratégia ponderada (#541): monta os candidatos válidos (vivo, mesmo andar, dentro do
-  // raio de agressão) e deixa `rankTarget` sortear o critério — mais perto, menos vida, mais
-  // dano causado nele, ou aleatório.
-  const candidates: TargetRankCandidate[] = [];
+  // Aquisição (#645, Canary `Monster::onThink_async`: sem alvo perseguido, sempre
+  // `TARGETSEARCH_NEAREST` fixo — `monster.cpp:1736`): só o mais perto, zero sorteio, zero
+  // alocação nova, e o `targetStrategy` do conteúdo NUNCA é consultado aqui — a estratégia
+  // ponderada só entra no ramo estreito acima.
+  let closest: Prey | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
   for (const candidate of prey) {
     if (!candidate.alive) continue;
+    // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
+    // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair
+    // compartilham a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima
+    // através do chão.
     if (!sameFloor(monster.position.z, candidate.position.z)) continue;
     const d = distance(monster.position, candidate.position);
-    if (d > definition.aggroRadius) continue;
-    candidates.push({
-      id: candidate.id, distance: d, health: candidate.health,
-      damage: monster.contribution.damageBy(candidate.id),
-    });
+    if (d > definition.aggroRadius || d >= closestDistance) continue;
+    closest = candidate;
+    closestDistance = d;
   }
-  return candidates.length === 0 ? null : rankTarget(strategy, candidates, rng);
+  return closest?.id ?? null;
+}
+
+/**
+ * O candidato mais perto (Chebyshev), com o mesmo desempate FIXO do Canary que a aquisição de
+ * `chooseTarget` já usa: o primeiro da lista que bate o recorde fica — comparação ESTRITA,
+ * nunca sorteada (#645, `searchTargetImmediate`, `TARGETSEARCH_NEAREST`, `monster.cpp:944-964`).
+ * Draconya não modela facção, então o offset de facção do Canary (`getFaction() * 100`) nunca
+ * entra — é sempre zero para todo mundo. `candidates` já vem filtrado por quem chama (vivo,
+ * mesmo andar, dentro do raio) — usada pelo vencimento de `targetChange` em `hunt.ts`, que
+ * precisa da MESMA regra de desempate sem duplicá-la.
+ */
+export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Prey | null {
+  let closest: Prey | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const d = distance(origin, candidate.position);
+    if (d >= closestDistance) continue;
+    closest = candidate;
+    closestDistance = d;
+  }
+  return closest;
 }
 
 /**
