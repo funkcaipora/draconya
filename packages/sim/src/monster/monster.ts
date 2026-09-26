@@ -122,6 +122,15 @@ export type MonsterAction =
   | { readonly kind: 'idle' }
   /** O tile a pisar. Um por vencimento. */
   | { readonly kind: 'step'; readonly to: GridPoint }
+  /**
+   * O tile a pisar para AUMENTAR a distância do alvo (#542, manter distância). Distinto de
+   * `step` para quem consome a ação poder ver, sem recalcular nada, que o monstro recuou em vez
+   * de aproximar — o mesmo motivo pelo qual a fuga por vida baixa é sempre `step` de qualquer
+   * forma hoje: aqui vale a pena nomear porque `retreat` e `step` nascem de ramos diferentes de
+   * `decideMonsterAction` e um teste ou uma telemetria futura não deveriam reconstruir a
+   * distinção comparando posições.
+   */
+  | { readonly kind: 'retreat'; readonly to: GridPoint }
   | { readonly kind: 'attack'; readonly targetId: string };
 
 export class MonsterRuntime {
@@ -346,6 +355,23 @@ export function decideMonsterAction(
     // Encurralado: fica — recuar até a parede e parar lá é o comportamento certo (ADR 0009),
     // não um caso a consertar.
     return away === null ? { kind: 'idle' } : { kind: 'step', to: away };
+  }
+
+  // Manter distância (#542, TFS/Canary `Monster::getDistanceStep`): um atirador com
+  // `targetDistance > 1` recua um passo quando o alvo entra mais perto do que isso —
+  // independente da fuga por vida baixa acima, que já tratou o caso "sempre foge". Precisa do
+  // MESMO andar: um alvo em outro piso nunca é "perto demais". Sem passo livre (parede atrás),
+  // cai para a checagem de alcance abaixo — ataca parado em vez de ficar preso tentando um
+  // recuo impossível. O Canary só entra neste ramo com linha de visão livre
+  // (`isSightClear`); o sim ainda não modela isso (M30-06) — pendência registrada em
+  // `docs/product/combat.md`.
+  if (
+    definition.targetDistance > 1
+    && sameFloor(monster.position.z, target.position.z)
+    && distance(monster.position, target.position) < definition.targetDistance
+  ) {
+    const away = fleeStep(monster.position, target.position, blocked);
+    if (away !== null) return { kind: 'retreat', to: away };
   }
 
   // O alcance de parada é o MAIOR entre as abilities (CMB-06): um monstro de ability à

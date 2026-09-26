@@ -22,7 +22,7 @@ const definition: Monster = {
   health: 20, experience: 5, attack: 6, armor: 0, defense: 0, defenseMitigation: 0,
   damageType: 'physical',
   attackIntervalMs: 2_000, speed: 300, aggroRadius: 8,
-  attackRange: 1, leashRadius: 0, blockable: false, loot: { items: [] },
+  attackRange: 1, targetDistance: 1, leashRadius: 0, blockable: false, loot: { items: [] },
   mitigation: compileMitigation(undefined),
   abilities: [{
     id: BASIC_ABILITY_ID, cadenceMs: 2_000, target: { range: 1 },

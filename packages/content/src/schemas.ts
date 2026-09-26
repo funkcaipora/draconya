@@ -1660,6 +1660,20 @@ export const monsterSchema = z.strictObject({
    * colado é comportamento diferente de um que atira à distância, e a diferença é conteúdo.
    */
   attackRange: z.number().int().positive().default(1),
+  /**
+   * A distância que o monstro tenta MANTER do alvo, em tiles (#542, TFS/Canary `targetDistance`,
+   * `Monster::getDistanceStep`). Um atirador com `targetDistance > 1` recua um passo quando o
+   * alvo chega mais perto que isto — independente da fuga por vida baixa (`runOnHealth`), que já
+   * afasta por outro motivo. Ausente é `1`: o corpo a corpo de sempre, que nunca recua por este
+   * campo — rato, rotworm, Dragon e Dragon Lord (`dragon.lua`/`dragon_lord.lua`, que não
+   * declaram o campo) continuam idênticos.
+   *
+   * Separado de `attackRange` de propósito: `attackRange` é até onde o monstro ALCANÇA para
+   * bater; `targetDistance` é a distância que ele PREFERE manter enquanto persegue. Um monstro de
+   * `attackRange` 4 e `targetDistance` 1 ainda cola no alvo antes de atirar — só o oposto
+   * (`targetDistance` > 1) muda o passo.
+   */
+  targetDistance: z.number().int().positive().default(1),
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
   /**
