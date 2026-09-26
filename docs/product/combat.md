@@ -1040,8 +1040,25 @@ interface MonsterTargetStrategy {
   SEMPRE o mais perto (aquisição) ou o sorteio uniforme/mais perto por `targetDistance`
   (reroll), nunca o peso; nenhum script de monstro do bestiário chama `self:searchTarget()`
   (conferido com grep em `data-otservbr-global/`), então na prática esse ramo só dispara quando
-  o Dragon/Dragon Lord já está fugindo E o alvo perseguido saiu do alcance de toda ability dele —
-  a MESMA raridade que o Canary real tem.
+  o Dragon/Dragon Lord já está fugindo E o alvo perseguido saiu do alcance de toda ability dele.
+
+  **A CADÊNCIA do ramo também é a do Canary, corrigida na revisão do #654.** `chooseTarget` é
+  chamada de três eventos independentes em `hunt.ts` (`#onMonsterStep`, `#onMonsterAttack`, e
+  cada `#onMonsterAbility` declarada) — um Dragon com três abilities a `cadenceMs: 2000` gera
+  4-5 vencimentos a cada 2 s, e o passo sozinho vence bem mais rápido que isso. Sem um gate, cada
+  um desses vencimentos reentraria no ramo estreito acima e consumiria um sorteio NOVO do
+  critério — contra o Canary real, em que `Monster::onThink_async` roda sozinho, uma vez, a cada
+  `EVENT_CREATURE_THINK_INTERVAL` = 1000 ms (`creature.hpp:47`), e nunca é chamado por
+  `doAttacking` (o caminho de ataque/spell). Isso faria um Dragon fugindo e bloqueado reavaliar o
+  peso — e queimar sorteio do `rng` da sessão — várias vezes mais rápido que o Canary para o
+  MESMO estado de HP/posição, ainda que o ALVO final quase sempre convirja (os pesos do Dragon
+  favorecem `nearest` a 70 %). `chooseTarget` agora impõe "no máximo uma reavaliação por
+  1000 ms por monstro" com um cooldown de sessão (`monster.cooldowns`, chave `target-think`,
+  `packages/sim/src/monster/monster.ts`): os três eventos continuam chamando a função a cada
+  vencimento deles, mas só o primeiro dentro de cada janela de 1000 ms de fato entra no ramo —
+  os demais devolvem o alvo retido, como o Canary faria entre um `onThink_async` e o próximo.
+  Coberto por `packages/sim/src/monster/monster.test.ts` (descreve "gate de cadência"), com um
+  `Rng` que estoura se consultado provando que as reentradas dentro da janela não sorteiam nada.
 - **Fuga (`monster.runOnHealth`)**: `HP <= runOnHealth` é fugindo (`isMonsterFleeing`,
   `packages/sim/src/monster/monster.ts`) — pura, recalculada a cada decisão a partir do HP atual,
   nunca um booleano guardado à parte. Fugindo, `decideMonsterAction` SEMPRE devolve um passo para

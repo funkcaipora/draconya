@@ -62,7 +62,7 @@ for (let tick = 0; tick < TICKS; tick++) {
     prey[i] = { ...p, position: { x: 5 + ((tick + i * 7) % 30), y: 5 + ((tick >> 3) % 30) } };
   }
   for (const monster of monsters) {
-    monster.targetId = chooseTarget(monster, prey, definition, rng);
+    monster.targetId = chooseTarget(monster, prey, definition, rng, tick * DT_MS);
     const target = prey.find((p) => p.id === monster.targetId) ?? null;
     const action = decideMonsterAction(monster, target, definition, blocked);
     if (action.kind === 'step') {

@@ -5087,7 +5087,7 @@ const slots = bot.groups.get(group);
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
     // coletor rodando o tempo todo.
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
 
@@ -5133,7 +5133,7 @@ const slots = bot.groups.get(group);
     }
 
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
@@ -5171,7 +5171,7 @@ const slots = bot.groups.get(group);
 
     monster.scheduledAbilities.delete(ability.id);
     const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng);
+    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range

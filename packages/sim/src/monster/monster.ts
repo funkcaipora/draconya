@@ -243,6 +243,16 @@ export class MonsterRuntime {
 }
 
 /**
+ * A cadência do "think" do Canary (`EVENT_CREATURE_THINK_INTERVAL`, `creature.hpp:47`) — o
+ * único relógio que chama `Monster::onThink_async`, e portanto o único que pode reavaliar o
+ * ramo `TARGETSEARCH_DEFAULT`. Ver o comentário de `chooseTarget` para o porquê de existir aqui.
+ */
+const TARGET_THINK_INTERVAL_MS = 1_000;
+
+/** A chave de `monster.cooldowns` que implementa o gate acima — ver `chooseTarget`. */
+const TARGET_THINK_COOLDOWN_KEY = 'target-think';
+
+/**
  * Escolhe alvo, e só quando precisa.
  *
  * Manter o alvo até ele morrer ou sair do raio de desistência é o que impede a varredura de
@@ -260,12 +270,25 @@ export class MonsterRuntime {
  * `canUseAttack` real: qualquer spell cujo alcance cubra a distância). Fora desse corner case
  * — aquisição (sem alvo retido) e o vencimento de `targetChange` em `hunt.ts` — o critério é
  * SEMPRE o mais perto, nunca o peso; ver "Seleção ponderada de alvo" em `docs/product/combat.md`.
+ *
+ * **A CADÊNCIA do ramo também é a do Canary, desde a revisão do #645.** `chooseTarget` é chamada
+ * de três eventos independentes em `hunt.ts` (`#onMonsterStep`, `#onMonsterAttack`,
+ * `#onMonsterAbility`) — um Dragon com três abilities a `cadenceMs: 2000` gera 4-5 vencimentos a
+ * cada 2 s, contra o `Monster::onThink_async` real, que roda sozinho a `EVENT_CREATURE_THINK_INTERVAL`
+ * = 1000 ms e nunca é chamado por `doAttacking` (`creature.hpp:47`). Reentrar no ramo a cada
+ * vencimento reavaliaria o peso — e consumiria `rng` — várias vezes mais rápido que o Canary
+ * para o MESMO estado de HP/posição. O gate em `nowMs`/`TARGET_THINK_COOLDOWN_KEY` reproduz o
+ * "só uma vez por think" sem inventar um quarto evento agendado: cada vencimento continua
+ * chamando `chooseTarget`, mas só o primeiro dentro de cada janela de 1000 ms de fato reavalia —
+ * os demais devolvem o `current` retido, como o Canary faria entre um `onThink_async` e o
+ * próximo.
  */
 export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
   definition: Monster,
   rng: Rng,
+  nowMs: number,
 ): string | null {
   const current = monster.targetId === null
     ? undefined
@@ -278,10 +301,14 @@ export function chooseTarget(
     if (leash === 0 || distance(monster.home, current.position) <= leash) {
       const strategy = definition.targetStrategy;
       // O ramo estreito (#645, ver o comentário da função): só quando HÁ pesos declarados, o
-      // monstro FOGE e o alvo retido está fora do alcance de toda ability dele agora.
+      // monstro FOGE, o alvo retido está fora do alcance de toda ability dele agora, E já
+      // passou pelo menos um `TARGET_THINK_INTERVAL_MS` desde a última reavaliação — o gate que
+      // faz o ramo disparar no máximo uma vez por think do Canary, não uma vez por vencimento.
       if (strategy !== undefined
         && isMonsterFleeing(monster, definition)
-        && distance(monster.position, current.position) > monsterAttackRange(definition)) {
+        && distance(monster.position, current.position) > monsterAttackRange(definition)
+        && monster.cooldowns.isReady(TARGET_THINK_COOLDOWN_KEY, nowMs)) {
+        monster.cooldowns.start(TARGET_THINK_COOLDOWN_KEY, nowMs, TARGET_THINK_INTERVAL_MS);
         // Os mesmos candidatos válidos de sempre (vivo, mesmo andar, dentro do raio de
         // agressão) — `rankTarget` pode devolver o PRÓPRIO `current` de volta, e é o esperado:
         // reavaliar não é o mesmo que trocar.

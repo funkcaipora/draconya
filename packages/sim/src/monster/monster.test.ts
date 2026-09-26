@@ -36,15 +36,15 @@ const rng = Rng.fromSeed('monster-test');
 describe('chooseTarget', () => {
   it('takes the closest inside the aggro radius', () => {
     const monster = monsterAt(0, 0);
-    expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat, rng)).toBe('near');
+    expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat, rng, 0)).toBe('near');
   });
 
   it('ignores anything outside the radius', () => {
-    expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat, rng)).toBeNull();
+    expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat, rng, 0)).toBeNull();
   });
 
   it('ignores the dead', () => {
-    expect(chooseTarget(monsterAt(0, 0), [prey('p', 1, 0, false)], rat, rng)).toBeNull();
+    expect(chooseTarget(monsterAt(0, 0), [prey('p', 1, 0, false)], rat, rng, 0)).toBeNull();
   });
 
   it('keeps its target instead of rescanning every tick', () => {
@@ -52,13 +52,13 @@ describe('chooseTarget', () => {
     // vezes por segundo — e trocar de alvo porque outro jogador passou um tile mais perto
     // não é o comportamento que os jogadores esperam.
     const monster = monsterAt(0, 0, { targetId: 'first' });
-    expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat, rng))
+    expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat, rng, 0))
       .toBe('first');
   });
 
   it('drops a target that died', () => {
     const monster = monsterAt(0, 0, { targetId: 'gone' });
-    expect(chooseTarget(monster, [prey('gone', 1, 0, false), prey('alive', 2, 0)], rat, rng))
+    expect(chooseTarget(monster, [prey('gone', 1, 0, false), prey('alive', 2, 0)], rat, rng, 0))
       .toBe('alive');
   });
 
@@ -66,10 +66,10 @@ describe('chooseTarget', () => {
     // Zero é "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK faria o
     // jogador voltar e encontrar tudo parado, sem explicação.
     const monster = monsterAt(0, 0, { targetId: 'runner' });
-    expect(chooseTarget(monster, [prey('runner', 50, 0)], rat, rng)).toBe('runner');
+    expect(chooseTarget(monster, [prey('runner', 50, 0)], rat, rng, 0)).toBe('runner');
 
     const leashed = { ...rat, leashRadius: 5 };
-    expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, rng)).toBeNull();
+    expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, rng, 0)).toBeNull();
   });
 
   describe('andar (#519, hunt multiandar)', () => {
@@ -86,22 +86,22 @@ describe('chooseTarget', () => {
 
     it('ignora presa perto por (x, y) mas em outro andar', () => {
       const monster = monsterAtFloor(0, 0, 10);
-      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11)], rat, rng)).toBeNull();
-      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11), preyAtFloor('same', 2, 0, 10)], rat, rng))
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11)], rat, rng, 0)).toBeNull();
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11), preyAtFloor('same', 2, 0, 10)], rat, rng, 0))
         .toBe('same');
     });
 
     it('larga o alvo que trocou de andar, mesmo dentro do leash', () => {
       const monster = monsterAtFloor(0, 0, 10, { targetId: 'runner' });
       const leashed = { ...rat, leashRadius: 0 };
-      expect(chooseTarget(monster, [preyAtFloor('runner', 1, 0, 11)], leashed, rng)).toBeNull();
+      expect(chooseTarget(monster, [preyAtFloor('runner', 1, 0, 11)], leashed, rng, 0)).toBeNull();
     });
 
     it('sem `z` de nenhum dos lados continua igual a antes — compatível com snapshot anterior', () => {
       // Nem o monstro nem a presa carregam `z`: é o snapshot de uma hunt de andar único gravado
       // antes desta issue, e o comportamento não pode mudar para ela.
       const monster = monsterAt(0, 0);
-      expect(chooseTarget(monster, [prey('p', 1, 0)], rat, rng)).toBe('p');
+      expect(chooseTarget(monster, [prey('p', 1, 0)], rat, rng, 0)).toBe('p');
     });
   });
 
@@ -121,24 +121,24 @@ describe('chooseTarget', () => {
 
     it('a busca do mais perto não sorteia nada', () => {
       const monster = monsterAt(0, 0);
-      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat, poisoned))
+      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat, poisoned, 0))
         .toBe('near');
     });
 
     it('manter o alvo atual não sorteia nada', () => {
       const monster = monsterAt(0, 0, { targetId: 'first' });
-      expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat, poisoned))
+      expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat, poisoned, 0))
         .toBe('first');
     });
 
     it('desistir pelo leash não sorteia nada', () => {
       const monster = monsterAt(0, 0, { targetId: 'runner' });
       const leashed = { ...rat, leashRadius: 5 };
-      expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, poisoned)).toBeNull();
+      expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, poisoned, 0)).toBeNull();
     });
 
     it('sem candidato nenhum também não sorteia nada', () => {
-      expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat, poisoned)).toBeNull();
+      expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat, poisoned, 0)).toBeNull();
     });
   });
 
@@ -159,19 +159,19 @@ describe('chooseTarget', () => {
       const monster = monsterAt(0, 0);
       const near = prey('near', 1, 0, true, 500); // mais perto, mais vida
       const far = prey('far', 3, 0, true, 1); // mais longe, menos vida — venceria por `health`
-      expect(chooseTarget(monster, [near, far], healthOnly, rng)).toBe('near');
+      expect(chooseTarget(monster, [near, far], healthOnly, rng, 0)).toBe('near');
     });
 
     it('o mesmo vale para `damage`: quem bateu mais no monstro não fura a fila na aquisição', () => {
       const monster = monsterAt(0, 0);
       monster.contribution.record('far', 40);
       const preyList = [prey('near', 1, 0), prey('far', 3, 0)];
-      expect(chooseTarget(monster, preyList, damageOnly, rng)).toBe('near');
+      expect(chooseTarget(monster, preyList, damageOnly, rng, 0)).toBe('near');
     });
 
     it('não sorteia NADA na aquisição, mesmo com a estratégia declarada — zero consulta ao RNG', () => {
       const monster = monsterAt(0, 0);
-      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], healthOnly, poisoned))
+      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], healthOnly, poisoned, 0))
         .toBe('near');
     });
   });
@@ -195,7 +195,7 @@ describe('chooseTarget', () => {
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const current = prey('current', 3, 0, true, 500); // fora do alcance (1) — bloqueado
       const wounded = prey('wounded', 3, 0, true, 5); // mesma distância, menos vida
-      expect(chooseTarget(monster, [current, wounded], healthOnly, rng)).toBe('wounded');
+      expect(chooseTarget(monster, [current, wounded], healthOnly, rng, 0)).toBe('wounded');
     });
 
     it('o critério `damage` também entra neste ramo, com o dano acumulado no monstro', () => {
@@ -203,14 +203,14 @@ describe('chooseTarget', () => {
       monster.contribution.record('big-hitter', 40);
       const current = prey('current', 3, 0);
       const bigHitter = prey('big-hitter', 3, 0);
-      expect(chooseTarget(monster, [current, bigHitter], damageOnly, rng)).toBe('big-hitter');
+      expect(chooseTarget(monster, [current, bigHitter], damageOnly, rng, 0)).toBe('big-hitter');
     });
 
     it('pode devolver o PRÓPRIO alvo retido — reavaliar não é o mesmo que trocar', () => {
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const current = prey('current', 3, 0, true, 5); // menos vida — vence o critério `health`
       const healthy = prey('healthy', 3, 0, true, 900);
-      expect(chooseTarget(monster, [current, healthy], healthOnly, rng)).toBe('current');
+      expect(chooseTarget(monster, [current, healthy], healthOnly, rng, 0)).toBe('current');
     });
 
     it('NÃO foge (HP acima de `runOnHealth`): mantém o alvo sem consultar a estratégia', () => {
@@ -218,14 +218,14 @@ describe('chooseTarget', () => {
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const current = prey('current', 3, 0, true, 500);
       const wounded = prey('wounded', 3, 0, true, 5);
-      expect(chooseTarget(monster, [current, wounded], notFleeing, poisoned)).toBe('current');
+      expect(chooseTarget(monster, [current, wounded], notFleeing, poisoned, 0)).toBe('current');
     });
 
     it('foge, mas o alvo retido está AO ALCANCE: mantém sem consultar a estratégia', () => {
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const current = prey('current', 1, 0, true, 500); // dentro do alcance (1) — não bloqueado
       const wounded = prey('wounded', 1, 0, true, 5);
-      expect(chooseTarget(monster, [current, wounded], healthOnly, poisoned)).toBe('current');
+      expect(chooseTarget(monster, [current, wounded], healthOnly, poisoned, 0)).toBe('current');
     });
 
     it('foge e está bloqueado, mas SEM `targetStrategy`: mantém o alvo, como sempre', () => {
@@ -234,7 +234,55 @@ describe('chooseTarget', () => {
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const current = prey('current', 3, 0, true, 500);
       const wounded = prey('wounded', 3, 0, true, 5);
-      expect(chooseTarget(monster, [current, wounded], fleeing, poisoned)).toBe('current');
+      expect(chooseTarget(monster, [current, wounded], fleeing, poisoned, 0)).toBe('current');
+    });
+
+    describe('gate de cadência (achado da revisão do #654): no máximo um think por 1000 ms, como `EVENT_CREATURE_THINK_INTERVAL` (`creature.hpp:47`)', () => {
+      // `chooseTarget` é chamada de três eventos independentes em `hunt.ts` (passo, ataque
+      // básico e cada ability declarada) — um Dragon com três abilities a `cadenceMs: 2000`
+      // gera 4-5 vencimentos a cada 2 s. Sem o gate, cada um reentraria neste ramo e consumiria
+      // um sorteio novo — várias vezes mais rápido que o `Monster::onThink_async` real, que só
+      // roda a cada 1000 ms e nunca é chamado por `doAttacking`. `monster.cooldowns` é quem
+      // impõe o "no máximo uma vez por think", exatamente como o resto do motor já usa para
+      // gate de tempo lógico (invariante 9: só a sessão dona escreve nele).
+      it('a primeira chamada reavalia; chamadas dentro dos MESMOS 1000 ms nem tocam o RNG', () => {
+        const monster = monsterAt(0, 0, { targetId: 'current' });
+        const current = prey('current', 3, 0, true, 500); // fora do alcance — bloqueado
+        const wounded = prey('wounded', 3, 0, true, 5); // menos vida — venceria o critério `health`
+
+        // nowMs = 0: o primeiro think da janela. Consome o sorteio do critério e troca.
+        expect(chooseTarget(monster, [current, wounded], healthOnly, rng, 0)).toBe('wounded');
+
+        // `monster.targetId` continua 'current' — quem escreve de volta é sempre o chamador em
+        // `hunt.ts`, nunca `chooseTarget`. As chamadas abaixo simulam o passo e as abilities do
+        // MESMO Dragon vencendo antes do próximo think dele: todas reavaliariam o alvo retido
+        // se o gate não existisse, e a `poisoned` prova que nenhuma sequer consulta o RNG.
+        for (const laterMs of [1, 100, 500, 999]) {
+          expect(chooseTarget(monster, [current, wounded], healthOnly, poisoned, laterMs))
+            .toBe('current');
+        }
+      });
+
+      it('exatamente 1000 ms depois, o think seguinte reavalia de novo', () => {
+        const monster = monsterAt(0, 0, { targetId: 'current' });
+        const current = prey('current', 3, 0, true, 500);
+        const wounded = prey('wounded', 3, 0, true, 5);
+
+        expect(chooseTarget(monster, [current, wounded], healthOnly, rng, 0)).toBe('wounded');
+        expect(chooseTarget(monster, [current, wounded], healthOnly, rng, 1_000)).toBe('wounded');
+      });
+
+      it('o gate é por MONSTRO — outra instância fugindo no mesmo instante reavalia à parte', () => {
+        // O cooldown mora em `monster.cooldowns`, não numa variável de módulo: dois monstros
+        // fugindo no mesmo tick não podem compartilhar o relógio um do outro.
+        const first = monsterAt(0, 0, { id: 1, targetId: 'current' });
+        const second = monsterAt(0, 0, { id: 2, targetId: 'current' });
+        const current = prey('current', 3, 0, true, 500);
+        const wounded = prey('wounded', 3, 0, true, 5);
+
+        expect(chooseTarget(first, [current, wounded], healthOnly, rng, 0)).toBe('wounded');
+        expect(chooseTarget(second, [current, wounded], healthOnly, rng, 1)).toBe('wounded');
+      });
     });
   });
 
@@ -249,7 +297,7 @@ describe('chooseTarget', () => {
       });
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const preyList = [prey('current', 3, 0), prey('nearer', 1, 0, true, 1)];
-      expect(chooseTarget(monster, preyList, healthOnly, poisoned)).toBe('current');
+      expect(chooseTarget(monster, preyList, healthOnly, poisoned, 0)).toBe('current');
     });
   });
 });
