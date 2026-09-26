@@ -936,10 +936,12 @@ e a UI detalhada de buff.
 ## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
 
 O #155 só tinha `haste`, sempre positivo (`speedPercent` inteiro positivo). O CMB-11 generaliza
-o `ConditionEffect` de velocidade para `speed`, reproduzindo `ConditionSpeed` do Canary/TFS
-(`src/creatures/combat/condition.cpp`): `type: 'haste' | 'paralyze'` — o nome do Tibia, não
-derivado do sinal calculado, porque só ele decide o PISO — e uma magnitude por UMA das duas
-formas, nunca as duas:
+o `ConditionEffect` de velocidade para `speed`, reproduzindo `ConditionSpeed` — a classe existe
+tanto no Canary quanto no TFS (`src/creatures/combat/condition.cpp`), mas o mecanismo do `−40` e
+do piso abaixo é só do CANARY (o TFS usa `baseSpeed` direto, sem deslocamento nem piso —
+`monsters.cpp`); a precedência é a do ADR 0037 decisão 4. `type: 'haste' | 'paralyze'` é o nome
+do Tibia, não derivado do sinal calculado, porque só ele decide o PISO — e uma magnitude por UMA
+das duas formas, nunca as duas:
 
 - **`delta`** (inteiro, em MILÉSIMOS): o formato do ATAQUE/DEFESA de monstro — o `speedChange`
   copiado sem conversão do Lua (`{ name = "speed", speedChange = -600, duration = 30000, target
@@ -955,11 +957,29 @@ As duas convergem no MESMO cálculo (`resolveSpeedPercent`, `packages/sim/src/co
 `difference = baseSpeed − 40`; `min`/`max` são LINEARES nele e TRUNCADOS para inteiro — como o
 C++ trunca ao atribuir um `float` a `int32_t`, nunca arredonda —; o resultado é sorteado INTEIRO
 e inclusivo no intervalo com o `Rng` da sessão (`min === max` não consome sorteio, como
-`uniform_random` do Canary não consome quando os limites coincidem); e o piso do `paralyze`
+`uniform_random` do Canary não consome quando os limites coincidem); e o piso
 (`speedDelta < 40 − baseSpeed`) é a MESMA trava do Canary — a escala do `speed` do Draconya já é
 a do TFS (ADR 0037 decisão 4: Dragon 172, jogador 220), então "40" é o valor REAL do Canary, não
 um número reescalado. `baseSpeed` é o `speed` do ALVO no instante da aplicação (o `mover.speed`
 de `movement.ts`), como `Creature::getBaseSpeed()` lê o de quem recebe a condição.
+
+**O piso vale SEMPRE, não só quando `type === 'paralyze'`.** No Canary o clamp é condicionado ao
+`ConditionType_t`; aqui `type` é um campo de CONTEÚDO, e nada além de disciplina impediria um
+`delta`/`formula` de sinal de paralyze rotulado por engano como `haste`. Sem o piso incondicional
+isso produziria `speedDelta` arbitrariamente negativo e um `speedScale` NEGATIVO — que
+`movement.ts` trata como velocidade zero (congelado), o oposto e pior do que o efeito rotulado.
+O schema (`packages/content/src/schemas.ts`) reforça isso na origem com dois `.refine` sobre
+`conditionEffectSchema`: `type` precisa concordar com o sinal de `delta` (`haste` exige > 0,
+`paralyze` exige <= 0, como `Monsters::deserializeSpell` do Canary decide) e, para `formula`,
+uma fórmula cujos quatro coeficientes só podem reduzir velocidade não pode ser `type: 'haste'`
+(e vice-versa) — o caso real que motivou isto é a runa de paralyze (`-1, 0, -1, 0`) rotulada como
+`haste`. O piso incondicional continua como rede de segurança para o caso de `formula` cujo sinal
+não é estaticamente decidível pelo schema.
+
+**A política `strongest` compara MAGNITUDE, não o valor com sinal.** `speedPercent` passou a ter
+sinal com este efeito (paralyze é negativo); `strengthOf` (`packages/sim/src/conditions.ts`) usa
+`Math.abs(speedPercent)` para a condição `speed`, senão um paralyze severo (`-80`) perderia para
+um haste fraco (`+5`) numa comparação `strongest` — o inverso do que a política promete.
 
 **A chave é RESERVADA** (`SPEED_CONDITION_KEY = 'speed'`, `packages/content/src/schemas.ts`):
 `conditionSpecSchema` recusa `key` diferente de `"speed"` quando `effect.kind === 'speed'`. É o
