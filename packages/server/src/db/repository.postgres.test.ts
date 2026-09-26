@@ -49,7 +49,8 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
       gold: 0,
       capacity: 400,
       premiumUntil: null,
-      staminaMs: 86_400_000,
+      // 12 h (M32-01, #562, ADR 0043 emenda 2026-09-25) — era 24 h antes da migração 0011.
+      staminaMs: 43_200_000,
       state: 'city',
       sessionId: null,
     });

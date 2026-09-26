@@ -112,8 +112,11 @@ export const characters = pgTable(
     premiumUntil: timestamp('premium_until', { withTimezone: true }),
 
     // Stamina é função do tempo decorrido, não recurso decrementado por job (FUN-39).
-    // Guarda-se o valor materializado e o instante em que ele valia.
-    staminaMs: bigint('stamina_ms', { mode: 'number' }).notNull().default(86_400_000),
+    // Guarda-se o valor materializado e o instante em que ele valia. Default 12 h
+    // (43.200.000 ms) desde M32-01 (#562, ADR 0043 emenda 2026-09-25 — o teto do Huntera);
+    // era 24 h (86.400.000 ms) antes, um número nosso sem fonte. Migração 0011 clampa quem já
+    // tinha mais que o novo teto persistido.
+    staminaMs: bigint('stamina_ms', { mode: 'number' }).notNull().default(43_200_000),
     staminaUpdatedAt: timestamp('stamina_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
     /**

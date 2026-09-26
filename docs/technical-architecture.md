@@ -258,7 +258,7 @@ Dois pontos que evitam migração destrutiva depois (§35.3):
 
 - Combate, loot, XP e transações são resolvidos no servidor; o cliente só manda intenção.
 - Limite de 2 personagens ativos por conta aplicado com script atômico no Redis, não com verificação otimista.
-- **A automação é legítima** — "parece bot" nunca pode ser sinal de punição. O que resta detectar é **multiconta e RMT**, e as defesas são: teto de 2 sessões por conta, stamina de 24 h, e ledger auditável por conta.
+- **A automação é legítima** — "parece bot" nunca pode ser sinal de punição. O que resta detectar é **multiconta e RMT**, e as defesas são: teto de 2 sessões por conta, stamina de 12 h (M32-01, #562, ADR 0043 emenda 2026-09-25), e ledger auditável por conta.
 - Ticket de sessão de uso único com expiração curta.
 - Ações administrativas com trilha de auditoria.
 
@@ -473,7 +473,7 @@ quem decide é desempenho por core, e um core M-series não é um OCPU Ampere ne
 (ADR 0013). Medir aqui serve como linha de base e para detectar regressão de ordem de grandeza;
 a conta de servidor de verdade precisa da rodada no host que vai rodar o jogo.
 
-O maior risco de custo não é técnico: é o teto de `2 × accounts`. Stamina de 24 h com regeneração 1:1 significa que um personagem pode caçar metade do tempo — isso é o freio econômico real e precisa ser monitorado como métrica de infraestrutura, não só de game design.
+O maior risco de custo não é técnico: é o teto de `2 × accounts`. Stamina de 12 h (M32-01, #562, ADR 0043 emenda 2026-09-25) com regeneração 1:1 significa que um personagem pode caçar metade do tempo — isso é o freio econômico real e precisa ser monitorado como métrica de infraestrutura, não só de game design.
 
 ---
 

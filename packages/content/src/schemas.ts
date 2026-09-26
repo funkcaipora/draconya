@@ -2329,7 +2329,11 @@ export type Combat = z.infer<typeof combatSchema>;
  */
 export const staminaSchema = z.object({
   id: z.literal('baseline'),
-  /** Teto, em milissegundos. §10: 24 horas. Aplicado na LEITURA, não só na escrita. */
+  /**
+   * Teto, em milissegundos. Aplicado na LEITURA, não só na escrita. §10 previa 24 h; desde
+   * M32-01 (#562, ADR 0043 emenda 2026-09-25) o valor real é 12 h — o teto que o Huntera mostra
+   * cheio na Cidade.
+   */
   maxMs: z.number().int().positive(),
   /** Milissegundos recuperados por milissegundo fora de hunt. §10: 1:1. */
   recoveryRatio: z.number().positive(),
