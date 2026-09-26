@@ -12,10 +12,10 @@
     "@draconya/content": "workspace:*",
     "@draconya/protocol": "workspace:*",
     "lzma-web": "^4.0.0",
-    "pixi.js": "^8.6.0",
+    "pixi.js": "^8.21.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "zod": "^4.6.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
