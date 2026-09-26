@@ -1540,6 +1540,45 @@ export const monsterTargetStrategySchema = z.object({
 );
 export type MonsterTargetStrategy = z.infer<typeof monsterTargetStrategySchema>;
 
+/**
+ * Uma entrada de invocação de monstro por monstro (#546, TFS/Canary `Monster::onThinkDefense`,
+ * `monster.summon`/`summons`, referência §15-19): o MESMO laço que avalia `defenses`, um
+ * `monsterId` por entrada — o `summonBlock.name`/`summonName` da fonte. Cada entrada tem a
+ * PRÓPRIA cadência e a PRÓPRIA chance, um evento na fila por entrada (o desenho de
+ * `monsterDefenseSchema`), nunca um cálculo por tick.
+ */
+export const monsterSummonEntrySchema = z.strictObject({
+  monsterId: z.string().min(1),
+  /** Milissegundos entre tentativas. Tempo decorrido, nunca contagem de tick (invariante 2). */
+  intervalMs: z.number().int().positive(),
+  /**
+   * A chance de nascer quando o `intervalMs` vence — uma rolagem por vencimento, em FRAÇÃO 0–1
+   * como o resto do conteúdo (`monsterDefenseSchema.chance`, `monsterAbilitySchema.chance`). A
+   * fonte guarda 1–100 (`summonChance`/`chance`, TFS `summonChance < uniform_random(1, 100)`) —
+   * o Slime declara `chance = 10`, e aqui vira `0.10`.
+   */
+  chance: z.number().min(0).max(1),
+  /**
+   * Teto de invocações VIVAS deste NOME (`summonBlock.max`/`summonCount`), não do monstro
+   * inteiro — esse é `monsterSummonsSchema.max` (`maxSummons`).
+   */
+  count: z.number().int().positive(),
+  _open: z.string().optional(),
+});
+export type MonsterSummonEntry = z.infer<typeof monsterSummonEntrySchema>;
+
+/**
+ * A invocação de um monstro (#546, `monster.summon`/`maxSummons`): quantas invocações vivas ele
+ * tolera NO TOTAL, entre todos os nomes, e a lista do que pode nascer. Campo NOVO e opcional —
+ * nenhum monstro do recorte atual (rat, rotworm, dragon, dragon-lord) declara `monster.summon`
+ * na fonte (conferido em 2026-09-25); ausente é nenhuma invocação, o comportamento de sempre.
+ */
+export const monsterSummonsSchema = z.strictObject({
+  max: z.number().int().positive(),
+  entries: z.array(monsterSummonEntrySchema).min(1),
+});
+export type MonsterSummons = z.infer<typeof monsterSummonsSchema>;
+
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1674,6 +1713,11 @@ export const monsterSchema = z.strictObject({
   staticAttack: z.number().min(0).max(1).optional(),
   /** De onde um monstro IMPORTADO veio (ADR 0038 decisão 2). Ausente em monstro autorado à mão. */
   source: catalogSourceSchema.optional(),
+  /**
+   * A invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`,
+   * referência §15-19). Ausente é nenhuma — o comportamento de sempre.
+   */
+  summons: monsterSummonsSchema.optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
   _open: z.string().optional(),
 });

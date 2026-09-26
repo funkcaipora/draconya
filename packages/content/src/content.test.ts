@@ -593,6 +593,64 @@ describe('a estratégia ponderada de alvo (`monster.targetStrategy`, #541)', () 
   });
 });
 
+describe('invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
+  // O rato invoca a SI MESMO — mesma forma do Slime real (`slimes/slime.lua`, `monster.summon
+  // = { maxSummons = 3, summons = {{ name = "Slime", chance = 10, interval = 2000, count = 3
+  // }} }`, fonte local do #546), e mantém a hunt padrão (`cellars`, que aponta `rat`) montando
+  // sem precisar de um segundo monstro na fixture só para isto.
+  const summon = { monsterId: 'rat', chance: 0.10, intervalMs: 2_000, count: 3 };
+
+  it('ausência é nenhuma invocação — o comportamento de sempre', () => {
+    expect(buildContent(base()).monsters.get('rat')?.summons).toBeUndefined();
+  });
+
+  it('aceita a invocação declarada e propaga em FRAÇÃO, como as outras chances do monstro', () => {
+    // `chance = 10` (1–100 na fonte) vira `0.10` aqui, como `monsterDefenseSchema.chance` já
+    // faz para a cura do Dragon (#518) — a mesma convenção, a mesma conversão.
+    const withSummon = { ...rat, summons: { max: 3, entries: [summon] } };
+    const content = buildContent(base({ monsters: [withSummon] }));
+    expect(content.monsters.get('rat')?.summons).toEqual({ max: 3, entries: [summon] });
+  });
+
+  it('uma entrada pode apontar para o PRÓPRIO monstro — o Slime invoca Slime', () => {
+    const withSummon = { ...rat, summons: { max: 3, entries: [summon] } };
+    expect(() => buildContent(base({ monsters: [withSummon] }))).not.toThrow();
+  });
+
+  it('recusa entrada que aponta monstro inexistente — a mesma referência cruzada do loot.items', () => {
+    const withSummon = {
+      ...rat,
+      summons: { max: 1, entries: [{ monsterId: 'fantasma', chance: 1, intervalMs: 1_000, count: 1 }] },
+    };
+    expect(() => buildContent(base({ monsters: [withSummon] })))
+      .toThrow(/summons\.entries referencia monstro "fantasma", que não existe no catálogo/);
+  });
+
+  it('recusa duas entradas do mesmo monsterId: duas dividiriam o mesmo (kind, subject) na fila', () => {
+    const withSummon = {
+      ...rat,
+      summons: {
+        max: 2,
+        entries: [
+          { monsterId: 'rat', chance: 0.5, intervalMs: 1_000, count: 1 },
+          { monsterId: 'rat', chance: 0.3, intervalMs: 2_000, count: 1 },
+        ],
+      },
+    };
+    expect(() => buildContent(base({ monsters: [withSummon] })))
+      .toThrow(/summons\.entries "rat" duplicada/);
+  });
+
+  it('recusa entries vazio e chance fora de 0–1, como as outras chances do monstro', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, summons: { max: 1, entries: [] } }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, summons: { max: 1, entries: [{ ...summon, chance: 1.5 }] } }],
+    }))).toThrow(ContentError);
+  });
+});
+
 describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.

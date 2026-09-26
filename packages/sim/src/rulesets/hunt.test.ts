@@ -7289,6 +7289,317 @@ describe('condição de velocidade com sinal — paralyze de ataque e haste de d
   });
 });
 
+describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
+  // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
+  // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
+  // monstro de verdade. `aggroRadius: 0` na INVOCAÇÃO isola o teste da IA de perseguição DELA:
+  // ela nunca sai do lugar nem bate em ninguém — quem invoca não pode ser confundido com quem é
+  // invocado. O MESTRE precisa de alvo de verdade (#546, TFS/Canary `hasFollowPath`): sem ele, a
+  // invocação nunca dispara — é o describe seguinte que prova isso isoladamente —, então aqui ele
+  // fica com o `aggroRadius` de sempre do `rat` (4), e a rota da fixture (herói entra em (1,1),
+  // ponto de spawn em (4,2)) garante o engajamento na primeira decisão do mestre: a distância
+  // máxima de qualquer tile de nascimento possível (raio 2 ao redor do ponto) até (1,1) é 3, e
+  // 3 ≤ 4. `pacifist` (o mesmo do describe do Dragon acima) zera o ataque do herói: sem ele, o
+  // herói mataria minions sozinho ao alcançar o ponto de spawn pela rota, e um abate incidental
+  // confundiria "o teto segura" com "o herói ajudou a esvaziar" — o mestre pode bater de volta
+  // (o herói tem HP absurdo, de propósito, na fixture-base), mas nunca o contrário.
+  const minion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 20, experience: 50, attack: 0, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
+  };
+  const summoner = {
+    ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
+    summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
+  };
+  const summonerHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
+    },
+  };
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+  const loaded = () => content({
+    monsters: [summoner, minion], hunts: [summonerHunt], combat: [pacifist],
+  });
+
+  it('nunca invoca sem alvo — mestre nunca engajado (aggroRadius: 0) fica no cadenciamento e nunca rola a chance (TFS/Canary hasFollowPath)', () => {
+    // O MESMO desenho da fixture acima, com uma diferença: `aggroRadius: 0` no MESTRE, não na
+    // invocação — `chooseTarget` nunca acha ninguém a distância ≤ 0 (tile é exclusivo,
+    // invariante 8), então `targetId` fica `null` para sempre. É exatamente a fixture que a
+    // versão anterior deste teste usava para o describe INTEIRO — provando, sem querer, que a
+    // implementação de então invocava com o mestre permanentemente sem alvo. Aqui ela vira o
+    // que deveria ser desde o início: a prova de que SEM alvo não nasce invocação nenhuma.
+    const neverEngaged = {
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 0,
+      summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
+    };
+    const neverEngagedContent = content({
+      monsters: [neverEngaged, minion], hunts: [summonerHunt], combat: [pacifist],
+    });
+    const { session, ruleset } = start({ loaded: neverEngagedContent });
+    run(session, 10_000, 100); // 10 vencimentos de cadência (1 000 ms cada) sem rolar nenhum.
+
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    expect(master.targetId).toBeNull();
+    // A CADÊNCIA continua se rearmando — `scheduledSummons` não é o gate, `targetId` é (a
+    // invariante "engatilhada OU agendada" continua valendo por entrada).
+    expect(master.scheduledSummons.size).toBeGreaterThan(0);
+    expect(ruleset.monsters.filter((m) => m.monsterId === 'minion')).toHaveLength(0);
+  });
+
+  it('1 Hz == 10 Hz: o timer da invocação não é "por tick" (invariante 2/3)', () => {
+    // 5 s de janela, teto 10: bem longe do teto, para medir só a cadência — não onde ela para.
+    const at = (hz: number): number => {
+      const { session, ruleset } = start({ loaded: loaded() });
+      run(session, 5_000, 1000 / hz);
+      return ruleset.monsters.filter((m) => m.alive && m.monsterId === 'minion').length;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+    expect(at(10)).toBeGreaterThan(0);
+  });
+
+  it('nasce perto do mestre, com masterId, e NÃO ocupa lugar do Spawner (TFS placeCreature force)', () => {
+    // O mestre agora tem alvo de verdade (#546, `hasFollowPath`) — e, engajado, ele ANDA. Se o
+    // teste rodasse mais tempo e comparasse com a posição ATUAL do mestre, um passo dele entre
+    // o instante da invocação e o instante da leitura faria a distância medida crescer por um
+    // motivo que não tem nada a ver com ONDE ela nasceu. Por isso o loop para no primeiro
+    // vencimento em que a invocação aparece, sem avançar mais um passo — a posição do mestre lida
+    // ali É a mesma que `#spawnSummon` usou para buscar o tile livre.
+    const { session, ruleset } = start({ loaded: loaded() });
+    let master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    let summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    let masterPositionAtBirth: { x: number; y: number; z?: number } | undefined;
+    for (let elapsed = 0; elapsed < 1_500 && summon === undefined && session.ended === null; elapsed += 50) {
+      session.advanceBy(50);
+      master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+      summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+      if (master !== undefined && summon !== undefined) masterPositionAtBirth = { ...master.position };
+    }
+    if (master === undefined) throw new Error('sem mestre');
+    if (summon === undefined) throw new Error('sem invocação');
+    if (masterPositionAtBirth === undefined) throw new Error('sem posição do mestre no nascimento');
+
+    expect(summon.masterId).toBe(master.id);
+    // A posição exata do mestre já está ocupada por ELE (tile é exclusivo, invariante 8): a
+    // invocação nasce num dos 8 vizinhos imediatos — `SUMMON_SPAWN_RADIUS` é 1, como
+    // `Map::placeCreature(..., extendedPos: false)` da fonte, nunca um anel mais largo.
+    expect(Math.max(
+      Math.abs(summon.position.x - masterPositionAtBirth.x),
+      Math.abs(summon.position.y - masterPositionAtBirth.y),
+    )).toBeLessThanOrEqual(1);
+
+    // O ÚNICO lugar do Spawner é do mestre (a hunt pede `monsterCount: 1`), e continua ocupado
+    // por ELE: a invocação nasceu por `#spawnMonster` direto, nunca por `#onSpawn`.
+    const slots = ruleset.getState().spawner.slots;
+    expect(slots).toHaveLength(1);
+    expect(slots[0]?.occupantId).toBe(master.id);
+  });
+
+  it('respeita o teto POR NOME e o teto DO MONSTRO, cada um separadamente', () => {
+    // `minion-a` para em 1 — o teto DELA (`count: 1`); `minion-b` para em 2 — o que SOBRA do
+    // teto do MONSTRO (`max: 3`) depois que `minion-a` já gastou 1, mesmo com `count: 5` de
+    // folga própria. Provar os dois juntos, com nomes diferentes, é o que distingue qual teto
+    // segurou cada um — um só monstro com os dois números iguais não distinguiria nada.
+    const minionA = { ...minion, id: 'minion-a' };
+    const minionB = { ...minion, id: 'minion-b' };
+    const capped = {
+      ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
+      summons: {
+        max: 3,
+        entries: [
+          { monsterId: 'minion-a', chance: 1, intervalMs: 1_000, count: 1 },
+          { monsterId: 'minion-b', chance: 1, intervalMs: 1_000, count: 5 },
+        ],
+      },
+    };
+    const cappedHunt = {
+      ...hunt,
+      difficulties: {
+        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
+      },
+    };
+    const cappedContent = content({
+      monsters: [capped, minionA, minionB], hunts: [cappedHunt], combat: [pacifist],
+    });
+    const { session, ruleset } = start({ loaded: cappedContent });
+    const live = (id: string): number => ruleset.monsters.filter((m) => m.alive && m.monsterId === id).length;
+
+    run(session, 10_000, 100);
+    expect(live('minion-a')).toBe(1);
+    expect(live('minion-b')).toBe(2);
+
+    // Roda mais: os dois tetos SEGURAM — não é só "ainda não deu tempo de rolar de novo".
+    run(session, 10_000, 100);
+    expect(live('minion-a')).toBe(1);
+    expect(live('minion-b')).toBe(2);
+  });
+
+  it('a invocação não paga XP, nem loot, nem conta no Bestiário (TFS hasBeenSummoned)', () => {
+    const { session, hero, ruleset } = start({ loaded: loaded() });
+    run(session, 1_500, 100);
+    const summon = ruleset.monsters.find((m) => m.monsterId === 'minion');
+    if (summon === undefined) throw new Error('sem invocação');
+
+    const killsBefore = session.aggregates.kills;
+    summon.receiveDamage(summon.health);
+    resolveDeath(session, { kind: 'monster', monster: summon });
+
+    // O abate CONTA no "matei N" do extrato (#190) — a mesma condição de sempre —, mas nada
+    // MAIS paga: sem XP, sem gold, sem Bestiário. `Player::onKilledMonster` do Canary devolve
+    // cedo para quem `hasBeenSummoned()`, antes de tocar hunting task ou Bestiário.
+    expect(session.aggregates.kills).toBe(killsBefore + 1);
+    expect(hero.xp).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldGained).toBe(0);
+    expect(session.aggregates.xpGained).toBe(0);
+    expect(hero.bestiary.getState()).toEqual({});
+  });
+
+  it('some quando o mestre morre: desaparece, nunca morre (TFS Game::removeCreature)', () => {
+    const { session, ruleset } = start({ loaded: loaded() });
+    run(session, 3_000, 100);
+    const master = ruleset.monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    const summons = ruleset.monsters.filter((m) => m.masterId === master.id);
+    expect(summons.length).toBeGreaterThan(0);
+
+    session.drainEvents();
+    master.receiveDamage(master.health);
+    resolveDeath(session, { kind: 'monster', monster: master });
+
+    // Nenhuma invocação DESTE mestre continua indexada — e nenhum novo `masterId` órfão
+    // apareceu (a lista de agora é exatamente vazia para ele, não só "diminuiu").
+    expect(ruleset.monsters.filter((m) => m.masterId === master.id)).toHaveLength(0);
+    // O desaparecimento saiu para o mestre E para CADA invocação — nunca um golpe (`creature-hit`
+    // ausente), nunca um cadáver (`ground-item-appeared` ausente): é remoção, não abate.
+    const events = session.drainEvents();
+    const vanished = events
+      .filter((e) => e.kind === 'creature-vanished')
+      .map((e) => (e.kind === 'creature-vanished' ? e.creatureId : ''));
+    expect(vanished).toContain(master.subject);
+    for (const summon of summons) expect(vanished).toContain(summon.subject);
+    expect(vanished).toHaveLength(summons.length + 1);
+    expect(events.some((e) => e.kind === 'ground-item-appeared')).toBe(false);
+  });
+
+  it('scheduledSummons sobrevive ao snapshot, como scheduledDefenses (#518)', () => {
+    // Só o suficiente para o mestre nascer e armar a lista — ANTES do primeiro vencimento
+    // (1 000 ms), para o teste provar que o CAMPO sobreviveu, não que a invocação já aconteceu.
+    const { session } = start({ loaded: loaded() });
+    run(session, 500, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const master = (resumed.ruleset as HuntRuleset).monsters.find((m) => m.monsterId === 'summoner');
+    if (master === undefined) throw new Error('sem mestre');
+    expect(master.scheduledSummons.size).toBeGreaterThan(0);
+
+    resumed.drainEvents();
+    run(resumed, 3_000, 100);
+    const summons = (resumed.ruleset as HuntRuleset).monsters.filter((m) => m.masterId === master.id);
+    expect(summons.length).toBeGreaterThan(0);
+  });
+});
+
+describe('magia em área mata o mestre E a invocação adjacente no MESMO lançamento (#546, achado pós-review)', () => {
+  // O mestre fica PARADO de propósito: `attackRange` bem acima de qualquer distância possível
+  // dentro da sala minúscula da fixture faz `decideMonsterAction` nunca escolher "aproximar" —
+  // `monsterAttackRange` já considera o alvo ao alcance desde o primeiro engajamento
+  // (`packages/content/src/schemas.ts`, `monsterAttackRange`). Sem isto o mestre andaria até o
+  // corpo a corpo entre o nascimento da invocação (que NUNCA o segue, `aggroRadius: 0`) e o
+  // lançamento — e ela ficaria para trás, fora do raio do `blast` quando ele saísse. Parado, ela
+  // nasce ao lado dele (`SUMMON_SPAWN_RADIUS = 1`) e continua ao lado dele até o fim do teste.
+  const masterWithSummon = {
+    ...rat, attackRange: 12,
+    summons: { max: 1, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 1 }] },
+  };
+  const minion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 20, experience: 50, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
+  };
+  // `blast` (raio 2 centrado no alvo, poder 80) só sai quando a ÁREA já tem 2 alvos — o mestre
+  // sozinho conta 1 (`countAreaTargets` inclui o primário). O gate atrasa o lançamento até
+  // depois de a invocação existir: sem ele, o primeiro vencimento mataria só o mestre, e o
+  // teste nunca exercitaria a cascata que remove a invocação NO MEIO do `#applyHits`.
+  const explodirComDois = botConfig({
+    attack: [{ when: { kind: 'targets', op: '>=', count: 2 }, do: { kind: 'spell', spellId: 'blast' } }],
+  });
+  // `attackPower: 0` (o mesmo `pacifist` do describe da invocação, acima): a sala é pequena o
+  // bastante para o mestre às vezes nascer a 1 tile do herói, e sem isto o corpo a corpo AUTOMÁTICO
+  // (fora do `#applyHits`, fora deste teste) somaria um `creature-hit` a mais no mestre — ruído
+  // que não tem nada a ver com a cascata que este teste mede.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+
+  it('um só abate, um só creature-vanished por criatura, e nenhum creature-hit para quem já sumiu na cascata', () => {
+    // O defeito que este teste fecha: `#aimFor` colhe o mestre e a invocação na MESMA mira,
+    // mestre primeiro (ele nasceu antes, `#collect(primary)` antes da varredura da forma).
+    // `#applyHits` aplica os golpes na ordem da colheita — ao processar o mestre, `resolveDeath`
+    // cascateia em `#removeSummon` para a invocação AINDA NA LISTA, que sai de
+    // `#monsterBySubject`/`#monsters` sem que `alive` vire falso (ela nunca morreu, ela sumiu).
+    // Sem a checagem de presença no início do laço, a iteração seguinte reprocessaria a
+    // invocação já removida: um `creature-hit` para um id que o cliente já viu sumir e, se o
+    // dano zerasse a vida dela, um SEGUNDO `resolveDeath` — abate duplicado e um `world.vacate`
+    // sobre um tile que já foi liberado (e que pode já ter outro ocupante).
+    const { session, ruleset } = withSpells(
+      explodirComDois,
+      { mana: 200, monstersRaw: [masterWithSummon, minion], combat: [pacifist] },
+      'cautious',
+    );
+    const killsBefore = session.aggregates.kills;
+
+    const events: DomainEvent[] = [];
+    for (let elapsed = 0; elapsed < 3_000; elapsed += 50) {
+      session.advanceBy(50);
+      events.push(...session.drainEvents());
+      if (ruleset.monsters.length === 0) break;
+    }
+
+    const casts = events.filter((e) => e.kind === 'spell-cast');
+    expect(casts.length).toBeGreaterThan(0);
+    const first = casts[0] as { targets: readonly { creatureId: string | number }[] };
+    // A mira colheu os DOIS no mesmo lançamento — é o que garante que este caso passou pelo
+    // caminho mestre-antes-da-invocação dentro do MESMO `#applyHits`, e não dois lançamentos
+    // separados (o que não exercitaria nada).
+    expect(first.targets).toHaveLength(2);
+    const targetSubjects = first.targets.map((t) => t.creatureId);
+
+    // Nenhum dos dois continua indexado — o mestre morreu, a invocação sumiu na cascata.
+    expect(ruleset.monsters).toHaveLength(0);
+
+    // UM abate só: a invocação nunca paga abate (#546), e — com a correção — nem reprocessa a
+    // própria remoção como se fosse uma morte nova. Sem a correção, o `resolveDeath` duplicado
+    // creditava um segundo 'kills' para uma invocação que ninguém matou de novo.
+    expect(session.aggregates.kills).toBe(killsBefore + 1);
+
+    // Cada um dos dois alvos some UMA vez só — nunca dois `creature-vanished` para o mesmo id.
+    const vanishedCounts = new Map<string | number, number>();
+    for (const event of events) {
+      if (event.kind !== 'creature-vanished') continue;
+      vanishedCounts.set(event.creatureId, (vanishedCounts.get(event.creatureId) ?? 0) + 1);
+    }
+    for (const subject of targetSubjects) expect(vanishedCounts.get(subject)).toBe(1);
+
+    // Só o mestre leva golpe de MAGIA de verdade — a invocação já tinha sumido quando a vez dela
+    // chegou no laço, então ela nunca deveria ganhar um `creature-hit` de `#applyHits` (sem a
+    // correção, ela ganhava um, para um id que o `creature-vanished` acima já anunciou como
+    // sumido). `source: 'spell'` isola o golpe do `#applyHits` sob teste do corpo a corpo
+    // AUTOMÁTICO que a sala pequena pode colocar ao alcance do herói (`pacifist` zera o dano
+    // dele, mas o evento sai de qualquer forma — código fora deste teste, e não o assunto dele).
+    const spellHitsOnEitherTarget = events.filter(
+      (event) => event.kind === 'creature-hit' && event.source === 'spell'
+        && targetSubjects.includes(event.creatureId),
+    );
+    expect(spellHitsOnEitherTarget).toHaveLength(1);
+  });
+});
+
 describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#520)', () => {
   // Espelha `data/monsters/dragon.json` (TFS `dragon.xml`, conferido com o Canary): as mesmas
   // chances e a mesma mitigação — fogo IMUNE, gelo −10 % (vulnerável). HP alto de propósito,
