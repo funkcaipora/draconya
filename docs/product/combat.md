@@ -865,25 +865,49 @@ interface MonsterTargetStrategy {
   (#518)**, o ramo `TARGETSEARCH_RANDOM` do TFS — AO ACASO, que é o que o Dragon usava antes do
   #541. `TARGETSEARCH_NEAREST` (monstro de alcance maior) fica de fora: nenhum monstro do
   recorte precisa dele.
-- **Seleção ponderada de alvo (`monster.targetStrategy`, #541)**: o Canary sorteia o CRITÉRIO do
-  reroll pelos pesos declarados — mais perto, menos vida, mais dano causado no monstro, ou
-  aleatório (`Monster::searchTargetImmediate`, `monster.cpp:906-931`;
-  `MonsterTargetRanker::rank`, `monster_targeting.cpp:17-83`) — em vez de sempre `random`.
-  `rankTarget` (`packages/sim/src/monster/target-strategy.ts`) reproduz isso com a MESMA
-  ordem fixa de sorteio: um para o critério, e um segundo SÓ quando o critério é `random`
-  (nearest/health/damage resolvem por redução determinística, empate com quem aparece primeiro
-  na lista de candidatos — o mesmo `<`/`>` estrito do `.cpp`). É usado nos DOIS lugares que
-  escolhem alvo: o vencimento de `targetChange` acima, e a aquisição inicial em `chooseTarget`
-  (`packages/sim/src/monster/monster.ts`). Ausente o campo, nenhum dos dois consome sorteio a
-  mais — a sequência de RNG do rato e do rotworm continua bit a bit a de antes. O schema
-  (`monsterTargetStrategySchema`) exige os quatro pesos como inteiros não-negativos com soma
-  > 0; ao contrário do Canary (que trata `random` como "o que sobra até 100", e nunca soma o
-  campo), aqui `random` é um peso EXPLÍCITO como os outros três, e a soma não precisa ser 100 —
-  `rankTarget` sorteia proporcionalmente à soma real. Dragon e Dragon Lord declaram
-  `{ nearest: 70, health: 10, damage: 10, random: 10 }` (`dragon.lua`/`dragon_lord.lua`,
+- **Seleção ponderada de alvo (`monster.targetStrategy`, #541)**: o CRITÉRIO da escolha é
+  sorteado pelos pesos declarados — mais perto, menos vida, mais dano causado no monstro, ou
+  aleatório —, com a MESMA matemática de `MonsterTargetRanker::rank`
+  (`monster_targeting.cpp:17-83`): `rankTarget` (`packages/sim/src/monster/target-strategy.ts`)
+  reproduz a ordem fixa de sorteio (um para o critério, um segundo SÓ quando o critério é
+  `random`) e o desempate por redução determinística (nearest/health/damage ficam com quem
+  aparece primeiro na lista de candidatos — o mesmo `<`/`>` estrito do `.cpp`). Ausente o campo,
+  nenhum caminho consome sorteio a mais — a sequência de RNG do rato e do rotworm continua bit a
+  bit a de antes. O schema (`monsterTargetStrategySchema`) exige os quatro pesos como inteiros
+  não-negativos com soma > 0; ao contrário do Canary (que trata `random` como "o que sobra até
+  100", e nunca soma o campo), aqui `random` é um peso EXPLÍCITO como os outros três, e a soma
+  não precisa ser 100 — `rankTarget` sorteia proporcionalmente à soma real. Dragon e Dragon Lord
+  declaram `{ nearest: 70, health: 10, damage: 10, random: 10 }` (`dragon.lua`/`dragon_lord.lua`,
   conferidos em 2026-09-25); os outros 644 monstros do bestiário do Canary só declaram
   `nearest: 100` — fora do recorte desta issue (ver "Fora do escopo" do #541), então o rato e o
   rotworm continuam sem o campo.
+
+  **Divergência deliberada: ONDE a seleção ponderada entra (ADR 0037).** `rankTarget` é chamado
+  nos DOIS lugares que escolhem alvo — o vencimento de `targetChange` acima e a aquisição
+  inicial em `chooseTarget` (`packages/sim/src/monster/monster.ts`) —, sempre que
+  `monster.targetStrategy` está declarado. Isto NÃO é onde o Canary real consulta
+  `strategiesTargetNearest/Health/Damage/Random`: os quatro pesos só são lidos dentro de
+  `Monster::searchTargetImmediate` quando ela é chamada com `TARGETSEARCH_DEFAULT`
+  (`monster.cpp:906-931`), e o ÚNICO ponto do código que passa esse valor é
+  `Monster::onThink_async`, num ramo estreito — o monstro já tem um alvo perseguido
+  (`followCreature && hasFollowPath`), está FUGINDO (`isFleeing()`) E não consegue atacá-lo
+  agora (`!canUseAttack`) (`monster.cpp:1737-1739`). A aquisição de rotina (sem alvo, o caso que
+  `chooseTarget` cobre) usa `TARGETSEARCH_NEAREST` fixo (`monster.cpp:1736`, dentro do mesmo
+  `onThink_async`), e o reroll periódico — `Monster::onThinkTarget`, `monster.cpp:2141-2192`,
+  idêntico no TFS (`forgottenserver/src/monster.cpp:919-963`) — resolve `RANDOM` ou `NEAREST`
+  só pelo `targetDistance` do monstro e nunca lê `strategiesTarget*`. Para um monstro corpo a
+  corpo como o Dragon (`targetDistance <= 1`), o Canary real usa `TARGETSEARCH_RANDOM` fixo no
+  reroll periódico e `TARGETSEARCH_NEAREST` fixo na aquisição — os pesos de `dragon.lua`
+  praticamente nunca entram em jogo, porque nenhum script de monstro do bestiário chama
+  `self:searchTarget()` (conferido com grep em `data-otservbr-global/`) e o ramo
+  `TARGETSEARCH_DEFAULT` só dispara nesse corner case de fuga bloqueada. O Draconya aplica o
+  peso nos dois vencimentos de sempre em vez de reproduzir esse gate estreito porque `chooseTarget`
+  e `#onMonsterTargetChange` não têm (e não vão ganhar só por isto) o equivalente do
+  `followCreature`/`hasFollowPath`/`canUseAttack` do Canary — e porque o efeito pretendido do
+  #541 (Dragon favorecer visivelmente quem tem menos vida ou mais dano nele) precisa acontecer
+  toda vez que o alvo é escolhido, não só numa fuga bloqueada que quase nunca ocorre. É uma regra
+  própria, não a do Tibia (ADR 0037 decisão 1): a MATEMÁTICA do sorteio é fiel ao
+  `MonsterTargetRanker::rank`, o GATILHO que a aciona não é.
 - **Fuga (`monster.runOnHealth`)**: `HP <= runOnHealth` é fugindo (`isMonsterFleeing`,
   `packages/sim/src/monster/monster.ts`) — pura, recalculada a cada decisão a partir do HP atual,
   nunca um booleano guardado à parte. Fugindo, `decideMonsterAction` SEMPRE devolve um passo para
@@ -997,9 +1021,10 @@ paralisia nem invisibilidade, ver CMB-07 "Fora do escopo"), então a imunidade a
 que ser declarada. Pela mesma razão, os flags `canPushItems`/`canPushCreatures` do Canary
 (`monster.flags`) não existem no schema — ficam registrados aqui como o que falta ao motor, não
 implementado por esta issue. A `strategiesTarget` ponderada (nearest 70 % / health 10 % / damage
-10 % / random 10 %) deixou de ser divergência com o #541: `monster.targetStrategy` existe no
-schema, e Dragon/Dragon Lord já declaram os mesmos quatro pesos — ver "Seleção ponderada de
-alvo" acima.
+10 % / random 10 %) deixou de ser divergência de CONTEÚDO com o #541: `monster.targetStrategy`
+existe no schema, e Dragon/Dragon Lord já declaram os mesmos quatro pesos. Continua havendo uma
+divergência de GATILHO — onde o `rankTarget` entra não é onde o Canary real consulta esses pesos
+— ver "Seleção ponderada de alvo" acima.
 
 ## Outcomes avançados: crítico, leech e mana shield (CMB-08, #335)
 
