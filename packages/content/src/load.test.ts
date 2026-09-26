@@ -71,6 +71,15 @@ describe('loadContent', () => {
     expect(content.progression.startingMana).toBeGreaterThanOrEqual(Math.min(...costs));
   });
 
+  it('o teto de stamina real é 12 h, o valor do Huntera (M32-01, #562, ADR 0043 emenda 2026-09-25)', () => {
+    // Era 24 h (86.400.000 ms) antes desta issue — um número nosso sem fonte. A recuperação
+    // fora de hunt segue 1:1, valor PROVISÓRIO (ver `_open` de `stamina/baseline.json`): a
+    // razão real de recuperação passiva do Huntera nunca foi medida.
+    const content = loadContent(DATA);
+    expect(content.stamina.maxMs).toBe(43_200_000);
+    expect(content.stamina.recoveryRatio).toBe(1);
+  });
+
   it('subpasta ausente é conjunto vazio, não erro', () => {
     // O conteúdo cresce por partes; a validação de referência cruzada pega o que faltar.
     const semMonstros = join(dirname(fileURLToPath(import.meta.url)), '..', 'data-parcial');
