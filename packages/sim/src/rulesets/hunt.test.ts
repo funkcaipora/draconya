@@ -3318,6 +3318,26 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     expect(shieldingOf(hero)).toBeNull();
   });
 
+  it('#548 (achado da revisão do PR #642): sob combat-v3 a ORIGEM decide, não o tipo de dano', () => {
+    // O MESMO rato de fogo do teste acima — corpo a corpo (`attackRange: 1`), dano elemental —
+    // mas agora sob `combat-v3`: `blockTypes` (que só aprova `physical`) não é mais quem decide
+    // a elegibilidade do dano em si, é a ORIGEM (`blockable.shield`, a mesma flag que
+    // `resolveBlockHit` usa). Um ataque corpo a corpo elemental É elegível, e o shield tem que
+    // treinar — o oposto do teste v1/v2 acima, de propósito.
+    const fireRat = { ...rat, damageType: 'fire' };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [fireRat], combat: [combatV3] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
   it('não é por TICK: sem ser atacado, a skill fica parada', () => {
     // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move.
     const pacificRat = { ...rat, aggroRadius: 0 };

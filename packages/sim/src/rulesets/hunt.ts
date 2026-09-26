@@ -5114,12 +5114,23 @@ const slots = bot.groups.get(group);
       damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
-    // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
-    // de defesa e o tipo está aprovado. Nunca por tick, nunca por dano aplicado: um bloqueio
-    // total (ou um golpe de 0) ainda é um bloqueio praticado. Ataque elemental não entra.
+    // Shielding sobe pelo USO (CMB-04): uma vez por ataque ELEGÍVEL recebido — há fonte de
+    // defesa e o golpe é do tipo que a defesa aprova. Nunca por tick, nunca por dano aplicado:
+    // um bloqueio total (ou um golpe de 0) ainda é um bloqueio praticado.
+    //
+    // Em `combat-v1`/`v2` "aprova" é por TIPO de dano (`combat.defense.blockTypes`) — a única
+    // coisa que existia antes do `combat-v3`. No `combat-v3` (#548, achado da revisão do PR
+    // #642) a elegibilidade do dano em si já não é por tipo: é por ORIGEM (`blockable.shield`,
+    // a mesma flag que `resolveBlockHit` usa — corpo a corpo bloqueia, magia/distância pura não).
+    // Continuar checando `blockTypes` aqui destreinaria (ou treinaria errado) no dia em que o
+    // catálogo tiver uma ability corpo a corpo elemental — hoje nenhuma tem, então as duas regras
+    // ainda concordam, mas por coincidência do catálogo, não por desenho.
+    const shieldEligible = this.#options.combat.compatibilityProfile === 'combat-v3'
+      ? (outcome.intent.blockable?.shield ?? MELEE_BLOCK_FLAGS.shield)
+      : (this.#options.combat.defense?.blockTypes.includes(ability.damageType) ?? false);
     if (this.#options.combat.defense !== undefined
       && defender.defense !== undefined && defender.defense.kind !== 'none'
-      && this.#options.combat.defense.blockTypes.includes(ability.damageType)) {
+      && shieldEligible) {
       this.#gainSkills(session, character, 'shield-block', 1);
     }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
