@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
 import { effectiveDodge, resolveDamage } from './damage.js';
 import type { DamageIntent } from './damage.js';
-import { FULL_BLOCK_CHARGE } from './block-charge.js';
+import { availableBlockCharges, FULL_BLOCK_CHARGE } from './block-charge.js';
+import type { BlockChargeState } from './block-charge.js';
 import { MAGIC_BLOCK_FLAGS } from './blockhit.js';
 
 const combat: Combat = {
@@ -541,10 +542,32 @@ describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () =
     blockCharge = first.blockCharge as typeof blockCharge;
     const second = resolveDamage(swing, { ...attacker, blockCharge }, 'pve', v3, rng, nowMs);
     blockCharge = second.blockCharge as typeof blockCharge;
-    // As duas cargas já foram gastas — a próxima carga só recarrega 1000 ms DEPOIS de cada
-    // consumo (ver `block-charge.ts`), e ainda estamos no mesmo instante.
-    const [first0, second0] = blockCharge;
-    expect(Math.max(first0, second0)).toBeGreaterThan(nowMs);
+    // As duas cargas já foram gastas — o relógio compartilhado só credita a próxima 1000 ms
+    // DEPOIS do instante em que o banco começou a contar (ver `block-charge.ts`), e ainda estamos
+    // no mesmo instante do golpe.
+    expect(blockCharge.charges).toBe(0);
+    expect(availableBlockCharges(blockCharge, nowMs)).toBe(0);
+  });
+
+  it('achado da revisão do PR #642: o secundário herda a carga que o primário já gastou', () => {
+    // Sem a correção, o secundário rolava o estágio novo contra o `blockCharge` de ENTRADA (como
+    // se o primário nunca tivesse consumido nada), e o `blockCharge` de nível superior — o único
+    // que `applyDamageOutcome` grava de volta (invariante 9) — refletia só o consumo do
+    // primário, perdendo em silêncio o que o secundário gastou por cima.
+    const attacker = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    const composite: DamageIntent = {
+      ...swing, rawDamage: 1_000,
+      secondary: { rawDamage: 500, damageType: 'fire' },
+    };
+    const rng = Rng.fromSeed('v3-composite-charge');
+    const nowMs = 5_000;
+    const result = resolveDamage(
+      composite, { ...attacker, blockCharge: FULL_BLOCK_CHARGE }, 'pve', v3, rng, nowMs,
+    );
+    // O primário sozinho gasta só UMA carga; o secundário, herdando o estado PÓS-primário, gasta
+    // a OUTRA. As duas precisam terminar refletidas no `blockCharge` de nível superior.
+    expect(result.secondaryOutcome?.blockCharge).toEqual(result.blockCharge);
+    expect(availableBlockCharges(result.blockCharge as BlockChargeState, nowMs)).toBe(0);
   });
 
   it('combat-v1/v2 continuam bit a bit — o combat-v3 não toca `resolveMitigation`', () => {

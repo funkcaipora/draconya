@@ -378,6 +378,11 @@ function resolveBlockHitProfile(
 
   const damage = dodged ? afterCrit * combat.dodgeMultiplier : afterCrit;
 
+  // O secundário roda contra o defensor JÁ COM a carga que o primário gastou (#548, achado da
+  // revisão do PR #642): sem isto, o secundário sortearia o estágio novo como se o primário
+  // nunca tivesse consumido nada, e uma carga extra seria descontada em memória sem nunca voltar
+  // ao dono — `applyDamageOutcome` só lê o `blockCharge` de NÍVEL SUPERIOR do outcome (ver
+  // abaixo), então o consumo do secundário tem que terminar ali.
   const secondaryOutcome = intent.secondary === undefined
     ? undefined
     : resolveDamage(
@@ -387,7 +392,7 @@ function resolveBlockHitProfile(
         damageType: intent.secondary.damageType,
         ...(intent.blockable === undefined ? {} : { blockable: intent.blockable }),
       },
-      defender, context, combat, rng, nowMs,
+      { ...defender, blockCharge: blockHit.blockCharge }, context, combat, rng, nowMs,
     );
 
   return {
@@ -404,7 +409,9 @@ function resolveBlockHitProfile(
     critical,
     resolvedDamage: Math.max(0, Math.round(damage)),
     defenseMitigationRemoved: blockHit.mitigationRemoved,
-    blockCharge: blockHit.blockCharge,
+    // O estado que `applyDamageOutcome` grava de volta (invariante 9) tem que refletir o QUE O
+    // SECUNDÁRIO ainda gastou por cima do primário — sem isto, o consumo dele nunca persistiria.
+    blockCharge: secondaryOutcome?.blockCharge ?? blockHit.blockCharge,
     ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
   };
 }

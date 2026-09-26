@@ -9,7 +9,7 @@ import { monsterAttackRange } from '@draconya/content';
 import { Cooldowns } from '../cooldown.js';
 import { Conditions } from '../conditions.js';
 import type { ConditionState } from '../conditions.js';
-import { FULL_BLOCK_CHARGE } from '../combat/block-charge.js';
+import { FULL_BLOCK_CHARGE, isFullBlockCharge } from '../combat/block-charge.js';
 import type { BlockChargeState } from '../combat/block-charge.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
@@ -178,8 +178,7 @@ export class MonsterRuntime {
         ? {}
         : { scheduledDefenses: [...this.scheduledDefenses] }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
-      ...(this.blockCharge[0] === 0 && this.blockCharge[1] === 0
-        ? {} : { blockCharge: this.blockCharge }),
+      ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
     };
   }
 

@@ -141,7 +141,9 @@ describe('resolveBlockHit — ordem e casos de borda', () => {
   });
 
   it('#548: sem carga de bloqueio, a defesa não reduz nada — a armadura continua valendo', () => {
-    const exhausted: BlockChargeState = [1_000, 1_000]; // as duas vagas ocupadas até 1000
+    // O banco no zero, com o relógio ancorado no MESMO instante do golpe: nenhum período de
+    // 1000 ms terminou ainda, então `availableBlockCharges` continua em zero.
+    const exhausted: BlockChargeState = { charges: 0, anchorMs: 500 };
     const rng = scriptedInteger(15 /* só a armadura deveria consumir */);
     const outcome = resolveBlockHit(
       baseInput({ defense: 30, armor: 25, blockCharge: exhausted, nowMs: 500 }), rng,

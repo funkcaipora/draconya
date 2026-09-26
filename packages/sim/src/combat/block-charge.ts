@@ -1,44 +1,94 @@
 // As cargas de bloqueio do `combat-v3` (#548, ADR 0040) — o `blockCount` do
 // `Creature::blockHit` do Canary.
 //
-// O Canary guarda um contador que ganha +1 a cada 1000 ms de `onThink` até um teto de 2, e o
-// estágio de DEFESA (não o de armadura — ver `blockhit.ts`) só reduz o golpe enquanto o contador
-// tem carga. Isso é literalmente "por tick" (`creature.cpp`: `blockTicks += interval; if
-// (blockTicks >= 1000) { blockCount = min(blockCount+1, 2); blockTicks = 0; }`), e o invariante 2
-// proíbe escrever assim aqui — nada soma por tick, tudo é calculado SOB DEMANDA a partir de um
-// valor guardado e do instante do último evento (a mesma disciplina de `stamina.ts`).
+// O Canary guarda um contador ÚNICO, compartilhado pelas duas "vagas" possíveis, que ganha +1 a
+// cada 1000 ms de `onThink` até um teto de 2 (`creature.cpp`: `blockTicks += interval; if
+// (blockTicks >= 1000) { blockCount = min(blockCount+1, 2); blockTicks = 0; }`) — e esse relógio
+// roda INDEPENDENTE de bloqueio nenhum ter acontecido: `Creature::blockHit` (`creature.cpp:944`)
+// só decrementa `blockCount`, nunca toca `blockTicks` nem reinicia o relógio. Isso é literalmente
+// "por tick", e o invariante 2 proíbe escrever assim aqui — nada soma por tick, tudo é calculado
+// SOB DEMANDA a partir de um valor guardado e do instante do último evento (a mesma disciplina de
+// `stamina.ts`, que já resolve um problema formalmente idêntico para um recurso contínuo).
 //
-// O modelo escolhido é equivalente em efeito, não literal: DUAS "vagas" independentes, cada uma
-// um instante absoluto em que volta a ficar pronta. Uma vaga pronta (instante ≤ agora) é uma
-// carga disponível; consumi-la marca a PRÓPRIA vaga como pronta de novo só 1000 ms depois DESTE
-// consumo — não numa fase compartilhada por um relógio de "tick" que roda independente de uso.
-// A diferença entre os dois modelos só aparece num padrão de uso adversarial (bloquear em
-// instantes cuidadosamente espaçados para "roubar" uma carga extra do relógio compartilhado); ela
-// não muda a propriedade que o `Creature::blockHit` documenta e que os vetores do #548 medem: no
-// máximo DUAS cargas disponíveis a qualquer instante, cada uma levando 1000 ms para voltar depois
-// de gasta.
+// A primeira versão deste arquivo (revisão da #548, PR #642) modelava DUAS vagas INDEPENDENTES,
+// cada uma reagendando o PRÓPRIO relógio a partir do instante do PRÓPRIO consumo. Isso é um
+// mecanismo diferente do Canary, não uma reescrita equivalente: o Canary tem um relógio
+// COMPARTILHADO que nunca se importa com quando cada carga foi gasta, então duas cargas gastas em
+// instantes próximos (um padrão comum de combate — dois atacantes, ou um personagem e uma
+// ability de monstro quase juntos) podem voltar no MESMO instante do relógio compartilhado, mais
+// cedo do que qualquer um dos dois consumos "individualmente" devolveria — e um golpe que o
+// Canary ainda bloquearia (o relógio compartilhado já recarregou) o modelo de duas vagas
+// independentes recusava (nenhuma das duas tinha completado os próprios 1000 ms ainda). A
+// diferença NÃO é limitada a um padrão adversarial de RNG — aparece em combate comum com mais de
+// um atacante — por isso a correção: ver `docs/adr/0040-combat-v3-canary-block-hit-pipeline.md`.
 //
-// `FULL_BLOCK_CHARGE` (as duas vagas prontas desde o instante 0) é o estado AUSENTE do snapshot:
-// um personagem ou monstro que nunca bloqueou — ou um snapshot gravado antes desta issue — entra
-// com as duas cargas já disponíveis. Isso reproduz o caso comum do Canary (uma criatura já existe
-// há muito mais que 2000 ms antes do primeiro golpe de uma hunt, então o contador dela já está no
-// teto quando o combate começa) sem precisar guardar o instante de criação de cada defensor.
+// O modelo agora é um banco de cargas (o mesmo desenho de `stamina.ts`, discretizado em passos de
+// 1000 ms em vez de uma taxa contínua): guarda-se quantas cargas já estão CREDITADAS e o instante
+// a partir do qual o relógio ainda não creditou nada — a leitura calcula quantos períodos de
+// 1000 ms terminaram desde ali e credita cada um, até o teto. Consumir uma carga só desconta do
+// banco; o relógio NUNCA reinicia por causa de um consumo — exatamente a propriedade do
+// `blockTicks` do Canary, que continua contando (e "gira em falso" quando o banco já está no
+// teto) independente de quantas vagas alguém gastou nesse meio-tempo.
+//
+// `FULL_BLOCK_CHARGE` (o banco já no teto desde o instante 0) é o estado AUSENTE do snapshot: um
+// personagem ou monstro que nunca bloqueou — ou um snapshot gravado antes desta issue — entra com
+// as duas cargas já disponíveis. Isso reproduz o caso comum do Canary (uma criatura já existe há
+// muito mais que 2000 ms antes do primeiro golpe de uma hunt, então o contador dela já está no
+// teto quando o combate começa) sem precisar guardar o instante de criação de cada defensor — uma
+// simplificação deliberada e documentada, não um efeito colateral do modelo: ela NÃO reproduz o
+// primeiro ~2 s de vida de uma criatura recém-spawnada do Canary (que nasce em `blockCount = 0` e
+// sobe até o teto), e journal de produto nenhum pediu essa janela de vulnerabilidade ainda.
 
-/** Os dois instantes (lógicos, ms) em que cada vaga de bloqueio volta a ficar pronta. */
-export type BlockChargeState = readonly [number, number];
-
-/** As duas cargas já disponíveis desde o instante 0 — o estado de quem nunca bloqueou. */
-export const FULL_BLOCK_CHARGE: BlockChargeState = [0, 0];
-
-/** Quanto tempo uma vaga gasta leva para voltar a ficar pronta, depois do consumo. */
-const BLOCK_CHARGE_REFILL_MS = 1_000;
+/** Quantas cargas estão banco, e desde quando o relógio ainda não creditou nenhuma nova. */
+export interface BlockChargeState {
+  /** Cargas já creditadas e não gastas, sempre em `[0, MAX_BLOCK_CHARGES]`. */
+  readonly charges: number;
+  /** O instante (lógico, ms) a partir do qual o próximo crédito de 1000 ms ainda não contou. */
+  readonly anchorMs: number;
+}
 
 /** O teto de cargas simultâneas — o `min(blockCount + 1, 2)` do Canary. */
 export const MAX_BLOCK_CHARGES = 2;
 
+/** Quanto tempo o relógio compartilhado leva para creditar UMA carga nova, até o teto. */
+const BLOCK_CHARGE_REFILL_MS = 1_000;
+
+/** O banco já no teto desde o instante 0 — o estado de quem nunca bloqueou. */
+export const FULL_BLOCK_CHARGE: BlockChargeState = { charges: MAX_BLOCK_CHARGES, anchorMs: 0 };
+
+/**
+ * `true` quando o estado é BIT A BIT o default (`FULL_BLOCK_CHARGE`) — o que `character.ts` e
+ * `monster.ts` usam para OMITIR o campo do snapshot (o construtor já repõe o default sozinho na
+ * ausência). Comparação exata, não "equivalente em efeito": um banco no teto com o relógio
+ * deslocado (`anchorMs` diferente de 0) carrega fase que reconstruir do default perderia.
+ */
+export function isFullBlockCharge(state: BlockChargeState): boolean {
+  return state.charges === FULL_BLOCK_CHARGE.charges && state.anchorMs === FULL_BLOCK_CHARGE.anchorMs;
+}
+
+/**
+ * Dobra os períodos de 1000 ms já COMPLETOS desde `anchorMs` para dentro do banco, sem nunca
+ * ultrapassar o teto — o `blockTicks >= 1000` do Canary, calculado sob demanda em vez de somado a
+ * cada `onThink`. Devolve o MESMO objeto quando nenhum período terminou ainda, para quem chama
+ * poder detectar "nada mudou" por igualdade de referência (a mesma convenção que a versão
+ * anterior deste arquivo já usava).
+ */
+function credit(state: BlockChargeState, nowMs: number): BlockChargeState {
+  const elapsedMs = nowMs - state.anchorMs;
+  if (elapsedMs < BLOCK_CHARGE_REFILL_MS) return state;
+  const periods = Math.floor(elapsedMs / BLOCK_CHARGE_REFILL_MS);
+  return {
+    charges: Math.min(MAX_BLOCK_CHARGES, state.charges + periods),
+    // O relógio avança pelos períodos INTEIROS que já creditou, mesmo quando o banco já estava
+    // no teto — a fase nunca reinicia por causa do teto, a mesma coisa que o `blockTicks` do
+    // Canary faz ao resetar para 0 todo período, esteja `blockCount` no teto ou não.
+    anchorMs: state.anchorMs + periods * BLOCK_CHARGE_REFILL_MS,
+  };
+}
+
 /** Quantas cargas estão disponíveis agora. Pura: não escreve nada, só lê o estado guardado. */
 export function availableBlockCharges(state: BlockChargeState, nowMs: number): number {
-  return state.reduce((count, readyAtMs) => count + (readyAtMs <= nowMs ? 1 : 0), 0);
+  return credit(state, nowMs).charges;
 }
 
 /** O resultado de consumir uma carga: o estado NOVO (a devolver a quem escreve) e se havia carga. */
@@ -48,16 +98,14 @@ export interface BlockChargeConsumption {
 }
 
 /**
- * Consome uma carga, se houver. Pura a menos de nada — sem RNG, sem tempo de parede: só aranha e
- * devolve o estado NOVO, que é quem chama (a etapa que escreve recurso, `applyDamageOutcome`)
- * quem grava de volta no personagem ou monstro dono (invariante 9).
+ * Consome uma carga, se houver. Pura a menos de nada — sem RNG, sem tempo de parede: só credita o
+ * que o relógio já rendeu e devolve o estado NOVO, que é quem chama (a etapa que escreve recurso,
+ * `applyDamageOutcome`) quem grava de volta no personagem ou monstro dono (invariante 9).
  *
  * Sem carga disponível, o estado devolvido é o MESMO objeto recebido — nada a escrever.
  */
 export function consumeBlockCharge(state: BlockChargeState, nowMs: number): BlockChargeConsumption {
-  const index = state.findIndex((readyAtMs) => readyAtMs <= nowMs);
-  if (index < 0) return { state, hadCharge: false };
-  const next: [number, number] = [state[0] as number, state[1] as number];
-  next[index] = nowMs + BLOCK_CHARGE_REFILL_MS;
-  return { state: next, hadCharge: true };
+  const credited = credit(state, nowMs);
+  if (credited.charges <= 0) return { state, hadCharge: false };
+  return { state: { charges: credited.charges - 1, anchorMs: credited.anchorMs }, hadCharge: true };
 }

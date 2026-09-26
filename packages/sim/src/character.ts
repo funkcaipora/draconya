@@ -3,7 +3,7 @@
 
 import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
-import { FULL_BLOCK_CHARGE } from './combat/block-charge.js';
+import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import type { BlockChargeState } from './combat/block-charge.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
@@ -443,8 +443,7 @@ export class CharacterRuntime {
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
       // Como `conditions`: omitido quando ainda vale `FULL_BLOCK_CHARGE` (nunca bloqueou), para
       // não inflar todo snapshot existente com dois zeros que o construtor já repõe sozinho.
-      ...(this.blockCharge[0] === 0 && this.blockCharge[1] === 0
-        ? {} : { blockCharge: this.blockCharge }),
+      ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
     };
   }
 
