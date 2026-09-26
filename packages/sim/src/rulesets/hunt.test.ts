@@ -8336,6 +8336,33 @@ describe('monstro evita campo que não pode atravessar (M29-05)', () => {
     // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4.
     expect(monster?.position.x).toBeLessThan(4);
   });
+
+  it('o tique de um campo que ele PODE pisar (veneno) também concede a passagem pelo fogo que o prende (achado da revisão do #650)', () => {
+    // O rato só recusa FOGO (`canWalkOnFire: false`) — veneno (`earth`) continua livre, e é
+    // exatamente onde ele está PARADO, preso atrás da parede de fogo. Nenhuma wand, nenhum
+    // herói perto: o ÚNICO dano deste teste é o tique periódico do próprio campo de veneno, pelo
+    // caminho de `HuntRuleset#applyConditionTick`/`#onFieldTick` — não `#applyHits`/`#land`.
+    const puddleOfPoison: FieldSpec = {
+      id: 'puddle', durationMs: 9_999_999,
+      shape: { shape: 'beam', length: 1 },
+      condition: {
+        key: 'poisoned', merge: 'refresh', durationMs: 9_999_999,
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 1_000, intervalMs: 500, damage: 5 }], damageType: 'earth',
+        },
+      },
+    };
+    const { session, ruleset } = setup(false);
+    // `beam` de comprimento 1 partindo de (4,0) rumo ao sul cobre só (4,1) — o tile do próprio
+    // monstro —, sem tocar nenhum dos dois tiles da parede de fogo na coluna x=3.
+    ruleset.applyField(session, puddleOfPoison, { x: 4, y: 0, z: 7 });
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4 — o mesmo
+    // mecanismo do teste da wand acima, agora armado pelo tique de campo, não por um golpe.
+    expect(monster?.position.x).toBeLessThan(4);
+  });
 });
 
 describe('outcomes avançados na hunt (CMB-08)', () => {
