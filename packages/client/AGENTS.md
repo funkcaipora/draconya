@@ -355,6 +355,10 @@ pnpm tsx scripts/make-sheet-fixture.ts
   explorador não tem sessão, não tem `selfId` e não importa `net/` (invariante 4). O cache é LRU
   por setor (`DEFAULT_SECTOR_BUDGET`, 512 ≈ 100 MB de heap medido). A rota só existe em
   desenvolvimento ou com `VITE_WORLD_EXPLORER=true` (`worldExplorerEnabled`).
+  **Minimapa e mapa-múndi (#662)** são canvas 2D, sem Pixi (`shell/WorldMaps.tsx`): blocos PNG de
+  256 px em seis níveis (`world/minimap.ts` é o contrato e a conta de coordenadas; `pnpm
+  map:minimap` pinta a partir da cor de automapa, `AppearanceFlags.automapColor`, campo 30). O
+  índice diz quais blocos existem, e bloco que não existe nunca é pedido.
 - **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
   puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
   inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit

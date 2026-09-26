@@ -119,6 +119,17 @@ export interface AppearanceFlags {
   readonly lyingObject: boolean;
   readonly animateAlways: boolean;
   readonly fullbank: boolean;
+  /**
+   * `AppearanceFlagLight` (23): o brilho (raio em tiles) e a cor na paleta de 216 cores do Tibia.
+   * Ausente é objeto que não ilumina. Lido para a luz do explorador do mundo (#666).
+   */
+  readonly lightIntensity?: number;
+  readonly lightColor?: number;
+  /**
+   * `AppearanceFlagAutomap.color` (30): a cor do objeto no minimapa, na mesma paleta de 216.
+   * Ausente é objeto que não aparece no minimapa. Lido pelo minimapa do mundo (#662).
+   */
+  readonly automapColor?: number;
 }
 
 /** Aparência sem nenhuma flag lida — o que uma sem o campo 3 devolve, e o que um teste usa. */
@@ -264,7 +275,18 @@ function readAppearanceFlags(reader: Reader): AppearanceFlags {
       if (elevation !== undefined) flags.elevation = elevation;
       continue;
     }
-    // Mercado, NPC, cyclopedia, vocação, luz, minimapa e o que vier: pulados.
+    if (field === 23) {
+      const light = readVarintPair(reader.slice());
+      if (light.first !== undefined && light.first > 0) flags.lightIntensity = light.first;
+      if (light.second !== undefined) flags.lightColor = light.second;
+      continue;
+    }
+    if (field === 30) {
+      const color = readSingleVarint(reader.slice(), 1);
+      if (color !== undefined && color > 0) flags.automapColor = color;
+      continue;
+    }
+    // Mercado, NPC, cyclopedia, vocação e o que vier: pulados.
     reader.skip(wire);
   }
 
