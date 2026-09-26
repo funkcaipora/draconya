@@ -1,5 +1,5 @@
 import {
-  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -790,5 +790,204 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     expect(content.vocations.get('paladin')?.spellSkill).toBe('distance');
     expect(content.vocations.get('sorcerer')?.spellSkill).toBe('magic');
     expect(content.vocations.get('druid')?.spellSkill).toBe('magic');
+  });
+});
+
+// O catálogo importado do Canary (ADR 0038, #572): `generated/` é o que `pnpm catalog:import`
+// escreve, `overrides/` é a correção nossa por cima. Cada teste copia o conteúdo real para um
+// diretório temporário e acrescenta só o arquivo que o cenário precisa — o resto do repositório
+// continua carregando do jeito de sempre, e é isso que prova que a mudança é aditiva.
+describe('loadContent — generated/ e overrides/ (ADR 0038)', () => {
+  function withCopy(mutate: (dir: string) => void, assert: (dir: string) => void): void {
+    const dir = mkdtempSync(join(tmpdir(), 'draconya-content-catalog-'));
+    try {
+      cpSync(DATA, dir, { recursive: true });
+      mutate(dir);
+      assert(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Um item novo precisa de uma linha em `appearances.items` (FUN-94) — sem isso `buildContent`
+   * reprova por falta de aparência, e não pelo que o teste quer provar. Reaproveita o id da
+   * "cheese" (3607): já existe no inventário do pacote 1332, e o teste não fala de arte.
+   */
+  function givePlaceholderAppearance(dir: string, itemId: string): void {
+    const path = join(dir, 'appearances', 'baseline.json');
+    const baseline = JSON.parse(readFileSync(path, 'utf8')) as { items: Record<string, number> };
+    baseline.items[itemId] = 3607;
+    writeFileSync(path, JSON.stringify(baseline, null, 2));
+  }
+
+  it('items/generated/<fatia>.json: um array vira várias entidades no catálogo', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'generated'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'generated', 'imported.json'), JSON.stringify([
+          { id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1 },
+          { id: 'imported-b', name: 'Imported B', kind: 'other', weight: 2, value: 2 },
+        ]));
+        givePlaceholderAppearance(dir, 'imported-a');
+        givePlaceholderAppearance(dir, 'imported-b');
+      },
+      (dir) => {
+        const content = loadContent(dir);
+        expect(content.items.get('imported-a')?.name).toBe('Imported A');
+        expect(content.items.get('imported-b')?.weight).toBe(2);
+      },
+    );
+  });
+
+  it('items/generated/<fatia>.json com o bloco "source" por entidade (ADR 0038 decisão 2) carrega — schema estrito não recusa a proveniência', () => {
+    // A mesma forma que `scripts/catalog/generated-writer.ts` (`CatalogEntity`) escreve de
+    // verdade: `source: { engine, commit, path }` embutido em CADA entidade. `itemSchema` é
+    // `z.strictObject` — sem um campo `source` explícito, isto derrubaria o boot na primeira
+    // entidade que #573 gerar.
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'generated'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'generated', 'imported.json'), JSON.stringify([
+          {
+            id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1,
+            source: { engine: 'canary', commit: 'a'.repeat(40), path: 'items.xml' },
+          },
+        ]));
+        givePlaceholderAppearance(dir, 'imported-a');
+      },
+      (dir) => {
+        const content = loadContent(dir);
+        expect(content.items.get('imported-a')?.name).toBe('Imported A');
+      },
+    );
+  });
+
+  it('id duplicado entre AUTORAL e GERADO falha no boot', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'generated'), { recursive: true });
+        // "backpack" já existe como arquivo autoral (items/backpack.json) — o gerado não pode
+        // reintroduzir o mesmo id.
+        writeFileSync(join(dir, 'items', 'generated', 'dup.json'), JSON.stringify([
+          { id: 'backpack', name: 'Backpack (do gerado)', kind: 'other', weight: 1, value: 1 },
+        ]));
+      },
+      (dir) => {
+        expect(() => loadContent(dir)).toThrow(/item "backpack" duplicado/);
+      },
+    );
+  });
+
+  it('overrides/*.json aplica o patch por cima da entidade autoral, com reason exigida', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'overrides', 'backpack-weight.json'), JSON.stringify({
+          id: 'backpack', reason: 'teste: confere que o override muda o peso', patch: { weight: 999 },
+        }));
+      },
+      (dir) => {
+        const content = loadContent(dir);
+        const backpack = content.items.get('backpack');
+        expect(backpack?.weight).toBe(999);
+        // O resto da entidade continua o mesmo — o patch é RASO, não substitui o objeto inteiro.
+        expect(backpack?.name).toBe('Backpack');
+      },
+    );
+  });
+
+  it('overrides/*.json também corrige uma entidade GERADA (não só autoral)', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'generated'), { recursive: true });
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'generated', 'imported.json'), JSON.stringify([
+          { id: 'imported-a', name: 'Imported A', kind: 'other', weight: 1, value: 1 },
+        ]));
+        givePlaceholderAppearance(dir, 'imported-a');
+        writeFileSync(join(dir, 'items', 'overrides', 'imported-a-value.json'), JSON.stringify({
+          id: 'imported-a', reason: 'teste: TibiaWiki dá outro preço', patch: { value: 42 },
+        }));
+      },
+      (dir) => {
+        expect(loadContent(dir).items.get('imported-a')?.value).toBe(42);
+      },
+    );
+  });
+
+  it('override SEM "reason" falha — toda correção precisa de motivo (ADR 0038 decisão 3)', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'overrides', 'sem-motivo.json'), JSON.stringify({
+          id: 'backpack', patch: { weight: 999 },
+        }));
+      },
+      (dir) => {
+        expect(() => loadContent(dir)).toThrow(/sem "reason"/);
+      },
+    );
+  });
+
+  it('override SEM "patch" falha', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'overrides', 'sem-patch.json'), JSON.stringify({
+          id: 'backpack', reason: 'teste',
+        }));
+      },
+      (dir) => {
+        expect(() => loadContent(dir)).toThrow(/sem "patch"/);
+      },
+    );
+  });
+
+  it('override para um id que não existe (nem autoral, nem gerado) falha — correção órfã', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'overrides', 'orfao.json'), JSON.stringify({
+          id: 'nao-existe-de-verdade', reason: 'teste', patch: { weight: 1 },
+        }));
+      },
+      (dir) => {
+        expect(() => loadContent(dir)).toThrow(/override para "nao-existe-de-verdade"/);
+      },
+    );
+  });
+
+  it('override que é um ARRAY (não objeto) falha — a forma é sempre {id, reason, patch}', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'overrides', 'array.json'), JSON.stringify([
+          { id: 'backpack', reason: 'teste', patch: { weight: 1 } },
+        ]));
+      },
+      (dir) => {
+        expect(() => loadContent(dir)).toThrow(/precisa ser um objeto/);
+      },
+    );
+  });
+
+  it('dois overrides para o MESMO id se aplicam em sequência, em ordem de nome de arquivo', () => {
+    withCopy(
+      (dir) => {
+        mkdirSync(join(dir, 'items', 'overrides'), { recursive: true });
+        writeFileSync(join(dir, 'items', 'overrides', '1-weight.json'), JSON.stringify({
+          id: 'backpack', reason: 'teste 1', patch: { weight: 111 },
+        }));
+        writeFileSync(join(dir, 'items', 'overrides', '2-value.json'), JSON.stringify({
+          id: 'backpack', reason: 'teste 2', patch: { value: 222 },
+        }));
+      },
+      (dir) => {
+        const backpack = loadContent(dir).items.get('backpack');
+        expect(backpack?.weight).toBe(111);
+        expect(backpack?.value).toBe(222);
+      },
+    );
   });
 });

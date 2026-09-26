@@ -55,7 +55,31 @@ export function loadContent(dir: string): Content {
   });
 }
 
+/**
+ * Um diretório de conteúdo (`data/items`, `data/monsters`, …): arquivo autoral direto, mais
+ * `generated/` e `overrides/` quando existem (ADR 0038) — o importador de catálogo escreve a
+ * primeira, um humano escreve a segunda, e as duas convivem SEM se sobrescrever.
+ *
+ * `generated/<fatia>.json` é sempre um array (`pnpm catalog:import`, ver `scripts/catalog/`);
+ * um arquivo autoral costuma ser UMA entidade, mas também aceita array — regra única, sem
+ * depender de em qual pasta o arquivo está. Id repetido entre autoral e gerado é erro (FUN-*
+ * de sempre): `parseAll`, em `content.ts`, já recusa duplicata na lista achatada que sai daqui,
+ * sem precisar de checagem própria neste módulo.
+ *
+ * `overrides/*.json` NUNCA entra na lista achatada como entidade nova — cada arquivo é uma
+ * correção `{ id, reason, patch }` aplicada por cima da entidade (autoral ou gerada) de mesmo
+ * id. É assim que uma reimportação nunca apaga uma correção em silêncio (ADR 0038 decisão 3):
+ * o dado gerado continua sendo a transcrição PURA do Canary, e a correção é reaplicada toda vez
+ * que o conteúdo é carregado, não uma vez só na hora de gerar.
+ */
 function readJsonDir(dir: string): unknown[] {
+  const entities = [...readJsonFiles(dir), ...readJsonFiles(join(dir, 'generated'))];
+  applyOverrides(dir, entities);
+  return entities;
+}
+
+/** Lê todo `*.json` de um diretório; array vira várias entidades, objeto vira uma. */
+function readJsonFiles(dir: string): unknown[] {
   let names: string[];
   try {
     names = readdirSync(dir).filter((n) => n.endsWith('.json')).sort();
@@ -64,14 +88,84 @@ function readJsonDir(dir: string): unknown[] {
     // validação de referência cruzada já pega o que faltar de verdade.
     return [];
   }
-  return names.map((name) => {
+  const entities: unknown[] = [];
+  for (const name of names) {
     const caminho = join(dir, name);
+    let parsed: unknown;
     try {
-      return JSON.parse(readFileSync(caminho, 'utf8'));
+      parsed = JSON.parse(readFileSync(caminho, 'utf8'));
     } catch (erro) {
       throw new Error(`${caminho}: JSON inválido — ${(erro as Error).message}`);
     }
-  });
+    if (Array.isArray(parsed)) entities.push(...(parsed as unknown[]));
+    else entities.push(parsed);
+  }
+  return entities;
+}
+
+interface OverridePatch {
+  readonly id: string;
+  readonly reason: string;
+  readonly patch: Record<string, unknown>;
+}
+
+/** Um `overrides/*.json`: `{ id, reason, patch }`, sempre os três — nunca um campo a menos. */
+function readOverride(path: string): OverridePatch {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (erro) {
+    throw new Error(`${path}: JSON inválido — ${(erro as Error).message}`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${path}: override precisa ser um objeto { id, reason, patch }`);
+  }
+  const record = parsed as Record<string, unknown>;
+  const { id, reason, patch } = record;
+  if (typeof id !== 'string' || id === '') {
+    throw new Error(`${path}: override sem "id"`);
+  }
+  if (typeof reason !== 'string' || reason.trim() === '') {
+    // O motivo obrigatório É a decisão (ADR 0038 decisão 3): sem ele, uma correção vira número
+    // sem explicação, indistinguível de erro de digitação na próxima revisão.
+    throw new Error(`${path}: override de "${id}" sem "reason" — toda correção exige motivo (ADR 0038 decisão 3)`);
+  }
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+    throw new Error(`${path}: override de "${id}" sem "patch" (objeto com os campos a corrigir)`);
+  }
+  return { id, reason, patch: patch as Record<string, unknown> };
+}
+
+/**
+ * Aplica cada `overrides/*.json` de `dir` por cima da entidade de mesmo id em `entities`,
+ * MUTANDO o objeto no lugar — `entities` já reflete a correção quando a função devolve. Override
+ * para um id que não existe (nem autoral, nem gerado) é erro: uma correção órfã normalmente
+ * significa que o id mudou ou a entidade sumiu, nunca é caso de simplesmente ignorar.
+ */
+function applyOverrides(dir: string, entities: readonly unknown[]): void {
+  const overridesDir = join(dir, 'overrides');
+  let names: string[];
+  try {
+    names = readdirSync(overridesDir).filter((n) => n.endsWith('.json')).sort();
+  } catch {
+    return;
+  }
+  if (names.length === 0) return;
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const entity of entities) {
+    if (typeof entity !== 'object' || entity === null || Array.isArray(entity)) continue;
+    const id = (entity as Record<string, unknown>)['id'];
+    if (typeof id === 'string') byId.set(id, entity as Record<string, unknown>);
+  }
+  for (const name of names) {
+    const path = join(overridesDir, name);
+    const override = readOverride(path);
+    const target = byId.get(override.id);
+    if (target === undefined) {
+      throw new Error(`${path}: override para "${override.id}", que não existe em ${dir} (nem autoral, nem gerado)`);
+    }
+    Object.assign(target, override.patch);
+  }
 }
 
 /**

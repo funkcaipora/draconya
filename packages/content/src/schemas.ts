@@ -24,6 +24,25 @@ export const DAMAGE_TYPES = [
 export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /**
+ * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
+ * engine, commit e arquivo do Canary/TFS o número saiu — o mesmo `CatalogSource` que
+ * `scripts/catalog/generated-writer.ts` grava por entidade em `<tipo>/generated/*.json`, e o
+ * mesmo espírito do `source` que `tilemapSchema` já declara para o mapa importado (ADR 0025
+ * decisão 3). Opcional: só entidade GERADA carrega isto — uma autoral não tem `source` porque
+ * nasceu aqui, não foi importada.
+ *
+ * Precisa ser um campo EXPLÍCITO em cada schema que hospeda entidade gerada, e não um `_open`
+ * qualquer: todo schema de entidade (`itemSchema`, `monsterSchema`, `ammunitionSchema`, …) é
+ * `z.strictObject`, e chave não declarada derruba o boot na primeira entidade gerada de
+ * verdade — exatamente o motivo de `tilemapSchema` já declarar o dela.
+ */
+export const catalogSourceSchema = z.object({
+  engine: z.enum(['canary', 'forgottenserver']),
+  commit: z.string().min(1),
+  path: z.string().min(1),
+});
+
+/**
  * O perfil de mitigação de uma entidade (CMB-03): o que ela RESISTE e ao que é IMUNE.
  *
  * `resistances` é uma fração por tipo, no intervalo `[-1, 1)` aprovado na emenda do ADR 0031:
@@ -689,6 +708,8 @@ export const itemSchema = z.strictObject({
   ringEffect: ringEffectSchema.optional(),
   /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
   effect: consumableEffectSchema.optional(),
+  /** De onde um item IMPORTADO veio (ADR 0038 decisão 2). Ausente em item autorado à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
   // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
@@ -966,6 +987,8 @@ export const ammunitionSchema = z.strictObject({
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),
+  /** De onde uma munição IMPORTADA veio (ADR 0038 decisão 2). Ausente em munição autorada à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 });
 
@@ -1352,6 +1375,8 @@ export const monsterSchema = z.strictObject({
    * no determinismo; senão registrar como divergência").
    */
   staticAttack: z.number().min(0).max(1).optional(),
+  /** De onde um monstro IMPORTADO veio (ADR 0038 decisão 2). Ausente em monstro autorado à mão. */
+  source: catalogSourceSchema.optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
   _open: z.string().optional(),
 });
