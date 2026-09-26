@@ -76,7 +76,7 @@ import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction 
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
-  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
+  MonsterRuntime, canMonsterEnterField, chooseTarget, decideMonsterAction, isMonsterFleeing, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { rankTarget } from '../monster/target-strategy.js';
@@ -4072,6 +4072,10 @@ const slots = bot.groups.get(group);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe. Um
       // `manadrain` sai daqui com `healthDamage: 0` sempre — a vida do monstro nunca se move.
       const applied = applyDamageOutcome(monster, outcome, character, 1, false, targetsAffected);
+      // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
+      // (`lastStepBlocked`) concede UMA passagem pelo campo que o prendia — nunca de graça, e
+      // nunca ao andar livre. Zero de dano (`chance: 0`/overkill de mira que já matou) não arma.
+      if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
       // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied.healthDamage);
@@ -4346,6 +4350,11 @@ const slots = bot.groups.get(group);
     );
     const applied = applyDamageOutcome(target, outcome, null);
     recordDamage(target.contribution, attacker, applied.healthDamage);
+    // O bypass de campo (M29-05) — o mesmo mecanismo de `#applyHits`/`#land`, agora para o tique
+    // de condição/campo: no Canary TODO dano passa por um único cano (`Creature::drainHealth`),
+    // então um monstro preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto
+    // preso atrás de um de veneno) também ganha a passagem temporária pelo campo que o prende.
+    if (target.lastStepBlocked && applied.healthDamage > 0) target.ignoresFieldDamage = true;
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
@@ -5129,16 +5138,32 @@ const slots = bot.groups.get(group);
     const prey: readonly Prey[] = session.participants;
     monster.targetId = chooseTarget(monster, prey, definition, session.rng);
     const target = findById(prey, monster.targetId);
-    const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
+    const action = decideMonsterAction(
+      monster, target, definition, this.#blockedForMonster(monster, definition),
+    );
+    // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
+    // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
+    monster.lastStepBlocked = target !== null && target.alive && action.kind === 'idle';
 
     // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
     // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
     // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119). `retreat` (#542,
     // manter distância) pisa o tile do MESMO jeito que `step` — a diferença entre os dois é só
     // de onde a decisão veio, não de como o passo em si é executado.
+    //
+    // O `ignoresFieldDamage` só é CONSUMIDO depois deste `#step` (achado da revisão do #650), não
+    // antes: `#step` revalida o campo do destino final para um monstro, e precisa ver o MESMO
+    // bypass que `#blockedForMonster` acabou de usar para aprovar `action.to` — resetar antes
+    // apagaria a concessão bem na hora em que o commit precisa dela. O bypass continua valendo
+    // por UMA decisão só, tenha sido usado ou não: é exatamente por isso que o reset abaixo
+    // roda sempre, incondicionalmente, depois do passo.
     const result = action.kind === 'step' || action.kind === 'retreat'
       ? this.#step(session, monster, action.to, subject)
       : null;
+    // O bypass de campo (M29-05) vale por UMA decisão — a que acabou de rodar, tenha usado ou
+    // não —, e é consumido aqui, como o Canary o gasta no primeiro recálculo de caminho depois
+    // de concedido (`Monster::doWalkBack`/`doFollowCreature`).
+    monster.ignoresFieldDamage = false;
     const cadence = result !== null && result.ok
       ? result.durationMs
       : movementDuration(this.#world, monster, monster.position, this.#at(monster));
@@ -5552,11 +5577,24 @@ const slots = bot.groups.get(group);
    * `getRandomStep` quando o passo primário falha, e nenhum dos dois passa de novo por
    * `Creature::getNextStep`/`onWalk` — o sorteio é UM por DECISÃO de movimento, nunca um por
    * tentativa física de chegar lá.
+   *
+   * Para um MONSTRO, o campo é revalidado aqui, no COMMIT — não só na decisão (M29-05, achado da
+   * revisão do #650): `decideMonsterAction` já filtrou os candidatos com `#blockedForMonster`,
+   * mas o destino que chega até aqui pode ter sido REESCRITO depois da decisão (o desvio de
+   * embriaguez do #558, logo acima) sem passar de novo por aquele predicado — e `move()`/`canOccupy` não
+   * conhecem `Fields`, porque são genéricos e servem a Cidade também. Sem esta segunda checagem,
+   * qualquer reescrita futura do destino bastaria para pisar num campo que o monstro não pode
+   * cruzar, quebrando o invariante que esta issue existe para estabelecer.
    */
   #step<P extends GridPoint>(
     session: Session, mover: Movable<P>, to: P, creatureId: string, rollDrunk = true,
   ): MoveResult {
     const target = rollDrunk ? this.#drunkTarget(session, mover, to) : to;
+    // O campo é conferido no destino FINAL — depois do desvio de drunk, que pode ter trocado o
+    // tile aprovado pela decisão (M29-05, achado da revisão do #650).
+    if (mover instanceof MonsterRuntime && this.#monsterFieldBlocked(mover, target)) {
+      return { ok: false, reason: 'tile-blocked' };
+    }
     const result = move(this.#world, mover, target);
     if (result.ok) {
       // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
@@ -5995,6 +6033,9 @@ const slots = bot.groups.get(group);
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
     const applied = applyDamageOutcome(monster, outcome, character);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
+    // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
+    // pelo caminho de golpe corpo a corpo/wand.
+    if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
     this.#markCombatActive(session, character.id);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
@@ -7212,6 +7253,56 @@ const slots = bot.groups.get(group);
   #blockedFor(mover: Movable<GridPoint>): Blocked {
     this.#mover = mover;
     return this.#moverBlocked;
+  }
+
+  /**
+   * `#blockedFor`, mas ACRESCENTA o campo (M29-05, TFS `Monster::canWalkOnFieldType`): um tile
+   * com campo de fogo/veneno/energia que o MONSTRO não pode pisar conta como bloqueado — para o
+   * passo guloso E para a fuga (#518), porque as duas passam por este ÚNICO predicado dentro de
+   * `decideMonsterAction`. Só monstro: o jogador pode entrar em qualquer campo (e leva o dano),
+   * então nenhum call site de personagem usa isto.
+   *
+   * UMA closure reaproveitada com o monstro e a definição capturados em campo mutável — o mesmo
+   * desenho de `#moverBlocked`, e pela mesma razão: isto roda até três vezes por passo de cada
+   * monstro, e uma closure nova por vencimento é o coletor rodando o tempo todo com 5.000
+   * instâncias.
+   */
+  #fieldMonster: MonsterRuntime | null = null;
+  #fieldDefinition: Monster | null = null;
+  readonly #fieldProbe = { x: 0, y: 0, z: 0 };
+
+  /** O predicado de campo isolado (M29-05) — compartilhado pela decisão e pelo commit abaixo. */
+  #fieldBlocksMonster(monster: MonsterRuntime, definition: Monster, x: number, y: number): boolean {
+    this.#fieldProbe.x = x;
+    this.#fieldProbe.y = y;
+    this.#fieldProbe.z = this.#floorOf(monster);
+    const field = this.#fields.at(this.#fieldProbe);
+    return !canMonsterEnterField(definition, monster.ignoresFieldDamage, field);
+  }
+
+  readonly #monsterBlocked: Blocked = (x, y) => {
+    if (this.#moverBlocked(x, y)) return true;
+    return this.#fieldBlocksMonster(this.#fieldMonster as MonsterRuntime, this.#fieldDefinition as Monster, x, y);
+  };
+
+  #blockedForMonster(monster: MonsterRuntime, definition: Monster): Blocked {
+    this.#mover = monster;
+    this.#fieldMonster = monster;
+    this.#fieldDefinition = definition;
+    return this.#monsterBlocked;
+  }
+
+  /**
+   * SÓ o campo do destino, revalidado no COMMIT do passo (`#step`, achado da revisão do #650) —
+   * ver o comentário lá. Busca a própria definição do monstro em vez de reaproveitar
+   * `#fieldDefinition`: não depende de `#blockedForMonster` ter rodado antes na mesma decisão, e
+   * por isso continua correto mesmo que o destino tenha sido reescrito por outra coisa depois
+   * dela.
+   */
+  #monsterFieldBlocked(monster: MonsterRuntime, to: GridPoint): boolean {
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return false;
+    return this.#fieldBlocksMonster(monster, definition, to.x, to.y);
   }
 
   /**

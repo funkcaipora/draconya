@@ -381,6 +381,24 @@ describe('crítico e leech de item e de monstro (M30-04, #551)', () => {
   });
 });
 
+describe('canWalkOnFire/Poison/Energy (M29-05)', () => {
+  it('ausentes são `true` — o default do Canary, identidade do rato', () => {
+    const content = buildContent(base());
+    const monster = content.monsters.get('rat');
+    expect(monster?.canWalkOnFire).toBe(true);
+    expect(monster?.canWalkOnPoison).toBe(true);
+    expect(monster?.canWalkOnEnergy).toBe(true);
+  });
+
+  it('aceita `false` por tipo, independente dos outros dois', () => {
+    const avoidsFire = { ...rat, id: 'avoids-fire', name: 'Avoids Fire', canWalkOnFire: false };
+    const content = buildContent(base({ monsters: [rat, avoidsFire] }));
+    expect(content.monsters.get('avoids-fire')).toMatchObject({
+      canWalkOnFire: false, canWalkOnPoison: true, canWalkOnEnergy: true,
+    });
+  });
+});
+
 describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
   const withMitigation = (mitigation: unknown) => base({ monsters: [{ ...rat, mitigation }] });
 

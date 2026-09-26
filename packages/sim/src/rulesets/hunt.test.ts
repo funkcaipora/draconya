@@ -8541,6 +8541,123 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
   });
 });
 
+describe('monstro evita campo que não pode atravessar (M29-05)', () => {
+  // HP absurdo de propósito: o teste mede se ele SE MOVE, não se ele sobrevive à wand.
+  const fieldRat = { ...rat, id: 'field-rat', name: 'Field Rat', health: 100_000, canWalkOnFire: false };
+  // Rota mínima, SEM o herói passar perto do monstro: ele fica preso entre (1,1) e (2,1),
+  // sempre a 2 ou 3 tiles do monstro em (4,1) — nunca ao alcance do desarmado (1). O objetivo é
+  // isolar "o monstro tomou dano PRESO", sem o herói chegar perto o bastante para brigar corpo
+  // a corpo por acidente ao andar a rota inteira do resto do arquivo.
+  const stuckRoute = {
+    id: 'stuck-route', mapId: 'arena',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    spawnPoints: [{ routeIndex: 0 }],
+  };
+  const stuckHunt = {
+    ...hunt, routeId: 'stuck-route',
+    difficulties: {
+      cautious: {
+        monsterCount: 1, composition: [{ monsterId: 'field-rat', weight: 1 }], respawnDelayMs: 30_000,
+      },
+      bold: {
+        monsterCount: 1, composition: [{ monsterId: 'field-rat', weight: 1 }], respawnDelayMs: 30_000,
+      },
+    },
+  };
+  // Alcance 3, o bastante para bater no monstro PRESO sem o herói precisar se aproximar.
+  const rangeWand = {
+    id: 'range-wand', name: 'Range Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
+    weapon: { kind: 'wand', range: 3, manaPerHit: 5, damage: { min: 30, max: 30 }, damageType: 'physical' },
+  };
+  const wallOfFire: FieldSpec = {
+    id: 'wall', durationMs: 9_999_999,
+    shape: { shape: 'beam', length: 3 },
+    condition: {
+      key: 'burning', merge: 'refresh', durationMs: 9_999_999,
+      effect: {
+        kind: 'damage-over-time', form: 'rounds',
+        // Intervalo enorme: o tique do CAMPO nunca vence dentro da janela do teste — o único
+        // dano que pode armar o bypass é o da wand, nunca o do próprio campo.
+        rounds: [{ count: 1, intervalMs: 9_999_999, damage: 1 }], damageType: 'fire',
+      },
+    },
+  };
+
+  /**
+   * Um monstro `canWalkOnFire: false` em (4,1), rumo ao herói a oeste: o passo guloso tenta
+   * (3,1) [primário], (3,0) [vizinho horário — já é parede do MAPA] e (3,2) [anti-horário]. Um
+   * `beam` de 3 tiles partindo de (3,0) para o sul cobre exatamente (3,1) e (3,2) — as DUAS
+   * tentativas que a parede do mapa não cobre sozinha —, deixando o monstro sem NENHUMA rota.
+   */
+  const setup = (armed: boolean) => {
+    const loaded = content({
+      monsters: [fieldRat], routes: [stuckRoute], hunts: [stuckHunt],
+      items: armed ? [...items, rangeWand] : items,
+    });
+    const { session, hero, ruleset } = start({
+      loaded,
+      ...(armed ? {
+        inventory: {
+          backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'range-wand', quantity: 1 } },
+        },
+      } : {}),
+    });
+    if (armed) { hero.mana = 10_000; hero.maxMana = 10_000; }
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { x: 4, y: 1, z: 7 };
+    ruleset.applyField(session, wallOfFire, { x: 3, y: 0, z: 7 });
+    return { session, hero, ruleset };
+  };
+
+  it('sem arma de alcance, o herói nunca alcança o monstro preso — ele fica atrás do fogo para sempre', () => {
+    const { session, ruleset } = setup(false);
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Só o `x` importa: o monstro pode oscilar em y dentro da própria coluna sem NUNCA cruzar a
+    // parede (em x=3), e é isso — não a posição inteira — que prova que ele não atravessou.
+    expect(monster?.position.x).toBe(4);
+    expect(monster?.lastStepBlocked).toBe(true);
+    expect(monster?.ignoresFieldDamage).toBe(false);
+  });
+
+  it('com uma wand de alcance 3, o dano à distância concede UMA passagem pelo fogo (TFS/Canary `ignoreFieldDamage`)', () => {
+    const { session, ruleset } = setup(true);
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4.
+    expect(monster?.position.x).toBeLessThan(4);
+  });
+
+  it('o tique de um campo que ele PODE pisar (veneno) também concede a passagem pelo fogo que o prende (achado da revisão do #650)', () => {
+    // O rato só recusa FOGO (`canWalkOnFire: false`) — veneno (`earth`) continua livre, e é
+    // exatamente onde ele está PARADO, preso atrás da parede de fogo. Nenhuma wand, nenhum
+    // herói perto: o ÚNICO dano deste teste é o tique periódico do próprio campo de veneno, pelo
+    // caminho de `HuntRuleset#applyConditionTick`/`#onFieldTick` — não `#applyHits`/`#land`.
+    const puddleOfPoison: FieldSpec = {
+      id: 'puddle', durationMs: 9_999_999,
+      shape: { shape: 'beam', length: 1 },
+      condition: {
+        key: 'poisoned', merge: 'refresh', durationMs: 9_999_999,
+        effect: {
+          kind: 'damage-over-time', form: 'rounds',
+          rounds: [{ count: 1_000, intervalMs: 500, damage: 5 }], damageType: 'earth',
+        },
+      },
+    };
+    const { session, ruleset } = setup(false);
+    // `beam` de comprimento 1 partindo de (4,0) rumo ao sul cobre só (4,1) — o tile do próprio
+    // monstro —, sem tocar nenhum dos dois tiles da parede de fogo na coluna x=3.
+    ruleset.applyField(session, puddleOfPoison, { x: 4, y: 0, z: 7 });
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4 — o mesmo
+    // mecanismo do teste da wand acima, agora armado pelo tique de campo, não por um golpe.
+    expect(monster?.position.x).toBeLessThan(4);
+  });
+});
+
 describe('outcomes avançados na hunt (CMB-08)', () => {
   // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
   // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.

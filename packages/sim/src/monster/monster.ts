@@ -4,8 +4,9 @@
 // objetivo do MVP — e não é economia de esforço: previsível é o que deixa o jogador planejar,
 // e é o que faz uma hunt AFK render sem supervisão.
 
-import type { Monster } from '@draconya/content';
+import type { DamageType, Monster } from '@draconya/content';
 import { monsterAttackRange } from '@draconya/content';
+import type { TileFieldState } from '../fields.js';
 import { Cooldowns } from '../cooldown.js';
 import { Conditions } from '../conditions.js';
 import type { ConditionState } from '../conditions.js';
@@ -88,6 +89,29 @@ export interface MonsterState {
    * issue. Sem bump de `SNAPSHOT_FORMAT_VERSION`, como `conditions`.
    */
   readonly blockCharge?: BlockChargeState;
+  /**
+   * A última decisão de movimento (`decideMonsterAction`) tinha alvo vivo e não achou passo —
+   * nem aproximando, nem fugindo (M29-05). É o dado que `HuntRuleset#land`/`#applyHits` consulta
+   * ao aplicar dano: apanhar preso arma `ignoresFieldDamage` — a mesma condição do TFS/Canary
+   * `Monster::drainHealth` (`!hasFollowPath && getFollowCreature()`), sem o ramo de passo
+   * aleatório porque este motor não tem um monstro "andando à toa" sem alvo (ver o comentário de
+   * `ignoresFieldDamage`). Ausente é `false` — o monstro que nunca ficou preso, ou snapshot
+   * anterior a esta issue. Precisa sobreviver ao snapshot: perder o valor na reconexão faria uma
+   * hunt retomada esquecer que estava presa no exato instante em que um golpe chegaria.
+   */
+  readonly lastStepBlocked?: boolean;
+  /**
+   * O bypass TEMPORÁRIO de campo do TFS/Canary (M29-05, `Monster::ignoreFieldDamage`,
+   * `monster.cpp` perto de 2536): true faz o predicado de bloqueio (`HuntRuleset
+   * #blockedForMonster`) ignorar `canWalkOnFire/Poison/Energy` por UMA decisão de movimento — a
+   * mesma que o consome e o zera de volta (`#onMonsterStep`), como o Canary o gasta no primeiro
+   * recálculo de caminho depois de concedido. Armado só quando o monstro leva dano ESTANDO preso
+   * (`lastStepBlocked`) — nunca ao andar livre, e nunca por si só sem dano, o que preservaria um
+   * monstro preso para sempre atrás de um campo que ele não pode atravessar (o comportamento
+   * CERTO, e o que os dois testes sem dano do `hunt.test.ts`/`monster.test.ts` prendem). Ausente
+   * é `false` — precisa sobreviver ao snapshot pela mesma razão de `lastStepBlocked`.
+   */
+  readonly ignoresFieldDamage?: boolean;
 }
 
 /**
@@ -170,6 +194,10 @@ export class MonsterRuntime {
    * invariante 9) — ver `MonsterState.blockCharge`.
    */
   blockCharge: BlockChargeState;
+  /** Ver `MonsterState.lastStepBlocked` (M29-05). Escrito só por `HuntRuleset#onMonsterStep`. */
+  lastStepBlocked: boolean;
+  /** Ver `MonsterState.ignoresFieldDamage` (M29-05). */
+  ignoresFieldDamage: boolean;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -188,6 +216,8 @@ export class MonsterRuntime {
     this.scheduledSummons = new Set(state.scheduledSummons ?? []);
     this.conditions = Conditions.fromState(state.conditions);
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
+    this.lastStepBlocked = state.lastStepBlocked ?? false;
+    this.ignoresFieldDamage = state.ignoresFieldDamage ?? false;
   }
 
   get alive(): boolean {
@@ -231,6 +261,8 @@ export class MonsterRuntime {
         : { scheduledSummons: [...this.scheduledSummons] }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
       ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
+      ...(this.lastStepBlocked ? { lastStepBlocked: true } : {}),
+      ...(this.ignoresFieldDamage ? { ignoresFieldDamage: true } : {}),
     };
   }
 
@@ -327,6 +359,39 @@ export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): 
   return definition.runOnHealth !== undefined
     && monster.alive
     && monster.health <= definition.runOnHealth;
+}
+
+/**
+ * O tipo de dano de um campo, quando ele CAUSA dano ao longo do tempo (CMB-07). Um campo de
+ * outro efeito (velocidade, cura) não tem `damageType` — nunca conta para `canWalkOnFieldType`,
+ * porque o Tibia só tem o par `canWalkOn*` para fogo/veneno/energia (o resto do switch do TFS/
+ * Canary devolve sempre `true`).
+ */
+function fieldDamageType(field: TileFieldState): DamageType | null {
+  return field.condition.effect.kind === 'damage-over-time' ? field.condition.effect.damageType : null;
+}
+
+/**
+ * O monstro pode pisar neste campo (M29-05, TFS `Monster::canWalkOnFieldType`/`Tile::queryAdd`,
+ * Canary `monster.cpp:196-206`)? Sem campo, ou campo sem tipo de dano associado (cura,
+ * velocidade), sempre pode — só fogo/veneno/energia têm o par `canWalkOn*` correspondente.
+ * Imune ao tipo do campo, sempre pode, como o Canary (`!monster->isImmune(combatType)` guarda a
+ * checagem inteira). `ignoresFieldDamage` é o bypass TEMPORÁRIO (`MonsterState.
+ * ignoresFieldDamage`) que uma decisão de movimento consome inteiro, sem olhar o tipo — a mesma
+ * concessão incondicional do `monster->getIgnoreFieldDamage()` do Canary.
+ */
+export function canMonsterEnterField(
+  definition: Monster, ignoresFieldDamage: boolean, field: TileFieldState | null,
+): boolean {
+  if (field === null || ignoresFieldDamage) return true;
+  const damageType = fieldDamageType(field);
+  if (damageType === null || definition.mitigation.immunities.has(damageType)) return true;
+  switch (damageType) {
+    case 'fire': return definition.canWalkOnFire;
+    case 'earth': return definition.canWalkOnPoison;
+    case 'energy': return definition.canWalkOnEnergy;
+    default: return true;
+  }
 }
 
 /**

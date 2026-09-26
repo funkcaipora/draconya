@@ -1772,6 +1772,24 @@ export const monsterSchema = z.strictObject({
    * o Canary de fato faz; por isso não há `criticalDamage` aqui.
    */
   critChance: z.number().int().min(0).max(100).default(0),
+  /**
+   * Pode pisar em campo de FOGO mesmo sem ser imune a `fire` (M29-05, TFS `Monster::
+   * canWalkOnFieldType`/`Tile::queryAdd`, Canary `monsters.hpp:150`, `canWalkOnFire`)? Ausente é
+   * `true` — o default do próprio Canary, e o que preserva rato/rotworm/Dragon/Dragon Lord (os
+   * quatro monstros de hoje declaram `true`, ou não declaram nada — `dragon.lua`/`dragon_lord.
+   * lua`, conferidos em 2026-09-25). `false` é a EXCEÇÃO real (632/1601 no bestiário do Canary):
+   * o passo guloso e a fuga (`monster/step.ts`) tratam um tile com campo de fogo como bloqueado
+   * para quem declara `false` e não é imune a `fire` — a base de um Fire Field/GFB controlar
+   * posição de monstro.
+   */
+  canWalkOnFire: z.boolean().default(true),
+  /**
+   * O mesmo, para campo de VENENO — TFS/Canary `canWalkOnPoison`. O elemento do Tibia aqui é
+   * `earth` (CMB-03: `terra→canWalkOnPoison`), não um tipo `poison` à parte.
+   */
+  canWalkOnPoison: z.boolean().default(true),
+  /** O mesmo, para campo de ENERGIA — TFS/Canary `canWalkOnEnergy`. */
+  canWalkOnEnergy: z.boolean().default(true),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
   /**
