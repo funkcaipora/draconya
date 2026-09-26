@@ -306,32 +306,43 @@ function resolveMitigation(
 }
 
 /**
- * O pipeline de recebimento do `combat-v3` (#548, M30-01; ADR 0040) — o `Creature::blockHit` do
- * Canary, na ordem:
+ * O pipeline de recebimento do `combat-v3` (#548, M30-01; #551, M30-04; ADR 0040) — o
+ * `Creature::blockHit` do Canary, na ordem:
  *
  *   1. uma única rolagem de Dodge, SEMPRE consumida, primeiro ato (INALTERADO do v1/v2: o Tibia
  *      nega o golpe inteiro ANTES de chamar `blockHit`, a mesma posição que o Draconya já usa —
  *      ver o `Skill dodge (ruse)` de `Game::combatChangeHealth`);
- *   2. imunidade explícita, defesa com `blockCount` e faixa, armadura em faixa e mitigação
- *      percentual — o estágio NOVO, `resolveBlockHit` (`blockhit.ts`), que substitui o bloqueio
- *      binário do CMB-04 inteiro (defesa) e a subtração flat de armadura do CMB-02/03;
- *   3. resistência/vulnerabilidade por tipo (CMB-03, `mitigation.resistances`) — INTOCADO, e
+ *   2. crítico (CMB-08, M30-04), quando o intent declara o modificador — na GERAÇÃO do dano,
+ *      ANTES do `blockHit`: é onde o Canary de fato rola (`Combat::applyExtensions`, chamado de
+ *      `getCombatDamage`/`doCombat`, roda ANTES de `Creature::blockHit` multiplicar
+ *      `damage.primary.value`). O multiplicador incide sobre o PODER BRUTO, e o que segue
+ *      (imunidade, defesa, armadura, mitigação) age sobre o dano JÁ com o bônus — um crítico não
+ *      é "desperdiçado" por imunidade, porque o Canary também não sabe de imunidade neste ponto:
+ *      `applyExtensions` só olha o ATACANTE, nunca o alvo. Esta é a correção do M30-04: a
+ *      posição anterior (depois da mitigação inteira) era um placeholder documentado como tal —
+ *      nenhum teste a travava, e nenhum conteúdo real declarava `combat.modifiers` ainda;
+ *   3. imunidade explícita, defesa com `blockCount` e faixa, armadura em faixa e mitigação
+ *      percentual — o estágio `resolveBlockHit` (`blockhit.ts`), que substitui o bloqueio
+ *      binário do CMB-04 inteiro (defesa) e a subtração flat de armadura do CMB-02/03, agora
+ *      sobre o dano JÁ crítico;
+ *   4. resistência/vulnerabilidade por tipo (CMB-03, `mitigation.resistances`) — INTOCADO, e
  *      continua um estágio à parte: o Canary a resolve como absorção percentual (o PRIMEIRO
  *      estágio de `blockHit`, fora do escopo do #548, M30-05), e o Draconya já tinha este
  *      mecanismo antes desta issue — não duplicado aqui, só reposicionado depois do estágio
  *      novo por não ter razão para vir antes dele;
- *   4. piso (`minimumDamageFraction`), sobre o PODER BRUTO — mantido como salvaguarda de
- *      PRODUTO do Draconya (nunca existiu no Canary: lá um bloqueio pode legitimamente zerar um
- *      golpe). Pulado quando IMUNE — o piso nunca revoga imunidade explícita;
- *   5. crítico (CMB-08), quando o intent declara o modificador — REPOSICIONADO para depois da
- *      mitigação inteira (era o 3º sorteio, entre defesa e armadura, no v1/v2): crítico e leech
- *      são o M30-04, ainda não implementado para o `combat-v3`, e nenhum conteúdo real declara
- *      `combat.modifiers` hoje — mover o multiplicador para o fim evita fatiar o estágio novo
- *      (que decide "pular armadura" olhando o dano JÁ com defesa aplicada) sem mudar resultado
- *      nenhum observável ainda. Decisão registrada para revisão no M30-04;
+ *   5. piso (`minimumDamageFraction`), sobre o PODER BRUTO ORIGINAL (sem o crítico) — mantido
+ *      como salvaguarda de PRODUTO do Draconya (nunca existiu no Canary: lá um bloqueio pode
+ *      legitimamente zerar um golpe, e o crítico não existe no Canary como conceito de "piso").
+ *      Pulado quando IMUNE — o piso nunca revoga imunidade explícita;
  *   6. corte do Dodge, se a rolagem ativou;
  *   7. arredondamento só no fim, com piso em zero;
- *   8. componente secundário (#473), se declarado — mesma regra do v1/v2.
+ *   8. componente secundário (#473), se declarado — mesma regra do v1/v2, e o secundário
+ *      continua SEM crítico nem leech próprios (`intent` sintetizado não herda `modifiers`).
+ *
+ * O LEECH (M30-04) não mora aqui: ele opera sobre o HP EFETIVAMENTE removido, não sobre o
+ * `DamageOutcome`, e por isso é aplicado depois — em `applyDamageOutcome`/`applyLeech`
+ * (`combat/outcome.ts`/`combat/modifiers.ts`) —, dividido por `targetsAffected` pela fórmula do
+ * Canary (`Game::calculateLeechAmount`).
  *
  * As cargas de bloqueio (`blockCharge`) do resultado são as NOVAS — quem aplica o outcome
  * (`applyDamageOutcome`, CMB-08) as grava de volta no personagem ou monstro dono (invariante 9);
@@ -348,9 +359,22 @@ function resolveBlockHitProfile(
   // Idêntico ao v1/v2: primeiro ato, sempre consumido.
   const dodged = rng.chance(effectiveDodge(defender, context));
 
+  // Crítico (M30-04): o SEGUNDO sorteio, na GERAÇÃO do dano — ANTES do `blockHit`, a mesma
+  // posição do Canary (ver o comentário da função). Declarado com `chance: 0`, ainda consome —
+  // a mesma regra aditiva do bloqueio (ADR 0031); ausente, nenhum sorteio novo e o resultado é
+  // bit a bit o de sempre.
+  const criticalModifier = intent.modifiers?.critical;
+  const critical = criticalModifier !== undefined && rng.chance(criticalModifier.chance);
+  const criticalRawDamage = critical
+    ? intent.rawDamage * (criticalModifier?.multiplier ?? 1)
+    : intent.rawDamage;
+
   const immune = defender.mitigation?.immunities.has(intent.damageType) ?? false;
   const blockHit = resolveBlockHit({
-    rawDamage: intent.rawDamage,
+    // O dano JÁ crítico entra no estágio de bloqueio — defesa, armadura e o "pular armadura
+    // quando a defesa absorveu tudo" decidem sobre o número que o alvo de fato recebe, não
+    // sobre o poder bruto sem o bônus.
+    rawDamage: criticalRawDamage,
     damageType: intent.damageType,
     immune,
     blockable: intent.blockable ?? MELEE_BLOCK_FLAGS,
@@ -369,17 +393,13 @@ function resolveBlockHitProfile(
   const resistance = defender.mitigation?.resistances[intent.damageType] ?? 0;
   const afterResistance = blockHit.damage * (1 - resistance);
 
-  // Piso, sobre o PODER BRUTO — como no v1/v2 — mas nunca revogando imunidade explícita.
+  // Piso, sobre o PODER BRUTO ORIGINAL (sem o crítico) — como no v1/v2 — mas nunca revogando
+  // imunidade explícita. O crítico é bônus do atacante; o piso é a garantia de que nem a maior
+  // mitigação zera o golpe BASE, e as duas coisas não precisam se multiplicar juntas.
   const minimumDamage = intent.rawDamage * combat.minimumDamageFraction;
   const afterFloor = immune ? 0 : Math.max(minimumDamage, afterResistance);
 
-  // Crítico: mesma regra de consumo do v1/v2 (rola só quando declarado, mesmo com chance 0),
-  // reposicionado para depois da mitigação inteira — ver o comentário da função.
-  const criticalModifier = intent.modifiers?.critical;
-  const critical = criticalModifier !== undefined && rng.chance(criticalModifier.chance);
-  const afterCrit = critical ? afterFloor * (criticalModifier?.multiplier ?? 1) : afterFloor;
-
-  const damage = dodged ? afterCrit * combat.dodgeMultiplier : afterCrit;
+  const damage = dodged ? afterFloor * combat.dodgeMultiplier : afterFloor;
 
   // O secundário roda contra o defensor JÁ COM a carga que o primário gastou (#548, achado da
   // revisão do PR #642): sem isto, o secundário sortearia o estágio novo como se o primário

@@ -235,6 +235,13 @@ const items = [
     id: 'sharp-hat', name: 'Sharp Hat', kind: 'armor', slot: 'head',
     weight: 1, value: 0, bonuses: { skill: { skillId: 'melee', amount: 20 } },
   },
+  // Crítico e leech de EQUIPAMENTO (M30-04, #551): 100 % de chance, +100 % de dano e 50 % de
+  // life leech — números redondos para os testes medirem sem depender de sorteio.
+  {
+    id: 'crit-leech-ring', name: 'Crit Leech Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0,
+    combatModifiers: { criticalChance: 10_000, criticalDamage: 10_000, lifeLeech: 5_000 },
+  },
 ];
 
 // A munição é ABSTRATA (ADR 0026 d.3): sem item, sem pilha, sem peso. Cada tiro debita o preço.
@@ -1724,6 +1731,8 @@ const withSpells = (
     spells?: readonly unknown[]; items?: readonly unknown[]; supplies?: readonly unknown[];
     monsters?: boolean;
     combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
+    /** Equipamento inicial (M30-04, #551) — ausente é o herói nu de sempre. */
+    inventory?: InventoryState;
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -1754,6 +1763,7 @@ const withSpells = (
     level: 1, xp: 0, vocationId: null,
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
+    ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset, content: loaded };
@@ -8392,6 +8402,113 @@ describe('outcomes avançados na hunt (CMB-08)', () => {
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
       .toBe(false);
+  });
+
+  // M30-04 (#551): a MESMA mecânica, agora pelo EQUIPAMENTO (`Inventory.combatModifiers`), não
+  // pelo `combat.modifiers` estático do conteúdo — a fonte real que o item catalogado usa.
+  const critLeechInventory: InventoryState = {
+    backpack: [],
+    equipped: { finger: { instanceId: 'r1', itemId: 'crit-leech-ring', quantity: 1 } },
+  };
+
+  it('anel de crítico/leech (item, M30-04) tem o MESMO efeito do `combat.modifiers` estático', () => {
+    // Desarmado 25 ×2 (crit-leech-ring) = 50, a vida do rato: um golpe, e o leech de 50 % repõe
+    // 25 — os mesmos números do teste do `combat.modifiers`, agora vindos do equipamento.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, items: [...items], inventory: critLeechInventory,
+      monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    const before = hero.health;
+    run(session, 5_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.bestBasicHit).toBeGreaterThanOrEqual(50);
+    expect(hero.health).toBe(before + 25);
+    const healed = ofKind(session.drainEvents(), 'creature-healed')
+      .filter((e) => e.source === 'leech');
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed[0]).toMatchObject({ creatureId: 'hero', amount: 25 });
+  });
+
+  it('tirar o anel apaga o crítico/leech — o bônus é só enquanto VESTIDO', () => {
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, items: [...items], inventory: critLeechInventory,
+      monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    });
+    hero.inventory.unequip('finger', { backpackSlots: 0, satchelSlots: 10, row: 1 });
+    const before = hero.health;
+    run(session, 3_000, 100);
+    // Sem o anel, o golpe desarmado é 25 — nunca crítico, e sem leech nenhum.
+    expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
+      .toBe(false);
+    expect(hero.health).toBe(before);
+  });
+
+  it('a magia TAMBÉM rola o crítico do equipamento (M30-04) — não só o golpe básico', () => {
+    // `strike` (fire, poder 40) ×2 pelo anel = 80 num rato tanque, sem armadura: TODO golpe de
+    // magia crítica exatamente 80 — a chance é 100 %, então nenhum sai a 40.
+    const { session } = withSpells(botConfig({
+      attack: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' } }],
+    }), {
+      health: 100, mana: 1_000, items: [...items], inventory: critLeechInventory,
+      monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    });
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const hits = ofKind(events, 'creature-hit')
+      .filter((e) => String(e.creatureId).startsWith('m:') && e.source === 'spell');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.amount === 80)).toBe(true);
+  });
+
+  // `attackPower: 0` (só nestes dois testes, via `over.combat`) desliga o auto-ataque
+  // desarmado (`#armPlayerAttack`, sempre ativo — Tibia ataca corpo a corpo independente da
+  // rotação de magia do bot): sem isso, o golpe desarmado também criticaria com o mesmo anel e
+  // misturaria leech de outra origem nos mesmos eventos, cada vez maior conforme a skill
+  // `melee` sobe de nível durante a corrida. Zerado, ele nunca aplica dano e nunca gera leech —
+  // só a magia (`blast`) permanece.
+  const noMeleeCombat = [{ ...combat, player: { ...combat.player, attackPower: 0 } }];
+
+  it('leech de UM alvo (magia) é a identidade — fator (0,1×1+0,9)/1 = 1', () => {
+    const blastRule = {
+      when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
+      do: { kind: 'spell' as const, spellId: 'blast' },
+    };
+    const { session } = withSpells(botConfig({ attack: [blastRule] }), {
+      health: 100, mana: 2_000, items: [...items], inventory: critLeechInventory,
+      combat: noMeleeCombat, monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    }, 'cautious');
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const healed = ofKind(events, 'creature-healed').filter((e) => e.source === 'leech');
+    // O MESMO anel também critica (M30-04): 80 de `blast` ×2 = 160 de dano aplicado. Leech
+    // 50 % × fator 1 (um alvo só) = 80, sempre — cada lançamento acerta o mesmo alvo único.
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed.every((e) => e.amount === 80)).toBe(true);
+  });
+
+  it('leech de TRÊS alvos (magia em área) usa o fator do Canary, NÃO uma divisão simples', () => {
+    // `blast` (poder 80, raio 2) na dificuldade "bold": três ratos no mesmo ponto de nascimento,
+    // todos no raio (o mesmo cenário do teste "o maior hit de magia é POR ALVO"). O MESMO anel
+    // também critica: 80 ×2 = 160 de dano aplicado POR ALVO. O fator para n=3 é
+    // (0,1×3+0,9)/3 = 0,4, não 1/3 ≈ 0,333 — cada golpe de 160×50 % rende 32, não ~26,7.
+    const blastRule = {
+      when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
+      do: { kind: 'spell' as const, spellId: 'blast' },
+    };
+    const { session } = withSpells(botConfig({ attack: [blastRule] }), {
+      health: 100, mana: 2_000, items: [...items], inventory: critLeechInventory,
+      combat: noMeleeCombat, monstersRaw: [{ ...rat, attack: 0, health: 1_000_000 }],
+    }, 'bold');
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const healed = ofKind(events, 'creature-healed').filter((e) => e.source === 'leech');
+    // Um evento de leech POR ALVO, sempre 32 — nunca 26 (o quociente ingênuo de 160×50 %/3).
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed.every((e) => e.amount === 32)).toBe(true);
   });
 });
 describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {

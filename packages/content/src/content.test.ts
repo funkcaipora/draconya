@@ -314,6 +314,73 @@ describe('combat-v3: defesa/armadura/mitigação do blockHit (#548, M30-01)', ()
   });
 });
 
+describe('crítico e leech de item e de monstro (M30-04, #551)', () => {
+  const espada = {
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
+    slot: 'hand', weight: 50, value: 0, attack: 24, requires: { level: 15 },
+  };
+
+  it('item sem combatModifiers é o de sempre — o campo fica ausente', () => {
+    const content = buildContent(base({ items: [espada] }));
+    expect(content.items.get('spike-sword')?.combatModifiers).toBeUndefined();
+  });
+
+  it('item aceita combatModifiers em pontos-base (os números do wand of darkness, #43)', () => {
+    const wand = {
+      ...espada, id: 'wand-of-darkness', name: 'Wand of Darkness',
+      combatModifiers: { criticalChance: 1000, criticalDamage: 3500 },
+    };
+    const content = buildContent(base({ items: [wand] }));
+    expect(content.items.get('wand-of-darkness')?.combatModifiers)
+      .toEqual({ criticalChance: 1000, criticalDamage: 3500 });
+  });
+
+  it('lifeLeech/manaLeech também são pontos-base, e os quatro campos são independentes', () => {
+    const ring = {
+      ...espada, id: 'grand-sanguine-ring', name: 'Grand Sanguine Ring', kind: 'ring', slot: 'finger',
+      combatModifiers: { lifeLeech: 1000, manaLeech: 500 },
+    };
+    const content = buildContent(base({ items: [ring] }));
+    expect(content.items.get('grand-sanguine-ring')?.combatModifiers)
+      .toEqual({ lifeLeech: 1000, manaLeech: 500 });
+  });
+
+  it('combatModifiers negativo, não inteiro, ou criticalChance acima de 10000, derrubam o boot', () => {
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { criticalChance: -1 } }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { lifeLeech: 1.5 } }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { criticalChance: 10_001 } }],
+    }))).toThrow(ContentError);
+  });
+
+  it('combatModifiers é `strictObject` — chave desconhecida (a `criticalhitchance` do XML) derruba', () => {
+    expect(() => buildContent(base({
+      items: [{ ...espada, combatModifiers: { criticalhitchance: 1000 } }],
+    }))).toThrow(ContentError);
+  });
+
+  it('monster.critChance é opcional, default 0 (identidade de rato/rotworm/dragon/dragon-lord)', () => {
+    const content = buildContent(base());
+    expect(content.monsters.get('rat')?.critChance).toBe(0);
+  });
+
+  it('monster.critChance aceita o número do Canary (antenna.lua: critChance 10)', () => {
+    const boss = { ...rat, id: 'antenna', name: 'Antenna', critChance: 10 };
+    const content = buildContent(base({ monsters: [rat, boss] }));
+    expect(content.monsters.get('antenna')?.critChance).toBe(10);
+  });
+
+  it('critChance fora de [0, 100], ou não inteiro, derrubam o boot', () => {
+    expect(() => buildContent(base({ monsters: [{ ...rat, critChance: -1 }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, critChance: 101 }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, critChance: 1.5 }] }))).toThrow(ContentError);
+  });
+});
+
 describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
   const withMitigation = (mitigation: unknown) => base({ monsters: [{ ...rat, mitigation }] });
 

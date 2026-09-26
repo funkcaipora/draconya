@@ -454,5 +454,16 @@ entre arquivos resolvem.
   `buildContent` exige pelo menos um dos dois; uma `condition` de defesa só aceita `type:
   'haste'` (o self-haste do Doom Deer), nunca `paralyze` — uma defesa que se paralisa sozinha
   não é o mecanismo que o bestiário observado usa.
+- **`item.combatModifiers` é pontos-base (×10000); `monster.critChance` é PERCENTUAL** (M30-04,
+  #551) — unidades DIFERENTES de propósito, cada uma a escala do campo correspondente no Canary
+  (`items.xml` já usa ×10000; o Lua do monstro usa `critChance = 10` direto). Quem soma os dois
+  em pontos-base é o `sim` (`Inventory.combatModifiers`/`monsterCriticalModifiers`,
+  `combat/modifiers.ts`), não este pacote — `content` só valida a forma. `lifeleechchance`/
+  `manaleechchance` do Canary (`items.xml`) NÃO têm campo aqui: `Game::calculateLeechAmount` só
+  lê a skill AMOUNT, e o próprio Canary as pula na descrição do item — são vestigiais, sem
+  consumidor na resolução de dano (a pergunta do `_open` do #548 "conferir se a chance ainda é
+  lida" está respondida: não é). Nenhum item ou monstro do catálogo real declara os campos novos
+  ainda — os quatro monstros do bestiário (rat, rotworm, dragon, dragon lord) ficam no default
+  `critChance: 0`, a identidade; só 6 bosses do Canary declaram, fora do recorte hoje.
 
 Issue: FUN-8.

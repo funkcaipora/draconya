@@ -15,11 +15,14 @@
 // cuida do LANÇADOR: portão, custo e cooldown.
 
 import { matchesVocationRequirement } from '@draconya/content';
-import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
+import type {
+  Combat, CompiledMitigation, DamageModifiers, Spell, SpellFormula, Supply,
+} from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
+import { rollSharedCriticalOutcome } from './combat/modifiers.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
 
@@ -285,6 +288,17 @@ export function castSpell(
    * ADR 0035 d.10).
    */
   recipient: CharacterRuntime = caster,
+  /**
+   * Os modificadores avançados do LANÇADOR (CMB-08; M30-04, #551): crítico do equipamento
+   * vestido (`Inventory.combatModifiers`) somado ao `combat.modifiers` estático, se houver
+   * (`HuntRuleset#attackerModifiers`). Ausente é o de sempre — nenhum sorteio novo, resultado
+   * bit a bit — porque quem monta o intent aqui é EXTERNO ao catálogo (este arquivo não conhece
+   * `Inventory`), e magia sem atacante equipado (a fixture de teste, por exemplo) não precisa
+   * declarar nada. O Canary rola crítico para QUALQUER combate do jogador — magia inclusive
+   * (`Combat::applyExtensions`, chamado de `doCombat`/`doAreaCombatHealth`, não só do golpe
+   * básico) —, e é isso que este parâmetro passa adiante para `resolveDamage`.
+   */
+  modifiers: DamageModifiers | undefined = undefined,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -351,6 +365,12 @@ export function castSpell(
       // (`combat/baseline.json`) — não motor. A postura (Swift Foot, Protector) multiplica o
       // poder ANTES da armadura, como faz com o golpe.
       const dealt = caster.conditions.damageDealtScale('spell');
+      // O crítico é da AÇÃO, não do alvo (achado da revisão do #551/#653): `Combat::
+      // applyExtensions` do Canary rola uma vez por `doCombat`/`doAreaCombatHealth` inteiro, e
+      // TODO alvo da mesma magia em área compartilha o mesmo resultado. Rolar aqui, ANTES do
+      // laço, e forçar o mesmo resultado em cada `resolveDamage` por alvo (via
+      // `rollSharedCriticalOutcome`) é o que impede um alvo criticar e outro não na MESMA magia.
+      const actionModifiers = rollSharedCriticalOutcome(modifiers, rng);
       const hits: number[] = [];
       let total = 0;
       for (let i = 0; i < targets.length; i += 1) {
@@ -362,6 +382,10 @@ export function castSpell(
             // Magia não bloqueia por defesa nem armadura no `combat-v3` (#548) — o default de
             // `CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ignorado em v1/v2.
             blockable: MAGIC_BLOCK_FLAGS,
+            // O crítico do LANÇADOR (M30-04, #551): o mesmo `DamageModifiers` do golpe básico —
+            // o Canary rola para qualquer combate do jogador, magia inclusive — já com o
+            // resultado da AÇÃO fixado acima, não um sorteio novo por alvo.
+            ...(actionModifiers === undefined ? {} : { modifiers: actionModifiers }),
           },
           {
             armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
@@ -492,6 +516,11 @@ export function useSupply(
    * que faz o uso trancar o grupo como o lançamento de magia.
    */
   nowMs?: number,
+  /**
+   * Os modificadores avançados do USUÁRIO (M30-04, #551, CMB-08) — só a runa de ataque os lê;
+   * ver o comentário do mesmo parâmetro em `castSpell`.
+   */
+  modifiers?: DamageModifiers,
 ): CastResult {
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
@@ -519,6 +548,9 @@ export function useSupply(
     const paidFromStockDamage = hasStockDamage && spendStock(user, supply.id);
     if (!paidFromStockDamage) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
+    // O crítico é da AÇÃO (a mesma correção de `castSpell`, #551/#653): uma runa de área rola o
+    // crítico UMA vez, e cada alvo herda o mesmo resultado via `rollSharedCriticalOutcome`.
+    const actionModifiers = rollSharedCriticalOutcome(modifiers, rng);
     const hits: number[] = [];
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
@@ -535,6 +567,7 @@ export function useSupply(
         {
           rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
           blockable: MAGIC_BLOCK_FLAGS,
+          ...(actionModifiers === undefined ? {} : { modifiers: actionModifiers }),
         },
         {
           armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,

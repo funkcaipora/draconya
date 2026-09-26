@@ -344,6 +344,8 @@ expectativa.
 | Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
 | Shielding — início, curva (base), defesa por nível | 10 / 100 / +2 % `[ABERTO — defesa por nível provisória]` (base = `skillBase` do escudo no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/shielding.json` |
 | Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]` | `packages/content/data/combat/baseline.json`, `modifiers` |
+| Crítico/leech de ITEM (M30-04, #551) | pontos-base (×10000), NÚMEROS REAIS do Canary — não provisórios: wand of darkness 1000/3500 (chance/dano); nenhum item do catálogo atual declara ainda | `packages/content/src/schemas.ts`, `item.combatModifiers` |
+| Crítico de MONSTRO (M30-04, #551) | percentual 0-100, a escala do Lua do Canary (`critChance`); ausente/`0` em rat, rotworm, dragon e dragon lord — os únicos 6 monstros do Canary que declaram são bosses fora do recorte | `packages/content/src/schemas.ts`, `monster.critChance` |
 
 As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
 perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
@@ -729,28 +731,38 @@ CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁT
 
 1. uma rolagem de Dodge, sempre consumida — o Draconya continua na frente de tudo, porque o
    Tibia nega o golpe inteiro ANTES de chamar `blockHit` (a mesma posição, não coincidência);
-2. imunidade explícita ao tipo (`mitigation.immunities`) — zera e para tudo, sem defesa, sem
+2. **crítico** (CMB-08; M30-04, #551), quando `modifiers.critical` é declarado — na GERAÇÃO do
+   dano, ANTES de tudo o que segue: é onde o Canary de fato rola
+   (`Combat::applyExtensions`, chamado de `getCombatDamage`/`doCombat`, roda ANTES de
+   `Creature::blockHit` multiplicar `damage.primary.value`). O multiplicador incide sobre o
+   PODER BRUTO, e o defensor recebe o dano JÁ com o bônus — um crítico não é "desperdiçado" por
+   imunidade, porque o Canary também não sabe de imunidade neste ponto (`applyExtensions` só olha
+   o ATACANTE). Esta é a posição FINAL, decidida no M30-04: a versão do #548 (M30-01) a colocava
+   depois de toda a mitigação como placeholder documentado — nenhum teste a travava, e nenhum
+   conteúdo real declarava `combat.modifiers` ainda;
+3. imunidade explícita ao tipo (`mitigation.immunities`) — zera e para tudo, sem defesa, sem
    armadura, sem mitigação percentual;
-3. **defesa**: só enquanto o defensor tem CARGA de bloqueio (`blockCount`, no máximo duas,
+4. **defesa**: só enquanto o defensor tem CARGA de bloqueio (`blockCount`, no máximo duas,
    recarregando com o tempo — ver adiante). Com carga, `uniform_random(defesa/2, defesa)` sai do
-   golpe; zerou, a ARMADURA é pulada. A carga é gasta sempre que a origem do dano bloqueia
-   ALGUMA coisa (defesa OU armadura), mesmo que a defesa em si não tire nada;
-4. **armadura**, INDEPENDENTE da carga de bloqueio: `armor > 3` sorteia
+   golpe JÁ crítico; zerou, a ARMADURA é pulada. A carga é gasta sempre que a origem do dano
+   bloqueia ALGUMA coisa (defesa OU armadura), mesmo que a defesa em si não tire nada;
+5. **armadura**, INDEPENDENTE da carga de bloqueio: `armor > 3` sorteia
    `uniform_random(armor/2, armor − (armor % 2 + 1))`; `armor` de 1 a 3 é sempre `−1`; `armor`
    zero não reduz nada;
-5. **mitigação percentual** (`defenseMitigation`, o campo NOVO do monstro — distinto de
+6. **mitigação percentual** (`defenseMitigation`, o campo NOVO do monstro — distinto de
    `mitigation`, que é resistência/imunidade por TIPO): `dano −= dano × defenseMitigation ÷ 100`,
    sobre o que sobrou da armadura, para QUALQUER tipo de dano (a exceção de lifedrain/manadrain
    do Canary ainda não tem tipo correspondente — M29-07 — e por isso nunca isenta hoje);
-6. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
+7. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
    antes, intocado por esta issue, só reposicionado depois do estágio novo;
-7. piso (`minimumDamageFraction`), sobre o poder BRUTO — mantido como salvaguarda de PRODUTO do
-   Draconya (o Canary não tem: lá um bloqueio pode legitimamente zerar um golpe). Pulado quando
-   imune — o piso nunca revoga imunidade explícita;
-8. crítico (CMB-08), quando declarado — **reposicionado** para depois de toda a mitigação (era o
-   3º sorteio, entre defesa e armadura, no v1/v2). Nenhum conteúdo real declara
-   `combat.modifiers` hoje; a posição exata para o `combat-v3` é trabalho do M30-04;
+8. piso (`minimumDamageFraction`), sobre o poder BRUTO ORIGINAL — SEM o bônus do crítico —
+   mantido como salvaguarda de PRODUTO do Draconya (o Canary não tem: lá um bloqueio pode
+   legitimamente zerar um golpe, e não existe "piso" nenhum para o crítico reforçar). Pulado
+   quando imune — o piso nunca revoga imunidade explícita;
 9. corte do Dodge, arredondamento só no fim.
+
+O LEECH (M30-04) não é um estágio deste pipeline: ele opera sobre o HP EFETIVAMENTE removido, não
+sobre o `DamageOutcome`, e é aplicado depois — ver a seção do CMB-08 mais abaixo.
 
 ### As flags de bloqueio vêm da ORIGEM, não do tipo
 
@@ -1465,7 +1477,7 @@ O CMB-02 devolvia um outcome; o CMB-04 tornou a defesa um estágio; o CMB-08 com
 com os modificadores aprovados e torna a **absorção de mana** um estágio visível. Nada disso
 recalcula dano fora do resolver canônico, e nada entra no snapshot nem no S2C (DT-03).
 
-### A ordem, congelada na emenda do ADR 0031
+### A ordem em `combat-v1`/`v2`, congelada na emenda do ADR 0031
 
 ```text
 raw power
@@ -1476,8 +1488,10 @@ raw power
   -> corte do Dodge -> multiplicador do crítico -> arredondamento
 ```
 
-As três posições de sorteio são contrato. O crítico é o **último**: um estágio novo que precise
-de sorteio próprio entra depois dele, e mover qualquer posição exige perfil novo.
+As três posições de sorteio são contrato PARA `combat-v1`/`v2` — perfis antigos, mantidos bit a
+bit para sessão nenhuma quebrar. O crítico é o **último** multiplicador ali. Em `combat-v3`
+(M30-04, abaixo) a posição é OUTRA, e fiel ao Canary: ver "O pipeline de recebimento do
+combat-v3" mais acima.
 
 ### Defaults neutros: a ausência preserva o v1
 
@@ -1490,14 +1504,24 @@ de sorteio próprio entra depois dele, e mover qualquer posição exige perfil n
   a sequência não depende do VALOR;
 - `lifeLeech`/`manaLeech` são fração do HP aplicado e **não consomem RNG**.
 
-### Leech: base, clamp e evento
+### Leech: base, fórmula, clamp e evento
 
 - A base é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill não rende
   leech, e dano absorvido pela mana não rende leech nenhum.
 - `lifeLeechApplied`/`manaLeechApplied` são o que de fato entrou — a vida limitada ao teto, a
   mana ao espaço livre. Atacante cheio informa zero, e o `creature-healed` de leech **não sai**:
   o número verde não mente.
-- A fração é truncada (`floor`), nunca arredondada para cima.
+- **A fórmula (M30-04, #551) é `Game::calculateLeechAmount` do Canary** (`game.cpp:9058`), não
+  uma fração direta: `realDamage × leechFraction × (0,1 × n + 0,9) / n`, arredondada
+  (`std::lround`, meio para cima — `Math.round`) e limitada a `[0, realDamage]`, onde `n` é
+  `targetsAffected` — o total de criaturas que a MESMA ação atingiu (`damage.affected` do
+  Canary), não só as elegíveis a leech. Para `n = 1` o fator vale exatamente `1` — o golpe de
+  alvo único de sempre, e a fórmula reduz à fração pura. Para `n = 5` vale `0,28`, **não** `0,2`:
+  uma magia em área rende, POR ALVO, mais que um quinto do que renderia sozinha — a "divisão
+  pelos alvos" é a descrição solta do produto, o número real vem da fórmula. Vive em
+  `calculateLeechAmount`/`applyLeech` (`packages/sim/src/combat/modifiers.ts`), compartilhada
+  entre o golpe de alvo único (`applyDamageOutcome`, `targetsAffected` `1` por padrão) e a magia
+  em área (`HuntRuleset#applyHits`, um `targetsAffected` só para todos os alvos da MESMA mira).
 
 ### Mana shield como estágio visível (DT-02)
 
@@ -1531,12 +1555,48 @@ o extrato conseguirem auditar o golpe sem recalcular (DT-01).
 - **Nenhum cliente calcula ou modifica o outcome** (DT-03): não há campo novo no protocolo nem
   janela de breakdown. O detalhamento é CMB-10.
 
-### Escopo
+### Escopo, e de onde os modificadores vêm (M30-04, #551)
 
-Os modificadores entram pelo `DamageIntent` e o CMB-08 os liga aos **ataques básicos** (corpo a
-corpo, distância e wand/rod), onde a fonte é `combat.modifiers`. Magia, runa, ability de monstro
-e DOT seguem sem modificadores — declará-los é conteúdo novo sob o mesmo contrato. Reflect,
-imbuements não aprovados, PvP e a janela de breakdown ficam fora.
+Os modificadores entram pelo `DamageIntent` — o contrato do CMB-08 não muda —, mas a FONTE deixou
+de ser só `combat.modifiers` (o andaime original, um valor estático de conteúdo que nenhum
+conteúdo real declara, e que a conformance ainda exercita):
+
+- **Item** (`ItemCombatModifiers`, `packages/content/src/schemas.ts`): `criticalChance`,
+  `criticalDamage`, `lifeLeech`, `manaLeech`, em pontos-base (×10000) — a MESMA escala do
+  `criticalhitchance`/`criticalhitdamage`/`lifeleechamount`/`manaleechamount` do Canary
+  (`items.xml`, conferido em 2026-09-26 contra `47dfd51`). `Inventory.combatModifiers` soma os
+  EQUIPADOS, como já faz `armor`/`skillBonus`/`speedBonus` — o mesmo molde. O `criticalhitchance`/
+  `criticalhitdamage` do wand of darkness (1000/3500) são o vetor de conteúdo do CMB-08.
+  **`lifeleechchance`/`manaleechchance`** (também no `items.xml`, 19/17 itens) **não têm campo
+  aqui de propósito**: `Game::calculateLeechAmount` só lê a skill AMOUNT — a CHANCE não entra na
+  fórmula —, e o próprio Canary pula as duas ao montar a descrição do item (`item.cpp:91`); são
+  vestigiais nesta versão, sem consumidor na resolução de dano.
+- **Monstro** (`Monster.critChance`): PERCENTUAL inteiro 0-100, a escala do Lua do Canary
+  (`critChance = 10`), convertido para pontos-base por `monsterCriticalModifiers`
+  (`combat/modifiers.ts`) — `getCriticalChance() * 100` do Canary. Sem `criticalDamage`
+  declarável: o Canary não tem esse campo em conteúdo nenhum (só runtime, sempre `0`), então um
+  crítico de monstro ativa a FLAG sem multiplicar dano — fiel ao que o Canary de fato faz.
+  Nenhum dos quatro monstros do bestiário atual (rat, rotworm, dragon, dragon lord) declara
+  `critChance` — só 6 bosses do Canary o fazem, fora do recorte hoje.
+- `combat.modifiers` continua existindo e SOMA com as fontes acima (`combineCombatModifiers`,
+  em pontos-base) — é o que mantém a conformance do CMB-08 original passando sem mudança.
+
+`HuntRuleset#attackerModifiers` agrega equipamento + `combat.modifiers` uma vez por ação, e
+alimenta o golpe básico (`#strike`), a magia (`castSpell`) e a runa (`useSupply`) — o Canary rola
+crítico para qualquer combate do JOGADOR, magia inclusive (`Combat::applyExtensions`, chamado de
+`doCombat`/`doAreaCombatHealth`, não só o golpe básico). Ataque de monstro (básico ou ability) usa
+só `monsterCriticalModifiers`, nunca leech — leech é mecanismo exclusivo do atacante JOGADOR no
+Canary (`applyLifeLeech`/`applyManaLeech` exigem `attackerPlayer`). DOT/condição seguem sem
+modificadores. Reflect, imbuements (M40), charms (M39), PvP e a janela de breakdown ficam fora.
+
+**A ROLAGEM em si é da AÇÃO, não do alvo** (correção pós-#551/#653): `Combat::applyExtensions` do
+Canary decide o crítico UMA vez por `doCombat`/ability inteira, antes de o dano se dividir pelos
+alvos (`combat.cpp:2657`/`2757`) — nunca um alvo criticando e outro não na MESMA magia em área,
+runa em área ou ability de monstro que acerta vários personagens. `rollSharedCriticalOutcome`
+(`combat/modifiers.ts`) é quem garante isso: `castSpell`, `useSupply` e
+`HuntRuleset#executeMonsterAbility` rolam o crítico uma vez ANTES do laço por alvo, e cada
+`resolveDamage` por alvo recebe o resultado já decidido (`chance` fixado em `0` ou `1`) — o
+sorteio de MAGNITUDE (a faixa de poder) continua por alvo, só o crítico é compartilhado.
 
 ## Conformance e benchmark (CMB-10, #336)
 

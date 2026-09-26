@@ -13,11 +13,14 @@
 // O leech usa como base o HP EFETIVAMENTE removido (`healthDamage`), não o resolvido: overkill
 // não rende leech, e dano integralmente absorvido pela mana não rende leech nenhum. A reposição
 // é limitada ao teto do atacante, e o que o outcome informa é o que de fato entrou — nunca o
-// que o modificador prometia.
+// que o modificador prometia. A FÓRMULA (M30-04, #551) e a divisão por `targetsAffected` moram
+// em `applyLeech`/`calculateLeechAmount` (`combat/modifiers.ts`) — a peça compartilhada com a
+// magia em área, que não passa por este `DamageOutcome`.
 
 import { CharacterRuntime } from '../character.js';
 import type { MonsterRuntime } from '../monster/monster.js';
 import type { DamageOutcome } from './damage.js';
+import { applyLeech } from './modifiers.js';
 
 /** Quem pode receber um golpe: personagem (mana shield, leech) ou monstro. */
 export type DamageTarget = CharacterRuntime | MonsterRuntime;
@@ -60,6 +63,13 @@ export function applyDamageOutcome(
   attacker: CharacterRuntime | null,
   damageTakenScale = 1,
   extraManaShield = false,
+  /**
+   * Quantos alvos a MESMA ação de dano atingiu (M30-04, #551, `damage.affected` do Canary):
+   * default `1`, o golpe de alvo único de sempre — nesse caso `calculateLeechAmount` reduz à
+   * identidade (`(0,1×1+0,9)/1 = 1`), e o v1/v2/v3 continuam bit a bit. A magia em área
+   * (`HuntRuleset#applyHits`) passa o total de alvos da MESMA mira.
+   */
+  targetsAffected = 1,
 ): AppliedDamageOutcome {
   let remaining = Math.max(0, Math.round(outcome.resolvedDamage * damageTakenScale));
   let absorbedByMana = 0;
@@ -78,18 +88,12 @@ export function applyDamageOutcome(
   let lifeLeechApplied = 0;
   let manaLeechApplied = 0;
   if (attacker !== null && healthDamage > 0) {
-    const modifiers = outcome.intent.modifiers;
-    const lifeLeech = modifiers?.lifeLeech ?? 0;
-    if (lifeLeech > 0) {
-      // `heal` devolve o que REPÔS, então o atacante cheio informa zero — o evento não mente.
-      lifeLeechApplied = attacker.heal(Math.floor(healthDamage * lifeLeech));
-    }
-    const manaLeech = modifiers?.manaLeech ?? 0;
-    if (manaLeech > 0) {
-      const room = attacker.maxMana - attacker.mana;
-      manaLeechApplied = Math.min(Math.floor(healthDamage * manaLeech), Math.max(0, room));
-      attacker.mana += manaLeechApplied;
-    }
+    // `heal`/`mana` devolvem o que de fato REPÔS, então o atacante cheio informa zero — o
+    // evento não mente. A fórmula é `calculateLeechAmount` (`combat/modifiers.ts`, M30-04):
+    // NÃO uma divisão simples por `targetsAffected` — ver o comentário dela.
+    ({ lifeLeechApplied, manaLeechApplied } = applyLeech(
+      attacker, healthDamage, outcome.intent.modifiers, targetsAffected,
+    ));
   }
 
   // As cargas de bloqueio do `combat-v3` (#548): o resolver só CALCULA o estado novo

@@ -188,3 +188,39 @@ describe('leech com base no HP aplicado, clampado no teto', () => {
     expect(attacker.mana).toBe(50);
   });
 });
+
+describe('leech dividido por targetsAffected (M30-04, #551, Game::calculateLeechAmount)', () => {
+  it('targetsAffected 1 (default) é a identidade — bit a bit o de sempre', () => {
+    const attacker = character({ health: 0 });
+    const applied = applyDamageOutcome(monster(100), outcome(40, { lifeLeech: 0.5 }), attacker);
+    expect(applied.lifeLeechApplied).toBe(20);
+  });
+
+  it('cinco alvos: o fator é (0,1×5+0,9)/5 = 0,28, NÃO 0,2 (uma divisão simples)', () => {
+    // 40 de HP removido, 50 % de leech, 5 alvos na MESMA ação: 40 × 0,5 × 0,28 = 5,6 → 6.
+    // Uma divisão ingênua por 5 daria 40 × 0,5 / 5 = 4 — um número MENOR e diferente.
+    const attacker = character({ health: 0 });
+    const applied = applyDamageOutcome(
+      monster(100), outcome(40, { lifeLeech: 0.5 }), attacker, 1, false, 5,
+    );
+    expect(applied.lifeLeechApplied).toBe(6);
+  });
+
+  it('mana leech também divide pelo mesmo targetsAffected', () => {
+    const attacker = character({ mana: 0, maxMana: 100 });
+    const applied = applyDamageOutcome(
+      monster(100), outcome(40, { manaLeech: 0.5 }), attacker, 1, false, 5,
+    );
+    expect(applied.manaLeechApplied).toBe(6);
+  });
+
+  it('ainda clampado no teto do atacante mesmo com targetsAffected > 1', () => {
+    const attacker = character({ health: 97, mana: 100 });
+    const applied = applyDamageOutcome(
+      monster(100), outcome(40, { lifeLeech: 0.5 }), attacker, 1, false, 5,
+    );
+    // 6 de leech não caberia todo — só 3 até o teto de 100.
+    expect(applied.lifeLeechApplied).toBe(3);
+    expect(attacker.health).toBe(100);
+  });
+});
