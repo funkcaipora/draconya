@@ -28,7 +28,7 @@ import type {
   Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
-import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
+import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource } from '../area.js';
 import {
   NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
@@ -37,7 +37,7 @@ import {
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
 import {
-  advanceTick, conditionFromSpec, retiredTick, sameTick, specTickIntervalMs, tickOf,
+  advanceTick, conditionFromSpec, retiredTick, rollDrunkDeviation, sameTick, specTickIntervalMs, tickOf,
 } from '../conditions.js';
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
@@ -2841,7 +2841,12 @@ export class HuntRuleset implements Ruleset {
         if (distance(character.position, rejoined) > 0) {
           const toward = greedyStep(character.position, rejoined, this.#blockedForGroundedStep(character));
           if (toward !== null) {
-            result = this.#step(session, character, { ...toward, z: character.position.z }, character.id);
+            // `rollDrunk: false` (#651): a tentativa PRIMÁRIA (`to`, acima) já rolou drunk se a
+            // criatura tiver a condição — esta é a recuperação do MESMO vencimento, não um novo
+            // passo. Ver a nota de `#step`.
+            result = this.#step(
+              session, character, { ...toward, z: character.position.z }, character.id, false,
+            );
           } else {
             // Os três candidatos do passo guloso rumo à rota estão todos ocupados (#527, achado
             // varrendo várias sementes com conteúdo real: a MESMA geometria de uma QA ao vivo —
@@ -2881,7 +2886,11 @@ export class HuntRuleset implements Ruleset {
           runner.walker.hold();
         } else {
           runner.walker.hold();
-          result = this.#step(session, character, { ...around, z: character.position.z }, character.id);
+          // `rollDrunk: false` (#651): mesmo motivo do ramo `not-adjacent` acima — o contorno é
+          // a recuperação do passo PRIMÁRIO deste vencimento, que já rolou.
+          result = this.#step(
+            session, character, { ...around, z: character.position.z }, character.id, false,
+          );
         }
       } else if (
         result.reason === 'same-tile' && runner.sameTileStreak < 1 && this.#hasActiveFollow(session)
@@ -5522,11 +5531,29 @@ const slots = bot.groups.get(group);
    * É por aqui que TODO passo da hunt passa — bot, monstro e o `walk` do socket. Uma recusa
    * não é erro: o tile pode estar ocupado agora, e ficar parado até o vencimento seguinte é o
    * mesmo que o passo guloso já fazia ao empacar (ADR 0009).
+   *
+   * O desvio de drunk (M31-03, #558) troca o destino ANTES do commit — é por isto que TODO
+   * passo passar por aqui basta para cobrir o `walk` manual, a rota do bot e o passo guloso do
+   * monstro com a MESMA regra (ADR 0041 decisão 3 — o passo conduzido pelo bot inclusive, sem
+   * exceção de automação, invariante 11). Um tile desviado bloqueado falha como `move` já falha
+   * para qualquer outro motivo — o bot replaneja sozinho no próximo vencimento, sem tratamento
+   * especial.
+   *
+   * `rollDrunk` (achado da revisão do #651) é `false` só na tentativa de RECUPERAÇÃO que
+   * `#playerStep` faz no MESMO vencimento — o contorno de companheiro e o fecha-distância de
+   * `not-adjacent` (§ logo abaixo) chamam `#step` de novo depois que a tentativa PRIMÁRIA já
+   * rolou drunk (se a criatura tiver a condição). Sem isto, um único vencimento de
+   * `PLAYER_STEP` podia consumir DOIS sorteios independentes — o próprio Canary nunca faz isso:
+   * `Monster::doFollowCreature`/`doWalkBack` (`monster.cpp`) caem para `getDanceStep`/
+   * `getRandomStep` quando o passo primário falha, e nenhum dos dois passa de novo por
+   * `Creature::getNextStep`/`onWalk` — o sorteio é UM por DECISÃO de movimento, nunca um por
+   * tentativa física de chegar lá.
    */
   #step<P extends GridPoint>(
-    session: Session, mover: Movable<P>, to: P, creatureId: string,
+    session: Session, mover: Movable<P>, to: P, creatureId: string, rollDrunk = true,
   ): MoveResult {
-    const result = move(this.#world, mover, to);
+    const target = rollDrunk ? this.#drunkTarget(session, mover, to) : to;
+    const result = move(this.#world, mover, target);
     if (result.ok) {
       // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
       // escreve, e só a do personagem — o monstro não lança magia.
@@ -5544,6 +5571,25 @@ const slots = bot.groups.get(group);
       }
     }
     return result;
+  }
+
+  /**
+   * O destino de um passo, depois do desvio de drunk (M31-03, #558, `Creature::onWalk` do
+   * Canary/TFS). Só personagem e monstro carregam `Conditions` — os dois únicos tipos que
+   * `#step` recebe —, e só quem TEM a condição (`Conditions.hasDrunk`) chega a rolar: uma
+   * criatura sem drunk nunca consome este sorteio (a mesma regra do `chance` ausente de uma
+   * ability, CMB-06). O desvio troca só x/y, a partir da posição ATUAL — nunca da direção que
+   * `to` já representava —, e preserva o resto de `to` (o `z` que o chamador já resolveu).
+   */
+  #drunkTarget<P extends GridPoint>(session: Session, mover: Movable<P>, to: P): P {
+    if (!(mover instanceof CharacterRuntime) && !(mover instanceof MonsterRuntime)) return to;
+    if (!mover.conditions.hasDrunk()) return to;
+    const { direction } = rollDrunkDeviation(session.rng);
+    // `speak` (r <= 4, "Hicks!") fica sem consumidor: o Draconya ainda não tem evento de fala de
+    // criatura (docs/product/combat.md) — presentação, não regra de hunt (ADR 0037 d.6).
+    if (direction === null) return to;
+    const offset = FORWARD[direction];
+    return { ...to, x: mover.position.x + offset.x, y: mover.position.y + offset.y };
   }
 
   /**

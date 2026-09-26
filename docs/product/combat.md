@@ -14,7 +14,8 @@ por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031), o dano de a
 com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`), o
 pipeline de recebimento do `Creature::blockHit` — defesa com `blockCount`, armadura em faixa e
 mitigação percentual (#548, M30-01, ADR 0040, perfil `combat-v3`), a condição de velocidade
-com sinal — paralyze/slow de ataque de monstro e haste de defesa (CMB-11, #556) —, a seleção
+com sinal — paralyze/slow de ataque de monstro e haste de defesa (CMB-11, #556) —, o desvio de
+passo da condição drunk (M31-03, #558, ADR 0041) —, a seleção
 ponderada de alvo do Canary (nearest/health/damage/random, #541) e a invocação de monstro por
 monstro (#546, TFS/Canary `monster.summon`/`maxSummons`) implementados
 **PRD:** §12
@@ -1519,6 +1520,64 @@ usamos os números do estágio MAIS FORTE (2118) pelos 200 000 ms inteiros, em v
 cadeia. Um jogador que pisa tarde no campo do Tibia real levaria menos dano (estágio mais
 fraco) e o campo sumiria mais cedo (a soma dos três estágios, não só o primeiro); aqui o campo
 fica no chão os 200 000 ms cheios com a força do primeiro estágio o tempo todo.
+
+## Drunk: desvio de passo (M31-03, #558, ADR 0041)
+
+`Creature::onWalk` (`src/creatures/creature.cpp:291-301`) do Canary/TFS desvia o passo de quem
+carrega `CONDITION_DRUNK`: a cada passo, sorteia `r = uniform_random(0, 60)` (61 valores, os dois
+extremos inclusive); `r <= 4` (`DIRECTION_DIAGONAL_MASK`, `game/movement/position.hpp`) faz a
+criatura falar "Hicks!", e só `r < 4` troca a direção do passo — para a CARDEAL do PRÓPRIO `r`
+(`NORTH=0, EAST=1, SOUTH=2, WEST=3` no enum do Canary), nunca relacionada à direção que o passo já
+ia tomar. `r === 4` representaria a diagonal `DIRECTION_SOUTHWEST` — o próprio Canary NÃO troca a
+direção nesse caso (só fala); é o algoritmo dele que nunca pede uma diagonal aqui, não uma
+limitação do Draconya, que TEM passo diagonal de criatura (`packages/sim/src/monster/step.ts`,
+ADR 0009 — o passo guloso do monstro anda nas oito direções, e `movement.ts` cobra ×3 de duração
+numa diagonal). Taxa observável: 4/61 (~6,6 %) de desvio de direção, 5/61 (~8,2 %) de fala.
+
+**`rollDrunkDeviation` (`packages/sim/src/conditions.ts`) reproduz exatamente esse sorteio**, com
+o `Rng` da sessão (`rng.integer(0, 60)`, inclusive nos dois extremos como o `uniform_random` do
+Canary) — sem campo de conteúdo nenhum: o mecanismo INTEIRO é este sorteio, e por isso o efeito
+`drunk` de `conditionEffectSchema` (`packages/content/src/schemas.ts`) não carrega parâmetro
+próprio, só `kind: 'drunk'`. A ÁREA do ataque que aplica a condição (`radius`/`length`+`spread` do
+Canary, ex. `{ name = "drunk", length = 5, spread = 0 }` do demon parrot) já é o `target.area` de
+`monsterAbilitySchema` — o MESMO mecanismo de toda ability em área (#523); nada de novo precisou
+entrar aí.
+
+**A chave é RESERVADA** (`DRUNK_CONDITION_KEY = 'drunk'`, `packages/content/src/schemas.ts`), pelo
+MESMO motivo de `speed`: o estado (`ConditionState`) da condição não tem nenhum campo de leitura
+próprio — é `{ key, targetId, sourceId, expiresAtMs, merge }` e nada mais —, então nada além da
+chave distingue "esta criatura está bêbada" de qualquer outra condição vazia. `Conditions.hasDrunk`
+(`packages/sim/src/conditions.ts`) lê exatamente essa chave, como `hasManaShield` já lê
+`'mana-shield'`.
+
+**O desvio acontece em `HuntRuleset#step` (`packages/sim/src/rulesets/hunt.ts`), o ÚNICO lugar por
+onde todo passo da hunt passa** — bot, monstro e o `walk` do socket (ver "Movimentação com
+escritor único" nas notas de arquitetura do `sim`). `#drunkTarget` confere `Conditions.hasDrunk`
+de quem vai andar (personagem OU monstro — os dois únicos tipos que `#step` recebe) e, se ativo,
+sorteia e troca só x/y do destino a partir da posição ATUAL, preservando o `z` que o chamador já
+resolveu; uma criatura sem drunk nunca chama `rollDrunkDeviation`, e por isso nunca consome esse
+sorteio (a mesma disciplina do `chance` ausente de uma ability, CMB-06). Um tile desviado
+bloqueado FALHA como `move()` já falha por qualquer outro motivo — sem tratamento especial: o bot
+replaneja sozinho no vencimento seguinte, e um `walk` manual do jogador simplesmente não anda.
+
+**Isso vale IGUAL para o passo conduzido pelo bot** (ADR 0041 decisão 3, invariante 11): como
+`#step` é o mesmo choke point para o `walk` do socket, a rota do bot e o passo guloso do monstro,
+não existe um caminho de automação que escape do desvio — o jogador embriagado sofre o mesmo
+sorteio jogando manualmente ou automatizado. Excluir o bot seria dar à automação uma vantagem que
+o jogo real não dá ao jogador manual, o tipo de assimetria que o invariante 11 proíbe.
+
+**"Hicks!" (a fala da criatura) fica sem consumidor.** O Draconya ainda não tem evento de fala de
+criatura no protocolo; `rollDrunkDeviation` devolve `speak` (verdadeiro sempre que `r <= 4`, mesmo
+quando a direção não muda) para quando esse evento existir, mas hoje nada o lê. Isso é
+apresentação, não regra de hunt (ADR 0037 decisão 6) — a divergência é aceitável e fica registrada
+aqui, não no passo em si.
+
+**Nenhum monstro do catálogo (`rat`, `rotworm`, `dragon`, `dragon-lord`) declara `drunk` hoje** —
+é mecanismo puro, sem conteúdo real associado ainda (o ataque `drunk` é dos 77 usos do Canary,
+concentrados em bosses de quest fora do recorte atual). `conditions.test.ts` prende a taxa exata
+(4/61 de desvio, 5/61 de fala, com seed fixa e 61 000 rolagens) e o mapeamento `r → direção`;
+`hunt.test.ts` prova a integração — o desvio passa pelo `#step` de verdade, para personagem e para
+monstro, sem consumir sorteio de quem não tem a condição.
 
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 

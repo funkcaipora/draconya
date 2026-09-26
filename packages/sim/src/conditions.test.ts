@@ -5,7 +5,7 @@ import { applyDamageOutcome } from './combat/outcome.js';
 import type { DamageOutcome } from './combat/damage.js';
 import {
   Conditions, conditionFromSpec, damageOverTimeTicks, generateDamageList, resolveSpeedPercent,
-  retiredTick, tickOf,
+  retiredTick, rollDrunkDeviation, tickOf,
 } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
@@ -474,5 +474,87 @@ describe('the mana shield on the character', () => {
     expect(twice.absorbedByMana).toBe(20);
     expect(both.mana).toBe(10);
     expect(both.health).toBe(100);
+  });
+});
+
+describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
+  it('`conditionFromSpec` compila drunk sem campo próprio — a chave reservada é o que distingue', () => {
+    const condition = conditionFromSpec(
+      { key: 'drunk', merge: 'refresh', durationMs: 10_000, effect: { kind: 'drunk' } },
+      'hero', 'm:1', 1_000, 'monster-attack',
+    );
+    expect(condition.key).toBe('drunk');
+    expect(condition.targetId).toBe('hero');
+    expect(condition.sourceId).toBe('m:1');
+    expect(condition.expiresAtMs).toBe(11_000);
+    // Nenhum campo de leitura (speedPercent, tick, damageDealtPercent…) — é por isso que a chave
+    // reservada, e não o formato do estado, é o que `hasDrunk` reconhece.
+    expect(condition.tick).toBeUndefined();
+    expect(condition.speedPercent).toBeUndefined();
+  });
+
+  it('`Conditions.hasDrunk` lê a chave reservada, como `hasManaShield`', () => {
+    const conditions = new Conditions();
+    expect(conditions.hasDrunk()).toBe(false);
+    conditions.apply({ key: 'drunk', expiresAtMs: 10_000 });
+    expect(conditions.hasDrunk()).toBe(true);
+    expect(conditions.remove('drunk')).not.toBeNull();
+    expect(conditions.hasDrunk()).toBe(false);
+  });
+
+  /** Um `Rng` de teste que devolve uma sequência FIXA para `integer`, para prender a MAPEAÇÃO
+   * `r → direção` sem depender de achar uma semente real que caia em cada `r` (é isso que o
+   * `CountingRng` de `hunt.test.ts`/`target-strategy.test.ts` já faz para CONTAR — aqui o
+   * objetivo é FORÇAR o valor). Fora do vocabulário desta função lançaria — ela nunca chama
+   * `integer` com outro `min`/`max`. */
+  class ScriptedRng extends Rng {
+    readonly #queue: number[];
+
+    constructor(queue: readonly number[]) {
+      super(Rng.fromSeed('scripted-drunk').getState());
+      this.#queue = [...queue];
+    }
+
+    override integer(min: number, max: number): number {
+      const next = this.#queue.shift();
+      if (next === undefined) throw new Error('ScriptedRng esgotado');
+      if (min !== 0 || max !== 60) throw new Error(`rollDrunkDeviation devia pedir [0, 60], pediu [${min}, ${max}]`);
+      return next;
+    }
+  }
+
+  it('r < 4 (DIRECTION_DIAGONAL_MASK) troca a direção pela CARDEAL do próprio r, na ordem do enum do Canary', () => {
+    // `game/movement/position.hpp`: NORTH = 0, EAST = 1, SOUTH = 2, WEST = 3.
+    expect(rollDrunkDeviation(new ScriptedRng([0]))).toEqual({ direction: 'north', speak: true });
+    expect(rollDrunkDeviation(new ScriptedRng([1]))).toEqual({ direction: 'east', speak: true });
+    expect(rollDrunkDeviation(new ScriptedRng([2]))).toEqual({ direction: 'south', speak: true });
+    expect(rollDrunkDeviation(new ScriptedRng([3]))).toEqual({ direction: 'west', speak: true });
+  });
+
+  it('r === 4 fala mas NÃO troca a direção — a diagonal que o Canary representaria aqui e o Draconya não tem (ADR 0009)', () => {
+    expect(rollDrunkDeviation(new ScriptedRng([4]))).toEqual({ direction: null, speak: true });
+  });
+
+  it('r > 4 não faz nada — nem fala, nem desvia', () => {
+    expect(rollDrunkDeviation(new ScriptedRng([5]))).toEqual({ direction: null, speak: false });
+    expect(rollDrunkDeviation(new ScriptedRng([60]))).toEqual({ direction: null, speak: false });
+  });
+
+  it('a taxa de desvio é ~4/61 e a de fala ~5/61 com seed fixa (o critério de aceite da issue)', () => {
+    const rng = Rng.fromSeed('drunk-rate-558');
+    const total = 61_000;
+    let deviated = 0;
+    let spoke = 0;
+    const seenDirections = new Set<string>();
+    for (let i = 0; i < total; i += 1) {
+      const roll = rollDrunkDeviation(rng);
+      if (roll.direction !== null) { deviated += 1; seenDirections.add(roll.direction); }
+      if (roll.speak) spoke += 1;
+    }
+    // 61 000 rolagens dá desvio-padrão bem abaixo de 1 ponto percentual — a margem de duas
+    // casas decimais é folgada o bastante para nunca reprovar por acaso.
+    expect(deviated / total).toBeCloseTo(4 / 61, 2);
+    expect(spoke / total).toBeCloseTo(5 / 61, 2);
+    expect([...seenDirections].sort()).toEqual(['east', 'north', 'south', 'west']);
   });
 });

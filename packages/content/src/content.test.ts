@@ -2298,6 +2298,24 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     }))).toThrow(ContentError);
   });
 
+  it('recusa a VOLTA também — a chave reservada "speed" com um efeito que NÃO é speed (#651)', () => {
+    // `conditionSpecSchema` só checava `effect.kind === 'speed' → key === 'speed'`; a implicação
+    // inversa (`key === 'speed' → effect.kind === 'speed'`) passava batido. `Conditions` (`sim/
+    // conditions.ts`) reconhece a condição pela CHAVE, nunca pelo `effect.kind` — um `buff`
+    // copiado/colado com `key: 'speed'` por engano ligaria a leitura de velocidade de quem o
+    // carrega sem NENHUMA relação com o autor pretendido.
+    const chaveReservadaComEfeitoErrado = {
+      key: 'speed', merge: 'refresh' as const, durationMs: 5_000,
+      effect: { kind: 'buff' as const, damageTakenPercent: -20 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveReservadaComEfeitoErrado }],
+      }],
+    }))).toThrow(ContentError);
+  });
+
   it('monsterDefenseSchema aceita heal, condition, ou os dois — mas recusa nenhum dos dois', () => {
     const withHeal = { id: 'h', cadenceMs: 2_000, chance: 0.15, heal: { min: 40, max: 70 } };
     const withCondition = { id: 's', cadenceMs: 3_000, chance: 0.3, condition: hasteDefense };
@@ -2317,6 +2335,82 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     const selfParalyze = { id: 'p', cadenceMs: 1_000, chance: 1, condition: paralyzeAttack };
     expect(() => buildContent(base({
       monsters: [{ ...rat, defenses: [selfParalyze] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('a condition de uma defesa nunca aceita drunk — drunk é sempre efeito de ATACANTE (#651)', () => {
+    // Achado da revisão do #651: `monsterDefenseSchema` só recusava `speed` do tipo paralyze —
+    // nada impedia `condition.effect.kind: 'drunk'` numa defesa. O Canary nunca aplica drunk
+    // como self-buff (`Monsters::deserializeSpell` só o usa em ATAQUE), e um monstro que se
+    // embebedasse sozinho a cada `cadenceMs` desviaria o PRÓPRIO passo pelo mesmo `#drunkTarget`
+    // do jogador — um mecanismo que o Canary/TFS não tem.
+    const selfDrunk = {
+      id: 'd', cadenceMs: 1_000, chance: 1,
+      condition: {
+        key: 'drunk', merge: 'refresh' as const, durationMs: 5_000, effect: { kind: 'drunk' as const },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, defenses: [selfDrunk] }],
+    }))).toThrow(ContentError);
+  });
+});
+
+describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => {
+  // O ataque do demon parrot (`data-otservbr-global/monster/birds/demon_parrot.lua`):
+  // `{ name = "drunk", interval = 1000, chance = 30, length = 5, spread = 0, target = false }`.
+  // A ÁREA (`length`/`spread`/`radius`) já é `target.area` de `monsterAbilitySchema` — o mesmo
+  // mecanismo de toda ability em área (#523); só o EFEITO da condição é novo aqui.
+  const drunkAttack = {
+    key: 'drunk', merge: 'refresh' as const, durationMs: 10_000,
+    effect: { kind: 'drunk' as const },
+  };
+
+  it('monsterAbilitySchema aceita a condição drunk, com a chave reservada', () => {
+    const ability = {
+      id: 'hicks', cadenceMs: 1_000, power: 0,
+      target: { range: 1, area: { shape: 'wave' as const, length: 5 } },
+      condition: drunkAttack,
+    };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'hicks')?.condition)
+      .toEqual(drunkAttack);
+  });
+
+  it('drunk não aceita campo nenhum além do que toda condição já tem — só `kind`', () => {
+    // Ao contrário de `speed` (delta/formula) e dos DOT (totalDamage/rounds), o efeito drunk não
+    // tem parâmetro do Tibia: o mecanismo inteiro é o sorteio [0, 60] do `sim`. Um campo estranho
+    // é descartado pelo `z.object` (como `mana-shield`), nunca vira erro de conteúdo.
+    const comCampoEstranho = { ...drunkAttack, effect: { kind: 'drunk' as const, delta: -600 } };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: comCampoEstranho }],
+      }],
+    }))).not.toThrow();
+  });
+
+  it('recusa a chave errada — drunk exige a chave reservada "drunk"', () => {
+    const chaveErrada = { ...drunkAttack, key: 'hicks' };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveErrada }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa a VOLTA também — a chave reservada "drunk" com um efeito que NÃO é drunk (#651)', () => {
+    // O mesmo achado do describe de speed acima, do lado do drunk: `Conditions.hasDrunk`
+    // (`sim/conditions.ts`) reconhece a condição SÓ pela chave — um efeito qualquer copiado com
+    // `key: 'drunk'` por engano (por exemplo editando uma condição de drunk para outra coisa e
+    // esquecendo de trocar a chave) ligaria o desvio de passo em quem o carrega, sem relação
+    // nenhuma com o autor pretendido.
+    const chaveReservadaComEfeitoErrado = {
+      key: 'drunk', merge: 'refresh' as const, durationMs: 5_000,
+      effect: { kind: 'buff' as const, damageTakenPercent: -20 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveReservadaComEfeitoErrado }],
+      }],
     }))).toThrow(ContentError);
   });
 });
