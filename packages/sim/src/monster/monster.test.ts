@@ -142,45 +142,114 @@ describe('chooseTarget', () => {
     });
   });
 
-  describe('com `targetStrategy` declarado (#541)', () => {
-    // Peso 100 numa estratégia só é o jeito de isolar CADA critério sem depender do sorteio —
-    // `target-strategy.test.ts` cobre `rankTarget` isolada; aqui o que se prova é a FIAÇÃO:
-    // `chooseTarget` de fato repassa candidatos, vida e dano acumulado para ela.
-    const nearestOnly = { ...rat, targetStrategy: { nearest: 100, health: 0, damage: 0, random: 0 } };
+  describe('aquisição ignora `targetStrategy` (#645, Canary `Monster::onThink_async`: sempre NEAREST fixo — `monster.cpp:1736`)', () => {
+    // Sem alvo retido, o Canary real SEMPRE resolve `TARGETSEARCH_NEAREST` — os pesos de
+    // `dragon.lua` nunca entram aqui, só no ramo estreito de fuga bloqueada (ver o describe
+    // abaixo). Peso 100 num critério que NÃO é `nearest` é o jeito de provar isso sem
+    // ambiguidade: se a aquisição ainda consultasse a estratégia, o resultado seria outro.
     const healthOnly = { ...rat, targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 } };
     const damageOnly = { ...rat, targetStrategy: { nearest: 0, health: 0, damage: 100, random: 0 } };
+    const poisoned = new Proxy({} as unknown as Rng, {
+      get(_target, property) {
+        throw new Error(`chooseTarget não deveria consultar o RNG (.${String(property)})`);
+      },
+    });
 
-    it('nearest: escolhe o mais perto, como o comportamento sem estratégia', () => {
+    it('escolhe o mais perto mesmo com peso 100 em `health` — quem tem menos vida não fura a fila', () => {
       const monster = monsterAt(0, 0);
-      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], nearestOnly, rng))
+      const near = prey('near', 1, 0, true, 500); // mais perto, mais vida
+      const far = prey('far', 3, 0, true, 1); // mais longe, menos vida — venceria por `health`
+      expect(chooseTarget(monster, [near, far], healthOnly, rng)).toBe('near');
+    });
+
+    it('o mesmo vale para `damage`: quem bateu mais no monstro não fura a fila na aquisição', () => {
+      const monster = monsterAt(0, 0);
+      monster.contribution.record('far', 40);
+      const preyList = [prey('near', 1, 0), prey('far', 3, 0)];
+      expect(chooseTarget(monster, preyList, damageOnly, rng)).toBe('near');
+    });
+
+    it('não sorteia NADA na aquisição, mesmo com a estratégia declarada — zero consulta ao RNG', () => {
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], healthOnly, poisoned))
         .toBe('near');
     });
+  });
 
-    it('health: escolhe quem está com menos vida, mesmo mais longe', () => {
-      const monster = monsterAt(0, 0);
-      const wounded = prey('wounded', 3, 0, true, 5);
-      const healthy = prey('healthy', 1, 0, true, 500);
-      expect(chooseTarget(monster, [healthy, wounded], healthOnly, rng)).toBe('wounded');
+  describe('ramo estreito equivalente a `TARGETSEARCH_DEFAULT` (#645, ADR 0037 d.6, `monster.cpp:1737-1739`)', () => {
+    // O ÚNICO lugar em que `chooseTarget` consulta `targetStrategy`: um alvo JÁ retido, o
+    // monstro FUGINDO (`isMonsterFleeing`), e sem conseguir atacá-lo AGORA — aqui, distância
+    // maior que `monsterAttackRange` (o `rat` não declara `abilities`, então o alcance é só
+    // `attackRange`, 1 por padrão). `runOnHealth` igual ao HP do `rat` (20) o faz nascer
+    // fugindo, sem precisar feri-lo antes — determinístico.
+    const fleeing = { ...rat, runOnHealth: 20 };
+    const healthOnly = { ...fleeing, targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 } };
+    const damageOnly = { ...fleeing, targetStrategy: { nearest: 0, health: 0, damage: 100, random: 0 } };
+    const poisoned = new Proxy({} as unknown as Rng, {
+      get(_target, property) {
+        throw new Error(`chooseTarget não deveria consultar o RNG (.${String(property)})`);
+      },
     });
 
-    it('damage: escolhe quem causou mais dano NO monstro', () => {
-      const monster = monsterAt(0, 0);
+    it('reavalia pelo peso quando foge E o alvo retido está fora do alcance de toda ability', () => {
+      const monster = monsterAt(0, 0, { targetId: 'current' });
+      const current = prey('current', 3, 0, true, 500); // fora do alcance (1) — bloqueado
+      const wounded = prey('wounded', 3, 0, true, 5); // mesma distância, menos vida
+      expect(chooseTarget(monster, [current, wounded], healthOnly, rng)).toBe('wounded');
+    });
+
+    it('o critério `damage` também entra neste ramo, com o dano acumulado no monstro', () => {
+      const monster = monsterAt(0, 0, { targetId: 'current' });
       monster.contribution.record('big-hitter', 40);
-      monster.contribution.record('poker', 5);
-      const preyList = [prey('poker', 1, 0), prey('big-hitter', 3, 0)];
-      expect(chooseTarget(monster, preyList, damageOnly, rng)).toBe('big-hitter');
+      const current = prey('current', 3, 0);
+      const bigHitter = prey('big-hitter', 3, 0);
+      expect(chooseTarget(monster, [current, bigHitter], damageOnly, rng)).toBe('big-hitter');
     });
 
-    it('damage: ninguém bateu ainda — cai no primeiro candidato, como o Canary sem `hasDamage`', () => {
-      const monster = monsterAt(0, 0);
-      const preyList = [prey('first', 3, 0), prey('second', 1, 0)];
-      expect(chooseTarget(monster, preyList, damageOnly, rng)).toBe('first');
+    it('pode devolver o PRÓPRIO alvo retido — reavaliar não é o mesmo que trocar', () => {
+      const monster = monsterAt(0, 0, { targetId: 'current' });
+      const current = prey('current', 3, 0, true, 5); // menos vida — vence o critério `health`
+      const healthy = prey('healthy', 3, 0, true, 900);
+      expect(chooseTarget(monster, [current, healthy], healthOnly, rng)).toBe('current');
     });
 
-    it('mantém o alvo atual antes de consultar a estratégia — o desempate não te tira de um alvo válido', () => {
+    it('NÃO foge (HP acima de `runOnHealth`): mantém o alvo sem consultar a estratégia', () => {
+      const notFleeing = { ...rat, targetStrategy: healthOnly.targetStrategy }; // sem `runOnHealth`
+      const monster = monsterAt(0, 0, { targetId: 'current' });
+      const current = prey('current', 3, 0, true, 500);
+      const wounded = prey('wounded', 3, 0, true, 5);
+      expect(chooseTarget(monster, [current, wounded], notFleeing, poisoned)).toBe('current');
+    });
+
+    it('foge, mas o alvo retido está AO ALCANCE: mantém sem consultar a estratégia', () => {
+      const monster = monsterAt(0, 0, { targetId: 'current' });
+      const current = prey('current', 1, 0, true, 500); // dentro do alcance (1) — não bloqueado
+      const wounded = prey('wounded', 1, 0, true, 5);
+      expect(chooseTarget(monster, [current, wounded], healthOnly, poisoned)).toBe('current');
+    });
+
+    it('foge e está bloqueado, mas SEM `targetStrategy`: mantém o alvo, como sempre', () => {
+      // Nenhum monstro do conteúdo hoje combina `runOnHealth` sem `targetStrategy`, mas o
+      // ramo estreito não pode inventar um sorteio para quem não declarou pesos.
+      const monster = monsterAt(0, 0, { targetId: 'current' });
+      const current = prey('current', 3, 0, true, 500);
+      const wounded = prey('wounded', 3, 0, true, 5);
+      expect(chooseTarget(monster, [current, wounded], fleeing, poisoned)).toBe('current');
+    });
+  });
+
+  describe('com `targetStrategy` declarado, alvo retido e sem fuga (#541, #645)', () => {
+    const healthOnly = { ...rat, targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 } };
+
+    it('mantém o alvo atual sem consultar a estratégia — não está fugindo (sem `runOnHealth`)', () => {
+      const poisoned = new Proxy({} as unknown as Rng, {
+        get(_target, property) {
+          throw new Error(`chooseTarget não deveria consultar o RNG (.${String(property)})`);
+        },
+      });
       const monster = monsterAt(0, 0, { targetId: 'current' });
       const preyList = [prey('current', 3, 0), prey('nearer', 1, 0, true, 1)];
-      expect(chooseTarget(monster, preyList, healthOnly, rng)).toBe('current');
+      expect(chooseTarget(monster, preyList, healthOnly, poisoned)).toBe('current');
     });
   });
 });

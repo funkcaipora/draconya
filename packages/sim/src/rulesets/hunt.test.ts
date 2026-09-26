@@ -7848,12 +7848,24 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     expect(ruleset.fields[0]?.tiles).toHaveLength(21);
   });
 
-  describe('estratégia ponderada de alvo (#541)', () => {
-    it('numa party de 2, troca para o membro de MENOS vida quando `health` é sorteado', () => {
-      // Isola o critério `health` (peso 100): a distribuição real 70/10/10/10 do Dragon já
-      // está coberta em `target-strategy.test.ts` — o que este teste prova é a FIAÇÃO, que o
-      // vencimento de `MONSTER_TARGET_CHANGE` de fato repassa a vida de cada membro da party
-      // para `rankTarget`, e não só `chooseTarget` (a aquisição inicial).
+  describe('#645: `targetChange` NUNCA consulta `targetStrategy` (ADR 0037 d.6, TFS/Canary `onThinkTarget`)', () => {
+    // `onThinkTarget` real nunca lê `strategiesTarget*` — só `m_monsterType->info.targetDistance`
+    // (a classificação melee/à-distância do TIPO, `definition.attackRange` aqui) decide entre
+    // `TARGETSEARCH_RANDOM` e `TARGETSEARCH_NEAREST` (`monster.cpp:2141-2192`, idêntico no TFS
+    // `monster.cpp:919-963`). A estratégia ponderada só entra no ramo estreito de `chooseTarget`
+    // (fuga bloqueada) — ver `monster.test.ts`.
+    const ally = (id: string, x: number, health: number): CharacterRuntime => new CharacterRuntime({
+      id, position: { x, y: 0, z: 7 }, health, maxHealth: 1_000_000, mana: 1_000, maxMana: 1_000,
+      level: 200, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+
+    it('melee (`attackRange: 1`, o caso do Dragon): o reroll sorteia uniforme, não sempre o de menos vida', () => {
+      // Se o peso 100 % em `health` ainda fosse consultado, `wounded-ally` venceria SEMPRE.
+      // Rodando muitos vencimentos com os dois candidatos à MESMA posição (nenhum critério de
+      // distância os separa), `TARGETSEARCH_RANDOM` alcança os dois — a prova de que o critério
+      // é o sorteio uniforme, não o peso.
       const healthPickingDragon = {
         ...dragon,
         targetChange: { intervalMs: 1_000, chance: 1 },
@@ -7863,16 +7875,86 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
         monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
       }));
       const session = createHuntSession({
-        id: 'dragon-target-health', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        id: 'dragon-target-change-random', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      session.enter(ally('wounded-ally', 0, 1));
+      session.enter(ally('healthy-ally', 0, 900_000));
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+      const seen = new Set<string | null>();
+      for (let i = 0; i < 30; i++) {
+        // Fixa o alvo ANTES de cada vencimento: o que se mede é a TROCA, não a aquisição.
+        monster.targetId = knight.id;
+        run(session, 1_100, 100);
+        seen.add(monster.targetId);
+      }
+      expect(seen.has('healthy-ally')).toBe(true);
+      expect(seen.has('wounded-ally')).toBe(true);
+    });
+
+    it('à distância (`attackRange > 1`): o reroll resolve NEAREST fixo, mesmo com o peso favorecendo o mais ferido e mais longe', () => {
+      const rangedDragon = {
+        ...dragon, attackRange: 4,
+        targetChange: { intervalMs: 1_000, chance: 1 },
+        targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 }, // favoreceria `wounded-far`
+      };
+      const loaded = buildContent(raw({
+        monsters: [rangedDragon], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-target-change-nearest', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      const near = ally('near-ally', 0, 900_000);
+      session.enter(near);
+      const woundedFar = ally('wounded-far-ally', 0, 1);
+      session.enter(woundedFar);
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+      // Reposiciona os candidatos RELATIVOS ao Dragon (o spawn dele vem da rota da hunt, não é
+      // fixo) — o mesmo recurso do teste de conformidade de RNG acima (`distantRat`).
+      const monsterFloor = monster.position.z ?? 0;
+      near.position = { x: monster.position.x + 1, y: monster.position.y, z: monsterFloor };
+      woundedFar.position = { x: monster.position.x + 6, y: monster.position.y, z: monsterFloor };
+      monster.targetId = knight.id;
+
+      run(session, 1_500, 100); // um vencimento de 1 000 ms cabe nesta janela.
+
+      expect(monster.targetId).toBe('near-ally');
+    });
+  });
+
+  describe('#645: `rankTarget` só no ramo de fuga bloqueada de `chooseTarget` (ADR 0037 d.6)', () => {
+    it('Dragon fugindo com o alvo fora do alcance de toda ability troca pelo critério `health`', () => {
+      // `chooseTarget` unitária já cobre isto em `monster.test.ts`; aqui é a FIAÇÃO pela
+      // `Session` de verdade — o mesmo caminho que `#onMonsterStep`/`#onMonsterAttack` usam.
+      const healthPickingDragon = {
+        ...dragon,
+        targetChange: undefined, // isola do timer: só a reavaliação de `chooseTarget` importa aqui.
+        targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
+      };
+      const loaded = buildContent(raw({
+        monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-flee-rerank', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
       });
       const knight = heroLevel200({ health: 1_000_000 });
       session.enter(knight);
       const wounded = new CharacterRuntime({
-        id: 'wounded-ally', position: { x: 0, y: 0, z: 7 },
-        health: 1, maxHealth: 1_000_000, mana: 1_000, maxMana: 1_000,
-        level: 200, xp: 0, vocationId: null,
-        staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
-        gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+        id: 'wounded-ally', position: { x: 0, y: 0, z: 7 }, health: 5, maxHealth: 1_000_000,
+        mana: 1_000, maxMana: 1_000, level: 200, xp: 0, vocationId: null,
+        staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
       });
       session.enter(wounded);
 
@@ -7880,14 +7962,20 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
       const ruleset = session.ruleset as HuntRuleset;
       const monster = ruleset.monsters[0];
       if (monster === undefined) throw new Error('sem monstro nesta cena');
-      // Fixa o alvo ANTES do vencimento de `targetChange`: o que se mede é a TROCA, não a
-      // aquisição inicial (que também usa `rankTarget`, mas por outro caminho — ver
-      // `chooseTarget` em `monster.ts`).
+
+      // Empurra para a faixa de fuga (runOnHealth 300) e coloca o alvo retido a 8 tiles — além
+      // do alcance da bola de fogo (7, a maior ability do Dragon), mas ainda dentro do
+      // `aggroRadius` (8, também de `dragon`), para não sair da lista de candidatos.
+      monster.receiveDamage(healthPickingDragon.health - 250);
+      const monsterFloor = monster.position.z ?? 0;
+      knight.position = { x: monster.position.x + 8, y: monster.position.y, z: monsterFloor };
+      wounded.position = { x: monster.position.x + 8, y: monster.position.y, z: monsterFloor };
       monster.targetId = knight.id;
+      session.drainEvents();
 
-      run(session, 1_500, 100); // um vencimento de 1 000 ms cabe nesta janela.
+      run(session, 2_500, 100); // um passo do Dragon (movementDuration) cabe nesta janela.
 
-      expect(monster.targetId).toBe(wounded.id);
+      expect(monster.targetId).toBe('wounded-ally');
     });
   });
 });
