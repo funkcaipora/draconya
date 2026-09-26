@@ -1,7 +1,9 @@
 import { compileMonster, monsterSchema } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
-import { MonsterRuntime, chooseTarget, decideMonsterAction, type Prey } from './monster.js';
+import {
+  MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, type Prey,
+} from './monster.js';
 
 const rat: Monster = {
   ...compileMonster(monsterSchema.parse({
@@ -58,6 +60,39 @@ describe('chooseTarget', () => {
 
     const leashed = { ...rat, leashRadius: 5 };
     expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed)).toBeNull();
+  });
+
+  describe('andar (#519, hunt multiandar)', () => {
+    // Um monstro com `z` na posição só enxerga presa NO MESMO `z` — os três andares da
+    // Darashia Dragon Lair compartilham a mesma caixa (x, y), então ignorar o andar faria um
+    // Dragon Lord do meio agredir o Dragon de cima através do chão.
+    const monsterAtFloor = (x: number, y: number, z: number, over: Record<string, unknown> = {}) =>
+      new MonsterRuntime({
+        id: 1, monsterId: 'rat', position: { x, y, z }, home: { x, y, z },
+        health: 20, targetId: null, cooldowns: {}, ...over,
+      });
+    const preyAtFloor = (id: string, x: number, y: number, z: number, alive = true): Prey =>
+      ({ id, position: { x, y, z }, alive });
+
+    it('ignora presa perto por (x, y) mas em outro andar', () => {
+      const monster = monsterAtFloor(0, 0, 10);
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11)], rat)).toBeNull();
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11), preyAtFloor('same', 2, 0, 10)], rat))
+        .toBe('same');
+    });
+
+    it('larga o alvo que trocou de andar, mesmo dentro do leash', () => {
+      const monster = monsterAtFloor(0, 0, 10, { targetId: 'runner' });
+      const leashed = { ...rat, leashRadius: 0 };
+      expect(chooseTarget(monster, [preyAtFloor('runner', 1, 0, 11)], leashed)).toBeNull();
+    });
+
+    it('sem `z` de nenhum dos lados continua igual a antes — compatível com snapshot anterior', () => {
+      // Nem o monstro nem a presa carregam `z`: é o snapshot de uma hunt de andar único gravado
+      // antes desta issue, e o comportamento não pode mudar para ela.
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [prey('p', 1, 0)], rat)).toBe('p');
+    });
   });
 });
 
@@ -131,5 +166,75 @@ describe('MonsterRuntime', () => {
     monster.receiveDamage(5);
     const restored = new MonsterRuntime(monster.getState());
     expect(restored.getState()).toEqual(monster.getState());
+  });
+
+  it('round-trips scheduledDefenses (#518), like scheduledAbilities', () => {
+    const monster = monsterAt(0, 0);
+    monster.scheduledDefenses.add('self-heal');
+    const restored = new MonsterRuntime(monster.getState());
+    expect(restored.scheduledDefenses.has('self-heal')).toBe(true);
+  });
+
+  it('heals up to the max, never past it (#518)', () => {
+    const monster = monsterAt(0, 0);
+    monster.receiveDamage(15);
+    expect(monster.health).toBe(5);
+    expect(monster.heal(20, 100)).toBe(15);
+    expect(monster.health).toBe(20);
+  });
+
+  it('reports zero healed at full health, so callers can skip the event', () => {
+    const monster = monsterAt(0, 0);
+    expect(monster.heal(20, 10)).toBe(0);
+    expect(monster.health).toBe(20);
+  });
+});
+
+describe('isMonsterFleeing (#518)', () => {
+  const runsAt300 = { ...rat, runOnHealth: 300 };
+
+  it('is false without `runOnHealth` declared, however low the HP', () => {
+    const monster = monsterAt(0, 0, { health: 1 });
+    expect(isMonsterFleeing(monster, rat)).toBe(false);
+  });
+
+  it('is true at or below the threshold, false above it', () => {
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 300 }), runsAt300)).toBe(true);
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 299 }), runsAt300)).toBe(true);
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 301 }), runsAt300)).toBe(false);
+  });
+
+  it('is false for the dead — a corpse does not flee', () => {
+    expect(isMonsterFleeing(monsterAt(0, 0, { health: 0 }), runsAt300)).toBe(false);
+  });
+});
+
+describe('decideMonsterAction fleeing (#518)', () => {
+  const runsAt300 = { ...rat, runOnHealth: 300 };
+
+  it('steps AWAY from the target instead of attacking, even well inside reach', () => {
+    const monster = monsterAt(5, 5, { health: 300 });
+    const action = decideMonsterAction(monster, prey('p', 6, 5), runsAt300, open);
+    expect(action).toEqual({ kind: 'step', to: { x: 4, y: 5 } });
+  });
+
+  it('steps away instead of approaching when the target is far', () => {
+    const monster = monsterAt(5, 5, { health: 300 });
+    const action = decideMonsterAction(monster, prey('p', 9, 5), runsAt300, open);
+    expect(action).toEqual({ kind: 'step', to: { x: 4, y: 5 } });
+  });
+
+  it('stands its ground when cornered — a wall to consult, not a bug', () => {
+    const monster = monsterAt(0, 0, { health: 300 });
+    // Encurralado no canto (0,0): fugir de um alvo a leste (1,0) empurraria para x=-1, fora
+    // do mapa nesta grade de teste.
+    const corner = (x: number, y: number) => x < 0 || y < 0;
+    expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, corner).kind).toBe('idle');
+  });
+
+  it('does not flee above the threshold — attacks as usual', () => {
+    const monster = monsterAt(0, 0, { health: 301 });
+    expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
   });
 });

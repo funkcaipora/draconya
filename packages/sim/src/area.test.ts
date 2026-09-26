@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaTiles, directionOf, isSelfOrigin, tileKey } from './area.js';
+import { areaTiles, directionOf, facingDirection, isSelfOrigin, tileKey } from './area.js';
 import type { Direction } from './area.js';
 
 // As formas (#155): tiles exatos por forma e direção. A onda é o que mais importa — o cone
@@ -29,7 +29,7 @@ describe('areaTiles', () => {
     expect(keys(south)).toEqual(['10,11,7', '9,12,7', '10,12,7', '11,12,7']);
   });
 
-  it('cleave is the three tiles in front; beam is a straight line', () => {
+  it('cleave is the three tiles in front (one step ahead, AREA_WAVE6 anchored via needDirection); beam is a straight line', () => {
     for (const direction of ['north', 'east', 'south', 'west'] as Direction[]) {
       expect(areaTiles({ shape: 'cleave' }, origin, direction)).toHaveLength(3);
       const beam = areaTiles({ shape: 'beam', length: 8 }, origin, direction);
@@ -65,6 +65,57 @@ describe('areaTiles', () => {
       .toHaveLength(21);
   });
 
+  it('circle (SPELL, #523): radius 4-7 is the plain Manhattan diamond, no flattening bonus', () => {
+    // AREA_CIRCLE4X4/5X5/6X6 do Canary (things/sources/canary local,
+    // data/scripts/lib/register_spells.lua) são diamantes puros — sem o bônus de achatamento
+    // que os raios 1-3 usam. `2r² + 2r + 1` é a soma fechada das larguras ímpares 1,3,…,2r+1,…,3,1.
+    const bySpellRadius: Readonly<Record<number, number>> = { 4: 41, 5: 61, 6: 85, 7: 113 };
+    for (const [radius, expected] of Object.entries(bySpellRadius)) {
+      const tiles = areaTiles({ shape: 'circle', radius: Number(radius), centered: 'caster' }, origin, 'north');
+      expect(tiles, `raio ${radius}`).toHaveLength(expected);
+      expect(2 * Number(radius) ** 2 + 2 * Number(radius) + 1, `fórmula fechada raio ${radius}`).toBe(expected);
+    }
+    // O raio 5 (AREA_CIRCLE5X5) é 3/5/7/9/11/9/7/5/3 por fileira — sem o achatamento do raio 3.
+    const r5 = areaTiles({ shape: 'circle', radius: 5, centered: 'caster' }, origin, 'north');
+    const rows = new Map<number, number>();
+    for (const tile of r5) rows.set(tile.y, (rows.get(tile.y) ?? 0) + 1);
+    expect([...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, count]) => count))
+      .toEqual([1, 3, 5, 7, 9, 11, 9, 7, 5, 3, 1]);
+  });
+
+  it('circle (MONSTER, #523): raio 1-7 usa a tabela de anéis do Canary, um mecanismo DIFERENTE do da magia', () => {
+    // `AreaCombat::setupArea(int32_t radius)` (src/creatures/combat/combat.cpp local): tabela
+    // de anéis 13×13, não as AREA_CIRCLEnXn nomeadas. As contagens abaixo foram medidas
+    // aplicando a regra de inclusão do Canary (valor do anel <= radius) a essa tabela.
+    const byMonsterRadius: Readonly<Record<number, number>> = {
+      1: 1, 2: 5, 3: 9, 4: 21, 5: 37, 6: 57, 7: 73,
+    };
+    for (const [radius, expected] of Object.entries(byMonsterRadius)) {
+      const tiles = areaTiles(
+        { shape: 'circle', radius: Number(radius), centered: 'caster' }, origin, 'north', undefined, 'monster',
+      );
+      expect(tiles, `raio ${radius}`).toHaveLength(expected);
+    }
+    // Raio de monstro 5 e raio de magia 3 dão a MESMA forma (37 tiles, 3/5/7/7/7/5/3) —
+    // coincidência de forma entre dois mecanismos com escalas de raio diferentes, não o mesmo
+    // raio físico.
+    const monsterR5 = areaTiles(
+      { shape: 'circle', radius: 5, centered: 'caster' }, origin, 'north', undefined, 'monster',
+    );
+    const spellR3 = areaTiles({ shape: 'circle', radius: 3, centered: 'caster' }, origin, 'north');
+    expect(keys(monsterR5).sort()).toEqual(keys(spellR3).sort());
+    // Raio > 8 satura no raio 8 (101 tiles) — a tabela de anéis não tem valor maior que 8.
+    const monsterR8 = areaTiles(
+      { shape: 'circle', radius: 8, centered: 'caster' }, origin, 'north', undefined, 'monster',
+    );
+    const monsterR50 = areaTiles(
+      { shape: 'circle', radius: 50, centered: 'caster' }, origin, 'north', undefined, 'monster',
+    );
+    expect(monsterR8).toHaveLength(101);
+    expect(monsterR50).toHaveLength(101);
+    expect(keys(monsterR50).sort()).toEqual(keys(monsterR8).sort());
+  });
+
   it('cross: radius 1 is the five cardinal tiles; radius 2 extends each axis', () => {
     const cross = areaTiles({ shape: 'cross', radius: 1 }, origin, 'north', { x: 20, y: 20, z: 7 });
     expect(keys(cross)).toEqual(['20,20,7', '21,20,7', '19,20,7', '20,21,7', '20,19,7']);
@@ -95,5 +146,30 @@ describe('directionOf', () => {
     expect(directionOf(origin, { x: 9, y: 11, z: 7 })).toBe('west');
     // Sem passo, sem direção: quem chama mantém a que tinha.
     expect(directionOf(origin, origin)).toBeNull();
+  });
+});
+
+describe('facingDirection (#518, TFS Monster::updateLookDirection)', () => {
+  it('faces whichever axis has the larger offset, cardinal moves included', () => {
+    expect(facingDirection(origin, { x: 10, y: 5, z: 7 })).toBe('north');
+    expect(facingDirection(origin, { x: 10, y: 15, z: 7 })).toBe('south');
+    expect(facingDirection(origin, { x: 20, y: 10, z: 7 })).toBe('east');
+    expect(facingDirection(origin, { x: 0, y: 10, z: 7 })).toBe('west');
+  });
+
+  it('the DOMINANT axis wins on a diagonal — unlike `directionOf`, which is always horizontal', () => {
+    // O alvo está muito mais longe no eixo VERTICAL: o monstro olha para norte/sul, não para
+    // leste/oeste. É o que distingue de `directionOf` (passo, sempre horizontal quando dx != 0).
+    expect(facingDirection(origin, { x: 11, y: 5, z: 7 })).toBe('north');
+    expect(facingDirection(origin, { x: 11, y: 15, z: 7 })).toBe('south');
+    expect(directionOf(origin, { x: 11, y: 5, z: 7 })).toBe('east');
+  });
+
+  it('a tie (equal offsets, or no offset at all) decides horizontal, by the sign of dx', () => {
+    expect(facingDirection(origin, { x: 15, y: 15, z: 7 })).toBe('east');
+    expect(facingDirection(origin, { x: 5, y: 15, z: 7 })).toBe('west');
+    expect(facingDirection(origin, { x: 5, y: 5, z: 7 })).toBe('west');
+    // Mesmo tile (empate zero-zero): a mesma regra do TFS dá leste, não uma direção arbitrária.
+    expect(facingDirection(origin, origin)).toBe('east');
   });
 });

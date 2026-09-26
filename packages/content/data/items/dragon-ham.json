@@ -1,0 +1,9 @@
+{
+  "id": "dragon-ham",
+  "name": "Dragon Ham",
+  "kind": "other",
+  "weight": 30,
+  "value": 0,
+  "stackable": true,
+  "_open": "Loot do Dragon/Dragon Lord (#520). Comida/curiosidade sem NPC comprador, como o cheese: regeneração por comida ainda não existe (§20 do PRD não decide). weight 30 oz do Canary `items.xml` id 3583 (`dragon ham`, weight 3000)."
+}

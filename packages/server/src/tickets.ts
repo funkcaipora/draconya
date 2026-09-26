@@ -143,6 +143,16 @@ export interface InitialCharacter {
   /** A munição escolhida por família (#152), validada como o Bestiário. */
   readonly ammo?: Readonly<Record<string, string>>;
   /**
+   * O estoque de supply do loot (#520): `supplyId → quantidade`. Entra na sessão, e não só sai
+   * dela — sem isto, uma hunt nova sempre começaria com estoque zero, e uma Strong Health
+   * Potion caída ontem sumiria no login de hoje. Tipado como o Bestiário: mapa de inteiros,
+   * conferido sem conhecer domínio. Ausente é quem nunca recebeu um drop, ou ticket de um `api`
+   * antigo: a sessão parte de `{}`.
+   */
+  readonly supplyStock?: Readonly<Record<string, number>>;
+  /** O estoque de munição do loot (#520), pela mesma razão e a mesma forma do `supplyStock`. */
+  readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
    * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
    * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
    * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
@@ -596,6 +606,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // `NaN` dentro do motor ou de recusar o ticket por causa de uma contagem.
     ...(isBestiaryState(initial['bestiary']) ? { bestiary: initial['bestiary'] } : {}),
     ...(isAmmoSelection(initial['ammo']) ? { ammo: initial['ammo'] } : {}),
+    // O estoque de supply/munição (#520): mesma régua de forma do Bestiário — objeto de
+    // inteiros seguros, não negativos, sob chaves não vazias — porque valem pelo mesmo motivo:
+    // um valor torto vira AUSENTE, nunca ticket recusado.
+    ...(isStockMap(initial['supplyStock']) ? { supplyStock: initial['supplyStock'] } : {}),
+    ...(isStockMap(initial['ammunitionStock']) ? { ammunitionStock: initial['ammunitionStock'] } : {}),
     // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
     // recusado — como o Bestiário.
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
@@ -637,6 +652,21 @@ export function isBestiaryState(value: unknown): value is BestiaryState {
     && typeof kills === 'number'
     && Number.isSafeInteger(kills)
     && kills >= 0);
+}
+
+/**
+ * A forma de um estoque de loot (#520: `supplyStock`/`ammunitionStock`) — a MESMA régua do
+ * Bestiário (objeto de inteiros seguros, não negativos, sob chaves não vazias), com nome
+ * próprio porque o domínio é outro: aqui a chave é `supplyId`/`ammunitionId`, não `monsterId`.
+ * Um valor torto vira AUSENTE, nunca ticket recusado, pela mesma razão do Bestiário.
+ */
+export function isStockMap(value: unknown): value is Readonly<Record<string, number>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value).every(([id, quantity]) =>
+    id.length > 0
+    && typeof quantity === 'number'
+    && Number.isSafeInteger(quantity)
+    && quantity >= 0);
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {

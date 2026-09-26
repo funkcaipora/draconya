@@ -25,8 +25,8 @@ const baseline = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
   vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
 };
 
 const combat = {
@@ -36,7 +36,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200 } };
+const party = { id: 'baseline', maxMembers: 8 };
 
 // As famílias de arma e as skills que elas escalam (CMB-05). O conteúdo real vive em
 // `data/weapon-families/` e `data/skills/`; aqui é o mínimo que faz uma arma montar. A fórmula
@@ -468,10 +468,16 @@ describe('abilities de monstro (CMB-06)', () => {
     }))).toThrow(/duplicada/);
   });
 
-  it('recusa forma de área que o monstro não lança — `wave` sai da direção do lançador', () => {
+  it('aceita `wave` e `beam` — saem na direção do lançador para o alvo (#518)', () => {
     const wave = { id: 'wave', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'wave', length: 2 } } };
-    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [wave] }] })))
-      .toThrow(/só lança `circle`/);
+    const beam = { id: 'beam', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'beam', length: 4 } } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [wave, beam] }] }))).not.toThrow();
+  });
+
+  it('recusa forma de área que o monstro ainda não lança — `cross` fica de fora (#518)', () => {
+    const cross = { id: 'cross', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'cross', radius: 1 } } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [cross] }] })))
+      .toThrow(/só lança `circle`, `wave` ou `beam`/);
   });
 
   it('ability sem linha na tabela de aparências é MUDA, nunca erro', () => {
@@ -595,16 +601,20 @@ describe('o raio livre do spawn (#236)', () => {
   });
 });
 
-describe('a tabela da party (#188, ADR 0027)', () => {
-  it('refuses content without it: solo is a party of one, and the pool lives in content', () => {
+describe('a party (#188, ADR 0027; multiplicador de XP saiu do conteúdo no #525)', () => {
+  it('refuses content without it: solo is a party of one', () => {
     expect(() => buildContent({ ...base(), party: [] })).toThrow(/party\/baseline/);
   });
 
-  it('is indexed on the content, with the pool by unique vocations', () => {
+  it('is indexed on the content, sem o multiplicador de XP (§525: agora é fórmula em sim/party.ts)', () => {
     const content = buildContent(base());
     expect(content.party.maxMembers).toBe(8);
-    expect(content.party.xpPoolPercentByUniqueVocations['8']).toBe(200);
     expect(content.party.matchmakingLevelRange).toBe(0);
+    // Uma chave `xpPoolPercentByUniqueVocations` antiga num RawContent é IGNORADA, não recusada
+    // (schema não estrito) — não precisa migração para quem ainda a carrega.
+    expect(buildContent(base({
+      party: [{ ...party, xpPoolPercentByUniqueVocations: { '1': 999 } }],
+    })).party.maxMembers).toBe(8);
   });
 
   it('carrega o limite de venda automática, com default seguro para fixtures antigas (§8)', () => {
@@ -617,18 +627,8 @@ describe('a tabela da party (#188, ADR 0027)', () => {
     })).party.autoSellItemTypes).toEqual({ free: 1, premium: 3 });
   });
 
-  it('refuses a missing key, a decreasing percent, and maxMembers below two', () => {
-    // Mutação que mata: tirar o `superRefine` — a tabela `{ '1': 150, '2': 125 }` entraria, e o
-    // sim daria menos XP a uma party mais variada.
-    const table = (over: Record<string, unknown>) => () => buildContent({
-      ...base(),
-      party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 }, ...over }],
-    });
-    expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175 } })).toThrow(/sem a chave "4"/);
-    expect(table({ xpPoolPercentByUniqueVocations: { '1': 150, '2': 125, '3': 175, '4': 200 } })).toThrow(/menor que a anterior/);
-    expect(table({ maxMembers: 1 })).toThrow(ContentError);
-    // Chave a mais é inofensiva.
-    expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200 } })).not.toThrow();
+  it('refuses maxMembers below two', () => {
+    expect(() => buildContent(base({ party: [{ ...party, maxMembers: 1 }] }))).toThrow(ContentError);
   });
 });
 
@@ -1603,6 +1603,88 @@ describe('magia de vocação (#156–#159)', () => {
   });
 });
 
+describe('requisito de mais de uma vocação em item e suprimento (#524, kit level 200)', () => {
+  const paladin = { ...knight, id: 'paladin', name: 'Paladin' };
+
+  it('item: `requires.vocationId` aceita uma LISTA, e cada id precisa existir', () => {
+    const sharedArmor = {
+      id: 'shared-armor', name: 'Shared Armor', kind: 'armor', slot: 'chest',
+      weight: 1, value: 0, requires: { vocationId: ['knight', 'monk'] },
+    };
+    expect(() => buildContent(base({ vocations: [knight, paladin], items: [sharedArmor] })))
+      .toThrow(/item "shared-armor": requires.vocationId "monk" não existe/);
+    const fixed = { ...sharedArmor, requires: { vocationId: ['knight', 'paladin'] } };
+    expect(() => buildContent(base({ vocations: [knight, paladin], items: [fixed] }))).not.toThrow();
+  });
+
+  it('item: sem NENHUMA vocação declarada no catálogo, a conferência é tolerante (conteúdo de teste sem sistema de vocação)', () => {
+    // A mesma tolerância de `spellSkill`: `vocations.size === 0` não tem como conferir nada.
+    const orphanArmor = {
+      id: 'orphan-armor', name: 'Orphan Armor', kind: 'armor', slot: 'chest',
+      weight: 1, value: 0, requires: { vocationId: ['sorcerer', 'druid'] },
+    };
+    expect(() => buildContent(base({ vocations: [], items: [orphanArmor] }))).not.toThrow();
+  });
+
+  it('item: `bonuses.skill.skillId` precisa existir no catálogo de skills', () => {
+    const mlHat = {
+      id: 'ml-hat', name: 'ML Hat', kind: 'armor', slot: 'head', weight: 1, value: 0,
+      bonuses: { skill: { skillId: 'nope', amount: 1 } },
+    };
+    expect(() => buildContent(base({ items: [mlHat] })))
+      .toThrow(/item "ml-hat": bonuses.skill.skillId "nope" não existe/);
+    const fixed = { ...mlHat, bonuses: { skill: { skillId: 'magic', amount: 1 } } };
+    expect(() => buildContent(base({ items: [fixed] }))).not.toThrow();
+  });
+
+  it('suprimento: `requires.vocationId` também aceita uma LISTA, com a mesma conferência', () => {
+    const greatMana = {
+      id: 'great-mana-potion', name: 'Great Mana Potion', price: 250, group: 'potion' as const,
+      groupCooldownMs: 1_000,
+      requires: { level: 80, vocationId: ['sorcerer', 'druid', 'monk'] },
+      effect: { kind: 'mana' as const, amountRange: { min: 150, max: 250 } },
+    };
+    expect(() => buildContent(base({ vocations: [knight, paladin], supplies: [greatMana] })))
+      .toThrow(/supply\/great-mana-potion: requires.vocationId "monk" não existe/);
+  });
+
+  it('suprimento: `effect.heal.amountRange` é a faixa fixa da poção do Tibia — min não passa de max', () => {
+    const broken = {
+      id: 'broken-potion', name: 'Broken Potion', price: 1, group: 'potion' as const,
+      groupCooldownMs: 1_000, requires: {},
+      effect: { kind: 'heal' as const, amountRange: { min: 350, max: 250 } },
+    };
+    expect(() => buildContent(base({ supplies: [broken] })))
+      .toThrow(/faixa invertida/);
+  });
+
+  it('suprimento: `effect.mana` exige `amount` OU `amountRange` — nenhum dos dois é recusado', () => {
+    const empty = {
+      id: 'empty-potion', name: 'Empty Potion', price: 1, group: 'potion' as const,
+      groupCooldownMs: 1_000, requires: {}, effect: { kind: 'mana' as const },
+    };
+    expect(() => buildContent(base({ supplies: [empty] })))
+      .toThrow(/mana precisa de "amount" ou "amountRange"/);
+  });
+
+  it('suprimento: `effect.heal.alsoMana` (a poção de espírito) exige `amount` OU `amountRange`', () => {
+    const emptySpirit = {
+      id: 'empty-spirit', name: 'Empty Spirit', price: 1, group: 'potion' as const,
+      groupCooldownMs: 1_000, requires: {},
+      effect: {
+        kind: 'heal' as const, amountRange: { min: 1, max: 2 }, alsoMana: {},
+      },
+    };
+    expect(() => buildContent(base({ supplies: [emptySpirit] })))
+      .toThrow(/alsoMana precisa de "amount" ou "amountRange"/);
+    const withMana = {
+      ...emptySpirit,
+      effect: { ...emptySpirit.effect, alsoMana: { amountRange: { min: 1, max: 2 } } },
+    };
+    expect(() => buildContent(base({ supplies: [withMana] }))).not.toThrow();
+  });
+});
+
 describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
   it('recusa secondaryGroup sem group, e cita o id', () => {
     // O secundário é o segundo livro (combat.md); sem o primeiro ele vira o único, com
@@ -1713,7 +1795,7 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
       .toMatchObject({ kind: 'heal', formula: { skillMin: 5.7 } });
     const both = { ...rune, effect: { ...rune.effect, amount: 10 } };
     expect(() => buildContent(base({ supplies: [both] })))
-      .toThrow(/supply\/ultimate-healing-rune: cura precisa de amount OU basePower\/formula/);
+      .toThrow(/supply\/ultimate-healing-rune: cura precisa de amount\/amountRange OU basePower\/formula/);
   });
 });
 

@@ -7,6 +7,10 @@ const pkg = (name: string) =>
   fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url));
 
 const alias = {
+  // Mais específico ANTES do geral: aliases de string casam por PREFIXO (`@rollup/plugin-
+  // alias`), e `@draconya/content` sozinho casaria `@draconya/content/load` primeiro e
+  // devolveria `.../content/src/index.ts/load` — um caminho que não existe.
+  '@draconya/content/load': fileURLToPath(new URL('./packages/content/src/load.ts', import.meta.url)),
   '@draconya/protocol': pkg('protocol'),
   '@draconya/content': pkg('content'),
   '@draconya/sim': pkg('sim'),

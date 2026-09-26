@@ -137,6 +137,37 @@ describe('contagem de alvos', () => {
   });
 });
 
+describe('andar (#519, hunt multiandar)', () => {
+  // Os três andares da Darashia Dragon Lair compartilham a mesma caixa (x, y): ignorar o andar
+  // faria um jogador em z10 selecionar, contar ou acertar em área um monstro em z11 só por
+  // coincidência de coordenada.
+  const atFloor = (monsterId: string, x: number, y: number, z: number, health = 100): TargetLike =>
+    ({ monsterId, health, alive: true, position: { x, y, z } });
+
+  it('selectTarget ignora candidato em outro andar, mesmo mais perto por (x, y)', () => {
+    const perto = atFloor('rat', 1, 0, 11);
+    const longeMesmoAndar = atFloor('rat', 3, 0, 10);
+    const from = { x: 0, y: 0, z: 10 };
+    expect(selectTarget(targeting(), [perto, longeMesmoAndar], from, 9)?.position.z).toBe(10);
+  });
+
+  it('sem `z` em `from` (Cidade de andar único) continua igual a antes', () => {
+    // `HERE` não carrega `z`: é o chamador que nunca soube de andar, e o comparador vira NO-OP.
+    expect(selectTarget(targeting(), [at('rat', 2), at('wolf', 1)], HERE, 3)).toEqual(at('wolf', 1));
+  });
+
+  it('countTargets desconta quem está em outro andar', () => {
+    const campo = [atFloor('rat', 1, 0, 10), atFloor('rat', 1, 0, 11)];
+    expect(countTargets(targeting(), campo, { x: 0, y: 0, z: 10 }, 3)).toBe(1);
+  });
+
+  it('countAreaTargets confere o andar da FORMA, não só o (x, y) do tile', () => {
+    const tilesZ10 = [{ x: 0, y: 0, z: 10 }, { x: 1, y: 0, z: 10 }];
+    const campo = [atFloor('rat', 0, 0, 10), atFloor('rat', 1, 0, 11)];
+    expect(countAreaTargets(targeting(), campo, tilesZ10)).toBe(1);
+  });
+});
+
 describe('contagem de alvos por ÁREA (#480)', () => {
   // A lista de tiles chega como `areaTiles` a devolve; aqui ela é escrita à mão para o teste
   // falar do que a contagem faz, não da forma de uma magia específica.

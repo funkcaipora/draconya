@@ -71,6 +71,13 @@ export interface PartyRecord {
   readonly state: PartyLifecycle;
   /** A sessão hospedada, quando `hunting`. */
   readonly sessionId: string | null;
+  /**
+   * Quando o `start` aconteceu (#527). É contra ELE, não contra `createdAtMs` (que é de quando
+   * a party começou a FORMAR), que a limpeza de uma `hunting` presa mede a carência — sem essa
+   * distinção, uma party que passou minutos formando pareceria presa no instante em que acaba
+   * de nascer.
+   */
+  readonly startedAtMs: number | null;
   /** A versão de conteúdo fixada no `start`, conferida no `/join` (invariante 7). */
   readonly contentVersion: string | null;
   /** Sala pública de "Encontrar Party" (§17–§20). */
@@ -507,6 +514,7 @@ export class PartyStore {
       // Um `api` anterior ao #402 não grava `state`: a party é `forming` por definição.
       state: hash['state'] === 'hunting' ? 'hunting' : 'forming',
       sessionId: hash['sessionId'] ?? null,
+      startedAtMs: hash['startedAtMs'] === undefined ? null : Number(hash['startedAtMs']),
       contentVersion: hash['contentVersion'] ?? null,
       published: hash['published'] === '1',
       minLevel: hash['minLevel'] === undefined ? null : Number(hash['minLevel']),
@@ -892,7 +900,9 @@ export class PartyStore {
       multi.pexpire(byCharacterKey(characterId), HUNTING_TTL_MS);
     }
     multi.pexpire(ticketsKey(id), ticketTtlMs);
-    multi.hset(partyKey(id), { state: 'hunting', sessionId, contentVersion });
+    multi.hset(partyKey(id), {
+      state: 'hunting', sessionId, contentVersion, startedAtMs: String(this.#now()),
+    });
     multi.pexpire(partyKey(id), HUNTING_TTL_MS);
     multi.pexpire(membersKey(id), HUNTING_TTL_MS);
     multi.pexpire(accountsKey(id), HUNTING_TTL_MS);
@@ -932,11 +942,20 @@ export class PartyStore {
     await multi.exec();
   }
 
-  /** Desfaz a party inteira (o `start` falhou no meio, ou o líder desistiu). */
-  async remove(id: string): Promise<void> {
-    const members = await this.#redis.zrange(membersKey(id), '0', '-1');
+  /**
+   * Desfaz a party inteira (o `start` falhou no meio, ou o líder desistiu).
+   *
+   * `members`, quando vem, é a lista a limpar — e não a do ZSET agora. Existe para o disband de
+   * uma `hunting` presa (#527): `liveMembers` já PODA do ZSET quem não está mais vivo antes de
+   * `disbandIfDead` decidir remover a party inteira, e por padrão esta função lê o ZSET DEPOIS
+   * dessa poda — com todo mundo podado, ele está vazio, e `party:by-char` de cada um sobreviveria
+   * pelo TTL de 24h mesmo com a party já apagada. Ausente: o comportamento de sempre, lido do
+   * ZSET como está (o `start` que falhou não podou ninguém).
+   */
+  async remove(id: string, members?: readonly string[]): Promise<void> {
+    const roster = members ?? await this.#redis.zrange(membersKey(id), '0', '-1');
     const multi = this.#redis.multi();
-    for (const member of members) multi.del(byCharacterKey(member));
+    for (const member of roster) multi.del(byCharacterKey(member));
     multi.del(
       partyKey(id), membersKey(id), accountsKey(id), invitesKey(id), vocationsKey(id), ticketsKey(id),
     );

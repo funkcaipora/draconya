@@ -307,11 +307,31 @@ const lootRollSchema = z.object({
  * A tabela de loot (FUN-63). Moeda e item são coisas DIFERENTES, e o schema diz qual é qual:
  * gold é campo no personagem (`character.gold`), não item — por isso tem lugar próprio, em vez
  * de um `itemId: "gold-coin"` que o código teria que reconhecer por nome.
+ *
+ * `items` aceita `itemId` OU `supplyId` OU `ammunitionId` (#520): poção e munição física são
+ * ABSTRATAS (`supplies/*.json`/`ammunition/*.json`, AB-01/ADR 0026 d.7) e não existiam no
+ * catálogo de item — sem isso, um Burst Arrow ou uma Strong Health Potion no loot de monstro
+ * não tinham como ser declarados. `supplyId`/`ammunitionId` creditam o ESTOQUE
+ * (`CharacterRuntime.supplyStock`/`ammunitionStock`, `character.ts`) de quem recebe o drop, e
+ * NÃO passam pela mochila: sem peso, sem instância, sem a Caixa de Loot — o mesmo motivo de
+ * gold não ser item. O `.refine` recusa a linha ambígua (duas ou mais chaves) ou vazia
+ * (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo existente que só declara
+ * `itemId` continua válido sem mudar uma vírgula.
  */
 export const lootTableSchema = z.object({
   gold: lootRollSchema.optional(),
-  /** Itens de verdade. `buildContent` confere cada `itemId` contra o catálogo (FUN-76). */
-  items: z.array(lootRollSchema.safeExtend({ itemId: z.string().min(1) })).default([]),
+  /**
+   * Itens de verdade, supply OU munição. `buildContent` confere cada `itemId`/`supplyId`/
+   * `ammunitionId` contra o catálogo correspondente (FUN-76 / AB-01 / ADR 0026 d.7).
+   */
+  items: z.array(lootRollSchema.safeExtend({
+    itemId: z.string().min(1).optional(),
+    supplyId: z.string().min(1).optional(),
+    ammunitionId: z.string().min(1).optional(),
+  }).refine(
+    (line) => [line.itemId, line.supplyId, line.ammunitionId].filter((id) => id !== undefined).length === 1,
+    { message: 'loot: declare exatamente um de itemId, supplyId ou ammunitionId' },
+  )).default([]),
 });
 
 /**
@@ -406,6 +426,8 @@ export interface WeaponProfile {
   readonly power?: WeaponPowerFormula;
   readonly manaPerHit?: number;
   readonly fixedDamage?: { readonly min: number; readonly max: number };
+  /** O `hitChance` da arma (#524), só dado — ver o comentário em `weaponSchema`. */
+  readonly hitChance?: number;
 }
 
 export const weaponSchema = z.strictObject({
@@ -430,6 +452,12 @@ export const weaponSchema = z.strictObject({
     min: z.number().int().nonnegative(),
     max: z.number().int().nonnegative(),
   }).optional(),
+  /**
+   * O bônus/malus de acerto à distância da ARMA (#524, `hitchance` do Canary — o royal
+   * crossbow tem `+3`). Só dado: a chance de acerto por skill/distância é da issue #522
+   * (`chance de acerto à distância`); este campo carrega o número para quando ela existir.
+   */
+  hitChance: z.number().int().min(-100).max(100).optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 
@@ -476,6 +504,35 @@ export const ITEM_ORIGINS = [
   'loot', 'boss', 'quest', 'market', 'admin', 'starting-kit', 'vocation-choice',
 ] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
+
+/**
+ * Um requisito de vocação (FUN-92, #524): UMA vocação, ou VÁRIAS — a peça/poção do Tibia que
+ * duas vocações usam igual (Magic Plate Armor em Knight+Paladin, Focus Cape em Sorcerer+Druid).
+ * Magia continua com um arquivo por vocação (`haste-knight.json` etc., #155): lá o formato pode
+ * mudar por vocação (mana, alcance); aqui o item/suprimento é IDÊNTICO nas duas, e duplicar o
+ * arquivo só para variar `vocationId` divergiria peso/preço/atributo no primeiro balanceamento.
+ * `min(2)` porque uma vocação só é o `z.string()` de sempre — a lista existe para dizer "mais de
+ * uma", nunca para repetir o caso simples.
+ */
+export const vocationRequirementSchema = z.union([
+  z.string().min(1),
+  z.array(z.string().min(1)).min(2),
+]);
+export type VocationRequirement = z.infer<typeof vocationRequirementSchema>;
+
+/**
+ * Casa a vocação do portador com o requisito (FUN-92, #524). Ausente é "qualquer um", como
+ * sempre; string é a comparação de sempre; lista aceita qualquer uma das declaradas. Mora aqui
+ * (e não em `sim`) porque é pura leitura do formato do schema — `Inventory#meets` e `useSupply`
+ * chamam a mesma função em vez de reimplementar a união cada um do seu jeito.
+ */
+export function matchesVocationRequirement(
+  required: VocationRequirement | undefined, actual: string | null,
+): boolean {
+  if (required === undefined) return true;
+  if (actual === null) return false;
+  return typeof required === 'string' ? actual === required : required.includes(actual);
+}
 
 /**
  * Os grupos de cooldown do consumível (ADR 0032 d.2/d.6). O motor v2 os lê: o uso do supply
@@ -588,7 +645,8 @@ export const itemSchema = z.strictObject({
    */
   requires: z.object({
     level: z.number().int().positive().optional(),
-    vocationId: z.string().min(1).optional(),
+    /** Uma vocação, ou várias (#524) — ver `vocationRequirementSchema`. */
+    vocationId: vocationRequirementSchema.optional(),
     /** O `magicLevel` da runa (#165). Hoje só o supply de dano o usa. */
     magicLevel: z.number().int().nonnegative().optional(),
   }).default(() => ({})),
@@ -601,6 +659,26 @@ export const itemSchema = z.strictObject({
    */
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
+  /**
+   * Bônus PASSIVO enquanto o item está equipado (#524, kit level 200): skill (inclusive magic
+   * level — que aqui é a skill `magic`, FUN-92) e velocidade. Ausente é o item comum de sempre,
+   * sem bônus nenhum. Mora num objeto só, como `ringEffect`, porque os dois são "efeito de estar
+   * vestido" — ao contrário de `charges`/`durationMs`, que são consumo.
+   *
+   * Um item só declara UM bônus de skill (o Hat of the Mad soma magic level; a Paladin Armor
+   * soma distância) — o Canary também nunca soma dois `skillboost`/`*points` no mesmo item base
+   * (o que teria dois é imbuement, que o catálogo ainda não modela, `docs/product/items.md`
+   * "Em aberto"). Lista viraria generalidade sem exemplo — o mesmo motivo do `itemSchema` inteiro
+   * ser enxuto de propósito.
+   */
+  bonuses: z.object({
+    skill: z.object({
+      skillId: z.string().min(1),
+      amount: z.number().int().positive(),
+    }).optional(),
+    /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
+    speed: z.number().int().positive().optional(),
+  }).optional(),
   /**
    * O que o EQUIPAMENTO resiste e ao que é imune (CMB-03). Ausente é o item neutro — o default
    * preserva o v1, em que nenhum item tinha mitigação. Soma com os outros equipados no boot do
@@ -650,7 +728,15 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
-  /** Os três tiles imediatamente à frente (Front Sweep). */
+  /**
+   * Os três tiles imediatamente à frente (Front Sweep, Lesser Front Sweep). O Canary
+   * (`AREA_WAVE6`, `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
+   * {0,0,0,0,0}`) ancora essa fileira em `getNextPosition(dir, casterPos)` — um passo à frente
+   * do lançador, não na posição dele —, então em coordenadas do mundo os três tiles (os dois
+   * `1` e o `3`, que TAMBÉM conta como atingido) caem juntos, um passo adiante: exatamente
+   * `distance` 1, largura 3. #523 chegou a "corrigir" isto para os dois tiles ao LADO do
+   * lançador lendo só a matriz local, sem a âncora do motor — revertido numa revisão.
+   */
   z.object({ shape: z.literal('cleave') }),
   /** Linha reta de `length` tiles à frente, largura 1. */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
@@ -685,6 +771,21 @@ export const spellFormulaSchema = z.object({
   baseMin: z.number().default(0),
   /** Constante somada ao teto. Default `0`. */
   baseMax: z.number().default(0),
+  /**
+   * O termo de ATAQUE DA ARMA (#523). O Canary usa `CALLBACK_PARAM_SKILLVALUE` — em vez de
+   * `(player, level, maglevel)` o callback recebe `(player, skill, attack, factor)` — para
+   * Groundshaker, Berserk, Fierce Berserk, Front Sweep e Whirlwind Throw: a magia soma o
+   * `attack` da arma equipada ao skill antes de escalar, então skill sozinho (`skillMin`/
+   * `skillMax`) não basta. `attackMin`/`attackMax` são o coeficiente LINEAR do `attack`;
+   * `skillAttackMin`/`skillAttackMax` são o coeficiente do PRODUTO `skill × attack` (Brutal
+   * Strike, Front Sweep, Lesser Front Sweep somam `skill * attack`, não `skill + attack`).
+   * Ausentes — o caso de toda magia que não é baseada em arma —, o `attack` que `sim` passa
+   * nunca entra na conta: é o que preserva bit a bit toda fórmula que já existia antes do #523.
+   */
+  attackMin: z.number().optional(),
+  attackMax: z.number().optional(),
+  skillAttackMin: z.number().optional(),
+  skillAttackMax: z.number().optional(),
 });
 
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;
@@ -706,6 +807,15 @@ const runeAreaSchema = z.union([
    */
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
 ]);
+
+/**
+ * Uma faixa `[min, max]` sorteada por uso (#524) — a poção do Tibia, que cura/repõe um valor
+ * ALEATÓRIO fixo, sem escalar por level ou skill (ao contrário de `basePower`/`formula`).
+ */
+const rangeSchema = z.object({
+  min: z.number().int().positive(),
+  max: z.number().int().positive(),
+}).refine((range) => range.min <= range.max, { message: 'faixa invertida: min maior que max' });
 
 /**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
@@ -736,8 +846,10 @@ export const supplySchema = z.object({
   groupCooldownMs: z.number().int().positive().default(1_000),
   effect: z.discriminatedUnion('kind', [
     /**
-     * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). Os três mecanismos são
-     * os mesmos da magia de cura — `amount` fixo, `basePower` provisório ou `formula` canônica —
+     * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). QUATRO mecanismos —
+     * `amount` fixo, `amountRange` (faixa fixa sorteada por uso, #524: a poção do Tibia cura
+     * entre um mínimo e um máximo, SEM escalar por level/ML — a strong health potion cura
+     * 250-350 tanto no level 50 quanto no 200), `basePower` provisório ou `formula` canônica —
      * e a runa escala pelo MAGIC LEVEL. `range` é o alcance da runa (catalogado; no motor v1 a
      * runa de cura cura o próprio usuário, como a poção).
      * `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10).
@@ -745,18 +857,43 @@ export const supplySchema = z.object({
     z.object({
       kind: z.literal('heal'),
       amount: z.number().int().positive().optional(),
+      amountRange: rangeSchema.optional(),
       basePower: z.number().int().positive().optional(),
       formula: spellFormulaSchema.optional(),
+      /**
+       * Mana reposta NO MESMO uso (#524: great/ultimate spirit potion do Tibia curam vida E
+       * mana de um só gole). Ausente é a poção/runa de cura de sempre, sem mana junto. Ao lado
+       * de `heal`, e não um `kind` novo, para não duplicar todo `switch`/`if` por `effect.kind`
+       * que já trata `'heal'` como "isto cura" (auto-target do bot, `#emitHealed`) — a poção de
+       * espírito CURA, com um bônus, não é um quinto tipo de efeito.
+       */
+      alsoMana: z.object({
+        amount: z.number().int().positive().optional(),
+        amountRange: rangeSchema.optional(),
+      }).refine(
+        (mana) => mana.amount !== undefined || mana.amountRange !== undefined,
+        { message: 'alsoMana precisa de "amount" ou "amountRange"' },
+      ).optional(),
       /** `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10). */
       target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
-    }),
+    }).refine(
+      (effect) => effect.amount !== undefined || effect.amountRange !== undefined
+        || effect.basePower !== undefined || effect.formula !== undefined,
+      { message: 'heal precisa de "amount", "amountRange", "basePower" ou "formula"' },
+    ),
     z.object({
-      kind: z.literal('mana'), amount: z.number().int().positive(),
+      kind: z.literal('mana'),
+      amount: z.number().int().positive().optional(),
+      /** Faixa fixa sorteada por uso (#524), como `heal.amountRange` — a mesma poção do Tibia. */
+      amountRange: rangeSchema.optional(),
       target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
-    }),
+    }).refine(
+      (effect) => effect.amount !== undefined || effect.amountRange !== undefined,
+      { message: 'mana precisa de "amount" ou "amountRange"' },
+    ),
     /**
      * Runa de ataque (#165, ADR 0026 d.8; #476): o dano sai de UM mecanismo — o Base Power do
      * TibiaWiki convertido pela mesma fórmula das magias (`combat.spellPower`, #155) ou a
@@ -783,6 +920,9 @@ export const supplySchema = z.object({
   requires: z.object({
     level: z.number().int().positive().optional(),
     magicLevel: z.number().int().nonnegative().optional(),
+    /** Uma vocação, ou várias (#524, o suprimento do Tibia restrito por vocação — a poção de
+     * espírito é só do Paladin, a grande poção de mana é Sorcerer/Druid/Paladin). */
+    vocationId: vocationRequirementSchema.optional(),
   }).default(() => ({})),
   _open: z.string().optional(),
 });
@@ -806,6 +946,23 @@ export const ammunitionSchema = z.strictObject({
   damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /** Gold debitado por tiro. Sem munição grátis: o preço é > 0, e o gold no tiro é o custo. */
   price: z.number().int().positive(),
+  /**
+   * O `maxhitchance` da munição (#524, o power bolt tem `91`) — o BALDE (`combat.
+   * distanceHitChance`, #522) que a tabela por skill/distância usa. `91` não bate nenhum dos
+   * três baldes que o Canary modela (75/90/100), então a munição especial cai na chance FIXA
+   * (`else { chance = maxHitChance; }` do Canary) — nem skill nem distância importam.
+   */
+  maxHitChance: z.number().int().min(0).max(100).optional(),
+  /**
+   * O `hitchance` DIRETO do Canary (`it.hitChance`, #522): quando declarado e diferente de
+   * zero, IGNORA `maxHitChance` e a tabela inteira — chance FIXA, sem skill nem distância. É o
+   * caminho da munição/arma de arremesso avulsa (viper star `hitchance=80`, leaf star `90`) —
+   * `it.hitChance != 0` é conferido ANTES de `it.maxHitChance` em `WeaponDistance::useWeapon`.
+   * Distinto de `weapon.hitChance` (#524): aquele é o bônus/malus ADITIVO do arco, somado ao
+   * que a munição calcular por qualquer um dos dois caminhos — os dois vêm do MESMO atributo
+   * `hitchance` do Canary, lido em papéis diferentes conforme o item é o arco ou o disparado.
+   */
+  hitChance: z.number().int().min(0).max(100).optional(),
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),
@@ -931,9 +1088,12 @@ export interface MonsterAbilityPower {
 }
 
 /**
- * O alvo de uma ability de monstro (CMB-06): o alcance até o alvo principal e, opcionalmente,
- * a forma de área. `area` é só `circle` — o monstro não carrega DIREÇÃO, e `wave`/`cleave`/
- * `beam` saem do lançador na direção dele; `buildContent` recusa as outras formas.
+ * O alvo de uma ability de monstro (CMB-06, estendido em #518): o alcance até o alvo principal
+ * e, opcionalmente, a forma de área. `circle` é o caso de sempre (centrado no alvo ou no
+ * lançador); `wave` e `beam` saem do lançador NA DIREÇÃO dele — o monstro vira para o alvo antes
+ * de atacar (`facingDirection`, `area.ts`), o mesmo cálculo do TFS `updateLookDirection` (eixo
+ * dominante de dx/dy, empate decide horizontal; referência §15-19). `cross`/`cleave` continuam
+ * fora: `buildContent` recusa as formas que o monstro ainda não lança.
  */
 export const monsterAbilityTargetSchema = z.object({
   range: z.number().int().positive().default(1),
@@ -949,6 +1109,17 @@ export const monsterAbilitySchema = z.strictObject({
   id: z.string().min(1),
   /** Milissegundos entre usos. Tempo decorrido, nunca contagem de tick (invariante 2). */
   cadenceMs: z.number().int().positive(),
+  /**
+   * A chance de a ability sair quando o `cadenceMs` vence (#518, TFS `Monster::doAttacking`/
+   * `onThinkDefense`, referência §15-19): cada entrada da lista rola a PRÓPRIA chance, uma
+   * rolagem independente — corpo a corpo, onda e bola podem sair no mesmo vencimento.
+   *
+   * **Ausente é sempre passa, e NÃO consome sorteio** — o mesmo argumento do `blockChance`
+   * (CMB-04) e do `modifiers.critical` (CMB-08): é o que preserva o rato e o rotworm bit a bit,
+   * porque a ability básica do boot nunca declara este campo. Declarada, a ability consome UMA
+   * rolagem a cada vencimento, mesmo com o valor 1 — a sequência não pode depender do número.
+   */
+  chance: z.number().min(0).max(1).optional(),
   target: monsterAbilityTargetSchema.default(() => ({ range: 1 })),
   power: z.union([
     z.number().int().nonnegative(),
@@ -988,6 +1159,8 @@ export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
 export interface MonsterAbility {
   readonly id: string;
   readonly cadenceMs: number;
+  /** A chance de sair a cada vencimento (#518). Ausente: sempre sai, sem consumir sorteio. */
+  readonly chance?: number;
   readonly target: { readonly range: number; readonly area?: SpellArea };
   readonly power: MonsterAbilityPower;
   readonly damageType: DamageType;
@@ -1013,8 +1186,64 @@ export interface MonsterAbility {
  * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
  * Ver Decisão técnica DT-02.
  */
-export const MONSTER_CLASSES = ['mammal', 'vermin'] as const;
+export const MONSTER_CLASSES = ['mammal', 'vermin', 'dragon'] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
+
+/**
+ * Uma DEFESA de monstro (#518, TFS `Monster::onThinkDefense`, referência §15-19): cura própria,
+ * como o Dragon (`interval 2000, chance 15%, +40..+70`). É uma lista independente da de ataque —
+ * cada defesa tem a própria cadência e a própria chance, um evento na fila por defesa (o mesmo
+ * desenho de `monsterAbilitySchema`), nunca um cálculo por tick.
+ *
+ * Campo NOVO e opcional no monstro: nenhum conteúdo existente declara `defenses`, então `chance`
+ * aqui é OBRIGATÓRIA — declarar a lista já é conteúdo novo, sem concessão de compatibilidade a
+ * preservar.
+ */
+export const monsterDefenseSchema = z.strictObject({
+  id: z.string().min(1),
+  /** Milissegundos entre tentativas. Tempo decorrido, nunca contagem de tick (invariante 2). */
+  cadenceMs: z.number().int().positive(),
+  /** A chance de curar quando o `cadenceMs` vence — uma rolagem por vencimento. */
+  chance: z.number().min(0).max(1),
+  /** Quanto repõe, sorteado com o `Rng` da sessão a cada cura — nunca passa do HP máximo. */
+  heal: z.object({
+    min: z.number().int().nonnegative(),
+    max: z.number().int().nonnegative(),
+  }).refine((range) => range.min <= range.max, 'heal.min não pode passar de heal.max'),
+  /**
+   * A chave SEMÂNTICA de apresentação (CMB-06): o mesmo `impactKey` da ability, resolvido pelo
+   * host em `appearances.abilities` — o `blueshimmer` do Dragon, por exemplo. Chave sem linha é
+   * MUDA; a cura acontece igual (invariante 6).
+   */
+  presentation: z.object({
+    impactKey: z.string().min(1).optional(),
+  }).optional(),
+  _open: z.string().optional(),
+});
+export type MonsterDefenseDefinition = z.infer<typeof monsterDefenseSchema>;
+
+/** A defesa como o `sim` a consome — mesma forma do arquivo, sem defaults a resolver. */
+export interface MonsterDefense {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly chance: number;
+  readonly heal: { readonly min: number; readonly max: number };
+  readonly presentation?: { readonly impactKey?: string };
+}
+
+/**
+ * A troca de alvo por tempo (#518, TFS `Monster::onThinkTarget`, `changeTargetSpeed`/
+ * `changeTargetChance`, referência §15-19): a cada `intervalMs` rola `chance`; se passa, o
+ * monstro troca para outro alvo válido ao acaso dentro do `aggroRadius` — o ramo
+ * `TARGETSEARCH_RANDOM` do TFS, que é o que o Dragon usa (`targetDistance <= 1`). O ramo
+ * `TARGETSEARCH_NEAREST` para monstro de alcance maior fica de fora (§ "Fora do escopo" do
+ * #518): nenhum monstro do recorte precisa dele, e o Dragon/Dragon Lord usam o aleatório.
+ */
+export const monsterTargetChangeSchema = z.object({
+  intervalMs: z.number().int().positive(),
+  chance: z.number().min(0).max(1),
+});
+export type MonsterTargetChange = z.infer<typeof monsterTargetChangeSchema>;
 
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
@@ -1056,7 +1285,19 @@ export const monsterSchema = z.strictObject({
    * `ceil50(chão × 1000 / speed)` ms, diagonal × 3. O rato do mapa real tem 172.
    */
   speed: z.number().int().positive(),
-  /** Raio de agressão, em tiles. */
+  /**
+   * Raio de agressão, em tiles — a distância em que `chooseTarget` (`monster/monster.ts`) aceita
+   * um candidato novo (Chebyshev, como `distance`). É o mesmo raio de `Monster::canSee` do
+   * TFS/Canary, que faz `updateTargetList`/`onCreatureFound` aceitar um jogador na lista de
+   * alvos (#527): TFS restringe a `Monster::canSee` própria — quadrado de
+   * `Map::maxClientViewportX + 1` = 9 (`src/monster.cpp`, `src/map.h`); o Canary NÃO sobrescreve
+   * `canSee` para monstro, então herda o quadrado de `Creature::canSee`,
+   * `MAP_MAX_VIEW_PORT_X`/`_Y` = 11 (`src/map/map_const.hpp`, `src/creatures/creature.cpp`) — os
+   * dois valores conferidos contra o código em 2026-09-25. Pela precedência do ADR 0037 d.4
+   * (Canary primeiro quando ele define algo, TFS só onde a escala é a clássica), o raio de
+   * agressão do Dragon e do Dragon Lord é 11, não o 9 do TFS nem o 8 que o conteúdo tinha antes
+   * desta issue.
+   */
   aggroRadius: z.number().int().nonnegative(),
   /**
    * Até onde o monstro alcança para atacar, em tiles. `1` é corpo a corpo.
@@ -1067,6 +1308,16 @@ export const monsterSchema = z.strictObject({
   attackRange: z.number().int().positive().default(1),
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
+  /**
+   * Espera o jogador sair da vista do ponto para respawnar (#519, `isBlockable` no TFS/Canary)?
+   * Ausente é `false` — o DEFAULT do Canary, e o que 1.640 dos 1.656 monstros do bestiário dele
+   * declaram (inclusive Dragon e Dragon Lord): a maioria respawna na hora, ignorando quem está
+   * perto. `true` é a EXCEÇÃO (só ~7 monstros, tipicamente NPCs/eventos de quest) — é ela que
+   * `spawnClearRadius` (#236) passa a valer só para. Draconya invertia isso por padrão (`0`
+   * desligava a checagem inteira, mas quando ligada valia para todo monstro); a partir daqui o
+   * padrão passa a ser o do Tibia, monstro por monstro.
+   */
+  blockable: z.boolean().default(false),
   loot: lootTableSchema.default({ items: [] }),
   /**
    * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
@@ -1076,6 +1327,33 @@ export const monsterSchema = z.strictObject({
    * elas (o boot NÃO sintetiza a básica). O id `basic` é reservado ao boot.
    */
   abilities: z.array(monsterAbilitySchema).optional(),
+  /**
+   * As defesas declaradas (#518): cura própria, hoje. AUSENTE é nenhuma — o rato e o rotworm não
+   * declaram, e não curam sozinhos, como sempre.
+   */
+  defenses: z.array(monsterDefenseSchema).optional(),
+  /** A troca de alvo por tempo (#518). Ausente é o comportamento de sempre: só troca quando o
+   * alvo atual morre ou sai do `leashRadius` (`chooseTarget`). */
+  targetChange: monsterTargetChangeSchema.optional(),
+  /**
+   * O HP em que o monstro passa a fugir (#518, TFS `runonhealth`, referência §15-19): abaixo ou
+   * igual a este valor, ele se afasta do alvo em vez de aproximar, não dá golpe corpo a corpo,
+   * mas continua usando as abilities à distância que alcançam. Ausente é nunca foge — o
+   * comportamento de sempre.
+   */
+  runOnHealth: z.number().int().nonnegative().optional(),
+  /**
+   * A fração de vencimentos em que o monstro, podendo atacar, fica parado em vez de dar um
+   * passo aleatório colado no alvo (#518, TFS `staticattack`, referência §15-19: `randomStepping`
+   * quando o sorteio passa do valor). **Aceito e validado, mas ainda NÃO wired no `sim`** — o
+   * motor de passo daqui não tem um "pensamento" periódico independente do passo em si, e
+   * simular o shuffle exigiria um evento novo só para isso. Registrado como divergência em
+   * `docs/product/combat.md`, por decisão explícita do #518 ("implementar só se couber sem mexer
+   * no determinismo; senão registrar como divergência").
+   */
+  staticAttack: z.number().min(0).max(1).optional(),
+  /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
+  _open: z.string().optional(),
 });
 
 /**
@@ -1175,6 +1453,27 @@ export const vocationSchema = z.object({
   /** A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`, e `distance` no Paladin. */
   spellSkill: z.string().min(1).default('magic'),
   /**
+   * Regeneração passiva DESTA vocação (#521, ADR 0037), na mesma forma de `progression.regen`:
+   * pontos por segundo, não por tick (ver o comentário lá). Vem do Canary `vocations.xml`
+   * (`gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — convertidos para taxa:
+   * `amount * 1000 / ticks`), verificado contra o arquivo em `main` de 2026-09-24. Ausente:
+   * quem monta a sessão cai no `regen` da tabela base (sem vocação) — o conteúdo de teste que
+   * não fala de vocação por vocação.
+   */
+  regen: z.object({
+    healthPerSecond: z.number().nonnegative(),
+    manaPerSecond: z.number().nonnegative(),
+  }).optional(),
+  /**
+   * Quanto esta vocação demora para subir cada skill (#521, ADR 0037): o `factor` de
+   * `pointsForLevel` (`skills.ts`) por `skillId`, substituindo o da tabela do conteúdo da
+   * skill. É o `<skill id multiplier="…">` do Canary `vocations.xml` — a mesma chave cobre
+   * magic level, porque ML é só mais uma entrada da tabela (`manamultiplier` no Canary).
+   * Ausente para um `skillId`: cai no `factor` do PRÓPRIO conteúdo da skill (o padrão de quem
+   * não distingue vocação nenhuma — o conteúdo de teste antigo).
+   */
+  skillMultipliers: z.record(z.string(), z.number().min(1)).default({}),
+  /**
    * A arma que a vocação recebe ao ser escolhida (#154, ADR 0026 decisão 3). `buildContent`
    * confere que o item existe, é `kind: 'weapon'` e exige ESTA vocação — uma arma que qualquer
    * um veste não é "a arma da vocação". Opcional no SCHEMA, e não no conteúdo real: as quatro
@@ -1196,6 +1495,15 @@ export const vocationSchema = z.object({
    * (gravado direto no banco, sem passar por `equip`), que recusa a combinação.
    */
   startingKit: z.array(startingKitPieceSchema).default([]),
+  /**
+   * O `meleeDamage`/`distDamage` de `vocations.xml` (Canary, #522): multiplicador do dano MÁXIMO
+   * de arma desta vocação, corpo a corpo e distância — aplicado em `resolveWeaponPower` sob o
+   * `combat-v2` (ADR 0037 decisão 5). `1` em toda vocação no Canary hoje: não há vocação que
+   * bata mais forte de arma por decreto, só por skill/level/equipamento. Fica em conteúdo, não
+   * constante mágica (§12.1), para o dia em que balancear precisar de outro valor.
+   */
+  meleeDamageMultiplier: z.number().positive().default(1),
+  distDamageMultiplier: z.number().positive().default(1),
   /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.
@@ -1261,30 +1569,59 @@ export const progressionSchema = z.object({
   satchelInitialSlots: z.number().int().positive().default(10),
   containerRow: z.number().int().positive().default(5),
   /**
-   * A curva de XP, como FÓRMULA e não como tabela: `base * level^exponent` é a XP para
-   * completar aquele level.
+   * A curva de XP (#521, ADR 0037).
    *
-   * Tabela de 500 linhas seria mais expressiva e é o caminho errado aqui. A curva vai ser
-   * rebalanceada muitas vezes, e rebalancear uma tabela é reescrever 500 linhas à mão — o que
-   * na prática significa que ela nunca é rebalanceada. Dois números mudam a curva inteira, e
-   * a forma continua legível para quem balanceia.
+   * `kind: 'tibia'` é a curva REAL do Tibia (`Player::getExpForLevel` do Canary/TFS): total
+   * acumulado para estar no level `L` é `(L³ − 6L² + 17L − 12) / 6 × 100` — sempre inteiro,
+   * porque `L³ − L` é produto de três inteiros consecutivos e por isso múltiplo de 6. É a curva
+   * do conteúdo REAL (`baseline.json`); não é mais uma escolha de balanceamento do Draconya
+   * (ADR 0037 revoga esse limite do ADR 0019 para mecânica de jogo).
+   *
+   * `kind: 'power'` é a fórmula antiga (`base * level^exponent`), mantida só para o conteúdo de
+   * TESTE que quer uma curva pequena e arbitrária sem carregar os números do Tibia — nunca para
+   * conteúdo de jogo real.
    */
-  xp: z.object({
-    base: z.number().positive(),
-    exponent: z.number().positive(),
-  }),
+  xp: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('tibia') }),
+    z.object({
+      kind: z.literal('power'),
+      base: z.number().positive(),
+      exponent: z.number().positive(),
+    }),
+  ]),
   /**
-   * Penalidade de morte (§26.2). Mora aqui, junto da curva, porque ela é definida COMO
-   * fração da curva — separar as duas é como as duas divergem numa rebalanceada.
+   * Penalidade de morte (#521, ADR 0037): a fórmula do Tibia (`Player::getLostPercent`,
+   * `Player::death` do Canary), não mais uma fração fixa de um level.
+   *
+   * Abaixo de `cubicFromLevel` o Tibia cobra uma fração FIXA da XP acumulada (`flatFraction`,
+   * 10% dos levels 8–23); a partir dali a perda é a fórmula cúbica clássica —
+   * `((L+50) / 100) × 50 × (L² − 5L + 8)`, com `L` incluindo a fração de progresso dentro do
+   * level, para a perda não saltar na fronteira — sobre a XP acumulada, não mais uma fração de
+   * `xpToCompleteLevel`. `blessedReduction` mapeia o conceito de bênção do repo (`premium` na
+   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%.
    */
   deathPenalty: z.object({
-    /** Fração da XP necessária para completar o level atual. §26.2: 60%. */
-    fraction: z.number().min(0).max(1),
-    /** A mesma fração para quem tem Premium. §26.2: 54%. */
-    premiumFraction: z.number().min(0).max(1),
-    /** Abaixo deste level a penalidade não derruba ninguém. §26.2: 8. */
+    /** Fração fixa da XP acumulada perdida abaixo de `cubicFromLevel`. Tibia: 10%. */
+    flatFraction: z.number().min(0).max(1),
+    /** A partir de qual level a fórmula cúbica substitui a fração fixa. Tibia: 24. */
+    cubicFromLevel: z.number().int().positive(),
+    /** Redução de quem está "abençoado" (mapeia `premium`). Tibia: 56% (7 bênçãos × 8%). */
+    blessedReduction: z.number().min(0).max(1),
+    /**
+     * Abaixo deste level a penalidade não tira XP nenhuma. **Sem equivalente no Tibia** — lá
+     * não existe piso (TibiaPlan, "Tibia Death Penalty", 2026-09-24): é decisão de PRODUTO do
+     * Draconya, para não punir quem acabou de escolher vocação, documentada como divergência
+     * em `docs/product/progression.md`.
+     */
     levelFloor: z.number().int().positive(),
   }),
+  /**
+   * Quanto demora para subir cada skill SEM vocação escolhida (levels 1–7, §7.4): o `factor`
+   * por `skillId`, na mesma forma do `skillMultipliers` da vocação. Vem da vocação `None` do
+   * Canary `vocations.xml` (#521, ADR 0037). Ausente para um `skillId`: cai no `factor` do
+   * próprio conteúdo da skill.
+   */
+  skillMultipliers: z.record(z.string(), z.number().min(1)).default({}),
   _open: z.string().optional(),
 });
 
@@ -1315,11 +1652,35 @@ export const COMBAT_V1: CombatCompatibilityProfile = {
 };
 
 /**
+ * O perfil `combat-v2` (ADR 0037, decisão 5): o próximo id livre depois do `combat-v1` — o
+ * `combat-v2` que o ADR 0032 tinha reservado para a postura nunca chegou a existir em código, e
+ * é por isso que esta é a primeira vez que o id é usado. **Rompimento**: o dano de arma passa a
+ * ser o do Canary (fórmula, variância pela normal truncada e `attackFactor`), com chance de
+ * acerto à distância por skill e por tile. Uma sessão fixada no `combat-v1` continua nele
+ * (invariante 7); retomar sob um perfil `breaking` diferente do que a criou é recusado, nunca
+ * reinterpretado (ADR 0031).
+ *
+ * As exceções de produto do `combat-v1` mudam de forma: `player-always-hit` do v1 cobria
+ * corpo a corpo E distância; o Canary não rola acerto ofensivo em corpo a corpo no PvE (o piso
+ * da fórmula é quem faz um golpe "fraco", nunca um "miss"), então a exceção fica só
+ * `player-always-hit-melee` — a DISTÂNCIA passa a rolar a chance de acerto do Tibia por skill e
+ * tile (§ do Canary `WeaponDistance::useWeapon`), deixando de ser exceção. O Dodge **fica**: a
+ * #522 confirma que ele corresponde ao charm de esquiva do Tibia (metade do dano, não zera), e
+ * `dodge-halves-damage` continua listada. `pve-only-bestiary-bonus` é estrutural e não muda.
+ */
+export const COMBAT_V2: CombatCompatibilityProfile = {
+  id: 'combat-v2',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'breaking',
+};
+
+/**
  * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
  * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
  */
 export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
-  new Map([[COMBAT_V1.id, COMBAT_V1]]);
+  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2]]);
 
 /**
  * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
@@ -1444,7 +1805,118 @@ export const combatSchema = z.object({
     skillFactor: z.number().nonnegative(),
     spread: z.number().min(0).max(1),
   }).default({ levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 }),
+  /**
+   * O dano de arma do `combat-v2` (#522, ADR 0037 decisão 5) — `Weapons::getMaxWeaponDamage` do
+   * Canary, com a variância pela normal truncada (`normal_random`, `packages/sim/src/combat/
+   * weapon-power.ts`):
+   *
+   * ```text
+   * maxDamage = round(coefficient × attackFactor × attack × skill + ⌊level/5⌋) × vocationMultiplier
+   * minDamage = ⌊level/5⌋ (corpo a corpo: 0 se attack ≤ 0)
+   * damage    = normalRandom(minDamage, maxDamage)
+   * ```
+   *
+   * `meleeCoefficient`/`distanceCoefficient` são os `0,085`/`0,09` do Canary
+   * (`Weapons::getMaxWeaponDamage`, `isMelee`). `attackFactor` é o `getAttackFactor()` do modo
+   * de luta (ofensivo 1,0 / equilibrado 0,75 / defensivo 0,5) — o Draconya **não tem seletor de
+   * postura ainda** (o primitivo de "Postura Defensiva/Balanceada/Atacante" nunca foi montado,
+   * `docs/hud-contract-plan.md`), então o valor é uma CONSTANTE de conteúdo fixada em `1,0`
+   * (ofensivo), e não o estado por personagem que uma UI de postura vai um dia escolher — trocar
+   * um escalar fixo por uma leitura de `CharacterState` não muda a fórmula nem exige perfil novo.
+   * `vocationMultiplier` vem de `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — 1,0 em
+   * toda vocação no Canary hoje (`vocations.xml`), e por isso em conteúdo e não constante mágica.
+   * Obrigatório quando `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
+   */
+  weaponDamage: z.object({
+    meleeCoefficient: z.number().positive(),
+    distanceCoefficient: z.number().positive(),
+    attackFactor: z.number().positive(),
+  }).optional(),
+  /**
+   * A chance de acerto à distância do `combat-v2` (#522): só a DISTÂNCIA rola acerto ofensivo —
+   * corpo a corpo continua sem rolagem (`player-always-hit-melee`). Mecanismo original do
+   * Draconya (ADR 0019: só número e caso de borda vêm do Canary, nunca código) que reproduz
+   * `WeaponDistance::useWeapon` — as TRÊS tabelas que o Canary modela (baldes 75 uma mão, 90
+   * duas mãos e 100), não só a de 90% que o catálogo usa hoje:
+   *
+   * ```text
+   * se ammunition.hitChance declarado e ≠ 0:
+   *   percent = ammunition.hitChance                    (caminho DIRETO — ignora tudo abaixo)
+   * senão:
+   *   balde   = ammunition.maxHitChance ?? defaultMaxHitChance
+   *   bucket  = buckets.find(b => b.maxHitChance === balde)
+   *   se bucket ausente:  percent = balde                (balde que a tabela não modela: flat)
+   *   senão:
+   *     tier = bucket.tiers.find(t => t.distance === distância)
+   *     se tier ausente:  percent = 0                     (distância fora da tabela: MISS)
+   *     senão:            percent = clamp(⌊min(skill, tier.skillCap) × tier.perSkill⌋ + tier.flat, 0, 100)
+   * percent = clamp(percent + (weapon.hitChance ?? 0), 0, 100)   (bônus/malus do arco, #524)
+   * hit     = rng.chance(percent / 100)               (uma rolagem por tiro, sempre consumida)
+   * ```
+   *
+   * `ammunition.hitChance` (#522, inteiro 0–100) é o `it.hitChance` DIRETO do Canary — conferido
+   * ANTES de `maxHitChance`, e quando ≠ 0 ignora a tabela inteira (a munição/arma de arremesso
+   * avulsa com chance fixa: viper star 80%, leaf star 90%).
+   * `ammunition.maxHitChance` (#524, inteiro 0–100) é o `it.maxHitChance` do Canary: ausente,
+   * usa `defaultMaxHitChance` (90 — munição de duas mãos é a única família que o catálogo tem);
+   * um valor que não bate nenhum `bucket.maxHitChance` declarado — o power bolt do Tibia declara
+   * 91, e nem 75 nem 90 nem 100 estão nos `buckets` de baixo se algum dia sobrar de fora — vira
+   * chance FIXA (`else { chance = maxHitChance; }` do Canary), nunca um erro.
+   * Distância fora de `tiers`, DENTRO de um balde reconhecido, é MISS (0%) — o `default: chance
+   * = it.hitChance;` de cada `switch` do Canary, que vale 0 porque só se chega a essa tabela
+   * quando `it.hitChance` já é 0. **Não** é o teto do balde: um catálogo real nunca teria uma
+   * arma de alcance > 7 hoje, mas se tivesse, o Canary erraria sempre no tile 8 — não acertaria
+   * quase sempre.
+   * `weapon.hitChance` (#524, inteiro -100–100) é o bônus/malus da ARMA — a besta real soma ao
+   * percentual que a munição calculou, por QUALQUER um dos caminhos acima, sempre. Os três
+   * campos de item são "só dado" desde o #524 (`ammunition.maxHitChance`, `weapon.hitChance`) e
+   * o #522 (`ammunition.hitChance`); o #522 é quem passa a lê-los todos. Obrigatório quando
+   * `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
+   */
+  distanceHitChance: z.object({
+    /**
+     * O balde default (90, munição de duas mãos) quando `ammunition.maxHitChance` está ausente
+     * — o Canary auto-seleciona por `ammoType` (`!= AMMO_NONE` → 90, senão 75); o catálogo do
+     * Draconya só tem munição de duas mãos hoje, então o default é sempre 90.
+     */
+    defaultMaxHitChance: z.number().int().min(0).max(100),
+    /**
+     * As tabelas por balde RECONHECIDO. O Canary só tem fórmula própria para 75/90/100 — um
+     * `maxHitChance` fora daqui (declarado na munição, ou este `defaultMaxHitChance`) vira
+     * chance FIXA, nunca erro de conteúdo.
+     */
+    buckets: z.array(z.object({
+      maxHitChance: z.number().int().min(0).max(100),
+      tiers: z.array(z.object({
+        distance: z.number().int().positive(),
+        skillCap: z.number().nonnegative(),
+        perSkill: z.number().nonnegative(),
+        flat: z.number(),
+      })),
+    })).superRefine((buckets, context) => {
+      const seen = new Set<number>();
+      for (const bucket of buckets) {
+        if (seen.has(bucket.maxHitChance)) {
+          context.addIssue({
+            code: 'custom', message: `distanceHitChance.buckets tem maxHitChance ${bucket.maxHitChance} duplicado`,
+          });
+        }
+        seen.add(bucket.maxHitChance);
+      }
+    }),
+  }).optional(),
   _open: z.string().optional(),
+}).superRefine((combat, context) => {
+  // A #522/ADR 0037: perfil `combat-v2` sem os blocos novos é conteúdo que o resolver de poder
+  // de arma não sabe executar — recusar no boot, nunca por um `??` silencioso no caminho quente.
+  if (combat.compatibilityProfile === 'combat-v2') {
+    if (combat.weaponDamage === undefined) {
+      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "weaponDamage"' });
+    }
+    if (combat.distanceHitChance === undefined) {
+      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "distanceHitChance"' });
+    }
+  }
 });
 
 export type Combat = z.infer<typeof combatSchema>;
@@ -1469,16 +1941,23 @@ export const staminaSchema = z.object({
 export type Stamina = z.infer<typeof staminaSchema>;
 
 /**
- * A party de hunt (§15, ADR 0027, #188): o teto de membros e o pool de XP por número de
- * VOCAÇÕES ÚNICAS entre os membros elegíveis — `pool% = min(100 + 25 × únicas, 200)` é como a
- * tabela foi preenchida, mas quem manda é a tabela. Indexada só por vocações únicas: o número
- * de membros não entra no pool, só na divisão (o PRD pedia as duas dimensões; a segunda seria
- * coluna repetida). Percentuais NÃO DECRESCENTES e uma chave para cada `1..maxMembers`.
+ * A party de hunt (§15, ADR 0027, #188; fórmula e elegibilidade emendadas pelo ADR 0027 em
+ * 2026-09-24 e 2026-09-25, #525, fidelidade Canary do ADR 0037 decisão 4): o teto de membros e
+ * a elegibilidade de XP compartilhada (`Party::canUseSharedExperience` do TFS/Canary) — nível
+ * dentro de 2/3 do maior level do roster, alcance/andar do líder e atividade recente.
+ *
+ * O MULTIPLICADOR de XP não é mais tabela: é `sharedExperiencePercent` em `packages/sim/src/
+ * party.ts`, a fórmula do Canary (`Party:onShareExperience`) copiada em código — não é número
+ * de balanceamento, é MECANISMO, a mesma categoria de `movementDuration`/`resolveDamage`. Uma
+ * tabela indexada só por vocações únicas não conseguiria expressar o desconto do Canary por
+ * TAMANHO da party (`≥ 4` membros, não `≥ 4` vocações — ver o comentário de `sharedExperiencePercent`),
+ * e é por isso que saiu do conteúdo: `xpPoolPercentByUniqueVocations` existiu aqui até o #525
+ * corrigir contra a fonte, e uma chave desse nome num `RawContent` antigo é ignorada (schema não
+ * estrito) — não precisa migração.
  */
 export const partySchema = z.object({
   id: z.literal('baseline'),
   maxMembers: z.number().int().min(2).max(8),
-  xpPoolPercentByUniqueVocations: z.record(z.string().regex(/^[1-9]\d*$/), z.number().int().min(100)),
   /** §43.2, ainda aberto. `0` desliga: qualquer level entra na mesma fila. */
   matchmakingLevelRange: z.number().int().nonnegative().default(0),
   /**
@@ -1492,34 +1971,75 @@ export const partySchema = z.object({
     free: z.number().int().nonnegative(),
     premium: z.number().int().nonnegative(),
   }).optional(),
+  /**
+   * A elegibilidade de XP compartilhada (`Party::canUseSharedExperience`, ADR 0027 emenda
+   * 2026-09-24, #525). `rangeTiles`/`floors` são os `EXPERIENCE_SHARE_RANGE`/`FLOORS` do TFS
+   * (`src/party.h`) e o `Position::areInRange<30, 30, 1>` do Canary (`party.cpp`) — as duas
+   * engines concordam em 30 tiles / 1 andar. `levelRangeDivisor` é o `partyShareRangeMultiplier`
+   * do Canary (`configmanager.cpp`, default `1.5`): `minLevel = ceil(maiorLevel / divisor)`, que
+   * com `1.5` é o "2/3 do level" do TFS (`getMemberSharedExperienceStatus`, hardcoded). Sem
+   * TFS/Canary concordando num divisor CONFIGURÁVEL, fixamos `1.5` — o valor observado nas duas.
+   * `activityWindowMs` segue o CANARY (`Party::isPlayerActive`, 2 minutos) por precedência do
+   * ADR 0037 d.4: o TFS usa `pzLocked` (1 minuto por padrão), que é config de PZ, não de party.
+   * OPCIONAL e preenchido com os defaults acima no parse, pelo mesmo motivo de
+   * `autoSellItemTypes`: fixtures antigas continuam válidas sem o campo.
+   */
+  sharedExperience: z.object({
+    rangeTiles: z.number().int().positive(),
+    floors: z.number().int().nonnegative(),
+    levelRangeDivisor: z.number().positive(),
+    activityWindowMs: z.number().int().positive(),
+  }).optional(),
   _open: z.string().optional(),
-}).superRefine((party, ctx) => {
-  let previous = 0;
-  for (let n = 1; n <= party.maxMembers; n++) {
-    const percent = party.xpPoolPercentByUniqueVocations[String(n)];
-    if (percent === undefined) {
-      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations sem a chave "${String(n)}"` });
-      return;
-    }
-    if (percent < previous) {
-      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations["${String(n)}"] é menor que a anterior` });
-      return;
-    }
-    previous = percent;
-  }
 }).transform((party): {
   id: 'baseline';
   maxMembers: number;
-  xpPoolPercentByUniqueVocations: Record<string, number>;
   matchmakingLevelRange: number;
   autoSellItemTypes?: { free: number; premium: number } | undefined;
+  sharedExperience?: {
+    rangeTiles: number; floors: number; levelRangeDivisor: number; activityWindowMs: number;
+  } | undefined;
   _open?: string | undefined;
 } => ({
   ...party,
   autoSellItemTypes: party.autoSellItemTypes ?? { free: 5, premium: 20 },
+  sharedExperience: party.sharedExperience
+    ?? { rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000 },
 }));
 
 export type PartyConfig = z.infer<typeof partySchema>;
+
+/**
+ * A entrada de Bestiário de UM monstro (#520, Canary `Bestiary`/TFS `bestiary`, referência
+ * §15-19). `class` é o MESMO vocabulário de `MONSTER_CLASSES` (a categoria do Cyclopedia); `race`
+ * é a família usada pelo sistema de Charms do Tibia — string livre, porque o Draconya ainda não
+ * tem Charms, e `race` entra só como dado (como `class` fez antes do primeiro monstro real).
+ *
+ * Os três limiares (Canary `FirstUnlock`/`SecondUnlock`/`toKill`, TFS `prowess`/`expertise`/
+ * `mastery`) são CRESCENTES por definição — o segundo desbloqueio não pode pedir menos abates
+ * que o primeiro, nem a ficha completa menos que o segundo —, e o `.refine` o exige.
+ */
+export const bestiaryEntrySchema = z.strictObject({
+  class: z.enum(MONSTER_CLASSES),
+  race: z.string().min(1),
+  /** Abates para a ficha completa (Canary `toKill`, TFS `mastery`). */
+  toKill: z.number().int().positive(),
+  /** Abates para o primeiro desbloqueio — a ficha básica (Canary `FirstUnlock`, TFS `prowess`). */
+  firstUnlock: z.number().int().positive(),
+  /** Abates para o segundo desbloqueio — quase completa (Canary `SecondUnlock`, TFS `expertise`). */
+  secondUnlock: z.number().int().positive(),
+  /** Pontos de Charm ganhos ao completar a ficha (Canary `CharmsPoints`, TFS `charmPoints`). */
+  charmsPoints: z.number().int().nonnegative(),
+  /** Estrelas de dificuldade do Cyclopedia, 1 a 4 (Canary `Stars`). */
+  stars: z.number().int().min(1).max(4),
+  /** Raridade de encontro do Cyclopedia: 0 comum … 3 muito raro (Canary `Occurrence`). */
+  occurrence: z.number().int().min(0).max(3),
+  _open: z.string().optional(),
+}).refine(
+  (entry) => entry.firstUnlock <= entry.secondUnlock && entry.secondUnlock <= entry.toKill,
+  { message: 'bestiary: firstUnlock <= secondUnlock <= toKill' },
+);
+export type BestiaryEntry = z.infer<typeof bestiaryEntrySchema>;
 
 /**
  * O Bestiário (§18, FUN-113): os marcos de abates por monstro e o que cada marco vale.
@@ -1553,6 +2073,18 @@ export const bestiarySchema = z.object({
    * ponto flutuante na frente do arredondamento — a armadilha que a conta em inteiro evita.
    */
   xpBonusPercentPerMilestone: z.number().int().nonnegative(),
+  /**
+   * A ficha de Bestiário de cada monstro (#520, Canary `Bestiary`/TFS `bestiary`, referência
+   * §15-19): os limiares de abate que desbloqueiam a ficha e a classificação do próprio Tibia.
+   * Chave é `monsterId`; `buildContent` confere que ele existe (como `class` já fazia sozinho) e
+   * que `class` bate com o `class` do monstro — duas fontes da mesma verdade divergiriam na
+   * primeira mudança em uma delas.
+   *
+   * **Declarado, e ainda não lido por ninguém** — como `staticAttack` (#518): o Cyclopedia
+   * (#321) hoje mostra só progresso por marco global, e a UI de estrelas/desbloqueio é dado à
+   * espera de consumidor. Registrado como divergência em `docs/product/bestiary.md`.
+   */
+  entries: z.record(z.string().min(1), bestiaryEntrySchema).default({}),
   _open: z.string().optional(),
 });
 
@@ -2181,7 +2713,7 @@ export type BotLimits = z.infer<typeof botSchema>;
 export type BotConfig = z.infer<typeof botConfigV1Schema>;
 
 export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
-export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
+export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special', 'ultimatestrikes'] as const;
 
 /**
  * O efeito de uma magia, como o ARQUIVO o descreve. Fica separado de `spellSchema` porque o
@@ -2331,7 +2863,7 @@ export type Spell = z.infer<typeof spellSchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities'> & {
+export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities' | 'defenses'> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
@@ -2342,6 +2874,12 @@ export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities'> & {
    * que o `sim` lê, e é por isso que ele não conhece o par `attack`/`attackIntervalMs`.
    */
   readonly abilities: readonly MonsterAbility[];
+  /**
+   * As defesas JÁ NORMALIZADAS (#518): nunca `undefined` — ausência vira lista vazia, para o
+   * `sim` iterar sem `?? []`. Ao contrário das abilities, não há básica a sintetizar: nenhum
+   * monstro cura sozinho por padrão.
+   */
+  readonly defenses: readonly MonsterDefense[];
 };
 export type MonsterAttack = MonsterDefinition['attack'];
 export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
@@ -2453,6 +2991,26 @@ export const routeSchema = z.object({
       /** Índice na rota. Ancorar no índice, e não em coordenada, mantém rota e spawn juntos. */
       routeIndex: z.number().int().nonnegative(),
       radius: z.number().int().positive().default(3),
+      /**
+       * O monstro DESTE ponto (#519, hunt copiada do Tibia). Ausente é o de sempre: o `Spawner`
+       * sorteia pela composição da dificuldade. Declarado, o ponto sempre nasce esse monstro —
+       * é como o spawn do Canary funciona, um `<monster name>` por posição, nunca um sorteio.
+       */
+      monsterId: z.string().min(1).optional(),
+      /**
+       * A posição EXATA do spawn (#519), quando ela não é o tile do `routeIndex` — o caso do
+       * Canary, cujos pontos raramente caem em cima da rota do bot. Ausente é o tile da rota
+       * nesse índice, como sempre foi. `routeIndex` continua obrigatório mesmo com `at`: é o
+       * ANCORADOR ao laço (ordem, andar de referência), nunca a posição de nascimento.
+       */
+      at: point.optional(),
+      /**
+       * O `spawntime` DESTE ponto, em ms (#519) — no Canary é um atributo por `<monster>`
+       * dentro do `<spawn>`, não da zona nem da dificuldade: cada ponto pode render num ritmo
+       * diferente do vizinho. Ausente cai no `respawnDelayMs` da dificuldade, como sempre foi —
+       * é o que mantém rat-cellars/rotworm-caves (sem `spawntime` por ponto) exatamente iguais.
+       */
+      respawnDelayMs: z.number().int().positive().optional(),
     }),
   ).default([]),
 });

@@ -173,6 +173,59 @@ describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
   });
 });
 
+describe('useSupply — o ESTOQUE do loot é gasto antes do gold (#520, revisão do #536)', () => {
+  it('com estoque, usa SEM debitar gold nenhum — `goldSpent` sai 0', () => {
+    const user = hero({ health: 50, gold: 0 });
+    user.supplyStock.set('health-potion', 2);
+    const result = useSupply(user, potion);
+
+    expect(result).toMatchObject({ ok: true, healed: 50, goldSpent: 0 });
+    expect(user.goldDelta).toBe(0);
+    expect(balanceOf(user)).toBe(0);
+    expect(user.supplyStock.get('health-potion')).toBe(1);
+  });
+
+  it('esgota o estoque em 1 unidade: a chave some do Map ao zerar', () => {
+    // `Map` sem a chave, não `0` guardado — o mesmo cuidado de `Cooldowns`/`ammo`: uma chave
+    // com valor 0 sobreviveria ao snapshot como "tem estoque zero" em vez de "não tem estoque".
+    const user = hero({ health: 50, gold: 100 });
+    user.supplyStock.set('health-potion', 1);
+    useSupply(user, potion);
+    expect(user.supplyStock.has('health-potion')).toBe(false);
+    // E o gold NÃO foi tocado nesse uso — só o estoque.
+    expect(user.goldDelta).toBe(0);
+  });
+
+  it('sem estoque, cai no gold de sempre — `goldSpent` sai o preço cheio', () => {
+    const user = hero({ health: 50, gold: 100 });
+    const result = useSupply(user, potion);
+    expect(result).toMatchObject({ ok: true, goldSpent: 45 });
+    expect(user.goldDelta).toBe(-45);
+  });
+
+  it('com estoque MAS sem gold, ainda assim usa: o estoque não depende do saldo', () => {
+    const user = hero({ health: 50, gold: 0, goldDelta: 0 });
+    user.supplyStock.set('health-potion', 1);
+    expect(useSupply(user, potion).ok).toBe(true);
+    expect(balanceOf(user)).toBe(0);
+  });
+
+  it('sem estoque e sem gold, recusa como sempre — o estoque não inventa saldo', () => {
+    const user = hero({ health: 10, gold: 44 });
+    expect(useSupply(user, potion))
+      .toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+    expect(user.supplyStock.size).toBe(0);
+  });
+
+  it('o estoque de mana potion é um id DIFERENTE — não compartilha contador com a de vida', () => {
+    const user = hero({ mana: 10, gold: 0 });
+    user.supplyStock.set('mana-potion', 1);
+    expect(useSupply(user, manaPotion)).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(user.supplyStock.has('health-potion')).toBe(false);
+    expect(user.supplyStock.has('mana-potion')).toBe(false);
+  });
+});
+
 describe('cura em outro personagem (#399, ADR 0035 d.10)', () => {
   it('castSpell: o RECIPIENT recebe a cura, quem lança paga a mana (RF-04)', () => {
     const caster = hero({ mana: 100 });
@@ -505,6 +558,15 @@ describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisã
     expect(again.ok && again.hits).toEqual(result.hits);
   });
 
+  it('com estoque de loot (#520), a runa sai SEM debitar gold — goldSpent 0', () => {
+    const caster = hero({ level: 30, gold: 0 });
+    caster.supplyStock.set('avalanche-rune', 1);
+    const result = useSupply(caster, rune, three, combat, rng(), scaling(4));
+    expect(result).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(caster.goldDelta).toBe(0);
+    expect(caster.supplyStock.has('avalanche-rune')).toBe(false);
+  });
+
   it('refuses by level, magic level, target, range and gold — and NEVER charges on a refusal', () => {
     // Mutação que mata: subir o débito para antes da mira (runa em ninguém custaria).
     const at = (level: number, gold: number, skill: number, aim: typeof three | null) => {
@@ -552,6 +614,140 @@ describe('quem paga o supply é a Purse (#192, ADR 0027)', () => {
     // A bolsa de UM é o de sempre: saldo dele, débito nele.
     expect(useSupply(hero, potion)).toMatchObject({ ok: true, goldSpent: 45 });
     expect(hero.goldDelta).toBe(-45);
+  });
+});
+
+describe('a poção do Tibia — faixa fixa, espírito e requisito de vocação (#524, kit level 200)', () => {
+  // `hero()` tem `maxHealth`/`maxMana` 100, curtos demais para as faixas de 250-350 do Tibia — a
+  // cura sairia CLAMPADA pelo teto e o teste mediria o teto, não a faixa. Pools grandes aqui.
+  const bigHero = (over: Partial<{
+    health: number; mana: number; level: number; gold: number; vocationId: string | null;
+  }> = {}): CharacterRuntime => {
+    const runtime = new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: over.health ?? 10, maxHealth: 2_000,
+      mana: over.mana ?? 0, maxMana: 2_000,
+      level: over.level ?? 60, xp: 0, vocationId: over.vocationId ?? null,
+      staminaMs: null, staminaUpdatedAtMs: 0,
+      gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    return runtime;
+  };
+
+  const strongHeal: Supply = {
+    id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 50, vocationId: ['knight', 'paladin'] },
+    effect: { kind: 'heal', amountRange: { min: 250, max: 350 } },
+  };
+  const strongMana: Supply = {
+    id: 'strong-mana-potion', name: 'Strong Mana Potion', price: 150, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 50 },
+    effect: { kind: 'mana', amountRange: { min: 115, max: 185 } },
+  };
+  const spirit: Supply = {
+    id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 80, vocationId: 'paladin' },
+    effect: {
+      kind: 'heal', amountRange: { min: 250, max: 350 },
+      alsoMana: { amountRange: { min: 100, max: 200 } },
+    },
+  };
+
+  it('sorteia a cura DENTRO da faixa, com o RNG da sessão — nunca fora dela', () => {
+    // Um `bigHero` NOVO por rodada — não só a vida resetada: 20 usos a 115 gold cada estourariam
+    // o saldo de um personagem só, e a recusa por `not-enough-gold` não é o que este teste mede.
+    for (let seed = 0; seed < 20; seed += 1) {
+      const paladino = bigHero({ level: 60, health: 10, gold: 1_000 });
+      paladino.vocationId = 'paladin';
+      const result = useSupply(
+        paladino, strongHeal, null, undefined, Rng.fromSeed(`s${seed}`), undefined, undefined,
+        paladino, 0,
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.healed).toBeGreaterThanOrEqual(250);
+        expect(result.healed).toBeLessThanOrEqual(350);
+        expect(paladino.health).toBe(10 + result.healed);
+      }
+    }
+  });
+
+  it('sem `rng` (caminho de fixture), a faixa cai no MÍNIMO — determinístico, nunca undefined', () => {
+    const paladino = bigHero({ level: 60, health: 10, gold: 1_000 });
+    paladino.vocationId = 'paladin';
+    expect(useSupply(paladino, strongHeal)).toMatchObject({ ok: true, healed: 250 });
+  });
+
+  it('recusa por LEVEL: a poção pede 50, quem tem 49 não bebe', () => {
+    const cavaleiro = bigHero({ level: 49, gold: 1_000 });
+    cavaleiro.vocationId = 'knight';
+    expect(useSupply(cavaleiro, strongHeal)).toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+  });
+
+  it('recusa por VOCAÇÃO — lista de duas: nem sorcerer nem druid bebem a poção de knight/paladin', () => {
+    const sorcerer = bigHero({ level: 60, gold: 1_000 });
+    sorcerer.vocationId = 'sorcerer';
+    expect(useSupply(sorcerer, strongHeal)).toEqual({ ok: false, reason: 'wrong-vocation', retryInMs: 0 });
+
+    const cavaleiro = bigHero({ level: 60, gold: 1_000 });
+    cavaleiro.vocationId = 'knight';
+    expect(useSupply(cavaleiro, strongHeal).ok).toBe(true);
+    const paladino = bigHero({ level: 60, gold: 1_000 });
+    paladino.vocationId = 'paladin';
+    expect(useSupply(paladino, strongHeal).ok).toBe(true);
+  });
+
+  it('poção de mana com faixa TAMBÉM confere level — gap que não existia antes do #524', () => {
+    const novato = bigHero({ level: 10, mana: 0, gold: 1_000 });
+    expect(useSupply(novato, strongMana)).toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    const veterano = bigHero({ level: 60, mana: 0, gold: 1_000 });
+    const result = useSupply(veterano, strongMana, null, undefined, Rng.fromSeed('mana'));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.manaRestored).toBeGreaterThanOrEqual(115);
+      expect(result.manaRestored).toBeLessThanOrEqual(185);
+    }
+  });
+
+  it('poção de mana SEM `requires.vocationId` vale para qualquer vocação (a strong mana potion do Tibia)', () => {
+    const sorcerer = bigHero({ level: 60, mana: 0, gold: 1_000 });
+    sorcerer.vocationId = 'sorcerer';
+    expect(useSupply(sorcerer, strongMana, null, undefined, Rng.fromSeed('any')).ok).toBe(true);
+  });
+
+  it('a poção de espírito cura E repõe mana no MESMO uso (`alsoMana`)', () => {
+    const paladino = bigHero({ level: 90, health: 10, mana: 0, gold: 1_000 });
+    paladino.vocationId = 'paladin';
+    const result = useSupply(paladino, spirit, null, undefined, Rng.fromSeed('spirit'));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.healed).toBeGreaterThanOrEqual(250);
+      expect(result.healed).toBeLessThanOrEqual(350);
+      expect(result.manaRestored).toBeGreaterThanOrEqual(100);
+      expect(result.manaRestored).toBeLessThanOrEqual(200);
+    }
+    // As duas barras de fato mudaram — não é só o `CastSuccess` mentindo.
+    expect(paladino.health).toBeGreaterThan(10);
+    expect(paladino.mana).toBeGreaterThan(0);
+  });
+
+  it('quem não é Paladino não bebe a poção de espírito, e nada muda', () => {
+    const druida = bigHero({ level: 90, health: 10, mana: 0, gold: 1_000 });
+    druida.vocationId = 'druid';
+    expect(useSupply(druida, spirit)).toEqual({ ok: false, reason: 'wrong-vocation', retryInMs: 0 });
+    expect(druida.health).toBe(10);
+    expect(druida.mana).toBe(0);
+  });
+
+  it('a recusa por vocação/level do supply NÃO tem prazo, como a da magia', () => {
+    const sorcerer = bigHero({ level: 60, gold: 1_000 });
+    sorcerer.vocationId = 'sorcerer';
+    const recusa = useSupply(sorcerer, strongHeal);
+    expect(recusa.ok).toBe(false);
+    if (!recusa.ok) expect(recusa.retryInMs).toBe(0);
   });
 });
 
@@ -670,6 +866,16 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
     expect(user.goldDelta).toBe(-35);
     expect(user.cooldowns.isReady('group:healing', 999)).toBe(false);
     expect(user.cooldowns.isReady('group:healing', 1_000)).toBe(true);
+  });
+
+  it('com estoque de loot (#520), a UH rune escalada sai SEM debitar gold', () => {
+    const user = hero({ level: 50, health: 100, gold: 0 });
+    user.maxHealth = 5_000;
+    user.supplyStock.set('ultimate-healing-rune', 3);
+    const result = useSupply(user, uhRune, null, combat, rng(), magic, undefined, user, 0);
+    expect(result).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(user.goldDelta).toBe(0);
+    expect(user.supplyStock.get('ultimate-healing-rune')).toBe(2);
   });
 
   it('a IH rune recusa por magic level e não cura sem contexto — sem cobrar gold', () => {

@@ -3,13 +3,13 @@
   "name": "Blood Rage",
   "description": "Aumenta o dano corpo a corpo causado em 25% e o dano recebido em 15%, por 10 segundos.",
   "vocationId": "knight",
-  "minLevel": 20,
-  "manaCost": 20,
+  "minLevel": 60,
+  "manaCost": 290,
   "group": "support",
   "groupCooldownMs": 2000,
   "cooldownMs": 2000,
   "secondaryGroup": {
-    "name": "stance",
+    "name": "focus",
     "cooldownMs": 2000
   },
   "effect": {
@@ -20,5 +20,5 @@
     },
     "damageTakenPercent": 15
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia dá +25 % de SKILL, não de dano; sem skill de arma separada (ADR 0026 d.4) a aproximação é em dano."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia dá +25 % de SKILL, não de dano; sem skill de arma separada (ADR 0026 d.4) a aproximação é em dano. Level, mana e grupo secundário do Canary (`data/scripts/spells/support/blood_rage.lua`, main, 2026-09-24): level 20→60, mana 20→290, grupo `stance`→`focus` (o Canary usa `focus` para todo self-buff do Knight/Paladin, não uma `stance` separada)."
 }

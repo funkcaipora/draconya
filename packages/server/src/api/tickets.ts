@@ -4,7 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import type { BestiaryState } from '@draconya/sim';
-import { isAmmoSelection, isBestiaryState } from '../tickets.js';
+import { isAmmoSelection, isBestiaryState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
@@ -126,7 +126,7 @@ export function createTicketHandler(
     try {
       settlement = await settleProgress(body.data.characterId);
     } catch (error) {
-      request.log.error({ error, characterId: body.data.characterId }, 'Settlement failed');
+      request.log.error({ err: error, characterId: body.data.characterId }, 'Settlement failed');
       return reply.code(503).send({ error: 'progress-not-settled' });
     }
     // Recusar em vez de deixar passar: entrar com um personagem que o servidor SABE estar
@@ -202,6 +202,10 @@ export function initialCharacterOf(
     ...bestiaryOf(character.bestiary),
     // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
     ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
+    // E o estoque de supply/munição do loot (#520), mesma régua: sem isto, uma hunt nova
+    // sempre começaria com estoque zero, mesmo com drop de ontem esperando na linha.
+    ...(isStockMap(character.supplyStock) ? { supplyStock: character.supplyStock } : {}),
+    ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,

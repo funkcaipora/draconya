@@ -83,6 +83,15 @@ export interface Movable<P extends GridPoint = GridPoint> {
    * a entrada na hunt REESCREVEM `speed` pela tabela, e apagariam o haste com ele. Ausente é 1.
    */
   readonly speedScale?: number;
+  /**
+   * Usa escada (#519, hunt multiandar)? Ausente é o padrão de sempre: quem carrega `z` na
+   * posição sobe e desce; quem não carrega vê o degrau como parede (o monstro, e o Tibia
+   * concorda). O monstro multiandar PASSOU a carregar `z` — é o que faz `zOf` achar o andar
+   * certo dele para bloqueio e ocupação —, então `false` aqui é o que continua impedindo o
+   * monstro de subir escada só porque a posição dele agora tem `z`: as duas coisas eram a MESMA
+   * checagem antes desta issue, e não podem continuar sendo.
+   */
+  readonly crossesFloors?: boolean;
 }
 
 /**
@@ -156,9 +165,11 @@ export function canOccupy(
   const z = zOf(from, world.map);
   const change = floorChangeAt(world.map, to.x, to.y, z);
   if (change !== null) {
-    // Quem não carrega `z` — o monstro — não usa escada, como no Tibia: para ele o degrau é
-    // parede. Para quem carrega, a legalidade é a do DESTINO da escada.
-    if (!('z' in from)) return 'tile-blocked';
+    // Quem não carrega `z` continua vendo o degrau como parede (o monstro de andar único de
+    // sempre, como no Tibia); quem carrega mas foi marcado `crossesFloors: false` também — é o
+    // monstro multiandar (#519), que carrega `z` para achar o PRÓPRIO andar mas nunca troca de
+    // andar sozinho. Para quem sobra, a legalidade é a do DESTINO da escada.
+    if (!('z' in from) || mover.crossesFloors === false) return 'tile-blocked';
     return tileAdmits(world, change);
   }
   return tileAdmits(world, { x: to.x, y: to.y, z });

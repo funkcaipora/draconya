@@ -26,7 +26,7 @@ const character = (id: string, accountId: string, over: Partial<CharacterRecord>
   id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null,
+  ammo: null, supplyStock: null, ammunitionStock: null,
   createdAt: new Date(),
   ...over,
 });
@@ -36,6 +36,8 @@ const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
 function build(over: {
   issue?: (characterId: string) => IssueResult;
   locate?: (characterId: string) => { type: string } | null;
+  /** O relógio do `PartyStore` (#527, carência do disband) — real por padrão. */
+  now?: () => number;
 } = {}) {
   const app = Fastify();
   const characters = new Map<string, CharacterRecord>([
@@ -47,8 +49,11 @@ function build(over: {
   // Onde cada personagem está pelo diretório FAKE: sessão e nó. `locate` cobre o `type` que as
   // rotas antigas já usavam; `sessionId`/`nodeId` são a lotação viva e o nó do líder (#402).
   const locations = new Map<string, { sessionId: string; nodeId: string; type: string }>();
+  // Quem tem um snapshot de OUTRA sessão pendente de retomada (#527) — vazio por padrão, como
+  // o caso comum de ninguém ter uma hunt drenada esperando.
+  const pendingSnapshots = new Set<string>();
   const deps: PartyRouteDependencies = {
-    party: new PartyStore(redis),
+    party: new PartyStore(redis, over.now === undefined ? {} : { now: over.now }),
     tickets: {
       resolveNode: async () => ({ ok: true, node: NODE }),
       issue: async (_accountId, characterId, _initial, node, party) => {
@@ -78,6 +83,11 @@ function build(over: {
       lookup: async (characterId) => locations.get(characterId) ?? null,
       node: async (nodeId) => ({ nodeId, sessions: 0, url: `ws://${nodeId}:7171` }),
     },
+    snapshots: {
+      load: async (characterId) => (pendingSnapshots.has(characterId)
+        ? { characterId, accountId: characters.get(characterId)?.accountId ?? 'a?', nodeId: 'n0', savedAtMs: 0, snapshot: { id: `s-old-${characterId}` } as never }
+        : null),
+    },
     limits: {
       maxMembers: 4, contentVersion: 'v-test',
       vocations: ['knight', 'druid', 'sorcerer', 'paladin'],
@@ -100,7 +110,7 @@ function build(over: {
       headers: { 'x-account': characters.get(characterId)?.accountId ?? 'nobody' },
     }),
   });
-  return { app, as, issued, revoked, locations, characters, deps, redis };
+  return { app, as, issued, revoked, locations, pendingSnapshots, characters, deps, redis };
 }
 
 describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () => {
@@ -213,6 +223,27 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect(started.json()).toEqual({ error: 'not-in-city', characterId: 'p2' });
     expect(issued).toEqual([]);
     // A party continua de pé para tentar de novo.
+    expect(((await as('p1').mine()).json() as { party: unknown }).party).not.toBeNull();
+  });
+
+  it('refuses to start when a member has a snapshot from another session still pending resumption (#527)', async () => {
+    // ADR 0010: um nó que reinicia no meio de uma hunt deixa o REGISTRO no diretório morrer
+    // com o lease — `locateSession` volta `null`, e o personagem PARECE em repouso — mas o
+    // snapshot resumível continua de pé (§38.4). Sem esta checagem, `/start` formaria uma
+    // party nova para p2 enquanto a hunt anterior dele ainda espera retomada, e o `game`
+    // "resolveria" sozinho qual sessão é a certa quando o ticket chegasse — o achado da QA ao
+    // vivo (`Session resumed from snapshot` em vez de criar a hunt nova).
+    const { as, issued, pendingSnapshots } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'split' });
+    pendingSnapshots.add('p2');
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(409);
+    expect(started.json()).toEqual({ error: 'pending-session', characterId: 'p2' });
+    expect(issued).toEqual([]);
+    // A party continua de pé para tentar de novo — reconectar sozinho resolve o snapshot.
     expect(((await as('p1').mine()).json() as { party: unknown }).party).not.toBeNull();
   });
 
@@ -522,5 +553,80 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     const declined = await as('p5').post(`/api/party/${id}/decline`);
     expect(declined.statusCode).toBe(200);
     expect(((await as('p5').mine()).json() as { invites: unknown[] }).invites).toEqual([]);
+  });
+
+  it('keeps a freshly started hunting party alive on `/mine` during the grace window, then disbands it once nobody ever connects (#527)', async () => {
+    const { as, redis } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/configure`, {
+      huntId: 'arena', difficulty: 'bold', minLevel: 1, vocationTargets: { [NO_VOCATION]: 4 },
+    });
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(200);
+    // Ainda dentro da carência (#527, `DISBAND_GRACE_MS`): NINGUÉM conectou ainda, mas o líder
+    // só abre o WebSocket DEPOIS desta resposta HTTP — o mesmo caso do teste "runs the whole
+    // flow" acima. A party continua respondendo normalmente.
+    expect((await as('p1').mine()).json()).toMatchObject({ party: { state: 'hunting' } });
+
+    // "Volta no tempo" só o `startedAtMs`, direto no formulário: simula a carência vencida sem
+    // esperar de verdade — o cenário exato de `pnpm dev:dragon-party --start` sem anexar o
+    // ticket do líder (#527), ou de um navegador que fechou antes do primeiro `session-attach`.
+    await redis.hset(`party:${id}`, 'startedAtMs', String(Date.now() - 60_000));
+
+    const mine = await as('p1').mine();
+    expect(mine.statusCode).toBe(200);
+    expect((mine.json() as { party: unknown }).party).toBeNull();
+    // A party sumiu de vez — não só da resposta: p1 e p2 ficam livres para formar outra, sem
+    // esperar o TTL de 24h de uma `hunting` que nunca hospedou ninguém.
+    expect(await redis.exists(`party:${id}`)).toBe(0);
+    expect(await redis.exists('party:by-char:p1')).toBe(0);
+    expect(await redis.exists('party:by-char:p2')).toBe(0);
+    const recreated = await as('p1').post('/api/party');
+    expect(recreated.statusCode).toBe(200);
+  });
+
+  it('a hunting party stuck with the leader still in a City session is disbanded, not treated as alive (#527)', async () => {
+    const { as, redis, locations } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/configure`, {
+      huntId: 'arena', difficulty: 'bold', minLevel: 1, vocationTargets: { [NO_VOCATION]: 4 },
+    });
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(200);
+    // O líder reconecta ao MESMO nó, mas cai de volta na Cidade (a sessão antiga, nunca
+    // trocada) em vez da hunt: a checagem tem que comparar `sessionId`, não só perguntar se o
+    // diretório conhece o líder — "alguém" ali não é "a party".
+    locations.set('p1', { sessionId: 'city-session-p1', nodeId: 'n1', type: 'city' });
+    // Fora da carência, do mesmo jeito que o teste acima — passado sem um relógio próprio,
+    // regravando `startedAtMs` direto.
+    await redis.hset(`party:${id}`, 'startedAtMs', String(Date.now() - 60_000));
+    const mine = await as('p2').mine();
+    expect((mine.json() as { party: unknown }).party).toBeNull();
+    expect(await redis.exists(`party:${id}`)).toBe(0);
+  });
+
+  it('drops a hunting room that never hosted anyone from `/rooms`, disbanding it (#527)', async () => {
+    const { as, redis } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/configure`, {
+      huntId: 'arena', difficulty: 'bold', minLevel: 1, vocationTargets: { [NO_VOCATION]: 4 },
+    });
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/publish`);
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(200);
+    // Publicada antes do `start`, ninguém conecta depois, e a carência já venceu: a sala
+    // apareceria `hunting` com zero membros vivos — uma vaga que nenhum "Entrar" conseguiria
+    // de fato usar.
+    await redis.hset(`party:${id}`, 'startedAtMs', String(Date.now() - 60_000));
+    const rooms = await as('p3').rooms();
+    expect(rooms.statusCode).toBe(200);
+    expect((rooms.json() as { rooms: unknown[] }).rooms).toEqual([]);
+    expect(await redis.exists(`party:${id}`)).toBe(0);
   });
 });

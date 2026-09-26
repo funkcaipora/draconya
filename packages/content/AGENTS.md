@@ -153,6 +153,19 @@ reservado ao boot. **Os ids que cada chave resolve continuam sendo arte**, entã
 `packProblems` os confere contra o inventário do pacote (CMB-09, #242): um projétil fora da
 faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
 
+**A IA do TFS é conteúdo opcional, nunca contagem por tick** (#518, referência §15-19).
+`monsterAbilitySchema.chance` é OPCIONAL e sem default preenchido de propósito — não
+`z.number().default(1)` — porque a diferença entre "ausente" e "declarado como 1" é observável
+no `sim` (ausente não rola sorteio, declarado rola sempre). `monsterAbilityTargetSchema.area`
+aceita `circle`, `wave` e `beam` (`buildContent` recusa o resto); `wave`/`beam` saem do monstro
+na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
+(cura própria) é normalizado no boot como `abilities` (`normalizeMonsterDefenses`, ausente vira
+lista VAZIA — nunca `undefined` — para o `sim` iterar sem `?? []`), mas sem básica a sintetizar:
+nenhum monstro cura sozinho por padrão. `monster.targetChange`/`runOnHealth`/`staticAttack` são
+opcionais e passam direto (sem compilação) — presença é o que importa, não normalização de
+forma. Nenhum destes campos tem default preenchido: ausência é o comportamento de sempre, e é
+isso que preserva rato e rotworm.
+
 **A conferência visual dos efeitos e projéteis é auditada e re-rodável** (CMB-09, #242). O
 método, a versão do pacote e o bloqueio da biblioteca parcial estão em
 `docs/combat-presentation-audit.md`; `src/appearances.test.ts` prende que toda referência cai no
@@ -354,5 +367,22 @@ entre arquivos resolvem.
 - **O `.refine` de `botRingSwapSchema` é regra de jogo, não de forma.** `removeAbove` maior que
   `equipBelow` é o que garante a faixa morta da histerese — limiares iguais parseiam como número
   válido e trocam o anel a cada golpe. Recusar aqui é mais barato que descobrir pelo extrato.
+- **Rota pode atravessar `floorChanges`, e a posição EFETIVA de um passo pode divergir do tile
+  autorado** (#519, hunt multiandar — a Darashia Dragon Lair). `validateRoute` (`map.ts`) não
+  confere mais adjacência tile a tile: confere adjacência à posição EFETIVA, que vira o destino
+  da escada assim que o passo pisa nela — exatamente como `move()` do `sim` resolve de verdade.
+  Um tile que É origem de escada nunca é o problema por si só; o que é sempre um erro é um ponto
+  de PASSAGEM (`--via` do `trace-route.ts`) sobre um degrau, porque ninguém "para" numa escada.
+- **`routeSchema.spawnPoints` ganhou `monsterId`, `at` e `respawnDelayMs`, todos opcionais e
+  todos por PONTO** (#519, o formato do spawn do Canary — um `<monster>` por posição, com
+  `spawntime` próprio, nunca um sorteio por zona). Ausentes, o comportamento é o de sempre:
+  `Spawner` sorteia da composição, a posição é o tile do `routeIndex`, o respawn usa o
+  `respawnDelayMs` da DIFICULDADE. `routeIndex` continua obrigatório mesmo com `at` declarado —
+  ele ancora ao laço (ordem, andar de referência); `at` é só a posição de nascimento.
+- **`monsterSchema.blockable` é o `isBlockable` do TFS/Canary, e o default é `false`** (#519) —
+  NÃO esperar o jogador sair da vista antes de respawnar, porque é isso que 1.640 dos 1.656
+  monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`
+  (#236) da hunt só vale para quem declara `blockable: true` — Rat e Rotworm o fazem, porque o
+  comportamento deles vem do Huntera observado, não do Canary, e não podia mudar aqui.
 
 Issue: FUN-8.

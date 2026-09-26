@@ -23,14 +23,15 @@ import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
   Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
 } from '@draconya/content';
-import { containerRulesFor, PartyFullError, shareCostsOf, splitLootOf } from '@draconya/sim';
+import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
   PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
-import type { SessionDirectory } from '../directory.js';
+import type { SessionDirectory, SessionLocation } from '../directory.js';
+import { settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
@@ -355,19 +356,23 @@ type PlayerStats = S2CProps<'player-stats'>;
  */
 function skillProgressOf(
   character: CharacterRuntime | undefined, definition: Skill | undefined,
+  vocation: Vocation | null, progression: Progression | undefined,
 ): SkillProgress {
   if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
-  return character.skills.progressOf(definition);
+  const factor = progression === undefined ? undefined : skillFactorFor(definition, vocation, progression);
+  return character.skills.progressOf(definition, factor);
 }
 
 function playerStatsOf(
   character: CharacterRuntime | undefined,
   skillCatalog?: ReadonlyMap<string, Skill>,
+  vocation: Vocation | null = null,
+  progression?: Progression,
 ): PlayerStats {
   const skills: Record<string, SkillProgress> = {};
   if (character !== undefined && skillCatalog !== undefined) {
     for (const definition of skillCatalog.values()) {
-      skills[definition.id] = character.skills.progressOf(definition);
+      skills[definition.id] = skillProgressOf(character, definition, vocation, progression);
     }
   }
   return {
@@ -388,7 +393,7 @@ function playerStatsOf(
     },
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
-    magicLevel: skillProgressOf(character, skillCatalog?.get('magic')),
+    magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
   };
 }
 
@@ -1027,12 +1032,28 @@ export class SessionHost {
   ): Promise<PrepareResult> {
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
-      await this.#register(characterId, existing, accountId);
-      return { created: false };
+      // O ticket é de PARTY e pede uma sessão diferente da que o personagem já ocupa aqui
+      // (#527, invariante 8): o líder clica "Iniciar com o time" DA Cidade, e o socket antigo
+      // pode nem ter fechado ainda quando o novo ticket chega. Sem isto, `#prepare` reanexava
+      // à Cidade e o ticket da party era descartado em silêncio — a hunt nunca nascia, e quem
+      // mandasse `session-attach` continuava recebendo `sessionType: "city"` para sempre.
+      if (party !== undefined && existing.id !== party.sessionId) {
+        // O tipo do destino é o da sessão já hospedada (#402, quem chega depois do primeiro
+        // ticket) quando ela existe; senão é o que `createSession` vai produzir para um
+        // `PartyTicket` — sempre `'hunt'` (`sessions.ts`, `partyHuntFor`), nunca outra coisa.
+        const targetType = this.#sessions.get(party.sessionId)?.session.ruleset.type ?? 'hunt';
+        await this.#leaveForParty(characterId, existing, {
+          sessionId: party.sessionId, nodeId: this.#options.nodeId, type: targetType,
+        });
+      } else {
+        await this.#register(characterId, existing, accountId);
+        return { created: false };
+      }
     }
 
-    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso.
-    // A sessão é achada pelo id dela neste nó; sessão ausente é recusa tipada, não sessão nova.
+    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso —
+    // ou acabou de sair da Cidade pelo ramo acima. A sessão é achada pelo id dela neste nó;
+    // sessão ausente é recusa tipada, não sessão nova.
     if (party?.join === true) {
       return this.#admitLateJoiner(characterId, initialCharacter, accountId, party);
     }
@@ -1055,6 +1076,76 @@ export class SessionHost {
       }
     }
     return { created: true };
+  }
+
+  /**
+   * Tira o personagem da sessão que ele ocupa NESTE nó antes de a party assumir (#527,
+   * invariante 8: nunca duas sessões ao mesmo tempo) — E move o registro do diretório pela
+   * MESMA operação que a transição hunt↔Cidade da morte usa (`directory.succeed`, FUN-38, o
+   * `#replace` abaixo), nunca por `#register`/`#takeOver`: `#takeOver` existe para RETOMAR
+   * depois de nó morto — `TAKE_OVER_SESSION` recusa quando o batimento do nó ainda existe
+   * (`directory.ts`) — e o nó aqui está bem vivo, é ele mesmo quem está pedindo a troca. Sem
+   * isto, o `#register` que `#createAndRegister` chama logo depois via o `sessionKey` ainda
+   * apontando para a Cidade, caía no `#takeOver`, e ele recusava SEMPRE — "active reservation
+   * expired before session registration" em todo handshake, porque o nó nunca estava morto.
+   *
+   * Espelha o ramo de shard de `release` — a Cidade não credita e não encerra por personagem
+   * (ADR 0023), mas guarda o que mudou (`#saveDurableReceipt`, #154).
+   *
+   * A sessão de origem só deveria ser um shard: a API só emite ticket de party para quem o
+   * diretório via na Cidade (ou em repouso) no instante da emissão — `/start` e o `/join` em
+   * curso conferem isso antes de reservar qualquer coisa. O ramo `else` é rede de segurança
+   * para essa suposição falhar — credita como uma saída normal em vez de arriscar apagar
+   * progresso em silêncio.
+   */
+  async #leaveForParty(characterId: string, existing: Session, target: SessionLocation): Promise<void> {
+    const hosted = this.#sessions.get(existing.id);
+    if (hosted === undefined) {
+      this.#sessionIdByCharacter.delete(characterId);
+    } else {
+      this.#dropViewers(hosted, characterId);
+      if (existing.ruleset.shared === true) {
+        await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
+        hosted.session.leave(characterId);
+        this.#announceDeparture(hosted, characterId);
+      } else {
+        let receipt: Receipt | null;
+        if (hosted.session.ended === null && hosted.session.participants.length > 1) {
+          const departure = hosted.session.leave(characterId, 'manual-exit');
+          receipt = departure?.receipt ?? null;
+        } else {
+          if (hosted.session.ended === null) hosted.session.end('manual-exit');
+          receipt = receiptOf(hosted, characterId);
+        }
+        if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
+      }
+      const remaining = this.#charactersOf(existing.id).filter((id) => id !== characterId);
+      if (remaining.length === 0) this.#sessions.delete(existing.id);
+      this.#sessionIdByCharacter.delete(characterId);
+      this.#restingSince.delete(characterId);
+    }
+
+    // O registro do diretório troca AQUI, não em `#register` — ver o comentário acima. A
+    // conta é a que a Cidade já registrou (`#createLocal` a gravou quando o personagem
+    // entrou lá); sem diretório (host de teste sem essa dependência), não há o que mover.
+    const directory = this.#options.directory;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    if (directory === undefined || accountId === undefined) return;
+    const moved = await directory.succeed(
+      characterId, accountId,
+      { sessionId: existing.id, nodeId: this.#options.nodeId, type: existing.ruleset.type satisfies SessionType },
+      target,
+    );
+    if (!moved) {
+      // Outro nó assumiu o registro, ou o lease/reserva expirou, entre a leitura da sessão
+      // atual e agora — a mesma corrida rara que `#replace` cobre soltando o personagem. Aqui
+      // não há `hosted` para soltar (o estado local já saiu acima); falhar alto é o que faz o
+      // handshake responder 503 em vez de hospedar uma sessão sem registro válido nenhum
+      // (invariante 9).
+      throw new Error(
+        `directory entry for ${characterId} changed hands while leaving a session for a party ticket`,
+      );
+    }
   }
 
   /**
@@ -1197,7 +1288,7 @@ export class SessionHost {
     try {
       await this.release(characterId, 1000, 'logout');
     } catch (error) {
-      this.#logger.error({ error, characterId }, 'Failed to log the character out');
+      this.#logger.error({ err: error, characterId }, 'Failed to log the character out');
     }
   }
 
@@ -1261,7 +1352,7 @@ export class SessionHost {
     } catch (error) {
       // Falhar aqui deixa o slot preso até o lease expirar, que é ruim mas se resolve
       // sozinho. Silenciar seria pior: é a única pista de por que uma conta ficou sem slot.
-      this.#logger.error({ error, characterId }, 'Failed to release session from the directory');
+      this.#logger.error({ err: error, characterId }, 'Failed to release session from the directory');
     }
     this.#logger.info({ characterId, sessionId: hosted.session.id }, 'Session released');
   }
@@ -1543,7 +1634,7 @@ export class SessionHost {
     // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
     // `equipment-changed` como caminho próprio.
     const character = this.#participantOf(hosted, viewer.characterId);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = this.#statsOf(character);
     hosted.sentStats.set(viewer.characterId, stats);
     this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
   }
@@ -1703,7 +1794,7 @@ export class SessionHost {
       }
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
@@ -1712,6 +1803,18 @@ export class SessionHost {
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
+  }
+
+  /**
+   * `playerStatsOf` com a vocação DESTE personagem já resolvida (#521, ADR 0037): o `%` de
+   * skill/ML no HUD precisa do fator da vocação dele, não do genérico do conteúdo — e todo
+   * chamador tinha o mesmo par `character`/`this.#options.skillCatalog` repetido.
+   */
+  #statsOf(character: CharacterRuntime | undefined): PlayerStats {
+    const vocation = character?.vocationId == null
+      ? null
+      : this.#options.vocations?.get(character.vocationId) ?? null;
+    return playerStatsOf(character, this.#options.skillCatalog, vocation, this.#options.progression);
   }
 
   /**
@@ -1735,7 +1838,7 @@ export class SessionHost {
       return;
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
@@ -2013,7 +2116,7 @@ export class SessionHost {
         hosted.session.advanceBy(overdueMs);
       } catch (error) {
         // Uma sessão que explode não pode derrubar as outras do nó.
-        this.#logger.error({ error, sessionId: hosted.session.id }, 'Session tick failed');
+        this.#logger.error({ err: error, sessionId: hosted.session.id }, 'Session tick failed');
       }
       // O ATRASO é quanto o tick passou do período que ele mesmo pediu, não o intervalo. Um
       // tick de 1 Hz que roda a cada 1000 ms está no prazo; o mesmo intervalo num tick de
@@ -2255,7 +2358,11 @@ export class SessionHost {
    *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
    *                      lançamento (`spell-cast`) ou do uso (`supply-used`), que vêm antes —
    *                      senão uma cura que repôs zero não teria efeito e uma que repôs teria,
-   *                      e a magia pareceria falhar quando o jogador estava cheio;
+   *                      e a magia pareceria falhar quando o jogador estava cheio. A EXCEÇÃO é
+   *                      `source: 'monster'` (#518, a defesa de cura própria): não há
+   *                      lançamento prévio, e o `sim` só emite o evento quando REPÔS — como
+   *                      `spell-cast`/`supply-used` sempre emitem, o efeito aqui é seguro do
+   *                      mesmo jeito;
    *   spell-cast       → o projétil do conjurador ao PRIMEIRO alvo (é um projétil, não uma
    *                      rajada), e o efeito em CADA alvo — ou no próprio conjurador quando
    *                      não há alvo, que é a cura;
@@ -2294,6 +2401,14 @@ export class SessionHost {
         const id = hosted.creatureIds.get(String(event.creatureId));
         if (id === undefined) return;
         messages.push({ type: 'creature-hit', id, amount: event.amount, kind: 'heal' });
+        // A defesa de cura própria (#518) não tem lançamento prévio — o efeito sai AQUI, só
+        // quando o evento existe (o `sim` já suprime a cura que repôs zero).
+        const impactId = event.impactKey === undefined
+          ? undefined
+          : appearances?.abilities[event.impactKey]?.effect;
+        if (impactId !== undefined) {
+          messages.push({ type: 'effect', position: event.position, effectId: impactId });
+        }
         break;
       }
       case 'spell-cast': {
@@ -2424,7 +2539,7 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character, this.#options.skillCatalog);
+      const stats = this.#statsOf(character);
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
@@ -2583,7 +2698,7 @@ export class SessionHost {
     viewer.send(state);
     hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);
-    const stats = playerStatsOf(participant, this.#options.skillCatalog);
+    const stats = this.#statsOf(participant);
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
     // E o alvo selecionado (#470): tem mensagem própria, e sem ela quem reanexa com um alvo
@@ -3253,7 +3368,7 @@ export class SessionHost {
         'Collecting a resting character nobody is watching',
       );
       void this.release(characterId).catch((error: unknown) => {
-        this.#logger.error({ error, characterId }, 'Failed to collect a resting character');
+        this.#logger.error({ err: error, characterId }, 'Failed to collect a resting character');
       });
     }
   }
@@ -3373,7 +3488,7 @@ export class SessionHost {
         //
         // A que falhou FICA com snapshot e registro: é o caminho da FUN-28, e voltar
         // retomável é melhor que sumir sem crédito.
-        this.#logger.error({ error, characterId, sessionId }, 'Failed to drain a session');
+        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to drain a session');
       }
     }
     return ended;
@@ -3440,6 +3555,16 @@ export class SessionHost {
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
+      // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
+      // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
+      // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
+      // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
+      // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
+      // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
+      // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
+      ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
@@ -3474,7 +3599,7 @@ export class SessionHost {
     if (owner === undefined || owner.lootBox.length === 0) return;
     await this.#options.lootBoxes?.save(sessionId, owner.lootBox)
       .catch((error: unknown) => {
-        this.#logger.error({ error, characterId, sessionId }, 'Failed to save the session loot box');
+        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to save the session loot box');
       });
   }
 
@@ -3533,7 +3658,7 @@ export class SessionHost {
       } catch (error) {
         // Falhar aqui é perder o próximo intervalo, não a sessão. Silenciar seria perder a
         // única pista de por que uma retomada voltou mais atrasada do que devia.
-        this.#logger.error({ error, characterId }, 'Failed to save session snapshot');
+        this.#logger.error({ err: error, characterId }, 'Failed to save session snapshot');
       }
     }
   }
@@ -3582,10 +3707,7 @@ export class SessionHost {
     const { session } = hosted;
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
-    const self = playerStatsOf(
-      this.#participantOf(hosted, characterId),
-      this.#options.skillCatalog,
-    );
+    const self = this.#statsOf(this.#participantOf(hosted, characterId));
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
@@ -3618,7 +3740,11 @@ export class SessionHost {
       const definition = this.#options.monsterCatalog?.get(monster.monsterId);
       creatures.push({
         id: this.#creatureId(hosted, monster.subject),
-        position: { ...monster.position, z: ruleset.floor ?? 0 },
+        // O andar do MONSTRO (#519, hunt multiandar), nunca o padrão da instância: numa hunt de
+        // andar único os dois sempre bateram, e é só por isso que `ruleset.floor` nunca apareceu
+        // errado até aqui. `?? ruleset.floor ?? 0` sobra para o monstro de snapshot anterior a
+        // esta issue, sem `z` nenhum na posição.
+        position: { ...monster.position, z: monster.position.z ?? ruleset.floor ?? 0 },
         appearanceId: definition?.outfitId ?? 0,
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
@@ -3689,10 +3815,19 @@ export class SessionHost {
     party?: PartyTicket,
   ): Promise<void> {
     // A party (#195): a sessão pode JÁ estar hospedada — outro membro chegou primeiro — e aí
-    // este só entra nela. Senão, ou é retomada de snapshot (que já traz os N), ou o primeiro
-    // ticket cria a hunt com todos.
+    // este só entra nela. Senão, o primeiro ticket cria a hunt com todos.
     const hostedParty = party === undefined ? undefined : this.#sessions.get(party.sessionId);
-    const resumed = hostedParty === undefined ? await this.#resume(characterId, accountId) : null;
+    // A retomada de snapshot (que já traz os N, quando ele é de uma party) só se aplica a um
+    // ticket SOLO reconectando — nunca a um ticket de party (#527, invariante 8): o snapshot é
+    // indexado por `characterId`, não por `sessionId`, e `/start` sempre emite um `sessionId`
+    // novo (`randomUUID`). Um personagem com QUALQUER snapshot pendente de outra sessão — a
+    // hunt em que ele estava quando o nó reiniciou (ADR 0010), por exemplo — nunca deveria
+    // chegar aqui com um ticket de party: `/start` recusa formar a party antes disso (ver
+    // `api/party.ts`). Se chegar mesmo assim, o ticket é AUTORITATIVO sobre qual sessão isto
+    // é — retomar o snapshot errado seria colocar o personagem na hunt de outra pessoa.
+    const resumed = (party === undefined && hostedParty === undefined)
+      ? await this.#resume(characterId, accountId)
+      : null;
     const session = hostedParty?.session
       ?? resumed?.session
       ?? this.#options.createSession(characterId, initialCharacter, party);
@@ -3713,6 +3848,16 @@ export class SessionHost {
         this.#logger.warn({ characterId: other.id, sessionId: session.id }, 'Party member has no snapshot of their own; hosting without a lease');
         continue;
       }
+      // O outro membro pode estar hospedado AQUI, na Cidade, no mesmo nó (#527) — o cenário de
+      // duas caçadas locais logadas juntas. ANTES do `#register` de propósito: registrar com o
+      // `sessionKey` ainda apontando para a Cidade cairia no `#takeOver`, que recusa sempre
+      // (o nó está vivo — ver `#leaveForParty`).
+      const existingOther = this.sessionFor(other.id);
+      if (existingOther !== undefined && existingOther.id !== session.id) {
+        await this.#leaveForParty(other.id, existingOther, {
+          sessionId: session.id, nodeId: this.#options.nodeId, type: session.ruleset.type,
+        });
+      }
       await this.#register(other.id, session, otherAccount);
       this.#accountIdByCharacter.set(other.id, otherAccount);
     }
@@ -3727,6 +3872,9 @@ export class SessionHost {
     }
     this.#createLocal(characterId, session, accountId);
     for (const other of others) {
+      // A Cidade dele já foi deixada no loop acima, ANTES do `#register` — aqui só falta o
+      // mapa local, que aquele loop não mexeu de propósito (a ordem de `#createLocal` importa
+      // para quem já estava na hunt ver a chegada, como o comentário duas linhas acima explica).
       this.#sessionIdByCharacter.set(other.id, session.id);
       this.#restingSince.set(other.id, this.#now());
       // Nome, cores e bot dos outros membros vêm do bloco da party (#195): quem os vê no
@@ -3767,7 +3915,7 @@ export class SessionHost {
     try {
       stored = await snapshots.load(characterId);
     } catch (error) {
-      this.#logger.error({ error, characterId }, 'Failed to load session snapshot');
+      this.#logger.error({ err: error, characterId }, 'Failed to load session snapshot');
       return null;
     }
     if (stored === null) return null;
@@ -3795,10 +3943,12 @@ export class SessionHost {
   /**
    * Extrato de uma sessão que não volta mais, montado a partir do snapshot.
    *
-   * O `seq` sai de `ledgerSeq + 1`, que é a MESMA regra do caminho normal — e é ela que torna
-   * isto idempotente: se aquela sessão já tinha creditado esse `seq`, a chave única do ledger
-   * recusa o segundo, e o jogador não recebe duas vezes. Sem essa aritmética, um snapshot que
-   * sobreviveu a uma drenagem parcial creditaria o mesmo progresso de novo.
+   * A montagem em si — que campos do `CharacterState` viram extrato, `seq = ledgerSeq + 1`
+   * para a idempotência — é `settleSnapshotAsReceipt` (`../snapshot-settlement.js`, #527):
+   * compartilhada com `/api/party/:id/start` (recusa formar hunt para quem tem outro snapshot
+   * resumível pendente) e `pnpm dev:dragon-party --reset` (limpa o snapshot pelo MESMO
+   * caminho, nunca apagando a chave às cegas). Nenhum dos dois tem o resto do runtime de jogo
+   * para reconstruir a sessão — e não precisam: creditar não depende disso.
    */
   async #creditUnrestorable(
     characterId: string,
@@ -3807,47 +3957,13 @@ export class SessionHost {
   ): Promise<void> {
     const receipts = this.#options.receipts;
     if (receipts === undefined || accountId === undefined) return;
-    const owner = snapshot.participants.find((participant) => participant.id === characterId);
     try {
-      await receipts.save({
-        sessionId: snapshot.id,
-        characterId,
-        accountId,
-        // `drain` porque foi o servidor que encerrou, não o jogador: é a mesma família de
-        // "sua sessão foi encerrada por manutenção", que é o que de fato aconteceu.
-        reason: 'drain',
-        seq: snapshot.ledgerSeq + 1,
-        // Os agregados DELE (#187); snapshot anterior só tem a soma, que era dele.
-        aggregates: snapshot.aggregatesByCharacter?.[characterId] ?? snapshot.aggregates,
-        notableEvents: snapshot.notableEvents,
-        ...(owner?.staminaMs === undefined || owner.staminaMs === null
-          ? {}
-          : {
-            staminaMs: owner.staminaMs,
-            staminaUpdatedAtMs: owner.staminaUpdatedAtMs ?? 0,
-          }),
-        // As skills e o Bestiário estão no `CharacterState` do snapshot, e sem eles aqui a
-        // progressão da sessão inteira sumia: a XP era creditada e o abate 9 999 voltava a
-        // ser o 5 000 (achado da revisão da FUN-113 — as skills sofriam o mesmo). Ambos são
-        // absolutos e monotônicos, e o ledger funde pelo maior: um snapshot velho não rebaixa.
-        ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
-        ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
-        ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
-        // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
-        // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
-        ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
-        ...(owner?.inventory === undefined ? {} : {
-          equipment: equipmentOfState(owner.inventory),
-          layout: layoutOfState(owner.inventory),
-          acquired: acquiredByState(owner.inventory, snapshot.id),
-        }),
-        ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
-      });
+      await settleSnapshotAsReceipt(snapshot, { characterId, accountId, receipts });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
       // quando isto lança: a próxima conexão tenta de novo.
       this.#logger.error(
-        { error, characterId, sessionId: snapshot.id },
+        { err: error, characterId, sessionId: snapshot.id },
         'Failed to credit an unrestorable snapshot',
       );
       throw error;
@@ -3961,7 +4077,7 @@ export class SessionHost {
     } catch (error) {
       // Lease não renovado vira sessão órfã para a FUN-28. Registrar alto: é o sintoma que
       // antecede uma sessão sendo retomada em outro nó sem necessidade.
-      this.#logger.error({ error }, 'Failed to renew session leases');
+      this.#logger.error({ err: error }, 'Failed to renew session leases');
     }
   }
 
@@ -3990,7 +4106,7 @@ export class SessionHost {
         const nodes = await directory.aliveNodes();
         total = nodes.reduce((sum, node) => sum + (node.players ?? 0), 0);
       } catch (error) {
-        this.#logger.error({ error }, 'Failed to aggregate online player count');
+        this.#logger.error({ err: error }, 'Failed to aggregate online player count');
         return;
       }
     }

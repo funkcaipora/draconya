@@ -51,8 +51,9 @@ const progression = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
   regen: { healthPerSecond: 0, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  skillMultipliers: {},
 };
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
@@ -60,7 +61,7 @@ const combat = {
   player: { attackPower: 25, attackIntervalMs: 1000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const party = { id: 'baseline', maxMembers: 4 };
 const skills = [
   { id: 'melee', name: 'Melee', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0 },
   { id: 'distance', name: 'Distance', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 }, damagePerLevel: 0 },
@@ -261,6 +262,54 @@ describe('o bow atira a munição abstrata e debita o preço no tiro (#152, ADR 
   });
 });
 
+describe('o estoque de munição do loot é gasto ANTES do gold (#520, revisão do #536)', () => {
+  it('com estoque, atira SEM debitar gold — o agregado `goldSpent` não sobe', () => {
+    const { session, hero } = start({
+      inventory: armed('bow'), gold: 0, ammo: { arrow: 'arrow' },
+    });
+    hero.ammunitionStock.set('arrow', 3);
+    session.advanceBy(50);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
+    expect(hero.ammunitionStock.get('arrow')).toBe(2);
+  });
+
+  it('esgota o estoque em 1: some do Map, e o PRÓXIMO tiro já cobra gold', () => {
+    const { session, hero } = start({
+      inventory: armed('bow'), gold: 100, ammo: { arrow: 'arrow' },
+    });
+    hero.ammunitionStock.set('arrow', 1);
+    session.advanceBy(50); // primeiro tiro: do estoque.
+    expect(hero.ammunitionStock.has('arrow')).toBe(false);
+    expect(hero.goldDelta).toBe(0);
+    session.advanceBy(1_000); // cooldown do bow: o segundo tiro sai depois.
+    expect(hero.goldDelta).toBe(-1);
+  });
+
+  it('SEM gold mas COM estoque, o tiro sai — o estoque não depende do saldo', () => {
+    const { session, hero, ruleset } = start({
+      inventory: armed('bow'), gold: 0, ammo: { arrow: 'arrow' },
+    });
+    hero.ammunitionStock.set('arrow', 1);
+    session.advanceBy(50);
+    const events = session.drainEvents();
+    expect(events.some((e) => e.kind === 'shot')).toBe(true);
+    const rat = ruleset.monsters[0];
+    if (rat === undefined) throw new Error('sem rato');
+    expect(rat.health).toBeLessThan(1_000);
+  });
+
+  it('SEM gold e SEM estoque, o tiro não sai — a regra `out-of-gold` continua de pé', () => {
+    const { session, hero } = start({
+      inventory: armed('bow'), gold: 0, ammo: { arrow: 'arrow' },
+    });
+    session.advanceBy(50);
+    const events = session.drainEvents();
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(hero.goldDelta).toBe(0);
+  });
+});
+
 describe('a seleção de munição sobrevive ao snapshot (#152)', () => {
   it('a escolha viaja no personagem e volta na retomada', () => {
     const { session, hero, loaded } = start({
@@ -345,5 +394,145 @@ describe('equivalência entre taxas com munição e arma na mão (#152, ADR 0020
       expect(fast.hero.goldDelta).toBe(slow.hero.goldDelta);
       expect(fast.hero.mana).toBe(slow.hero.mana);
     }
+  });
+});
+
+// --- combat-v2: chance de acerto à distância (#522, ADR 0037 d.5) -----------------------------
+//
+// A mesma arena, com um `combat` que declara `distanceHitChance` — o balde "de duas mãos" do
+// Canary (teto 90%), transcrito como dado (`baseline.json`). `combat-v1` (o `combat` do topo do
+// arquivo, sem o bloco) continua sempre acertando — os testes acima não mudam.
+
+const combatV2 = {
+  ...combat, compatibilityProfile: 'combat-v2',
+  weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+  distanceHitChance: {
+    defaultMaxHitChance: 90,
+    buckets: [
+      {
+        maxHitChance: 90,
+        tiers: [
+          { distance: 1, skillCap: 74, perSkill: 1.20, flat: 1 },
+          { distance: 2, skillCap: 28, perSkill: 3.20, flat: 0 },
+          { distance: 3, skillCap: 45, perSkill: 2.00, flat: 0 },
+          { distance: 4, skillCap: 58, perSkill: 1.55, flat: 0 },
+          { distance: 5, skillCap: 74, perSkill: 1.20, flat: 1 },
+          { distance: 6, skillCap: 90, perSkill: 1.00, flat: 0 },
+          { distance: 7, skillCap: 90, perSkill: 1.00, flat: 0 },
+        ],
+      },
+    ],
+  },
+};
+
+/** A mesma `start()` de cima, com o conteúdo `combat-v2` no lugar do `combat-v1` do topo. */
+function startV2(
+  options: Parameters<typeof start>[0] & { skills?: Record<string, { level: number; points: number }> } = {},
+) {
+  const loaded = buildContent(raw({ combat: [combatV2] }));
+  const session = createHuntSession({
+    id: 'session-1', content: loaded, huntId: 'range', difficulty: 'cautious', createdAtMs: 0,
+  });
+  const stats = statsForLevel(1, null, progression as Progression);
+  const hero = new CharacterRuntime({
+    id: 'hero', position: { x: 0, y: 0, z: 7 },
+    health: stats.maxHealth, maxHealth: stats.maxHealth,
+    mana: options.mana ?? stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
+    ...(options.ammo === undefined ? {} : { ammo: options.ammo }),
+    ...(options.skills === undefined ? {} : { skills: options.skills }),
+  });
+  session.enter(hero);
+  return { session, hero, ruleset: session.ruleset as HuntRuleset, loaded };
+}
+
+describe('combat-v2: chance de acerto à distância (#522)', () => {
+  it('skill inicial (10) e alvo a 6 tiles: chance baixa (10 %) — a maioria dos tiros erra', () => {
+    const { session, hero, ruleset } = startV2({
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    session.advanceBy(50);
+    const rat = ratAt(ruleset, 6);
+    const h0 = rat.health;
+    const before = hero.goldDelta;
+    run(session, 40_000, 100); // 40 tiros no intervalo de 1000 ms do `combat.player`.
+    const shotsFired = before - hero.goldDelta; // 1 gold por tiro (`arrow.price`).
+    const damageDealt = h0 - rat.health;
+    // Toda flecha sai (o preço é debitado mesmo no erro): ~40 tiros.
+    expect(shotsFired).toBeGreaterThan(30);
+    // Mas com 10 % de chance, o dano total fica bem abaixo de "todo tiro acertou" (attack 20
+    // cada) — a prova de que o erro existe e reduz o rendimento, não só o extrato de gold.
+    expect(damageDealt).toBeLessThan(shotsFired * 20 * 0.4);
+  });
+
+  it('skill inicial (10) e alvo a 1 tile: chance alta (13 %)... mas a 6 já é maior (0 %→90 %) — comparação de distância', () => {
+    // A #522 pede a tabela por SKILL e DISTÂNCIA: skill fixa (10), duas distâncias, chances
+    // diferentes (distância 1: ⌊10×1,20⌋+1=13 %; distância 3: ⌊10×2,00⌋=20 %). Amostra grande
+    // o bastante (60 tiros) para a diferença aparecer sem ser ruído de semente.
+    const near = startV2({ inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' } });
+    near.session.advanceBy(50);
+    const ratNear = ratAt(near.ruleset, 1);
+    const h0Near = ratNear.health;
+    run(near.session, 60_000, 100);
+    const damageNear = h0Near - ratNear.health;
+
+    const mid = startV2({ inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' } });
+    mid.session.advanceBy(50);
+    const ratMid = ratAt(mid.ruleset, 3);
+    const h0Mid = ratMid.health;
+    run(mid.session, 60_000, 100);
+    const damageMid = h0Mid - ratMid.health;
+
+    // 20 % > 13 %: em média, a distância 3 rende mais dano que a 1 com a MESMA skill baixa.
+    expect(damageMid).toBeGreaterThan(damageNear);
+  });
+
+  it('skill alta (90) e distância 6: a chance satura em 90 % — quase todo tiro acerta', () => {
+    // Distância 6 é 1:1 com a skill até o teto 90 (`min(skill,90) × 1 + 0`): skill 90 → 90 %.
+    // A skill entra pronta no personagem — não treinada tiro a tiro — para o teste não depender
+    // de o rato sobreviver 400 s nem de onde ele respawna.
+    const { session, hero, ruleset } = startV2({
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+      skills: { distance: { level: 90, points: 0 } },
+    });
+    session.advanceBy(50);
+    const rat = ratAt(ruleset, 6);
+    const h0 = rat.health;
+    const before = hero.goldDelta;
+    run(session, 20_000, 100);
+    const shotsFired = before - hero.goldDelta;
+    const damageDealt = h0 - rat.health;
+    // Com 90 % de chance, o dano médio por tiro (attack 20) fica bem mais perto de 20 que de 0
+    // — o oposto do teste de skill baixa acima.
+    expect(shotsFired).toBeGreaterThan(10);
+    expect(damageDealt / shotsFired).toBeGreaterThan(14);
+  });
+
+  it('combat-v1 (sem `distanceHitChance`) continua sempre acertando — nenhum sorteio novo', () => {
+    const { session, hero, ruleset } = start({
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    session.advanceBy(50);
+    const rat = ratAt(ruleset, 6); // a mesma distância "difícil" do teste v2 acima.
+    const h0 = rat.health;
+    const before = hero.goldDelta;
+    run(session, 20_000, 100);
+    const shotsFired = before - hero.goldDelta;
+    const damageDealt = h0 - rat.health;
+    // v1: cada tiro pago é um tiro que acerta — dano total é `shots × attack` (20).
+    expect(damageDealt).toBe(shotsFired * 20);
+  });
+
+  it('1 Hz e 10 Hz rendem o MESMO resultado com a chance de acerto ligada (ADR 0020)', () => {
+    const fast = startV2({ inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' } });
+    const slow = startV2({ inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' } });
+    fast.session.advanceBy(50); slow.session.advanceBy(50);
+    ratAt(fast.ruleset, 6); ratAt(slow.ruleset, 6);
+    run(fast.session, 20_000, 100);
+    run(slow.session, 20_000, 1_000);
+    expect(fast.ruleset.monsters[0]?.health).toBe(slow.ruleset.monsters[0]?.health);
+    expect(fast.hero.goldDelta).toBe(slow.hero.goldDelta);
   });
 });

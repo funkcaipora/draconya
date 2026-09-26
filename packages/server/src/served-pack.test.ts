@@ -8,8 +8,8 @@ const raw: RawContent = {
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
     healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
-    regen: { healthPerSecond: 1, manaPerSecond: 1 }, xp: { base: 20, exponent: 2 },
-    deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+    regen: { healthPerSecond: 1, manaPerSecond: 1 }, xp: { kind: 'power', base: 20, exponent: 2 },
+    deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   }],
   combat: [{
     id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
@@ -17,7 +17,7 @@ const raw: RawContent = {
     player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
   }],
   stamina: [{ id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 }],
-  party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } }],
+  party: [{ id: 'baseline', maxMembers: 4 }],
   bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
 };

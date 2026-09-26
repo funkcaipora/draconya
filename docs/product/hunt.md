@@ -46,6 +46,17 @@ regra de "não mostra estimativa oficial" já descrita abaixo.
 identidade da hunt (SV-05) do parágrafo acima — e some, deixando só a contagem, nos mesmos dois
 casos em que o modal de detalhes omite o nome.
 
+**A contagem e o painel Batalha são do MESMO andar, sempre (#527).** Numa hunt privada não há
+AOI (FUN-33): o hospedeiro manda TODOS os monstros vivos da instância pelo `session-state`, dos
+três andares da Darashia Dragon Lair inclusive, porque o mundo espacial precisa deles para
+desenhar o que se vê através de escada e vão (ADR 0034). `battleRows`
+(`packages/client/src/shell/BattlePanel.tsx`) e a contagem do `WorldOverlay` filtram por
+`creature.position.z === própria posição` antes de contar — sem isto, quem estava em z10 via
+"35 criaturas no alcance" com Dragon Lords de z11/z12 somados, embora o bot (`countTargets`,
+`packages/sim/src/targeting.ts`) já contasse certo, só por andar, desde o #519. O mundo
+continua desenhando andares vizinhos (ADR 0034); só a LISTA de batalha e o contador são
+por andar — no Tibia a battle list também só mostra quem está no mesmo andar.
+
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
 pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido por
@@ -187,8 +198,20 @@ navegação e não simulação.
 
 **O mapa tem andares** (FUN-119): `floors` por `z`, e pisar numa escada (`floorChanges`) é um
 passo cujo destino está em outro andar — como no Tibia, o tile de chegada pode não ser o
-adjacente. O monstro não usa escada: para quem não carrega `z`, o degrau é parede. A rota fica
-num andar só, e o carregador recusa rota que pise em escada.
+adjacente. O monstro não usa escada: para quem não carrega `z`, o degrau é parede.
+
+**A rota pode atravessar andares** (#519, a Darashia Dragon Lair): `validateRoute` aceita um
+passo que pisa exatamente no tile registrado em `floorChanges`, e a posição EFETIVA para julgar o
+passo seguinte é o destino da escada — nunca o tile autorado, porque `move()` nunca deixa ninguém
+parado nela. `scripts/trace-route.ts` traça isso sozinho: de um estado `(x, y, z)`, o vizinho que
+é uma escada não vira um tile a mais no caminho, a busca CONTINUA a partir do destino dela. O
+monstro, mesmo passando a carregar o PRÓPRIO andar (`position.z`, para saber onde nasceu — ver
+"Spawn" abaixo), continua sem a CAPACIDADE de usar escada: o `z` na posição dele é identidade,
+nunca permissão (`Movable.crossesFloors`, só o personagem tem). Todo lugar que compara alvo,
+área ou proximidade confere o andar antes da distância — os três andares da Darashia Dragon Lair
+compartilham a mesma caixa `(x, y)`, e um Dragon Lord de z11 pode ter coordenada idêntica à de um
+Dragon em z10, um andar acima; sem a checagem, o monstro perseguiria e a magia acertaria através
+do chão.
 
 ## Spawn: densidade é dado, composição é sorteio
 
@@ -218,6 +241,23 @@ segundo, no evento que já existia — e nunca cancela: a densidade continua sen
 dificuldade, que é o que a referência (§29) exige ao mandar não copiar a supressão do TFS. Sem
 isso, com `respawnDelayMs` igual ao intervalo de ataque, o rato nascia e morria no mesmo
 instante, e o cliente desenhava o dano num tile vazio. `0` desliga.
+
+**`spawnClearRadius` só vale para quem é `blockable`** (#519, o `isBlockable` do TFS/Canary). No
+Canary, 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — respawnam
+olhando para o jogador: `isBlockable` é `false` neles, e a EXCEÇÃO é quem declara `true`. O
+monstro do Draconya ganha o mesmo campo, com o mesmo default (`blockable: false`); Rat e Rotworm
+DECLARAM `blockable: true`, porque o comportamento deles vem do Huntera observado (não do
+Canary) e não pode mudar por esta issue. A checagem de distância — o alcance é o mesmo
+`Spawn::findPlayer` do TFS, `±11` tiles no MESMO andar — só roda para quem é `blockable`.
+
+**Cada ponto de spawn pode declarar o próprio monstro, a posição exata e o próprio `spawntime`**
+(#519, o formato do XML de spawn do Canary — um `<monster>` por posição, nunca um sorteio). Um
+ponto assim SEMPRE nasce aquele monstro: a composição sorteada da dificuldade vira fallback, só
+para quem não declara. A Darashia Dragon Lair é a primeira hunt a usar isto: 47 pontos, cada um
+com o `monsterId` (`dragon` ou `dragon-lord`), a coordenada exata do Canary e
+`respawnDelayMs: 90000` (o `spawntime="90"` do XML). Rat Cellars e Rotworm Caves continuam com o
+formato de sempre — `routeIndex` + `radius`, monstro sorteado, `respawnDelayMs` da dificuldade —,
+porque nenhuma delas declara os campos novos.
 
 Os três pulls — Cauteloso, Ousado, Agressivo — são **dados**, não código. Trocar `monsterCount`
 e a composição no JSON muda densidade e variedade sem tocar em lógica; há teste afirmando
@@ -422,18 +462,29 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
+| Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary; Rat e Rotworm declaram `true` para preservar o `spawnClearRadius` observado no Huntera (#519) | `data/monsters/*.json`, campo `blockable` |
+| Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Ausente é o de sempre (sorteio da composição, `respawnDelayMs` da dificuldade) — Rat Cellars e Rotworm Caves não declaram; a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
 | Prazo do cadáver no chão (só visual) | 30 s em Rat Cellars e em Rotworm Caves (RESOLVIDO, Huntera Parte VI §36) | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
-| Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Velocidade do personagem (escala do Tibia) | 220 no level 1, +2 por level — o TFS clássico, RESOLVIDO pelo #527 (ADR 0037 decisão 4): mesma escala do passo abaixo e da velocidade de monstro | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
 | O rato (números do Huntera Cyclopedia, Parte V §32) | 20 HP, 5 XP, ataque 3–4 sorteado por golpe, armadura 1, speed 172; +20 % de dano de terra e sagrado, −10 % de gelo e morte; o `defense 5` do Canary fica `[ABERTO]` — o motor só tem `armor` | `data/monsters/rat.json` |
 | Loot por abate (Rat Cellars) | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
 | O rotworm (números do Canary v3.6.1, #511) | 65 HP, 40 XP, ataque 24–30 sorteado por golpe, armadura 8, speed 180; sem elementos (Cyclopedia não lista nenhum) | `data/monsters/rotworm.json` |
 | Loot por abate (Rotworm Caves, #511) | Rotworm: gold 71,76 %, 1–17; sword 3 %; mace 4,5 %; meat 20 %; ham 20,12 %; worm 3 % (1–3 un.); lump of dirt 10 %; legion helmet 1,89 % | `data/monsters/rotworm.json`, bloco `loot` |
+| O Dragon (TFS `dragon.xml`, conferido com o Canary, #520) | 1000 HP, 700 XP, melee 0–120, armadura 25, speed 172 (escala do TFS — o Canary guarda metade por outra fórmula de cliente, não usada aqui); terra +80 %, energia +20 %, gelo −10 % (vulnerável), fogo IMUNE; `targetDistance 1`, `staticAttack 80 %` (aceito, não ligado ao passo — ver `combat.md`), `runOnHealth 300`, troca de alvo 4 s/10 % | `data/monsters/dragon.json` |
+| Abilities do Dragon (#520, CMB-06/#518) | bola de fogo (alvo, alcance 7, círculo raio 4, centrada no alvo): 60–140, 15 %; onda de fogo (comprimento 8, sem alvo): 100–170, 10 %; cura própria: +40–70, 15 % | `data/monsters/dragon.json`, blocos `abilities`/`defenses` |
+| O Dragon Lord (TFS `dragon_lord.xml`, conferido com o Canary, #520) | 1900 HP, 2100 XP, melee 0–230, armadura 35, speed 200 (escala do TFS); mesmos elementos do Dragon; mesmas flags | `data/monsters/dragon-lord.json` |
+| Abilities do Dragon Lord (#520) | bola de fogo: 100–200, 20 %; campo de fogo (alvo, alcance 7, sem dano direto — só larga o campo, círculo raio 4 centrado no alvo): 10 %; onda de fogo: 150–230, 15 %; cura própria: +57–93, 15 % | `data/monsters/dragon-lord.json` |
+| Campo de fogo do Dragon Lord (#520) | queimadura: 20 de dano a cada 10 s, por até 70 s (a cadeia de decaimento 2118→2119→2120 do Canary `items.xml` simplificada num campo só, com os números do estágio mais forte — ver `combat.md`) | `data/monsters/dragon-lord.json`, `abilities[].field` |
+| Loot do Dragon (21 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; burst arrow (`ammunitionId`) 7,976 % (1–10); longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % | `data/monsters/dragon.json`, bloco `loot` |
+| Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
+| Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
+| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 670 000 ms — soma da cadeia de decaimento do Canary `items.xml` (dead dragon/dead dragon lord: 10 s → 300 s → 300 s → 60 s, `decayTo` até sumir, não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
 
 ## Em aberto
 
@@ -490,3 +541,37 @@ além do gold: sete itens (`sword`, `mace`, `meat`, `ham`, `worm`, `lump-of-dirt
 `legion-helmet`), com `value` de TibiaWiki provisório para as três peças de equipamento e `0`
 para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada continua pelo menu,
 abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.
+
+**A Darashia Dragon Lair é a primeira hunt MULTIANDAR, e a primeira copiada do Canary em vez do
+Huntera** (#519, ADR 0025 emenda, ADR 0037): o recorte real importado (86×121, z10–z12 — 2.036
+andáveis em z10, 1.849 em z11, 173 em z12), a rota traçada por `pnpm route:trace` — estendido
+nesta issue para atravessar `floorChanges` — sobre ele: um laço de 1.494 tiles pelos três
+andares, com os 47 pontos de spawn do Canary (`data-otservbr-global/world/otservbr-monster.xml`)
+ancorados na coordenada EXATA, distância zero. Os 19 pontos de z10 são `dragon`, os 28 de
+z11+z12 são `dragon-lord` — cada um com `respawnDelayMs: 90000`, o `spawntime="90"` do XML, por
+PONTO, não por dificuldade. **Os dois conectores entre andares são degraus reais do Canary**:
+cruzados por item id contra `items.xml` (id 469, `stairs`, `floorchange="down"`; id 7544/7729–7736,
+`ramp`, `floorchange="west"`/`"down"`) e resolvidos pelo deslocamento de pouso que
+`Tile::queryDestination` aplica — não uma coincidência geométrica de overlap (ver o detalhe,
+inclusive a correção de uma revisão adversarial que pegou o pouso errado numa primeira tentativa,
+em ADR 0025). **Os monstros (Dragon e Dragon Lord) e o arquivo da hunt fecharam o laço na #520**:
+`data/hunts/darashia-dragon-lair.json` aponta o mesmo `mapId`/`routeId`, `ambience: cavern`,
+`recommendedLevel: 40` (o "Gate of Expertise" que trava a entrada da lair real, TibiaWiki) e uma
+dificuldade só (`monsterCount: 47` — o mesmo total de `spawnPoints`, para cada ponto nascer
+exatamente uma vez; o Tibia real não tem tamanho de pull aqui). `corpseTtlMs: 670000` (670 s) é a
+vida útil TOTAL do cadáver no Canary — corrigido numa revisão da #536, achado [major]: a primeira
+versão tinha lido só os 10 s do PRIMEIRO estágio de decaimento (`items.xml` id 5973/5984, "dead
+dragon"/"dead dragon lord", `duration="10"`) e confundido isso com o tempo total no chão, quando
+na verdade o item decai (`decayTo`) para o próximo estágio em vez de sumir. A cadeia completa —
+idêntica em forma para os dois monstros — é 10 s → 300 s → 300 s → 60 s até o último `decayTo="0"`
+(aí some de fato): 10+300+300+60 = 670 s = 670 000 ms (segundos × 1000). NÃO os 30 000 ms que Rat
+Cellars/Rotworm Caves copiam do Huntera: ADR 0037 d.6 pede a caçada idêntica ao Tibia real em toda
+hunt, e o fato real é a soma da cadeia, não o primeiro estágio dela. O motor não modela decaimento
+em múltiplos estágios (só um `corpseTtlMs` por hunt) nem TTL por monstro; como Dragon e Dragon
+Lord chegam à MESMA soma no Canary, o único número da hunt já serve para os dois — a simplificação
+é "um TTL só", não o valor do TTL. Testado contra o
+CONTEÚDO REAL (`packages/server/src/game/darashia-dragon-lair.test.ts`): uma party de quatro
+level 200 (Knight/Paladin/Sorcerer/Druid) que entra vê os 47 nascerem — 19 Dragon em z10, 24
+Dragon Lord em z11, 4 em z12 —, cada um na coordenada exata do próprio ponto, e o respawn de um
+ponto abatido acontece 90 s depois, nunca antes, com o mesmo `monsterId` na mesma vizinhança. A
+entrada continua pelo menu (ADR 0025).

@@ -7,11 +7,18 @@
   "manaCost": 6,
   "group": "attack",
   "groupCooldownMs": 2000,
-  "cooldownMs": 8000,
+  "cooldownMs": 2000,
   "effect": {
     "kind": "damage",
     "basePower": 9,
-    "range": 5
+    "range": 7,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.333333,
+      "skillMax": 1,
+      "baseMin": 3,
+      "baseMax": 9
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. alcance 5 (TibiaWiki), não está na tabela da issue."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. alcance 5 (TibiaWiki), não está na tabela da issue. Fórmula, alcance e cooldown do Canary (`data/scripts/spells/attack/lesser_ethereal_spear.lua`, main, 2026-09-24): range 5→7, cooldown 8s→2s."
 }

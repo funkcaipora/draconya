@@ -21,9 +21,10 @@ import {
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
-  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility,
+  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
-  Vocation, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
+  Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
+  WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { validateBotConfig, validateBotConfigV2 } from './bot.js';
@@ -196,10 +197,11 @@ export function compileMitigation(profile: MitigationProfile | undefined): Compi
 
 /** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
 export function compileMonster(monster: MonsterDefinition): CompiledMonster {
-  const { mitigation: _rawMitigation, abilities: _rawAbilities, ...rest } = monster;
+  const { mitigation: _rawMitigation, abilities: _rawAbilities, defenses: _rawDefenses, ...rest } = monster;
   return {
     ...rest,
     abilities: normalizeMonsterAbilities(monster),
+    defenses: normalizeMonsterDefenses(monster),
     mitigation: compileMitigation(monster.mitigation),
   };
 }
@@ -221,6 +223,7 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
     return declared.map((ability) => ({
       id: ability.id,
       cadenceMs: ability.cadenceMs,
+      ...(ability.chance === undefined ? {} : { chance: ability.chance }),
       target: {
         range: ability.target.range,
         ...(ability.target.area === undefined ? {} : { area: ability.target.area }),
@@ -249,6 +252,26 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
     power: attackRange(monster.attack),
     damageType: monster.damageType,
   }];
+}
+
+/**
+ * Normaliza as defesas no BOOT (#518), mesmo desenho de `normalizeMonsterAbilities`: ausente
+ * vira lista vazia — nunca `undefined` —, para o `sim` iterar sem `?? []` em cada chamada.
+ * Não há caso legado a preservar aqui: nenhum monstro existente declara `defenses`.
+ */
+export function normalizeMonsterDefenses(monster: MonsterDefinition): readonly MonsterDefense[] {
+  return (monster.defenses ?? []).map((defense) => ({
+    id: defense.id,
+    cadenceMs: defense.cadenceMs,
+    chance: defense.chance,
+    heal: { min: defense.heal.min, max: defense.heal.max },
+    ...(defense.presentation === undefined ? {} : {
+      presentation: {
+        ...(defense.presentation.impactKey === undefined
+          ? {} : { impactKey: defense.presentation.impactKey }),
+      },
+    }),
+  }));
 }
 
 /** Compila a mitigação de cada monstro no boot (CMB-03). */
@@ -359,6 +382,8 @@ export function compileItem(
         ...(raw.kind === 'distance' && raw.ammoFamily !== undefined
           ? { ammoFamily: raw.ammoFamily }
           : {}),
+        // O `hitChance` da arma (#524) é só dado — a chance de acerto à distância é a #522.
+        ...(raw.hitChance === undefined ? {} : { hitChance: raw.hitChance }),
       };
     }
   }
@@ -592,10 +617,14 @@ export function buildContent(raw: RawContent): Content {
     const where = `supply/${supply.id}`;
     const effect = supply.effect;
     if (effect.kind === 'heal') {
-      const fixed = effect.amount !== undefined;
+      // `amountRange` (#524, a poção do Tibia) conta como "fixo" ao lado de `amount`: as duas
+      // são um número SEM escalar por level/ML, ao contrário de `basePower`/`formula`.
+      const fixed = effect.amount !== undefined || effect.amountRange !== undefined;
       const scaled = effect.basePower !== undefined || effect.formula !== undefined;
       if (fixed === scaled) {
-        problems.push(`${where}: cura precisa de amount OU basePower/formula, um dos dois`);
+        problems.push(
+          `${where}: cura precisa de amount/amountRange OU basePower/formula, um dos dois`,
+        );
       }
     }
     if (effect.kind === 'damage'
@@ -608,6 +637,17 @@ export function buildContent(raw: RawContent): Content {
       }
       if (effect.target === 'self' && effect.range !== undefined) {
         problems.push(`${where}: efeito em si mesmo não tem alcance`);
+      }
+    }
+    // A vocação que o suprimento exige precisa existir (#524, como a magia em #156-159): a
+    // grande poção de mana pede Sorcerer/Druid/Paladin, e um id errado subiria mudo — recusado
+    // sempre, nunca lançável, sem nenhuma pista de por quê. Só quando HÁ vocações (a mesma
+    // tolerância do item, acima, e do `spellSkill`).
+    if (vocations.size > 0) {
+      for (const vocationId of vocationIdsOf(supply.requires.vocationId)) {
+        if (!vocations.has(vocationId)) {
+          problems.push(`${where}: requires.vocationId "${vocationId}" não existe`);
+        }
       }
     }
   }
@@ -719,6 +759,27 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
+    }
+    // A vocação que o item exige precisa existir (#524, como a magia em #156-159): a Magic
+    // Plate Armor pede Knight/Paladin, e um id errado tornaria o item ETERNAMENTE inacessível
+    // sem nenhuma pista de por quê — ninguém tem a vocação que não existe. Só quando HÁ
+    // vocações — o conteúdo de teste sem nenhuma (fixture sem sistema de vocação) não tem como
+    // conferir, a mesma tolerância do `spellSkill` (linha ~790).
+    if (vocations.size > 0) {
+      for (const vocationId of vocationIdsOf(item.requires.vocationId)) {
+        if (!vocations.has(vocationId)) {
+          problems.push(`item "${item.id}": requires.vocationId "${vocationId}" não existe`);
+        }
+      }
+    }
+    // O bônus de skill do item (#524) aponta uma skill que precisa existir — como a família de
+    // arma aponta a dela (linha ~620). Sem a conferência, "hat of the mad" bonificaria uma skill
+    // que ninguém lê, e o item pareceria funcionar sem fazer nada.
+    if (item.bonuses?.skill !== undefined && skills.size > 0
+      && !skills.has(item.bonuses.skill.skillId)) {
+      problems.push(
+        `item "${item.id}": bonuses.skill.skillId "${item.bonuses.skill.skillId}" não existe`,
+      );
     }
   }
   // A munição é abstrata (ADR 0026 d.3): NÃO existe munição grátis por família — cada tiro
@@ -992,20 +1053,65 @@ export function buildContent(raw: RawContent): Content {
   // Loot de item agora tem catálogo (FUN-76), e a referência é conferida — o que continua sendo
   // recusado é o item FANTASMA. Aceitar a linha creditaria no primeiro abate um item que nunca
   // vai poder ser desenhado, equipado nem vendido, e o sintoma chegaria dias depois.
+  //
+  // Loot de SUPPLY e de MUNIÇÃO (#520) é a mesma conferência do outro lado: a linha declara
+  // exatamente um de `itemId`/`supplyId`/`ammunitionId` (o schema já garante isso), e cada um
+  // confere contra o catálogo dele.
   for (const monster of monsterDefinitions.values()) {
     for (const line of monster.loot.items) {
-      if (itemDefinitions.has(line.itemId)) continue;
-      problems.push(
-        `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
-          + 'no catálogo',
-      );
+      if (line.itemId !== undefined) {
+        if (itemDefinitions.has(line.itemId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
+            + 'no catálogo',
+        );
+      } else if (line.supplyId !== undefined) {
+        if (supplies.has(line.supplyId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia supply "${line.supplyId}", que não `
+            + 'existe no catálogo',
+        );
+      } else if (line.ammunitionId !== undefined) {
+        if (ammunitionDefinitions.has(line.ammunitionId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia munição "${line.ammunitionId}", que não `
+            + 'existe no catálogo',
+        );
+      }
     }
   }
 
-  // As abilities DECLARADAS (CMB-06), conferidas no arquivo CRU — o compilado já tem a básica
-  // sintetizada, e validá-lo reprovaria todo monstro legado pelo id reservado. O `basic` é do
-  // BOOT; a duplicata tornaria a escolha por id ambígua; e `wave`/`cleave`/`beam` saem da
-  // DIREÇÃO do lançador, que o monstro não carrega.
+  // A ficha de Bestiário por monstro (#520): a chave precisa ser um monstro que existe — a
+  // mesma referência cruzada de `loot.items` acima —, e o `class` da ficha precisa bater com o
+  // `class` do PRÓPRIO monstro quando ele o declara: duas fontes da mesma categoria divergiriam
+  // na primeira mudança em uma delas, e ninguém perceberia (a categoria do Cyclopedia é a do
+  // monstro, §"A classe do monstro" acima).
+  if (bestiary !== undefined) {
+    for (const [monsterId, entry] of Object.entries(bestiary.entries)) {
+      const monster = monsterDefinitions.get(monsterId);
+      if (monster === undefined) {
+        problems.push(
+          `bestiary/baseline.json: entries referencia monstro "${monsterId}", que não existe `
+            + 'no catálogo',
+        );
+        continue;
+      }
+      if (monster.class !== undefined && monster.class !== entry.class) {
+        problems.push(
+          `bestiary/baseline.json: entries."${monsterId}".class é "${entry.class}", e o monstro `
+            + `declara "${monster.class}"`,
+        );
+      }
+    }
+  }
+
+  // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
+  // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
+  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave` e
+  // `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
+  // — o monstro não guarda direção entre golpes); `cross`/`cleave` continuam fora porque nenhum
+  // monstro do recorte precisa deles ainda.
+  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'beam']);
   for (const monster of rawMonsterDefinitions.values()) {
     const seenAbilities = new Set<string>();
     for (const ability of monster.abilities ?? []) {
@@ -1017,14 +1123,15 @@ export function buildContent(raw: RawContent): Content {
       }
       seenAbilities.add(ability.id);
       const area = ability.target.area;
-      if (area !== undefined && area.shape !== 'circle') {
+      if (area !== undefined && !MONSTER_ABILITY_AREA_SHAPES.has(area.shape)) {
         problems.push(
           `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
-            'monstro só lança `circle` — as outras formas saem da direção do lançador',
+            'monstro só lança `circle`, `wave` ou `beam`',
         );
       }
-      // O campo (CMB-07) segue a mesma regra da área: só `circle`, pela mesma razão — o
-      // monstro não carrega direção. A condição do campo é validada pelo schema.
+      // O campo (CMB-07) segue a regra ANTERIOR da área: só `circle`. `wave`/`beam` são da
+      // ability em si (#518, o ataque que sai do monstro); o campo que ela deixa no chão
+      // continua centrado no alvo, como sempre — estender o campo fica para quem precisar.
       if (ability.field !== undefined && ability.field.shape.shape !== 'circle') {
         problems.push(
           `monstro "${monster.id}": o campo da ability "${ability.id}" usa forma ` +
@@ -1301,6 +1408,12 @@ function withCorpses(
     resolved.set(id, { ...monster, corpseAppearanceId: appearance });
   }
   return resolved;
+}
+
+/** Normaliza um `VocationRequirement` (#524) para a lista de ids que ele carrega. Ausente: nenhum. */
+function vocationIdsOf(requirement: VocationRequirement | undefined): readonly string[] {
+  if (requirement === undefined) return [];
+  return typeof requirement === 'string' ? [requirement] : requirement;
 }
 
 /** Os `_open` de um catálogo inteiro, prefixados pelo tipo. Ver `openValues`. */

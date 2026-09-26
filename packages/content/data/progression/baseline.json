@@ -1,13 +1,13 @@
 {
   "id": "baseline",
   "startingHealth": 150,
-  "startingMana": 20,
+  "startingMana": 55,
   "startingCapacity": 400,
   "healthPerLevel": 5,
   "manaPerLevel": 5,
   "capacityPerLevel": 10,
   "vocationLevel": 8,
-  "startingSpeed": 278,
+  "startingSpeed": 220,
   "speedPerLevel": 2,
   "startingKit": [
     {
@@ -38,17 +38,23 @@
   "satchelInitialSlots": 10,
   "containerRow": 5,
   "xp": {
-    "base": 20,
-    "exponent": 2
+    "kind": "tibia"
   },
   "deathPenalty": {
-    "fraction": 0.6,
-    "premiumFraction": 0.54,
+    "flatFraction": 0.1,
+    "cubicFromLevel": 24,
+    "blessedReduction": 0.56,
     "levelFloor": 8
   },
   "regen": {
-    "healthPerSecond": 1,
-    "manaPerSecond": 1
+    "healthPerSecond": 0.08333333333333333,
+    "manaPerSecond": 0.3333333333333333
   },
-  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios, e a velocidade também: 278 no level 1 (Parte I, §3 da observação do Huntera) e 292 no level 7 (Parte II, §15) dão uma reta de ~2,3 por level; +2 é a aproximação inteira, e não vem do PRD. A curva de XP (base 20, expoente 2) também é provisória: o PRD não a define, e ela põe o level 8 a cerca de duas horas de Rat Cellars — cedo o bastante para a escolha de vocação não virar espera. A mana inicial (20, FUN-114) é o bastante para UMA cura ou um Golpe Arcano no level 1, para as magias existirem no primeiro minuto; é provisória como o resto. A regeneração (1 HP/s e 1 mana/s) é provisória e não vem do PRD: é o suficiente para uma hunt de Rat Cellars se sustentar sem poção, e poção é o que vai reequilibrar isso quando existir."
+  "skillMultipliers": {
+    "melee": 2.0,
+    "distance": 2.0,
+    "shielding": 1.5,
+    "magic": 4.0
+  },
+  "_open": "§9.3 — o PRD define só o incremento por vocação; base, crescimento dos níveis 1–7 e capacidade inicial continuam provisórios (não vêm do Tibia nem do PRD). A velocidade É o Tibia desde o #527 (ADR 0037 decisão 4): `startingSpeed` 220 e `speedPerLevel` 2 são `PLAYER_BASE_SPEED`/`Player::updateBaseSpeed` do `forgottenserver` (`src/player.h`: `baseSpeed = vocation->getBaseSpeed() + (2 * (level - 1))`; `src/vocation.h`, `baseSpeed = 220` — confirmado em `data/XML/vocations.xml`, `basespeed=\"220\"` nas cinco vocações e promoções), verificado contra `otland/forgottenserver` `main` em 2026-09-25. É a escala CLÁSSICA, a mesma do nosso passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro (Dragon 172, Dragon Lord 200) — o Canary guarda metade (110 de base, +1/level) por outra fórmula de cliente, e não é usado aqui pela mesma razão da decisão 4. ANTES do #527 o valor era 278 (observação do Huntera, Parte I §3): mantido como nota histórica — o Huntera não é a fonte para mecânica de jogo desde o ADR 0037. A curva de XP, a mana inicial, a penalidade de morte e o `regen`/`skillMultipliers` acima SÃO o Tibia (#521, ADR 0037): curva cúbica de `Player::getExpForLevel`, mana inicial `5 × (level + 10)` (55 no level 1, verificado com `startingHealth`/`healthPerLevel` batendo o HP 3065 do Knight level 200), `regen` e `skillMultipliers` da vocação `None` do Canary `vocations.xml` (`gainhpticks` 12000/`gainmanaticks` 6000, `manamultiplier` 4.0), morte de `Player::getLostPercent`+`Player::death` — todos verificados contra `opentibiabr/canary` `main` em 2026-09-24 e contra a TibiaPlan (\"Tibia Death Penalty\") para a ausência de piso. `levelFloor` (8) É divergência: o Tibia não tem piso de level para a penalidade de morte."
 }

@@ -26,7 +26,7 @@ const character = (id: string, accountId: string, over: Partial<Pick<CharacterRe
   id, accountId, name: `Hero ${id}`, vocation: over.vocation ?? null, level: 10, xp: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null,
+  ammo: null, supplyStock: null, ammunitionStock: null,
   createdAt: new Date(),
 });
 
@@ -65,6 +65,9 @@ function build(over: { locate?: (characterId: string) => { type: string } | null
       lookup: async (characterId) => locations.get(characterId) ?? null,
       node: async (nodeId) => ({ nodeId, sessions: 0, url: `ws://${nodeId}:7171` }),
     },
+    // `/start` não é exercitado aqui (o convite social nasce fora de qualquer party) — sempre
+    // "sem snapshot pendente" (#527).
+    snapshots: { load: async () => null },
     limits: {
       maxMembers: 4, contentVersion: 'v-test',
       vocations: ['knight', 'druid', 'sorcerer', 'paladin'],

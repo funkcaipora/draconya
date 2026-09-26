@@ -2,9 +2,9 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
-**Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
+**Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário); E2 (kit level 200, M28)
 
 ## Comportamento
 
@@ -96,6 +96,29 @@ TP-03 (M22). Ver `economy.md` e `bot.md`.
 | `mana-potion` | `mana` 100 | `potion` | 50 | `data/supplies/mana-potion.json` |
 | `avalanche-rune` | `damage` gelo, BP 45, raio 3, alcance 8, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
 
+As nove poções do Tibia (#524, kit level 200): faixa **fixa** sorteada por uso (`effect.amountRange`,
+sem escalar por level/ML — a mesma cura no level 50 e no 200), `requires.level`/`vocationId` fiéis ao
+Canary `data/scripts/actions/items/potions.lua` (Monk omitido — não existe no Draconya), preço uniforme
+de NPC do Tibia (TibiaWiki via tibiascape.com).
+
+| Suprimento | Efeito | `requires` | `price` | Arquivo |
+|---|---|---|---|---|
+| `strong-health-potion` | `heal` 250–350 | level 50, Knight/Paladin | 115 | `data/supplies/strong-health-potion.json` |
+| `great-health-potion` | `heal` 425–575 | level 80, Knight | 225 | `data/supplies/great-health-potion.json` |
+| `ultimate-health-potion` | `heal` 650–850 | level 130, Knight | 350 | `data/supplies/ultimate-health-potion.json` |
+| `supreme-health-potion` | `heal` 875–1125 | level 200, Knight | 480 | `data/supplies/supreme-health-potion.json` |
+| `strong-mana-potion` | `mana` 115–185 | level 50 | 150 | `data/supplies/strong-mana-potion.json` |
+| `great-mana-potion` | `mana` 150–250 | level 80, Sorcerer/Druid/Paladin | 250 | `data/supplies/great-mana-potion.json` |
+| `ultimate-mana-potion` | `mana` 425–575 | level 130, Sorcerer/Druid | 350 | `data/supplies/ultimate-mana-potion.json` |
+| `great-spirit-potion` | `heal` 250–350 **+** `alsoMana` 100–200 | level 80, Paladin | 225 | `data/supplies/great-spirit-potion.json` |
+| `ultimate-spirit-potion` | `heal` 420–580 **+** `alsoMana` 250–350 | level 130, Paladin | 450 | `data/supplies/ultimate-spirit-potion.json` |
+
+`effect.alsoMana` (#524) é o mecanismo novo da poção de espírito: repõe vida **e** mana no MESMO uso,
+um único `useSupply`. Fica dentro do `kind: 'heal'` — e não vira um quinto `kind` — para não duplicar
+todo `switch`/`if` sobre `effect.kind` que já trata "isto cura" (auto-target do bot, `#emitHealed`).
+`CastSuccess.healed`/`manaRestored` já existiam separados; a poção de espírito é o primeiro caminho que
+preenche os dois ao mesmo tempo.
+
 | Item | Efeito | Arquivo |
 |---|---|---|
 | `blessing-charge` | `blessing` (a TP-03, M22, é quem o executa) | `data/items/blessing-charge.json` |
@@ -118,6 +141,13 @@ família, pelo opcode 14 `select-ammo`, validada por `requires.level` no servido
 | `burst-arrow` | `arrow` | 27 | 3 | — | `data/ammunition/burst-arrow.json` |
 | `sniper-arrow` | `arrow` | 28 | 5 | `level: 20` | `data/ammunition/sniper-arrow.json` |
 | `onyx-arrow` | `arrow` | 38 | 7 | `level: 40` | `data/ammunition/onyx-arrow.json` |
+| `power-bolt` | `bolt` | 40 | 10 | `level: 55` | `data/ammunition/power-bolt.json` |
+
+`power-bolt` (#524, kit level 200) é a primeira munição `family: 'bolt'` do catálogo — a da Royal
+Crossbow do Paladin. Traz também `maxHitChance` (91, do Canary) — só DADO: a chance de acerto por
+skill/distância é da issue #522 (`chance de acerto à distância`), que lê `weapon.hitChance` (o bônus
+da arma, +3 na Royal Crossbow) e `ammunition.maxHitChance` juntos. Até a #522 entrar, o tiro segue
+sempre acertando, como hoje.
 
 O primeiro **colar** (`glacier-amulet`, `kind: 'amulet'`, `slot: 'neck'`, `charges: 20`,
 resistência a gelo 0,2) e o primeiro **escudo real** (`wooden-shield`, `kind: 'shield'`,
@@ -297,6 +327,48 @@ sessão encerrada encheria o Redis com cinco mil chaves dizendo "não sobrou ite
 (`draconya_loot_boxes_pending`) — uma pilha que só cresce é jogador ganhando item que não
 consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o número.
 
+### Loot de SUPPLY e MUNIÇÃO: `supplyId`/`ammunitionId` creditam o ESTOQUE, não passam pela mochila (#520)
+
+Poção e munição física são suprimentos/**abstratos** no catálogo (AB-01, ADR 0032 d.6; ADR 0026
+d.7) — sem pilha física, sem instância. Antes da #520, `lootTableSchema` só conhecia `itemId`:
+um monstro não tinha como dropar poção nem flecha nenhuma, e o Dragon/Dragon Lord do Tibia
+soltam Strong Health Potion, Burst Arrow e Power Bolt. A linha da tabela agora declara
+**exatamente um de `itemId`, `supplyId` ou `ammunitionId`** — o `.refine` do schema recusa duas
+chaves ou nenhuma —, e `rollLoot` separa o resultado em `items`/`supplies`/`ammunition` DEPOIS
+de sortear, na mesma ordem de sempre (gold, depois cada linha na ordem do arquivo): a separação
+é de DESTINO, não de sorteio, e por isso o contrato de semente do FUN-63 continua valendo sem
+exceção.
+
+**O destino é `CharacterRuntime.supplyStock`/`ammunitionStock` (`id → quantidade`), dois Maps
+novos no personagem, opcionais no snapshot como `ammo`/`bestiary` — sem bump de
+`SNAPSHOT_FORMAT_VERSION`.** Solo e party `split` creditam o recipiente do loot sozinho (o mesmo
+`recipient` do gold); party `shared` divide entre os presentes no abate (`#creditStock`, o
+mecanismo comum dos dois) — e **o resto de uma quantidade que não divide igual (o caso comum: 1
+poção para N presentes) vai para um recipiente SORTEADO a cada abate** (embaralhamento parcial
+de Fisher-Yates com o `Rng` da sessão), não sempre para o primeiro da lista — achado da revisão
+do #536: `splitEqually`, correto para o rateio de GOLD em `#settle` (que soma MUITOS drops numa
+bolsa antes de dividir uma vez), sempre manda o resto para o índice 0, e aplicado abate a abate
+isso creditava sempre a MESMA pessoa. Nenhum dos dois estoques pesa nem passa pela bolsa/
+`#settle` como item — o estoque **é** o destino final.
+
+**O estoque é USÁVEL — a mesma sessão que credita também gasta (revisão do #536).**
+`useSupply` (`casting.ts`) gasta UMA unidade do `supplyStock` antes de qualquer checagem de
+gold, nos quatro pontos de pagamento (runa de dano, runa de cura escalada, poção de faixa
+fixa/aleatória, poção de mana) — `goldSpent` sai `0` quando pago do estoque. O tiro de arma de
+distância (`#strike`, `hunt.ts`) faz o mesmo com `ammunitionStock`: `#ammoFor` deixa o tiro sair
+mesmo sem gold se houver estoque, e `#strike` gasta uma unidade em vez de debitar `price`. Os
+dois estoques são PESSOAIS — nunca passam por `Purse` nem por `shareCosts`: quem tem três
+poções no estoque usa as próprias três, e o resto da party continua pagando gold pelas delas.
+
+**Os dois estoques sobrevivem à sessão — colunas `jsonb` `supply_stock`/`ammunition_stock`**
+(migração `0010_520-supply-and-ammunition-stock.sql`, ADR 0014), no mesmo padrão de `ammo`:
+ABSOLUTO e última-escrita-vence (não monotônico como o Bestiário, porque o estoque sobe por
+loot e desce por uso na MESMA sessão). O caminho é o mesmo de skills/Bestiário/munição
+escolhida: `#persistReceipt`/`#creditUnrestorable` (`host.ts`) escrevem no extrato,
+`applyProgression` (`jobs/ledger.ts`) grava na coluna, e `initialCharacterOf`/`consume`
+(`tickets.ts`/`api/tickets.ts`) levam de volta para o ticket da PRÓXIMA sessão — sem isso, uma
+Strong Health Potion caída do Dragon sumiria no logout mesmo sem ser gasta.
+
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
@@ -329,17 +401,87 @@ Duração reinicia cheia ao reequipar: não há `remainingMs` guardado (DT-04), 
 de novo devolve o prazo inteiro. Como o prazo é um evento no relógio LÓGICO, a hunt desanexada a
 1 Hz vence no MESMO instante que a anexada a 10 Hz (invariante 2, ADR 0020).
 
-**Carga é por GOLPE PROTEGIDO.** O colar equipado no `neck` gasta uma carga a cada golpe de
-monstro cujo tipo ele protege — imunidade explícita ou resistência positiva; resistência negativa
-é vulnerabilidade e não gasta. A carga é da INSTÂNCIA (`CarriedItem.charges`), ausente é "cheio",
-e o total vem de `Item.charges`; em zero o item sai do corpo e não vai para a mochila. O golpe é
-gasto mesmo quando esquivado (DT-03): a mitigação incide no cálculo antes do corte do Dodge.
+**Carga é por GOLPE PROTEGIDO.** O colar (`neck`) e, desde o #524, o anel (`finger`) gastam uma
+carga CADA um a cada golpe de monstro cujo tipo eles protegem — imunidade explícita ou
+resistência positiva; resistência negativa é vulnerabilidade e não gasta. As duas peças gastam
+INDEPENDENTE (um golpe de fogo com Dragon Necklace e Might Ring vestidos gasta uma carga de cada).
+A carga é da INSTÂNCIA (`CarriedItem.charges`), ausente é "cheio", e o total vem de `Item.charges`;
+em zero o item sai do corpo e não vai para a mochila. O golpe é gasto mesmo quando esquivado
+(DT-03): a mitigação incide no cálculo antes do corte do Dodge.
 
 **A destruição avisa a apresentação.** O `sim` emite `equipment-changed`, e o `server` o mapeia
 para a mensagem `inventory` já existente (opcode 16, sem campo novo — invariante 5): o slot
 destruído aparece vazio. `CarriedItem.charges` é opcional, então snapshot antigo não precisa de
 bump; o `EQUIP_EXPIRE` viaja na fila. **Carga e tempo restante não sobrevivem ao logout** — a
 linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora do escopo da AB-06).
+
+## O kit level 200 por vocação e o bônus de equipamento (#524, M28)
+
+O catálogo tinha só equipamento de Rookgaard. O kit level 200 (Knight, Paladin, Sorcerer, Druid —
+`docs/adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md`) trouxe os atributos que
+faltavam no schema, todos com os números do Canary `data/items/items.xml` (`opentibiabr/canary`
+main) e o preço de NPC do TibiaWiki (ADR 0037 d.4: Canary/TFS para mecanismo e número, TibiaWiki
+para preço de NPC — os NPCs do `data-otservbr-global` são a economia própria daquele servidor, não
+o fato do Tibia).
+
+**Requisito de mais de uma vocação.** `requires.vocationId` (item e suprimento) aceita uma
+vocação (`"paladin"`) OU uma lista (`["knight", "paladin"]`) — `vocationRequirementSchema`,
+`matchesVocationRequirement` em `@draconya/content`. A Magic Plate Armor e a Knight/Crown Legs
+são Knight+Paladin; a Hat of the Mad, a Focus Cape e o Spellbook of Mind Control são
+Sorcerer+Druid. Diferente da magia (um arquivo por vocação, `haste-knight.json` etc., #155): lá o
+formato pode mudar por vocação (mana, alcance); aqui o item físico é IDÊNTICO nas duas, e
+duplicar o arquivo só para variar `vocationId` divergiria peso/preço no primeiro balanceamento.
+
+**Bônus passivo de equipamento.** `item.bonuses` (§21.2): `skill` (uma skill, um valor — o magic
+level do Tibia É a skill `magic` no Draconya, FUN-92) e `speed` (somado direto a
+`character.speed`, as boots of haste — 40 desde o #527, a escala TFS clássica do
+`forgottenserver` `items.xml` id 2195, a MESMA de `progression.startingSpeed`; o Canary guarda 20
+porque a base dele também é metade). Lido por `Inventory.skillBonus`/`speedBonus` — a MESMA
+forma de `armor()`/`mitigation()`, uma soma pelos poucos slots equipados, sem tabela por
+catálogo. `skillBonus` entra em `#weaponPower` (a Paladin Armor, +2 distância, bate mais forte
+com o crossbow), `#runeScaling` e `#spellScaling` (o Hat of the Mad/Focus Cape/Spellbook of Mind
+Control, +1/+1/+2 magic level, escalam runa e magia de cura/dano mais forte). `speedBonus` entra
+em QUATRO pontos: a entrada na hunt (`onEnter`), o snapshot antigo sem velocidade
+(`#onPlayerStep`), o equipar/desequipar em voo (`#equipmentObserver` → `#recomputeSpeed` — calçar
+a bota muda a velocidade no MESMO evento, sem esperar o próximo passo) e, desde o #527, a entrada
+na CIDADE de quem nunca esteve numa sessão (`createCityRuleset`, mesma guarda de `speed <= 0`) —
+sem o quarto ponto, um personagem recém-criado com a bota já no kit (o level 200 do
+`dragon-party`, #526) mostrava a mesma velocidade com ou sem ela até a primeira entrada numa
+hunt.
+
+**Anel com carga**, além do colar (ver "Duração e carga do equipamento", acima): o Might Ring é
+`kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy/Life
+Ring (efeito permanente enquanto vestido, sem carga). `#consumeAmuletCharge` foi alargado para
+conferir os dois slots (`neck` e `finger`) independente.
+
+**hitChance, só dado.** `weapon.hitChance` (a Royal Crossbow, +3) e `ammunition.maxHitChance` (o
+power bolt, 91) entraram no schema e no catálogo, mas SEM mecanismo de acerto — a chance de
+acerto à distância por skill/distância é a issue #522, que vai ler os dois campos. Até lá, tiro
+sempre acerta (o comportamento de hoje).
+
+**A troca registrada:** a Magic Longsword da issue é `slotType="two-handed"` no Canary E no TFS
+(conferido nos dois `items.xml`, 2026-09-24) — ocuparia o slot do escudo, e o kit do Knight pede
+Mastermind Shield junto. Substituída pela Mystic Blade (Canary `items.xml` id 7384): espada de
+UMA mão, attack 44, defense 25, level 60, sem vocação — usável com escudo, como a issue autoriza
+("item com requisito incompatível... trocar pelo equivalente do Tibia").
+
+**Sem divergência de peso na Royal Crossbow.** Uma revisão anterior desta PR usava o peso do
+TibiaWiki (60 oz) por parecer pesada demais para uma besta de duas mãos frente ao resto do kit —
+uma divergência não autorizada pela ADR 0037 d.4, que reserva TibiaWiki só ao que nenhuma das duas
+engines carrega (preço de NPC, por exemplo), nunca a atributo de item. Corrigido para os 120 oz
+(12000) do Canary `items.xml` id 8023, confirmados também no TFS `items.xml` id 8851 — os dois
+concordam em peso, `hitChance`, alcance e `attack`.
+
+| Kit | Knight | Paladin | Sorcerer | Druid |
+|---|---|---|---|---|
+| cabeça | Crusader Helmet | Royal Helmet | Hat of the Mad | Hat of the Mad |
+| peito | Magic Plate Armor | Paladin Armor | Focus Cape | Focus Cape |
+| pernas | Knight Legs | Crown Legs | Zaoan Legs | Zaoan Legs |
+| pés | Boots of Haste | Boots of Haste | Boots of Haste | Boots of Haste |
+| mão | Mystic Blade | Royal Crossbow + power bolt | Wand of Starstorm | Hailstorm Rod |
+| escudo | Mastermind Shield | — (besta de duas mãos) | Spellbook of Mind Control | Spellbook of Mind Control |
+| amuleto | Dragon Necklace | Dragon Necklace | Dragon Necklace | Dragon Necklace |
+| anel | Might Ring | Might Ring | Might Ring | Might Ring |
 
 ## Parâmetros de balanceamento
 
@@ -360,6 +502,10 @@ linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora
 | Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
 | Colar — `charges` / resistência / peso / `value` | glacier amulet 20 cargas / gelo 0,2 / 5,5 oz / 0 `[ABERTO — cargas, resistência, peso e valor provisórios]` | `packages/content/data/items/glacier-amulet.json` |
 | Escudo — `defense` / peso / `value` | wooden shield 14 / 40 oz / 0 `[ABERTO — defense, peso e valor provisórios]` | `packages/content/data/items/wooden-shield.json` |
+| Kit level 200 — atributos e preço de NPC | os 19 itens da tabela do kit, acima (armor/attack/defense/weight/`value`/`bonuses`/`requires`) — números do Canary `items.xml` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/items/*.json` (as 16 peças novas), `packages/content/data/ammunition/power-bolt.json` |
+| Poções do Tibia — `amountRange` / `requires` / `price` | as nove poções da tabela, acima — números do Canary `potions.lua` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/supplies/{strong,great,ultimate,supreme}-*.json` |
+| Loot do Dragon (#520) — 21 linhas | atributos e `value` do Canary `items.xml`; preço de NPC do Tibia real via TibiaWiki quando o Canary só tinha oferta custom (ADR 0037 d.4) — 18 itens novos + `supplyId: strong-health-potion` + `ammunitionId: burst-arrow` (já existia) | `packages/content/data/items/{dragon-ham,steel-shield,crossbow,dragons-tail,longsword,steel-helmet,broadsword,plate-legs,wand-of-inferno,green-dragon-scale,green-dragon-leather,double-axe,dragon-hammer,serpent-sword,small-diamond,dragon-shield,life-crystal,dragonbone-staff}.json` |
+| Loot do Dragon Lord (#520) — 20 linhas | idem; reaproveita Energy Ring, Royal Helmet e Power Bolt (já existiam), 12 itens novos + `supplyId: strong-health-potion` | `packages/content/data/items/{green-mushroom,royal-spear,gemmed-book,small-sapphire,golden-mug,red-dragon-scale,red-dragon-leather,strange-helmet,fire-sword,tower-shield,dragon-scale-mail,dragon-slayer,dragon-lord-trophy}.json` |
 
 ## Em aberto
 
@@ -375,6 +521,25 @@ linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora
   as seis peças e o slot em que cada uma nasce vestida, e `createCharacter` grava as linhas de
   `item_instance` na **mesma transação** que o personagem (id `<characterId>:kit:<n>`), sem
   passar pelo ledger — o kit não tem preço. Personagem criado antes do #153 continua sem kit.
+- **Royal Spear (#520) não é arma de arremesso.** No Tibia real é `weaponType distance` sem
+  munição — o próprio item é o projétil, consumido ao acertar (`breakChance`). `WEAPON_KINDS`
+  (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
+  arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
+  vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
+- **Serpent Sword e Fire Sword (#520) perdem o componente elemental embutido.** O Tibia real dá
+  `elementearth 8` à Serpent Sword e `elementfire 11` à Fire Sword — dano elemental somado ao
+  físico no MESMO golpe. `weapon.damageType` é um tipo só por arma (CMB-03); `attack` fica com o
+  total, e o componente elemental não aparece. As duas armas continuam batendo o número certo em
+  físico; só o "queima também" some.
+- **Defesa residual de arma de duas mãos (#520) não é copiada.** O Tibia real dá `defense` a
+  Broadsword, Double Axe e Dragon Slayer mesmo sendo de duas mãos; `buildContent` recusa
+  `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — regra
+  de antes da #520, não uma exceção criada para ela. O número simplesmente não entra no item.
+- **Dragonbone Staff (#520) é club, não wand/rod.** O nome sugere conjuração, mas o Tibia real a
+  modela como arma de club corpo a corpo (`weaponType club`), sem `mana`/`fromDamage`/`toDamage`
+  no script de equip — e é assim que o catálogo a declara.
+- **Gemmed Book (#520) reaproveita o item genérico "book" do Canary**, sem atributo próprio que
+  distinga a versão "gemmed" (a diferença no Tibia real é só de nome/arte).
 
 ## Decidido (ADR 0026): munição, containers e runa
 

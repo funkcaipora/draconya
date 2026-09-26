@@ -11,7 +11,14 @@
   "effect": {
     "kind": "damage",
     "basePower": 50,
-    "range": 3
+    "range": 3,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1.403,
+      "skillMax": 2.203,
+      "baseMin": 8,
+      "baseMax": 13
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Dano físico no Tibia, com armadura contando; no CMB-03 o tipo fica `arcane` (o default que preserva o v1) porque declarar `physical` faria a armadura passar a contar e mudaria o dano entregue — a troca exige perfil novo (ADR 0031)."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Dano físico no Tibia, com armadura contando; no CMB-03 o tipo fica `arcane` (o default que preserva o v1) porque declarar `physical` faria a armadura passar a contar e mudaria o dano entregue — a troca exige perfil novo (ADR 0031). Fórmula do Canary (`data/scripts/spells/attack/physical_strike.lua`, main, 2026-09-24)."
 }

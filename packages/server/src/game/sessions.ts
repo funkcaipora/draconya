@@ -258,6 +258,12 @@ export function characterFromTicket(
       ...(initialCharacter.bestiary === undefined ? {} : { bestiary: initialCharacter.bestiary }),
       // A munição escolhida (#152): validada na emissão e no consumo; ausente, atira a grátis.
       ...(initialCharacter.ammo === undefined ? {} : { ammo: initialCharacter.ammo }),
+      // O estoque de supply/munição do loot (#520): validado como a munição; ausente, a
+      // sessão parte sem estoque nenhum — a poção de ontem só entra se o ticket a trouxer.
+      ...(initialCharacter.supplyStock === undefined
+        ? {} : { supplyStock: initialCharacter.supplyStock }),
+      ...(initialCharacter.ammunitionStock === undefined
+        ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)

@@ -121,16 +121,45 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
-- **A party é aritmética pura em `party.ts` (#189, ADR 0027), e o ruleset só chama.** Quatro
-  contas em inteiro, sem RNG: `uniqueVocations` (`null` CONTA como uma vocação), `xpPool`
-  (`floor(xp × tabela[únicas] / 100)`; um elegível só devolve `xp` sem ler a tabela — solo é
-  100 %, e a linha `"1"` é da party de vocações iguais), `xpShare` (cota igual, resto
-  DESCARTADO — dar o resto a alguém seria prioridade por golpe, §15.5) e `settleEntries`
-  (vende a bolsa ENTRADA por entrada, cada uma dividida só entre `eligible ∩ presentes` com
-  `splitEqually` — resto UM a UM nos primeiros, porque gold descartado é valor que o ledger não
-  vê; `value: 0` vai em `unsold`, para o líder, não para o gold), além de `autoSellLimit` (o
-  limite de tipos do líder lê o Premium do PERSONAGEM). Nada aqui sabe o que é sessão; é o
-  que permite testar por tabela.
+- **A party é aritmética pura em `party.ts` (#189, ADR 0027; fórmula e elegibilidade emendadas
+  pelo #525 em 2026-09-24/25, fidelidade CANARY do ADR 0037 d.4 — não TFS: as duas engines
+  divergem no multiplicador, e é o Canary que manda em fórmula), e o ruleset só chama.**
+  `uniqueVocations` conta `null` (sem vocação) como uma vocação DISTINTA, capada em 4
+  (`Party::getUniqueVocationsCount` do Canary não exclui `VOCATION_NONE` — o TFS exclui, mas
+  perde a decisão 4). `sharedExperiencePercent` é a fórmula do Canary em INTEIRO —
+  `10n² − 20n + 130`, menos 10 se o TAMANHO do roster (não `n`) for ≥ 4 — reproduzida do CÓDIGO
+  do Canary, não do comentário dele (que fala em "vocações", mas testa tamanho). `xpShare`
+  (cota ARREDONDADA PARA CIMA — `ceil`, não `floor` —, dividida pelo TAMANHO TOTAL do roster,
+  não por elegíveis; é a ÚNICA conta deste arquivo que NÃO descarta resto, porque não é escolha
+  de quem leva o resto, é "todos levam um pouco mais"), `canShareExperience` (o TUDO OU NADA do
+  `Party::canUseSharedExperience`, avaliado sobre o ROSTER inteiro — não só elegíveis: nível ≥
+  2/3 do maior de TODO o roster, alcance/andar do LÍDER, atividade em `activityWindowMs` — falhar
+  qualquer um desliga a cota igual do abate INTEIRO), `xpByDamage` (o rateio por dano quando a
+  regra acima desliga — `floor(dano/total × xp)`, igual ao `Creature::getGainedExperience`, SEM
+  o teto da cota compartilhada — quem causa 100 % do dano leva o XP inteiro do monstro; quem não
+  bateu não recebe) e `settleEntries` (vende a bolsa ENTRADA por entrada, cada uma dividida só
+  entre `eligible ∩ presentes` com `splitEqually` — resto UM a UM nos primeiros, porque gold
+  descartado é valor que o ledger não vê; `value: 0` vai em `unsold`, para o líder, não para o
+  gold), além de `autoSellLimit` (o limite de tipos do líder lê o Premium do PERSONAGEM). Nada
+  aqui sabe o que é sessão — a atividade chega como `lastActionAtMs` já resolvido, não como
+  `Runner`/relógio —; é o que permite testar por tabela. Duas populações, nomes DIFERENTES de
+  propósito: `allMembers` (o roster inteiro — decide `n`, tamanho e quem `canShareExperience`
+  confere) e `eligible` (vivo + stamina — decide só quem RECEBE a cota calculada).
+- **A atividade de `canShareExperience` é `Runner.lastCombatActionAtMs`, escrita só por
+  `#markCombatActive`** (`hunt.ts`, #525), nos MESMOS pontos que já creditam dano/cura para o
+  DPS/HPS (#431): `#land` (golpe corpo a corpo/distância/wand) e `#applyHits` (magia em área)
+  sempre; `#emitHealed` só quando o RECIPIENTE da cura é DIFERENTE do healer — curar A SI MESMO
+  não conta (`Player::isPartner`, TFS e Canary, exclui `player == this` antes de registrar
+  atividade por cura; o HPS continua contando o self-heal, só esta atividade não). Um ponto de
+  escrita a mais divergiria do que já é creditado em algum lugar. `null` é "nunca agiu" — o mesmo
+  efeito conservador de um `ticksMap` vazio no TFS/Canary logo após a entrada ou uma retomada de
+  snapshot (o campo é opcional no `RunnerState`, ausente quando `null`). Consequência OBSERVADA
+  (ou, no self-heal do Canary, INTENCIONADA e confirmada pelo TFS funcional — o código do Canary
+  para esse caminho específico tem uma variável não resolvida antes do uso, o que o torna inerte
+  na versão observada), não defeito: o abate que acontece no instante 0 de uma hunt cai sempre no
+  rateio por dano — ninguém teve tempo de agir ainda —, e um membro que nunca ataca nem cura
+  OUTRO (sem bot configurado, por exemplo) desliga a cota igual para a party inteira pelo resto
+  da hunt, não só para ele.
 - **Agregados são POR PARTICIPANTE desde o #187, e `session.aggregates` é a SOMA.** Escreva
   com `session.credit(id, key, delta)` — nunca `session.aggregates.x += n`: `credit` escreve
   no participante e na soma no mesmo passo, e trata `best*Hit` como máximo. `end()` devolve
@@ -305,6 +334,25 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
   "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
   `scheduledAbilities` (opcional no snapshot, sem bump).
+- **A IA do TFS é entrada independente, evento na fila — nunca um "pensamento" por tick**
+  (#518, referência §15-19). `ability.chance` AUSENTE é sempre passa e NÃO consome sorteio (o
+  mesmo argumento do `blockChance`/CMB-04 e do `modifiers.critical`/CMB-08 — preserva rato e
+  rotworm bit a bit); declarada, consome UMA rolagem por vencimento mesmo em 1.
+  `#onMonsterAttack`/`#onMonsterAbility` REAGENDAM antes de rolar a chance, para o intervalo
+  correr mesmo quando a rolagem falha. `wave`/`beam` de ability saem na direção do ALVO,
+  recalculada a cada golpe por `facingDirection` (`area.ts`, eixo de maior deslocamento, empate
+  decide horizontal) — DIFERENTE de `directionOf`, que é do PASSO e sempre prioriza horizontal.
+  `monster.defenses` (cura própria) é evento POR DEFESA, subject derivado `m:<id>:<defenseId>`,
+  `scheduledDefenses` (opcional no snapshot); não depende de alvo, e de vida cheia não emite
+  `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` troca para um alvo
+  ao acaso DIFERENTE do atual dentro do `aggroRadius` (TFS `TARGETSEARCH_RANDOM`); a estratégia
+  ponderada do Canary e o `TARGETSEARCH_NEAREST` ficam de fora — nenhum monstro do recorte
+  precisa deles. `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
+  a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
+  aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
+  alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no
+  schema mas NÃO é wired: sem "pensamento" periódico separado do passo, simular o shuffle do
+  TFS exigiria um evento novo só para isso — divergência registrada em `docs/product/combat.md`.
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
   munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
   lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).
@@ -382,3 +430,37 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   propriedade de equivalência. `combat/conformance.ts` é a comparação PURA; o cenário misto do
   benchmark vive em `tools` e a interpretação da linha de base em
   `docs/product/combat-conformance.md`.
+- **`circle` tem DOIS mecanismos de raio, e o parâmetro `source` de `areaTiles` (#523) escolhe
+  qual** — a magia usa as `AREA_CIRCLEnXn` nomeadas do Canary (raio 1-3 com bônus de
+  achatamento, raio ≥ 4 diamante puro, SEM o bônus — uma descontinuidade real da autoria, não um
+  erro de leitura), a ability de monstro usa a tabela de anéis de `AreaCombat::setupArea(radius)`
+  (mecanismo diferente, escala de raio diferente: raio de monstro 5 e raio de magia 3 dão a
+  MESMA forma por coincidência, não porque sejam o mesmo raio). O default é `'spell'` — quem
+  escreve uma ability de monstro em área precisa passar `'monster'` explicitamente (só
+  `monster/ability.ts` faz isso hoje); esquecer faz a ability usar a tabela errada em silêncio,
+  sem erro de tipo nenhum para pegar.
+- **Hunt multiandar (#519): o monstro carrega `z` para achar o PRÓPRIO andar, nunca para trocar
+  de andar sozinho.** `MonsterRuntime.position`/`.home` passaram a ser `FloorPoint` (`z`
+  opcional — ausente é snapshot anterior a esta issue, ou hunt de andar único). Isso faz `zOf`
+  (`movement.ts`) resolver o andar CERTO para ele em `canOccupy`/`move`/ocupação — sem isso, todo
+  monstro de um mapa multiandar seria tratado como se estivesse no andar padrão do mapa. O
+  `crossesFloors: false` de `MonsterRuntime` é o que impede esse `z` novo de virar permissão de
+  usar escada: antes desta issue, "não carrega `z`" e "não sobe escada" eram a MESMA checagem
+  (`'z' in from`); agora são duas, porque o monstro passou a satisfazer a primeira sem poder
+  satisfazer a segunda. Mexer nessa dupla checagem sem entender as duas metades quebra uma das
+  duas invisivelmente.
+- **Todo lugar que compara alvo por distância confere o ANDAR primeiro** (#519,
+  `sameFloor`/`FloorPoint` em `monster/step.ts`): `chooseTarget`, `selectTarget`/`countTargets`/
+  `countAreaTargets` (`targeting.ts`), `abilityTargets` (`monster/ability.ts`) e
+  `#spawnBlockedFor`/`#liveTargetOf`/`#holdFollow` (`hunt.ts`). `sameFloor(a, b)` é NO-OP quando
+  QUALQUER lado é `undefined` — é o que mantém bit a bit toda hunt de andar único e todo
+  snapshot anterior a esta issue, onde `z` nunca era escrito. Antes desta issue,
+  `abilityTargets` FORÇAVA `z: caster.z` em todo candidato antes de montar a chave — parecia
+  reforçar "mesmo andar", mas na verdade fazia o oposto: aceitava QUALQUER andar do candidato,
+  porque a chave comparada era sempre a do lançador. Ver #519 no ADR 0025 (emenda).
+- **`Blocked` (`monster/step.ts`) ganhou dois parâmetros opcionais, `z` e `monsterId` — nesta
+  ordem, e os dois só importam para o spawner.** O passo guloso de personagem e monstro continua
+  chamando com dois argumentos; `Spawner.#freeTile` é quem passa os quatro, porque só ele
+  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
+  para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
+  1.640/1.656 do bestiário, não a exceção).

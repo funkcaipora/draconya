@@ -2,8 +2,8 @@
   "id": "magic",
   "name": "Magia",
   "startingLevel": 0,
-  "curve": { "base": 400, "factor": 1.1 },
+  "curve": { "base": 1600, "factor": 4.0 },
   "gain": { "on": "spell-cast", "pointsPerMana": 1 },
   "damagePerLevel": 0.03,
-  "_open": "Curva e contribuição provisórias. Sobe por MANA GASTA, como no Tibia: por lançamento, a forma ótima de subir seria lançar mil vezes a magia mais barata."
+  "_open": "Base 1600 é o `getReqMana` do Canary (`Vocation::getReqMana`, #521, ADR 0037: `1600 × manamultiplier^(ML-1)`, ML1 sempre custa a base cheia porque o expoente zera), verificado em `opentibiabr/canary` `main` 2026-09-24. `factor` 4.0 é o FALLBACK sem vocação (`manamultiplier` da vocação `None`); cada vocação real sobe por `vocationSchema.skillMultipliers.magic` — Sorcerer/Druid 1.1, Paladin 1.4, Knight 3.0. Sobe por MANA GASTA, como no Tibia: por lançamento, a forma ótima de subir seria lançar mil vezes a magia mais barata. `damagePerLevel` continua provisório."
 }

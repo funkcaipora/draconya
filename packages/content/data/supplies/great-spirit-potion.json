@@ -1,0 +1,20 @@
+{
+  "id": "great-spirit-potion",
+  "name": "Great Spirit Potion",
+  "description": "Cura entre 250 e 350 pontos de vida e recupera entre 100 e 200 pontos de mana. Nível 80 ou mais, Paladino.",
+  "price": 225,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "amountRange": { "min": 250, "max": 350 },
+    "alsoMana": { "amountRange": { "min": 100, "max": 200 } },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 80,
+    "vocationId": "paladin"
+  },
+  "_open": "Kit level 200 (#524) — a poção de vida E mana num uso só, exclusiva do Paladin. Canary `potions.lua`, item id 7642: `health = {250, 350}`, `mana = {100, 200}`, `vocations = {PALADIN, MONK}`, `level = 80` — Monk omitido. `effect.alsoMana` (#524) é o campo novo para isto: `useSupply` repõe os dois no MESMO uso, e `CastSuccess` já carregava `healed`/`manaRestored` separados. `price` 225: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/great-spirit-potion)."
+}

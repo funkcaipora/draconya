@@ -126,6 +126,25 @@ export interface CharacterState {
    * vocação; opcional, e por isso o `SNAPSHOT_FORMAT_VERSION` continua o mesmo.
    */
   readonly ammo?: Readonly<Partial<Record<AmmoFamily, string>>>;
+  /**
+   * O ESTOQUE de supply que caiu em loot (#520): `supplyId → quantidade`, creditado por quem
+   * recebe o drop (`rollLoot`/`LootSupply`, `packages/sim/src/loot.ts`). Supply continua
+   * abstrato no CATÁLOGO (AB-01, ADR 0032 d.6: sem pilha própria) — mas `useSupply` (revisão do
+   * #536) gasta DESTE estoque primeiro, e só cobra gold quando ele acaba: uma Strong Health
+   * Potion caída do Dragon é usável de verdade, não só um número que credita e nunca se gasta.
+   * Ausente é nenhum estoque, sem bump de `SNAPSHOT_FORMAT_VERSION`. Persistido em
+   * `character.supply_stock` (jsonb) — ver `packages/server/src/db/schema.ts`.
+   */
+  readonly supplyStock?: Readonly<Record<string, number>>;
+  /**
+   * O ESTOQUE de munição FÍSICA que caiu em loot (#520): `ammunitionId → quantidade`, a mesma
+   * forma e a mesma regra do `supplyStock` — munição continua abstrata no TIRO (ADR 0026 d.7:
+   * cada disparo debita `price` do gold por família escolhida, sem item físico), mas o que caiu
+   * em loot (Burst Arrow, Power Bolt) é gasto ANTES do gold, uma unidade por tiro daquela
+   * família. Ausente é nenhum estoque, sem bump de `SNAPSHOT_FORMAT_VERSION`. Persistido em
+   * `character.ammunition_stock` (jsonb).
+   */
+  readonly ammunitionStock?: Readonly<Record<string, number>>;
   readonly cooldowns: Partial<CooldownState>;
   /**
    * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
@@ -225,6 +244,10 @@ export class CharacterRuntime {
    * família cai na básica da família na hora do tiro.
    */
   readonly ammo: Map<AmmoFamily, string>;
+  /** O estoque de supply do loot (#520). Só a sessão dona escreve — ver `CharacterState.supplyStock`. */
+  readonly supplyStock: Map<string, number>;
+  /** O estoque de munição do loot (#520). Ver `CharacterState.ammunitionStock`. */
+  readonly ammunitionStock: Map<string, number>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
@@ -257,6 +280,8 @@ export class CharacterRuntime {
     this.lootSeq = state.lootSeq ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
+    this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
+    this.ammunitionStock = new Map(Object.entries(state.ammunitionStock ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
@@ -390,6 +415,15 @@ export class CharacterRuntime {
       lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
+      // supplyStock/ammunitionStock NÃO seguem o mesmo `size === 0` do ammo: ammo só cresce
+      // dentro de uma sessão (`selectAmmo` nunca remove uma família escolhida), então vazio ali
+      // sempre quer dizer "nunca escolheu nada". O estoque de loot, ao contrário, É consumido
+      // (`spendStock`/`#strike` fazem `Map.delete`) — drenar até zero DENTRO da sessão é um
+      // resultado real, não "nunca teve". Omitir a chave aqui faria essa drenagem desaparecer no
+      // snapshot que `#creditUnrestorable` lê (achado da revisão da #536): sempre incluir, e
+      // deixar quem grava o extrato decidir se um objeto vazio é "drenado" ou "nunca tocado".
+      supplyStock: Object.fromEntries(this.supplyStock),
+      ammunitionStock: Object.fromEntries(this.ammunitionStock),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),

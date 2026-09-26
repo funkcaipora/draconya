@@ -49,8 +49,9 @@ export const TEST_PROGRESSION = {
   id: 'baseline', startingHealth: 1_200, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  skillMultipliers: {},
 };
 
 export const TEST_COMBAT = {
@@ -61,10 +62,12 @@ export const TEST_COMBAT = {
 };
 
 export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-/** A party de hunt (ADR 0027): a tabela real, para solo ser party de um. */
+/**
+ * A party de hunt (ADR 0027; multiplicador de XP saiu do conteúdo no #525 — é
+ * `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary em código).
+ */
 export const TEST_PARTY = {
   id: 'baseline', maxMembers: 4,
-  xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 },
   autoSellItemTypes: { free: 5, premium: 20 },
 };
 

@@ -1,6 +1,6 @@
 # 0019 — OpenTibia como especificação de domínio
 
-**Status:** aceito
+**Status:** aceito; limite 2 revogado para mecânica de jogo pelo [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 **Data:** 2026-09-09
 **Contexto técnico:** `sim` principalmente; toda decisão de mecânica de jogo daqui para a frente
 

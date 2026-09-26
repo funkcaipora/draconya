@@ -207,8 +207,8 @@ por cooldown.
 | Cooldown de fallback de um grupo | 1 s | `packages/content/data/bot/baseline.json`, `categoryCooldownMs` |
 | Grupo de cooldown por magia | `attack` / `healing` / `support` | `packages/content/data/spells/*.json`, campo `group` |
 | Grupo de cooldown por supply | `potion` / `attack` | `packages/content/data/supplies/*.json`, campo `group` |
-| Preço do supply (gold no uso) | poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]` | `packages/content/data/supplies/*.json`, campo `price` |
-| Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]` | `packages/content/data/ammunition/*.json`, campo `price` |
+| Preço do supply (gold no uso) | poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]`; as nove poções do Tibia (#524, kit level 200) 115–480, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
+| Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]`; power bolt 10 (#524, NÃO provisório) | `packages/content/data/ammunition/*.json`, campo `price` |
 | Raio de busca de alvo | 8 tiles | `packages/content/data/bot/baseline.json`, `targetSearchRadius` |
 | Teto de regras de saída | 4 | `packages/content/data/bot/baseline.json`, `slots.exit` |
 | Baseline v2 por vocação (slots + automações) | cavaleiro: arma/escudo por vida; paladino: munição por alvos; sorcerer: renovar anel; druid: renovar colar `[ABERTO — provisório]` | `packages/content/data/bot/baseline.json`, `defaultConfigByVocation` |
@@ -276,8 +276,8 @@ O que ele faz, por tipo de ação:
 |---|---|---|
 | `spell` com efeito `heal` | repõe HP do lançador, debita mana, inicia o cooldown da magia | level, vocação, cooldown, mana |
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no alvo e **atribui** (`recordDamage`) | level, vocação, cooldown, sem alvo, fora de alcance, mana |
-| `supply` `heal`/`mana` | repõe HP ou mana e **debita `price` do gold** no ato | sem gold |
-| `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, magic level, sem alvo, fora de alcance, sem gold |
+| `supply` `heal`/`mana` | repõe HP ou mana (faixa fixa sorteada, `amountRange`, ou `alsoMana` junto — #524, kit level 200) e **debita `price` do gold** no ato | level, vocação (#524 — a poção do Tibia pede as duas, como a magia), sem gold |
+| `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, vocação, magic level, sem alvo, fora de alcance, sem gold |
 | `item` com efeito `blessing` | nada — quem o executa é a TP-03 (M22) | sempre |
 
 Três coisas que não podem mudar sem pensar duas vezes:
@@ -402,6 +402,89 @@ preserva a configuração salva (sem subir `BOT_VOCABULARY_VERSION`):
   supplies[]` expõe `targets` para a UI só oferecer o seletor onde cabe.
 
 No fio, o follow sai por `follow-state` (S2C, opcode 30) por personagem.
+
+### Follow através de andar, e por que ninguém fica preso sozinho (#527)
+
+Achado reproduzindo ao vivo o teste de saída do M28 (a party de dragões na Darashia Dragon Lair):
+o líder trocando de andar deixava o seguidor sem alvo alcançável, e ele caía na PRÓPRIA rota — que
+pode levar a um andar diferente do que o líder está agora. Foi assim que um membro foi sozinho
+para o meio dos Dragon Lords enquanto o resto da party continuava dois andares abaixo.
+
+`#holdFollow` (`packages/sim/src/rulesets/hunt.ts`) agora trata "andar diferente" como uma escada
+a atravessar, não como "inalcançável" na hora: `floorChangeToward` (`@draconya/content`,
+`packages/content/src/map.ts`) faz uma busca em largura sobre o grafo de escadas do mapa
+(`Tilemap.floorChangesByFloor`) e devolve o tile, NO ANDAR do seguidor, da primeira escada rumo
+ao andar do alvo. O seguidor dá `greedyStep` até esse tile — sem pathfinding real (ADR 0009
+continua valendo, é o mesmo passo guloso de sempre, só mirando a escada em vez do alvo) — e pisar
+nela já muda de andar sozinho; no vencimento seguinte a mesma busca acha a escada seguinte, ou já
+está perto o bastante do alvo para cair no caminho normal por distância. Só vira `unreachable`
+quando NENHUMA sequência de escadas liga os dois andares.
+
+### O gargalo de dois seguidores: empurrão e prazo de cessão (#527)
+
+Ainda no mesmo teste: um seguidor satisfeito (distância 1 do alvo) pode acabar parado exatamente
+em cima do PRÓXIMO tile da rota de outro personagem — um corredor estreito onde o único caminho
+livre é o tile que o companheiro ocupa. `#companionAt`/o contorno por `greedyStep` (#203) já
+existiam para o caso comum (contorna e segue); quando o contorno TAMBÉM falha (cercado dos dois
+lados), `#nudgeCompanion` pede ao bloqueio para abrir espaço — só quem não está em combate agora
+(sem alvo ao alcance) cede, com um passo `fleeStep` para longe de quem pediu passagem.
+
+Sem mais nada, o par empataria para sempre: quem cede sai do tile e, no PRÓPRIO vencimento
+seguinte, o follow já o trazia de volta — muitas vezes para o MESMO tile, antes de quem pediu
+conseguir atravessar. `Runner.nudgedUntilMs` é o prazo (`NUDGE_YIELD_MS`, 3 s lógicos) em que
+`#holdFollow` de quem cedeu devolve `false` (o mesmo que "inalcançável") em vez de tentar
+reocupar o alcance — o bastante para o líder passar, sem o follow parecer quebrado nem gerar
+`follow-state` por um empurrão tão curto.
+
+### O cerco do lure tem teto (#527)
+
+`#luring` (§13.7) já tinha a máquina de dois limiares (correr até `max`, limpar até `min`); o que
+faltava era um TETO de quanto tempo "lutando" pode durar. Numa zona densa, aggro fiel ao Tibia
+(raio maior, sem leash) atrai gente de FORA do raio de busca continuamente — quem morre é reposto
+por um recém-chegado antes do respawn do próprio ponto —, e `perto` pode nunca cair abaixo de
+`min`: a party fica "PARADA NA ROTA" acampando para sempre, mesmo matando sem parar. Isto não é
+fidelidade de Tibia (a automação é do Draconya, ADR 0037 decisão 2) — é o contrato do PRÓPRIO
+lure, que promete "junta, limpa, anda" e não "vira torre".
+
+`Runner.lureStoppedSinceMs` marca quando o cerco começou; estourado `MAX_LURE_HOLD_MS` (2 min
+lógicos) com a densidade ainda alta, `#luring` força `running = true` e abre uma janela de
+`LURE_FORCE_WALK_MS` (1 min lógico, `Runner.lureForceWalkUntilMs`) em que `lure.max` é ignorado —
+sem essa proteção, o vencimento seguinte via a densidade ainda alta e reengatilhava o cerco no
+MESMO tile, e o "resume" durava um único passo.
+
+### Três outros tetos, achados numa segunda rodada de QA (#527)
+
+O follow através de andar e o `#nudgeCompanion` (acima) resolveram os dois primeiros deadlocks,
+mas expuseram mais três, todos com o mesmo formato — um mecanismo que espera resolver sozinho
+"no próximo vencimento" mas não tinha teto para quando isso nunca acontece:
+
+- **Travessia de escada empacada.** `greedyStep` rumo à escada (`floorChangeToward`) só tenta três
+  candidatos (ADR 0009); um seguidor pode acabar numa reentrância do mapa de onde a direção
+  guloso bate em parede nas três tentativas, mesmo havendo saída por outro lado. `stair` é uma
+  propriedade do MAPA — ao contrário da distância no ramo do mesmo andar, não muda de um
+  vencimento para o outro —, então sem teto o seguidor ficava parado (walker `stop()`ado de uma
+  travessia anterior) para sempre. `Runner.crossFloorStuckSinceMs`/`MAX_CROSS_FLOOR_STUCK_MS`
+  (30 s) desistem e devolvem `unreachable`; `Runner.nudgedUntilMs`/`FOLLOW_GIVE_UP_SUSPEND_MS`
+  (20 s, reaproveitando o campo do empurrão) suspendem o follow por um trecho — sem isso, o
+  vencimento seguinte via os dois ainda em andares diferentes e reengatilhava a MESMA travessia
+  impossível antes da rota própria dar um passo sequer.
+- **Reentrar na rota de longe.** `not-adjacent → rejoinNearest` sempre assumiu que quem saiu da
+  rota está PERTO dela (um empurrão, um `walk` manual). O follow através de andar quebra essa
+  suposição — o passo guloso livre até a escada pode terminar a vários tiles de qualquer tile da
+  rota —, e `rejoinNearest` só resincroniza o ÍNDICE, nunca move ninguém: se o tile mais próximo
+  também não é adjacente, o vencimento seguinte cai no MESMO `not-adjacent`, resincroniza para o
+  MESMO tile de novo, e nunca dá um passo de verdade. `#playerStep` agora fecha essa distância com
+  `greedyStep` rumo ao tile resincronizado, na MESMA chamada, antes de voltar a confiar na rota.
+- **Corredor com três ou mais personagens.** Um gargalo estreito com a party inteira dentro pode
+  fazer `#nudgeCompanion` falhar em CADEIA — quem bloqueia também está cercado, e ceder não tem
+  para onde ir —, e sem monstro nenhum por perto nada mais desbloqueia sozinho (achado numa QA ao
+  vivo: a party toda parada 90–200+ s, zero monstro a menos de 14 tiles — engarrafamento, não
+  fome de presa). `Runner.routeStuckSinceMs`/`MAX_ROUTE_BLOCK_STUCK_MS` (30 s) fazem o PRÓPRIO
+  personagem recuar (`fleeStep` de quem bloqueia) em vez de insistir para a frente — abrir espaço
+  é o que quebra um engarrafamento que empurrar não quebra.
+
+Nenhum destes números é fidelidade de Tibia — são design do Draconya (ADR 0037 decisão 2) para o
+CONTRATO do bot ("anda, luta, segue") nunca virar "trava para sempre".
 
 ## Quando a hunt encerra sozinha (FUN-86)
 

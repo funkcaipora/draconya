@@ -60,7 +60,7 @@ export async function writePendingBotConfigs(
       written += await settleBotConfig(characterId, options);
     } catch (error) {
       failed += 1;
-      options.logger.error({ error, characterId }, 'Failed to persist bot configuration');
+      options.logger.error({ err: error, characterId }, 'Failed to persist bot configuration');
     }
   }
   return { written, failed };

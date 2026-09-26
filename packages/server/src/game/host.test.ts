@@ -3872,6 +3872,41 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(all, 'creature-hit').some((h) => h.kind === 'spell' && h.id === heroId)).toBe(true);
   });
 
+  it('a defesa de cura própria do monstro vira effect pela chave semântica, e é muda sem linha (#518)', () => {
+    // A defesa de cura própria (#518) não tem lançamento prévio como a ability — o efeito sai
+    // direto no ramo de `creature-healed`, reusando a MESMA chave/tabela `appearances.abilities`
+    // da ability à distância (`spit-hit` → effect 8, CMB-06). Chave sem linha continua muda: a
+    // cura aconteceu no `sim` (o número em verde prova), e derrubar a apresentação por falta de
+    // arte esconderia que ela funcionou — o mesmo argumento do teste acima, do outro lado.
+    const defense = (impactKey: string) => ({
+      id: 'self-heal', cadenceMs: 500, chance: 1,
+      heal: { min: 40, max: 40 }, presentation: { impactKey },
+    });
+
+    const comLinha = hunt({ rat: { health: 1_000, defenses: [defense('spit-hit')] } });
+    // Deixa o SPAWN (evento na fila) acontecer antes de pegar o monstro e feri-lo — sem vida
+    // faltando não há o que curar, e o teste mediria o vazio.
+    comLinha.runFor(100);
+    const ratComLinha = (comLinha.host.sessionFor('hero')?.ruleset as HuntRuleset).monsters[0];
+    if (ratComLinha === undefined) throw new Error('sem monstro');
+    ratComLinha.receiveDamage(500);
+    comLinha.runFor(1_000);
+    const allComLinha = comLinha.received();
+    expect(ofType(allComLinha, 'creature-hit').some((h) => h.kind === 'heal')).toBe(true);
+    expect(ofType(allComLinha, 'effect').some((e) => e.effectId === 8)).toBe(true);
+
+    const semLinha = hunt({ rat: { health: 1_000, defenses: [defense('nope')] } });
+    semLinha.runFor(100);
+    const ratSemLinha = (semLinha.host.sessionFor('hero')?.ruleset as HuntRuleset).monsters[0];
+    if (ratSemLinha === undefined) throw new Error('sem monstro');
+    ratSemLinha.receiveDamage(500);
+    semLinha.runFor(1_000);
+    const allSemLinha = semLinha.received();
+    // A cura ainda acontece — só o efeito visual é que falta.
+    expect(ofType(allSemLinha, 'creature-hit').some((h) => h.kind === 'heal')).toBe(true);
+    expect(ofType(allSemLinha, 'effect').filter((e) => e.effectId === 8)).toHaveLength(0);
+  });
+
   it('golpe em criatura que o cliente ainda NÃO conhece é descartado; o session-attach é quem a apresenta', () => {
     // O rato nasceu com ninguém olhando: o `creature-appear` dele foi drenado para o nada, e
     // ele não tem id numérico. Quem chega depois liga o socket mas ainda não pediu o mundo —
@@ -4198,7 +4233,8 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
   };
   const knight = {
     id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
-    startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [],
+    startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
+    meleeDamageMultiplier: 1, distDamageMultiplier: 1,
   };
   const vocations = new Map([[knight.id, knight]]);
   const itemCatalog = new Map([[axe.id, axe]]);
@@ -4352,12 +4388,12 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     const kitVocations: Map<string, Vocation> = new Map([
       ['knight', {
         id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
-        spellSkill: 'magic',
+        spellSkill: 'magic', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
         startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
       ['paladin', {
         id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20,
-        spellSkill: 'distance',
+        spellSkill: 'distance', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
         startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
     ]);
@@ -4697,6 +4733,198 @@ describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com 
   });
 });
 
+describe('um ticket de party nunca retoma o snapshot de OUTRA sessão (#527)', () => {
+  // O snapshot é indexado por `characterId`, não por `sessionId` — e `/start` sempre emite um
+  // `sessionId` novo (`randomUUID`). Um personagem cujo nó reiniciou no meio de uma hunt (ADR
+  // 0010) tem um snapshot resumível dessa hunt ANTIGA; se ele entrar numa party NOVA antes de
+  // reconectar sozinho e resolver aquele snapshot, `#createAndRegister` não pode "resolver"
+  // escolhendo a sessão errada — o achado exato da QA ao vivo: `game` logava `Session resumed
+  // from snapshot gapMs 47781` (quase 13 horas) em vez de criar a hunt que o ticket pedia.
+  const party = {
+    sessionId: 's-nova', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
+    ],
+  };
+
+  /** Um snapshot próprio por personagem, de sessões DIFERENTES — nem uma nem outra é `s-nova`. */
+  const STALE_SESSION_ID: Record<string, string> = { a: 's-velha-a', b: 's-velha-b' };
+
+  function build() {
+    const { ruleset } = countingRuleset();
+    let createCalls = 0;
+    const snapshots = {
+      load: async (characterId: string) => {
+        const sessionId = STALE_SESSION_ID[characterId];
+        if (sessionId === undefined) return null;
+        return {
+          characterId, accountId: `acc-${characterId}`, nodeId: 'n0', savedAtMs: Date.now() - 47_781,
+          snapshot: { id: sessionId, type: 'hunt' } as unknown as SessionSnapshot,
+        };
+      },
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+    } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      directory, snapshots,
+      // Se `#resume` fosse chamado para QUALQUER personagem, é a sessão velha DELE que voltaria.
+      restoreSession: (snapshot) => new Session({
+        id: snapshot.id, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('old'), createdAtMs: 0,
+      }),
+      createSession: (characterId, _initial, ticket) => {
+        createCalls += 1;
+        const session = new Session({
+          id: ticket?.sessionId ?? `s-${characterId}`, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('p'), createdAtMs: 0,
+        });
+        for (const member of ticket?.members ?? [{ characterId }]) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+    });
+    return { host, createCalls: () => createCalls };
+  }
+
+  it("creates the ticket's hunt instead of resuming the leader's own unrelated snapshot", async () => {
+    const { host, createCalls } = build();
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('a')?.id).toBe('s-nova');
+    expect(host.sessionFor('a')?.id).not.toBe('s-velha-a');
+    // A fábrica FOI chamada — a retomada não interceptou a criação como fazia antes do #527.
+    expect(createCalls()).toBe(1);
+  });
+
+  it('applies the same rule to the other member of the ticket, who has a DIFFERENT stale snapshot', async () => {
+    // Prova que a checagem não é "só quem conectou importa": 'b' nunca abre o próprio socket
+    // aqui — ele entra pelo laço de `others` de `#createAndRegister`, com o snapshot dele
+    // (`s-velha-b`, diferente do de 'a') igualmente ignorado a favor do ticket.
+    const { host, createCalls } = build();
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('b')?.id).toBe('s-nova');
+    expect(host.sessionFor('b')?.id).not.toBe('s-velha-b');
+    expect(createCalls()).toBe(1);
+  });
+});
+
+describe('o ticket de party quando o personagem já está hospedado na Cidade (#527, invariante 8)', () => {
+  // O líder clica "Iniciar com o time" DA PRÓPRIA Cidade (#195, #402): o socket antigo pode
+  // nem ter fechado ainda quando o ticket da party chega. Antes do #527, `#prepare` via a
+  // sessão já hospedada e reanexava a ela direto — o ticket da party era descartado em
+  // silêncio, e a hunt nunca nascia.
+  const party = {
+    sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
+    ],
+  };
+  const cityRuleset: Ruleset = {
+    type: 'city',
+    // Como a Cidade de verdade (FUN-71): um shard, não uma sessão privada.
+    shared: true,
+    hz: () => 0,
+    onEnter: () => {},
+    onEvent: () => {},
+    onCreatureDied: () => {},
+    onEnd: () => {},
+  };
+
+  function build() {
+    const registered: string[] = [];
+    const { ruleset: huntRuleset } = countingRuleset();
+    // A Cidade é UMA sessão compartilhada, criada na hora do primeiro login e reutilizada
+    // pelos seguintes — o mesmo padrão de `CityShard.admit`, só que sem o conteúdo de verdade.
+    let city: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      directory: {
+        register: async (characterId: string) => { registered.push(characterId); return true; },
+        succeed: async () => true, release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+      } as unknown as SessionDirectory,
+      createSession: (characterId, _initial, ticket) => {
+        if (ticket === undefined) {
+          city ??= new Session({
+            id: 'city-1', contentVersion: 'v-test', ruleset: cityRuleset, rng: Rng.fromSeed('city'), createdAtMs: 0,
+          });
+          city.enter(new CharacterRuntime({
+            id: characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+          return city;
+        }
+        const session = new Session({
+          id: ticket.sessionId, contentVersion: 'v-test', ruleset: huntRuleset, rng: Rng.fromSeed('p'), createdAtMs: 0,
+        });
+        for (const member of ticket.members) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+    });
+    return { host, registered };
+  }
+
+  it('leaves the City and enters the party hunt when the leader was hosted here (#527)', async () => {
+    const { host, registered } = build();
+    // O líder loga primeiro, sem party — a Cidade de sempre.
+    const solo = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a');
+    expect(solo.created).toBe(true);
+    expect(host.sessionFor('a')?.ruleset.type).toBe('city');
+
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('a')?.ruleset.type).toBe('hunt');
+    // O diretório reflete a troca — não fica só no mapa local do nó.
+    expect(registered.filter((id) => id === 'a').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('also moves a second member who was independently hosted in the same City on this node (#527)', async () => {
+    const { host } = build();
+    await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a');
+    await host.prepare('b', party.members[1]?.initialCharacter, 'acc-b');
+    // Mutação que mata: os dois na MESMA sessão de Cidade — se `createSession` criasse uma
+    // Cidade por personagem, o teste passaria mesmo sem a correção do laço de `others`.
+    expect(host.sessionFor('a')?.id).toBe(host.sessionFor('b')?.id);
+    expect(host.sessionFor('b')?.ruleset.type).toBe('city');
+
+    // O ticket completo chega para 'a' e cria a hunt com os DOIS — inclusive 'b', que estava
+    // na MESMA Cidade deste nó: sem a checagem em `#createAndRegister`, o mapa local passaria
+    // a apontar 'b' para a hunt enquanto o `HostedSession` da Cidade continuaria com ele em
+    // `participants`, e o personagem ficaria em duas sessões ao mesmo tempo por dentro.
+    const prepared = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(prepared.created).toBe(true);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('b')?.id).toBe('s-party');
+  });
+
+  it('reconnecting to the SAME hunt still short-circuits, without leaving anything (#527)', async () => {
+    const { host, registered } = build();
+    await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    registered.length = 0;
+    // O segundo ticket da MESMA party (o outro membro pegando o dele pelo `mine`, ou uma
+    // reconexão) não deve mexer em nada — é o caminho de sempre (#195).
+    const second = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(second.created).toBe(false);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(registered).toEqual(['a']);
+  });
+});
+
 describe('a entrada numa sessão em curso (#402, ADR 0035 D7)', () => {
   // A party já criou a hunt com dois donos; o terceiro chega por um ticket `join: true` para o
   // MESMO `sessionId`. O host admite (`session.enter`) sem criar uma segunda hunt, e recusa
@@ -4880,17 +5108,26 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
     expect(leadState.partyBag).toMatchObject({ gold: 0, items: [], weight: 0, capacity: capacity() });
 
-    // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números.
+    // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números. Credita os
+    // DOIS, com valores diferentes: sem isto, o abate do instante 0 (ver comentário abaixo)
+    // já deixaria "lead" com toda a XP da sessão, e a asserção de baixo (individual < soma)
+    // não provaria nada — passaria mesmo se a soma vazasse para o analisador de "lead".
     session()?.credit('lead', 'xpGained', 7);
+    session()?.credit('b', 'xpGained', 4);
     runFor(200);
     const analyzerOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'analyzer').at(-1);
     const la = analyzerOf(lead.socket);
     const ba = analyzerOf(b.socket);
     if (la?.type !== 'analyzer') throw new Error('sem analyzer para lead');
-    // Os dois podem ter matado um rato no meio (XP dividida igual): a DIFERENÇA é o crédito
-    // só do líder — e é ela que a soma esconderia.
+    // O primeiro rato morre no instante 0 — o golpe inicial já sai ENGATILHADO —, antes de "b"
+    // ter agido uma vez: a XP compartilhada do TFS/Canary é TUDO OU NADA (§525), e um membro
+    // que nunca atacou é INATIVO (`Party::isPlayerActive`). Esse abate cai no rateio por DANO
+    // e "lead", que deu o golpe sozinho, fica com os 5 XP do rato inteiros — "b" nada, por não
+    // ter batido. Os 7 creditados à mão somam em cima: 12, não 7 — e nunca 12 + 4 = 16, que é
+    // o que a soma da sessão daria se o analisador de "lead" vazasse o total de "b".
     const bXp = ba?.type === 'analyzer' ? ba.aggregates.xpGained : 0;
-    expect(la.aggregates.xpGained - bXp).toBe(7);
+    expect(la.aggregates.xpGained - bXp).toBe(8);
+    expect(bXp).toBe(4);
     expect(la.aggregates.xpGained).toBeLessThan(session()?.aggregates.xpGained ?? 0);
   });
 
@@ -5179,8 +5416,12 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     runFor(100);
     const state = lead.socket.received().find((m) => m.type === 'session-state');
     if (state?.type !== 'session-state') throw new Error('sem session-state');
+    // §525 (emenda 2026-09-25): os dois membros nascem sem vocação (level < 8) — "nenhuma"
+    // CONTA como vocação distinta no Canary (`Party::getUniqueVocationsCount` não exclui
+    // `VOCATION_NONE`, diferente do TFS), então os dois mapeiam para a MESMA "nenhuma" e
+    // `uniqueVocations` é 1, não 0. `xpPercent` = 10×1² − 20×1 + 130 = 120 (tamanho 2 < 4).
     expect(state.partySummary).toMatchObject({
-      players: 2, uniqueVocations: 1, xpPercent: 125, shareCosts: true, splitLoot: true,
+      players: 2, uniqueVocations: 1, xpPercent: 120, shareCosts: true, splitLoot: true,
       autoSell: { used: 0, limit: 5 },
     });
 

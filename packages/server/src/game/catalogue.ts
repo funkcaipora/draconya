@@ -44,6 +44,11 @@ function detailOf(effect: Spell['effect'] | Supply['effect']): EffectDetail {
   if ('basePower' in effect && effect.basePower !== undefined) detail.basePower = effect.basePower;
   if ('power' in effect && effect.power !== undefined) detail.power = effect.power;
   if ('amount' in effect) detail.amount = effect.amount;
+  // A faixa fixa da poção do Tibia (#524, kit level 200) — `amount` sorteado, não escalado por
+  // level/ML; e a mana da poção de espírito, reposta no MESMO uso. Só `supply.effect.heal` tem
+  // os dois; `'in'` estreita por construção, como todo campo acima.
+  if ('amountRange' in effect && effect.amountRange !== undefined) detail.amountRange = effect.amountRange;
+  if ('alsoMana' in effect && effect.alsoMana !== undefined) detail.alsoMana = effect.alsoMana;
   if ('intervalMs' in effect) detail.intervalMs = effect.intervalMs;
   if ('durationMs' in effect) detail.durationMs = effect.durationMs;
   if ('speedPercent' in effect) detail.speedPercent = effect.speedPercent;
@@ -115,6 +120,11 @@ export function buildCatalogue(content: Content): Catalogue {
             ? {}
             : { magicLevel: supply.requires.magicLevel }),
         },
+        // A vocação (#524, kit level 200): `null` — e não ausente — quando o suprimento não
+        // exige nenhuma, como `spell.vocationId` já faz acima. Sem isto a tela do bot oferece a
+        // Strong Health Potion (Knight/Paladin) para um Sorcerer configurar, e o servidor recusa
+        // TODO uso em silêncio — o defeito que o cabeçalho deste arquivo descreve.
+        vocationId: supply.requires.vocationId ?? null,
         groupCooldownMs: supply.groupCooldownMs,
         ...(supply.description === undefined ? {} : { description: supply.description }),
         detail: detailOf(supply.effect),
@@ -276,6 +286,10 @@ function lootOf(content: Content, huntId: string): Array<{ itemId: string; name:
       if (loot === undefined) continue;
       for (const item of loot.items) {
         if (item.chance <= 0) continue;
+        // Loot de supply (#520) não tem `itemId` — não é item físico, e esta lista é só do
+        // catálogo de item (FUN-76). Fica fora da vitrine da hunt por enquanto; ver o `_open`
+        // de `CharacterState.supplyStock`.
+        if (item.itemId === undefined) continue;
         const definition = content.items.get(item.itemId);
         if (definition !== undefined) found.set(item.itemId, definition.name);
       }
@@ -308,7 +322,10 @@ function lootDropsOf(content: Content, huntId: string): number {
       const loot = content.monsters.get(entry.monsterId)?.loot;
       if (loot === undefined) continue;
       if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
-      for (const item of loot.items) if (item.chance > 0) items.add(item.itemId);
+      // Supply (#520) não conta aqui — mesma razão de `lootOf`, acima.
+      for (const item of loot.items) {
+        if (item.chance > 0 && item.itemId !== undefined) items.add(item.itemId);
+      }
     }
   }
   return items.size + (gold ? 1 : 0);

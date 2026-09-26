@@ -1,0 +1,10 @@
+{
+  "id": "crusader-helmet",
+  "name": "Crusader Helmet",
+  "kind": "armor",
+  "slot": "head",
+  "weight": 52,
+  "value": 6000,
+  "armor": 8,
+  "_open": "Kit level 200 (#524). Armor 8 e weight 5200 (52 oz) do Canary `data/items/items.xml` id 3391 (`opentibiabr/canary` main, 2026-09-24) — sem `level`/`vocation` no script de equip: qualquer vocação veste. `value` 6000 é o que Alesar paga ao comprar (TibiaWiki, via tibiascape.com/library/items/crusader-helmet), e bate com o `sell = 6000` do NPC Nah'Bob em `data-otservbr-global/npc/nah_bob.lua`."
+}

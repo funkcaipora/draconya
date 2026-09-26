@@ -276,7 +276,7 @@ export function createGame(
             );
           });
         } catch (error) {
-          logger.error({ error }, 'Game handshake failed');
+          logger.error({ err: error }, 'Game handshake failed');
           if (aborted) return;
           response.cork(() => {
             if (!aborted) {
@@ -365,7 +365,7 @@ export function createGame(
               url: configuration.GAME_PUBLIC_URL,
               players: host?.connectedCharacterCount ?? 0,
             })
-            .catch((error: unknown) => logger.error({ error }, 'Heartbeat failed'));
+            .catch((error: unknown) => logger.error({ err: error }, 'Heartbeat failed'));
         };
         beat();
         heartbeatTimer = setInterval(beat, HEARTBEAT_INTERVAL_MS);

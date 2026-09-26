@@ -1,10 +1,13 @@
-// A aritmética da party de hunt (§15, ADR 0027, #189).
+// A aritmética da party de hunt (§15, ADR 0027, #189; XP compartilhada emendada em 2026-09-24 e
+// 2026-09-25 pelo #525, fidelidade Canary do ADR 0037 decisão 4).
 //
-// Quatro contas, todas em INTEIRO e sem RNG: quantas vocações únicas há entre os elegíveis, o
-// pool de XP que isso rende, a cota igual de cada um, e quanto a bolsa compartilhada vale
-// quando é vendida e dividida. Vivem aqui, e não no ruleset, para serem testáveis por tabela:
-// resto negativo, divisão por zero elegíveis e `floor` em ponto flutuante são o tipo de erro
-// que uma fixture de hunt de 3.000 linhas esconde e uma tabela de doze casos não.
+// Contas em INTEIRO e sem RNG: quantas vocações únicas há no roster, o multiplicador que isso
+// rende (fórmula do Canary, copiada — não tabela de conteúdo), a elegibilidade TUDO OU NADA de
+// compartilhar, a cota igual de cada um OU o rateio por dano quando a elegibilidade falha, e
+// quanto a bolsa compartilhada vale quando é vendida e dividida. Vivem aqui, e não no ruleset,
+// para serem testáveis por tabela: resto negativo, divisão por zero elegíveis e `floor` em
+// ponto flutuante são o tipo de erro que uma fixture de hunt de 3.000 linhas esconde e uma
+// tabela de doze casos não.
 //
 // Quem chama é `rulesets/hunt.ts`; este arquivo não sabe o que é sessão.
 
@@ -13,7 +16,11 @@ import type { CarriedItem } from './inventory.js';
 
 export interface PartyMember {
   readonly id: string;
-  /** `null` é "sem vocação" (level < 8) — e CONTA como uma vocação (ADR 0027 decisão 3). */
+  /**
+   * `null` é "sem vocação" (level < 8). CONTA como uma vocação distinta em `uniqueVocations`
+   * (Canary: `Vocation` id 0 "None" é um `Vocation*` real, não excluído — ver lá). O TFS
+   * exclui `VOCATION_NONE`; a fidelidade do ADR 0037 d.4 segue o Canary para fórmula.
+   */
   readonly vocationId: string | null;
 }
 
@@ -110,34 +117,185 @@ export function splitLootOf(options: CostLootMode): boolean {
   return options.splitLoot ?? options.mode === 'shared';
 }
 
-/** Quantas vocações DISTINTAS há entre `members`. `null` é uma delas. */
+/**
+ * Quantas vocações DISTINTAS há entre `members`, capado em 4 — `Party::getUniqueVocationsCount`
+ * do Canary (`src/creatures/players/grouping/party.cpp`): itera `getPlayers()` (líder + membros,
+ * o ROSTER inteiro) inserindo `vocation->getBaseId()` num `unordered_set`, sem excluir vocação
+ * nenhuma, e para de contar ao chegar em 4 (`if (uniqueVocations.size() >= 4) break`).
+ *
+ * `null` (sem vocação, level < 8) CONTA como uma vocação distinta — a "None" do Canary
+ * (`data/XML/vocations.xml`, `id="0" baseid="0" name="None"`) é um `Vocation*` REAL, não nulo;
+ * só um ponteiro nulo (erro de carga) é pulado. **O TFS diverge aqui**: exclui `VOCATION_NONE`
+ * explicitamente em `Party:onShareExperience` (`vocationId ~= VOCATION_NONE`). A fidelidade do
+ * ADR 0037 decisão 4 é clara — Canary manda em fórmula —, e é o Canary que este arquivo
+ * reproduz; a exclusão do TFS fica só registrada aqui e no ADR 0027 (emenda 2026-09-25, #525),
+ * não implementada. Um release anterior desta issue excluía `null`, citando só o TFS — corrigido.
+ */
 export function uniqueVocations(members: readonly PartyMember[]): number {
   const seen = new Set<string>();
-  for (const member of members) seen.add(member.vocationId ?? '');
-  return seen.size;
+  for (const member of members) seen.add(member.vocationId ?? NO_VOCATION);
+  return Math.min(4, seen.size);
 }
 
+/** A chave interna para "sem vocação" — nunca um `vocationId` real, que vem do conteúdo. */
+const NO_VOCATION = '\u0000none';
+
 /**
- * O pool de XP que um monstro rende para `eligible`: `floor(xp × tabela[únicas] / 100)`.
+ * O multiplicador de XP compartilhada, em PERCENTUAL inteiro — `Party:onShareExperience` do
+ * Canary (`data/events/scripts/party.lua`), fórmula que o próprio código chama de "quadrática":
  *
- * Com um elegível só é `experience`, sem tabela: solo é 100 %, e a linha `"1"` da tabela vale
- * para a PARTY de vocações iguais — que rende mais que um solo no total e menos por cabeça,
- * o que é o que "repetidas não somam" significa com pool dividido (ADR 0027).
+ * ```
+ * m (fração)     = 0,1 × n² − 0,2 × n + 1,3                    (n = vocações únicas, capado em 4)
+ * m (percentual) = 10 × n² − 20 × n + 130                       (mesma conta em inteiro × 100)
+ * resultado      = tamanho da party ≥ 4 ? m − 10 : m            (tamanho = roster INTEIRO)
+ * ```
+ *
+ * O comentário do próprio Canary explica o `− 10` (`− 0,1` na fração dele): "a fórmula não é
+ * linear, então precisamos subtrair 0,1 se todas as vocações estão presentes, porque com todas
+ * as vocações o multiplicador é 2,1 e deveria ser 2,0" — mas o CÓDIGO testa o TAMANHO da party
+ * (`getMemberCount() + 1`), não `uniqueVocationsCount`: um comentário sobre a intenção original
+ * (4 vocações reais) ficou preso a uma condição diferente (4+ membros, mesmo com vocações
+ * repetidas). Este arquivo reproduz o CÓDIGO, não o comentário — é o que "fidelidade" significa
+ * quando os dois divergem, e é observável: 4 knights (`n = 1`, `tamanho = 4`) rendem 110 %, não
+ * 120 %, porque `tamanho ≥ 4` desconta mesmo com uma vocação só.
+ *
+ * **O TFS diverge nos dois eixos**: fórmula linear por faixa (`1 + n × (5 × (n − 1) + 10) / 100`
+ * para `n > 1`, `1,20` para `n ≤ 1`) e SEM o desconto por tamanho — só por `n`. As duas engines
+ * só concordam quando `tamanho da party` (Canary) e `n` (TFS) apontam para o mesmo resultado por
+ * coincidência (ex.: `n = 4` sempre tem `tamanho ≥ 4`, e as duas dão 200 % ANTES do desconto do
+ * Canary — mas o Canary desconta e o TFS não, então nem aí batem: Canary 190 %, TFS 200 %).
+ *
+ * Sem tabela em `content`: os números são MECANISMO copiado, não parâmetro de balanceamento —
+ * a mesma categoria de `movementDuration`/`resolveDamage`, que também são código, não JSON.
  */
-export function xpPool(experience: number, eligible: readonly PartyMember[], config: PartyConfig): number {
-  if (eligible.length <= 1) return experience;
-  const percent = config.xpPoolPercentByUniqueVocations[String(uniqueVocations(eligible))] ?? 100;
-  // Inteiro, como `Bestiary.applyXpBonus`: 7 × 1,75 em ponto flutuante não é 12,25 exato.
-  return Math.floor((experience * percent) / 100);
+export function sharedExperiencePercent(members: readonly PartyMember[]): number {
+  const n = uniqueVocations(members);
+  const base = 10 * n * n - 20 * n + 130;
+  return members.length >= 4 ? base - 10 : base;
 }
 
 /**
- * A cota IGUAL de cada elegível; o resto é descartado. Não é `splitEqually`: dar o resto a
- * alguém seria prioridade, e o §15.5 proíbe prioridade por golpe. Zero elegíveis é zero.
+ * A cota de cada elegível, ARREDONDADA PARA CIMA — ao contrário do resto deste arquivo (loot,
+ * gold), que descarta o resto (ADR 0027 decisão original, §15.5: sem prioridade por golpe).
+ *
+ * O TFS e o Canary fazem os DOIS `ceil(xp × multiplicador / tamanhoDaParty)` — uma conta só, e
+ * o DIVISOR é o TAMANHO TOTAL da party (`#self:getMembers() + 1` no TFS,
+ * `self:getMemberCount() + 1` no Canary — o roster inteiro, líder incluso), nunca a contagem de
+ * elegíveis. Neste motor, o roster inteiro é `allMembers` — todo participante da sessão, vivo ou
+ * exausto de stamina (§525, ADR 0027 emenda 2026-09-25): um membro sem stamina ainda conta para
+ * `n` e para o tamanho, do mesmo jeito que ainda define o maior level em `canShareExperience` —
+ * só não RECEBE cota (`eligible` decide quem recebe, `allMembers` decide QUANTO cada um recebe).
+ * As duas engines não têm o conceito de stamina zerando recompensa; é extensão só do Draconya.
+ *
+ * `eligible.length <= 1` devolve `experience` inteira sem ler a fórmula: é o solo de sempre, OU
+ * uma party onde só um está mesmo elegível — que já passou por `canShareExperience` (`hunt.ts`)
+ * e caiu no rateio por dano se a party fosse maior; com um só, as duas contas coincidem.
  */
-export function xpShare(experience: number, eligible: readonly PartyMember[], config: PartyConfig): number {
+export function xpShare(
+  experience: number, eligible: readonly PartyMember[], allMembers: readonly PartyMember[],
+): number {
   if (eligible.length === 0) return 0;
-  return Math.floor(xpPool(experience, eligible, config) / eligible.length);
+  if (eligible.length === 1) return experience;
+  const percent = sharedExperiencePercent(allMembers);
+  return Math.ceil((experience * percent) / (100 * allMembers.length));
+}
+
+/** Um membro do roster, com o que a elegibilidade de XP compartilhada do TFS/Canary precisa ler. */
+export interface SharedExperienceMember {
+  readonly id: string;
+  readonly level: number;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * Instante do último ataque, ou cura a OUTRO participante, no relógio LÓGICO da sessão.
+   * `null` é "nunca agiu" (ou nunca desde que entrou) — o equivalente a não ter entrada no
+   * `ticksMap` do TFS/Canary, que também é tratado como INATIVO (`SHAREDEXP_MEMBERINACTIVE`).
+   *
+   * CURAR A SI MESMO NÃO CONTA (`Player::isPartner`, que as duas engines chamam antes de
+   * registrar atividade por cura — TFS em `onTargetCreatureGainHealth`, `player.cpp`, e exclui
+   * `player == this`; o Canary tem a mesma checagem, ainda que o código de lá esteja com uma
+   * variável não resolvida antes do uso, o que a torna inerte na versão observada — a INTENÇÃO
+   * de excluir a si mesmo é a mesma nas duas, e é essa intenção que `hunt.ts` reproduz). Atacar
+   * um monstro sempre conta (`onAttackedCreatureDrainHealth`, sem checagem de parceiro).
+   */
+  readonly lastActionAtMs: number | null;
+}
+
+/** Os parâmetros de `Party::canUseSharedExperience`. Ver `PartyConfig.sharedExperience`. */
+export interface SharedExperienceRules {
+  readonly rangeTiles: number;
+  readonly floors: number;
+  readonly levelRangeDivisor: number;
+  readonly activityWindowMs: number;
+}
+
+/** O default do TFS/Canary (30 tiles, 1 andar, 2/3 do level, 2 min) — ver o schema em `content`. */
+export const DEFAULT_SHARED_EXPERIENCE_RULES: SharedExperienceRules = {
+  rangeTiles: 30, floors: 1, levelRangeDivisor: 1.5, activityWindowMs: 120_000,
+};
+
+/**
+ * A XP compartilhada do TFS/Canary é TUDO OU NADA (`Party::getSharedExperienceStatus`): com 0 ou
+ * 1 membro não há o que compartilhar (`xpShare` já devolve a XP inteira sem ler a fórmula), e
+ * com 2+ a regra vale se, e só se, TODO membro do ROSTER atende ao mesmo tempo — `members` aqui
+ * é o roster INTEIRO da sessão (`getPlayers()` nas duas engines: líder + membros, elegível para
+ * receber XP ou não), não só quem vai receber cota:
+ *
+ * - **nível**: `level ≥ ceil(maiorLevel / levelRangeDivisor)` — `maiorLevel` é o MAIOR entre
+ *   TODOS os membros do roster: um membro exausto ainda é da party e ainda define a régua,
+ *   mesmo sem receber cota nenhuma.
+ * - **alcance**: dentro de `rangeTiles` em x/y e `floors` em z do LÍDER — nunca entre membros
+ *   entre si (`leader->getPosition()` nas duas engines). Com hunt multiandar (#519), `z` vem da
+ *   posição de cada um; hunt de andar único tem `z` igual para todos e o teste sempre passa.
+ * - **atividade**: bateu ou curou OUTRO dentro de `activityWindowMs` (`lastActionAtMs`).
+ *
+ * Falhar QUALQUER uma delas desliga a divisão igual para o abate inteiro — não só para quem
+ * falhou —, e quem chama cai para `xpByDamage` (§525, ADR 0027 emenda 2026-09-24/25).
+ *
+ * Pura: sem RNG, sem relógio (recebe `nowMs`), sem I/O — como o resto deste arquivo.
+ */
+export function canShareExperience(
+  members: readonly SharedExperienceMember[],
+  highestLevel: number,
+  leaderPosition: SharedExperienceMember['position'],
+  nowMs: number,
+  rules: SharedExperienceRules,
+): boolean {
+  if (members.length <= 1) return true;
+  const minLevel = Math.ceil(highestLevel / rules.levelRangeDivisor);
+  return members.every((member) => {
+    if (member.level < minLevel) return false;
+    if (Math.abs(member.position.x - leaderPosition.x) > rules.rangeTiles) return false;
+    if (Math.abs(member.position.y - leaderPosition.y) > rules.rangeTiles) return false;
+    if (Math.abs(member.position.z - leaderPosition.z) > rules.floors) return false;
+    if (member.lastActionAtMs === null) return false;
+    return nowMs - member.lastActionAtMs <= rules.activityWindowMs;
+  });
+}
+
+/**
+ * A XP sem compartilhamento — Tibia sem party, ou com a compartilhada desligada pela regra
+ * acima: cada elegível recebe pelo DANO que causou neste abate, `floor(dano / total × xp)`,
+ * igual ao `Creature::getGainedExperience` do TFS/Canary (`floor(damageRatio × lostExperience)`).
+ * Quem não bateu (dano ausente ou zero) recebe zero — a party não "cobre" quem ficou parado.
+ *
+ * `total` é a soma de TODO `damageByActor` (§525): dano de quem não está mais elegível (morreu,
+ * saiu) ainda reduz a fatia dos outros, como nas engines de origem — o `damageMap` delas não é
+ * filtrado por quem ainda pode receber XP.
+ */
+export function xpByDamage(
+  experience: number,
+  eligible: readonly PartyMember[],
+  damageByActor: Readonly<Record<string, number>>,
+): ReadonlyMap<string, number> {
+  const shares = new Map<string, number>();
+  const total = Object.values(damageByActor).reduce((sum, damage) => sum + damage, 0);
+  if (total <= 0) return shares;
+  for (const member of eligible) {
+    const damage = damageByActor[member.id] ?? 0;
+    if (damage <= 0) continue;
+    shares.set(member.id, Math.floor((damage / total) * experience));
+  }
+  return shares;
 }
 
 /**

@@ -14,6 +14,7 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
+import { matchesVocationRequirement } from '@draconya/content';
 import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -158,6 +159,16 @@ export interface SpellScaling {
    * provisório do `basePower` e mantém o v1 bit a bit.
    */
   readonly magicLevel?: number;
+  /**
+   * O ataque da arma equipada (#523), para a magia cuja fórmula do Canary lê `skill` e `attack`
+   * juntos: soma (Groundshaker, Berserk, Fierce Berserk, Whirlwind Throw), produto (Brutal
+   * Strike, Front Sweep, Lesser Front Sweep) ou o termo residual de Strong Ethereal Spear
+   * (coeficiente pequeno o bastante para não pesar com o ataque de munição do Draconya hoje —
+   * ver o `_open` da magia). Ausente é `0`: o mesmo valor que uma magia sem arma, ou um alvo
+   * desarmado, já receberia — nenhuma fórmula sem `attackMin`/`attackMax`/`skillAttackMin`/
+   * `skillAttackMax` lê este campo.
+   */
+  readonly weaponAttack?: number;
 }
 
 const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
@@ -195,6 +206,7 @@ function powerOf(
     const skill = effect.kind === 'heal' ? scaling.magicLevel ?? scaling.skillLevel : scaling.skillLevel;
     const { min, max } = evaluateSpellPower(
       effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
+      scaling.weaponAttack ?? 0,
     );
     return rng.integer(min, max);
   }
@@ -408,6 +420,39 @@ function cast(condition: ConditionState): CastSuccess {
  * lugares decidindo a mesma coisa, e o dia em que eles divergissem ninguém saberia qual valia.
  * O início do livro é o mesmo ponto do `castSpell`: depois do pagamento, quando a ação SAIU.
  */
+/**
+ * O valor de um efeito FIXO de supply (#524): `amount` (número único) OU `amountRange` (faixa
+ * sorteada, a poção do Tibia — strong health potion cura 250-350, sempre, level 50 ou 200). O
+ * schema já garante que pelo menos um dos dois existe; sem `rng` (o caminho de fixture que prova
+ * o gold sem sorteio) a faixa cai no MÍNIMO — determinístico, nunca `undefined`.
+ */
+function fixedAmount(
+  amount: number | undefined,
+  range: { readonly min: number; readonly max: number } | undefined,
+  rng: Rng | undefined,
+): number {
+  if (range !== undefined) return rng === undefined ? range.min : rng.integer(range.min, range.max);
+  return amount ?? 0;
+}
+
+/**
+ * Gasta UM do estoque do supply antes de cobrar gold (#520, revisão do #536): uma Strong
+ * Health Potion caída do Dragon (`CharacterRuntime.supplyStock`, creditada por `#creditSupplies`
+ * em `hunt.ts`) é usável de verdade, não só um número que credita e nunca se gasta.
+ *
+ * O estoque é PESSOAL — ao contrário do gold, nunca passa por `Purse` nem por rateio de party:
+ * quem tem três poções no estoque usa as PRÓPRIAS três, e o resto da party continua pagando
+ * gold pelas delas. Devolve `true` quando gastou (o chamador pula o pagamento em gold inteiro,
+ * inclusive a checagem `canAfford`); `false` sem estoque, e o caminho de sempre continua.
+ */
+function spendStock(user: CharacterRuntime, supplyId: string): boolean {
+  const stock = user.supplyStock.get(supplyId) ?? 0;
+  if (stock <= 0) return false;
+  if (stock <= 1) user.supplyStock.delete(supplyId);
+  else user.supplyStock.set(supplyId, stock - 1);
+  return true;
+}
+
 export function useSupply(
   user: CharacterRuntime,
   supply: Supply,
@@ -437,15 +482,25 @@ export function useSupply(
     if (supply.requires.level !== undefined && user.level < supply.requires.level) {
       return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
     }
+    // A vocação, como o level acima (#524): nunca melhora esperando, então vem antes do
+    // cooldown/alvo — a mesma ordem de `castSpell` para a magia.
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
     if (supply.requires.magicLevel !== undefined && (scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
       return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
     }
     if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
-    if (!purse.canAfford(supply.price)) return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+    const hasStockDamage = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockDamage && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
     // Chamador sem contexto de combate: a runa não existe para ele — nunca dano sem `rng`.
     if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
-    purse.pay(supply.price);
+    const paidFromStockDamage = hasStockDamage && spendStock(user, supply.id);
+    if (!paidFromStockDamage) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
     const hits: number[] = [];
     let total = 0;
@@ -467,7 +522,10 @@ export function useSupply(
       hits.push(result.resolvedDamage);
       total += result.resolvedDamage;
     }
-    return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: total, hits,
+      goldSpent: paidFromStockDamage ? 0 : supply.price,
+    };
   }
 
   // Runa de cura escalada (#475): a `formula` canônica (ou o `basePower` provisório) escala
@@ -475,54 +533,79 @@ export function useSupply(
   // checagem vem ANTES do gold, pela ordem de sempre: recusar antes de debitar.
   if (supply.effect.kind === 'heal') {
     const effect = supply.effect;
-    // Requisitos da runa de cura (#475), na mesma ordem da runa de ataque: level e magic level
-    // são conferidos ANTES do gold. Poção não declara nenhum, e passa direto.
+    // Requisitos da runa de cura (#475), na mesma ordem da runa de ataque: level, vocação e
+    // magic level são conferidos ANTES do gold. Poção do v1 não declara nenhum, e passa direto;
+    // a poção do Tibia (#524) declara level e, na de espírito, vocação — só o Paladin bebe.
     if (supply.requires.level !== undefined && user.level < supply.requires.level) {
       return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
     }
     if (supply.requires.magicLevel !== undefined
       && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
       return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
     }
+    // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+    const hasStockHeal = (user.supplyStock.get(supply.id) ?? 0) > 0;
     if (effect.basePower !== undefined || effect.formula !== undefined) {
       if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
-      if (!purse.canAfford(supply.price)) {
+      if (!hasStockHeal && !purse.canAfford(supply.price)) {
         return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
       }
-      purse.pay(supply.price);
+      const paidFromStockRune = hasStockHeal && spendStock(user, supply.id);
+      if (!paidFromStockRune) purse.pay(supply.price);
       startSupplyCooldown(user, supply, nowMs);
       return {
         ok: true,
         healed: executeHealing(user, recipient, effect, scaling, combat, rng),
-        manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
+        manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paidFromStockRune ? 0 : supply.price,
       };
     }
-    if (!purse.canAfford(supply.price)) {
+    if (!hasStockHeal && !purse.canAfford(supply.price)) {
       return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
     }
-    purse.pay(supply.price);
+    const paidFromStockPotion = hasStockHeal && spendStock(user, supply.id);
+    if (!paidFromStockPotion) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
-    // Poção: número fixo, sem sorteio nem contexto de combate — o caminho de sempre.
+    // Poção: `amount` fixo OU `amountRange` sorteado (#524), sem contexto de combate — a runa
+    // de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
+    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava.
     return {
       ok: true,
-      healed: restore(recipient, 'health', effect.amount ?? 0),
-      manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
+      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng)),
+      manaRestored: effect.alsoMana === undefined
+        ? 0
+        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng)),
+      damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
     };
   }
 
-  if (!purse.canAfford(supply.price)) {
+  // Poção de mana (#524: requer level/vocação como a de vida — a strong mana potion pede level
+  // 50, a great mana potion Sorcerer/Druid/Paladin de level 80). Mesma ordem de sempre: level,
+  // vocação, e só então o gold.
+  if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+    return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+  }
+  if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+    return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+  }
+  // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+  const hasStockMana = (user.supplyStock.get(supply.id) ?? 0) > 0;
+  if (!hasStockMana && !purse.canAfford(supply.price)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
 
-  purse.pay(supply.price);
+  const paidFromStockMana = hasStockMana && spendStock(user, supply.id);
+  if (!paidFromStockMana) purse.pay(supply.price);
   startSupplyCooldown(user, supply, nowMs);
   return {
     ok: true,
     healed: 0,
-    manaRestored: restore(recipient, 'mana', supply.effect.amount),
+    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng)),
     damage: 0,
     hits: NO_HITS,
-    goldSpent: supply.price,
+    goldSpent: paidFromStockMana ? 0 : supply.price,
   };
 }
 

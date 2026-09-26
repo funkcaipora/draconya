@@ -80,8 +80,8 @@ const PROGRESSION = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
   regen: { healthPerSecond: 0, manaPerSecond: 0 },
-  xp: { base: 20, exponent: 2 },
-  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+  xp: { kind: 'power', base: 20, exponent: 2 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
 };
 
 const COMBAT = {
@@ -95,7 +95,7 @@ const COMBAT = {
 };
 
 const STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const PARTY = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const PARTY = { id: 'baseline', maxMembers: 4 };
 
 const SPELLS = [
   { id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000, effect: { kind: 'heal', amount: 60 } },

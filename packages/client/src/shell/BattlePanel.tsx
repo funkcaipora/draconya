@@ -49,12 +49,24 @@ export function battleTone(percent: number): 'ok' | 'warn' | 'danger' {
  * As criaturas visíveis, fora o próprio personagem e a party (DT-01). `world.creatures` é lido
  * DIRETO (ADR 0007): esta função não assina nada, e quem decide quando chamá-la de novo é o
  * `setInterval` de `BattlePanel`.
+ *
+ * **Só o ANDAR do próprio personagem** (#527). Numa hunt privada não existe AOI (FUN-33) — o
+ * hospedeiro manda TODOS os monstros vivos da instância pelo `session-state`/`creature-appear`,
+ * dos três andares da Darashia Dragon Lair inclusive, porque o mundo espacial precisa deles para
+ * desenhar o que se vê através de escada e vão (ADR 0034). A lista de batalha não é o mundo: no
+ * Tibia a battle list só mostra quem está no MESMO andar (o monstro de outro andar não é um alvo
+ * possível), e sem este filtro ela mostrava dragões de z11/z12 para quem estava em z10 — e o
+ * bot conta "quantos ao alcance" (`countTargets`, `packages/sim/src/targeting.ts`) já filtrando
+ * por andar havia tempo; só a APRESENTAÇÃO estava errada. `world.selfId` ausente (antes do
+ * `session-state` chegar) não filtra nada — não há andar próprio para comparar ainda.
  */
 export function battleRows(partyNames: ReadonlySet<string>): BattleRow[] {
+  const ownFloor = world.selfId === null ? undefined : world.creatures.get(world.selfId)?.position.z;
   const rows: BattleRow[] = [];
   for (const creature of world.creatures.values()) {
     if (creature.id === world.selfId) continue;
     if (partyNames.has(creature.name)) continue;
+    if (ownFloor !== undefined && creature.position.z !== ownFloor) continue;
     const percent = creature.maxHealth <= 0 || creature.health <= 0
       ? 0
       : Math.max(0, Math.min(100, Math.round((creature.health / creature.maxHealth) * 100)));
