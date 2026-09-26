@@ -477,9 +477,12 @@ export interface DrunkDeviation {
  * qualquer efeito; dentro disso, só `r < 4` troca a direção — para a CARDEAL do PRÓPRIO `r`
  * (índice na ordem do enum do Canary, nunca relacionada à direção que o passo já ia tomar). O
  * caso `r === 4` representaria uma diagonal lá (`DIRECTION_SOUTHWEST`), que o Canary também NÃO
- * aplica (`r < DIRECTION_DIAGONAL_MASK` dá falso) — só fala; o Draconya não tem diagonal (ADR
- * 0009, passo sempre cardeal), então este caso nunca precisaria de tratamento especial mesmo se
- * o Canary trocasse a direção nele.
+ * aplica (`r < DIRECTION_DIAGONAL_MASK` dá falso) — só fala. O próprio ALGORITMO do Canary é quem
+ * nunca troca para uma diagonal nesse ramo — não uma limitação do motor de destino: o Draconya
+ * TEM passo diagonal de criatura (`monster/step.ts`, ADR 0009 — o passo guloso anda nas oito
+ * direções, e `movement.ts` cobra ×3 de duração dele). Este caso não precisa de tratamento
+ * especial aqui porque o `r === 4` do Canary nunca chega a pedir uma direção nova, não porque
+ * uma diagonal aqui fosse impossível de representar.
  *
  * Quem chama SÓ rola quando a criatura tem drunk (`Conditions.hasDrunk`) — uma criatura sem a
  * condição nunca consome este sorteio, a mesma regra do `chance` ausente de uma ability (CMB-06).

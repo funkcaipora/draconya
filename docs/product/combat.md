@@ -1368,9 +1368,10 @@ extremos inclusive); `r <= 4` (`DIRECTION_DIAGONAL_MASK`, `game/movement/positio
 criatura falar "Hicks!", e só `r < 4` troca a direção do passo — para a CARDEAL do PRÓPRIO `r`
 (`NORTH=0, EAST=1, SOUTH=2, WEST=3` no enum do Canary), nunca relacionada à direção que o passo já
 ia tomar. `r === 4` representaria a diagonal `DIRECTION_SOUTHWEST` — o próprio Canary NÃO troca a
-direção nesse caso (só fala), e o Draconya não tem passo diagonal para criatura mesmo se trocasse
-(o passo é sempre cardeal — mais abaixo). Taxa observável: 4/61 (~6,6 %) de desvio de direção,
-5/61 (~8,2 %) de fala.
+direção nesse caso (só fala); é o algoritmo dele que nunca pede uma diagonal aqui, não uma
+limitação do Draconya, que TEM passo diagonal de criatura (`packages/sim/src/monster/step.ts`,
+ADR 0009 — o passo guloso do monstro anda nas oito direções, e `movement.ts` cobra ×3 de duração
+numa diagonal). Taxa observável: 4/61 (~6,6 %) de desvio de direção, 5/61 (~8,2 %) de fala.
 
 **`rollDrunkDeviation` (`packages/sim/src/conditions.ts`) reproduz exatamente esse sorteio**, com
 o `Rng` da sessão (`rng.integer(0, 60)`, inclusive nos dois extremos como o `uniform_random` do
