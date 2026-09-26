@@ -31,7 +31,7 @@ const baseline = {
 
 const combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
 
@@ -354,7 +354,7 @@ describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
     expect(mitigation?.immunities.has('fire')).toBe(false);
   });
 
-  it('a tabela de armadura exige os OITO tipos — um só não basta', () => {
+  it('a tabela de armadura exige os ONZE tipos — um só não basta', () => {
     // `z.record` de chave enum é exaustivo no zod 4: o conteúdo declara tudo, sem default em
     // código. É o que impede a efetividade de um elemento novo nascer zero por esquecimento.
     expect(() => buildContent(base({ combat: [{ ...combat, armorEffectiveness: { physical: 1 } }] })))

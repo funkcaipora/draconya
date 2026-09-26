@@ -5,21 +5,27 @@
 import { z } from 'zod';
 
 /**
- * A taxonomia CANÔNICA de tipos de dano (CMB-03, emenda do ADR 0031). É a fonte ÚNICA: o
- * `sim` importa `DamageType` daqui e não redeclara o enum.
+ * A taxonomia CANÔNICA de tipos de dano (CMB-03, emenda do ADR 0031; drown/lifedrain/manadrain
+ * pelo #547, M29-07). É a fonte ÚNICA: o `sim` importa `DamageType` daqui e não redeclara o enum.
  *
- * Os sete primeiros são os tipos de dano do Tibia 13.32 (`CombatType` do TFS/Canary — só os
- * NOMES, que são fato de domínio; nenhum código GPL é copiado, ADR 0019): físico, energia,
- * terra, fogo, gelo, sagrado e morte. `arcane` é o tipo NÃO-ELEMENTAL da magia cujo elemento o
- * conteúdo ainda não declarou — é o vocabulário do `combat-v1` (`melee`/`magic`) preservado
- * para que a ausência de tipo continue rendendo bit a bit o mesmo dano (DT-03).
+ * Os dez primeiros são os `CombatType` do Tibia 13.32 (TFS/Canary — só os NOMES, que são fato de
+ * domínio; nenhum código GPL é copiado, ADR 0019): físico, energia, terra, fogo, gelo, sagrado,
+ * morte, afogamento (`drown`), dreno de vida (`lifedrain`) e dreno de mana (`manadrain`).
+ * `lifedrain` e `manadrain` são dano — o Canary NUNCA os usa para curar quem ataca
+ * (`Creature::mitigateDamage`, `creature.cpp:911-921`, os pula da mitigação percentual; nenhum
+ * dos dois soma vida ou mana em quem golpeia). `manadrain` resolve contra a MANA do alvo, não a
+ * vida (`sim/combat/outcome.ts`); `drown` e `lifedrain` são dano de vida comum. `arcane` é o
+ * OITAVO/último tipo, NÃO-ELEMENTAL, da magia cujo elemento o conteúdo ainda não declarou — é o
+ * vocabulário do `combat-v1` (`melee`/`magic`) preservado para que a ausência de tipo continue
+ * rendendo bit a bit o mesmo dano (DT-03); seu destino no catálogo (ADR 0040) é uma issue à parte.
  *
  * Tipo é separado de ORIGEM (`DamageSource`) e de EFEITO VISUAL (`CreatureHit.source`), pela
  * DT-01: o mesmo elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem
  * dizer qual fórmula resolveu.
  */
 export const DAMAGE_TYPES = [
-  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death',
+  'drown', 'lifedrain', 'manadrain', 'arcane',
 ] as const;
 export type DamageType = (typeof DAMAGE_TYPES)[number];
 
@@ -90,13 +96,16 @@ export interface CompiledMitigation {
 
 /**
  * A tabela de efetividade de armadura que reproduz o `combat-v1` bit a bit (CMB-03): `physical`
- * vale o antigo `melee` (1), e todo tipo não-físico vale o antigo `magic` (0). É a REFERÊNCIA
- * da migração e o valor que uma fixture pode reusar; o conteúdo real declara a sua, porque o
- * schema exige os oito tipos e um default em código faria o balanceamento morar onde ninguém
- * procura.
+ * vale o antigo `melee` (1), e todo tipo não-físico vale o antigo `magic` (0), inclusive
+ * drown/lifedrain/manadrain (#547, M29-07: nenhum conteúdo v1/v2 os declara, e o `combat-v3`
+ * nem lê este campo — `blockhit.ts` usa a armadura em faixa, sem efetividade por tipo). É a
+ * REFERÊNCIA da migração e o valor que uma fixture pode reusar; o conteúdo real declara a sua,
+ * porque o schema exige os onze tipos e um default em código faria o balanceamento morar onde
+ * ninguém procura.
  */
 export const V1_ARMOR_EFFECTIVENESS: Readonly<Record<DamageType, number>> = {
-  physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+  physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+  drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
 };
 
 /** Referência a uma aparência no pacote de assets. NUNCA um caminho de arquivo (invariante 6). */
@@ -1089,8 +1098,9 @@ const damageOverTimeRoundSchema = z.object({
  *   vez de reimplementá-las) — o conteúdo só escolhe a forma mais perto da fonte.
  *
  * `damageType` é o ELEMENTO do Tibia (poison→earth, fire→fire, energy→energy, bleeding→physical,
- * cursed→death, freezing→ice, dazzled→holy — tabela em `docs/product/combat.md`; `drown` fica de
- * fora até o #547/M29-07 acrescentar o tipo). Ausente é `physical`, o default que preserva o v1.
+ * cursed→death, freezing→ice, dazzled→holy, drowning→drown — tabela em `docs/product/combat.md`;
+ * `drown` chegou ao enum pelo #547/M29-07, e um conteúdo de afogamento já pode declará-lo).
+ * Ausente é `physical`, o default que preserva o v1.
  */
 export const conditionEffectSchema = z.discriminatedUnion('kind', [
   /**
@@ -1624,12 +1634,13 @@ export const monsterSchema = z.strictObject({
    * A mitigação PERCENTUAL do `combat-v3` (#548, `Monster::getMitigation`/`monster.defenses.
    * mitigation` do Canary — nome DISTINTO de `mitigation` acima de propósito: aquele é
    * resistência/imunidade POR TIPO, `Creature::mitigateDamage` é um percentual ÚNICO aplicado
-   * por ÚLTIMO, depois da armadura, sobre QUALQUER tipo de dano (a exceção do Canary é
-   * lifedrain/manadrain/agony — tipos que `@draconya/content` ainda não declara; a exceção
-   * entra com a M29-07). O valor É o percentual direto — `0.99` tira 0,99 % do dano, não 99 %
-   * — e o Canary o CAPA em 30. Ausente é `0`, a identidade de rato/rotworm e de todo monstro
-   * que o Canary não declara (a maioria: 1394/1655 no bestiário real DECLARAM, mas o Draconya
-   * só tem quatro monstros hoje).
+   * por ÚLTIMO, depois da armadura, sobre QUALQUER tipo de dano — exceto lifedrain e manadrain
+   * (`agony` não existe no Draconya). A exceção chegou com o #547 (M29-07): `resolveBlockHit`
+   * (`sim/combat/blockhit.ts`) recebe `mitigationExempt` calculado do `damageType`, nunca mais
+   * fixo em `false`. O valor É o percentual direto — `0.99` tira 0,99 % do dano, não 99 % — e o
+   * Canary o CAPA em 30. Ausente é `0`, a identidade de rato/rotworm e de todo monstro que o
+   * Canary não declara (a maioria: 1394/1655 no bestiário real DECLARAM, mas o Draconya só tem
+   * quatro monstros hoje).
    */
   defenseMitigation: z.number().min(0).max(30).default(0),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
@@ -2110,9 +2121,10 @@ export const combatSchema = z.object({
    * Quanto da armadura do alvo é subtraído, POR TIPO DE DANO (CMB-03, emenda do ADR 0031).
    *
    * Antes eram duas colunas (`melee`/`magic`). A migração que preserva o v1 é:
-   * `physical` fica com o antigo `melee`; TODO tipo não-físico fica com o antigo `magic`.
-   * O `z.record` de chave enum é EXAUSTIVO no zod 4: o conteúdo declara os oito tipos, sem
-   * default em código — mudar a efetividade de um elemento é editar JSON, nunca lógica.
+   * `physical` fica com o antigo `melee`; TODO tipo não-físico fica com o antigo `magic` —
+   * inclusive drown/lifedrain/manadrain (#547, M29-07). O `z.record` de chave enum é EXAUSTIVO
+   * no zod 4: o conteúdo declara os ONZE tipos, sem default em código — mudar a efetividade de
+   * um elemento é editar JSON, nunca lógica.
    */
   armorEffectiveness: z.record(z.enum(DAMAGE_TYPES), z.number().min(0).max(1)),
   /** Piso de dano, como fração do ataque: nem a armadura mais alta zera um golpe. */

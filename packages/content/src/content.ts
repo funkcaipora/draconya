@@ -184,7 +184,8 @@ export interface CompiledWeaponFamily extends WeaponFamilyDefinition {
  */
 export function compileMitigation(profile: MitigationProfile | undefined): CompiledMitigation {
   const resistances: Record<DamageType, number> = {
-    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
   };
   if (profile !== undefined) {
     for (const type of DAMAGE_TYPES) {
