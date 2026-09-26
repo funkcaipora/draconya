@@ -45,7 +45,12 @@ export interface BlockHitInput {
   /** A defesa da peça/inata, já escalada por quem monta o `Defender` (0 é "sem defesa"). */
   readonly defense: number;
   readonly armor: number;
-  /** `defenseMitigation` do monstro, ou 0 (jogador, M30-02; monstro que não declara). Em [0,30]. */
+  /**
+   * `defenseMitigation` do monstro (em [0,30], teto do schema de `Monster`) ou 0 para o monstro
+   * que não declara. Desde o #549 (M30-02) o JOGADOR não usa mais o "ou 0": ele chega aqui com
+   * o percentual REAL de `playerMitigation` (`hunt.ts#playerMitigationV3`), sem o teto de 30 —
+   * a fórmula do jogador não tem esse limite.
+   */
   readonly defenseMitigationPercent: number;
   /**
    * A exceção do `mitigateDamage` do Canary: lifedrain/manadrain/agony NÃO passam pela

@@ -50,6 +50,8 @@ import type { DefenseSource } from '../combat/defense.js';
 import {
   DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS,
 } from '../combat/blockhit.js';
+import { playerArmor, playerDefense, playerMitigation } from '../combat/player-defense.js';
+import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { rollDistanceHit } from '../combat/distance-hit.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
@@ -6730,21 +6732,148 @@ const slots = bot.groups.get(group);
    * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante.
    */
   #playerDefender(character: CharacterRuntime): Defender {
+    // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
+    // partir dos poucos slots vestidos — não é varredura de tabela de resistência. Igual nos
+    // três perfis: nem #548 nem esta issue mexem em `mitigation` (resistência por tipo).
+    const mitigation = character.inventory.mitigation(this.#options.items);
+    const blockCharge = character.blockCharge;
+
+    if (this.#options.combat.compatibilityProfile === 'combat-v3') {
+      // A fórmula REAL do jogador do 13.x (#549, M30-02) — `playerDefense`/`playerArmor`/
+      // `playerMitigation` (`combat/player-defense.ts`) substituem, só aqui, os números ad hoc
+      // que `combat-v1`/`v2` (no `else` abaixo) continuam usando: `combat.player.armor` (uma
+      // constante "personagem desarmado no level 1") e `#defenseSourceOf` (a defesa da peça
+      // escalada por `powerMultiplier`, uma fórmula própria do Draconya). "O jogador defensor
+      // usa os números atuais de defesa e armadura até o M30-02" (comentário do #548) — esta
+      // issue É o M30-02.
+      //
+      // A mão e o escudo são lidos UMA VEZ e passados aos dois montadores — `weapon()`/
+      // `shield()` fazem lookup no catálogo e conferem `requires`, e as três fórmulas do golpe
+      // (aqui e as duas de baixo) usam o MESMO equipamento do MESMO golpe.
+      const weaponItem = character.inventory.weapon(this.#options.items, character);
+      const shieldItem = character.inventory.shield(this.#options.items, character);
+      return {
+        armor: playerArmor(character.inventory.armor(this.#options.items)),
+        dodgeChance: this.#options.player.dodgeChance,
+        mitigation,
+        defense: {
+          kind: shieldItem !== null ? 'shield' : weaponItem !== null ? 'weapon' : 'none',
+          defense: this.#playerDefenseV3(character, weaponItem, shieldItem),
+        },
+        defenseMitigation: this.#playerMitigationV3(character, weaponItem, shieldItem),
+        blockCharge,
+      };
+    }
+
     return {
       armor: this.#options.player.armor + character.inventory.armor(this.#options.items),
       dodgeChance: this.#options.player.dodgeChance,
-      // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
-      // partir dos poucos slots vestidos — não é varredura de tabela de resistência.
-      mitigation: character.inventory.mitigation(this.#options.items),
+      mitigation,
       // A fonte de defesa (CMB-04): escolhida pelo `Inventory` (DT-01) e escalada aqui pela
-      // skill de shielding, que é do ruleset porque vive no personagem. O `combat-v3` (#548)
-      // REUSA o mesmo número como a magnitude do estágio novo — "o jogador defensor usa os
-      // números atuais de defesa e armadura até o M30-02".
+      // skill de shielding, que é do ruleset porque vive no personagem. `combat-v1`/`v2`
+      // continuam com este número — só `combat-v3` (acima) muda de fórmula.
       defense: this.#defenseSourceOf(character),
-      // As cargas de bloqueio do `combat-v3` (#548): o personagem é dono do próprio estado
-      // (invariante 9), e `applyDamageOutcome` é quem escreve de volta o que este golpe gastou.
-      blockCharge: character.blockCharge,
+      // As cargas de bloqueio do `combat-v3` (#548): ignoradas em v1/v2, mas inofensivas de
+      // carregar — o personagem é dono do próprio estado (invariante 9).
+      blockCharge,
     };
+  }
+
+  /**
+   * A skill de escudo do PERSONAGEM (#549, M30-02) — `SKILL_SHIELD` do Canary, `shielding` no
+   * Draconya. Reusa `combat.defense.skillId` (CMB-04): é a MESMA skill que já escala o bloqueio
+   * do `combat-v1`/`v2`, então não há por que o `combat-v3` declarar uma segunda entrada de
+   * conteúdo só para o mesmo número. Sem a entrada (conteúdo de teste), zero — a mesma leitura
+   * de `#defenseSourceOf`.
+   */
+  #shieldSkillLevelOf(character: CharacterRuntime): number {
+    const skillId = this.#options.combat.defense?.skillId;
+    const skill = skillId === undefined ? undefined : this.#options.skills.get(skillId);
+    if (skill === undefined || skillId === undefined) return 0;
+    // `getSkillLevel` do Canary soma `varSkills[skill]` (o bônus de EQUIPAMENTO) para TODA
+    // skill, sem exceção para `SKILL_SHIELD` (`player.cpp:7480`) — a mesma leitura que
+    // `#skillLevelOf` já faz para a skill de arma/punho. Nenhum item do catálogo declara hoje
+    // um bônus de `shielding` (#549), mas a fórmula fica correta para o dia em que um declarar.
+    return character.skills.levelOf(skill)
+      + character.inventory.skillBonus(this.#options.items, skillId);
+  }
+
+  /**
+   * A mitigação da vocação (#549, M30-02) — a da vocação escolhida, ou a da tabela base (sem
+   * vocação, Canary `vocations.xml` id 0 "None") para quem ainda não tem uma. A mesma forma de
+   * `#regenOf`, para o mesmo motivo: cada vocação tem os próprios `multiplier`/`primaryShield`/
+   * `secondaryShield`, e quem não escolheu ainda usa o número base.
+   */
+  #mitigationVocationOf(character: CharacterRuntime): PlayerMitigationVocation {
+    return this.#vocationOf(character)?.mitigation ?? this.#options.progression.mitigation;
+  }
+
+  /**
+   * `playerDefense` (#549, M30-02; `combat/player-defense.ts`) montada com o que o personagem
+   * tem na mão e no escudo (já resolvidos por `#playerDefender`, um lookup só por golpe) — a
+   * arma primeiro (sobrescreve o punho), o escudo por cima (sobrescreve a arma), exatamente a
+   * ordem sequencial do `Player::getDefense` do Canary.
+   *
+   * A skill da arma NÃO é `#skillLevelOf` direto quando a família é `wand` (achado de revisão,
+   * #549): `Player::getWeaponSkill` do Canary só reconhece FIST/SWORD/CLUB/AXE/MISSILE/DISTANCE
+   * (`player.cpp:474-509`) — `WEAPON_WAND` cai no `default: attackSkill = 0`. `#skillLevelOf`
+   * devolveria a skill de MAGIA (a família `wand` aponta `skillId: 'magic'`, usado para o DANO,
+   * não a defesa), que é quase sempre não-zero — e como wand/rod nunca declaram `defense`/
+   * `extraDefense`, isso faria `playerDefense` pular o piso fixo (`defenseSkill === 0` → 1/2) e
+   * cair na fórmula cheia com `defenseValue` zerado, sempre 0. Zerar aqui reproduz o `default`
+   * do Canary e devolve o piso correto para um Sorcerer/Druid sem escudo.
+   */
+  #playerDefenseV3(
+    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null,
+  ): number {
+    const fistFamily = this.#options.weaponFamilies.get('fist');
+    const weaponFamily = weaponItem?.weapon?.family === undefined
+      ? undefined
+      : this.#options.weaponFamilies.get(weaponItem.weapon.family);
+    return playerDefense({
+      ...(weaponItem === null ? {} : {
+        weapon: {
+          defense: weaponItem.defense,
+          extraDefense: weaponItem.extraDefense,
+          skillLevel: weaponFamily?.kind === 'wand'
+            ? 0
+            : this.#skillLevelOf(character, weaponFamily),
+        },
+      }),
+      ...(shieldItem === null ? {} : { shield: { defense: shieldItem.defense } }),
+      fistSkillLevel: this.#skillLevelOf(character, fistFamily),
+      shieldSkillLevel: this.#shieldSkillLevelOf(character),
+      fightMode: 'attack',
+    });
+  }
+
+  /**
+   * `playerMitigation` (#549, M30-02; `combat/player-defense.ts`) montada com o mesmo
+   * equipamento de `#playerDefenseV3`, mais o `spellbook`/`quiver` do escudo e o `twoHanded`/
+   * `ammoFamily` da arma — os dois pares que só esta fórmula lê.
+   */
+  #playerMitigationV3(
+    character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null,
+  ): number {
+    return playerMitigation({
+      shieldSkillLevel: this.#shieldSkillLevelOf(character),
+      vocation: this.#mitigationVocationOf(character),
+      ...(weaponItem === null ? {} : {
+        weapon: {
+          defense: weaponItem.defense,
+          extraDefense: weaponItem.extraDefense,
+          twoHanded: weaponItem.twoHanded,
+          usesAmmo: weaponItem.weapon?.ammoFamily !== undefined,
+        },
+      }),
+      ...(shieldItem === null ? {} : {
+        shield: {
+          defense: shieldItem.defense,
+          rangedFocus: shieldItem.spellbook || shieldItem.quiver,
+        },
+      }),
+      fightMode: 'attack',
+    });
   }
 
   /**

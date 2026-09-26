@@ -51,10 +51,13 @@ export interface Defender {
    */
   readonly defense?: DefenseSource | undefined;
   /**
-   * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): em [0, 30],
-   * aplicada por ÚLTIMO no estágio novo, sobre QUALQUER tipo (exceto a exceção de lifedrain/
-   * manadrain do Canary, ainda sem tipo correspondente — M29-07). Ausente é `0`: o jogador
-   * (M30-02) e todo monstro que não declara. Ignorado em `combat-v1`/`v2`.
+   * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): em [0, 30] para
+   * um MONSTRO que declara — a QUEM não declara (e a todo defensor em `combat-v1`/`v2`, onde o
+   * campo é ignorado), ausente vale `0`. Aplicada por ÚLTIMO no estágio novo, sobre QUALQUER
+   * tipo (exceto a exceção de lifedrain/manadrain do Canary, ainda sem tipo correspondente —
+   * M29-07). Desde o #549 (M30-02) o JOGADOR sob `combat-v3` NÃO cai mais neste "ausente": ele
+   * sempre chega aqui com um percentual REAL, calculado por `playerMitigation` (sem o teto de
+   * 30 do schema do monstro — a fórmula do jogador não tem esse limite).
    */
   readonly defenseMitigation?: number | undefined;
   /**

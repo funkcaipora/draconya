@@ -760,6 +760,18 @@ export function buildContent(raw: RawContent): Content {
         `item "${item.id}": defense só vale em escudo ou arma corpo a corpo de uma mão`,
       );
     }
+    // extraDefense/spellbook/quiver (#549, M30-02): a mesma disciplina do `defense` acima —
+    // um campo que só a conta do JOGADOR lê não pode aparecer num item que não é arma ou
+    // escudo, porque o schema de campo opcional não sabe do `kind`.
+    if (item.extraDefense > 0 && item.kind !== 'weapon') {
+      problems.push(`item "${item.id}": extraDefense só faz sentido em arma`);
+    }
+    if ((item.spellbook || item.quiver) && item.kind !== 'shield') {
+      problems.push(`item "${item.id}": spellbook/quiver só fazem sentido em escudo`);
+    }
+    if (item.spellbook && item.quiver) {
+      problems.push(`item "${item.id}": spellbook e quiver são exclusivos — o escudo é um ou outro`);
+    }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
     }
