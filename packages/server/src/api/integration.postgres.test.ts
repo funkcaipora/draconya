@@ -215,7 +215,8 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     const character = await createCharacter(owner.cookie);
     expect(character).toMatchObject({
       vocation: null, level: 1, xp: 0, gold: 0, capacity: 400,
-      staminaMs: 86400000, premiumUntil: null, state: 'city',
+      // 12 h (M32-01, #562, ADR 0043 emenda 2026-09-25) — era 24 h antes da migração 0011.
+      staminaMs: 43200000, premiumUntil: null, state: 'city',
     });
     expect(Number.isNaN(Date.parse(character.staminaUpdatedAt))).toBe(false);
     for (const [path, method, body] of [
