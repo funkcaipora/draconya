@@ -53,9 +53,10 @@ export interface BlockHitInput {
    */
   readonly defenseMitigationPercent: number;
   /**
-   * A exceção do `mitigateDamage` do Canary: lifedrain/manadrain/agony NÃO passam pela
-   * mitigação percentual. Sempre `false` hoje — `@draconya/content` ainda não declara esses
-   * tipos (M29-07); o parâmetro existe para não reabrir este arquivo quando eles chegarem.
+   * A exceção do `mitigateDamage` do Canary: lifedrain e manadrain NÃO passam pela mitigação
+   * percentual (`agony` não existe no Draconya). Desde o #547 (M29-07) quem chama
+   * (`combat/damage.ts`) calcula isto do `damageType` do intent — este parâmetro continua
+   * existindo para o estágio ficar puro e testável sem depender do enum de conteúdo.
    */
   readonly mitigationExempt: boolean;
   readonly blockCharge: BlockChargeState;

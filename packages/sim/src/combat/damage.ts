@@ -54,10 +54,10 @@ export interface Defender {
    * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): em [0, 30] para
    * um MONSTRO que declara — a QUEM não declara (e a todo defensor em `combat-v1`/`v2`, onde o
    * campo é ignorado), ausente vale `0`. Aplicada por ÚLTIMO no estágio novo, sobre QUALQUER
-   * tipo (exceto a exceção de lifedrain/manadrain do Canary, ainda sem tipo correspondente —
-   * M29-07). Desde o #549 (M30-02) o JOGADOR sob `combat-v3` NÃO cai mais neste "ausente": ele
-   * sempre chega aqui com um percentual REAL, calculado por `playerMitigation` (sem o teto de
-   * 30 do schema do monstro — a fórmula do jogador não tem esse limite).
+   * tipo, exceto lifedrain e manadrain (#547, M29-07, a exceção do Canary — `mitigationExempt`
+   * em `blockhit.ts`). Desde o #549 (M30-02) o JOGADOR sob `combat-v3` NÃO cai mais neste
+   * "ausente": ele sempre chega aqui com um percentual REAL, calculado por `playerMitigation`
+   * (sem o teto de 30 do schema do monstro — a fórmula do jogador não tem esse limite).
    */
   readonly defenseMitigation?: number | undefined;
   /**
@@ -68,6 +68,19 @@ export interface Defender {
    * volta no personagem ou monstro dono (invariante 9); este resolver é puro e só o CALCULA.
    */
   readonly blockCharge?: BlockChargeState | undefined;
+  /**
+   * A MANA atual do defensor (#547, M29-07 — achado da revisão do PR #648): só existe para
+   * quem TEM mana (`CharacterRuntime`), e só importa para um golpe `manadrain`. O Canary
+   * calcula `manaLoss = min(mana atual, -manaChange)` ANTES de rodar `blockHit` — isto é, ANTES
+   * da resistência/absorção (`applyAbsorbDamageModifications`, `game.cpp:9175-9176`) — e não
+   * depois, como um dreno normal seria tentado a fazer. Sem este campo, `resolveBlockHitProfile`
+   * aplicaria a resistência sobre o poder BRUTO e só limitaria à mana no fim
+   * (`applyDamageOutcome`), dobrando o dreno sempre que a mana disponível for menor que o poder
+   * bruto e o alvo tiver resistência a `manadrain`. Ausente é "não capar aqui" — um monstro
+   * (sem mana) não precisa: `applyDamageOutcome` já zera o dreno dele por outro caminho (mana
+   * sempre 0). Ignorado para qualquer outro tipo de dano.
+   */
+  readonly mana?: number | undefined;
 }
 
 /**
@@ -370,6 +383,15 @@ function resolveBlockHitProfile(
     : intent.rawDamage;
 
   const immune = defender.mitigation?.immunities.has(intent.damageType) ?? false;
+  // Manadrain NUNCA bloqueia por defesa/escudo nem por armadura (#547, M29-07 — achado da
+  // revisão do PR #648): o Canary chama `target->blockHit(attacker, COMBAT_MANADRAIN,
+  // manaLoss)` com só 3 argumentos (`game.cpp:9176`), e `checkDefense`/`checkArmor` default a
+  // `false` (`Creature::blockHit`, `creature.cpp:944`) — os dois estágios ficam de fora para
+  // TODO mana-drain, corpo a corpo ou à distância, independente da origem do golpe. A ORIGEM
+  // (`intent.blockable`) continua decidindo para qualquer outro tipo; só manadrain a ignora.
+  const blockable = intent.damageType === 'manadrain'
+    ? { armor: false, shield: false }
+    : intent.blockable ?? MELEE_BLOCK_FLAGS;
   const blockHit = resolveBlockHit({
     // O dano JÁ crítico entra no estágio de bloqueio — defesa, armadura e o "pular armadura
     // quando a defesa absorveu tudo" decidem sobre o número que o alvo de fato recebe, não
@@ -377,21 +399,35 @@ function resolveBlockHitProfile(
     rawDamage: criticalRawDamage,
     damageType: intent.damageType,
     immune,
-    blockable: intent.blockable ?? MELEE_BLOCK_FLAGS,
+    blockable,
     defense: defender.defense?.defense ?? 0,
     armor: defender.armor,
     defenseMitigationPercent: defender.defenseMitigation ?? 0,
-    // A exceção de lifedrain/manadrain do Canary não tem tipo correspondente ainda (M29-07):
-    // nunca isenta, hoje, para nenhum tipo do vocabulário atual.
-    mitigationExempt: false,
+    // A exceção do `mitigateDamage` do Canary (#547, M29-07, `creature.cpp:911-921`): a
+    // mitigação percentual NUNCA se aplica a lifedrain nem manadrain. `drown` não é isento —
+    // só os dois tipos de dreno ficam de fora, os únicos que o Canary pula ali (`agony` não
+    // existe no Draconya).
+    mitigationExempt: intent.damageType === 'lifedrain' || intent.damageType === 'manadrain',
     blockCharge: defender.blockCharge ?? FULL_BLOCK_CHARGE,
     nowMs,
   }, rng);
 
+  // Manadrain capa para a mana ATUAL do alvo ANTES da resistência (#547, M29-07 — achado da
+  // revisão do PR #648): o Canary computa `manaLoss = min(mana atual, -manaChange)` e só DEPOIS
+  // roda `blockHit` (que aplica `applyAbsorbDamageModifications`, a resistência/absorção) sobre
+  // o valor já capado (`game.cpp:9175-9176`). Resistir primeiro e capar depois (a ordem que
+  // `applyDamageOutcome` sozinho produziria) dobra o dreno sempre que a mana disponível for
+  // menor que o poder bruto e o alvo tiver resistência — ver o exemplo no comentário de
+  // `Defender.mana`. Sem `defender.mana` (monstro, que não tem), nada muda aqui: o dreno dele já
+  // é zerado depois, em `applyDamageOutcome` (mana sempre 0).
+  const manaCapped = intent.damageType === 'manadrain' && defender.mana !== undefined
+    ? Math.min(defender.mana, blockHit.damage)
+    : blockHit.damage;
+
   // Resistência/vulnerabilidade por tipo (CMB-03): o mesmo mecanismo do v1/v2, intocado — ver o
   // comentário acima sobre por que ele continua separado do estágio novo.
   const resistance = defender.mitigation?.resistances[intent.damageType] ?? 0;
-  const afterResistance = blockHit.damage * (1 - resistance);
+  const afterResistance = manaCapped * (1 - resistance);
 
   // Piso, sobre o PODER BRUTO ORIGINAL (sem o crítico) — como no v1/v2 — mas nunca revogando
   // imunidade explícita. O crítico é bônus do atacante; o piso é a garantia de que nem a maior

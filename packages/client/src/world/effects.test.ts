@@ -148,11 +148,23 @@ describe('floatingTextColor (#479)', () => {
     expect(floatingTextColor('spell', 'physical')).toBe(0xff0000);
   });
 
-  it('são os oito elementos, e `arcane` é o roxo da magia', () => {
-    expect(Object.keys(ELEMENT_COLORS)).toHaveLength(9); // oito elementos + heal
+  it('são os onze elementos, e `arcane` é o roxo da magia', () => {
+    expect(Object.keys(ELEMENT_COLORS)).toHaveLength(12); // onze elementos + heal
     expect(elementColor('arcane')).toBe(0xcc33ff);
     // Tipo desconhecido nunca vira preto — some no fundo.
     expect(elementColor('poison')).toBe(0xcc33ff);
+  });
+
+  it('drown/lifedrain/manadrain (#547, M29-07) têm cor própria', () => {
+    // Lifedrain reusa o vermelho do físico — a mesma cor que o Canary manda para os dois
+    // (`TEXTCOLOR_RED`). Drown e manadrain são dois azuis DISTINTOS entre si e do gelo:
+    // mutação que mata é qualquer um dos três colapsar no roxo genérico de magia.
+    expect(elementColor('lifedrain')).toBe(0xff0000);
+    expect(elementColor('drown')).toBe(0x3399ff);
+    expect(elementColor('manadrain')).toBe(0x0033ff);
+    expect(elementColor('drown')).not.toBe(elementColor('manadrain'));
+    expect(elementColor('drown')).not.toBe(elementColor('ice'));
+    expect(elementColor('manadrain')).not.toBe(elementColor('ice'));
   });
 });
 

@@ -111,7 +111,10 @@ function valueLabel(effect: string): string {
 
 const DAMAGE_TYPE_LABEL: Readonly<Record<string, string>> = {
   physical: 'Físico', energy: 'Energia', earth: 'Terra', fire: 'Fogo',
-  ice: 'Gelo', holy: 'Sagrado', death: 'Morte', arcane: 'Arcano',
+  ice: 'Gelo', holy: 'Sagrado', death: 'Morte',
+  // #547, M29-07: drown/lifedrain/manadrain do Tibia.
+  drown: 'Afogamento', lifedrain: 'Dreno de vida', manadrain: 'Dreno de mana',
+  arcane: 'Arcano',
 };
 
 const GROUP_LABEL: Readonly<Record<string, string>> = {

@@ -135,7 +135,8 @@ describe('loadContent', () => {
     // huntera-observed.md Parte V §32, 2026-09-22), não mais o provisório da FUN-123.
     expect(rat?.attack).toEqual({ min: 3, max: 4 });
     expect(rat?.mitigation.resistances).toEqual({
-      physical: 0, energy: 0, earth: -0.2, fire: 0, ice: 0.1, holy: -0.2, death: 0.1, arcane: 0,
+      physical: 0, energy: 0, earth: -0.2, fire: 0, ice: 0.1, holy: -0.2, death: 0.1,
+      drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
     });
     expect(rat?.speed).toBe(172);
     expect(rat?.corpseAppearanceId).toBe(5964);

@@ -115,9 +115,15 @@ const FLOATING_TEXT_COLORS: Readonly<Record<HitKind, number>> = {
 };
 
 /**
- * A cor de cada TIPO DE DANO (RF-02, #479). É a paleta do cliente de referência: gelo azul
- * claro, fogo laranja, energia roxa, terra verde, sagrado amarelo, morte cinza, físico
- * vermelho, cura verde. `arcane` cai no roxo da magia — é o tipo "mágico" do v1.
+ * A cor de cada TIPO DE DANO (RF-02, #479; drown/lifedrain/manadrain pelo #547, M29-07). É a
+ * paleta do cliente de referência: gelo azul claro, fogo laranja, energia roxa, terra verde,
+ * sagrado amarelo, morte cinza, físico vermelho, cura verde. `arcane` cai no roxo da magia — é
+ * o tipo "mágico" do v1. `lifedrain` reusa o vermelho do físico — o Canary manda a MESMA cor
+ * (`TEXTCOLOR_RED`, `game.cpp`) pros dois, e no Tibia o dreno de vida lê como um golpe vermelho
+ * comum. `drown` e `manadrain` são dois azuis distintos entre si e do gelo: `drown` mais claro
+ * (afogamento, `TEXTCOLOR_LIGHTBLUE`), `manadrain` mais saturado (a cor da própria mana,
+ * `TEXTCOLOR_BLUE`) — aproximações RGB do nome do Canary, não uma paleta extraída (ADR 0019: só
+ * o NOME da cor é fato de domínio, o pixel exato não).
  */
 export const ELEMENT_COLORS: Readonly<Record<string, number>> = {
   physical: 0xff0000,
@@ -127,6 +133,9 @@ export const ELEMENT_COLORS: Readonly<Record<string, number>> = {
   earth: 0x00cc00,
   holy: 0xffff00,
   death: 0xcccccc,
+  drown: 0x3399ff,
+  lifedrain: 0xff0000,
+  manadrain: 0x0033ff,
   arcane: 0xcc33ff,
   heal: 0x00ff00,
 };

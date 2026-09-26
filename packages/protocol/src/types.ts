@@ -8,16 +8,18 @@ const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number()
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
 /**
- * O TIPO de dano elemental (#479). Espelha `DAMAGE_TYPES` do conteúdo, mas vive aqui pela
- * mesma razão que todo contrato de rede: o protocolo é a base da pilha e não importa `content`.
- * A lista é fechada de propósito — um valor fora dela faria o cliente desenhar um número sem
- * cor, e o `decodeS2C` deve recusar a mensagem inteira em vez de deixar passar.
+ * O TIPO de dano elemental (#479; drown/lifedrain/manadrain pelo #547, M29-07). Espelha
+ * `DAMAGE_TYPES` do conteúdo, mas vive aqui pela mesma razão que todo contrato de rede: o
+ * protocolo é a base da pilha e não importa `content`. A lista é fechada de propósito — um
+ * valor fora dela faria o cliente desenhar um número sem cor, e o `decodeS2C` deve recusar a
+ * mensagem inteira em vez de deixar passar.
  *
  * `arcane` é o tipo "mágico" do v1 (`kind: magic` do CMB-03). Cura NÃO é um tipo de dano: é o
  * `kind` da mensagem, e por isso não aparece aqui.
  */
 export const DamageType = z.enum([
-  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death',
+  'drown', 'lifedrain', 'manadrain', 'arcane',
 ]);
 export type DamageType = z.infer<typeof DamageType>;
 

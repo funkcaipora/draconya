@@ -47,7 +47,7 @@ import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import {
-  applyLeech, combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
+  combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
 } from '../combat/modifiers.js';
 import type { DefenseSource } from '../combat/defense.js';
 import {
@@ -3976,10 +3976,7 @@ const slots = bot.groups.get(group);
       return result;
     }
 
-    this.#applyHits(
-      session, character, result.hits,
-      spell.effect.kind === 'damage' ? spell.effect.damageType : undefined,
-    );
+    this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
     return result;
   }
 
@@ -4025,17 +4022,27 @@ const slots = bot.groups.get(group);
    * vida — chamaria `resolveDeath` uma segunda vez sobre um monstro que não está em lugar
    * nenhum, o que credita abate duas vezes e libera de novo um tile que já foi liberado (e que
    * pode já ter outro ocupante).
+   *
+   * `hitOutcomes` (#547, M29-07 — achado da revisão do PR #648) é o `DamageOutcome` INTEIRO de
+   * cada alvo, na mesma ordem de `hits` — e é ele, não `hits[i]`, que decide como o golpe é
+   * APLICADO: `applyDamageOutcome` (CMB-08) é o único ponto que sabe desviar um
+   * `damageType: 'manadrain'` para a MANA do alvo em vez da vida. Chamar `monster.receiveDamage`
+   * direto aqui — como este método fazia antes — deixava a magia/runa de dano fora do desvio: um
+   * conteúdo que declarasse `manadrain` bateria na vida do monstro como dano comum. `hits`
+   * continua existindo só para o extrato (`bestSpellHit`), que quer o RESOLVIDO, nunca o
+   * aplicado — a mesma distinção que `#land` já fazia para o golpe básico.
    */
   #applyHits(
     session: Session, character: CharacterRuntime, hits: readonly number[],
-    damageType: DamageType | undefined,
+    hitOutcomes: readonly DamageOutcome[],
   ): void {
     // Leech (M30-04, #551): a MESMA ação de área divide pelo total de alvos atingidos
     // (`targetsAffected`), como o Canary faz em `Combat::doAreaCombatHealth`/`damage.affected`
     // — a fórmula é `calculateLeechAmount` (`combat/modifiers.ts`), nunca uma divisão simples.
-    // Uma leitura só do equipamento para a AÇÃO inteira, como o Canary lê a skill uma vez por
-    // `doCombat` — não por alvo.
-    const modifiers = this.#attackerModifiers(character);
+    // Os modificadores são os da AÇÃO, lidos uma vez por `castSpell`/`useSupply` e carregados em
+    // `outcome.intent.modifiers` — o Canary lê a skill uma vez por `doCombat`, não por alvo.
+    // Quem aplica o leech é `applyDamageOutcome`, com o `targetsAffected` da mira: um caminho só,
+    // o mesmo do `#land` — aplicar de novo aqui dobraria o leech de toda magia de dano.
     const targetsAffected = this.#spellHits.length;
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
@@ -4044,29 +4051,34 @@ const slots = bot.groups.get(group);
       // comentário acima. Ela nunca zera `alive` ao sumir, então a checagem certa é presença no
       // índice vivo da instância, não `monster.alive`.
       if (this.#monsterBySubject.get(monster.subject) !== monster) continue;
+      const outcome = hitOutcomes[i];
+      // Defensivo: `hitOutcomes` nasce do MESMO laço que `hits` em `castSpell`/`useSupply`, os
+      // dois sempre do mesmo tamanho — mas um índice sem outcome não aplica nada, em vez de
+      // arriscar `undefined` em `applyDamageOutcome`.
+      if (outcome === undefined) continue;
       const damage = hits[i] ?? 0;
       // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
       session.credit(character.id, 'bestSpellHit', damage);
-      // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
-      const applied = monster.receiveDamage(damage);
+      // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe. Um
+      // `manadrain` sai daqui com `healthDamage: 0` sempre — a vida do monstro nunca se move.
+      const applied = applyDamageOutcome(monster, outcome, character, 1, false, targetsAffected);
       // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
       // entra na conta do dano causado.
-      session.creditDamage(character.id, applied);
-      recordDamage(monster.contribution, character.id, applied);
+      session.creditDamage(character.id, applied.healthDamage);
+      recordDamage(monster.contribution, character.id, applied.healthDamage);
       this.#markCombatActive(session, character.id);
       // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
-      // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
+      // (#479) vai junto sempre: o efeito de dano SEMPRE declara um tipo.
       session.emit({
         kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
-        amount: applied, source: 'spell', position: this.#at(monster),
-        ...(damageType === undefined ? {} : { damageType }),
+        amount: applied.healthDamage, source: 'spell', position: this.#at(monster),
+        damageType: outcome.damageType,
       });
       this.#emitHealth(session, monster);
-      // Life leech (M30-04): o mesmo evento e a mesma base (`healthDamage`/`applied`) do `#land`
-      // — nunca o resolvido, overkill não rende leech. Mana leech repõe em silêncio, como lá.
-      const { lifeLeechApplied } = applyLeech(character, applied, modifiers, targetsAffected);
-      this.#emitHealed(session, character, lifeLeechApplied, 'leech', character.id);
+      // Life leech (M30-04): o mesmo evento e a mesma base (`healthDamage`) do `#land` — nunca o
+      // resolvido, overkill não rende leech. Mana leech repõe em silêncio, como lá.
+      this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
   }
@@ -4310,7 +4322,9 @@ const slots = bot.groups.get(group);
       recordDamage(target.contribution, attacker, applied.healthDamage);
       session.emit({
         kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
-        amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+        // `manaDamage` (#547, M29-07): zero para todo tipo além de `manadrain`, que por sua vez
+        // zera `healthDamage` — a soma é sempre o número que de fato saiu do alvo.
+        amount: applied.healthDamage + applied.manaDamage, source: 'spell', position: this.#at(target),
         damageType: intent.damageType,
       });
       this.#emitCharacterHealth(session, target);
@@ -4325,7 +4339,9 @@ const slots = bot.groups.get(group);
     recordDamage(target.contribution, attacker, applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
-      amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+      // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
+      // mesmo contrato do golpe em personagem, sem um `if` por tipo de alvo.
+      amount: applied.healthDamage + applied.manaDamage, source: 'spell', position: this.#at(target),
       damageType: intent.damageType,
     });
     this.#emitHealth(session, target);
@@ -4529,10 +4545,7 @@ const slots = bot.groups.get(group);
         tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
       if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
-      else this.#applyHits(
-        session, character, result.hits,
-        supply.effect.kind === 'damage' ? supply.effect.damageType : undefined,
-      );
+      else this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
       return result;
     }
 
@@ -5339,7 +5352,9 @@ const slots = bot.groups.get(group);
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
-      amount: applied.healthDamage, source, position: this.#at(character),
+      // `manaDamage` (#547, M29-07): o número que sobe azul quando a ability é `manadrain` — a
+      // vida some do `healthDamage` (zero por design) para ele aparecer.
+      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(character),
       damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
@@ -5936,7 +5951,9 @@ const slots = bot.groups.get(group);
     // cliente contando uma história que a barra desmente.
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
-      amount: applied.healthDamage, source, position: this.#at(monster),
+      // `manaDamage` (#547): sempre zero contra um monstro (sem mana), mas soma pelo mesmo
+      // contrato de `#applyMonsterHit` — nenhum `if` por tipo de alvo aqui também.
+      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(monster),
       damageType: outcome.damageType,
     });
     this.#emitHealth(session, monster);
@@ -6818,8 +6835,14 @@ const slots = bot.groups.get(group);
       // continuam com este número — só `combat-v3` (acima) muda de fórmula.
       defense: this.#defenseSourceOf(character),
       // As cargas de bloqueio do `combat-v3` (#548): ignoradas em v1/v2, mas inofensivas de
-      // carregar — o personagem é dono do próprio estado (invariante 9).
+      // carregar — o personagem é dono do próprio estado (invariante 9), e `applyDamageOutcome`
+      // é quem escreve de volta o que este golpe gastou.
       blockCharge,
+      // A mana ATUAL (#547, M29-07 — achado da revisão do PR #648): só um `manadrain` a lê, e
+      // só para capar o dreno ANTES da resistência, como o Canary faz (`Defender.mana`,
+      // `damage.ts`). Sem isto, `resolveBlockHitProfile` resistiria o poder bruto inteiro e só
+      // limitaria à mana no fim, dobrando o dreno contra um alvo com resistência ao tipo.
+      mana: character.mana,
     };
   }
 

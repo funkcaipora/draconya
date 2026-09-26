@@ -172,6 +172,23 @@ describe('actionDetail — a tabela da spec §6', () => {
     ]);
   });
 
+  it('drown/lifedrain/manadrain (#547, M29-07) têm rótulo próprio, não o id cru', () => {
+    const rowFor = (damageType: 'drown' | 'lifedrain' | 'manadrain'): string => {
+      const entry: ActionEntry = {
+        kind: 'spell',
+        spell: spell({
+          id: `spell-${damageType}`, name: 'Teste', effect: 'damage',
+          detail: { basePower: 10, damageType },
+        }),
+      };
+      const row = actionDetail(entry, context()).rows.find((r) => r.label === 'Tipo de dano');
+      return row?.value ?? '';
+    };
+    expect(rowFor('drown')).toBe('Afogamento');
+    expect(rowFor('lifedrain')).toBe('Dreno de vida');
+    expect(rowFor('manadrain')).toBe('Dreno de mana');
+  });
+
   it('área circle r=1 vira 3x3', () => {
     const entry: ActionEntry = {
       kind: 'spell',
