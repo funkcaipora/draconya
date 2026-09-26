@@ -103,25 +103,19 @@ export class Bestiary {
   }
 
   /**
-   * A XP de um abate com o bônus dos marcos aplicado, arredondada para BAIXO (DT-04).
+   * O bônus de XP dos marcos, em pontos percentuais INTEIROS (DT-01): `p × marcos`, somados
+   * sobre todos os monstros. O abate que fecha o marco é pago pela regra de ANTES dele (DT-04)
+   * porque quem chama lê este número antes de `record`.
    *
-   * Em inteiro: `floor(xp × (100 + p × marcos) / 100)`, e NUNCA `floor(xp × (1 + p/100 ×
-   * marcos))`: `1 + 0,01 × 13` é `1.13`, e `100 × 1.13` é `112.99999999999999` — o `floor`
-   * devolveria 112 onde a conta exata dá 113, e um abate em cada setenta perderia um ponto de
-   * XP sem ninguém conseguir explicar por quê. Com `p` inteiro — o schema do conteúdo exige —,
-   * `xp × (100 + p × marcos)` é um inteiro exato, e um inteiro dividido por 100 fica a zero
-   * ou a pelo menos um centésimo acima de um inteiro, longe demais para o resíduo da divisão
-   * puxá-lo para baixo — então o `floor` acerta. É a mesma armadilha do custo de nível de skill
-   * (`pointsForLevel`), evitada pela mesma porta: não deixar o resíduo de ponto flutuante
-   * chegar ao arredondamento. Quem quiser MOSTRAR o bônus soma os marcos e multiplica por `p`;
-   * um multiplicador em ponto flutuante não mora aqui de propósito.
+   * Devolve o PERCENTUAL, não a XP já multiplicada: quem compõe os bônus (o ruleset) SOMA este
+   * número aos outros bônus (level, VIP, evento) e aplica UMA multiplicação em inteiro
+   * (`applyExperienceBonus`, `progression.ts`). Um multiplicador em ponto flutuante não mora
+   * aqui de propósito — quem quiser MOSTRAR o bônus soma os marcos e multiplica por `p` (é o
+   * que o cliente faz).
    */
-  applyXpBonus(experience: number, config?: BestiaryConfig): number {
-    if (config === undefined) return experience;
-    const reached = this.milestonesReached(config);
-    if (reached === 0) return experience;
-    const percent = 100 + config.xpBonusPercentPerMilestone * reached;
-    return Math.floor((experience * percent) / 100);
+  xpBonusPercent(config?: BestiaryConfig): number {
+    if (config === undefined) return 0;
+    return config.xpBonusPercentPerMilestone * this.milestonesReached(config);
   }
 
   /**

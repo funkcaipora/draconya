@@ -1616,6 +1616,41 @@ export const progressionSchema = z.object({
     levelFloor: z.number().int().positive(),
   }),
   /**
+   * O bônus de XP por FAIXA de level (#563), em faixas ORDENADAS: `maxLevel` é o teto INCLUSIVO
+   * e a primeira faixa que contém o level vence; a última pode OMITIR `maxLevel` para ser o
+   * catch-all. Sem faixa nenhuma o bônus é zero (é o conteúdo de teste).
+   *
+   * Aditivo com o Bestiário e os demais bônus (VIP, evento): a soma dos percentuais vira UMA
+   * multiplicação em inteiro (`applyExperienceBonus`, `sim`). Os percentuais são INTEIROS pela
+   * mesma razão do Bestiário — meio ponto voltaria a pôr resíduo de ponto flutuante na frente do
+   * arredondamento.
+   *
+   * O VALOR (200% até o level 300, 100% acima) é decisão de PRODUTO do Draconya, não do Tibia —
+   * o `lowLevelBonus` do Canary é 50% até o level 50.
+   */
+  experienceBonusByLevel: z.array(z.object({
+    maxLevel: z.number().int().positive().optional(),
+    bonusPercent: z.number().int().nonnegative(),
+  })).superRefine((brackets, context) => {
+    for (let index = 0; index < brackets.length; index += 1) {
+      const bracket = brackets[index];
+      if (bracket === undefined) continue;
+      if (bracket.maxLevel === undefined && index !== brackets.length - 1) {
+        context.addIssue({ code: 'custom', message: `faixa de bônus sem maxLevel em ${index} não é a última` });
+        return;
+      }
+      const previous = brackets[index - 1];
+      if (index > 0 && previous?.maxLevel !== undefined && bracket.maxLevel !== undefined
+        && bracket.maxLevel <= previous.maxLevel) {
+        context.addIssue({
+          code: 'custom',
+          message: `faixas de bônus fora de ordem em ${index}: ${previous.maxLevel} antes de ${bracket.maxLevel}`,
+        });
+        return;
+      }
+    }
+  }).default([]),
+  /**
    * Quanto demora para subir cada skill SEM vocação escolhida (levels 1–7, §7.4): o `factor`
    * por `skillId`, na mesma forma do `skillMultipliers` da vocação. Vem da vocação `None` do
    * Canary `vocations.xml` (#521, ADR 0037). Ausente para um `skillId`: cai no `factor` do
@@ -2067,10 +2102,11 @@ export const bestiarySchema = z.object({
   /**
    * Quanto cada marco acrescenta à XP PvE, em pontos percentuais. §18.3: 1.
    *
-   * INTEIRO, e é regra de forma que sustenta uma de conta: `Bestiary.applyXpBonus` faz
-   * `floor(xp × (100 + p × marcos) / 100)` em inteiro, e a garantia de que o `floor` acerta
-   * depende de `p × marcos` ser inteiro. Meio ponto percentual voltaria a pôr resíduo de
-   * ponto flutuante na frente do arredondamento — a armadilha que a conta em inteiro evita.
+   * INTEIRO, e é regra de forma que sustenta uma de conta: `Bestiary.xpBonusPercent` devolve
+   * `p × marcos` e `applyExperienceBonus` faz `floor(xp × (100 + soma) / 100)` em inteiro, e a
+   * garantia de que o `floor` acerta depende de `p × marcos` ser inteiro. Meio ponto percentual
+   * voltaria a pôr resíduo de ponto flutuante na frente do arredondamento — a armadilha que a
+   * conta em inteiro evita.
    */
   xpBonusPercentPerMilestone: z.number().int().nonnegative(),
   /**

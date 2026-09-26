@@ -85,6 +85,26 @@ o que significa que qualquer valor inventado na criação do personagem some no 
 Por isso a criação de sessão passou a derivar HP e mana da mesma tabela — antes ela usava
 números fixos, e o personagem *encolheria* ao subir de level.
 
+## Bônus de XP somam entre si (#563)
+
+Todo bônus percentual de XP é **aditivo**: a XP de cada membro de uma party é a cota dele vezes
+`(100 + soma dos bônus) / 100`, com **uma** multiplicação em inteiro — nunca uma cadeia de
+`floor` por bônus, que perde um ponto na borda de cada um. Hoje os termos são:
+
+- **faixa de level** (`experienceBonusByLevel`): 200% até o level 300, 100% acima. É decisão de
+  **produto** do Draconya, não do Tibia — o `lowLevelBonus` do Canary é 50% até o level 50.
+- **Bestiário**: +1% por marco alcançado, somado sobre todos os monstros (DT-01). O abate que
+  fecha o marco é pago pela regra de ANTES dele (DT-04).
+- **VIP e evento**: o ponto de extensão existe no ruleset, com valor zero hoje — monetização
+  está fora do escopo da #563.
+
+A cota vem antes: a tabela de party (`xpPoolPercentByUniqueVocations`, ADR 0027) define a XP
+compartilhada, e os bônus incidem sobre ela. A conta é em INTEIRO pela mesma razão do Bestiário
+(`100 × 1,13` é `112.99999999999999`): o conteúdo exige percentuais inteiros, e
+`applyExperienceBonus` (`packages/sim/src/progression.ts`) faz
+`floor(exp × (100 + soma) / 100)`. O resultado não depende de haver alguém assistindo
+(invariante 3) — a 1 Hz ou a 10 Hz, o mesmo abate rende a mesma XP.
+
 ## A progressão volta para o banco pelo `jobs`, como delta
 
 O `game` não escreve nada durável. Ele encerra a sessão, monta o extrato e o deixa no Redis; o
@@ -175,6 +195,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Curva de ganho de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Teto de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Curva de XP | a cúbica do Tibia, `(L³ − 6L² + 17L − 12) / 6 × 100` (#521, ADR 0037 — ver seção acima) | `packages/content/data/progression/baseline.json`, `xp: { kind: 'tibia' }` |
+| Bônus de XP por level | 200% até o level 300 (inclusive), 100% acima — aditivo com o Bestiário (#563, decisão de produto) | `packages/content/data/progression/baseline.json`, `experienceBonusByLevel` |
 | Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary: `gainhpticks` 12000, `gainmanaticks` 6000 — #521, ADR 0037; substitui o 1/1 provisório) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | 0,1667/0,3333 · 0,125/0,5 · 0,0833/0,6667 · 0,0833/0,6667 HP/mana por segundo (`gainhpticks`/`gainmanaticks` de cada vocação no Canary, #521, ADR 0037) | `packages/content/data/vocations/*.json`, `regen` |

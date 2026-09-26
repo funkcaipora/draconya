@@ -74,7 +74,9 @@ import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
-import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
+import {
+  applyDeathPenalty, applyExperienceBonus, grantXp, levelExperienceBonusPercent, statsForLevel,
+} from '../progression.js';
 import { Rng } from '../rng.js';
 import { containerRulesFor } from '../inventory.js';
 import {
@@ -5926,9 +5928,10 @@ const slots = bot.groups.get(group);
    * matador: nada muda, inclusive quando a fonte do golpe sumiu — aí o solo continua sem XP,
    * porque o único candidato não é o matador (DT-04).
    *
-   * A ordem é contrato: para cada elegível, na ordem de ENTRADA, `applyXpBonus` (o bônus de
-   * Bestiário de ANTES deste abate — DT-04 da FUN-113) → `grantXp` → `record` no Bestiário.
-   * Nada aqui consome RNG.
+   * A ordem é contrato: para cada elegível, na ordem de ENTRADA, o bônus de Bestiário de ANTES
+   * deste abate (DT-04 da FUN-113) SOMA-SE ao bônus de level e aos que vierem — a XP com bônus
+   * sai de UMA multiplicação em inteiro (`applyExperienceBonus`), nunca de uma cadeia de
+   * `floor` por bônus; depois `grantXp` → `record` no Bestiário. Nada aqui consome RNG.
    */
   #grantPartyXp(
     session: Session, monster: MonsterRuntime, definition: Monster, eligible: readonly CharacterRuntime[],
@@ -5939,7 +5942,11 @@ const slots = bot.groups.get(group);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
-      const experience = member.bestiary.applyXpBonus(share, this.#options.bestiary);
+      // Aditivo por decisão (#563): Bestiário + faixa de level + os que vierem (VIP, evento —
+      // extensão aqui, valor zero hoje; a monetização está fora desta issue).
+      const bonusPercent = member.bestiary.xpBonusPercent(this.#options.bestiary)
+        + levelExperienceBonusPercent(member.level, this.#options.progression);
+      const experience = applyExperienceBonus(share, bonusPercent);
       const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
       session.credit(member.id, 'xpGained', experience);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa

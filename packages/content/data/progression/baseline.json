@@ -50,6 +50,10 @@
     "healthPerSecond": 0.08333333333333333,
     "manaPerSecond": 0.3333333333333333
   },
+  "experienceBonusByLevel": [
+    { "maxLevel": 300, "bonusPercent": 200 },
+    { "bonusPercent": 100 }
+  ],
   "skillMultipliers": {
     "melee": 2.0,
     "distance": 2.0,
