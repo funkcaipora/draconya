@@ -33,7 +33,7 @@ import {
 } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
-  FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
+  FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, loopPhaseAt, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
 import { createFpsMeter } from './fps.js';
@@ -63,7 +63,7 @@ export type { MapTiles } from './scene.js';
  * arte sintética e para o contrato do viewport ficar visível num lugar só. O pacote real a
  * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
  */
-export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize'
+export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize' | 'objectPhases'
   | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'
   | 'outfitDisplacement'>;
 
@@ -177,7 +177,16 @@ export interface ViewportOptions {
    * Ausente, são as do `world`, como sempre.
    */
   readonly creatures?: () => Iterable<Creature>;
+  /**
+   * Anima os objetos que têm fases — água, fogo, fontes (#666). O terreno passa a repintar no
+   * compasso de `OBJECT_ANIMATION_TICK_MS`, então só liga quem quer pagar por isso: o explorador
+   * do mundo. Ausente, todo objeto fica na fase 0, como sempre.
+   */
+  readonly animateObjects?: boolean;
 }
+
+/** De quanto em quanto tempo o terreno animado repinta. As fases do Tibia duram de 100 ms para cima. */
+export const OBJECT_ANIMATION_TICK_MS = 100;
 
 /**
  * A fotografia dos contadores de desenvolvimento do renderer (M23 §40, D8). Tudo é leitura:
@@ -481,12 +490,24 @@ export async function mountViewport(
    * parecer azulejo. Qual célula é de `tile-stack.ts`: posição, contagem ou gancho.
    */
   function objectTexture(
-    appearanceId: number, cell: { readonly x: number; readonly y: number },
+    appearanceId: number, cell: { readonly x: number; readonly y: number }, nowMs: number,
   ): Texture | null | undefined {
     // Cópia local porque `pack` é `let` (`setPack`) e o narrowing não entra na closure.
     const art = pack;
     if (art === null) return null;
-    return book.get(objectKey(appearanceId, cell), () => art.object(appearanceId, cell.x, cell.y));
+    const phase = options.animateObjects === true ? loopPhaseAt(phasesOf(art, appearanceId), nowMs) : 0;
+    return book.get(objectKey(appearanceId, cell, phase), () => art.object(appearanceId, cell.x, cell.y, phase));
+  }
+
+  /** As fases de cada objeto, pelo pacote de agora — lidas uma vez por id, não por tile pintado. */
+  const objectPhaseCache = new Map<number, readonly number[]>();
+  function phasesOf(art: WorldArt, appearanceId: number): readonly number[] {
+    let phases = objectPhaseCache.get(appearanceId);
+    if (phases === undefined) {
+      phases = art.objectPhases(appearanceId);
+      objectPhaseCache.set(appearanceId, phases);
+    }
+    return phases;
   }
 
   /**
@@ -610,7 +631,11 @@ export async function mountViewport(
     const floors = visibility.floors;
     const floorsKey = floors.join(',');
     // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele.
-    const key = `${scene === null ? '-' : sceneKeyOf(scene)}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
+    // O compasso da animação (#666) entra na chave só para quem anima: sem ele, o terreno parado
+    // continua repintando só quando a janela, o livro ou os itens do chão mudam.
+    const paintedAt = now();
+    const animation = options.animateObjects === true ? `:a${Math.floor(paintedAt / OBJECT_ANIMATION_TICK_MS)}` : '';
+    const key = `${scene === null ? '-' : sceneKeyOf(scene)}${animation}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
     if (key === painted) return;
     painted = key;
     terrainRepaints += 1;
@@ -703,7 +728,7 @@ export async function mountViewport(
         return drawn.creatureElevation;
       }
       for (const [index, object] of drawn.objects.entries()) {
-        const texture = objectTexture(object.appearanceId, object.cell);
+        const texture = objectTexture(object.appearanceId, object.cell, paintedAt);
         if (!(texture instanceof Texture)) {
           if (index === 0) placeholder(object.layer);
           if (object.layer === 'scene') sceneSlot++;
@@ -1252,6 +1277,7 @@ export async function mountViewport(
       // inteira no próximo quadro. `null` também zera — não fica nada pendente para o próximo.
       warmed = null;       // era `if (next !== null && scene !== null) warm(scene);`
       warmedOutfits.clear();
+      objectPhaseCache.clear();
       fadeKey = '';        // as flags vêm do pacote: `dontHide`, `unsight`, `bottom`
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).

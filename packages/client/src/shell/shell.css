@@ -1735,3 +1735,5 @@ body {
 .world-explorer__layers { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .world-explorer__layers label { display: flex; gap: var(--space-1); align-items: center; }
 .world-explorer__hover { margin: 0; min-height: 2.6em; font-family: var(--font-mono); color: var(--ash-7); overflow-wrap: anywhere; }
+.world-explorer__daylight { display: flex; gap: var(--space-2); align-items: center; }
+.world-explorer__daylight input { flex: 1; }

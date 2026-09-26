@@ -264,9 +264,20 @@ export class AssetPack {
    * diferentes e o padrão só se repete a cada quatro tiles. Pedir sempre `(0, 0)` desenha o
    * mesmo quadro em todo lugar, e a tela vira um ladrilho.
    */
-  async object(appearanceId: number, x = 0, y = 0): Promise<Sprite | null> {
+  async object(appearanceId: number, x = 0, y = 0, phase = 0): Promise<Sprite | null> {
     const group = this.#appearances.object.get(appearanceId)?.frameGroups[0];
-    return this.#frame(group, { x, y, z: 0, phase: 0, layer: LAYER_BASE });
+    return this.#frame(group, { x, y, z: 0, phase, layer: LAYER_BASE });
+  }
+
+  /**
+   * A duração de cada fase de um objeto animado — água, fogo, fonte —, em ms (#666). Vazio para
+   * objeto de um quadro só e para id que o pacote não tem. A duração MÍNIMA, pela mesma razão do
+   * efeito: onde mínimo e máximo diferem é variação ambiente, e o mínimo mantém o ritmo.
+   */
+  objectPhases(appearanceId: number): readonly number[] {
+    const group = this.#appearances.object.get(appearanceId)?.frameGroups[0];
+    if (group === undefined || group.phases.length <= 1) return [];
+    return group.phases.map((phase) => phase.durationMinMs);
   }
 
   /**

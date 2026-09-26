@@ -41,8 +41,9 @@ export function groundKey(appearanceId: number, x: number, y: number, pattern: P
  * posição, por contagem ou pelo gancho da parede (`tile-stack.ts`), e o livro não precisa saber
  * qual das três foi.
  */
-export function objectKey(appearanceId: number, cell: { readonly x: number; readonly y: number }): string {
-  return `object:${appearanceId}:${cell.x}:${cell.y}`;
+export function objectKey(appearanceId: number, cell: { readonly x: number; readonly y: number }, phase = 0): string {
+  // A fase 0 guarda a chave de antes: objeto parado não muda de chave por causa da animação.
+  return phase === 0 ? `object:${appearanceId}:${cell.x}:${cell.y}` : `object:${appearanceId}:${cell.x}:${cell.y}:p${phase}`;
 }
 
 /**
