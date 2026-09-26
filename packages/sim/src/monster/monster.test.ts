@@ -384,4 +384,39 @@ describe('decideMonsterAction: manter distância (#542, targetDistance)', () => 
     expect(decideMonsterAction(monsterAt(0, 0), prey('p', 5, 0), rat, open))
       .toEqual({ kind: 'step', to: { x: 1, y: 0 } });
   });
+
+  // Revisão do #649: a primeira versão desta issue só implementava a metade do recuo de
+  // `Monster::getPathSearchParams` — um atirador cuja ability alcança mais longe que o
+  // `targetDistance` preferido (a norma real: Necromancer `targetDistance` 4 com ability de
+  // alcance 7, Monk Familiar `targetDistance` 2 com abilities de alcance 5) parava assim que
+  // entrava no alcance da ability, sem nunca fechar até o stand-off documentado. Este describe
+  // usa um `attackRange` (5) maior que o `targetDistance` (2) de propósito: com os dois iguais
+  // (o `shooter` do describe acima), o defeito e o conserto produzem o MESMO resultado, e o
+  // teste não provaria nada sobre a metade que estava faltando.
+  const longRangeShooter = { ...rat, targetDistance: 2, attackRange: 5 };
+
+  it('keeps closing past its own ability range until it reaches targetDistance', () => {
+    // Alvo a 4 tiles: dentro do alcance da ability (5), mas ainda mais longe que o
+    // `targetDistance` (2) preferido. Antes do #649, isto já disparava `attack` parado a 4
+    // tiles — o defeito que a revisão encontrou.
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 9, 5), longRangeShooter, open))
+      .toEqual({ kind: 'step', to: { x: 6, y: 5 } });
+  });
+
+  it('stands and attacks exactly at targetDistance, even with an ability that reaches farther', () => {
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 7, 5), longRangeShooter, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('still stops at the largest ability range when targetDistance is the default (1) — CMB-06 unchanged', () => {
+    // Sem `targetDistance` declarado (> 1), o alcance de parada da aproximação continua sendo o
+    // maior alcance de ability, como sempre — a mudança do #649 só vale para quem declara
+    // `targetDistance > 1`.
+    const monster = monsterAt(5, 5);
+    const rangedNoPreference = { ...rat, attackRange: 4 };
+    expect(decideMonsterAction(monster, prey('p', 9, 5), rangedNoPreference, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
 });

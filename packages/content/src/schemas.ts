@@ -1662,16 +1662,23 @@ export const monsterSchema = z.strictObject({
   attackRange: z.number().int().positive().default(1),
   /**
    * A distância que o monstro tenta MANTER do alvo, em tiles (#542, TFS/Canary `targetDistance`,
-   * `Monster::getDistanceStep`). Um atirador com `targetDistance > 1` recua um passo quando o
-   * alvo chega mais perto que isto — independente da fuga por vida baixa (`runOnHealth`), que já
-   * afasta por outro motivo. Ausente é `1`: o corpo a corpo de sempre, que nunca recua por este
-   * campo — rato, rotworm, Dragon e Dragon Lord (`dragon.lua`/`dragon_lord.lua`, que não
-   * declaram o campo) continuam idênticos.
+   * `Monster::getDistanceStep`/`getPathSearchParams`). Um atirador com `targetDistance > 1` recua
+   * um passo quando o alvo chega mais perto que isto — independente da fuga por vida baixa
+   * (`runOnHealth`), que já afasta por outro motivo — e também governa até onde a APROXIMAÇÃO
+   * avança (revisão do #649): o monstro para de se aproximar ao alcançar `targetDistance`, e não
+   * no maior alcance de ability. Ausente é `1`: o corpo a corpo de sempre, que nunca recua por
+   * este campo nem muda onde a aproximação para — rato, rotworm, Dragon e Dragon Lord
+   * (`dragon.lua`/`dragon_lord.lua`, que declaram o campo IGUAL ao default `1`) continuam
+   * idênticos.
    *
    * Separado de `attackRange` de propósito: `attackRange` é até onde o monstro ALCANÇA para
-   * bater; `targetDistance` é a distância que ele PREFERE manter enquanto persegue. Um monstro de
-   * `attackRange` 4 e `targetDistance` 1 ainda cola no alvo antes de atirar — só o oposto
-   * (`targetDistance` > 1) muda o passo.
+   * bater; `targetDistance` é a distância que ele PREFERE manter enquanto persegue — e no
+   * bestiário real do Canary os dois raramente coincidem: um atirador tipicamente declara
+   * `targetDistance` bem MENOR que o alcance da ability mais longa (Necromancer `targetDistance`
+   * 4 com abilities de alcance 1/1/7; Priestess `targetDistance` 4 com abilities de alcance 7).
+   * Um monstro de `attackRange`/ability 7 e `targetDistance` 4 continua fechando a distância até
+   * 4 tiles mesmo já podendo atirar de mais longe — só o oposto (`targetDistance` ausente ou `1`)
+   * usa o maior alcance de ability como ponto de parada da aproximação.
    */
   targetDistance: z.number().int().positive().default(1),
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */

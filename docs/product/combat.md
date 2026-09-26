@@ -1069,18 +1069,33 @@ targetDistance`, a distância que ele PREFERE manter do alvo (TFS/Canary `target
 `Monster::getDistanceStep`, `monster.cpp:2632`). Com `targetDistance > 1`, um monstro que persegue
 alguém que chegou mais perto do que isso dá um passo para AUMENTAR a distância, em vez de colar
 como um corpo a corpo — o comportamento de 175 dos 1.601 monstros do `data-otservbr-global/
-monster` real (Necromancer, Priestess, Water Elemental), verificado contra o código em
-2026-09-26.
+monster` real (Necromancer, Priestess, Monk Familiar), verificado contra o código em 2026-09-26.
 
 - **Independente da fuga por vida baixa (`runOnHealth`)**: as duas são decisões de movimento
   separadas em `decideMonsterAction` — a fuga dispara SEMPRE que o HP cai no limiar, o recuo de
   `targetDistance` só quando o monstro NÃO está fugindo. O Dragon e o Dragon Lord continuam com
-  `targetDistance` ausente (default `1`, `dragon.lua`/`dragon_lord.lua` também não declaram o
-  campo) — corpo a corpo de sempre, sem o novo ramo.
+  `targetDistance` declarado IGUAL ao default `1` (`dragon.lua`/`dragon_lord.lua` declaram o
+  campo, só que com o mesmo valor que o schema já assume quando ausente) — corpo a corpo de
+  sempre, sem o novo ramo.
 - **`attackRange` continua sendo até onde o monstro ALCANÇA para bater**; `targetDistance` é a
-  distância que ele PREFERE manter enquanto persegue. Um monstro real do bestiário do Canary quase
-  sempre declara os dois iguais (o atirador para exatamente onde atira, como o Necromancer), mas o
-  schema não os acopla — são campos independentes, como já eram `attackRange` e `aggroRadius`.
+  distância que ele PREFERE manter enquanto persegue. Ao contrário do que a versão anterior desta
+  seção afirmava, os dois RARAMENTE coincidem no bestiário real: um atirador tipicamente declara
+  `targetDistance` bem menor que o alcance da ability mais longa — Necromancer `targetDistance` 4
+  com abilities de alcance 1/1/7; Priestess `targetDistance` 4 com abilities de alcance 7×3; Monk
+  Familiar `targetDistance` 2 com abilities de alcance 5 — e não o oposto (schema não os acopla;
+  são campos independentes, como já eram `attackRange` e `aggroRadius`).
+- **A APROXIMAÇÃO também para em `targetDistance`, não no maior alcance de ability** (revisão do
+  #649): a primeira versão desta issue só implementava a METADE do recuo de
+  `Monster::getPathSearchParams` (`monster.cpp:3830`, `fpp.maxTargetDist = targetDistance`) — um
+  atirador com ability de alcance maior que o `targetDistance` preferido (a norma real, ver item
+  acima) parava e atirava assim que entrava no alcance da ability, sem nunca fechar até o
+  stand-off documentado. Com `targetDistance > 1`, `decideMonsterAction` agora usa `targetDistance`
+  como alcance de parada da aproximação em vez de `monsterAttackRange`; sem o campo (ou com `1`),
+  o alcance de parada continua sendo o maior alcance de ability, como sempre (CMB-06, rato e
+  rotworm). As abilities continuam armando pela PRÓPRIA faixa (`#armMonsterAbilities`,
+  independente de `decideMonsterAction`) — um atirador de alcance 7 e `targetDistance` 4 já pode
+  disparar a partir de 7 tiles enquanto ainda está se aproximando, exatamente como o Canary real
+  (passo e ataque são decisões separadas, ver abaixo).
 - **O passo é o `fleeStep` que a fuga já usava** (o guloso com o alvo espelhado, FUN-85) — a
   MESMA função, reaproveitada como "o mecanismo que aumenta distância" em vez de reescrever a
   árvore de direções do `getDistanceStep` real do Canary linha a linha (GPL v2, ADR 0019). Sem
@@ -1101,9 +1116,11 @@ monster` real (Necromancer, Priestess, Water Elemental), verificado contra o có
   sendo decisões independentes, a mesma separação do TFS entre `getNextStep` e `doAttacking`.
 
 `targetDistance: int ≥ 1`, default `1` (`monsterSchema`), preserva rato, rotworm, Dragon e Dragon
-Lord bit a bit — nenhum dos quatro declara o campo, e `1` nunca aciona o ramo de recuo (a
-condição é `distance < targetDistance`, sempre falsa quando `targetDistance` é `1` e a distância
-Chebyshev nunca é negativa).
+Lord bit a bit — rato e rotworm não declaram o campo (caem no default), Dragon e Dragon Lord
+declaram (`dragon.lua`/`dragon_lord.lua:69`), mas com o MESMO valor `1` que o default já assume —
+e `1` nunca aciona nem o ramo de recuo (a condição é `distance < targetDistance`, sempre falsa
+quando `targetDistance` é `1` e a distância Chebyshev nunca é negativa) nem muda onde a
+aproximação para (o alcance de parada continua sendo o maior alcance de ability, CMB-06).
 
 **Divergência aceita: sem exigência de linha de visão** (ver "Divergências do PRD" abaixo). O
 Canary só entra no ramo de recuo com `isSightClear(creaturePos, targetPos, true)` verdadeiro —

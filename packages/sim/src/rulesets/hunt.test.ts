@@ -7988,6 +7988,78 @@ describe('manter distância: um atirador recua quando o alvo chega perto (#542, 
   });
 });
 
+describe('manter distância: a aproximação também para em targetDistance (revisão do #649)', () => {
+  // `attackRange` (5) BEM maior que `targetDistance` (2) de propósito — o oposto do `shooter`
+  // do describe acima, onde os dois coincidem. Antes desta revisão, `decideMonsterAction`
+  // ainda usava o MAIOR alcance de ability como ponto de parada da aproximação
+  // (`monsterAttackRange`, CMB-06): um atirador assim parava e atirava assim que entrava no
+  // alcance de 5, sem nunca fechar até o stand-off de 2 documentado — o que a issue original
+  // pedia era só a METADE do recuo (#542), e a revisão do #649 fechou a outra metade.
+  const longRangeShooter = {
+    id: 'long-range-shooter', name: 'Long Range Shooter', recommendedLevel: 1,
+    health: 50, experience: 5, attack: 10, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 5,
+    targetDistance: 2,
+    loot: { items: [] },
+  };
+
+  const shooterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: {
+        ...hunt.difficulties.cautious,
+        composition: [{ monsterId: 'long-range-shooter', weight: 1 }],
+      },
+    },
+  };
+
+  // O alcance desarmado do herói cobre a distância inicial inteira (3, os dois cantos opostos
+  // da sala 4×3) — reconhece o atirador como alvo desde o primeiro vencimento e para na hora,
+  // pelo mesmo motivo do describe acima: sem isto, o herói andaria a rota atrás de um alvo que
+  // ainda não está "ao alcance da arma", e o teste mediria o passo do herói, não o do monstro.
+  // `attackPower: 0` (pacifist): o atirador tem só 50 HP, e um herói parado batendo de verdade
+  // o mataria antes do monstro terminar de se aproximar.
+  const stationaryCombat = {
+    ...combat, player: { ...combat.player, attackRange: 3, attackPower: 0 },
+  };
+
+  it('fecha a distância além do próprio alcance de ability, até o targetDistance preferido', () => {
+    const loaded = buildContent(raw({
+      monsters: [longRangeShooter], hunts: [shooterHunt], combat: [stationaryCombat],
+    }));
+    const { session, hero, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // Cantos opostos da sala (interior 1..4 × 1..3): distância Chebyshev 3 — dentro do alcance
+    // de ability (5), mas mais longe que o `targetDistance` (2). O mesmo ciclo de
+    // snapshot/retomada do describe acima refaz a ocupação do mundo a partir da posição nova.
+    hero.position = { x: 1, y: 1, z: 7 };
+    monster.position = { x: 4, y: 3, z: 7 };
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    const resumedHero = resumed.participants.find((p) => p.id === 'hero') as CharacterRuntime;
+    const resumedMonster = resumedRuleset.monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro após retomar');
+
+    run(resumed, 6_000, 100);
+
+    const tiles = Math.max(
+      Math.abs(resumedMonster.position.x - resumedHero.position.x),
+      Math.abs(resumedMonster.position.y - resumedHero.position.y),
+    );
+    // Exatamente no `targetDistance`: mais longe seria a aproximação parando cedo demais (o
+    // defeito revisado), mais perto disparia o ramo de recuo do #542 numa distância que já
+    // deveria estar estável.
+    expect(tiles).toBe(longRangeShooter.targetDistance);
+    expect(resumedHero.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+});
+
 describe('estoque de supply/munição do loot: solo, split e shared não enviesado (#520, revisão do #536)', () => {
   // Um monstro fraco (morre num golpe do herói desarmado) que sempre solta 1 de supply E 1 de
   // munição — chance 1 tira o sorteio da conta, e a quantidade 1 é o caso comum (Strong Health

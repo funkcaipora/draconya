@@ -374,9 +374,22 @@ export function decideMonsterAction(
     if (away !== null) return { kind: 'retreat', to: away };
   }
 
-  // O alcance de parada é o MAIOR entre as abilities (CMB-06): um monstro de ability à
-  // distância 4 para a 4 tiles e atira, em vez de colar no alvo como um corpo a corpo.
-  if (distance(monster.position, target.position) <= monsterAttackRange(definition)) {
+  // O alcance de parada é o MAIOR entre as abilities (CMB-06) — EXCETO quando o monstro declara
+  // `targetDistance > 1` (#542, revisão do #649): aí a APROXIMAÇÃO também para em
+  // `targetDistance`, e não no maior alcance de ability. É a outra metade de
+  // `Monster::getPathSearchParams` (`monster.cpp:3830`, `fpp.maxTargetDist = targetDistance`) —
+  // o recuo acima já cobria a metade "chegou perto demais", mas a aproximação continuava usando
+  // `monsterAttackRange` sozinha, então um atirador cuja ability alcança mais longe que o
+  // stand-off preferido (a norma no bestiário real: Necromancer `targetDistance` 4 com
+  // abilities de alcance 1/1/7; Priestess `targetDistance` 4 com abilities de alcance 7) parava
+  // e atirava assim que entrava no alcance da ability, sem nunca fechar até o `targetDistance`
+  // documentado. Sem `targetDistance` declarado (> 1), o alcance de parada continua sendo o
+  // maior alcance de ability, como sempre — um monstro de ability à distância 4 para a 4 tiles
+  // e atira, em vez de colar no alvo como um corpo a corpo.
+  const approachStopRange = definition.targetDistance > 1
+    ? definition.targetDistance
+    : monsterAttackRange(definition);
+  if (distance(monster.position, target.position) <= approachStopRange) {
     return { kind: 'attack', targetId: target.id };
   }
 
