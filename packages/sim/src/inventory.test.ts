@@ -52,6 +52,20 @@ const catalog = new Map<string, Item>([
     id: 'haste-boots', kind: 'armor', slot: 'feet', weight: 5, value: 0,
     bonuses: { speed: 20 },
   })],
+  // Crítico e leech (M30-04, #551): a arma bonifica crítico, o anel bonifica leech de vida e
+  // mana — os dois enquanto vestidos, como `bonuses`.
+  ['crit-sword', define({
+    id: 'crit-sword', kind: 'weapon', slot: 'hand', weight: 40, value: 0, attack: 20,
+    combatModifiers: { criticalChance: 1000, criticalDamage: 3500 },
+  })],
+  ['leech-ring', define({
+    id: 'leech-ring', kind: 'ring', slot: 'finger', weight: 2, value: 0,
+    combatModifiers: { lifeLeech: 1000, manaLeech: 500 },
+  })],
+  ['crit-armor', define({
+    id: 'crit-armor', kind: 'armor', slot: 'chest', weight: 60, value: 0,
+    combatModifiers: { criticalChance: 500 },
+  })],
 ]);
 
 const carried = (itemId: string, instanceId = itemId, quantity = 1): CarriedItem =>
@@ -410,6 +424,42 @@ describe('o que o combate lê', () => {
     expect(inventory.speedBonus(catalog)).toBe(20);
     inventory.unequip('feet', rules);
     expect(inventory.speedBonus(catalog)).toBe(0);
+  });
+
+  it('combatModifiers soma crítico e leech do que está vestido (M30-04, #551)', () => {
+    const inventory = new Inventory();
+    // Ausente sem NENHUMA peça de combatModifiers — o caso comum, sem alocar nada.
+    expect(inventory.combatModifiers(catalog)).toBeUndefined();
+
+    inventory.add(carried('crit-sword'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('leech-ring'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('crit-sword', wearer(), catalog);
+    inventory.equip('leech-ring', wearer(), catalog);
+
+    // 1000 pontos-base = 10 % de chance; 3500 = +35 % de dano; leech em fração (÷10000).
+    expect(inventory.combatModifiers(catalog)).toEqual({
+      critical: { chance: 0.1, multiplier: 1.35 },
+      lifeLeech: 0.1,
+      manaLeech: 0.05,
+    });
+
+    // Só enquanto vestido: tirar o anel apaga o leech e mantém o crítico da espada.
+    inventory.unequip('finger', rules);
+    expect(inventory.combatModifiers(catalog)).toEqual({
+      critical: { chance: 0.1, multiplier: 1.35 },
+    });
+  });
+
+  it('duas peças de crítico somam pontos-base antes de UMA rolagem só (como o Canary soma itens)', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('crit-sword'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('crit-armor'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('crit-sword', wearer(), catalog);
+    inventory.equip('crit-armor', wearer(), catalog);
+    // Chance: 1000 + 500 = 1500 pontos-base = 15 %. Dano: só a espada declara, 3500 = +35 %.
+    expect(inventory.combatModifiers(catalog)).toEqual({
+      critical: { chance: 0.15, multiplier: 1.35 },
+    });
   });
 });
 

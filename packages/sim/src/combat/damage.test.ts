@@ -484,6 +484,100 @@ describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () =
     expect(result.resolvedDamage).toBeGreaterThan(0);
   });
 
+  /** Como `crit` do describe do CMB-08, redeclarado aqui porque aquele é local ao outro bloco. */
+  const crit = (chance: number, multiplier: number) => ({ critical: { chance, multiplier } });
+
+  /** `riggedDodge`, mas com DOIS `chance()` fixos: Dodge, depois crítico (M30-04). */
+  const riggedRolls = (chances: readonly boolean[], seed = 'v3-crit'): Rng => {
+    const real = Rng.fromSeed(seed);
+    let index = 0;
+    return {
+      chance: () => chances[index++] ?? false,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  describe('crítico (CMB-08, M30-04, #551): rolado na geração, ANTES do blockHit', () => {
+    const noBlockDefender = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+
+    it('sem defesa/armadura/mitigação, o crítico dobra o resolvido — o caso isolado', () => {
+      const result = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, noBlockDefender, 'pve', v3, riggedRolls([false, true]), 0,
+      );
+      expect(result.critical).toBe(true);
+      expect(result.resolvedDamage).toBe(200);
+    });
+
+    it('é o SEGUNDO sorteio: depois do Dodge, antes de qualquer `integer` do blockHit', () => {
+      const noCrit = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, dragonLike, 'pve', v3, riggedRolls([false, false]), 5_000,
+      );
+      expect(noCrit.critical).toBe(false);
+      const critHit = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, dragonLike, 'pve', v3, riggedRolls([false, true]), 5_000,
+      );
+      expect(critHit.critical).toBe(true);
+    });
+
+    it('o dano JÁ crítico é o que entra na defesa/armadura — não o resolvido dobrado no fim', () => {
+      // Defesa e armadura tiram um valor ABSOLUTO (`uniform_random`), independente do
+      // `rawDamage` que chega — dependem só de `defense`/`armor`. Com a MESMA semente (os
+      // mesmos sorteios de `integer`), a diferença entre `afterArmor` com e sem crítico tem que
+      // ser EXATAMENTE o delta do `rawDamage` (1000): se o crítico multiplicasse só o
+      // RESOLVIDO no fim (a ordem antiga), os dois `afterArmor` seriam IDÊNTICOS, porque a
+      // defesa/armadura teriam visto o mesmo bruto de 1000 nos dois casos.
+      const defender = { armor: 25, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 30 } };
+      const seed = 'v3-crit-order';
+      const noCrit = resolveDamage(
+        { ...swing, rawDamage: 1_000, modifiers: crit(1, 1) }, defender, 'pve', v3,
+        riggedRolls([false, true], seed), 5_000,
+      );
+      const withCrit = resolveDamage(
+        { ...swing, rawDamage: 1_000, modifiers: crit(1, 2) }, defender, 'pve', v3,
+        riggedRolls([false, true], seed), 5_000,
+      );
+      expect(noCrit.critical).toBe(true);
+      expect(withCrit.critical).toBe(true);
+      expect(withCrit.afterArmor - noCrit.afterArmor).toBeCloseTo(1_000, 5);
+      expect(withCrit.resolvedDamage).toBeGreaterThan(noCrit.resolvedDamage);
+    });
+
+    it('o piso continua sobre o PODER BRUTO ORIGINAL, sem o bônus do crítico', () => {
+      // Um alvo pesadíssimo: sem o crítico "vazar" para o piso, o resolvido crítico não passa
+      // de `2 × piso` — nunca o piso dobrado de novo por cima.
+      const tank = { armor: 5_000, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+      const result = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, tank, 'pve', v3, riggedRolls([false, true]), 0,
+      );
+      // minimumDamageFraction 0,1 sobre rawDamage 100 → piso 10. O crítico dobra o QUE PASSA
+      // da armadura (aqui, zero — a armadura consome tudo), então o piso decide sozinho, e o
+      // relatório de `minimumDamage` não muda com o crítico.
+      expect(result.minimumDamage).toBe(10);
+      expect(result.resolvedDamage).toBe(10);
+    });
+
+    it('crítico é consumido mesmo com o alvo IMUNE — o Canary não sabe de imunidade ainda', () => {
+      const immune = {
+        armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 },
+        mitigation: compileMitigation({ resistances: {}, immunities: ['physical'] }),
+      };
+      const result = resolveDamage(
+        { ...swing, modifiers: crit(1, 2) }, immune, 'pve', v3, riggedRolls([false, true]), 0,
+      );
+      expect(result.immune).toBe(true);
+      expect(result.critical).toBe(true);
+      expect(result.resolvedDamage).toBe(0);
+    });
+
+    it('crítico declarado com chance 0 ainda consome a rolagem — igual ao v1/v2', () => {
+      const zero = Rng.fromSeed('v3-crit-zero');
+      const none = Rng.fromSeed('v3-crit-zero');
+      resolveDamage({ ...swing, modifiers: crit(0, 2) }, noBlockDefender, 'pve', v3, zero, 0);
+      resolveDamage(swing, noBlockDefender, 'pve', v3, none, 0);
+      expect(zero.getState()).not.toEqual(none.getState());
+    });
+  });
+
   it('golpe elegível (melee) rola defesa+armadura+mitigação e escreve o blockCharge novo', () => {
     const rng = Rng.fromSeed('v3-melee');
     const before = FULL_BLOCK_CHARGE;

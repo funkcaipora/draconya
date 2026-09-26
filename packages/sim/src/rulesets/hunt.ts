@@ -22,10 +22,10 @@ import {
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
-  CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
-  Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange, PartyConfig, Progression,
-  ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
-  WeaponFamily, WeaponProfile,
+  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt, HuntDifficulty,
+  Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
+  PartyConfig, Progression, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
+  Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
@@ -46,6 +46,7 @@ import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
+import { applyLeech, combineCombatModifiers, monsterCriticalModifiers } from '../combat/modifiers.js';
 import type { DefenseSource } from '../combat/defense.js';
 import {
   DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS,
@@ -3910,7 +3911,7 @@ const slots = bot.groups.get(group);
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      this.#spellScaling(character), recipient,
+      this.#spellScaling(character), recipient, this.#attackerModifiers(character),
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
@@ -4025,6 +4026,13 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, hits: readonly number[],
     damageType: DamageType | undefined,
   ): void {
+    // Leech (M30-04, #551): a MESMA ação de área divide pelo total de alvos atingidos
+    // (`targetsAffected`), como o Canary faz em `Combat::doAreaCombatHealth`/`damage.affected`
+    // — a fórmula é `calculateLeechAmount` (`combat/modifiers.ts`), nunca uma divisão simples.
+    // Uma leitura só do equipamento para a AÇÃO inteira, como o Canary lê a skill uma vez por
+    // `doCombat` — não por alvo.
+    const modifiers = this.#attackerModifiers(character);
+    const targetsAffected = this.#spellHits.length;
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
       // A morte do mestre, resolvida num índice anterior deste MESMO laço, pode ter cascateado
@@ -4051,6 +4059,10 @@ const slots = bot.groups.get(group);
         ...(damageType === undefined ? {} : { damageType }),
       });
       this.#emitHealth(session, monster);
+      // Life leech (M30-04): o mesmo evento e a mesma base (`healthDamage`/`applied`) do `#land`
+      // — nunca o resolvido, overkill não rende leech. Mana leech repõe em silêncio, como lá.
+      const { lifeLeechApplied } = applyLeech(character, applied, modifiers, targetsAffected);
+      this.#emitHealed(session, character, lifeLeechApplied, 'leech', character.id);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
   }
@@ -4493,7 +4505,7 @@ const slots = bot.groups.get(group);
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
-      recipient, session.nowMs,
+      recipient, session.nowMs, this.#attackerModifiers(character),
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -5247,6 +5259,12 @@ const slots = bot.groups.get(group);
       });
     }
 
+    // O crítico do MONSTRO (M30-04, #551): `Monster::getCriticalChance()`, o mesmo para TODA
+    // ability dele — básica ou declarada, corpo a corpo ou à distância, como `applyExtensions`
+    // do Canary rola uma vez por `doCombat`, qualquer que seja a origem do golpe. Ausente
+    // (`critChance` 0, os quatro monstros do bestiário atual) não declara nada, e nenhum
+    // sorteio novo entra — bit a bit o rato/rotworm/dragon/dragon-lord de sempre.
+    const monsterModifiers = monsterCriticalModifiers(this.#options.monsters.get(monster.monsterId));
     for (const character of targets) {
       const defender = this.#playerDefender(character);
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
@@ -5260,6 +5278,7 @@ const slots = bot.groups.get(group);
           // básica legada inclusive) bloqueia os dois; a de alcance/área é magia para o
           // `blockHit`, como a do Canary sem `BLOCKARMOR`/`BLOCKSHIELD` declarado.
           blockable: melee ? MELEE_BLOCK_FLAGS : MAGIC_BLOCK_FLAGS,
+          ...(monsterModifiers === undefined ? {} : { modifiers: monsterModifiers }),
         },
         defender,
         'pve',
@@ -5716,7 +5735,7 @@ const slots = bot.groups.get(group);
           rawDamage: this.#weaponPower(session, character, profile),
           source: 'basic-attack',
           damageType: profile.damageType,
-          modifiers: this.#options.combat.modifiers,
+          modifiers: this.#attackerModifiers(character),
           // Distância bloqueia por armadura, mas NÃO por escudo no `combat-v3` (#548) —
           // `WeaponDistance` do Canary não seta `blockedByShield`.
           blockable: DISTANCE_BLOCK_FLAGS,
@@ -5747,7 +5766,7 @@ const slots = bot.groups.get(group);
           rawDamage: this.#weaponPower(session, character, how),
           source: 'basic-attack',
           damageType: how.damageType,
-          modifiers: this.#options.combat.modifiers,
+          modifiers: this.#attackerModifiers(character),
           // Wand/rod não bloqueiam nem por armadura nem por escudo no `combat-v3` (#548) — o
           // `WeaponWand` do Canary não declara nenhum dos dois; é dano MÁGICO.
           blockable: MAGIC_BLOCK_FLAGS,
@@ -5768,7 +5787,7 @@ const slots = bot.groups.get(group);
         rawDamage: this.#weaponPower(session, character, profile),
         source: 'basic-attack',
         damageType: profile.damageType,
-        modifiers: this.#options.combat.modifiers,
+        modifiers: this.#attackerModifiers(character),
         // Corpo a corpo (ou desarmado) bloqueia os dois — o default de `MELEE_BLOCK_FLAGS`,
         // explícito aqui só por simetria com os outros dois ramos de `#strike`.
         blockable: MELEE_BLOCK_FLAGS,
@@ -5810,6 +5829,22 @@ const slots = bot.groups.get(group);
       return Math.round(power * character.conditions.damageDealtScale('melee'));
     }
     return power;
+  }
+
+  /**
+   * Os modificadores avançados do ATACANTE (M30-04, #551, CMB-08): crítico, life leech e mana
+   * leech, somados do que está VESTIDO (`Inventory.combatModifiers`) mais o `combat.modifiers`
+   * estático do conteúdo — o andaime original do CMB-08, que nenhum conteúdo real declara hoje,
+   * mas que a conformance ainda exercita. `undefined` quando nenhuma fonte declara nada — o de
+   * sempre, sem sorteio novo. Usado tanto pelo golpe básico (`#strike`) quanto pela magia
+   * (`#castSpell`): o Canary rola crítico para qualquer combate do jogador, não só o corpo a
+   * corpo (`Combat::applyExtensions`).
+   */
+  #attackerModifiers(character: CharacterRuntime): DamageModifiers | undefined {
+    return combineCombatModifiers(
+      this.#options.combat.modifiers,
+      character.inventory.combatModifiers(this.#options.items),
+    );
   }
 
   /** O nível da skill que a família aponta; sem família ou skill no catálogo, zero. */

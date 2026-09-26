@@ -332,6 +332,38 @@ describe('magia em ÁREA (FUN-92)', () => {
   });
 });
 
+describe('crítico do LANÇADOR (M30-04, #551): o Canary rola para magia como para o golpe básico', () => {
+  it('sem modificadores (o de sempre), o dano não muda com a semente do golpe crítico', () => {
+    const semCritico = castSpell(hero(), strike, near(), 0, combat, rng());
+    if (!semCritico.ok) throw new Error('esperava lançar');
+    expect(semCritico.damage).toBe(40);
+  });
+
+  it('modifiers declarado dobra o dano quando o crítico ativa', () => {
+    const comCritico = castSpell(
+      hero(), strike, near(), 0, combat, rng(), undefined, undefined,
+      { critical: { chance: 1, multiplier: 2 } },
+    );
+    if (!comCritico.ok) throw new Error('esperava lançar');
+    expect(comCritico.damage).toBe(80);
+  });
+
+  it('vale também para magia em ÁREA — cada alvo rola o PRÓPRIO crítico', () => {
+    const blast = {
+      id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
+      effect: { kind: 'damage' as const, power: 30, range: 4, damageType: 'fire' as const, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
+    };
+    const aim = (targets: readonly { armor: number; dodgeChance: number }[], distance = 2) =>
+      ({ distance, targets });
+    const result = castSpell(
+      hero(), blast, aim([{ armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }]),
+      0, combat, rng(), undefined, undefined, { critical: { chance: 1, multiplier: 2 } },
+    );
+    if (!result.ok) throw new Error('esperava lançar');
+    expect(result.hits).toEqual([60, 60]);
+  });
+});
+
 describe('requisito de VOCAÇÃO (FUN-92)', () => {
   const druidica = { ...heal, id: 'nature-heal', vocationId: 'druid' };
 

@@ -15,7 +15,9 @@
 // cuida do LANÇADOR: portão, custo e cooldown.
 
 import { matchesVocationRequirement } from '@draconya/content';
-import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
+import type {
+  Combat, CompiledMitigation, DamageModifiers, Spell, SpellFormula, Supply,
+} from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
@@ -285,6 +287,17 @@ export function castSpell(
    * ADR 0035 d.10).
    */
   recipient: CharacterRuntime = caster,
+  /**
+   * Os modificadores avançados do LANÇADOR (CMB-08; M30-04, #551): crítico do equipamento
+   * vestido (`Inventory.combatModifiers`) somado ao `combat.modifiers` estático, se houver
+   * (`HuntRuleset#attackerModifiers`). Ausente é o de sempre — nenhum sorteio novo, resultado
+   * bit a bit — porque quem monta o intent aqui é EXTERNO ao catálogo (este arquivo não conhece
+   * `Inventory`), e magia sem atacante equipado (a fixture de teste, por exemplo) não precisa
+   * declarar nada. O Canary rola crítico para QUALQUER combate do jogador — magia inclusive
+   * (`Combat::applyExtensions`, chamado de `doCombat`/`doAreaCombatHealth`, não só do golpe
+   * básico) —, e é isso que este parâmetro passa adiante para `resolveDamage`.
+   */
+  modifiers: DamageModifiers | undefined = undefined,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -362,6 +375,9 @@ export function castSpell(
             // Magia não bloqueia por defesa nem armadura no `combat-v3` (#548) — o default de
             // `CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ignorado em v1/v2.
             blockable: MAGIC_BLOCK_FLAGS,
+            // O crítico do LANÇADOR (M30-04, #551): o mesmo `DamageModifiers` do golpe básico —
+            // o Canary rola para qualquer combate do jogador, magia inclusive.
+            ...(modifiers === undefined ? {} : { modifiers }),
           },
           {
             armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
@@ -492,6 +508,11 @@ export function useSupply(
    * que faz o uso trancar o grupo como o lançamento de magia.
    */
   nowMs?: number,
+  /**
+   * Os modificadores avançados do USUÁRIO (M30-04, #551, CMB-08) — só a runa de ataque os lê;
+   * ver o comentário do mesmo parâmetro em `castSpell`.
+   */
+  modifiers?: DamageModifiers,
 ): CastResult {
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
@@ -535,6 +556,7 @@ export function useSupply(
         {
           rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
           blockable: MAGIC_BLOCK_FLAGS,
+          ...(modifiers === undefined ? {} : { modifiers }),
         },
         {
           armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,

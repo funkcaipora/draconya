@@ -23,7 +23,8 @@
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageType, Item, ItemOrigin, ItemSlot, Progression, RingEffect,
+  CompiledMitigation, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot, Progression,
+  RingEffect,
 } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
@@ -644,6 +645,41 @@ export class Inventory {
       total += catalog.get(carried.itemId)?.bonuses?.speed ?? 0;
     }
     return total;
+  }
+
+  /**
+   * Os modificadores de crítico e leech do que está vestido, SOMADOS (M30-04, #551). Molde de
+   * `armor()`/`skillBonus()`/`speedBonus()` — uma varredura dos poucos slots equipados, cada
+   * campo ausente no item soma zero. Os quatro campos do item são pontos-base (×10000, a escala
+   * do Canary — `itemCombatModifiersSchema`); aqui já viram a FRAÇÃO que `DamageModifiers` usa.
+   *
+   * `undefined` quando NADA equipado declara `combatModifiers` — o item comum de sempre, o caso
+   * de todo o conteúdo hoje —, e é o que preserva bit a bit o v1/v2/v3 sem o chamador precisar
+   * confirmar "nada equipado" por fora. `critical` só existe quando a CHANCE somada é > 0: como
+   * `canApplyCritical = baseChance != 0 && ...` do Canary (`combat.cpp:2666`) curto-circuita —
+   * `criticalDamage` sozinho, sem chance nenhuma, nunca faz um golpe crítico nem consome sorteio.
+   */
+  combatModifiers(catalog: ReadonlyMap<string, Item>): DamageModifiers | undefined {
+    let criticalChance = 0;
+    let criticalDamage = 0;
+    let lifeLeech = 0;
+    let manaLeech = 0;
+    for (const carried of this.#equipped.values()) {
+      const modifiers = catalog.get(carried.itemId)?.combatModifiers;
+      if (modifiers === undefined) continue;
+      criticalChance += modifiers.criticalChance ?? 0;
+      criticalDamage += modifiers.criticalDamage ?? 0;
+      lifeLeech += modifiers.lifeLeech ?? 0;
+      manaLeech += modifiers.manaLeech ?? 0;
+    }
+    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0) return undefined;
+    return {
+      ...(criticalChance === 0 ? {} : {
+        critical: { chance: criticalChance / 10_000, multiplier: 1 + criticalDamage / 10_000 },
+      }),
+      ...(lifeLeech === 0 ? {} : { lifeLeech: lifeLeech / 10_000 }),
+      ...(manaLeech === 0 ? {} : { manaLeech: manaLeech / 10_000 }),
+    };
   }
 }
 
