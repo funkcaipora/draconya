@@ -40,7 +40,13 @@ export function enumBody(source: string, enumName: string): string {
   return clean.slice(openAt, index - 1);
 }
 
-/** Uma expressão de valor de enumerador: inteiro, hex, ou operação binária simples entre dois. */
+/**
+ * Uma expressão de valor de enumerador: inteiro, hex, sinal unário, ou operação binária simples
+ * entre dois. O sinal unário importa de verdade: `skills_t`/`charmRune_t`
+ * (`src/creatures/creatures_definitions.hpp`) e `ImbuementTypes_t`
+ * (`src/items/items_definitions.hpp`) usam `= -1` como sentinela de "nenhum valor" — o padrão
+ * Tibia/Canary de sempre.
+ */
 function evaluateEnumExpression(expression: string, known: ReadonlyMap<string, number>): number {
   const trimmed = expression.trim();
   const binary = /^(.+?)\s*(<<|>>|\||&|\+|-)\s*(.+)$/.exec(trimmed);
@@ -57,6 +63,16 @@ function evaluateEnumExpression(expression: string, known: ReadonlyMap<string, n
       case '-': return left - right;
       default: throw new Error(`operador "${operator}" não suportado`);
     }
+  }
+  // Só depois do binário: `-1` sozinho não tem operando ESQUERDO, então o regex acima nunca
+  // casa (`.+?` exige pelo menos 1 caractere antes do operador) — cai aqui, e não em
+  // "não avaliável". `A - 1` continua caindo no ramo binário de cima, porque "A" já é um
+  // operando esquerdo não vazio.
+  const unary = /^([-+])\s*(.+)$/.exec(trimmed);
+  if (unary !== null) {
+    const [, sign, rest] = unary as unknown as [string, string, string];
+    const value = evaluateEnumExpression(rest, known);
+    return sign === '-' ? -value : value;
   }
   if (/^0[xX][0-9a-fA-F]+$/.test(trimmed)) return Number.parseInt(trimmed, 16);
   if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);

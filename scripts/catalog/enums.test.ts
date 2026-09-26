@@ -40,6 +40,12 @@ enum Hex_t : uint8_t {
 	HEX_A = 0x10,
 	HEX_B = 0xFF,
 };
+
+enum Skills_t : int8_t {
+	SKILL_NONE = -1,
+	SKILL_FIST = 0,
+	SKILL_CLUB,
+};
 `;
 
 describe('enumBody', () => {
@@ -77,6 +83,12 @@ describe('extractEnum', () => {
   it('hexadecimal', () => {
     expect(extractEnum(SAMPLE_HEADER, 'Hex_t')).toEqual(new Map([
       ['HEX_A', 16], ['HEX_B', 255],
+    ]));
+  });
+
+  it('sentinela negativa (= -1), o padrão Tibia/Canary de "nenhum valor" (skills_t, ImbuementTypes_t)', () => {
+    expect(extractEnum(SAMPLE_HEADER, 'Skills_t')).toEqual(new Map([
+      ['SKILL_NONE', -1], ['SKILL_FIST', 0], ['SKILL_CLUB', 1],
     ]));
   });
 
