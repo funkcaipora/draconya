@@ -19,6 +19,7 @@ import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@d
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
+import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
 
@@ -97,6 +98,13 @@ export interface SpellTarget {
   readonly dodgeChance: number;
   /** Mitigação compilada do alvo (CMB-03). Ausente é o alvo neutro. */
   readonly mitigation?: CompiledMitigation | undefined;
+  /**
+   * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): magia NÃO
+   * bloqueia por defesa nem armadura (`MAGIC_BLOCK_FLAGS`), mas a mitigação percentual do
+   * Canary se aplica a QUALQUER origem — é por isso que ela viaja aqui e defesa/armadura não
+   * precisam. Ausente é `0`. Ignorado em `combat-v1`/`v2`.
+   */
+  readonly defenseMitigation?: number | undefined;
 }
 
 /**
@@ -349,11 +357,20 @@ export function castSpell(
         const target = targets[i] as SpellTarget;
         const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
         const result = resolveDamage(
-          { rawDamage: power, source: 'spell', damageType: effect.damageType },
-          { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
+          {
+            rawDamage: power, source: 'spell', damageType: effect.damageType,
+            // Magia não bloqueia por defesa nem armadura no `combat-v3` (#548) — o default de
+            // `CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ignorado em v1/v2.
+            blockable: MAGIC_BLOCK_FLAGS,
+          },
+          {
+            armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
+            defenseMitigation: target.defenseMitigation,
+          },
           'pve',
           combat,
           rng,
+          nowMs,
         );
         hits.push(result.resolvedDamage);
         total += result.resolvedDamage;
@@ -515,9 +532,17 @@ export function useSupply(
       );
       const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
       const result = resolveDamage(
-        { rawDamage: power, source: 'rune', damageType: supply.effect.damageType },
-        { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
-        'pve', combat, rng,
+        {
+          rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
+          blockable: MAGIC_BLOCK_FLAGS,
+        },
+        {
+          armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
+          defenseMitigation: target.defenseMitigation,
+        },
+        // `nowMs` é opcional aqui (fixture sem relógio, ver o comentário do parâmetro); o
+        // `combat-v3` só o lê para o `blockCharge`, e `0` é o instante de quem nunca bloqueou.
+        'pve', combat, rng, nowMs ?? 0,
       );
       hits.push(result.resolvedDamage);
       total += result.resolvedDamage;

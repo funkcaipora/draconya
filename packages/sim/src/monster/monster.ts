@@ -9,6 +9,8 @@ import { monsterAttackRange } from '@draconya/content';
 import { Cooldowns } from '../cooldown.js';
 import { Conditions } from '../conditions.js';
 import type { ConditionState } from '../conditions.js';
+import { FULL_BLOCK_CHARGE, isFullBlockCharge } from '../combat/block-charge.js';
+import type { BlockChargeState } from '../combat/block-charge.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
@@ -62,6 +64,12 @@ export interface MonsterState {
    */
   readonly conditions?: readonly ConditionState[];
   readonly cooldowns: Partial<CooldownState>;
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548, ADR 0040): `block-charge.ts`. Ausente é
+   * `FULL_BLOCK_CHARGE` — o monstro que nunca bloqueou ainda, ou snapshot anterior a esta
+   * issue. Sem bump de `SNAPSHOT_FORMAT_VERSION`, como `conditions`.
+   */
+  readonly blockCharge?: BlockChargeState;
 }
 
 /**
@@ -120,6 +128,11 @@ export class MonsterRuntime {
   readonly scheduledDefenses: Set<string>;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
   readonly conditions: Conditions;
+  /**
+   * As cargas de bloqueio do `combat-v3` (#548). Só `applyDamageOutcome` escreve (CMB-08,
+   * invariante 9) — ver `MonsterState.blockCharge`.
+   */
+  blockCharge: BlockChargeState;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -135,6 +148,7 @@ export class MonsterRuntime {
     this.scheduledAbilities = new Set(state.scheduledAbilities ?? []);
     this.scheduledDefenses = new Set(state.scheduledDefenses ?? []);
     this.conditions = Conditions.fromState(state.conditions);
+    this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
   }
 
   get alive(): boolean {
@@ -164,6 +178,7 @@ export class MonsterRuntime {
         ? {}
         : { scheduledDefenses: [...this.scheduledDefenses] }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
+      ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
     };
   }
 

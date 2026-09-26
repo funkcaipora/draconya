@@ -10,8 +10,10 @@ requisito de vocação (FUN-74, FUN-92), skills
 por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e IA de monstro do TFS —
 chance por intervalo, onda/feixe direcionais, defesa (cura própria), troca de alvo e fuga (#518)
 implementados
-por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031) e o dano de arma do Canary
-com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) implementados
+por uso (FUN-75), contrato de compatibilidade de combate (ADR 0031), o dano de arma do Canary
+com variância e chance de acerto à distância (#522, ADR 0037 d.5, perfil `combat-v2`) e o
+pipeline de recebimento do `Creature::blockHit` — defesa com `blockCount`, armadura em faixa e
+mitigação percentual (#548, M30-01, ADR 0040, perfil `combat-v3`) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -23,15 +25,18 @@ com o mecanismo lido de TFS/Canary (GPL v2 — só mecanismo e caso de borda, nu
 e os números observados no TibiaWiki. O perfil semântico de combate é conteúdo versionado: a
 sessão o congela na criação e não o troca no meio da hunt.
 
-Dois perfis existem hoje. `combat-v1` foi o primeiro, aditivo, e continua servindo sessão
+Três perfis existem hoje. `combat-v1` foi o primeiro, aditivo, e continua servindo sessão
 gravada antes do #522 (retomada de perfil `breaking` diferente é recusada, nunca reinterpretada
-— ADR 0031). `combat-v2` (#522) é o que `packages/content/data/combat/baseline.json` declara
-desde então: dano de arma pela fórmula do Canary, com variância pela normal truncada, e chance
-de acerto à distância por skill e tile — o que o ADR 0037 decisão 5 pediu para o M28
-(`docs/adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md`, mesclado ao main por
-outra branch do M28, ainda ausente nesta). A MITIGAÇÃO (Dodge, defesa/escudo, crítico, armadura,
-piso, resistência, imunidade) é **a mesma** nos dois perfis — o que o `combat-v2` muda vive
-antes dela, na seção "Como cada arma bate" adiante.
+— ADR 0031). `combat-v2` (#522) trocou o lado OFENSIVO: dano de arma pela fórmula do Canary, com
+variância pela normal truncada, e chance de acerto à distância por skill e tile — o que o ADR
+0037 decisão 5 pediu para o M28. `combat-v3` (#548, M30-01, ADR 0040) — o que
+`packages/content/data/combat/baseline.json` declara desde esta issue — troca o lado DEFENSOR: o
+bloqueio binário do CMB-04 vira a ordem e a matemática do `Creature::blockHit` do Canary (defesa
+com `blockCount`, armadura em faixa, mitigação percentual) — ver a seção "O pipeline de
+recebimento do combat-v3" adiante. A MITIGAÇÃO (Dodge, defesa/escudo, crítico, armadura, piso,
+resistência, imunidade) continua **a mesma** entre `combat-v1` e `combat-v2` — o que o
+`combat-v2` muda vive antes dela, na seção "Como cada arma bate" adiante; o `combat-v3` é quem
+finalmente muda esse pipeline.
 
 Este documento separa três coisas: o que está **entregue** (comportamento atual), o que é
 **exceção de produto aprovada** e o que ainda é **lacuna**. Nenhuma hipótese entra como
@@ -241,6 +246,12 @@ O conteúdo real declara defesa nas armas corpo a corpo de uma mão (machete, st
 sword) e no perfil; não existe item de escudo no catálogo ainda — o mecanismo do escudo é
 exercitado por fixture, e um escudo real entra quando houver arte conferida (invariante 6).
 
+**Este estágio é o do `combat-v1`/`combat-v2`.** Desde o `combat-v3` (#548, ver a seção "O
+pipeline de recebimento do combat-v3" adiante), o bloqueio binário acima é SUBSTITUÍDO pela
+ordem e pela matemática do `Creature::blockHit` do Canary — `combat.defense.blockChance` deixa
+de ser lido. `resolveDefense`/`defense.ts` continuam existindo, intocados, para as sessões
+fixadas em `combat-v1`/`v2`.
+
 ### Perfil, boot e retomada
 
 O perfil mora no conteúdo (`combat.compatibilityProfile`, default `combat-v1` para legado e
@@ -305,10 +316,14 @@ expectativa.
 - Dodge, quando ativa no defensor, reduz o dano recebido em 50%.
 - Dodge pode ativar contra qualquer ataque recebido, incluindo magia e ataques de boss.
 - Bônus permanentes de Bestiário valem só em PvE; não se aplicam em Guild War.
-- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe **físico**; o bloqueio nunca
-  zera o golpe, e ataque elemental não é bloqueado nem treina shielding (CMB-04).
-- Shielding sobe uma vez por ataque físico elegível recebido, nunca por tick e nunca pelo HP
-  perdido (CMB-04).
+- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe (CMB-04). Em `combat-v1`/`v2`
+  só o golpe **físico** é elegível — ataque elemental não é bloqueado nem treina shielding. Sob
+  `combat-v3` (o perfil default desde #548) a elegibilidade é pela ORIGEM do golpe, não pelo
+  tipo de dano: corpo a corpo bloqueia (e treina) mesmo elemental; distância só bloqueia
+  armadura; magia/runa não bloqueiam nada — ver "O pipeline de recebimento do combat-v3" adiante.
+  O bloqueio nunca zera o golpe sozinho (o piso de dano continua valendo).
+- Shielding sobe uma vez por ataque elegível recebido, nunca por tick e nunca pelo HP perdido
+  (CMB-04) — "elegível" segue a mesma regra do bullet acima, por perfil.
 
 ## Parâmetros de balanceamento
 
@@ -697,6 +712,123 @@ não gasta a munição de graça: o preço já saiu antes da rolagem (o tiro exi
 | `meleeDamageMultiplier` / `distDamageMultiplier` | 1,0 em toda vocação | `packages/content/data/vocations/*.json` |
 | Tabela de acerto à distância (baldes 75/90/100) | ver a tabela acima | `packages/content/data/combat/baseline.json`, `distanceHitChance` |
 | `ammunition.hitChance` / `ammunition.maxHitChance` / `weapon.hitChance` | ausentes hoje (nenhuma munição/arma especial no catálogo) | #522/#524, `packages/content/src/schemas.ts` |
+
+## O pipeline de recebimento do combat-v3 (#548, M30-01, ADR 0040)
+
+`packages/content/data/combat/baseline.json` declara `combat-v3` desde esta issue: é o perfil
+que toda hunt NOVA roda. O lado OFENSIVO não muda — a fórmula de arma e a chance de acerto à
+distância do `combat-v2` (seção acima) continuam valendo; o `combat-v3` exige os mesmos blocos
+`weaponDamage`/`distanceHitChance`. O que muda é o lado do DEFENSOR: o bloqueio binário do
+CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁTICA do
+`Creature::blockHit` do Canary (`packages/sim/src/combat/blockhit.ts`).
+
+### A ordem
+
+1. uma rolagem de Dodge, sempre consumida — o Draconya continua na frente de tudo, porque o
+   Tibia nega o golpe inteiro ANTES de chamar `blockHit` (a mesma posição, não coincidência);
+2. imunidade explícita ao tipo (`mitigation.immunities`) — zera e para tudo, sem defesa, sem
+   armadura, sem mitigação percentual;
+3. **defesa**: só enquanto o defensor tem CARGA de bloqueio (`blockCount`, no máximo duas,
+   recarregando com o tempo — ver adiante). Com carga, `uniform_random(defesa/2, defesa)` sai do
+   golpe; zerou, a ARMADURA é pulada. A carga é gasta sempre que a origem do dano bloqueia
+   ALGUMA coisa (defesa OU armadura), mesmo que a defesa em si não tire nada;
+4. **armadura**, INDEPENDENTE da carga de bloqueio: `armor > 3` sorteia
+   `uniform_random(armor/2, armor − (armor % 2 + 1))`; `armor` de 1 a 3 é sempre `−1`; `armor`
+   zero não reduz nada;
+5. **mitigação percentual** (`defenseMitigation`, o campo NOVO do monstro — distinto de
+   `mitigation`, que é resistência/imunidade por TIPO): `dano −= dano × defenseMitigation ÷ 100`,
+   sobre o que sobrou da armadura, para QUALQUER tipo de dano (a exceção de lifedrain/manadrain
+   do Canary ainda não tem tipo correspondente — M29-07 — e por isso nunca isenta hoje);
+6. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
+   antes, intocado por esta issue, só reposicionado depois do estágio novo;
+7. piso (`minimumDamageFraction`), sobre o poder BRUTO — mantido como salvaguarda de PRODUTO do
+   Draconya (o Canary não tem: lá um bloqueio pode legitimamente zerar um golpe). Pulado quando
+   imune — o piso nunca revoga imunidade explícita;
+8. crítico (CMB-08), quando declarado — **reposicionado** para depois de toda a mitigação (era o
+   3º sorteio, entre defesa e armadura, no v1/v2). Nenhum conteúdo real declara
+   `combat.modifiers` hoje; a posição exata para o `combat-v3` é trabalho do M30-04;
+9. corte do Dodge, arredondamento só no fim.
+
+### As flags de bloqueio vêm da ORIGEM, não do tipo
+
+Diferente do CMB-04 (que aprovava por `damageType`), o `combat-v3` decide se defesa e armadura
+valem pela ORIGEM do golpe — `checkDefense`/`checkArmor` do Canary: corpo a corpo (e o punho
+desarmado) bloqueiam os dois; distância só armadura (`WeaponDistance` do Canary não seta
+`blockedByShield`); magia, runa, wand/rod e DOT não bloqueiam nenhum dos dois — o default de
+`CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ability de monstro segue o mesmo critério
+pela FORMA dela (`isMeleeAbility`): corpo a corpo bloqueia os dois, a de alcance/área é magia
+para este estágio. A mitigação percentual (passo 5) é a ÚNICA que se aplica sempre, mesmo à
+magia — é assim no Canary (`if (damage != 0) mitigateDamage(...)`, fora do bloco de
+`checkDefense`/`checkArmor`).
+
+O treino de shielding (`#applyMonsterHit`, `hunt.ts`) segue a MESMA origem sob `combat-v3` —
+`blockable.shield`, não `combat.defense.blockTypes` — para não destreinar (ou treinar por
+engano) o dia em que o catálogo tiver uma ability corpo a corpo elemental (achado da revisão do
+PR #642; hoje nenhuma tem, então as duas regras ainda concordam por coincidência do catálogo).
+
+**`combat.armorEffectiveness` fica INERTE sob `combat-v3`.** O passo 4 (armadura) não olha mais
+`armorEffectiveness[damageType]` — a coluna que o `combat-v1`/`v2` usa para decidir SE a
+armadura vale para cada tipo de dano; sob `combat-v3` a armadura vale sempre que a ORIGEM permite
+(`checkArmor`), para QUALQUER tipo, exatamente como o `Creature::blockHit` do Canary (que não
+tem ramo por `combatType` nenhum no estágio de armadura). O schema continua exigindo o campo
+para todo perfil, inclusive `combat-v3` — editar `armorEffectiveness.fire` num conteúdo `v3`
+não muda resultado nenhum, e é o mesmo tipo de configuração morta que
+`combat.defense.blockChance` já é para esses conteúdos (parágrafo abaixo).
+
+### As cargas de bloqueio (`blockCount`)
+
+O Canary acumula uma carga a cada 1000 ms de relógio de jogo (`blockTicks`/`onThink`), até um
+teto de 2 — literalmente "por tick" (`creature.cpp`), e esse relógio é COMPARTILHADO pelas duas
+vagas e roda INDEPENDENTE de bloqueio nenhum ter acontecido: `Creature::blockHit` só decrementa
+o contador, nunca reinicia o relógio. O invariante 2 proíbe escrever assim: `packages/sim/src/
+combat/block-charge.ts` calcula as cargas disponíveis SOB DEMANDA, a partir de um banco guardado
+(quantas cargas já estão creditadas) e do instante a partir do qual o relógio ainda não creditou
+nada — sem nenhum evento nem soma por tick, e equivalente ao contador do Canary: um relógio
+ÚNICO, que credita no máximo uma carga por período de 1000 ms decorrido, até o teto de 2,
+independente de QUANDO cada carga foi gasta (achado da revisão do PR #642: uma versão anterior
+deste arquivo modelava duas vagas INDEPENDENTES, cada uma reagendando o próprio relógio a partir
+do próprio consumo — um mecanismo diferente, que podia recusar um bloqueio que o relógio
+compartilhado do Canary já teria recarregado, num padrão comum de mais de um atacante, não só
+adversarial). `CharacterState.blockCharge`/`MonsterState.blockCharge` viajam no snapshot
+(opcionais, sem bump de `SNAPSHOT_FORMAT_VERSION`); ausente é o banco já no teto desde o
+instante 0 — uma simplificação deliberada para o caso comum (uma criatura quase sempre existe há
+mais de 2 s antes do primeiro golpe de uma hunt), que NÃO reproduz a janela inicial do Canary
+(uma criatura nasce com `blockCount = 0` e sobe até o teto em ~2 s) — ninguém pediu essa janela
+de vulnerabilidade ainda, e fica em aberto para quando pedirem. Só `applyDamageOutcome` (CMB-08)
+escreve o estado de volta no dono (invariante 9); o resolver é puro e só o calcula.
+
+### O jogador continua com os números de antes
+
+**Fora do escopo do #548** (M30-02): a fórmula de defesa/armadura do jogador do Tibia 13.x. O
+`combat-v3` reusa os MESMOS números que o `combat-v1`/`v2` já calculavam —
+`combat.player.armor` mais o equipado (`Inventory.armor`), e a defesa de
+`Inventory.defenseSource` (escudo ou arma de uma mão, escalada pela skill `shielding`) — só o
+MECANISMO que os consome muda. `combat.defense.blockChance` (o percentual do CMB-04) deixa de ser
+lido; `combat.defense.skillId`/`blockTypes` continuam existindo para as sessões em `combat-v1`/
+`v2`.
+
+### O monstro ganha `defense` e `defenseMitigation`
+
+`monsterSchema` ganha os dois campos novos (ambos opcionais, default `0` — a identidade de rato e
+rotworm, que não os declaram). Os únicos dois monstros do catálogo real com o par declarado hoje
+são o Dragon e o Dragon Lord, conferidos contra `dragon.lua`/`dragon_lord.lua` do Canary local
+(47dfd51) em 2026-09-25:
+
+| Monstro | `armor` | `defense` | `defenseMitigation` |
+|---|---|---|---|
+| Dragon | 25 | 30 | 0,99 |
+| Dragon Lord | 34 (era 35 — um palpite anterior a esta issue, corrigido aqui) | 34 | 1,29 |
+
+`defenseMitigation` é o valor DIRETO que o Canary usa — `0,99` tira 0,99 % do dano, não 99 %; o
+Canary o capa em 30.
+
+### O que fica para depois
+
+Absorção/aumento por tipo (`applyAbsorbDamageModifications`, o PRIMEIRO estágio do `Creature::
+blockHit`) e reflexo são o **M30-05**. A fórmula própria de defesa/armadura/mitigação do jogador
+é o **M30-02**. Postura de luta é o **M30-03**. A posição exata do crítico/leech sob o
+`combat-v3` é o **M30-04**. A exceção de lifedrain/manadrain na mitigação percentual espera o
+**M29-07** (os tipos de dano ainda não existem em `@draconya/content`).
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 

@@ -270,6 +270,50 @@ describe('combat baseline', () => {
   });
 });
 
+describe('combat-v3: defesa/armadura/mitigação do blockHit (#548, M30-01)', () => {
+  const v3Combat = {
+    ...combat,
+    compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+
+  it('exige weaponDamage/distanceHitChance, como o combat-v2 já exigia', () => {
+    expect(() => buildContent(base({
+      combat: [{ ...combat, compatibilityProfile: 'combat-v3' }],
+    }))).toThrow(/combat-v3 exige o bloco "weaponDamage"/);
+    expect(() => buildContent(base({
+      combat: [{ ...combat, compatibilityProfile: 'combat-v3', weaponDamage: v3Combat.weaponDamage }],
+    }))).toThrow(/combat-v3 exige o bloco "distanceHitChance"/);
+  });
+
+  it('sobe com os dois blocos presentes', () => {
+    expect(buildContent(base({ combat: [v3Combat] })).combat.compatibilityProfile)
+      .toBe('combat-v3');
+  });
+
+  it('monster.defense/defenseMitigation são opcionais, default 0 (identidade do rato)', () => {
+    const content = buildContent(base());
+    const monster = content.monsters.get('rat');
+    expect(monster?.defense).toBe(0);
+    expect(monster?.defenseMitigation).toBe(0);
+  });
+
+  it('monster.defense/defenseMitigation aceitam os números do Dragon (#548)', () => {
+    const dragon = { ...rat, id: 'dragon', name: 'Dragon', defense: 30, defenseMitigation: 0.99 };
+    const content = buildContent(base({ monsters: [rat, dragon] }));
+    expect(content.monsters.get('dragon')).toMatchObject({ defense: 30, defenseMitigation: 0.99 });
+  });
+
+  it('defense negativo, ou mitigation fora de [0, 30], derrubam o boot', () => {
+    expect(() => buildContent(base({ monsters: [{ ...rat, defense: -1 }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, defenseMitigation: 31 }] })))
+      .toThrow(ContentError);
+    expect(() => buildContent(base({ monsters: [{ ...rat, defenseMitigation: -0.1 }] })))
+      .toThrow(ContentError);
+  });
+});
+
 describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
   const withMitigation = (mitigation: unknown) => base({ monsters: [{ ...rat, mitigation }] });
 

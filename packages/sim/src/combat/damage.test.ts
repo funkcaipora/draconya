@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
 import { effectiveDodge, resolveDamage } from './damage.js';
 import type { DamageIntent } from './damage.js';
+import { availableBlockCharges, FULL_BLOCK_CHARGE } from './block-charge.js';
+import type { BlockChargeState } from './block-charge.js';
+import { MAGIC_BLOCK_FLAGS } from './blockhit.js';
 
 const combat: Combat = {
   id: 'baseline',
@@ -450,6 +453,131 @@ describe('pipeline canônico elemental, físico e mitigações (#473)', () => {
       ));
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const dragonLike = {
+    armor: 25,
+    dodgeChance: 0,
+    defense: { kind: 'monster' as const, defense: 30 },
+    defenseMitigation: 0.99,
+  };
+
+  /**
+   * Como `rigged`, mas o `combat-v3` também sorteia `integer` (defesa/armadura) — delega esse
+   * para um `Rng` de verdade, e só força o `chance` (Dodge) para o valor combinado.
+   */
+  const riggedDodge = (dodges: boolean, seed = 'v3-dodge'): Rng => {
+    const real = Rng.fromSeed(seed);
+    return {
+      chance: () => dodges,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  it('Dodge continua o primeiro sorteio, na mesma posição do v1/v2', () => {
+    const result = resolveDamage(swing, dragonLike, 'pve', v3, riggedDodge(true), 0);
+    expect(result.dodged).toBe(true);
+    // Metade do que sobrou dos outros estágios — nunca zero, a mesma regra do v1/v2.
+    expect(result.resolvedDamage).toBeGreaterThan(0);
+  });
+
+  it('golpe elegível (melee) rola defesa+armadura+mitigação e escreve o blockCharge novo', () => {
+    const rng = Rng.fromSeed('v3-melee');
+    const before = FULL_BLOCK_CHARGE;
+    const result = resolveDamage(
+      { ...swing, rawDamage: 1_000 }, { ...dragonLike, blockCharge: before }, 'pve', v3, rng, 5_000,
+    );
+    expect(result.blockCharge).toBeDefined();
+    expect(result.blockCharge).not.toBe(before);
+    // A defesa (30) e a armadura (25) do "dragão" tiram um pedaço real do golpe de 1000.
+    expect(result.resolvedDamage).toBeLessThan(1_000);
+    expect(result.resolvedDamage).toBeGreaterThan(0);
+  });
+
+  it('magia (blockable ausente vira o default físico do chamador) ignora defesa/armadura quando declarada', () => {
+    const rng = Rng.fromSeed('v3-magic');
+    const before = FULL_BLOCK_CHARGE;
+    const spellIntent: DamageIntent = {
+      rawDamage: 100, source: 'spell', damageType: 'physical', blockable: MAGIC_BLOCK_FLAGS,
+    };
+    const result = resolveDamage(
+      spellIntent, { ...dragonLike, blockCharge: before }, 'pve', v3, rng, 5_000,
+    );
+    // Sem defesa/armadura, só a mitigação percentual (0,99 %) tira algo — o resultado fica
+    // muito perto do bruto, e nenhuma carga é consumida.
+    expect(result.resolvedDamage).toBeGreaterThanOrEqual(99);
+    expect(result.blockCharge).toBe(before);
+  });
+
+  it('imunidade zera e o piso NÃO revoga (imunidade explícita vence o piso)', () => {
+    const target = {
+      ...dragonLike,
+      mitigation: compileMitigation({ resistances: {}, immunities: ['fire'] }),
+    };
+    const result = resolveDamage(hit(1_000, 'fire'), target, 'pve', v3, rigged(false), 0);
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
+  });
+
+  it('o piso poupa um alvo pesado quando não é imune', () => {
+    const tank = { armor: 5_000, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    const result = resolveDamage(swing, tank, 'pve', v3, riggedDodge(false), 0);
+    // minimumDamageFraction 0.1 sobre 100 de rawDamage.
+    expect(result.resolvedDamage).toBe(10);
+  });
+
+  it('duas cargas de bloqueio, depois nenhuma: o terceiro golpe elegível no mesmo segundo não defende', () => {
+    // `defense: 0` isola só o efeito do `blockCharge` — sem magnitude nenhuma para ocultar a
+    // rolagem em si, o teste conta as vezes que `defenseBlocked` teria RNG consumido observando
+    // o estado do `blockCharge` que cada golpe devolve.
+    const attacker = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    let blockCharge = FULL_BLOCK_CHARGE;
+    const rng = Rng.fromSeed('v3-charges');
+    const nowMs = 500;
+
+    const first = resolveDamage(swing, { ...attacker, blockCharge }, 'pve', v3, rng, nowMs);
+    blockCharge = first.blockCharge as typeof blockCharge;
+    const second = resolveDamage(swing, { ...attacker, blockCharge }, 'pve', v3, rng, nowMs);
+    blockCharge = second.blockCharge as typeof blockCharge;
+    // As duas cargas já foram gastas — o relógio compartilhado só credita a próxima 1000 ms
+    // DEPOIS do instante em que o banco começou a contar (ver `block-charge.ts`), e ainda estamos
+    // no mesmo instante do golpe.
+    expect(blockCharge.charges).toBe(0);
+    expect(availableBlockCharges(blockCharge, nowMs)).toBe(0);
+  });
+
+  it('achado da revisão do PR #642: o secundário herda a carga que o primário já gastou', () => {
+    // Sem a correção, o secundário rolava o estágio novo contra o `blockCharge` de ENTRADA (como
+    // se o primário nunca tivesse consumido nada), e o `blockCharge` de nível superior — o único
+    // que `applyDamageOutcome` grava de volta (invariante 9) — refletia só o consumo do
+    // primário, perdendo em silêncio o que o secundário gastou por cima.
+    const attacker = { armor: 0, dodgeChance: 0, defense: { kind: 'monster' as const, defense: 0 } };
+    const composite: DamageIntent = {
+      ...swing, rawDamage: 1_000,
+      secondary: { rawDamage: 500, damageType: 'fire' },
+    };
+    const rng = Rng.fromSeed('v3-composite-charge');
+    const nowMs = 5_000;
+    const result = resolveDamage(
+      composite, { ...attacker, blockCharge: FULL_BLOCK_CHARGE }, 'pve', v3, rng, nowMs,
+    );
+    // O primário sozinho gasta só UMA carga; o secundário, herdando o estado PÓS-primário, gasta
+    // a OUTRA. As duas precisam terminar refletidas no `blockCharge` de nível superior.
+    expect(result.secondaryOutcome?.blockCharge).toEqual(result.blockCharge);
+    expect(availableBlockCharges(result.blockCharge as BlockChargeState, nowMs)).toBe(0);
+  });
+
+  it('combat-v1/v2 continuam bit a bit — o combat-v3 não toca `resolveMitigation`', () => {
+    const v1Result = resolveDamage(swing, plate, 'pve', combat, rigged(false), 0);
+    expect(v1Result.resolvedDamage).toBe(80);
+    expect(v1Result.blockCharge).toBeUndefined();
+    const v2 = { ...combat, compatibilityProfile: 'combat-v2' };
+    const v2Result = resolveDamage(swing, plate, 'pve', v2, rigged(false), 0);
+    expect(v2Result.resolvedDamage).toBe(80);
+    expect(v2Result.blockCharge).toBeUndefined();
   });
 });
 

@@ -138,13 +138,14 @@ function resolveWeaponPowerV2(
 
 /**
  * O poder bruto de um golpe de arma, antes da mitigação. Despacha por
- * `combat.compatibilityProfile` (ADR 0031): `combat-v2` usa a fórmula do Canary
+ * `combat.compatibilityProfile` (ADR 0031): `combat-v2` E `combat-v3` (#548, ADR 0040 — o
+ * `combat-v3` não muda o lado OFENSIVO, só o de recebimento) usam a fórmula do Canary
  * (`resolveWeaponPowerV2`); qualquer outro valor — inclusive `combat` ausente — usa o v1, de
  * propósito, para preservar toda chamada existente que não passa `combat` (DT-03: ausência é o
  * default que preserva o v1 bit a bit, o mesmo idioma do resto do ADR 0031).
  *
- * `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — só o v2 o lê;
- * o v1 nunca teve multiplicador de vocação, e passar `1` (o default) não muda nada nele.
+ * `vocationMultiplier` é `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — só o v2/v3 o
+ * lê; o v1 nunca teve multiplicador de vocação, e passar `1` (o default) não muda nada nele.
  *
  * Função PURA a menos do RNG da sessão.
  */
@@ -156,13 +157,15 @@ export function resolveWeaponPower(
   combat?: Combat,
   vocationMultiplier = 1,
 ): number {
-  const isV2 = combat?.compatibilityProfile === 'combat-v2' && combat.weaponDamage !== undefined;
+  const usesCanaryWeaponFormula = (combat?.compatibilityProfile === 'combat-v2'
+    || combat?.compatibilityProfile === 'combat-v3') && combat.weaponDamage !== undefined;
   if (profile.fixedDamage !== undefined) {
-    // `combat-v2`: `WeaponWand::getWeaponDamage` do Canary também sorteia pela normal truncada
-    // (`normal_random(minChange, maxChange)`), não uma faixa uniforme — a MESMA distribuição do
-    // corpo a corpo e da distância, só o MÁXIMO/MÍNIMO de wand/rod não muda (já era faixa fixa
-    // do item, sem coeficiente nem `attackFactor`). `combat-v1` continua uniforme, como sempre.
-    return isV2
+    // `combat-v2`/`combat-v3`: `WeaponWand::getWeaponDamage` do Canary também sorteia pela
+    // normal truncada (`normal_random(minChange, maxChange)`), não uma faixa uniforme — a
+    // MESMA distribuição do corpo a corpo e da distância, só o MÁXIMO/MÍNIMO de wand/rod não
+    // muda (já era faixa fixa do item, sem coeficiente nem `attackFactor`). `combat-v1`
+    // continua uniforme, como sempre.
+    return usesCanaryWeaponFormula
       ? normalRandomInt(rng, profile.fixedDamage.min, profile.fixedDamage.max)
       : rng.integer(profile.fixedDamage.min, profile.fixedDamage.max);
   }
@@ -171,7 +174,7 @@ export function resolveWeaponPower(
   // é a resposta honesta em vez de um número inventado.
   if (formula === undefined) return 0;
 
-  if (isV2 && combat?.weaponDamage !== undefined) {
+  if (usesCanaryWeaponFormula && combat?.weaponDamage !== undefined) {
     return resolveWeaponPowerV2(
       formula, profile.family === 'distance', level, skillLevel, rng, combat.weaponDamage,
       vocationMultiplier,
