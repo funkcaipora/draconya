@@ -1841,6 +1841,36 @@ describe('magia (FUN-74)', () => {
     expect(hero.xp).toBeGreaterThan(0);
   });
 
+  it('#547 (M29-07, achado da revisão do PR #648): magia de manadrain NUNCA tira vida do monstro', () => {
+    // Antes deste fix, `#applyHits` aplicava o `resolvedDamage` de QUALQUER magia direto em
+    // `monster.receiveDamage`, sem olhar `damageType` — só `applyDamageOutcome` (CMB-08) sabia
+    // desviar `manadrain` para a mana, e a magia de dano nunca passava por ali. Um monstro não
+    // tem mana (`MonsterRuntime` não declara o campo), então o dreno tem que ser um NO-OP total:
+    // nem vida, nem morte, por mais golpes que caiam — a mesma regra do Canary
+    // (`Game::combatChangeMana`, `manaLoss <= 0` já sem alvo).
+    const drenar = { id: 'drain', name: 'Dreno', manaCost: 5, cooldownMs: 100,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'manadrain' } };
+    const { session, ruleset } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'drain' },
+      }],
+    }), {
+      spells: [...spells, drenar], mana: 1_000,
+      // Ataque desarmado ZERADO: sem isto, o corpo a corpo AUTOMÁTICO (que roda independente
+      // do bot, como todo personagem perto de um alvo) mataria o rato sozinho e confundiria a
+      // asserção — este teste é sobre a MAGIA, não sobre o soco de sempre.
+      combat: [{ ...combat, player: { ...combat.player, attackPower: 0 } }],
+    });
+
+    // Poder 40 contra um rato de 50 de vida mataria em dois golpes se caísse na vida — dez
+    // segundos bastam para várias tentativas, mesmo com o cooldown de categoria do bot.
+    run(session, 10_000, 100);
+
+    expect(session.aggregates.kills).toBe(0);
+    expect(ruleset.monsters.every((m) => m.health === 50)).toBe(true);
+  });
+
   it('magia que sumiu do conteúdo não derruba a hunt: a regra só não faz nada', () => {
     // `validateBotConfig` recusa isto na ENTRADA. Sobra o conteúdo mudar sob uma sessão em
     // voo, e aí a resposta certa é a hunt continuar — quem estava caçando não perde a sessão

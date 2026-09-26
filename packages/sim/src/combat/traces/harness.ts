@@ -18,7 +18,7 @@ import type { SpellAim, SpellScaling, SpellTarget } from '../../casting.js';
 import { CharacterRuntime } from '../../character.js';
 import type { CharacterState } from '../../character.js';
 import { resolveDamage } from '../damage.js';
-import type { Defender, DamageIntent } from '../damage.js';
+import type { Defender, DamageIntent, DamageOutcome } from '../damage.js';
 import { applyDamageOutcome } from '../outcome.js';
 import { MonsterRuntime } from '../../monster/monster.js';
 import type { MonsterState } from '../../monster/monster.js';
@@ -236,7 +236,7 @@ export class TraceRuleset implements Ruleset {
       targets: this.#spellHits.map((monster) => ({ creatureId: monster.subject, position: this.#pointOf(monster) })),
       tiles: [...this.#aimTiles],
     });
-    this.#applyHits(session, hero, result.hits);
+    this.#applyHits(session, hero, result.hitOutcomes ?? []);
   }
 
   #supply(
@@ -259,7 +259,7 @@ export class TraceRuleset implements Ruleset {
       tiles: [...this.#aimTiles],
     });
     if (aim === null) this.#emitHealed(session, hero, result.healed, 'supply');
-    else this.#applyHits(session, hero, result.hits);
+    else this.#applyHits(session, hero, result.hitOutcomes ?? []);
   }
 
   /**
@@ -313,13 +313,23 @@ export class TraceRuleset implements Ruleset {
     this.#spellTargets.push(this.#defenderOf(monster));
   }
 
-  #applyHits(session: Session, hero: CharacterRuntime, hits: readonly number[]): void {
+  /**
+   * Aplica pelo mesmo `applyDamageOutcome` que a `HuntRuleset` usa (#547, M29-07 — achado da
+   * revisão do PR #648): chamar `monster.receiveDamage` direto, como este método fazia antes,
+   * deixava o trace de magia/runa fora do desvio de `manadrain` para a mana — o mesmo bug que
+   * `HuntRuleset#applyHits` teve. O `amount` emitido continua o APLICADO, byte a byte igual ao
+   * de antes para qualquer outro tipo (nenhum ganha mana shield nem leech aqui: monstro não tem
+   * mana, e o intent de magia/runa nunca declara `modifiers`).
+   */
+  #applyHits(session: Session, hero: CharacterRuntime, hitOutcomes: readonly DamageOutcome[]): void {
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
-      const applied = monster.receiveDamage(hits[i] ?? 0);
+      const outcome = hitOutcomes[i];
+      if (outcome === undefined) continue;
+      const applied = applyDamageOutcome(monster, outcome, hero);
       this.#emit(session, {
         kind: 'creature-hit', creatureId: monster.subject, attackerId: hero.id,
-        amount: applied, source: 'spell', position: this.#pointOf(monster),
+        amount: applied.healthDamage, source: 'spell', position: this.#pointOf(monster),
       });
       this.#emitMonsterHealth(session, monster);
     }

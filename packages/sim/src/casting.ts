@@ -19,6 +19,7 @@ import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@d
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
+import type { DamageOutcome } from './combat/damage.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
@@ -66,6 +67,17 @@ export interface CastSuccess {
    * qual sorteio cai em quem — o que faz a mesma semente render uma hunt diferente.
    */
   readonly hits: readonly number[];
+  /**
+   * O `DamageOutcome` INTEIRO de cada alvo, na MESMA ordem de `hits` (#547, M29-07 — achado da
+   * revisão do PR #648). `hits` guarda só o número resolvido, que basta para o extrato — mas
+   * quem APLICA o golpe (`HuntRuleset#applyHits`) precisa do outcome completo para rodar
+   * `applyDamageOutcome` (CMB-08), o único lugar que sabe desviar `manadrain` para a MANA do
+   * alvo em vez da vida. Sem isto, um `damageType: 'manadrain'` num efeito de dano bateria
+   * direto na vida — o mesmo bug que este campo fecha nos outros quatro produtores de dano
+   * (DOT, ability de monstro, golpe básico). Presente só quando `hits` também está — os demais
+   * sucessos (cura, condição, restauração) nunca aplicam golpe nenhum.
+   */
+  readonly hitOutcomes?: readonly DamageOutcome[];
   /** Gold debitado. Vira `aggregates.goldSpent` em quem chama. */
   readonly goldSpent: number;
   /**
@@ -352,6 +364,7 @@ export function castSpell(
       // poder ANTES da armadura, como faz com o golpe.
       const dealt = caster.conditions.damageDealtScale('spell');
       const hits: number[] = [];
+      const hitOutcomes: DamageOutcome[] = [];
       let total = 0;
       for (let i = 0; i < targets.length; i += 1) {
         const target = targets[i] as SpellTarget;
@@ -373,9 +386,10 @@ export function castSpell(
           nowMs,
         );
         hits.push(result.resolvedDamage);
+        hitOutcomes.push(result);
         total += result.resolvedDamage;
       }
-      return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
+      return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, hitOutcomes, goldSpent: 0 };
     }
     case 'heal':
       return {
@@ -520,6 +534,7 @@ export function useSupply(
     if (!paidFromStockDamage) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
     const hits: number[] = [];
+    const hitOutcomes: DamageOutcome[] = [];
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
       const target = aim.targets[i] as SpellTarget;
@@ -545,10 +560,11 @@ export function useSupply(
         'pve', combat, rng, nowMs ?? 0,
       );
       hits.push(result.resolvedDamage);
+      hitOutcomes.push(result);
       total += result.resolvedDamage;
     }
     return {
-      ok: true, healed: 0, manaRestored: 0, damage: total, hits,
+      ok: true, healed: 0, manaRestored: 0, damage: total, hits, hitOutcomes,
       goldSpent: paidFromStockDamage ? 0 : supply.price,
     };
   }
