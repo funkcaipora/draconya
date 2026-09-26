@@ -345,10 +345,10 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `monster.defenses` (cura própria) é evento POR DEFESA, subject derivado `m:<id>:<defenseId>`,
   `scheduledDefenses` (opcional no snapshot); não depende de alvo, e de vida cheia não emite
   `creature-healed` — a mesma regra de `#emitHealed`. `monster.targetChange` (#645, ADR 0037
-  d.6) NUNCA consulta `targetStrategy` — a classificação melee/à-distância do TIPO
-  (`definition.attackRange`, a métrica de `targetDistance` do Canary) decide sozinha entre
-  `TARGETSEARCH_RANDOM` (`attackRange <= 1`: um alvo ao acaso DIFERENTE do atual dentro do
-  `aggroRadius`) e `TARGETSEARCH_NEAREST` fixo (`attackRange > 1`, via `nearestPrey`, o mesmo
+  d.6) NUNCA consulta `targetStrategy` — o `targetDistance` do TIPO (`definition.
+  targetDistance`, #542 — o mesmo `info.targetDistance` que o Canary lê) decide sozinho entre
+  `TARGETSEARCH_RANDOM` (`targetDistance <= 1`: um alvo ao acaso DIFERENTE do atual dentro do
+  `aggroRadius`) e `TARGETSEARCH_NEAREST` fixo (`targetDistance > 1`, via `nearestPrey`, o mesmo
   desempate estrito da aquisição). A estratégia ponderada do Canary só entra no ramo estreito de
   `chooseTarget` equivalente a `TARGETSEARCH_DEFAULT`: um alvo JÁ retido, o monstro FUGINDO
   (`isMonsterFleeing`) e sem conseguir atacá-lo agora (`rankTarget`, `target-strategy.ts`) — e

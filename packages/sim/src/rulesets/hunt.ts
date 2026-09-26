@@ -5510,14 +5510,13 @@ const slots = bot.groups.get(group);
    * reagenda-se sempre enquanto o monstro viver.
    *
    * **Nunca consulta `targetStrategy` (#645, ADR 0037 d.6).** `onThinkTarget` resolve o
-   * critério só pelo `targetDistance` do TIPO do monstro — a classificação melee/à-distância
-   * declarada no conteúdo, `definition.attackRange`, não a distância corrida até o alvo —,
-   * nunca pelos pesos: `useRandomSearch = targetDistance <= 1` (`monster.cpp:2185-2186`). Para
-   * o Dragon (`attackRange: 1`, melee mesmo com bola/onda de alcance 7 — `targetDistance` é a
-   * classificação BASE, o Canary não a reescreve por causa de uma spell adicional), isso é
-   * SEMPRE `RANDOM`; a estratégia ponderada só entra no ramo estreito de `chooseTarget`
-   * (`monster.ts`, "fuga bloqueada") — ver "Seleção ponderada de alvo" em
-   * `docs/product/combat.md`.
+   * critério só pelo `targetDistance` do TIPO do monstro (`definition.targetDistance`, #542 —
+   * o MESMO campo `info.targetDistance` que o Canary lê aqui, não a distância corrida até o
+   * alvo nem o alcance das abilities) —, nunca pelos pesos: `useRandomSearch = targetDistance
+   * <= 1` (`monster.cpp:2185-2186`). Para o Dragon (`targetDistance: 1` em `dragon.lua`, melee
+   * mesmo com bola/onda de alcance 7), isso é SEMPRE `RANDOM`; a estratégia ponderada só entra
+   * no ramo estreito de `chooseTarget` (`monster.ts`, "fuga bloqueada") — ver "Seleção
+   * ponderada de alvo" em `docs/product/combat.md`.
    */
   #onMonsterTargetChange(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
@@ -5542,9 +5541,9 @@ const slots = bot.groups.get(group);
       && distance(monster.position, candidate.position) <= definition.aggroRadius);
     if (candidates.length === 0) return;
 
-    // RANDOM para melee (`attackRange <= 1`, o caso do rato/rotworm/Dragon/Dragon Lord),
-    // NEAREST fixo para à distância — zero peso consultado, como `onThinkTarget` real.
-    const chosen = definition.attackRange <= 1
+    // RANDOM para `targetDistance <= 1` (o caso do rato/rotworm/Dragon/Dragon Lord), NEAREST
+    // fixo para quem mantém distância — zero peso consultado, como `onThinkTarget` real.
+    const chosen = definition.targetDistance <= 1
       ? candidates[session.rng.integer(0, candidates.length - 1)] ?? null
       : nearestPrey(monster.position, candidates);
     if (chosen === null) return;

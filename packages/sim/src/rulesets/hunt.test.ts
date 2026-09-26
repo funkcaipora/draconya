@@ -7975,7 +7975,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
 
   describe('#645: `targetChange` NUNCA consulta `targetStrategy` (ADR 0037 d.6, TFS/Canary `onThinkTarget`)', () => {
     // `onThinkTarget` real nunca lê `strategiesTarget*` — só `m_monsterType->info.targetDistance`
-    // (a classificação melee/à-distância do TIPO, `definition.attackRange` aqui) decide entre
+    // (`definition.targetDistance` aqui, o campo do #542) decide entre
     // `TARGETSEARCH_RANDOM` e `TARGETSEARCH_NEAREST` (`monster.cpp:2141-2192`, idêntico no TFS
     // `monster.cpp:919-963`). A estratégia ponderada só entra no ramo estreito de `chooseTarget`
     // (fuga bloqueada) — ver `monster.test.ts`.
@@ -7986,7 +7986,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
       gold: 0, goldDelta: 0, alive: true, cooldowns: {},
     });
 
-    it('melee (`attackRange: 1`, o caso do Dragon): o reroll sorteia uniforme, não sempre o de menos vida', () => {
+    it('melee (`targetDistance: 1`, o caso do Dragon): o reroll sorteia uniforme, não sempre o de menos vida', () => {
       // Se o peso 100 % em `health` ainda fosse consultado, `wounded-ally` venceria SEMPRE.
       // Rodando muitos vencimentos com os dois candidatos à MESMA posição (nenhum critério de
       // distância os separa), `TARGETSEARCH_RANDOM` alcança os dois — a prova de que o critério
@@ -8023,9 +8023,43 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
       expect(seen.has('wounded-ally')).toBe(true);
     });
 
-    it('à distância (`attackRange > 1`): o reroll resolve NEAREST fixo, mesmo com o peso favorecendo o mais ferido e mais longe', () => {
+    it('alcance longo com `targetDistance: 1` continua RANDOM — quem decide é `targetDistance`, não `attackRange`', () => {
+      // O Canary lê `info.targetDistance` (`monster.cpp:2185-2186`); o alcance de ataque não
+      // entra. Com os dois campos DIFERENTES, um reroll que ainda olhasse `attackRange` cairia em
+      // NEAREST e nunca alcançaria o candidato empatado em distância que o sorteio alcança.
+      const longReachMelee = {
+        ...dragon, attackRange: 4, targetDistance: 1,
+        targetChange: { intervalMs: 1_000, chance: 1 },
+      };
+      const loaded = buildContent(raw({
+        monsters: [longReachMelee], hunts: [dragonHunt], combat: [pacifist],
+      }));
+      const session = createHuntSession({
+        id: 'dragon-target-change-long-reach', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      const knight = heroLevel200({ health: 1_000_000 });
+      session.enter(knight);
+      session.enter(ally('first-ally', 0, 900_000));
+      session.enter(ally('second-ally', 0, 900_000));
+
+      session.advanceBy(100); // o Dragon nasce.
+      const ruleset = session.ruleset as HuntRuleset;
+      const monster = ruleset.monsters[0];
+      if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+      const seen = new Set<string | null>();
+      for (let i = 0; i < 30; i++) {
+        monster.targetId = knight.id;
+        run(session, 1_100, 100);
+        seen.add(monster.targetId);
+      }
+      expect(seen.has('first-ally')).toBe(true);
+      expect(seen.has('second-ally')).toBe(true);
+    });
+
+    it('à distância (`targetDistance > 1`): o reroll resolve NEAREST fixo, mesmo com o peso favorecendo o mais ferido e mais longe', () => {
       const rangedDragon = {
-        ...dragon, attackRange: 4,
+        ...dragon, attackRange: 4, targetDistance: 4,
         targetChange: { intervalMs: 1_000, chance: 1 },
         targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 }, // favoreceria `wounded-far`
       };

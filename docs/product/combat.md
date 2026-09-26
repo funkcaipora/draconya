@@ -1167,12 +1167,12 @@ interface MonsterTargetStrategy {
   passa, escolhe um alvo válido diferente do atual dentro do `aggroRadius` — e, desde o #645,
   **também NUNCA consulta `targetStrategy`**, como `Monster::onThinkTarget`
   (`monster.cpp:2141-2192`, idêntico no TFS `forgottenserver/src/monster.cpp:919-963`): o
-  critério é `useRandomSearch = targetDistance <= 1` — a classificação melee/à-distância do
-  TIPO do monstro (`definition.attackRange`, NÃO a distância corrida até o alvo agora), lida uma
-  vez do conteúdo. Corpo a corpo (Dragon, Dragon Lord, rato, rotworm — todos `attackRange: 1`,
-  mesmo o Dragon tendo bola/onda de alcance 7: `targetDistance` é a classificação BASE, o Canary
-  não a reescreve por causa de uma spell adicional) é sempre `TARGETSEARCH_RANDOM`; um monstro
-  à distância (`attackRange > 1`, nenhum no recorte hoje) seria `TARGETSEARCH_NEAREST` fixo.
+  critério é `useRandomSearch = targetDistance <= 1` — o `targetDistance` do TIPO do monstro
+  (`definition.targetDistance`, o campo do #542 — NÃO a distância corrida até o alvo agora, nem
+  o `attackRange`), lido uma vez do conteúdo. Corpo a corpo (Dragon, Dragon Lord, rato, rotworm
+  — todos `targetDistance = 1` nos `.lua` do Canary, mesmo o Dragon tendo bola/onda de alcance
+  7) é sempre `TARGETSEARCH_RANDOM`; um monstro que mantém distância (`targetDistance > 1`,
+  nenhum no recorte hoje) é `TARGETSEARCH_NEAREST` fixo.
 - **Seleção ponderada de alvo (`monster.targetStrategy`, #541/#645)**: o CRITÉRIO da escolha é
   sorteado pelos pesos declarados — mais perto, menos vida, mais dano causado no monstro, ou
   aleatório —, com a MESMA matemática de `MonsterTargetRanker::rank`
