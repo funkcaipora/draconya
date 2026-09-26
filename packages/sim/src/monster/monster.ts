@@ -14,6 +14,8 @@ import type { BlockChargeState } from '../combat/block-charge.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
+import type { Rng } from '../rng.js';
+import { rankTarget, type TargetRankCandidate } from './target-strategy.js';
 import { distance, fleeStep, greedyStep, sameFloor, type Blocked, type FloorPoint, type GridPoint } from './step.js';
 
 export interface MonsterState {
@@ -84,6 +86,12 @@ export interface Prey {
   readonly id: string;
   readonly position: FloorPoint;
   readonly alive: boolean;
+  /**
+   * A vida atual (#541): só a estratégia ponderada de alvo lê isto — o critério `health` de
+   * `rankTarget`. `CharacterRuntime` já tem `health` público; nenhum chamador precisa montar
+   * nada à parte.
+   */
+  readonly health: number;
 }
 
 /**
@@ -220,6 +228,7 @@ export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
   definition: Monster,
+  rng: Rng,
 ): string | null {
   const current = monster.targetId === null
     ? undefined
@@ -232,20 +241,43 @@ export function chooseTarget(
     if (leash === 0 || distance(monster.home, current.position) <= leash) return current.id;
   }
 
-  let closest: Prey | null = null;
-  let closestDistance = Number.POSITIVE_INFINITY;
+  const strategy = definition.targetStrategy;
+  if (strategy === undefined) {
+    // Sem estratégia (#541): só o mais perto, no MESMO passo único de sempre — zero sorteio,
+    // zero alocação nova. É o que preserva a sequência de RNG do rato e do rotworm bit a bit;
+    // a estratégia ponderada só entra quando o CONTEÚDO a declara.
+    let closest: Prey | null = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of prey) {
+      if (!candidate.alive) continue;
+      // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
+      // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair
+      // compartilham a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima
+      // através do chão.
+      if (!sameFloor(monster.position.z, candidate.position.z)) continue;
+      const d = distance(monster.position, candidate.position);
+      if (d > definition.aggroRadius || d >= closestDistance) continue;
+      closest = candidate;
+      closestDistance = d;
+    }
+    return closest?.id ?? null;
+  }
+
+  // Estratégia ponderada (#541): monta os candidatos válidos (vivo, mesmo andar, dentro do
+  // raio de agressão) e deixa `rankTarget` sortear o critério — mais perto, menos vida, mais
+  // dano causado nele, ou aleatório.
+  const candidates: TargetRankCandidate[] = [];
   for (const candidate of prey) {
     if (!candidate.alive) continue;
-    // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
-    // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair compartilham
-    // a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima através do chão.
     if (!sameFloor(monster.position.z, candidate.position.z)) continue;
     const d = distance(monster.position, candidate.position);
-    if (d > definition.aggroRadius || d >= closestDistance) continue;
-    closest = candidate;
-    closestDistance = d;
+    if (d > definition.aggroRadius) continue;
+    candidates.push({
+      id: candidate.id, distance: d, health: candidate.health,
+      damage: monster.contribution.damageBy(candidate.id),
+    });
   }
-  return closest?.id ?? null;
+  return candidates.length === 0 ? null : rankTarget(strategy, candidates, rng);
 }
 
 /**

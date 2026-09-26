@@ -118,6 +118,7 @@
     }
   ],
   "targetChange": { "intervalMs": 4000, "chance": 0.10 },
+  "targetStrategy": { "nearest": 70, "health": 10, "damage": 10, "random": 10 },
   "runOnHealth": 300,
   "staticAttack": 0.80,
   "_open": "aggroRadius 11 (#527, era 8): mesma fonte do Dragon — TFS `Monster::canSee` é um quadrado de `Map::maxClientViewportX + 1` = 9; o Canary herda o quadrado de `Creature::canSee` sem sobrescrever, `MAP_MAX_VIEW_PORT_X`/`_Y` = 11. Precedência do ADR 0037 d.4: Canary vence. `armor`/`defense`/`defenseMitigation` (#548, combat-v3): `monster.defenses = { defense = 34, armor = 34, mitigation = 1.29 }` em `data-otservbr-global/monster/dragons/dragon_lord.lua` do Canary local (47dfd51), conferido em 2026-09-25 — `armor` era 35 aqui (um palpite de antes desta issue) e passa a 34, o valor real."

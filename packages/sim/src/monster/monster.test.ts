@@ -1,6 +1,7 @@
 import { compileMonster, monsterSchema } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { Rng } from '../rng.js';
 import {
   MonsterRuntime, chooseTarget, decideMonsterAction, isMonsterFleeing, type Prey,
 } from './monster.js';
@@ -19,22 +20,31 @@ const monsterAt = (x: number, y: number, over: Record<string, unknown> = {}) =>
     id: 1, monsterId: 'rat', position: { x, y }, home: { x, y },
     health: 20, targetId: null, cooldowns: {}, ...over,
   });
-const prey = (id: string, x: number, y: number, alive = true): Prey =>
-  ({ id, position: { x, y }, alive });
+/**
+ * `health` é usado só pela estratégia ponderada (#541); `rat` não a declara, então nenhum
+ * teste deste describe lê o valor — o default existe só para satisfazer `Prey`.
+ */
+const prey = (id: string, x: number, y: number, alive = true, health = 100): Prey =>
+  ({ id, position: { x, y }, alive, health });
 const open = () => false;
+/**
+ * `rat` não declara `targetStrategy`, então `chooseTarget` nunca consome esta semente nos
+ * testes abaixo (#541) — ela só precisa existir para o tipo.
+ */
+const rng = Rng.fromSeed('monster-test');
 
 describe('chooseTarget', () => {
   it('takes the closest inside the aggro radius', () => {
     const monster = monsterAt(0, 0);
-    expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat)).toBe('near');
+    expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat, rng)).toBe('near');
   });
 
   it('ignores anything outside the radius', () => {
-    expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat)).toBeNull();
+    expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat, rng)).toBeNull();
   });
 
   it('ignores the dead', () => {
-    expect(chooseTarget(monsterAt(0, 0), [prey('p', 1, 0, false)], rat)).toBeNull();
+    expect(chooseTarget(monsterAt(0, 0), [prey('p', 1, 0, false)], rat, rng)).toBeNull();
   });
 
   it('keeps its target instead of rescanning every tick', () => {
@@ -42,13 +52,13 @@ describe('chooseTarget', () => {
     // vezes por segundo — e trocar de alvo porque outro jogador passou um tile mais perto
     // não é o comportamento que os jogadores esperam.
     const monster = monsterAt(0, 0, { targetId: 'first' });
-    expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat))
+    expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat, rng))
       .toBe('first');
   });
 
   it('drops a target that died', () => {
     const monster = monsterAt(0, 0, { targetId: 'gone' });
-    expect(chooseTarget(monster, [prey('gone', 1, 0, false), prey('alive', 2, 0)], rat))
+    expect(chooseTarget(monster, [prey('gone', 1, 0, false), prey('alive', 2, 0)], rat, rng))
       .toBe('alive');
   });
 
@@ -56,10 +66,10 @@ describe('chooseTarget', () => {
     // Zero é "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK faria o
     // jogador voltar e encontrar tudo parado, sem explicação.
     const monster = monsterAt(0, 0, { targetId: 'runner' });
-    expect(chooseTarget(monster, [prey('runner', 50, 0)], rat)).toBe('runner');
+    expect(chooseTarget(monster, [prey('runner', 50, 0)], rat, rng)).toBe('runner');
 
     const leashed = { ...rat, leashRadius: 5 };
-    expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed)).toBeNull();
+    expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, rng)).toBeNull();
   });
 
   describe('andar (#519, hunt multiandar)', () => {
@@ -72,26 +82,105 @@ describe('chooseTarget', () => {
         health: 20, targetId: null, cooldowns: {}, ...over,
       });
     const preyAtFloor = (id: string, x: number, y: number, z: number, alive = true): Prey =>
-      ({ id, position: { x, y, z }, alive });
+      ({ id, position: { x, y, z }, alive, health: 100 });
 
     it('ignora presa perto por (x, y) mas em outro andar', () => {
       const monster = monsterAtFloor(0, 0, 10);
-      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11)], rat)).toBeNull();
-      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11), preyAtFloor('same', 2, 0, 10)], rat))
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11)], rat, rng)).toBeNull();
+      expect(chooseTarget(monster, [preyAtFloor('below', 1, 0, 11), preyAtFloor('same', 2, 0, 10)], rat, rng))
         .toBe('same');
     });
 
     it('larga o alvo que trocou de andar, mesmo dentro do leash', () => {
       const monster = monsterAtFloor(0, 0, 10, { targetId: 'runner' });
       const leashed = { ...rat, leashRadius: 0 };
-      expect(chooseTarget(monster, [preyAtFloor('runner', 1, 0, 11)], leashed)).toBeNull();
+      expect(chooseTarget(monster, [preyAtFloor('runner', 1, 0, 11)], leashed, rng)).toBeNull();
     });
 
     it('sem `z` de nenhum dos lados continua igual a antes — compatível com snapshot anterior', () => {
       // Nem o monstro nem a presa carregam `z`: é o snapshot de uma hunt de andar único gravado
       // antes desta issue, e o comportamento não pode mudar para ela.
       const monster = monsterAt(0, 0);
-      expect(chooseTarget(monster, [prey('p', 1, 0)], rat)).toBe('p');
+      expect(chooseTarget(monster, [prey('p', 1, 0)], rat, rng)).toBe('p');
+    });
+  });
+
+  describe('conformidade de RNG: sem `targetStrategy` (#541)', () => {
+    /**
+     * Um `Rng` que estoura ao ser consultado. `chooseTarget` recebe uma instância dele em vez
+     * de uma semente de verdade: se o ramo sem `targetStrategy` sortear QUALQUER coisa — hoje
+     * ou numa mudança futura —, o teste falha imediatamente, em vez de só divergir de um valor
+     * hardcoded frágil. É o jeito mais direto de provar "a sequência de RNG fica inalterada":
+     * a sequência de um monstro sem o campo é SEMPRE vazia.
+     */
+    const poisoned = new Proxy({} as unknown as Rng, {
+      get(_target, property) {
+        throw new Error(`chooseTarget não deveria consultar o RNG (.${String(property)})`);
+      },
+    });
+
+    it('a busca do mais perto não sorteia nada', () => {
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], rat, poisoned))
+        .toBe('near');
+    });
+
+    it('manter o alvo atual não sorteia nada', () => {
+      const monster = monsterAt(0, 0, { targetId: 'first' });
+      expect(chooseTarget(monster, [prey('first', 3, 0), prey('closer', 1, 0)], rat, poisoned))
+        .toBe('first');
+    });
+
+    it('desistir pelo leash não sorteia nada', () => {
+      const monster = monsterAt(0, 0, { targetId: 'runner' });
+      const leashed = { ...rat, leashRadius: 5 };
+      expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, poisoned)).toBeNull();
+    });
+
+    it('sem candidato nenhum também não sorteia nada', () => {
+      expect(chooseTarget(monsterAt(0, 0), [prey('p', 9, 0)], rat, poisoned)).toBeNull();
+    });
+  });
+
+  describe('com `targetStrategy` declarado (#541)', () => {
+    // Peso 100 numa estratégia só é o jeito de isolar CADA critério sem depender do sorteio —
+    // `target-strategy.test.ts` cobre `rankTarget` isolada; aqui o que se prova é a FIAÇÃO:
+    // `chooseTarget` de fato repassa candidatos, vida e dano acumulado para ela.
+    const nearestOnly = { ...rat, targetStrategy: { nearest: 100, health: 0, damage: 0, random: 0 } };
+    const healthOnly = { ...rat, targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 } };
+    const damageOnly = { ...rat, targetStrategy: { nearest: 0, health: 0, damage: 100, random: 0 } };
+
+    it('nearest: escolhe o mais perto, como o comportamento sem estratégia', () => {
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [prey('far', 3, 0), prey('near', 1, 0)], nearestOnly, rng))
+        .toBe('near');
+    });
+
+    it('health: escolhe quem está com menos vida, mesmo mais longe', () => {
+      const monster = monsterAt(0, 0);
+      const wounded = prey('wounded', 3, 0, true, 5);
+      const healthy = prey('healthy', 1, 0, true, 500);
+      expect(chooseTarget(monster, [healthy, wounded], healthOnly, rng)).toBe('wounded');
+    });
+
+    it('damage: escolhe quem causou mais dano NO monstro', () => {
+      const monster = monsterAt(0, 0);
+      monster.contribution.record('big-hitter', 40);
+      monster.contribution.record('poker', 5);
+      const preyList = [prey('poker', 1, 0), prey('big-hitter', 3, 0)];
+      expect(chooseTarget(monster, preyList, damageOnly, rng)).toBe('big-hitter');
+    });
+
+    it('damage: ninguém bateu ainda — cai no primeiro candidato, como o Canary sem `hasDamage`', () => {
+      const monster = monsterAt(0, 0);
+      const preyList = [prey('first', 3, 0), prey('second', 1, 0)];
+      expect(chooseTarget(monster, preyList, damageOnly, rng)).toBe('first');
+    });
+
+    it('mantém o alvo atual antes de consultar a estratégia — o desempate não te tira de um alvo válido', () => {
+      const monster = monsterAt(0, 0, { targetId: 'current' });
+      const preyList = [prey('current', 3, 0), prey('nearer', 1, 0, true, 1)];
+      expect(chooseTarget(monster, preyList, healthOnly, rng)).toBe('current');
     });
   });
 });
