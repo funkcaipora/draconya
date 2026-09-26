@@ -23,6 +23,7 @@ const definition: Monster = {
   damageType: 'physical',
   attackIntervalMs: 2_000, speed: 300, aggroRadius: 8,
   attackRange: 1, leashRadius: 0, blockable: false, loot: { items: [] },
+  canWalkOnFire: true, canWalkOnPoison: true, canWalkOnEnergy: true,
   mitigation: compileMitigation(undefined),
   abilities: [{
     id: BASIC_ABILITY_ID, cadenceMs: 2_000, target: { range: 1 },
