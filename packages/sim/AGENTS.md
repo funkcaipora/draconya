@@ -485,3 +485,14 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   fórmula) não mudou nesta issue — as duas mecânicas escrevem o MESMO campo de runtime
   (`ConditionState.speedPercent`), mas por conteúdo e código diferentes; ver
   `docs/product/combat.md` (CMB-11) para o porquê de não terem sido unificadas.
+- **`playerDefense`/`playerMitigation` (`combat/player-defense.ts`, #549, M30-02) conferem
+  escudo e arma em SEQUÊNCIA, não em exclusão mútua** — a arma pode SOBRESCREVER o que o escudo
+  já escreveu (`defenseValue`/`shieldFactor`/`distanceFactor`), na ordem exata do Canary
+  (`Player::getDefense`/`PlayerWheel::calculateMitigation`): trocar a ordem das duas checagens
+  muda o resultado do Knight com Mystic Blade + Mastermind Shield (as duas contribuem juntas).
+  **`fightMode` é sempre `'attack'` em produção** (`hunt.ts#playerDefenseV3`/`#playerMitigationV3`)
+  até a M30-03 ligar um seletor de postura de verdade — a mesma decisão que
+  `combat.weaponDamage.attackFactor` já tomou para o `combat-v2`. **`#playerDefender` bifurca por
+  `compatibilityProfile`**: `combat-v1`/`v2` continuam com os números antigos
+  (`combat.player.armor` + equipado; `#defenseSourceOf`), só `combat-v3` usa as três funções
+  novas — mexer nas duas sem entender a bifurcação quebra uma sessão v1/v2 congelada (ADR 0031).

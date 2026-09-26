@@ -527,6 +527,21 @@ export class Inventory {
   }
 
   /**
+   * A DEFINIÇÃO do que está no slot de escudo (mão secundária), ou `null` sem nada lá (#549,
+   * M30-02) — escudo, spellbook ou quiver, as três peças que só existem nesse slot. Irmã de
+   * `weapon()`: mesma checagem de requisito, mesma leitura de "não veste" para snapshot antigo
+   * ou instância fora de `equip`.
+   */
+  shield(catalog: ReadonlyMap<string, Item>, wearer: Requirements): Item | null {
+    const carried = this.#equipped.get('shield');
+    if (carried === undefined) return null;
+    const definition = catalog.get(carried.itemId);
+    if (definition === undefined) return null;
+    if (!this.#meets(definition, wearer)) return null;
+    return definition;
+  }
+
+  /**
    * A fonte de DEFESA do que está vestido (CMB-04, DT-01): escudo primeiro, depois a arma de
    * uma mão, e `none` quando não há nenhuma das duas.
    *

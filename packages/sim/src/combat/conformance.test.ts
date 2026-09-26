@@ -360,6 +360,7 @@ const PROGRESSION: Progression = {
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
+  mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
 };
 
 /** O monstro que compõe o cenário: ability em área, DOT e campo, tudo com número fixo. */
