@@ -35,7 +35,7 @@
     "dev:dragon-party": "tsc -b && pnpm --filter @draconya/tools dev:dragon-party"
   },
   "devDependencies": {
-    "@types/node": "^24.13.4",
+    "@types/node": "^24.13.5",
     "@typescript-eslint/parser": "^8.70.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.10.0",
@@ -44,7 +44,7 @@
     "postgres": "^3.4.9",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "fflate": "^0.8.3",
