@@ -19,6 +19,8 @@ import { createWorldScene, loadWorldIndex, sectorFetcher } from '../world/world-
 import type { WorldScene } from '../world/world-scene.js';
 import { loadWorldLinks, loadWorldPlaces } from '../world/world-places.js';
 import type { LinkIndex, WorldPlaces } from '../world/world-places.js';
+import { loadCreatureSource } from '../world/world-creatures.js';
+import type { CreatureSource } from '../world/world-creatures.js';
 import { WorldPlacesLayer } from './WorldPlacesLayer.js';
 import type { OverlayLayers } from './WorldPlacesLayer.js';
 import { useBrowserPack } from './useBrowserPack.js';
@@ -55,6 +57,11 @@ export function WorldExplorer() {
   const [places, setPlaces] = useState<WorldPlaces | null>(null);
   const [links, setLinks] = useState<LinkIndex | null>(null);
   const [layers, setLayers] = useState<OverlayLayers>({ houses: true, zones: false, links: true });
+  const [showCreatures, setShowCreatures] = useState(true);
+  /** As criaturas do mapa, lidas pelo laço do Pixi a cada quadro — por isso numa ref. */
+  const creaturesRef = useRef<CreatureSource | null>(null);
+  const showCreaturesRef = useRef(true);
+  showCreaturesRef.current = showCreatures;
   /** O que está sob o ponteiro: coordenada, casa e zona — a leitura da camada de lugares. */
   const [hover, setHover] = useState<string>('');
   /** O teclado do explorador para quando o mapa-múndi está aberto — ele tem o dele. */
@@ -96,7 +103,15 @@ export function WorldExplorer() {
     const baseUrl = import.meta.env.VITE_THINGS_URL;
 
     void (async () => {
-      const mounted = await mountViewport(parent, { pack: null, book, camera: () => cameraRef.current });
+      const mounted = await mountViewport(parent, {
+        pack: null, book, camera: () => cameraRef.current,
+        creatures: () => {
+          const source = creaturesRef.current;
+          if (source === null || !showCreaturesRef.current) return [];
+          const { x, y, z } = cameraRef.current;
+          return source.near(x, y, z, CREATURE_RADIUS);
+        },
+      });
       if (cancelled) { mounted.destroy(); return; }
       handleRef.current = mounted;
       if (loaded !== null) mounted.setPack(loaded.pack);
@@ -107,10 +122,11 @@ export function WorldExplorer() {
       sceneRef.current = scene;
       mounted.setScene(scene);
       setStatus('ready');
-      const [source, placesFile, linkIndex] = await Promise.all([
-        loadMinimapSource(baseUrl), loadWorldPlaces(baseUrl), loadWorldLinks(baseUrl),
+      const [source, placesFile, linkIndex, creatureSource] = await Promise.all([
+        loadMinimapSource(baseUrl), loadWorldPlaces(baseUrl), loadWorldLinks(baseUrl), loadCreatureSource(baseUrl),
       ]);
       if (cancelled) return;
+      creaturesRef.current = creatureSource;
       setMinimap(source);
       setPlaces(placesFile);
       setLinks(linkIndex);
@@ -178,8 +194,13 @@ export function WorldExplorer() {
     const view = viewFor(parent.clientWidth, parent.clientHeight, zoom);
     return tileAtScreen({ x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom }, cameraRef.current, view);
   };
-  const describe = (x: number, y: number, z: number): string => {
+  const describe = (x: number, y: number, z: number, clientX: number, clientY: number): string => {
     const parts = [`${x},${y},${z}`];
+    const creatureId = showCreaturesRef.current ? handleRef.current?.creatureAt(clientX, clientY) ?? null : null;
+    const creature = creatureId === null ? null : creaturesRef.current?.describe(creatureId) ?? null;
+    if (creature !== null) {
+      parts.push(creature.type.kind === 'npc' ? `NPC ${creature.type.name}` : `${creature.type.name} (renasce em ${creature.spawntime} s)`);
+    }
     const meta = sceneRef.current?.metaAt(x, y, z) ?? null;
     if (meta?.houseId !== undefined) {
       const house = places?.houses.find((h) => h.id === meta.houseId);
@@ -199,7 +220,7 @@ export function WorldExplorer() {
     const last = dragRef.current;
     if (last === null) {
       const tile = tileUnder(event.clientX, event.clientY);
-      if (tile !== null) setHover(describe(tile.x, tile.y, cameraRef.current.z));
+      if (tile !== null) setHover(describe(tile.x, tile.y, cameraRef.current.z, event.clientX, event.clientY));
       return;
     }
     const dx = event.clientX - last.x;
@@ -285,6 +306,7 @@ export function WorldExplorer() {
           <label><input type="checkbox" checked={layers.houses} onChange={() => { toggleLayer('houses'); }} /> casas</label>
           <label><input type="checkbox" checked={layers.zones} onChange={() => { toggleLayer('zones'); }} /> zonas</label>
           <label><input type="checkbox" checked={layers.links} onChange={() => { toggleLayer('links'); }} /> escadas</label>
+          <label><input type="checkbox" checked={showCreatures} onChange={() => { setShowCreatures((on) => !on); }} /> criaturas</label>
         </div>
         <p className="world-explorer__hover" data-testid="explorer-hover">{hover}</p>
         {minimap !== null && (
@@ -306,6 +328,9 @@ export function WorldExplorer() {
     </div>
   );
 }
+
+/** Quantos tiles em volta da câmera a fonte de criaturas entrega: a tela inteira a 1× com folga. */
+const CREATURE_RADIUS = 30;
 
 const LINK_NAMES: Readonly<Record<string, string>> = { stairs: 'escada', ladder: 'escada de mão', rope: 'corda', teleport: 'teleporte' };
 

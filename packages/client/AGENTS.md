@@ -364,6 +364,10 @@ pnpm tsx scripts/make-sheet-fixture.ts
   `WorldScene.metaAt` (flags e casa do setor que o pintor já trouxe — nunca pede setor) e o índice
   de `world/world-places.ts` (`links.json` e `places.json`). Clique sem arrasto numa ligação leva
   ao destino. **Não confundir com `shell/WorldOverlay.tsx`**, que é o overlay de área do HUD do jogo.
+  **Criaturas (#665)**: `ViewportOptions.creatures` troca a fonte das criaturas desenhadas — o
+  explorador entrega os NPCs e spawns do Canary perto da câmera (`world/world-creatures.ts`,
+  blocos de 256 tiles buscados sob demanda), parados e com vida cheia, e **nunca escreve no
+  `world` do jogo** (ADR 0007). Sem a opção, o viewport lê `world.creatures`, como sempre.
 - **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
   puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
   inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit
