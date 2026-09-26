@@ -293,7 +293,7 @@ if (import.meta.main) {
     strict: true,
   });
   const thingsDir = resolve(ROOT, values.things ?? process.env.THINGS_DIR ?? 'things');
-  const version = values.version ?? process.env.THINGS_VERSION ?? '1332';
+  const version = values.version ?? process.env.THINGS_VERSION ?? '1533';
   const otbmPath = resolve(thingsDir, 'maps', values.otbm ?? 'otservbr.otbm');
   if (!existsSync(otbmPath)) {
     console.error(`${otbmPath} não existe — rode pnpm map:fetch`);

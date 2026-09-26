@@ -93,7 +93,7 @@ describe('deriveLinks', () => {
 
 // O mapa real, quando gerado: a derivação bate com o que foi autorado à mão.
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const LINKS = join(ROOT, 'things', '1332', 'world', 'links.json');
+const LINKS = join(ROOT, 'things', '1533', 'world', 'links.json');
 
 describe.skipIf(!existsSync(LINKS))('ligações reais (things/)', () => {
   const data = JSON.parse(readFileSync(LINKS, 'utf8')) as { links: Array<[Point, Point, string]> };
