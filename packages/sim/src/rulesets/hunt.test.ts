@@ -98,7 +98,7 @@ const progression = {
 
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   // **Esquiva zero neste conteúdo de teste, e é decisão.** Com ela, dano vira função só do
   // tempo decorrido, e a comparação 10 Hz / 1 Hz mede o que ela deveria medir — a matemática
   // do tempo — em vez de medir em que ordem os sorteios caíram. Quem cuida do dodge é

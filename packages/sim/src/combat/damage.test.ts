@@ -12,7 +12,7 @@ const combat: Combat = {
   id: 'baseline',
   compatibilityProfile: 'combat-v1',
   dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   // O personagem desarmado não participa de nenhum caso deste arquivo: aqui o atacante e o
   // defensor são montados à mão, tijolo por tijolo. Está preenchido porque o tipo pede.
@@ -61,7 +61,7 @@ describe('resolveDamage', () => {
 
     const armouredAgainstMagic: Combat = {
       ...combat,
-      armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, arcane: 1 },
+      armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, drown: 1, lifedrain: 1, manadrain: 1, arcane: 1 },
     };
     expect(resolveDamage(spell, plate, 'pve', armouredAgainstMagic, rigged(false)).resolvedDamage)
       .toBe(80);
@@ -239,6 +239,30 @@ describe('mitigação por tipo: resistência, vulnerabilidade e imunidade (CMB-0
       swing, { armor: 20, dodgeChance: 0, mitigation: mitigation({}) }, 'pve', combat, rigged(false),
     );
     expect(empty).toEqual(plain);
+  });
+
+  it('#547 (M29-07): resistência a drown funciona como a de qualquer outro tipo', () => {
+    const result = resolveDamage(
+      hit(100, 'drown'), guard({ drown: 0.5 }), 'pve', combat, rigged(false),
+    );
+    expect(result.afterResistance).toBe(50);
+    expect(result.resolvedDamage).toBe(50);
+  });
+
+  it('#547 (M29-07): imunidade a lifedrain zera o dano', () => {
+    const result = resolveDamage(
+      hit(100, 'lifedrain'), guard({}, ['lifedrain']), 'pve', combat, rigged(false),
+    );
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
+  });
+
+  it('#547 (M29-07): imunidade a manadrain também zera — mesma regra dos demais tipos', () => {
+    const result = resolveDamage(
+      hit(100, 'manadrain'), guard({}, ['manadrain']), 'pve', combat, rigged(false),
+    );
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
   });
 });
 
@@ -520,6 +544,40 @@ describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () =
     const result = resolveDamage(hit(1_000, 'fire'), target, 'pve', v3, rigged(false), 0);
     expect(result.immune).toBe(true);
     expect(result.resolvedDamage).toBe(0);
+  });
+
+  it('#547 (M29-07): lifedrain e manadrain pulam a mitigação percentual (mitigationExempt)', () => {
+    // Magia (sem defesa/armadura, dragonLike.defenseMitigation 0,99 %): sem a isenção o
+    // resultado ficaria perto de 99, como no teste de magia acima. Com ela, o bruto passa
+    // inteiro — a mesma exceção do `Creature::mitigateDamage` do Canary.
+    const magicIntentOf = (damageType: 'lifedrain' | 'manadrain'): DamageIntent => ({
+      rawDamage: 100, source: 'monster-attack', damageType, blockable: MAGIC_BLOCK_FLAGS,
+    });
+    const lifedrain = resolveDamage(
+      magicIntentOf('lifedrain'), { ...dragonLike, blockCharge: FULL_BLOCK_CHARGE },
+      'pve', v3, rigged(false), 5_000,
+    );
+    const manadrain = resolveDamage(
+      magicIntentOf('manadrain'), { ...dragonLike, blockCharge: FULL_BLOCK_CHARGE },
+      'pve', v3, rigged(false), 5_000,
+    );
+    expect(lifedrain.resolvedDamage).toBe(100);
+    expect(lifedrain.defenseMitigationRemoved).toBe(0);
+    expect(manadrain.resolvedDamage).toBe(100);
+    expect(manadrain.defenseMitigationRemoved).toBe(0);
+  });
+
+  it('#547 (M29-07): drown NÃO é isento — a mitigação percentual continua incidindo', () => {
+    const drownIntent: DamageIntent = {
+      rawDamage: 100, source: 'monster-attack', damageType: 'drown', blockable: MAGIC_BLOCK_FLAGS,
+    };
+    const result = resolveDamage(
+      drownIntent, { ...dragonLike, blockCharge: FULL_BLOCK_CHARGE }, 'pve', v3, rigged(false), 5_000,
+    );
+    // A mesma conta do teste de magia física acima (0,99 % de 100 de mitigação).
+    expect(result.resolvedDamage).toBeLessThan(100);
+    expect(result.resolvedDamage).toBeGreaterThanOrEqual(99);
+    expect(result.defenseMitigationRemoved).toBeGreaterThan(0);
   });
 
   it('o piso poupa um alvo pesado quando não é imune', () => {

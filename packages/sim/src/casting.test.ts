@@ -9,7 +9,7 @@ import { Rng } from './rng.js';
 // cuida da matemática do golpe é `combat/damage.test.ts`.
 const combat: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, arcane: 1 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, drown: 1, lifedrain: 1, manadrain: 1, arcane: 1 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
 };

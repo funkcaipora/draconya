@@ -4294,7 +4294,9 @@ const slots = bot.groups.get(group);
       recordDamage(target.contribution, attacker, applied.healthDamage);
       session.emit({
         kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
-        amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+        // `manaDamage` (#547, M29-07): zero para todo tipo além de `manadrain`, que por sua vez
+        // zera `healthDamage` — a soma é sempre o número que de fato saiu do alvo.
+        amount: applied.healthDamage + applied.manaDamage, source: 'spell', position: this.#at(target),
         damageType: intent.damageType,
       });
       this.#emitCharacterHealth(session, target);
@@ -4309,7 +4311,9 @@ const slots = bot.groups.get(group);
     recordDamage(target.contribution, attacker, applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
-      amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+      // `manaDamage` (#547): sempre zero aqui — monstro não tem mana —, mas a soma mantém o
+      // mesmo contrato do golpe em personagem, sem um `if` por tipo de alvo.
+      amount: applied.healthDamage + applied.manaDamage, source: 'spell', position: this.#at(target),
       damageType: intent.damageType,
     });
     this.#emitHealth(session, target);
@@ -5309,7 +5313,9 @@ const slots = bot.groups.get(group);
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
-      amount: applied.healthDamage, source, position: this.#at(character),
+      // `manaDamage` (#547, M29-07): o número que sobe azul quando a ability é `manadrain` — a
+      // vida some do `healthDamage` (zero por design) para ele aparecer.
+      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(character),
       damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
@@ -5890,7 +5896,9 @@ const slots = bot.groups.get(group);
     // cliente contando uma história que a barra desmente.
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
-      amount: applied.healthDamage, source, position: this.#at(monster),
+      // `manaDamage` (#547): sempre zero contra um monstro (sem mana), mas soma pelo mesmo
+      // contrato de `#applyMonsterHit` — nenhum `if` por tipo de alvo aqui também.
+      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(monster),
       damageType: outcome.damageType,
     });
     this.#emitHealth(session, monster);

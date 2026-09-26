@@ -52,9 +52,9 @@ export interface Defender {
   readonly defense?: DefenseSource | undefined;
   /**
    * A mitigação percentual do `combat-v3` (#548, `Monster.defenseMitigation`): em [0, 30],
-   * aplicada por ÚLTIMO no estágio novo, sobre QUALQUER tipo (exceto a exceção de lifedrain/
-   * manadrain do Canary, ainda sem tipo correspondente — M29-07). Ausente é `0`: o jogador
-   * (M30-02) e todo monstro que não declara. Ignorado em `combat-v1`/`v2`.
+   * aplicada por ÚLTIMO no estágio novo, sobre QUALQUER tipo, exceto lifedrain e manadrain
+   * (#547, M29-07, a exceção do Canary — `mitigationExempt` em `blockhit.ts`). Ausente é `0`:
+   * o jogador (M30-02) e todo monstro que não declara. Ignorado em `combat-v1`/`v2`.
    */
   readonly defenseMitigation?: number | undefined;
   /**
@@ -354,9 +354,11 @@ function resolveBlockHitProfile(
     defense: defender.defense?.defense ?? 0,
     armor: defender.armor,
     defenseMitigationPercent: defender.defenseMitigation ?? 0,
-    // A exceção de lifedrain/manadrain do Canary não tem tipo correspondente ainda (M29-07):
-    // nunca isenta, hoje, para nenhum tipo do vocabulário atual.
-    mitigationExempt: false,
+    // A exceção do `mitigateDamage` do Canary (#547, M29-07, `creature.cpp:911-921`): a
+    // mitigação percentual NUNCA se aplica a lifedrain nem manadrain. `drown` não é isento —
+    // só os dois tipos de dreno ficam de fora, os únicos que o Canary pula ali (`agony` não
+    // existe no Draconya).
+    mitigationExempt: intent.damageType === 'lifedrain' || intent.damageType === 'manadrain',
     blockCharge: defender.blockCharge ?? FULL_BLOCK_CHARGE,
     nowMs,
   }, rng);

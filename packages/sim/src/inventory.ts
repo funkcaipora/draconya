@@ -596,7 +596,8 @@ export class Inventory {
     if (!contributing) return NEUTRAL_MITIGATION;
 
     const resistances: Record<DamageType, number> = {
-      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+      drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
     };
     const immunities = new Set<DamageType>();
     for (const carried of this.#equipped.values()) {
@@ -649,7 +650,10 @@ export class Inventory {
 
 /** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */
 const NEUTRAL_MITIGATION: CompiledMitigation = {
-  resistances: { physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  resistances: {
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  },
   immunities: new Set(),
 };
 
