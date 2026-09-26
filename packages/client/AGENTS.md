@@ -359,6 +359,11 @@ pnpm tsx scripts/make-sheet-fixture.ts
   256 px em seis níveis (`world/minimap.ts` é o contrato e a conta de coordenadas; `pnpm
   map:minimap` pinta a partir da cor de automapa, `AppearanceFlags.automapColor`, campo 30). O
   índice diz quais blocos existem, e bloco que não existe nunca é pedido.
+  **Lugares (#664)**: `shell/WorldPlacesLayer.tsx` desenha casas, zonas e marcadores de escada num
+  canvas 2D POR CIMA do Pixi, no andar da câmera, com a projeção de `world/camera.ts`. Lê
+  `WorldScene.metaAt` (flags e casa do setor que o pintor já trouxe — nunca pede setor) e o índice
+  de `world/world-places.ts` (`links.json` e `places.json`). Clique sem arrasto numa ligação leva
+  ao destino. **Não confundir com `shell/WorldOverlay.tsx`**, que é o overlay de área do HUD do jogo.
 - **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
   puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
   inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit
