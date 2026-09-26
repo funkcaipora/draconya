@@ -9612,6 +9612,65 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     expect(deviated / total).toBeLessThan(0.12);
   });
 
+  it('o bot NUNCA rola drunk duas vezes no MESMO vencimento, mesmo com o contorno de companheiro (#651)', () => {
+    // Achado da revisão do #651: o teste acima só cobre `requestMove` (`#step` UMA vez por
+    // chamada) — mas `#playerStep`, o passo do PRÓPRIO bot, pode chamar `#step` uma SEGUNDA vez
+    // no MESMO vencimento quando o próximo tile da rota está ocupado por um COMPANHEIRO parado
+    // (#203): o contorno via `greedyStep` tenta de novo. Sem a correção, a segunda chamada
+    // rolava drunk de novo — um vencimento só de `PLAYER_STEP` consumindo DOIS sorteios
+    // independentes. O próprio Canary nunca faz isso: quando o passo primário de
+    // `Monster::doFollowCreature`/`doWalkBack` (`monster.cpp`) falha, o fallback
+    // (`getDanceStep`/`getRandomStep`) NUNCA volta a chamar `Creature::getNextStep`/`onWalk` —
+    // o sorteio é UM por DECISÃO de movimento, nunca um por tentativa física de chegar lá.
+    class ScriptedDrunkRng extends Rng {
+      drunkRolls = 0;
+
+      override integer(min: number, max: number): number {
+        if (min === 0 && max === 60) {
+          this.drunkRolls += 1;
+          // Sempre > DIRECTION_DIAGONAL_MASK (4): nunca desvia nem fala, então o alvo original
+          // não muda entre rolagens — o companheiro trava o MESMO tile em toda tentativa. Este
+          // teste mede a CONTAGEM de sorteios, não a taxa de desvio (já coberta acima).
+          return 10;
+        }
+        return super.integer(min, max);
+      }
+    }
+    const rng = new ScriptedDrunkRng(Rng.fromSeed('drunk-companion-651').getState());
+    // Sem `spawnPoints`: nenhum monstro nasce para interferir — só a geometria de rota e
+    // companheiro importa aqui.
+    const loaded = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+    const session = new Session({
+      id: 'drunk-companion-651', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+    });
+    const hero = character();
+    const blocker = new CharacterRuntime({ ...character().getState(), id: 'blocker' });
+    session.enter(hero);
+    session.enter(blocker);
+    // `placeNear`/`tilesAround` (#203) colocam o SEGUNDO participante no tile LIVRE mais
+    // próximo do início da rota, em ordem fixa de anel — para esta sala e esta rota, isso é
+    // exatamente (2,1): o PRÓXIMO tile da rota do herói. Confirma a premissa da geometria antes
+    // de travar o bloqueador nela — se o algoritmo de posicionamento mudar, este teste falha
+    // aqui, alto e claro, em vez de silenciosamente deixar de cobrir o ramo que existe para
+    // testar.
+    expect(blocker.position).toEqual({ x: 2, y: 1, z: 7 });
+    // Trava o bloqueador ONDE está: sem passo próprio, ele nunca sai da frente sozinho (o mesmo
+    // `stand()` do describe de follow, mais abaixo, sem precisar importar o helper de lá).
+    session.cancelEvent('player-step', 'blocker');
+    hero.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+
+    // UM vencimento do PLAYER_STEP do herói: a rota pede (2,1), o bloqueador está lá, o ramo de
+    // contorno (`#companionAt`/`greedyStep`) chama `#step` uma segunda vez.
+    session.advanceBy(1);
+
+    expect(rng.drunkRolls).toBe(1);
+    // O contorno realmente rodou: o herói saiu de (1,1) para um tile ADJACENTE que não é o do
+    // bloqueador — a prova de que o ramo certo foi exercitado, não só "nada aconteceu".
+    expect(hero.position).not.toEqual({ x: 1, y: 1, z: 7 });
+    expect(hero.position).not.toEqual(blocker.position);
+  });
+
   it('o MONSTRO com drunk também desvia (ADR 0041 decisão 3, invariante 11) — mesmo `#step`', () => {
     // O teste acima já prova a mecânica no PERSONAGEM; este prova o outro lado do invariante 11:
     // o passo do PRÓPRIO monstro, guiado pela IA (nunca pelo bot do jogador), passa pelo MESMO
