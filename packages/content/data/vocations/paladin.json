@@ -26,5 +26,10 @@
     "distance": 1.1,
     "shielding": 1.1,
     "magic": 1.4
+  },
+  "mitigation": {
+    "multiplier": 1.28,
+    "primaryShield": 2.08,
+    "secondaryShield": 1.2
   }
 }

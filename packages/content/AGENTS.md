@@ -321,6 +321,25 @@ recusa `defense > 0` fora daí. O perfil declara `combat.defense` (`blockChance`
 catálogo de skills E subir por `shield-block` — as duas coisas são conferidas no boot, porque uma
 referência torta deixaria o escudo sem treinar ou uma skill que nunca sobe.
 
+**`extraDefense`/`spellbook`/`quiver` só existem para a conta do JOGADOR** (#549, M30-02;
+`sim/combat/player-defense.ts`) — diferente de `defense` acima, nenhum dos três entra no
+`combat-v3` de monstro nem no bloqueio do CMB-04. `extraDefense` (só `kind: 'weapon'`) é o
+`extradef` do Canary, somado ao `defense` do ESCUDO (ou da própria arma, se for de duas mãos) —
+a Mystic Blade do kit level 200 é o único item que o declara hoje. `spellbook`/`quiver` (só
+`kind: 'shield'`, mutuamente exclusivos) marcam o "escudo" que usa `secondaryShield` da vocação
+em vez de `primaryShield` na mitigação — o Spellbook of Mind Control (Sorcerer/Druid) declara o
+primeiro; nenhum item hoje declara o segundo (a Royal Crossbow do Paladin é de duas mãos e usa
+`Weapon.ammoFamily` para o mesmo efeito, não um item de escudo).
+
+**`vocation.mitigation`/`progression.mitigation`** (#549, M30-02) são o `<mitigation multiplier
+primaryShield secondaryShield>` de `vocations.xml` — SEM relação com `mitigationSchema`
+(resistência/imunidade por tipo, CMB-03) nem com `Monster.defenseMitigation` (ADR 0040), apesar
+do nome repetido (o próprio Canary também reusa "mitigação" para os três). O de `progression` tem
+DEFAULT (os números da vocação `None`) — diferente de `regen`, que fica sem um de propósito —
+porque aqui o número É o do Canary, verificado, e o default só existe para não reabrir a dúzia de
+fixtures de teste que constroem `Progression` sem falar de combate; o conteúdo REAL declara os
+três de qualquer forma.
+
 **O kit de nascimento e as armas de vocação** (#151, ADR 0026) são os primeiros itens com
 que o jogo se compromete, e cada id de aparência foi **conferido de olho** — o índice da
 biblioteca (`things/<versão>/library/appearances/object.jsonl`) não tem nome, e um id errado

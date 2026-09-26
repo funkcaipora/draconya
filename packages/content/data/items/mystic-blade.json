@@ -7,6 +7,7 @@
   "value": 20000,
   "attack": 44,
   "defense": 25,
+  "extraDefense": 2,
   "requires": {
     "level": 60
   },
@@ -15,5 +16,5 @@
     "family": "sword",
     "range": 1
   },
-  "_open": "SUBSTITUI a Magic Longsword da issue (#524): a Magic Longsword é `slotType=\"two-handed\"` no Canary `items.xml` id 3278 e no TFS `items.xml` id 2390 (os dois conferidos, 2026-09-24) — ocupa o slot do escudo, e o kit do Knight pede Mastermind Shield junto. Troca registrada na PR, como a issue autoriza (\"item com requisito incompatível... trocar pelo equivalente do Tibia\"). Mystic Blade (Canary `items.xml` id 7384): attack 44, defense 25, weight 3500 (35 oz), level 60, sem vocação — espada de UMA mão, usável com escudo. `value` 20000: Nah'Bob compra por esse preço (TibiaWiki via tibiascape.com/library/items/mystic-blade)."
+  "_open": "SUBSTITUI a Magic Longsword da issue (#524): a Magic Longsword é `slotType=\"two-handed\"` no Canary `items.xml` id 3278 e no TFS `items.xml` id 2390 (os dois conferidos, 2026-09-24) — ocupa o slot do escudo, e o kit do Knight pede Mastermind Shield junto. Troca registrada na PR, como a issue autoriza (\"item com requisito incompatível... trocar pelo equivalente do Tibia\"). Mystic Blade (Canary `items.xml` id 7384): attack 44, defense 25, weight 3500 (35 oz), level 60, sem vocação — espada de UMA mão, usável com escudo. `value` 20000: Nah'Bob compra por esse preço (TibiaWiki via tibiascape.com/library/items/mystic-blade). `extraDefense` 2 é o `extradef` do mesmo id 7384 (#549, M30-02) — conferido em 2026-09-26, entra na conta de `playerDefense`/`playerMitigation` do jogador, nunca isolado."
 }

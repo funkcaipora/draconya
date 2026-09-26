@@ -657,6 +657,34 @@ export const itemSchema = z.strictObject({
    */
   defense: z.number().int().nonnegative().default(0),
   /**
+   * O `extradef` da ARMA (#549, M30-02; `Player::getDefense`, Canary `player.cpp:776-813`) — a
+   * defesa ADICIONAL que só conta na fórmula de defesa/mitigação do JOGADOR (`playerDefense`/
+   * `playerMitigation`, `sim/combat/player-defense.ts`), somada ao `defense` do escudo (ou da
+   * própria arma, se ela for de duas mãos). Diferente de `defense` (CMB-04: o que a peça BLOQUEIA
+   * no `combat-v1`/`v2`, e a magnitude do estágio novo do `combat-v3`), `extraDefense` só existe
+   * dentro da conta do jogador — nunca aparece isolado. `0` é o default que preserva toda arma
+   * sem o atributo (a maioria: só a Mystic Blade do kit level 200 o declara, Canary `items.xml`
+   * id 7384, `extradef value="2"`). Só em `kind: 'weapon'` — `buildContent` recusa o resto,
+   * como já faz com `defense`.
+   */
+  extraDefense: z.number().int().nonnegative().default(0),
+  /**
+   * O escudo é um SPELLBOOK (#549, M30-02; `Item::isSpellBook`, Canary `item.hpp:553-555`) — o
+   * "escudo" de Sorcerer/Druid, vestido com wand/rod na outra mão. Só muda `playerMitigation`:
+   * em vez do `primaryShield` da vocação, ele usa o `secondaryShield` como `distanceFactor`
+   * (a mesma leitura que o `quiver` do Paladin usa, por um mecanismo diferente — arco/besta).
+   * Só em `kind: 'shield'`, e nunca junto de `quiver` — `buildContent` recusa as duas.
+   */
+  spellbook: z.boolean().default(false),
+  /**
+   * O escudo é um QUIVER (#549, M30-02; `Item::isQuiver`, Canary `item.hpp:544-546`) — o
+   * carcás que segura munição na mão secundária. Mesma leitura do `spellbook` em
+   * `playerMitigation` (`secondaryShield` como `distanceFactor`); nenhum item do catálogo atual
+   * o declara (a Royal Crossbow do Paladin é de duas mãos, sem escudo — o `ammoFamily` da ARMA
+   * já cobre o `distanceFactor` dela). Só em `kind: 'shield'`, e nunca junto de `spellbook`.
+   */
+  quiver: z.boolean().default(false),
+  /**
    * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
    *
    * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
@@ -1831,6 +1859,22 @@ export const vocationSchema = z.object({
     manaPerSecond: z.number().nonnegative(),
   }).optional(),
   /**
+   * A mitigação percentual do JOGADOR desta vocação (#549, M30-02; `PlayerWheel::
+   * calculateMitigation`, Canary `player_wheel.cpp:4072-4124`) — o `<mitigation multiplier
+   * primaryShield secondaryShield>` de `vocations.xml`. SEM RELAÇÃO com `mitigationSchema`
+   * (resistência/imunidade por tipo, CMB-03) nem com `Monster.defenseMitigation` (ADR 0040): os
+   * três se chamam "mitigação" porque o Canary também repete o nome para conceitos diferentes.
+   * `multiplier` escala a skill de escudo; `primaryShield`/`secondaryShield` escalam a defesa da
+   * peça — o segundo é o que spellbook, quiver e arma de duas mãos usam em vez do primeiro.
+   * Ausente: quem monta a sessão cai em `progression.mitigation` (a vocação `None`), a mesma
+   * regra de `regen` acima. `playerMitigation` (`sim/combat/player-defense.ts`) consome os três.
+   */
+  mitigation: z.object({
+    multiplier: z.number().nonnegative(),
+    primaryShield: z.number().nonnegative(),
+    secondaryShield: z.number().nonnegative(),
+  }).optional(),
+  /**
    * Quanto esta vocação demora para subir cada skill (#521, ADR 0037): o `factor` de
    * `pointsForLevel` (`skills.ts`) por `skillId`, substituindo o da tabela do conteúdo da
    * skill. É o `<skill id multiplier="…">` do Canary `vocations.xml` — a mesma chave cobre
@@ -1917,6 +1961,25 @@ export const progressionSchema = z.object({
     healthPerSecond: z.number().nonnegative(),
     manaPerSecond: z.number().nonnegative(),
   }),
+  /**
+   * A mitigação percentual BASE (#549, M30-02) — a vocação `None` do Canary `vocations.xml`
+   * (`<mitigation multiplier="1.3" primaryShield="2.05" secondaryShield="1.25">`), para quem
+   * ainda não tem vocação (níveis 1–7, §7.4) e para o conteúdo de teste que não declara uma.
+   *
+   * Ausente aqui é o default ABAIXO — os mesmos três números —, e não a lacuna que `regen`
+   * (sem default, acima) marca de propósito: `regen` ficou sem default porque o Canary não tem
+   * "regeneração de quem não tem vocação" nenhuma para copiar (§9.3 é number provisório, por
+   * decisão). Aqui o número É o do Canary, verificado, e não uma lacuna de balanceamento — o
+   * default existe só para não reabrir a dúzia de fixtures de teste que já constroem
+   * `progressionSchema` sem falar de combate. `content/data/progression/baseline.json` (o
+   * conteúdo REAL) declara os três de qualquer forma, como o `weaponSchema.family` já declara o
+   * que teria default.
+   */
+  mitigation: z.object({
+    multiplier: z.number().nonnegative(),
+    primaryShield: z.number().nonnegative(),
+    secondaryShield: z.number().nonnegative(),
+  }).default(() => ({ multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 })),
   /**
    * Com o que todo personagem nasce, já VESTIDO (ADR 0026, decisão 2; #153): o item e o slot
    * em que ele entra. É número de conteúdo, como o bot padrão — trocar a machete por outra
