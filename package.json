@@ -26,6 +26,7 @@
     "assets:fetch:1098": "tsx scripts/fetch-open-tibia-assets.ts",
     "map:fetch": "tsx scripts/fetch-map.ts",
     "map:import": "tsx scripts/import-map.ts",
+    "map:census": "tsx scripts/map-census.ts",
     "route:trace": "tsx scripts/trace-route.ts",
     "bench:monster": "tsc -b && pnpm --filter @draconya/tools bench:monster",
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",

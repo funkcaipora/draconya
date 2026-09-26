@@ -68,8 +68,20 @@ const ATTRIBUTE_SIZE: Readonly<Record<number, number | 'string'>> = {
 };
 
 const ATTR_TILE_FLAGS = 0x03;
+const ATTR_ACTION_ID = 0x04;
+const ATTR_UNIQUE_ID = 0x05;
+const ATTR_TELEPORT = 0x08;
 const ATTR_ITEM = 0x09;
+const ATTR_HOUSE_DOOR = 0x0e;
 const ATTR_COUNT = 0x0f;
+
+/** Os bits de `TILE_FLAGS`, pelos números do formato. */
+export const TILE_FLAG = {
+  protectionZone: 1 << 0,
+  noPvp: 1 << 2,
+  noLogout: 1 << 3,
+  pvpZone: 1 << 4,
+} as const;
 
 export interface OtbmHeader {
   readonly version: number;
@@ -79,10 +91,33 @@ export interface OtbmHeader {
   readonly itemsMinorVersion: number;
 }
 
+export interface OtbmPosition {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export interface OtbmItem {
   readonly id: number;
   /** Só quando o item é empilhável e o arquivo gravou a contagem. */
   readonly count?: number;
+  /** Só em teleporte: para onde ele leva. */
+  readonly teleportTo?: OtbmPosition;
+  /** Só em porta de casa. */
+  readonly houseDoorId?: number;
+  readonly actionId?: number;
+  readonly uniqueId?: number;
+}
+
+export interface OtbmTown {
+  readonly id: number;
+  readonly name: string;
+  readonly temple: OtbmPosition;
+}
+
+export interface OtbmWaypoint {
+  readonly name: string;
+  readonly position: OtbmPosition;
 }
 
 export interface OtbmTile {
@@ -124,6 +159,14 @@ class Payload {
   }
   u16(): number { return this.u8() | (this.u8() << 8); }
   u32(): number { return (this.u16() | (this.u16() << 16)) >>> 0; }
+  string(): string { return new TextDecoder('latin1').decode(this.take(this.u16())); }
+  position(): OtbmPosition { return { x: this.u16(), y: this.u16(), z: this.u8() }; }
+  take(count: number): Uint8Array {
+    if (this.#at + count > this.bytes.length) throw new OtbmError('payload truncado', this.offset);
+    const slice = this.bytes.subarray(this.#at, this.#at + count);
+    this.#at += count;
+    return slice;
+  }
   skip(count: number): void {
     if (this.#at + count > this.bytes.length) throw new OtbmError('payload truncado', this.offset);
     this.#at += count;
@@ -153,11 +196,19 @@ function readPayload(bytes: Uint8Array, at: number): { payload: Payload; end: nu
   return { payload: new Payload(Uint8Array.from(out), at), end: i };
 }
 
+interface Attributes {
+  flags: number;
+  ground: number | null;
+  count?: number;
+  teleportTo?: OtbmPosition;
+  houseDoorId?: number;
+  actionId?: number;
+  uniqueId?: number;
+}
+
 /** Consome os atributos de um tile ou item; devolve o que interessa e para no fim do payload. */
-function readAttributes(payload: Payload, offset: number): { flags: number; ground: number | null; count?: number } {
-  let flags = 0;
-  let ground: number | null = null;
-  let count: number | undefined;
+function readAttributes(payload: Payload, offset: number): Attributes {
+  const out: Attributes = { flags: 0, ground: null };
   while (!payload.done) {
     const type = payload.u8();
     const size = ATTRIBUTE_SIZE[type];
@@ -165,12 +216,27 @@ function readAttributes(payload: Payload, offset: number): { flags: number; grou
       throw new OtbmError(`atributo desconhecido 0x${type.toString(16)} em tile/item — sem tamanho, não dá para pular`, offset);
     }
     if (size === 'string') { payload.skip(payload.u16()); continue; }
-    if (type === ATTR_TILE_FLAGS) { flags = payload.u32(); continue; }
-    if (type === ATTR_ITEM) { ground = payload.u16(); continue; }
-    if (type === ATTR_COUNT) { count = payload.u8(); continue; }
+    if (type === ATTR_TILE_FLAGS) { out.flags = payload.u32(); continue; }
+    if (type === ATTR_ITEM) { out.ground = payload.u16(); continue; }
+    if (type === ATTR_COUNT) { out.count = payload.u8(); continue; }
+    if (type === ATTR_TELEPORT) { out.teleportTo = payload.position(); continue; }
+    if (type === ATTR_HOUSE_DOOR) { out.houseDoorId = payload.u8(); continue; }
+    if (type === ATTR_ACTION_ID) { out.actionId = payload.u16(); continue; }
+    if (type === ATTR_UNIQUE_ID) { out.uniqueId = payload.u16(); continue; }
     payload.skip(size);
   }
-  return count === undefined ? { flags, ground } : { flags, ground, count };
+  return out;
+}
+
+/** O item como o leitor o entrega: só as chaves que o arquivo gravou. */
+function itemFrom(id: number, attributes: Attributes): OtbmItem {
+  const item: { -readonly [K in keyof OtbmItem]: OtbmItem[K] } = { id };
+  if (attributes.count !== undefined) item.count = attributes.count;
+  if (attributes.teleportTo !== undefined) item.teleportTo = attributes.teleportTo;
+  if (attributes.houseDoorId !== undefined) item.houseDoorId = attributes.houseDoorId;
+  if (attributes.actionId !== undefined) item.actionId = attributes.actionId;
+  if (attributes.uniqueId !== undefined) item.uniqueId = attributes.uniqueId;
+  return item;
 }
 
 /** O cabeçalho do arquivo — o nó raiz. */
@@ -289,7 +355,7 @@ export function* readOtbmTiles(bytes: Uint8Array, region: Region): Generator<Otb
       // que importa é o item de fora; o de dentro não existe no mapa. Guardamos só o de fora.
       const parent = stack[stack.length - 1];
       if (owner !== null && parent !== undefined && parent.tile !== null) {
-        owner.items.push(attributes.count === undefined ? { id } : { id, count: attributes.count });
+        owner.items.push(itemFrom(id, attributes));
       }
       stack.push({ type, tile: null });
       i = end;
@@ -302,6 +368,43 @@ export function* readOtbmTiles(bytes: Uint8Array, region: Region): Generator<Otb
     i = end;
   }
   if (stack.length > 0) throw new OtbmError('arquivo terminou com nó aberto', i);
+}
+
+/**
+ * Cidades e waypoints do arquivo. Os tile areas são pulados inteiros, sem ler tile: o que
+ * interessa aqui mora em dois nós irmãos deles, no fim do map data.
+ */
+export function readOtbmTownsAndWaypoints(bytes: Uint8Array): { towns: OtbmTown[]; waypoints: OtbmWaypoint[] } {
+  readOtbmHeader(bytes);
+  const towns: OtbmTown[] = [];
+  const waypoints: OtbmWaypoint[] = [];
+  let depth = 0;
+  let i = 4;
+  while (i < bytes.length) {
+    const byte = bytes[i] as number;
+    if (byte === ESCAPE) { i += 2; continue; }
+    if (byte === NODE_END) {
+      if (depth === 0) throw new OtbmError('FF sem nó aberto', i);
+      depth -= 1;
+      i += 1;
+      continue;
+    }
+    if (byte !== NODE_START) { i += 1; continue; }
+    const type = bytes[i + 1];
+    if (type === undefined) throw new OtbmError('FE no fim do arquivo', i);
+    const start = i + 2;
+    if (type === NODE.tileArea) { i = skipNode(bytes, start); continue; }
+    const { payload, end } = readPayload(bytes, start);
+    if (type === NODE.town) {
+      towns.push({ id: payload.u32(), name: payload.string(), temple: payload.position() });
+    } else if (type === NODE.waypoint) {
+      waypoints.push({ name: payload.string(), position: payload.position() });
+    }
+    depth += 1;
+    i = end;
+  }
+  if (depth > 0) throw new OtbmError('arquivo terminou com nó aberto', i);
+  return { towns, waypoints };
 }
 
 /** Codifica bytes com o escape do formato — para fixture e para quem for escrever OTBM. */

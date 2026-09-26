@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NODE, OtbmError, otbmNode, readOtbmHeader, readOtbmTiles, u16, u32, u8 } from './otbm.js';
+import { NODE, OtbmError, otbmNode, readOtbmHeader, readOtbmTiles, readOtbmTownsAndWaypoints, u16, u32, u8 } from './otbm.js';
 import type { Region } from './otbm.js';
 
 // Um OTBM sintético, montado a partir do formato — nunca um arquivo real de 184 MB. A fixture
@@ -22,6 +22,15 @@ const item = (id: number, attrs: number[] = [], children: number[][] = []): numb
 const ground = (id: number): number[] => [0x09, ...u16(id)];
 const flags = (bits: number): number[] => [0x03, ...u32(bits)];
 const count = (n: number): number[] => [0x0f, ...u8(n)];
+
+const text = (value: string): number[] => [...u16(value.length), ...[...value].map((c) => c.charCodeAt(0))];
+const position = (x: number, y: number, z: number): number[] => [...u16(x), ...u16(y), ...u8(z)];
+const towns = (children: number[][]): number[] => otbmNode(NODE.towns, [], children);
+const town = (id: number, name: string, x: number, y: number, z: number): number[] =>
+  otbmNode(NODE.town, [...u32(id), ...text(name), ...position(x, y, z)]);
+const waypoints = (children: number[][]): number[] => otbmNode(NODE.waypoints, [], children);
+const waypoint = (name: string, x: number, y: number, z: number): number[] =>
+  otbmNode(NODE.waypoint, [...text(name), ...position(x, y, z)]);
 
 const file = (areas: number[][]): Uint8Array =>
   Uint8Array.from([...header(), ...root([mapData(areas)])]);
@@ -120,5 +129,41 @@ describe('readOtbmTiles', () => {
   it('nó sem fechamento é erro, não laço infinito', () => {
     const broken = Uint8Array.from([...header(), 0xfe, 0x00, ...u32(4), ...u16(1), ...u16(1), ...u32(4), ...u32(4)]);
     expect(() => all(broken)).toThrow(OtbmError);
+  });
+});
+
+describe('atributos de item que o censo lê', () => {
+  it('teleporte, porta de casa, action id e unique id viram campos do item', () => {
+    const bytes = file([area(32000, 32000, 7, [
+      tile(1, 1, ground(410), [
+        item(1949, [0x08, ...position(32100, 32200, 8)]),
+        item(6249, [0x0e, ...u8(3), 0x04, ...u16(2000), 0x05, ...u16(3001)]),
+      ]),
+    ])]);
+    expect(all(bytes)[0]?.items).toEqual([
+      { id: 1949, teleportTo: { x: 32100, y: 32200, z: 8 } },
+      { id: 6249, houseDoorId: 3, actionId: 2000, uniqueId: 3001 },
+    ]);
+  });
+});
+
+describe('readOtbmTownsAndWaypoints', () => {
+  it('lê cidades com templo e waypoints, pulando os tile areas', () => {
+    const bytes = Uint8Array.from([...header(), ...root([mapData([
+      area(32000, 32000, 7, [tile(1, 1, ground(1))]),
+      towns([town(8, 'Thais', 32369, 32241, 7), town(2, 'Carlin', 32360, 31782, 7)]),
+      waypoints([waypoint('ghostland', 32212, 31823, 7)]),
+    ])])]);
+    expect(readOtbmTownsAndWaypoints(bytes)).toEqual({
+      towns: [
+        { id: 8, name: 'Thais', temple: { x: 32369, y: 32241, z: 7 } },
+        { id: 2, name: 'Carlin', temple: { x: 32360, y: 31782, z: 7 } },
+      ],
+      waypoints: [{ name: 'ghostland', position: { x: 32212, y: 31823, z: 7 } }],
+    });
+  });
+
+  it('arquivo sem cidade nem waypoint devolve listas vazias', () => {
+    expect(readOtbmTownsAndWaypoints(file([]))).toEqual({ towns: [], waypoints: [] });
   });
 });
