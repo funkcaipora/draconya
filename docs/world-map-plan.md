@@ -148,3 +148,35 @@ Só depois das fases 0–5, e só se o dono pedir:
 - **ADR 0019/0038:** Canary é GPL v2 — o importador lê números e dados, nenhum código é copiado.
 - **ADR 0008/0025:** o mapa é dado derivado da CipSoft, nunca versionado.
 - **Nenhum invariante é afetado pelas fases 0–5:** não há simulação, sessão nem protocolo novo.
+
+## 7. Execução (2026-09-26)
+
+Milestone **M45 · Mapa do mundo** (label `E17 · Mapa do mundo`). Cada fase é uma PR empilhada
+sobre a anterior — mescle na ordem.
+
+| Fase | Issue | PR | Entrega |
+|---|---|---|---|
+| 0 | #659 | #667 | `pnpm map:census` — 17,97 M tiles, 29 425 setores, 30 cidades, 993 casas |
+| 1 | #660 | #668 | `pnpm map:world` — setores 32×32 com paleta (77,9 MB), ADR 0047 |
+| 2 | #661 | #669 | `/world` — câmera livre, setores sob demanda, `#x,y,z` na URL |
+| 3 | #662 | #670 | `pnpm map:minimap` — minimapa e mapa-múndi pela cor de automapa |
+| 4 | #663 | #671 | `pnpm map:links` — escadas, cordas e teleportes derivados (bate com as 92 de Thais e as 4 da Dragon Lair) |
+| 4 | #664 | #672 | `pnpm map:places` — ir para cidade, casas, zonas, clique na escada |
+| 5 | #665 | #673 | `pnpm map:creatures` — 1 008 NPCs e 83 286 spawns com outfit |
+| 5 | #666 | #674 | `pnpm map:lights` — luz por andar e animação de objetos |
+
+**Para gerar o mundo numa máquina nova**, nesta ordem (tudo em `things/`, nada versionado):
+
+```
+pnpm map:fetch        # o otservbr.otbm do Canary v3.6.1
+pnpm map:world        # os setores (não precisa do pacote de arte)
+pnpm map:minimap      # precisa de appearances.dat: pacote ou CANARY_DIR
+pnpm map:links        # CANARY_DIR: items.xml e global.lua
+pnpm map:places       # CANARY_DIR: otservbr-house.xml
+pnpm map:creatures    # CANARY_DIR: XML de spawn e .lua de NPC/monstro
+pnpm map:lights       # appearances.dat
+```
+
+Com isso, `pnpm dev` abre `/world`. O que ainda depende do pacote de arte `things/1332/` é só o
+DESENHO com sprites (sem ele, o explorador desenha retângulos) — os dados todos saem do OTBM e do
+Canary.
