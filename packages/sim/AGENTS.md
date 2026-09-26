@@ -496,3 +496,12 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `compatibilityProfile`**: `combat-v1`/`v2` continuam com os números antigos
   (`combat.player.armor` + equipado; `#defenseSourceOf`), só `combat-v3` usa as três funções
   novas — mexer nas duas sem entender a bifurcação quebra uma sessão v1/v2 congelada (ADR 0031).
+  **A skill da arma para `playerDefense` NÃO é `#skillLevelOf` cru quando a família é `wand`**
+  (achado de revisão, #549): a família `wand`/`rod` aponta `skillId: 'magic'` — usado para o
+  DANO (DT-02) —, mas `Player::getWeaponSkill` do Canary devolve `0` para `WEAPON_WAND`
+  (`default: attackSkill = 0`); `hunt.ts#playerDefenseV3` zera a skill nesse caso ANTES de
+  montar o input, senão um Sorcerer/Druid sem escudo cai na fórmula cheia com `defenseValue` 0
+  (wand/rod nunca declaram `defense`/`extraDefense`) em vez do piso fixo do Canary. **A skill de
+  escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
+  `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
+  `SKILL_SHIELD`.

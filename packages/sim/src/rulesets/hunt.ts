@@ -6789,7 +6789,13 @@ const slots = bot.groups.get(group);
   #shieldSkillLevelOf(character: CharacterRuntime): number {
     const skillId = this.#options.combat.defense?.skillId;
     const skill = skillId === undefined ? undefined : this.#options.skills.get(skillId);
-    return skill === undefined ? 0 : character.skills.levelOf(skill);
+    if (skill === undefined || skillId === undefined) return 0;
+    // `getSkillLevel` do Canary soma `varSkills[skill]` (o bônus de EQUIPAMENTO) para TODA
+    // skill, sem exceção para `SKILL_SHIELD` (`player.cpp:7480`) — a mesma leitura que
+    // `#skillLevelOf` já faz para a skill de arma/punho. Nenhum item do catálogo declara hoje
+    // um bônus de `shielding` (#549), mas a fórmula fica correta para o dia em que um declarar.
+    return character.skills.levelOf(skill)
+      + character.inventory.skillBonus(this.#options.items, skillId);
   }
 
   /**
@@ -6807,6 +6813,15 @@ const slots = bot.groups.get(group);
    * tem na mão e no escudo (já resolvidos por `#playerDefender`, um lookup só por golpe) — a
    * arma primeiro (sobrescreve o punho), o escudo por cima (sobrescreve a arma), exatamente a
    * ordem sequencial do `Player::getDefense` do Canary.
+   *
+   * A skill da arma NÃO é `#skillLevelOf` direto quando a família é `wand` (achado de revisão,
+   * #549): `Player::getWeaponSkill` do Canary só reconhece FIST/SWORD/CLUB/AXE/MISSILE/DISTANCE
+   * (`player.cpp:474-509`) — `WEAPON_WAND` cai no `default: attackSkill = 0`. `#skillLevelOf`
+   * devolveria a skill de MAGIA (a família `wand` aponta `skillId: 'magic'`, usado para o DANO,
+   * não a defesa), que é quase sempre não-zero — e como wand/rod nunca declaram `defense`/
+   * `extraDefense`, isso faria `playerDefense` pular o piso fixo (`defenseSkill === 0` → 1/2) e
+   * cair na fórmula cheia com `defenseValue` zerado, sempre 0. Zerar aqui reproduz o `default`
+   * do Canary e devolve o piso correto para um Sorcerer/Druid sem escudo.
    */
   #playerDefenseV3(
     character: CharacterRuntime, weaponItem: Item | null, shieldItem: Item | null,
@@ -6820,7 +6835,9 @@ const slots = bot.groups.get(group);
         weapon: {
           defense: weaponItem.defense,
           extraDefense: weaponItem.extraDefense,
-          skillLevel: this.#skillLevelOf(character, weaponFamily),
+          skillLevel: weaponFamily?.kind === 'wand'
+            ? 0
+            : this.#skillLevelOf(character, weaponFamily),
         },
       }),
       ...(shieldItem === null ? {} : { shield: { defense: shieldItem.defense } }),

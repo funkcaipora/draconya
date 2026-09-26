@@ -816,6 +816,16 @@ descrito pelo Canary 13.x (ADR 0019 — nunca código copiado):
   (`blockhit.ts`) rola em faixa (`uniform_random(defense/2, defense)`) enquanto o `blockCount`
   tiver carga — o jogador SEMPRE tem uma defesa residual agora (mesmo desarmado), diferente do
   `combat-v1`/`v2` (`Inventory.defenseSource` devolvia `none`/`0` sem peça nenhuma).
+  **Achado de revisão (#549):** "a skill DELA" para uma wand/rod não é a skill de magia que a
+  família aponta para o DANO — `Player::getWeaponSkill` do Canary devolve `0` para
+  `WEAPON_WAND` (nenhum case no switch, `default: attackSkill = 0`, `player.cpp:474-509`).
+  `hunt.ts#playerDefenseV3` zera a skill quando a família da arma é `wand` antes de montar o
+  input, exatamente para reproduzir esse `default` — sem o zero, um Sorcerer/Druid sem escudo
+  cairia na fórmula cheia com `defenseValue` 0 (wand/rod nunca declaram `defense`/
+  `extraDefense`) e teria defesa 0 em vez do piso fixo (1 ofensivo/equilibrado, 2 defensivo).
+  A skill de escudo (`#shieldSkillLevelOf`) também soma o bônus de EQUIPAMENTO da mesma skill
+  (`Inventory.skillBonus`, #524) — a mesma leitura que a skill de arma/punho já fazia, e que
+  `getSkillLevel` do Canary aplica sem exceção para `SKILL_SHIELD` (`player.cpp:7480`).
 - **`playerArmor`** → `Player::getArmor` (`player.cpp:658-667`): a soma do equipado, sem o
   baseline de 4 que `combat.player.armor` inventava para "o personagem desarmado no level 1" —
   esse número nunca existiu no Tibia. Um personagem sem NADA vestido agora tem armadura ZERO,

@@ -3340,6 +3340,91 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
   });
 
+  it('#549 (achado de revisão): wand/rod sem escudo usa skill ZERO na defesa — o piso do Canary (1), não a fórmula com defenseValue zerado (0)', () => {
+    // Um Sorcerer/Druid com só a wand na mão e sem escudo (o caso comum antes do nível 50, ou
+    // de quem simplesmente não veste um spellbook): `Player::getWeaponSkill` do Canary devolve
+    // 0 para `WEAPON_WAND` (`default: attackSkill = 0`, player.cpp:474-509) — não a skill de
+    // magia, que a família `wand` aponta para o DANO (DT-02), quase sempre não-zero. Como a
+    // wand nunca declara `defense`/`extraDefense`, alimentar a skill de magia pularia o piso
+    // fixo (`defenseSkill === 0` → 1 ofensivo/2 defensivo) e devolveria 0 pela fórmula cheia com
+    // `defenseValue` zerado — o oposto do Canary.
+    vi.mocked(resolveDamage).mockClear();
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3',
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const comWand: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'wand', quantity: 1 } },
+    };
+    const { session } = start({
+      loaded: content({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      inventory: comWand, skills: { magic: { level: 50, points: 0 } },
+    });
+    run(session, 5_000, 100);
+
+    const hits = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'monster-attack');
+    expect(hits.length).toBeGreaterThan(0);
+    for (const [, defender] of hits) {
+      expect(defender.defense).toEqual({ kind: 'weapon', defense: 1 });
+    }
+  });
+
+  it('#549 (achado de revisão): a skill de escudo soma o bônus de equipamento, como a de arma já soma', () => {
+    // `getSkillLevel` do Canary soma `varSkills[skill]` (o bônus de EQUIPAMENTO) para TODA
+    // skill, sem exceção para `SKILL_SHIELD` (player.cpp:7480) — a mesma leitura que
+    // `#skillLevelOf` já faz para a skill de arma/punho (#524). Nenhum item do catálogo real
+    // declara hoje um bônus de `shielding`; este teste usa um item só-de-teste para provar que
+    // a fórmula honra o bônus quando ele existir, em vez de descartá-lo silenciosamente.
+    const shieldWithBonus = {
+      id: 'shield-of-focus', name: 'Shield of Focus', kind: 'shield', slot: 'shield',
+      weight: 40, value: 0, defense: 30,
+      bonuses: { skill: { skillId: 'shielding', amount: 20 } },
+    };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const loaded = defenseContent({ items: [...items, shieldWithBonus], combat: [combatV3] });
+    const comEscudoComBonus: InventoryState = {
+      backpack: [], equipped: { shield: { instanceId: 's1', itemId: 'shield-of-focus', quantity: 1 } },
+    };
+
+    // Skill de shielding NUNCA treinada (nível 0, sobrescrita — o conteúdo deste describe
+    // declara `startingLevel: 10`) — só os 20 do bônus do item de teste.
+    const comBonusSemSkill = start({
+      loaded, difficulty: 'bold', health: 5_000, inventory: comEscudoComBonus,
+      skills: { shielding: { level: 0, points: 0 } },
+    });
+    vi.mocked(resolveDamage).mockClear();
+    run(comBonusSemSkill.session, 5_000, 100);
+    const bonusHits = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'monster-attack');
+    expect(bonusHits.length).toBeGreaterThan(0);
+    const [, bonusDefender] = bonusHits[0]!;
+
+    // O escudo COMUM (mesma defesa 30, sem bônus) com a skill de shielding treinada até 20 —
+    // o MESMO total (0 + 20 bônus == 20 + 0 bônus) por um caminho diferente.
+    const comSkillSemBonus = start({
+      loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      inventory: comEscudo, skills: { shielding: { level: 20, points: 0 } },
+    });
+    vi.mocked(resolveDamage).mockClear();
+    run(comSkillSemBonus.session, 5_000, 100);
+    const skillHits = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'monster-attack');
+    expect(skillHits.length).toBeGreaterThan(0);
+    const [, skillDefender] = skillHits[0]!;
+
+    // Os dois caminhos chegam ao MESMO total de skill (20) — se o bônus de equipamento fosse
+    // ignorado (o bug), `bonusDefender` ficaria com o total de quem nunca treinou (0), mais
+    // baixo que `skillDefender`.
+    expect(bonusDefender.defense).toEqual(skillDefender.defense);
+    expect(bonusDefender.defenseMitigation).toEqual(skillDefender.defenseMitigation);
+  });
+
   it('não é por TICK: sem ser atacado, a skill fica parada', () => {
     // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move.
     const pacificRat = { ...rat, aggroRadius: 0 };

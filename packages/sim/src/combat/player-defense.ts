@@ -84,8 +84,11 @@ export interface PlayerDefenseWeapon {
    * sword/axe/club/fist, `distance` para bow/crossbow) — já com o bônus de equipamento da
    * mesma skill somado, como `hunt.ts#skillLevelOf` já calcula para o dano. Uma arma cuja
    * família não aponta skill de golpe (wand/rod: `getWeaponSkill` do Canary devolve 0 para
-   * `WEAPON_WAND`, `default: 0`) entra aqui como `0` — o chamador não filtra: é o próprio `0`
-   * que aciona o `defenseSkill === 0` abaixo quando não há escudo para sobrescrever.
+   * `WEAPON_WAND`, `default: 0`) tem que chegar aqui como `0` — o CHAMADOR (`hunt.ts
+   * #playerDefenseV3`) é quem filtra isso, porque a família `wand` aponta `skillId: 'magic'`
+   * (usado para o DANO, DT-02) e não zero por conta própria; sem o filtro, esta função nunca
+   * vê o `0` que aciona o `defenseSkill === 0` abaixo quando não há escudo para sobrescrever
+   * (achado de revisão, #549).
    */
   readonly skillLevel: number;
 }
@@ -121,10 +124,16 @@ export interface PlayerDefenseInput {
  * `vocation->defenseMultiplier` fica de FORA (identidade, `× 1`): as cinco vocações do Canary —
  * e todas as promoções — declaram `<formula defense="1.0">` em `vocations.xml` hoje (conferido
  * em 2026-09-26); incluir o campo no conteúdo agora seria uma tabela que nunca diverge de 1.
- * Note-se que o próprio Canary CASTA esse multiplicador para inteiro antes de multiplicar
- * (`armor * static_cast<int32_t>(vocation->armorMultiplier)` em `getArmor`, a mesma forma em
- * `getDefense`) — um `1.0` sempre trunca para `1`, então mesmo um valor fracionário futuro não
- * mudaria nada sem essa parte da fórmula ser revisitada.
+ * Note-se que `getDefense` NÃO trunca esse multiplicador do mesmo jeito que `getArmor` — em
+ * `getArmor` o Canary CASTA só o multiplicador para inteiro antes de multiplicar (`armor *
+ * static_cast<int32_t>(vocation->armorMultiplier)`), então qualquer valor abaixo de `2.0` já
+ * colapsa para `1` (e abaixo de `1.0`, para `0`) ANTES da multiplicação; em `getDefense` o
+ * `vocation->defenseMultiplier` continua `float` até o fim da expressão (`double`), e é só o
+ * `int32_t` de RETORNO da função que trunca o PRODUTO inteiro uma vez. Hoje as duas dão o mesmo
+ * resultado porque todo `1.0` trunca para `1` de qualquer jeito — mas um multiplicador
+ * fracionário futuro (por exemplo `0.5`) se comportaria de forma bem diferente em cada função:
+ * zeraria a armadura via `getArmor`, mas só escalaria a defesa via `getDefense`. Reproduzir
+ * `getDefense` copiando o padrão de `getArmor` reproduziria o mecanismo ERRADO.
  */
 export function playerDefense(input: PlayerDefenseInput): number {
   let defenseSkill = input.fistSkillLevel;
