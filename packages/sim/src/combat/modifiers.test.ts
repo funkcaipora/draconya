@@ -1,13 +1,16 @@
 // Testes de `modifiers.ts` (M30-04, #551): a fórmula de leech do Canary (`calculateLeechAmount`),
-// o crítico de monstro (`monsterCriticalModifiers`) e a soma de fontes (`combineCombatModifiers`).
-// A APLICAÇÃO sobre o estado quente (`applyDamageOutcome`) é assunto de `outcome.test.ts`; a
-// rolagem em si, de `damage.test.ts`.
+// o crítico de monstro (`monsterCriticalModifiers`), a soma de fontes (`combineCombatModifiers`)
+// e a rolagem ÚNICA por ação (`rollSharedCriticalOutcome`, correção pós-#551/#653). A APLICAÇÃO
+// sobre o estado quente (`applyDamageOutcome`) é assunto de `outcome.test.ts`; a rolagem por
+// alvo em si (`resolveDamage`), de `damage.test.ts`.
 
 import { describe, expect, it } from 'vitest';
 import type { CharacterState } from '../character.js';
 import { CharacterRuntime } from '../character.js';
+import { Rng } from '../rng.js';
 import {
   applyLeech, calculateLeechAmount, combineCombatModifiers, monsterCriticalModifiers,
+  rollSharedCriticalOutcome,
 } from './modifiers.js';
 
 const character = (over: Partial<CharacterState> = {}): CharacterRuntime =>
@@ -119,5 +122,50 @@ describe('combineCombatModifiers', () => {
   it('crítico com chance 0 ainda MARCA a fonte como declarada (regra aditiva do ADR 0031)', () => {
     const combined = combineCombatModifiers({ critical: { chance: 0, multiplier: 1 } });
     expect(combined?.critical).toEqual({ chance: 0, multiplier: 1 });
+  });
+});
+
+describe('rollSharedCriticalOutcome (correção pós-#551/#653: crítico é da AÇÃO, não do alvo)', () => {
+  it('sem `critical` declarado, devolve os modifiers sem tocar — nenhuma rolagem nova', () => {
+    expect(rollSharedCriticalOutcome(undefined, Rng.fromSeed('x'))).toBeUndefined();
+    const leechOnly = { lifeLeech: 0.5 };
+    expect(rollSharedCriticalOutcome(leechOnly, Rng.fromSeed('x'))).toBe(leechOnly);
+  });
+
+  it('chance 1 sempre fixa o resultado em `chance: 1`, preservando o multiplicador', () => {
+    const resolved = rollSharedCriticalOutcome(
+      { critical: { chance: 1, multiplier: 2 } }, Rng.fromSeed('always'),
+    );
+    expect(resolved).toEqual({ critical: { chance: 1, multiplier: 2 } });
+  });
+
+  it('chance 0 sempre fixa o resultado em `chance: 0`', () => {
+    const resolved = rollSharedCriticalOutcome(
+      { critical: { chance: 0, multiplier: 2 } }, Rng.fromSeed('never'),
+    );
+    expect(resolved).toEqual({ critical: { chance: 0, multiplier: 2 } });
+  });
+
+  it('preserva lifeLeech/manaLeech intactos ao lado do crítico resolvido', () => {
+    const resolved = rollSharedCriticalOutcome(
+      { critical: { chance: 1, multiplier: 2 }, lifeLeech: 0.5, manaLeech: 0.25 },
+      Rng.fromSeed('leech-and-crit'),
+    );
+    expect(resolved).toEqual({
+      critical: { chance: 1, multiplier: 2 }, lifeLeech: 0.5, manaLeech: 0.25,
+    });
+  });
+
+  it('com chance parcial, o resultado é SEMPRE 0 ou 1 — nunca a chance original', () => {
+    // A rolagem acontece uma vez aqui, e é isso que o `for` de alvos vai reusar: nenhum alvo
+    // rola de novo o valor "0.5" em si, cada `resolveDamage` recebe um `chance` já decidido.
+    const outcomes = new Set<number>();
+    for (let seed = 0; seed < 50; seed += 1) {
+      const resolved = rollSharedCriticalOutcome(
+        { critical: { chance: 0.5, multiplier: 2 } }, Rng.fromSeed(`partial-${seed}`),
+      );
+      outcomes.add(resolved?.critical?.chance as number);
+    }
+    expect(outcomes).toEqual(new Set([0, 1]));
   });
 });

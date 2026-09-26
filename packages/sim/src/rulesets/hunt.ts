@@ -46,7 +46,9 @@ import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
-import { applyLeech, combineCombatModifiers, monsterCriticalModifiers } from '../combat/modifiers.js';
+import {
+  applyLeech, combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
+} from '../combat/modifiers.js';
 import type { DefenseSource } from '../combat/defense.js';
 import {
   DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS,
@@ -5261,10 +5263,17 @@ const slots = bot.groups.get(group);
 
     // O crítico do MONSTRO (M30-04, #551): `Monster::getCriticalChance()`, o mesmo para TODA
     // ability dele — básica ou declarada, corpo a corpo ou à distância, como `applyExtensions`
-    // do Canary rola uma vez por `doCombat`, qualquer que seja a origem do golpe. Ausente
-    // (`critChance` 0, os quatro monstros do bestiário atual) não declara nada, e nenhum
-    // sorteio novo entra — bit a bit o rato/rotworm/dragon/dragon-lord de sempre.
+    // do Canary rola uma vez por `doCombat`, qualquer que seja a origem do golpe e QUALQUER que
+    // seja o número de alvos que ela atinge. Ausente (`critChance` 0, os quatro monstros do
+    // bestiário atual) não declara nada, e nenhum sorteio novo entra — bit a bit o
+    // rato/rotworm/dragon/dragon-lord de sempre.
+    //
+    // A rolagem em si é da AÇÃO (achado da revisão do #551/#653): uma ability em área rola o
+    // crítico UMA vez, ANTES do laço por alvo, e `rollSharedCriticalOutcome` faz cada
+    // `resolveDamage` por alvo herdar o MESMO resultado — nunca um jogador critica e outro não
+    // no mesmo golpe do monstro.
     const monsterModifiers = monsterCriticalModifiers(this.#options.monsters.get(monster.monsterId));
+    const resolvedMonsterModifiers = rollSharedCriticalOutcome(monsterModifiers, session.rng);
     for (const character of targets) {
       const defender = this.#playerDefender(character);
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
@@ -5278,7 +5287,7 @@ const slots = bot.groups.get(group);
           // básica legada inclusive) bloqueia os dois; a de alcance/área é magia para o
           // `blockHit`, como a do Canary sem `BLOCKARMOR`/`BLOCKSHIELD` declarado.
           blockable: melee ? MELEE_BLOCK_FLAGS : MAGIC_BLOCK_FLAGS,
-          ...(monsterModifiers === undefined ? {} : { modifiers: monsterModifiers }),
+          ...(resolvedMonsterModifiers === undefined ? {} : { modifiers: resolvedMonsterModifiers }),
         },
         defender,
         'pve',

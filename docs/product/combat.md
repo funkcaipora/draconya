@@ -1512,6 +1512,15 @@ só `monsterCriticalModifiers`, nunca leech — leech é mecanismo exclusivo do 
 Canary (`applyLifeLeech`/`applyManaLeech` exigem `attackerPlayer`). DOT/condição seguem sem
 modificadores. Reflect, imbuements (M40), charms (M39), PvP e a janela de breakdown ficam fora.
 
+**A ROLAGEM em si é da AÇÃO, não do alvo** (correção pós-#551/#653): `Combat::applyExtensions` do
+Canary decide o crítico UMA vez por `doCombat`/ability inteira, antes de o dano se dividir pelos
+alvos (`combat.cpp:2657`/`2757`) — nunca um alvo criticando e outro não na MESMA magia em área,
+runa em área ou ability de monstro que acerta vários personagens. `rollSharedCriticalOutcome`
+(`combat/modifiers.ts`) é quem garante isso: `castSpell`, `useSupply` e
+`HuntRuleset#executeMonsterAbility` rolam o crítico uma vez ANTES do laço por alvo, e cada
+`resolveDamage` por alvo recebe o resultado já decidido (`chance` fixado em `0` ou `1`) — o
+sorteio de MAGNITUDE (a faixa de poder) continua por alvo, só o crítico é compartilhado.
+
 ## Conformance e benchmark (CMB-10, #336)
 
 O contrato do ADR 0031 virou executável em dois lugares, e os dois são complementares:

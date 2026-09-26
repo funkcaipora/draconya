@@ -16,6 +16,7 @@
 
 import type { DamageModifiers, Monster } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
+import type { Rng } from '../rng.js';
 
 /**
  * `Monster::getCriticalChance() * 100` (`combat.cpp:2766`): o `critChance` do conteúdo é
@@ -76,6 +77,36 @@ export function combineCombatModifiers(
     } : {}),
     ...(lifeLeech === 0 ? {} : { lifeLeech }),
     ...(manaLeech === 0 ? {} : { manaLeech }),
+  };
+}
+
+/**
+ * Rola o crítico da AÇÃO uma vez só (correção pós-#653/#654 do M30-04): o Canary decide crítico
+ * por `doCombat`/`Combat::applyExtensions` (`combat.cpp:2657`/`2757`) INTEIRO, antes de o dano
+ * se dividir pelos alvos — nunca por alvo. `castSpell`/`useSupply`/`#executeMonsterAbility`
+ * chamam `resolveDamage` uma vez POR ALVO (o poder e o bloqueio de cada um são mesmo
+ * independentes), e sem este helper cada chamada rolaria o próprio crítico dentro de
+ * `resolveBlockHitProfile`/`resolveMitigation` — um alvo criticando e outro não na MESMA ação, o
+ * que o Canary não permite fora do charm "low blow" (fora de escopo).
+ *
+ * Quando `modifiers.critical` está declarado, este helper consome a ÚNICA rolagem da ação e
+ * devolve os MESMOS `modifiers`, com `critical.chance` fixado em `1` (ativou) ou `0` (não
+ * ativou) e o `multiplier` real preservado. Cada `resolveDamage` por alvo continua "rolando" —
+ * a regra aditiva do CMB-08 (ADR 0031) exige que a rolagem seja SEMPRE consumida quando
+ * declarada, mesmo com `chance` 0 ou 1 — mas o resultado já está decidido, e todo alvo da mesma
+ * ação compartilha o mesmo crítico, como `isTargetCritical = canApplyCritical` no Canary.
+ *
+ * Ausente `modifiers.critical` (a maioria do conteúdo hoje), devolve `modifiers` sem tocar —
+ * nenhuma rolagem nova, e o conteúdo sem crítico continua bit a bit.
+ */
+export function rollSharedCriticalOutcome(
+  modifiers: DamageModifiers | undefined, rng: Rng,
+): DamageModifiers | undefined {
+  if (modifiers?.critical === undefined) return modifiers;
+  const critical = rng.chance(modifiers.critical.chance);
+  return {
+    ...modifiers,
+    critical: { chance: critical ? 1 : 0, multiplier: modifiers.critical.multiplier },
   };
 }
 
