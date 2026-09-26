@@ -133,10 +133,11 @@ não é o que os jogadores esperam.
 `Monster::canWalkOnFieldType`).** `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` são
 booleanos por monstro, ausentes é `true` — o default do Canary, o mesmo que 632/1.601 monstros
 do bestiário real sobrescrevem para `false` (é a base de Fire Field e GFB controlarem posição).
-Imune ao elemento, o monstro sempre pisa, como no Canary. O predicado vale igual no passo guloso,
-na fuga e no "manter distância": um tile com o campo proibido conta como bloqueado, exatamente
-como parede — sem caminho guardado para invalidar (ADR 0009), então a checagem é O(1) pelo
-índice numérico de `Fields`.
+Imune ao elemento, o monstro sempre pisa, como no Canary. O predicado vale igual no passo guloso
+e na fuga — e, por construção, em qualquer decisão futura de movimento que reaproveite o mesmo
+`Blocked` (ex.: uma postura de manter distância, ainda não implementada neste motor): um tile com
+o campo proibido conta como bloqueado, exatamente como parede — sem caminho guardado para
+invalidar (ADR 0009), então a checagem é O(1) pelo índice numérico de `Fields`.
 
 **Preso atrás de um campo que ele não pode cruzar, ele fica ali para sempre — a menos que
 apanhe.** É o `ignoreFieldDamage` do TFS/Canary: levar dano ENQUANTO preso (a decisão de
