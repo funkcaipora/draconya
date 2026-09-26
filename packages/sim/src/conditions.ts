@@ -36,10 +36,12 @@ import type { DamageType } from '@draconya/content';
 // `conditionSpecSchema` também precisa delas para conferir `durationMs` contra o total da fila, e
 // duas implementações do mesmo cálculo é o defeito que a DT-03 já nomeia noutro lugar do content.
 import { damageOverTimeTicks, generateDamageList } from '@draconya/content';
+import type { Direction } from './area.js';
 import type { DamageSource } from './combat/damage.js';
 import type { Rng } from './rng.js';
 
-export type ConditionKind = 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time';
+export type ConditionKind =
+  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -328,6 +330,10 @@ export function conditionFromSpec(
       };
     case 'mana-shield':
       return { ...base };
+    case 'drunk':
+      // Sem campo próprio (M31-03, #558): a chave RESERVADA (`DRUNK_CONDITION_KEY`, exigida pelo
+      // schema) é o que `Conditions.hasDrunk` reconhece — o mesmo desenho de `hasManaShield`.
+      return { ...base };
     case 'heal-over-time':
       return { ...base, tick: { kind: 'heal', amount: effect.amount, intervalMs: effect.intervalMs } };
     case 'damage-over-time': {
@@ -433,4 +439,53 @@ export class Conditions {
   hasManaShield(): boolean {
     return this.#active.has('mana-shield');
   }
+
+  /** A condição `drunk` (M31-03, #558) está ativa? Reconhecida pela chave reservada, como
+   * `hasManaShield` — nenhum campo do estado distingue as duas condições sem tique. */
+  hasDrunk(): boolean {
+    return this.#active.has('drunk');
+  }
+}
+
+/**
+ * As direções cardeais, na ORDEM do enum `Direction` do Canary/TFS (`game/movement/
+ * position.hpp`: `NORTH = 0, EAST = 1, SOUTH = 2, WEST = 3`) — é essa ordem que
+ * `rollDrunkDeviation` usa para transformar o sorteio no rótulo de direção.
+ */
+const DRUNK_CARDINALS: readonly Direction[] = ['north', 'east', 'south', 'west'];
+
+/** O que um passo com drunk ativo decide (M31-03, #558). */
+export interface DrunkDeviation {
+  /**
+   * A direção CARDEAL para onde o passo é desviado, ou `null` quando o sorteio não desvia nada
+   * — inclusive o caso `r === 4` do Canary, que também não desvia (só fala).
+   */
+  readonly direction: Direction | null;
+  /**
+   * `r <= 4`: no Canary é quando a criatura fala "Hicks!" (`Creature::onWalk`). Devolvido para
+   * quando o evento de fala de criatura existir no protocolo; hoje nada o consome (ver
+   * `docs/product/combat.md`) — é presentação, não regra de hunt (ADR 0037 d.6).
+   */
+  readonly speak: boolean;
+}
+
+/**
+ * O desvio de passo da condição `drunk` (M31-03, #558), reproduzindo `Creature::onWalk` do
+ * Canary/TFS (`creatures/creature.cpp:291-301`): sorteia UM `r` com o `Rng` da sessão em [0, 60]
+ * — 61 valores, `uniform_random(0, 60)` do Canary, inclusive nos dois extremos, como
+ * `Rng.integer` já é. Só `r <= 4` (`DIRECTION_DIAGONAL_MASK`, `game/movement/position.hpp`) tem
+ * qualquer efeito; dentro disso, só `r < 4` troca a direção — para a CARDEAL do PRÓPRIO `r`
+ * (índice na ordem do enum do Canary, nunca relacionada à direção que o passo já ia tomar). O
+ * caso `r === 4` representaria uma diagonal lá (`DIRECTION_SOUTHWEST`), que o Canary também NÃO
+ * aplica (`r < DIRECTION_DIAGONAL_MASK` dá falso) — só fala; o Draconya não tem diagonal (ADR
+ * 0009, passo sempre cardeal), então este caso nunca precisaria de tratamento especial mesmo se
+ * o Canary trocasse a direção nele.
+ *
+ * Quem chama SÓ rola quando a criatura tem drunk (`Conditions.hasDrunk`) — uma criatura sem a
+ * condição nunca consome este sorteio, a mesma regra do `chance` ausente de uma ability (CMB-06).
+ */
+export function rollDrunkDeviation(rng: Rng): DrunkDeviation {
+  const r = rng.integer(0, 60);
+  if (r > 4) return { direction: null, speak: false };
+  return { direction: r < 4 ? (DRUNK_CARDINALS[r] as Direction) : null, speak: true };
 }

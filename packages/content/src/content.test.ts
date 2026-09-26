@@ -2253,3 +2253,44 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     }))).toThrow(ContentError);
   });
 });
+
+describe('condição drunk — desvio de passo (M31-03, #558, ADR 0041)', () => {
+  // O ataque do demon parrot (`data-otservbr-global/monster/birds/demon_parrot.lua`):
+  // `{ name = "drunk", interval = 1000, chance = 30, length = 5, spread = 0, target = false }`.
+  // A ÁREA (`length`/`spread`/`radius`) já é `target.area` de `monsterAbilitySchema` — o mesmo
+  // mecanismo de toda ability em área (#523); só o EFEITO da condição é novo aqui.
+  const drunkAttack = {
+    key: 'drunk', merge: 'refresh' as const, durationMs: 10_000,
+    effect: { kind: 'drunk' as const },
+  };
+
+  it('monsterAbilitySchema aceita a condição drunk, com a chave reservada', () => {
+    const ability = {
+      id: 'hicks', cadenceMs: 1_000, power: 0,
+      target: { range: 1, area: { shape: 'wave' as const, length: 5 } },
+      condition: drunkAttack,
+    };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    expect(content.monsters.get('rat')?.abilities.find((a) => a.id === 'hicks')?.condition)
+      .toEqual(drunkAttack);
+  });
+
+  it('drunk não aceita campo nenhum além do que toda condição já tem — só `kind`', () => {
+    // Ao contrário de `speed` (delta/formula) e dos DOT (totalDamage/rounds), o efeito drunk não
+    // tem parâmetro do Tibia: o mecanismo inteiro é o sorteio [0, 60] do `sim`. Um campo estranho
+    // é descartado pelo `z.object` (como `mana-shield`), nunca vira erro de conteúdo.
+    const comCampoEstranho = { ...drunkAttack, effect: { kind: 'drunk' as const, delta: -600 } };
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: comCampoEstranho }],
+      }],
+    }))).not.toThrow();
+  });
+
+  it('recusa a chave errada — drunk exige a chave reservada "drunk"', () => {
+    const chaveErrada = { ...drunkAttack, key: 'hicks' };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: chaveErrada }] }],
+    }))).toThrow(ContentError);
+  });
+});

@@ -1058,6 +1058,16 @@ export type ConditionSpeedFormula = z.infer<typeof conditionSpeedFormulaSchema>;
 export const SPEED_CONDITION_KEY = 'speed' as const;
 
 /**
+ * A chave RESERVADA de uma condição `drunk` (M31-03, #558). O efeito não carrega campo nenhum
+ * além do `durationMs` que `conditionSpecSchema` já dá a QUALQUER condição — nada no estado de
+ * runtime (`ConditionState`) o distingue de um `buff`/`mana-shield` vazio, então o `sim`
+ * (`Conditions.hasDrunk`) reconhece a condição pela CHAVE, como já faz para `mana-shield`. A
+ * chave reservada é o que garante que essa chave seja SEMPRE a mesma, qualquer que seja a
+ * ability/defesa/campo que a declare.
+ */
+export const DRUNK_CONDITION_KEY = 'drunk' as const;
+
+/**
  * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
  * cada `intervalMs` — o `addDamage(rounds, interval, value)` que os scripts de magia do Canary
  * usam (Ignite: `addDamage(25, 3000, -45)`) e que o campo de fogo do Dragon Lord também usa
@@ -1119,6 +1129,15 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
     damageTakenPercent: z.number().int().optional(),
   }),
   z.object({ kind: z.literal('mana-shield') }),
+  /**
+   * O desvio de passo do bêbado (M31-03, #558, `CONDITION_DRUNK` — `Creature::onWalk` do
+   * Canary/TFS, `creatures/creature.cpp:291-301`). Sem campo próprio: o `sim`
+   * (`rollDrunkDeviation`, `conditions.ts`) sorteia a direção A CADA PASSO com o `Rng` da
+   * sessão — só `durationMs` (comum a toda condição) importa aqui. A área do ATAQUE que aplica
+   * a condição (`radius`/`length`+`spread` do Canary) já é o `target.area` de
+   * `monsterAbilitySchema`, o mesmo mecanismo de toda ability em área — nada de novo aqui.
+   */
+  z.object({ kind: z.literal('drunk') }),
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
@@ -1281,7 +1300,9 @@ export function damageOverTimeTotalMs(effect: DamageOverTimeEffect): number {
  * condição só fica com a fila zerada (`retiredTick`) até vencer, sem efeito observável.
  *
  * O efeito `speed` (CMB-11) exige `key: 'speed'` — a chave RESERVADA que faz haste e paralyze
- * de QUALQUER fonte se substituírem (ver `SPEED_CONDITION_KEY`), como no Tibia.
+ * de QUALQUER fonte se substituírem (ver `SPEED_CONDITION_KEY`), como no Tibia. O efeito `drunk`
+ * (M31-03) exige `key: 'drunk'` pelo mesmo motivo: sem campo próprio no estado, é a chave que o
+ * `sim` reconhece (ver `DRUNK_CONDITION_KEY`).
  */
 export const conditionSpecSchema = z.object({
   key: z.string().min(1),
@@ -1303,6 +1324,9 @@ export const conditionSpecSchema = z.object({
 }).refine(
   (spec) => spec.effect.kind !== 'speed' || spec.key === SPEED_CONDITION_KEY,
   { message: `a condição speed precisa da chave reservada "${SPEED_CONDITION_KEY}"` },
+).refine(
+  (spec) => spec.effect.kind !== 'drunk' || spec.key === DRUNK_CONDITION_KEY,
+  { message: `a condição drunk precisa da chave reservada "${DRUNK_CONDITION_KEY}"` },
 );
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 

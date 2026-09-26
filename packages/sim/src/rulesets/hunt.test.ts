@@ -9520,3 +9520,177 @@ describe('hunt multiandar (#519)', () => {
     expect(ruleset.monsters[0]?.position).toEqual({ x: 1, y: 2, z: 6 });
   });
 });
+
+describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
+  /** Conta toda rolagem de `Rng.integer` — o mesmo mecanismo do `CountingRng` acima, usado aqui
+   * para provar "a criatura sem drunk não consome sorteio" e "cada passo com drunk rola UMA vez
+   * só" diretamente, em vez de inferir pela taxa. */
+  class CountingRng extends Rng {
+    integerCalls = 0;
+
+    override integer(min: number, max: number): number {
+      this.integerCalls += 1;
+      return super.integer(min, max);
+    }
+  }
+
+  /**
+   * Sessão MANUAL (o mesmo molde da "conformidade de RNG" acima) para poder trocar o `Rng` por
+   * um que conta — `start()`/`createHuntSession` sempre derivam a semente do id da sessão.
+   * `aggroRadius: 0` isola o teste do PASSO: sem `session.advanceBy` nenhuma, o `Spawner` nunca
+   * chega a nascer o rato (o mesmo truque do describe de paralyze/haste, CMB-11, que já usa
+   * `requestMove` sem avançar tempo nenhum) — só o `walk` do socket roda, e ele passa pelo MESMO
+   * `#step` que o bot e o monstro (ADR 0041 decisão 3).
+   */
+  function manualSession(rng: Rng): { session: Session; hero: CharacterRuntime; ruleset: HuntRuleset } {
+    const loaded = content({ monsters: [{ ...rat, aggroRadius: 0 }] });
+    const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+    const session = new Session({
+      id: 'drunk-558', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+    });
+    const hero = character();
+    session.enter(hero);
+    return { session, hero, ruleset };
+  }
+
+  /** Anda para leste até a parede, depois para oeste até a outra — nunca pede um tile fora do
+   * quarto (a sala de `map` é `x: 1..4, y: 1..3`), então toda RECUSA observada num passo SEM
+   * desvio seria um bug nosso, não do teste. */
+  function bounce(hero: CharacterRuntime, dx: { value: number }): { readonly x: number; readonly y: number } {
+    if (hero.position.x <= 1) dx.value = 1;
+    else if (hero.position.x >= 4) dx.value = -1;
+    return { x: hero.position.x + dx.value, y: hero.position.y };
+  }
+
+  it('sem drunk, requestMove nunca consome sorteio nem desvia', () => {
+    const rng = new CountingRng(Rng.fromSeed('drunk-none').getState());
+    const { session, hero, ruleset } = manualSession(rng);
+    const dx = { value: 1 };
+    for (let i = 0; i < 200; i += 1) {
+      const target = bounce(hero, dx);
+      const result = ruleset.requestMove(session, hero.id, target);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.to).toEqual({ ...target, z: 7 });
+    }
+    expect(rng.integerCalls).toBe(0);
+  });
+
+  it('com drunk, cada passo rola exatamente UMA vez; o passo desviado bloqueado falha sem mover', () => {
+    const rng = new CountingRng(Rng.fromSeed('drunk-active').getState());
+    const { session, hero, ruleset } = manualSession(rng);
+    hero.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+
+    const dx = { value: 1 };
+    const total = 4_000;
+    let deviated = 0;
+    for (let i = 0; i < total; i += 1) {
+      const target = bounce(hero, dx);
+      const before = { ...hero.position };
+      const rollsBefore = rng.integerCalls;
+      const result = ruleset.requestMove(session, hero.id, target);
+      // Exatamente um sorteio por PASSO — a criatura tem drunk, então `#step` sempre rola, com
+      // sucesso ou não (a criatura SEM drunk do teste acima nunca rola nenhum).
+      expect(rng.integerCalls).toBe(rollsBefore + 1);
+      if (!result.ok) {
+        deviated += 1;
+        // O critério da issue: o passo desviado para um tile bloqueado FALHA e NÃO move —
+        // exatamente como `move()` já se comporta para qualquer outra recusa.
+        expect(hero.position).toEqual(before);
+        continue;
+      }
+      if (result.to.x !== target.x || result.to.y !== target.y) deviated += 1;
+    }
+    // A taxa EXATA (4/61 do enum do Canary) tem o teste de unidade dela em `conditions.test.ts`,
+    // sem ruído nenhum; aqui o que se mede é a integração — o desvio realmente ACONTECE pelo
+    // `#step` de verdade, e os dois ramos (livre/bloqueado) aparecem. A faixa é larga de
+    // propósito: quando a direção sorteada COINCIDE com a direção que o bounce já ia tomar
+    // (1 dos 4 cardeais, 1/61 dos casos), o desvio não é OBSERVÁVEL na posição — a taxa
+    // observada verdadeira é ~3/61 (4,9 %), não ~4/61 (6,6 %); a margem cobre as duas sem
+    // deixar passar uma rolagem com bounds errados (que erraria por uma ordem de grandeza).
+    expect(deviated).toBeGreaterThan(0);
+    expect(deviated / total).toBeGreaterThan(0.02);
+    expect(deviated / total).toBeLessThan(0.12);
+  });
+
+  it('o MONSTRO com drunk também desvia (ADR 0041 decisão 3, invariante 11) — mesmo `#step`', () => {
+    // O teste acima já prova a mecânica no PERSONAGEM; este prova o outro lado do invariante 11:
+    // o passo do PRÓPRIO monstro, guiado pela IA (nunca pelo bot do jogador), passa pelo MESMO
+    // `#step` — `#drunkTarget` confere `Conditions`, que personagem e monstro têm igual, sem
+    // tratamento por tipo de criatura.
+    //
+    // A `map`/`route` da fixture do arquivo é PEQUENA demais para este teste: o spawn nasce a
+    // distância 3 do herói e o passo guloso do monstro é DIAGONAL (#9, oito direções) — o
+    // primeiro `MONSTER_STEP` (agendado com atraso ZERO no nascimento) já fecha a distância até
+    // adjacente, ANTES de o teste conseguir aplicar drunk depois do `advanceBy` que faz o rato
+    // nascer. Um mapa MAIOR, com o spawn bem mais longe do herói, garante distância sobrando
+    // depois desse primeiro passo "de graça" — o suficiente para vários passos DEPOIS de drunk
+    // aplicado.
+    const bigMap = {
+      id: 'big-arena', z: 7,
+      grid: [
+        '################',
+        ...Array.from({ length: 14 }, () => '#..............#'),
+        '################',
+      ],
+    };
+    const bigRoute = {
+      id: 'big-arena-loop', mapId: 'big-arena',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+      spawnPoints: [{ routeIndex: 0, radius: 1, at: { x: 14, y: 14, z: 7 }, monsterId: 'rat' }],
+    };
+    const bigHunt = {
+      id: 'big-arena', name: 'Big Arena', recommendedLevel: 1,
+      mapId: 'big-arena', routeId: 'big-arena-loop',
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+        },
+      },
+    };
+    class FilteringRng extends Rng {
+      drunkRolls = 0;
+
+      override integer(min: number, max: number): number {
+        // `rollDrunkDeviation` é o ÚNICO chamador deste pacote que pede exatamente [0, 60] —
+        // dano, alcance e índice de alvo usam faixas bem menores nesta fixture.
+        if (min === 0 && max === 60) this.drunkRolls += 1;
+        return super.integer(min, max);
+      }
+    }
+    // `aggroRadius` grande cobre o mapa inteiro. HP absurdo (a mesma fixture `paralyzingRat` do
+    // CMB-11 acima): o herói ataca sozinho pelo reflexo de "alguém ao alcance", e um rato de 50
+    // HP morreria assim que chegasse perto — o RESPAWN traria um monstro NOVO sem a condição que
+    // este teste aplicou à mão, confundindo exatamente o que ele mede.
+    const loaded = content({
+      monsters: [{ ...rat, aggroRadius: 50, health: 100_000 }],
+      maps: [bigMap], routes: [bigRoute], hunts: [bigHunt],
+    });
+
+    const withoutDrunk = new FilteringRng(Rng.fromSeed('monster-drunk-a').getState());
+    const rulesetA = createHuntRuleset(loaded, 'big-arena', 'cautious');
+    const sessionA = new Session({
+      id: 'monster-drunk-a', contentVersion: loaded.version, ruleset: rulesetA,
+      rng: withoutDrunk, createdAtMs: 0,
+    });
+    sessionA.enter(character());
+    run(sessionA, 20_000, 200);
+    expect(withoutDrunk.drunkRolls).toBe(0);
+
+    const withDrunk = new FilteringRng(Rng.fromSeed('monster-drunk-b').getState());
+    const rulesetB = createHuntRuleset(loaded, 'big-arena', 'cautious');
+    const sessionB = new Session({
+      id: 'monster-drunk-b', contentVersion: loaded.version, ruleset: rulesetB,
+      rng: withDrunk, createdAtMs: 0,
+    });
+    sessionB.enter(character());
+    sessionB.advanceBy(10); // o rato nasce e dá o primeiro passo (sem drunk ainda).
+    const monster = rulesetB.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    // Ainda longe do herói (spawn a distância 13 do início da rota) — sobra passo de sobra
+    // depois do primeiro "de graça" para provar o desvio com drunk já ativo.
+    expect(monster.health).toBe(100_000);
+    monster.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+    run(sessionB, 20_000, 200);
+    expect(withDrunk.drunkRolls).toBeGreaterThan(0);
+  });
+});
