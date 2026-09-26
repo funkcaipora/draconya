@@ -2652,6 +2652,13 @@ export class HuntRuleset implements Ruleset {
    * posição de jogador nenhuma — e `monster.summon` só dispara com o mestre ENGAJADO
    * (`#onMonsterSummon`, `hasFollowPath`), justo a hora em que um jogador típico está colado
    * nele. `#summonBlockedFor` é o bloqueio PRÓPRIO da invocação, não o do Spawner reaproveitado.
+   *
+   * **A ordem de varredura dos 8 vizinhos é fixa** (a de `tilesAround`, achado pós-review do
+   * #546): com mais de um livre, a invocação sempre nasce no primeiro da lista, nunca num
+   * sorteado entre eles. TFS embaralha `normalRelList` (`std::shuffle`) antes de escolher — a
+   * mesma divergência aceita de `#step` (`packages/sim/AGENTS.md`, "a escolha entre os dois
+   * desvios é fixa"): funcionalmente inerte (a invocação nasce adjacente de qualquer forma, e
+   * nenhum invariante de determinismo quebra), então fica como nota, não como TODO.
    */
   #spawnSummon(session: Session, master: MonsterRuntime, monsterId: string): void {
     const definition = this.#options.monsters.get(monsterId);
@@ -3993,9 +4000,19 @@ const slots = bot.groups.get(group);
    * `#onMonsterDied` faz `this.#monsters = this.#monsters.filter(...)`: resolver morte no
    * meio de uma varredura sobre `#monsters` é varrer um array que está sendo trocado, e os
    * alvos depois do que morreu ficariam de fora. Colher primeiro fecha essa porta.
-   * Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço da forma —,
-   * então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
-   * `alive` aqui seria código que nenhum teste alcança.
+   * Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço da forma.
+   *
+   * Isso NÃO basta mais para garantir que um alvo colhido continua vivo quando chega a vez
+   * dele: desde #546, matar um mestre invocador no meio deste laço cascateia em
+   * `#removeSummon` para cada invocação dele (`#onMonsterDied` → mestre morto → invocações
+   * somem), e uma invocação adjacente pode ter sido colhida por esta MESMA mira, num índice
+   * posterior. `#removeSummon` tira a invocação de `#monsterBySubject`/`#monsters` sem tocar
+   * `health`/`alive` (ela nunca morreu, ela sumiu) — o `MonsterRuntime` colhido continua
+   * reportando `alive === true`. Sem a conferência abaixo, o laço aplicaria dano de novo nela,
+   * emitiria `creature-hit` para um id que o cliente já viu sumir, e — se o dano zerasse a
+   * vida — chamaria `resolveDeath` uma segunda vez sobre um monstro que não está em lugar
+   * nenhum, o que credita abate duas vezes e libera de novo um tile que já foi liberado (e que
+   * pode já ter outro ocupante).
    */
   #applyHits(
     session: Session, character: CharacterRuntime, hits: readonly number[],
@@ -4003,6 +4020,11 @@ const slots = bot.groups.get(group);
   ): void {
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
+      // A morte do mestre, resolvida num índice anterior deste MESMO laço, pode ter cascateado
+      // e removido esta invocação (`#removeSummon`) antes de chegar a vez dela — ver o
+      // comentário acima. Ela nunca zera `alive` ao sumir, então a checagem certa é presença no
+      // índice vivo da instância, não `monster.alive`.
+      if (this.#monsterBySubject.get(monster.subject) !== monster) continue;
       const damage = hits[i] ?? 0;
       // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.

@@ -7308,6 +7308,100 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
   });
 });
 
+describe('magia em área mata o mestre E a invocação adjacente no MESMO lançamento (#546, achado pós-review)', () => {
+  // O mestre fica PARADO de propósito: `attackRange` bem acima de qualquer distância possível
+  // dentro da sala minúscula da fixture faz `decideMonsterAction` nunca escolher "aproximar" —
+  // `monsterAttackRange` já considera o alvo ao alcance desde o primeiro engajamento
+  // (`packages/content/src/schemas.ts`, `monsterAttackRange`). Sem isto o mestre andaria até o
+  // corpo a corpo entre o nascimento da invocação (que NUNCA o segue, `aggroRadius: 0`) e o
+  // lançamento — e ela ficaria para trás, fora do raio do `blast` quando ele saísse. Parado, ela
+  // nasce ao lado dele (`SUMMON_SPAWN_RADIUS = 1`) e continua ao lado dele até o fim do teste.
+  const masterWithSummon = {
+    ...rat, attackRange: 12,
+    summons: { max: 1, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 1 }] },
+  };
+  const minion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 20, experience: 50, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { gold: { chance: 1, min: 9, max: 9 }, items: [] },
+  };
+  // `blast` (raio 2 centrado no alvo, poder 80) só sai quando a ÁREA já tem 2 alvos — o mestre
+  // sozinho conta 1 (`countAreaTargets` inclui o primário). O gate atrasa o lançamento até
+  // depois de a invocação existir: sem ele, o primeiro vencimento mataria só o mestre, e o
+  // teste nunca exercitaria a cascata que remove a invocação NO MEIO do `#applyHits`.
+  const explodirComDois = botConfig({
+    attack: [{ when: { kind: 'targets', op: '>=', count: 2 }, do: { kind: 'spell', spellId: 'blast' } }],
+  });
+  // `attackPower: 0` (o mesmo `pacifist` do describe da invocação, acima): a sala é pequena o
+  // bastante para o mestre às vezes nascer a 1 tile do herói, e sem isto o corpo a corpo AUTOMÁTICO
+  // (fora do `#applyHits`, fora deste teste) somaria um `creature-hit` a mais no mestre — ruído
+  // que não tem nada a ver com a cascata que este teste mede.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+
+  it('um só abate, um só creature-vanished por criatura, e nenhum creature-hit para quem já sumiu na cascata', () => {
+    // O defeito que este teste fecha: `#aimFor` colhe o mestre e a invocação na MESMA mira,
+    // mestre primeiro (ele nasceu antes, `#collect(primary)` antes da varredura da forma).
+    // `#applyHits` aplica os golpes na ordem da colheita — ao processar o mestre, `resolveDeath`
+    // cascateia em `#removeSummon` para a invocação AINDA NA LISTA, que sai de
+    // `#monsterBySubject`/`#monsters` sem que `alive` vire falso (ela nunca morreu, ela sumiu).
+    // Sem a checagem de presença no início do laço, a iteração seguinte reprocessaria a
+    // invocação já removida: um `creature-hit` para um id que o cliente já viu sumir e, se o
+    // dano zerasse a vida dela, um SEGUNDO `resolveDeath` — abate duplicado e um `world.vacate`
+    // sobre um tile que já foi liberado (e que pode já ter outro ocupante).
+    const { session, ruleset } = withSpells(
+      explodirComDois,
+      { mana: 200, monstersRaw: [masterWithSummon, minion], combat: [pacifist] },
+      'cautious',
+    );
+    const killsBefore = session.aggregates.kills;
+
+    const events: DomainEvent[] = [];
+    for (let elapsed = 0; elapsed < 3_000; elapsed += 50) {
+      session.advanceBy(50);
+      events.push(...session.drainEvents());
+      if (ruleset.monsters.length === 0) break;
+    }
+
+    const casts = events.filter((e) => e.kind === 'spell-cast');
+    expect(casts.length).toBeGreaterThan(0);
+    const first = casts[0] as { targets: readonly { creatureId: string | number }[] };
+    // A mira colheu os DOIS no mesmo lançamento — é o que garante que este caso passou pelo
+    // caminho mestre-antes-da-invocação dentro do MESMO `#applyHits`, e não dois lançamentos
+    // separados (o que não exercitaria nada).
+    expect(first.targets).toHaveLength(2);
+    const targetSubjects = first.targets.map((t) => t.creatureId);
+
+    // Nenhum dos dois continua indexado — o mestre morreu, a invocação sumiu na cascata.
+    expect(ruleset.monsters).toHaveLength(0);
+
+    // UM abate só: a invocação nunca paga abate (#546), e — com a correção — nem reprocessa a
+    // própria remoção como se fosse uma morte nova. Sem a correção, o `resolveDeath` duplicado
+    // creditava um segundo 'kills' para uma invocação que ninguém matou de novo.
+    expect(session.aggregates.kills).toBe(killsBefore + 1);
+
+    // Cada um dos dois alvos some UMA vez só — nunca dois `creature-vanished` para o mesmo id.
+    const vanishedCounts = new Map<string | number, number>();
+    for (const event of events) {
+      if (event.kind !== 'creature-vanished') continue;
+      vanishedCounts.set(event.creatureId, (vanishedCounts.get(event.creatureId) ?? 0) + 1);
+    }
+    for (const subject of targetSubjects) expect(vanishedCounts.get(subject)).toBe(1);
+
+    // Só o mestre leva golpe de MAGIA de verdade — a invocação já tinha sumido quando a vez dela
+    // chegou no laço, então ela nunca deveria ganhar um `creature-hit` de `#applyHits` (sem a
+    // correção, ela ganhava um, para um id que o `creature-vanished` acima já anunciou como
+    // sumido). `source: 'spell'` isola o golpe do `#applyHits` sob teste do corpo a corpo
+    // AUTOMÁTICO que a sala pequena pode colocar ao alcance do herói (`pacifist` zera o dano
+    // dele, mas o evento sai de qualquer forma — código fora deste teste, e não o assunto dele).
+    const spellHitsOnEitherTarget = events.filter(
+      (event) => event.kind === 'creature-hit' && event.source === 'spell'
+        && targetSubjects.includes(event.creatureId),
+    );
+    expect(spellHitsOnEitherTarget).toHaveLength(1);
+  });
+});
+
 describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#520)', () => {
   // Espelha `data/monsters/dragon.json` (TFS `dragon.xml`, conferido com o Canary): as mesmas
   // chances e a mesma mitigação — fogo IMUNE, gelo −10 % (vulnerável). HP alto de propósito,
