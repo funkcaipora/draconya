@@ -1009,10 +1009,13 @@ export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
 export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
 
 /**
- * A fórmula de `ConditionSpeed::setFormula` (CMB-11, #556, `condition.cpp` do Canary/TFS): o
- * formato da RUNA/MAGIA, declarado direto no Lua (`paralyze_rune.lua`: `setFormula(-1, 0, -1,
- * 0)`; `haste.lua`: `setFormula(1.3, 40, 1.3, 40)`). O `sim` lê como o Canary lê —
- * `min/max = a × (baseSpeed − 40) + b`, truncado para inteiro — nunca reescalada aqui.
+ * A fórmula de `ConditionSpeed::setFormula` (CMB-11, #556) — o método existe tanto no Canary
+ * quanto no TFS (`condition.cpp`), mas o `−40` abaixo é só do CANARY: o TFS usa `baseSpeed`
+ * direto, sem esse deslocamento (`monsters.cpp`: `minSpeedChange / 1000.0` como `mina`/`maxa`,
+ * `minb = maxb = 0`). O formato é o da RUNA/MAGIA, declarado direto no Lua (`paralyze_rune.lua`:
+ * `setFormula(-1, 0, -1, 0)`; `haste.lua`: `setFormula(1.3, 40, 1.3, 40)`). O `sim` lê como o
+ * CANARY lê — `min/max = a × (baseSpeed − 40) + b`, truncado para inteiro — nunca reescalada
+ * aqui; a precedência é a do ADR 0037 decisão 4 (Canary `main` para fórmula).
  */
 export const conditionSpeedFormulaSchema = z.object({
   mina: z.number(),
@@ -1039,10 +1042,14 @@ export const SPEED_CONDITION_KEY = 'speed' as const;
  */
 export const conditionEffectSchema = z.discriminatedUnion('kind', [
   /**
-   * Velocidade com SINAL (CMB-11, #556, `ConditionSpeed` do Canary/TFS): `type` é o nome do
-   * Tibia (`haste` acelera, `paralyze` desacelera) — não é derivado do sinal calculado, porque
-   * só ele decide o PISO (paralyze nunca desce a velocidade abaixo de 40, a mesma escala do
-   * TFS que o nosso `speed` já usa — ADR 0037 decisão 4). Duas formas mutuamente exclusivas:
+   * Velocidade com SINAL (CMB-11, #556, `ConditionSpeed` — a classe existe no Canary e no TFS,
+   * mas o PISO abaixo é mecanismo do CANARY, o TFS não tem: `type` é o nome do Tibia (`haste`
+   * acelera, `paralyze` desacelera) — não é derivado do sinal calculado, porque só ele decide o
+   * PISO (paralyze nunca desce a velocidade abaixo de 40; "40" está na escala do TFS que o nosso
+   * `speed` já usa — ADR 0037 decisão 4 — mas o próprio piso é do Canary). O `type` também
+   * precisa CONCORDAR com o sinal de `delta`/`formula` — ver os `.refine` abaixo: um `type`
+   * que contradiz a magnitude escapa do piso (a defesa que o protege só olha `type ===
+   * 'paralyze'`) e pode produzir `speedScale` negativo. Duas formas mutuamente exclusivas:
    * `delta`, o `speedChange` do ATAQUE/DEFESA de monstro copiado em MILÉSIMOS, sem conversão
    * (`Monsters::deserializeSpell` deriva a fórmula sozinho a partir dele); `formula`, a fórmula
    * da RUNA/MAGIA copiada direto do Lua. Nunca os dois, nunca nenhum.
@@ -1075,6 +1082,38 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
 ]).refine(
   (effect) => effect.kind !== 'speed' || (effect.delta !== undefined) !== (effect.formula !== undefined),
   { message: 'o efeito speed exige delta OU formula, nunca os dois nem nenhum' },
+).refine(
+  (effect) => {
+    if (effect.kind !== 'speed' || effect.delta === undefined) return true;
+    // `Monsters::deserializeSpell` do Canary: `speedChange > 0 ? CONDITION_HASTE :
+    // CONDITION_PARALYZE` — delta zero cai no `else` (paralyze), nunca haste.
+    return effect.type === 'haste' ? effect.delta > 0 : effect.delta <= 0;
+  },
+  {
+    message: 'o type do efeito speed precisa concordar com o sinal de delta (haste > 0, '
+      + 'paralyze <= 0, como Monsters::deserializeSpell do Canary) — um type que contradiz o '
+      + 'delta escapa do piso do paralyze e pode gerar speedScale negativo',
+  },
+).refine(
+  (effect) => {
+    if (effect.kind !== 'speed' || effect.formula === undefined) return true;
+    const { mina, minb, maxa, maxb } = effect.formula;
+    // Sinal ESTATICAMENTE decidível: se todos os coeficientes têm o mesmo sinal (ou são zero),
+    // o resultado pré-piso só pode ir numa direção para qualquer baseSpeed >= 40 — o mínimo que
+    // o conteúdo usa hoje. Uma fórmula que só pode SUBIR velocidade não pode ser `paralyze`, e
+    // uma que só pode DESCER não pode ser `haste`: é o caso real da runa de paralyze (`-1, 0,
+    // -1, 0`) rotulada por engano como `haste`, que produziria um `speedScale` negativo (#556).
+    const onlyNonPositive = mina <= 0 && minb <= 0 && maxa <= 0 && maxb <= 0;
+    const onlyNonNegative = mina >= 0 && minb >= 0 && maxa >= 0 && maxb >= 0;
+    if (effect.type === 'haste' && onlyNonPositive && !onlyNonNegative) return false;
+    if (effect.type === 'paralyze' && onlyNonNegative && !onlyNonPositive) return false;
+    return true;
+  },
+  {
+    message: 'o type do efeito speed precisa concordar com o sinal da formula — coeficientes '
+      + 'que só podem reduzir velocidade não podem ser type "haste", e coeficientes que só '
+      + 'podem aumentar não podem ser type "paralyze"',
+  },
 );
 export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
 

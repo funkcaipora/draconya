@@ -1947,6 +1947,73 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     }))).toThrow(ContentError);
   });
 
+  it('recusa type que contradiz o sinal de delta — haste negativo ou paralyze positivo', () => {
+    const hasteNegativo = {
+      ...paralyzeAttack,
+      effect: { kind: 'speed', type: 'haste', delta: -600 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: hasteNegativo }] }],
+    }))).toThrow(ContentError);
+
+    const paralyzePositivo = {
+      ...paralyzeAttack,
+      effect: { kind: 'speed', type: 'paralyze', delta: 400 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: paralyzePositivo }] }],
+    }))).toThrow(ContentError);
+
+    // delta zero cai no `else` de `Monsters::deserializeSpell` do Canary — é paralyze, não haste.
+    const hasteZero = {
+      ...paralyzeAttack,
+      effect: { kind: 'speed', type: 'haste', delta: 0 },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: hasteZero }] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('recusa type que contradiz o sinal de formula — a runa de paralyze rotulada como haste', () => {
+    // A runa real (`data/scripts/runes/paralyze_rune.lua`: `setFormula(-1, 0, -1, 0)`) só pode
+    // REDUZIR velocidade; rotulá-la `haste` é exatamente o erro de conteúdo que #641 encontrou.
+    const paralyzeRotuladoHaste = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'haste',
+        formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: paralyzeRotuladoHaste }] }],
+    }))).toThrow(ContentError);
+
+    // O inverso: a fórmula do haste (`setFormula(1.3, 40, 1.3, 40)`) só pode SUBIR velocidade;
+    // rotulá-la `paralyze` também é recusado.
+    const hasteRotuladoParalyze = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'paralyze',
+        formula: { mina: 1.3, minb: 40, maxa: 1.3, maxb: 40 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: hasteRotuladoParalyze }] }],
+    }))).toThrow(ContentError);
+
+    // A fórmula real, com o type CERTO, continua aceita.
+    const paralyzeCorreto = {
+      ...paralyzeAttack,
+      effect: {
+        kind: 'speed', type: 'paralyze',
+        formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+      },
+    };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'x', cadenceMs: 1_000, power: 0, condition: paralyzeCorreto }] }],
+    }))).not.toThrow();
+  });
+
   it('recusa a chave errada — speed exige a chave reservada "speed"', () => {
     const chaveErrada = { ...paralyzeAttack, key: 'slow' };
     expect(() => buildContent(base({
