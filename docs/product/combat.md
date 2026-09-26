@@ -800,15 +800,81 @@ mais de 2 s antes do primeiro golpe de uma hunt), que NÃO reproduz a janela ini
 de vulnerabilidade ainda, e fica em aberto para quando pedirem. Só `applyDamageOutcome` (CMB-08)
 escreve o estado de volta no dono (invariante 9); o resolver é puro e só o calcula.
 
-### O jogador continua com os números de antes
+### A defesa, a armadura e a mitigação do JOGADOR (#549, M30-02)
 
-**Fora do escopo do #548** (M30-02): a fórmula de defesa/armadura do jogador do Tibia 13.x. O
-`combat-v3` reusa os MESMOS números que o `combat-v1`/`v2` já calculavam —
-`combat.player.armor` mais o equipado (`Inventory.armor`), e a defesa de
-`Inventory.defenseSource` (escudo ou arma de uma mão, escalada pela skill `shielding`) — só o
-MECANISMO que os consome muda. `combat.defense.blockChance` (o percentual do CMB-04) deixa de ser
-lido; `combat.defense.skillId`/`blockTypes` continuam existindo para as sessões em `combat-v1`/
-`v2`.
+Sob `combat-v3`, o jogador para de usar os números ad hoc que `combat-v1`/`v2` calculavam
+(`combat.player.armor` mais o equipado; a defesa de `Inventory.defenseSource` escalada pela skill
+`shielding` via `powerMultiplier` — uma fórmula PRÓPRIA do Draconya, não do Tibia) e passa a usar
+as três funções puras de `packages/sim/src/combat/player-defense.ts`, transcritas do MECANISMO
+descrito pelo Canary 13.x (ADR 0019 — nunca código copiado):
+
+- **`playerDefense`** → `Player::getDefense` (`player.cpp:776-813`): sem nada na mão, a defesa
+  vem do PUNHO (`defenseValue` 7, escalado pela skill `melee` — Draconya consolidou fist/sword/
+  axe/club numa skill só, #521/ADR 0037); uma arma na mão troca os dois pelos DELA; um escudo
+  troca os dois de novo — `defenseValue` vira o do escudo MAIS o `extraDefense` da arma (se
+  houver uma), e a skill vira `shielding`. O resultado é o número que `resolveBlockHit`
+  (`blockhit.ts`) rola em faixa (`uniform_random(defense/2, defense)`) enquanto o `blockCount`
+  tiver carga — o jogador SEMPRE tem uma defesa residual agora (mesmo desarmado), diferente do
+  `combat-v1`/`v2` (`Inventory.defenseSource` devolvia `none`/`0` sem peça nenhuma).
+- **`playerArmor`** → `Player::getArmor` (`player.cpp:658-667`): a soma do equipado, sem o
+  baseline de 4 que `combat.player.armor` inventava para "o personagem desarmado no level 1" —
+  esse número nunca existiu no Tibia. Um personagem sem NADA vestido agora tem armadura ZERO,
+  como no Canary.
+- **`playerMitigation`** → `PlayerWheel::calculateMitigation` (`player_wheel.cpp:4072-4124`): a
+  mitigação percentual (`Defender.defenseMitigation`) que antes só o monstro tinha. Escudo e arma
+  contribuem em SEQUÊNCIA (não em exclusão mútua) — `vocation.mitigation.{multiplier,
+  primaryShield, secondaryShield}` (`vocations.xml` `<mitigation>`) escalam a skill de escudo e a
+  defesa da peça; spellbook e quiver (os dois novos campos de item, `Item.spellbook`/`.quiver`)
+  usam `secondaryShield` como `distanceFactor` em vez de `primaryShield`, como faz uma arma de
+  duas mãos ou uma que atira munição (`Item.extraDefense`, `Weapon.ammoFamily`).
+
+`fightMode` é PARÂMETRO das duas primeiras (a postura do Canary — ofensiva/equilibrada/
+defensiva). **Sem seletor ainda** (M30-03): todo chamador em `hunt.ts` passa `'attack'` fixo, a
+mesma decisão que `combat.weaponDamage.attackFactor` já tomou para o dano de arma do
+`combat-v2`. As duas fórmulas usam a metade ESTÁTICA dos fatores do Canary
+(`getDefenseFactor(sendToClient = true)`: 0,5/0,75/1,0; `getCombatTacticsMitigation`: 0,8/1,0/
+1,2) — a metade DINÂMICA (se o jogador bateu "recentemente", via `lastAttack`/`attackSpeed`) fica
+para a M30-03, que é quem vai desenhar o relógio de "último ataque" que essa metade pede; nenhum
+estado foi inventado só para esta issue.
+
+**Fora do escopo, de propósito** (ADR 0040 decisão 1, "o multiplicador da Roda é 0 até o M41"): o
+bônus `Combat Mastery` (soma em `defenseValue` quando um escudo tem `defense > 0`) e o
+`mitigation += mitigation × getMitigationMultiplier() ÷ 100` no fim de `calculateMitigation` — os
+dois são exclusivamente da Wheel of Destiny, zero sem gema.
+
+`vocation->defenseMultiplier`/`armorMultiplier` (`<formula defense="1.0" armor="1.0">`) ficam de
+FORA do conteúdo: as cinco vocações e todas as promoções do `vocations.xml` declaram `1.0`
+(conferido em 2026-09-26) — as duas funções aplicam a identidade e documentam a citação, em vez
+de uma tabela de conteúdo que nunca diverge de 1.
+
+`combat.player.armor`/`combat.player.dodgeChance` continuam existindo no schema e valendo para
+`combat-v1`/`v2` (`#playerDefender` em `hunt.ts` agora BIFURCA pelo perfil: números antigos em
+v1/v2, `playerDefense`/`playerArmor`/`playerMitigation` só em v3). `combat.defense.blockChance`
+(o percentual do CMB-04) continua sem uso sob `combat-v3`; `combat.defense.skillId` passa a ser
+REUSADO por `playerDefense`/`playerMitigation` como a skill de escudo do jogador — a mesma
+entrada de conteúdo, dois consumidores.
+
+### Parâmetros de conteúdo (#549)
+
+| Campo | Onde | Knight | Paladin | Sorcerer | Druid | Base (sem vocação) |
+|---|---|---|---|---|---|---|
+| `mitigation.multiplier` | `vocations/*.json` | 1,3 | 1,28 | 1,26 | 1,26 | 1,3 |
+| `mitigation.primaryShield` | `vocations/*.json` | 2,05 | 2,08 | 2,0 | 2,0 | 2,05 |
+| `mitigation.secondaryShield` | `vocations/*.json` | 1,25 | 1,2 | 1,2 | 1,2 | 1,25 |
+
+Fonte: Canary `data/XML/vocations.xml`, `<mitigation multiplier primaryShield secondaryShield>`
+das entradas `id="4"` (Knight), `id="3"` (Paladin), `id="1"` (Sorcerer), `id="2"` (Druid) e
+`id="0"` (None — a base de `progression/baseline.json`), conferido em 2026-09-26. A base repete
+os números do Knight por coincidência do arquivo real, não erro de cópia — Sorcerer e Druid
+também coincidem entre si.
+
+| Item | `extraDefense` | `spellbook`/`quiver` | Fonte |
+|---|---|---|---|
+| Mystic Blade (Knight) | 2 | — | Canary `items.xml` id 7384, `extradef value="2"` |
+| Spellbook of Mind Control (Sorcerer/Druid) | — | `spellbook: true` | `Item::isSpellBook`, `item.hpp:553-555` |
+
+Nenhum item do catálogo atual declara `quiver: true` — a Royal Crossbow (Paladin) é de duas mãos
+e usa `Weapon.ammoFamily` (não um item de escudo) para o mesmo efeito em `playerMitigation`.
 
 ### O monstro ganha `defense` e `defenseMitigation`
 
@@ -828,10 +894,11 @@ Canary o capa em 30.
 ### O que fica para depois
 
 Absorção/aumento por tipo (`applyAbsorbDamageModifications`, o PRIMEIRO estágio do `Creature::
-blockHit`) e reflexo são o **M30-05**. A fórmula própria de defesa/armadura/mitigação do jogador
-é o **M30-02**. Postura de luta é o **M30-03**. A posição exata do crítico/leech sob o
-`combat-v3` é o **M30-04**. A exceção de lifedrain/manadrain na mitigação percentual espera o
-**M29-07** (os tipos de dano ainda não existem em `@draconya/content`).
+blockHit`) e reflexo são o **M30-05**. Postura de luta de VERDADE (um seletor por personagem, em
+vez do `'attack'` fixo que `playerDefense`/`playerMitigation` recebem desde o #549) é o
+**M30-03**. A posição exata do crítico/leech sob o `combat-v3` é o **M30-04**. A exceção de
+lifedrain/manadrain na mitigação percentual espera o **M29-07** (os tipos de dano ainda não
+existem em `@draconya/content`).
 
 ## Famílias de arma e proficiências (CMB-05, #333)
 
