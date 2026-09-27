@@ -223,13 +223,52 @@ export function compileReflect(
 
 /** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
 export function compileMonster(monster: MonsterDefinition): CompiledMonster {
-  const { mitigation: _rawMitigation, abilities: _rawAbilities, defenses: _rawDefenses, ...rest } = monster;
+  const {
+    mitigation: _rawMitigation, abilities: _rawAbilities, defenses: _rawDefenses,
+    elementHealing: _rawHealing, reflect: _rawReflect, ...rest
+  } = monster;
+  const elementHealing = compileElementHealing(monster.elementHealing);
+  // O reflexo do monstro é só percentual (#683): o `flat` fica zero na forma do item (#552).
+  let reflect: CompiledReflect | undefined;
+  if (monster.reflect !== undefined) {
+    const declared: Partial<Record<DamageType, { percent: number }>> = {};
+    for (const type of DAMAGE_TYPES) {
+      const percent = monster.reflect[type];
+      if (percent !== undefined) declared[type] = { percent };
+    }
+    reflect = compileReflect(declared);
+  }
   return {
     ...rest,
     abilities: normalizeMonsterAbilities(monster),
     defenses: normalizeMonsterDefenses(monster),
     mitigation: compileMitigation(monster.mitigation),
+    ...(elementHealing === undefined ? {} : { elementHealing }),
+    ...(reflect === undefined ? {} : { reflect }),
   };
+}
+
+/**
+ * Compila a cura por elemento do monstro (#683) na tabela COMPLETA por tipo que o `sim` lê
+ * (`Defender.elementHealing`): zero onde não cura, como `compileMitigation`. `undefined` quando
+ * NADA cura — o monstro comum não paga objeto nenhum no caminho quente, como `compileReflect`.
+ */
+export function compileElementHealing(
+  healing: Partial<Record<DamageType, number>> | undefined,
+): Readonly<Record<DamageType, number>> | undefined {
+  if (healing === undefined) return undefined;
+  const table: Record<DamageType, number> = {
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  };
+  let any = false;
+  for (const type of DAMAGE_TYPES) {
+    const value = healing[type];
+    if (value === undefined || value <= 0) continue;
+    table[type] = value;
+    any = true;
+  }
+  return any ? table : undefined;
 }
 
 /**

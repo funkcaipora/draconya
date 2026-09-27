@@ -461,7 +461,13 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   resolver (`DamageOutcome.reflected`) e a SEGUNDA resolução é do ruleset
   (`#reflectOntoMonster`), com `reflectedDamageIntent` marcado `extension` — é essa marca, e não
   um contador, que impede reflexo sobre reflexo. O mecanismo é por fonte (`DefenderReflect.
-  reflector`): o reflexo de monstro (#683) reusa `resolveReflect`, não escreve outro. O cleave rola
+  reflector`): o reflexo de monstro (#683) reusa `resolveReflect`, não escreve outro — a segunda
+  resolução contra o personagem é `#reflectOntoCharacter`. A cura por elemento do monstro (#683)
+  é calculada no resolver (`DamageOutcome.elementHealing`, opcional) e aplicada pelo ruleset em
+  `#healMonsterByElement`; `#afterMonsterHit` é o ponto ÚNICO de `#land` e `#applyHits` para as
+  duas — um terceiro caminho de dano no monstro precisa chamá-lo, ou golpe e magia divergem. O
+  `attacker` do intent só existe quando o monstro reflete: sem isso, cada golpe alocaria um objeto
+  à toa. O cleave rola
   o poder de CADA vítima antes do golpe principal — a rolagem extra só existe com `cleavePercent`
   vestido, o que mantém o resto bit a bit.
 - **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,

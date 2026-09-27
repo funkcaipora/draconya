@@ -880,6 +880,92 @@ describe('combat-v3 (#552, M30-05): absorção, aumento e reflexo', () => {
   });
 });
 
+describe('combat-v3 (#683, M30-G6): vulnerabilidade até -200 % e cura por elemento do monstro', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const bare = { armor: 0, dodgeChance: 0 };
+  const fireHit = (rawDamage: number): DamageIntent => ({ ...hit(rawDamage, 'fire'), blockable: MAGIC_BLOCK_FLAGS });
+  // Tabela completa por tipo, como `compileElementHealing` a entrega: zero onde não cura.
+  const healing = (fire: number): Record<DamageType, number> => ({
+    physical: 0, energy: 0, earth: 0, fire, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  });
+  const rolls = (chances: readonly boolean[]): Rng => {
+    const real = Rng.fromSeed('v3-heal');
+    let index = 0;
+    return {
+      chance: () => chances[index++] ?? false,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  it('resistência -2 triplica o dano: 100 de fogo → 300', () => {
+    const defender = { ...bare, mitigation: compileMitigation({ resistances: { fire: -2 }, immunities: [] }) };
+    expect(resolveDamage(fireHit(100), defender, 'pve', v3, rigged(false), 0).resolvedDamage).toBe(300);
+  });
+
+  it('cura 50 % do dano BRUTO: 101 → ceil(50,5) = 51, com ou sem imunidade', () => {
+    const plain = { ...bare, elementHealing: healing(50) };
+    const hitPlain = resolveDamage(fireHit(101), plain, 'pve', v3, rigged(false), 0);
+    expect(hitPlain.elementHealing).toBe(51);
+    expect(hitPlain.resolvedDamage).toBe(101);
+    const immune = { ...plain, mitigation: compileMitigation({ resistances: {}, immunities: ['fire'] }) };
+    const hitImmune = resolveDamage(fireHit(101), immune, 'pve', v3, rigged(false), 0);
+    expect(hitImmune.resolvedDamage).toBe(0);
+    expect(hitImmune.elementHealing).toBe(51);
+    // Resistência não reduz a cura: ela sai ANTES do bloqueio.
+    const resistant = { ...plain, mitigation: compileMitigation({ resistances: { fire: 0.9 }, immunities: [] }) };
+    expect(resolveDamage(fireHit(101), resistant, 'pve', v3, rigged(false), 0).elementHealing).toBe(51);
+  });
+
+  it('a cura usa o dano JÁ crítico: 101 × 1,5 = 151,5 → ceil(75,75) = 76', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const intent: DamageIntent = { ...fireHit(101), modifiers: { critical: { chance: 1, multiplier: 1.5 } } };
+    const result = resolveDamage(intent, defender, 'pve', v3, rolls([false, true]), 0);
+    expect(result.critical).toBe(true);
+    expect(result.elementHealing).toBe(76);
+  });
+
+  it('outro tipo não cura, e o outcome não ganha a chave', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const result = resolveDamage({ ...hit(100, 'ice'), blockable: MAGIC_BLOCK_FLAGS }, defender, 'pve', v3, rigged(false), 0);
+    expect('elementHealing' in result).toBe(false);
+  });
+
+  it('o secundário cura pelo próprio tipo, no outcome dele', () => {
+    const defender = { ...bare, elementHealing: healing(100) };
+    const intent: DamageIntent = {
+      ...hit(100, 'physical'), blockable: MAGIC_BLOCK_FLAGS,
+      secondary: { rawDamage: 40, damageType: 'fire' },
+    };
+    const result = resolveDamage(intent, defender, 'pve', v3, rigged(false), 0);
+    expect(result.elementHealing).toBeUndefined();
+    expect(result.secondaryOutcome?.elementHealing).toBe(40);
+  });
+
+  it('combat-v1 ignora a cura: o outcome não tem a chave', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const result = resolveDamage(fireHit(100), defender, 'pve', combat, rigged(false), 0);
+    expect('elementHealing' in result).toBe(false);
+  });
+
+  it('o dano NEUTRO (reflexo de jogador) não cura', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const neutral: DamageIntent = { ...fireHit(100), source: 'reflect', extension: true, neutral: true };
+    expect(resolveDamage(neutral, defender, 'pve', v3, rigged(false), 0).elementHealing).toBeUndefined();
+  });
+
+  it('o reflexo de MONSTRO volta com o tipo original, não neutro, com o teto de 1 %', () => {
+    const table = compileReflect({ physical: { percent: 50 } });
+    if (table === undefined) throw new Error('reflexo vazio');
+    const defender = { ...bare, reflect: { reflector: 'monster' as const, table } };
+    const result = resolveDamage(
+      { ...hit(100), blockable: MAGIC_BLOCK_FLAGS, attacker: { maxHealth: 500, distance: 5 } },
+      defender, 'pve', v3, rigged(false), 0,
+    );
+    expect(result.reflected).toEqual({ amount: 5, damageType: 'physical', neutral: false });
+  });
+});
+
 describe('effectiveDodge', () => {
   it('gives the Bestiary bonus in PvE only', () => {
     // §18.5: bônus de Bestiário são PvE-only. O contexto é o que impede a Guild War de

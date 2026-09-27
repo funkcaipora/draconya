@@ -110,6 +110,12 @@ export interface Defender {
    * não reflete nada. Ignorado em `combat-v1`/`v2`.
    */
   readonly reflect?: DefenderReflect | undefined;
+  /**
+   * A cura por elemento do MONSTRO (#683, `monster.heals` do Canary): a tabela completa por
+   * tipo, em percentual INTEIRO (`compileElementHealing`, `content`). Ausente é quem não cura com
+   * tipo nenhum. Só o `combat-v3` lê.
+   */
+  readonly elementHealing?: Readonly<Record<DamageType, number>> | undefined;
 }
 
 /**
@@ -249,6 +255,14 @@ export interface DamageOutcome {
    * sempre num golpe que já é extensão.
    */
   readonly reflected?: ReflectedDamage;
+  /**
+   * Quanto o golpe CURA o defensor (#683, `monster.heals`): `ceil(dano já crítico × p / 100)`,
+   * calculado ANTES do bloqueio e mesmo com imunidade. OPCIONAL de propósito: ausente é zero, e o
+   * outcome de `combat-v1`/`v2` — e todo golpe em quem não cura — mantém a forma de sempre. Só
+   * este componente: o do secundário vem em `secondaryOutcome.elementHealing`. Quem aplica a
+   * cura é o ruleset, depois do dano e do reflexo.
+   */
+  readonly elementHealing?: number;
 }
 
 /** Chance de esquiva que de fato vale, dado onde a luta acontece. */
@@ -392,6 +406,8 @@ function resolveMitigation(
  *      percentual — o estágio `resolveBlockHit` (`blockhit.ts`), que substitui o bloqueio
  *      binário do CMB-04 inteiro (defesa) e a subtração flat de armadura do CMB-02/03, agora
  *      sobre o dano JÁ crítico;
+ *   2a. (#683) a cura por elemento do monstro (`elementHealing`), sobre o dano JÁ crítico e
+ *      antes de tudo que segue — imunidade inclusive; o ruleset a aplica depois do golpe;
  *   2b. (#552, M30-05) o corte de manadrain à mana atual e o estágio de absorção do `Creature`
  *      (`applyAbsorbDamageModifications`): absorção FLAT do defensor e AUMENTO do atacante por
  *      tipo — ANTES da imunidade e da defesa, como o primeiro ato do `blockHit` do Canary;
@@ -400,7 +416,8 @@ function resolveMitigation(
  *   4. resistência/vulnerabilidade por tipo (CMB-03, `mitigation.resistances`) — os `elements`
  *      do MONSTRO, que o Canary aplica em `Monster::blockHit` depois do `Creature::blockHit`
  *      (conferido no #552: NÃO passam por `getAbsorbPercent`). O jogador do `combat-v3` chega
- *      aqui sem resistência: a do item é a absorção do passo 3b;
+ *      aqui sem resistência: a do item é a absorção do passo 3b. O monstro vai até `-2` (#683,
+ *      `monsterMitigationSchema`): `dano × (1 − (−2))` triplica;
  *   5. piso (`minimumDamageFraction`), sobre o PODER BRUTO ORIGINAL (sem o crítico) — mantido
  *      como salvaguarda de PRODUTO do Draconya (nunca existiu no Canary: lá um bloqueio pode
  *      legitimamente zerar um golpe, e o crítico não existe no Canary como conceito de "piso").
@@ -447,6 +464,13 @@ function resolveBlockHitProfile(
   // imunidade, absorção, aumento e resistência não o tocam.
   const neutral = intent.neutral === true;
   const immune = !neutral && (defender.mitigation?.immunities.has(intent.damageType) ?? false);
+
+  // A cura por elemento (#683, `Game::combatBlockHit`): sobre o valor JÁ crítico e ANTES do
+  // `blockHit` — nem absorção, nem defesa, nem imunidade a tocam, então o monstro imune ao tipo
+  // cura igual. Sem sorteio. Conta inteira, como o reflexo: `ceil(d × p / 100)`. O dano neutro
+  // (reflexo de jogador) não tem entrada no `healingMap` do Canary e não cura.
+  const healingPercent = neutral ? 0 : defender.elementHealing?.[intent.damageType] ?? 0;
+  const elementHealing = healingPercent > 0 ? Math.ceil((criticalRawDamage * healingPercent) / 100) : 0;
 
   // Manadrain capa para a mana ATUAL do alvo ANTES de qualquer estágio (#547, M29-07 — achado da
   // revisão do PR #648): o Canary computa `manaLoss = min(mana atual, -manaChange)` e só DEPOIS
@@ -536,7 +560,11 @@ function resolveBlockHitProfile(
         ...(intent.modifiers?.increase === undefined
           ? {} : { modifiers: { increase: intent.modifiers.increase } }),
         // Sem `attacker`: o secundário não reflete por conta própria. O Canary só olha o reflexo
-        // do secundário quando o ALVO é monstro (`game.cpp:8016-8039`), o que é do #683.
+        // do secundário quando o ALVO é monstro (`game.cpp:8016-8039`), e o #683 o deixou de
+        // fora: nenhum conteúdo tem secundário contra monstro que reflete, e a conta de lá usa o
+        // valor do PRIMÁRIO com o tipo do secundário — não há o que copiar sem copiar o defeito.
+        // A CURA do secundário, ao contrário, sai daqui sozinha (`elementHealing` do outcome
+        // dele), e o ruleset soma as duas, como o `damageHeal` do Canary.
       },
       { ...defender, blockCharge: blockHit.blockCharge }, context, combat, rng, nowMs,
     );
@@ -569,6 +597,7 @@ function resolveBlockHitProfile(
     blockCharge: secondaryOutcome?.blockCharge ?? blockHit.blockCharge,
     ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
     ...(reflected === undefined ? {} : { reflected }),
+    ...(elementHealing > 0 ? { elementHealing } : {}),
   };
 }
 
