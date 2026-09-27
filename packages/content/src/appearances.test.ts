@@ -178,8 +178,14 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
     // munição, a runa e as armas com projétil também carregam a decisão.
     // Mutação que mata: colar a frase de volta.
     const offenders: string[] = [];
+    // `appearances/generated/` (#727, ADR 0050 d.1) é a ÚNICA subpasta em `data/` — a varredura
+    // DESCE nela; sem recursão, `readFileSync` numa pasta explode com `EISDIR`.
+    const filesOf = (path: string): string[] => readdirSync(path, { withFileTypes: true })
+      .flatMap((entry) => (entry.isDirectory()
+        ? filesOf(join(path, entry.name)).map((f) => join(entry.name, f))
+        : [entry.name]));
     for (const folder of readdirSync(DATA)) {
-      for (const file of readdirSync(join(DATA, folder))) {
+      for (const file of filesOf(join(DATA, folder))) {
         const text = readFileSync(join(DATA, folder, file), 'utf8');
         if (/sem conferência visual/.test(text)) offenders.push(`${folder}/${file}`);
       }

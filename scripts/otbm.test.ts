@@ -22,6 +22,13 @@ const item = (id: number, attrs: number[] = [], children: number[][] = []): numb
 const ground = (id: number): number[] => [0x09, ...u16(id)];
 const flags = (bits: number): number[] => [0x03, ...u32(bits)];
 const count = (n: number): number[] => [0x0f, ...u8(n)];
+const actionId = (id: number): number[] => [0x04, ...u16(id)];
+const uniqueId = (id: number): number[] => [0x05, ...u16(id)];
+const text = (value: string): number[] => {
+  const bytes = [...value].map((c) => c.charCodeAt(0));
+  return [0x06, ...u16(bytes.length), ...bytes];
+};
+const teleportDest = (x: number, y: number, z: number): number[] => [0x08, ...u16(x), ...u16(y), ...u8(z)];
 
 const file = (areas: number[][]): Uint8Array =>
   Uint8Array.from([...header(), ...root([mapData(areas)])]);
@@ -115,6 +122,30 @@ describe('readOtbmTiles', () => {
     // Já coberto pela fixture: `mapData` grava 0x17, que não está na tabela clássica.
     const bytes = file([area(32000, 32000, 7, [tile(1, 1, ground(9))])]);
     expect(all(bytes)).toHaveLength(1);
+  });
+
+  it('preserva aid/uid/text do item (#727, ADR 0050 d.1)', () => {
+    const bytes = file([area(32000, 32000, 7, [
+      tile(1, 1, ground(410), [
+        item(1629, [...actionId(1000)]),
+        item(2854, [...uniqueId(500)]),
+        item(1950, [...text('You see a sign.')]),
+      ]),
+    ])]);
+    expect(all(bytes)[0]?.items).toEqual([
+      { id: 1629, actionId: 1000 },
+      { id: 2854, uniqueId: 500 },
+      { id: 1950, text: 'You see a sign.' },
+    ]);
+  });
+
+  it('preserva o destino de um teleporte (`ATTR_TELE_DEST`, #727)', () => {
+    const bytes = file([area(32000, 32000, 7, [
+      tile(1, 1, ground(410), [item(1387, teleportDest(32100, 32100, 7))]),
+    ])]);
+    expect(all(bytes)[0]?.items).toEqual([
+      { id: 1387, teleportDestination: { x: 32100, y: 32100, z: 7 } },
+    ]);
   });
 
   it('nó sem fechamento é erro, não laço infinito', () => {

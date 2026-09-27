@@ -109,6 +109,17 @@ só como fixture em `packages/server/src/testing/content.ts`.
 personagem chegar ao fim e parar — o sintoma chega dias depois como "a hunt travou", sem ligação
 nenhuma com o arquivo de rota.
 
+**Cenário usável: o importador CLASSIFICA, o mecanismo é a #728** (#727, ADR 0050 d.1).
+`tilemapSchema.interactables[]` diz o que cada tile É — porta (comum, de chave, de level, de
+quest), capim, stone pile, rope spot, ladder, alavanca, baú, placa, teleporte — a partir de
+`aid`/`uid`/`text` do OTBM (portas e capim, pela tabela; baú e placa, pelo atributo) e das
+tabelas do Canary transcritas como DADO em `data/scenery/canary-tables.json` (`doors.lua`,
+`register_actions.lua`, `global.lua`, `items.xml` — só números e pares de id, nunca o script,
+ADR 0019). **O tile de um interativo nunca é `#` na grade**, mesmo fechado/trancado: quem sabe
+se dá para pisar ali agora é o interativo — hoje só a classificação existe; o estado que muda por
+sessão (`TileOverrides`) é a #728, que ainda não existe, e o `sim` não lê `interactables` até
+lá. `docs/product/scenery.md` traz os números medidos nos quatro mapas.
+
 Confira antes de subir o servidor:
 
 ```
@@ -267,6 +278,21 @@ porque o pacote ganhou ids não muda o que ninguém vê, e contá-lo faria um `p
 assets:inventory` recusar todo snapshot de uma queda sem drenagem. O que muda a arte de uma
 sessão é o `pack` da tabela, e esse já conta.
 
+**`appearances.scenery` é GERADO, e mora numa tabela SEPARADA** (#727, ADR 0050 d.1):
+`data/appearances/generated/scenery.json`, escrito por `pnpm map:import` — nunca à mão, como
+`baseline.json`. `load.ts` lê a subpasta `appearances/generated/` junto com `appearances/`, e
+`buildContent` mescla a seção `scenery` de toda tabela que não seja `baseline` por cima da de
+`baseline` (mesma chave, o último arquivo em ordem alfabética vence — a mesma regra do resto do
+conteúdo). A forma é `appearanceKey → { estado → id }` — `door-1629: { closed, open }`,
+`grass-3696: { uncut, cut }`, `lever: { down, up }` (uma alavanca só, compartilhada por todo
+mapa: 2772/2773 do Canary são o par físico, não um por instância) —, e só entram as chaves que
+ALGUM interativo de ALGUM mapa importado realmente usa: a tabela do Canary tem centenas de
+portas que o jogo inteiro usa, a maioria fora dos quatro recortes do Draconya e fora do
+inventário do pacote (`packs/tibia-1332.json` é a sombra de Thais/Rat Cellars/Rotworm
+Caves/Dragon Lair, não do jogo inteiro) — gerar a tabela toda faria `packProblems` recusar id
+que nenhum mapa usa, e o boot cairia por causa de porta que não está em lugar nenhum do jogo
+importado. `packProblems` confere cada estado de cada chave contra o pacote, como `corpses`.
+
 ## Loot (FUN-63)
 
 A tabela do monstro separa **moeda** de **item**: `loot.gold` é `{ chance, min, max }` e
@@ -420,6 +446,12 @@ entre arquivos resolvem.
 
 - É tentador colocar lógica aqui ("esse monstro se comporta assim"). Comportamento é `sim`;
   aqui só ficam os números e as tabelas que o comportamento lê.
+- **Uma porta TRANCADA (id `locked` de `KeyDoorTable`) é `.` na grade, não `#`** (#727, ADR
+  0050 d.1) — o mesmo vale para toda porta/capim/pile/rope spot/ladder/alavanca classificados.
+  Quem espera "porta fechada bloqueia o bot" precisa olhar `interactables[].initialState` e
+  `requires`, não `isBlocked`: até a #728 (`TileOverrides`) pousar, NADA impede o bot de andar
+  por cima de uma porta trancada — é a troca deliberada do ADR (a alternativa, manter `#` para
+  sempre, prendia o bot atrás de toda porta de Thais sem jeito nenhum de destrancar).
 - **`lure` e `ringSwap` são configuração de PERSONAGEM, não conteúdo** (FUN-87). Os schemas
   moram aqui porque o vocabulário do bot mora aqui; os valores vêm do `bot_config` de quem
   configurou. Nenhum arquivo de `data/` os define, e nenhum deveria.

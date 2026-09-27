@@ -572,9 +572,16 @@ describe('content/ nunca contém arte (invariante 6)', () => {
     // dela. Este teste é barato e é a única coisa que impede o atalho.
     const extensoes = /\.(png|jpe?g|gif|webp|bmp|spr|dat)\b/i;
     const ofensores: string[] = [];
+    // `appearances/generated/` (#727, ADR 0050 d.1) é a ÚNICA subpasta em `data/` — a varredura
+    // DESCE nela, em vez de pular: um `EISDIR` sem recursão é o jeito errado de notar a pasta
+    // nova, e pular em silêncio deixaria justamente o arquivo gerado fora da conferência.
+    const arquivosDe = (caminho: string): string[] => readdirSync(caminho, { withFileTypes: true })
+      .flatMap((entrada) => (entrada.isDirectory()
+        ? arquivosDe(join(caminho, entrada.name)).map((f) => join(entrada.name, f))
+        : [entrada.name]));
     for (const pasta of readdirSync(DATA)) {
       const caminhoPasta = join(DATA, pasta);
-      for (const arquivo of readdirSync(caminhoPasta)) {
+      for (const arquivo of arquivosDe(caminhoPasta)) {
         const texto = readFileSync(join(caminhoPasta, arquivo), 'utf8');
         if (extensoes.test(texto)) ofensores.push(`${pasta}/${arquivo}`);
       }

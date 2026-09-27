@@ -1032,7 +1032,20 @@ export function buildContent(raw: RawContent): Content {
   // de mapa, e exigir dele um arquivo vazio seria burocracia sem nada do outro lado.
   const appearanceTables = parseAll('appearances', raw.appearances ?? [], appearancesSchema,
     problems);
-  const appearances = appearanceTables.get('baseline');
+  let appearances = appearanceTables.get('baseline');
+  // `appearances/generated/scenery.json` (#727, ADR 0050 d.1) é uma tabela SEPARADA — `pnpm
+  // map:import` a escreve por mapa, e nunca toca `baseline.json`. O que o `sim`/`server` leem é
+  // um `appearances` só, então toda tabela que NÃO é `baseline` contribui sua seção `scenery`
+  // por cima dela — mesma chave em duas tabelas é o último arquivo (ordem alfabética) vencendo,
+  // como o resto do conteúdo.
+  if (appearances !== undefined) {
+    let scenery = appearances.scenery;
+    for (const [id, table] of appearanceTables) {
+      if (id === 'baseline' || Object.keys(table.scenery).length === 0) continue;
+      scenery = { ...scenery, ...table.scenery };
+    }
+    if (scenery !== appearances.scenery) appearances = { ...appearances, scenery };
+  }
   if (appearances === undefined
     && (monsterDefinitions.size > 0 || itemDefinitions.size > 0
       || ammunitionDefinitions.size > 0)) {
@@ -1475,6 +1488,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
+    // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
+    scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [
       typeof entry === 'object' && entry !== null && 'id' in entry
         ? String((entry as { id: unknown }).id)

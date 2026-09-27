@@ -236,6 +236,15 @@ export const appearancesSchema = z.object({
    */
   corpses: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `appearanceKey → { estado → id }` do cenário usável (#727, ADR 0050 d.1): a mesma
+   * indireção de `corpses` para porta, capim, stone pile, rope spot, ladder, alavanca. GERADO
+   * por `pnpm map:import` em `appearances/generated/scenery.json` — nunca escrito à mão —,
+   * porque quem sabe quais ids formam um par fechado/aberto é a tabela do Canary transcrita
+   * como dado, não um humano copiando do OTBM. Chave sem uso é vocabulário à espera (mesma
+   * regra de `abilities`); `tilemapSchema.interactables[].appearanceKey` aponta para cá.
+   */
+  scenery: z.record(z.string().min(1), z.record(z.string().min(1), appearanceId)).default({}),
+  /**
    * Outfits de PERSONAGEM (FUN-103). `default` é o que todo jogador veste enquanto ninguém
    * escolhe o seu (§7.4 pendente): `CharacterRuntime` não tem outfit e o ticket não carrega
    * um. Mora aqui, e não numa constante no servidor, porque é arte (invariante 6).
@@ -955,6 +964,17 @@ export const itemSchema = z.strictObject({
   effect: consumableEffectSchema.optional(),
   /** De onde um item IMPORTADO veio (ADR 0038 decisão 2). Ausente em item autorado à mão. */
   source: catalogSourceSchema.optional(),
+  /**
+   * O item É uma ferramenta de cenário (#727, ADR 0050 d.1): `use.tool` diz qual interativo do
+   * mapa (`tilemapSchema.interactables[].requires.tool`) ele destrava — machete corta capim,
+   * rope sobe de um rope spot, shovel cava a pile, pick abre rachadura, key abre porta de chave.
+   * NÃO é consumida: `#useOnMap` só confere que a ferramenta compatível está na mochila ou na
+   * mão, como o Tibia faz (a machete do kit de nascimento nunca acaba). Ausente é o item comum
+   * de sempre — a maioria não destrava nada.
+   */
+  use: z.object({
+    tool: z.enum(['machete', 'rope', 'shovel', 'pick', 'key']),
+  }).optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
   // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
@@ -4040,6 +4060,46 @@ export const tilemapSchema = z.object({
    * à mão para o recorte; o importador só lista candidatos.
    */
   floorChanges: z.array(z.object({ from: point, to: point })).default([]),
+  /**
+   * Cenário usável (#727, ADR 0050 d.1): porta, capim, stone pile, rope spot, ladder, alavanca,
+   * baú, placa — o que o importador CLASSIFICA a partir de `aid`/`uid`/`text` do OTBM e das
+   * tabelas do Canary transcritas como dado (`data/scenery/canary-tables.json`). Só classificação
+   * e geometria aqui: o mecanismo que muda de estado por sessão é `TileOverrides` (#728), que
+   * ainda não existe — até ele pousar, `initialState`/`blocking` descrevem o que o OTBM tinha no
+   * instante da importação, e o `sim` não lê este campo.
+   */
+  interactables: z.array(z.object({
+    at: point,
+    /** O que este tile é (ADR 0050 d.1). `hole`/`teleport` ficam para o T2/T3 do plano. */
+    kind: z.enum([
+      'door', 'locked-door', 'level-door', 'quest-door', 'grass', 'stone-pile', 'hole',
+      'rope-spot', 'ladder', 'lever', 'chest', 'sign', 'teleport',
+    ]),
+    /** O estado no instante da importação (`locked`/`closed`/`open`, `uncut`/`cut`, `down`/`up`,
+     * `pile`/`hole`, ou `default` para o que só tem um estado). Vocabulário por `kind`, não
+     * fechado aqui — fechá-lo obrigaria este schema a mudar a cada `kind` novo. */
+    initialState: z.string().min(1),
+    /** A chave em `appearances.scenery` que resolve `initialState` para um id de aparência. */
+    appearanceKey: z.string().min(1),
+    /** `ATTR_ACTION_ID` do item, quando o OTBM o carrega (porta, alavanca). */
+    aid: z.number().int().positive().optional(),
+    /** `ATTR_UNIQUE_ID` do item — baú e item com storage por personagem. */
+    uid: z.number().int().positive().optional(),
+    /** `ATTR_TEXT` do item — placa e livro, lidos no Look. */
+    text: z.string().min(1).optional(),
+    requires: z.object({
+      tool: z.enum(['machete', 'rope', 'shovel', 'pick', 'key']).optional(),
+      level: z.number().int().positive().optional(),
+      storageKey: z.string().min(1).optional(),
+      keyId: z.number().int().positive().optional(),
+    }).optional(),
+    /** Alavancas ligadas a outros interativos por `aid` (#728: quem liga o quê). */
+    links: z.array(z.string().min(1)).optional(),
+    /** Em ms — quanto tempo até reverter sozinho (o `duration` do `items.xml`, #728). */
+    revertMs: z.number().int().positive().optional(),
+    /** Destino de um teleporte. */
+    target: point.optional(),
+  })).default([]),
   /** De onde um mapa importado veio (ADR 0025). Ausente em mapa autorado à mão. */
   source: z.object({
     file: z.string().min(1),
