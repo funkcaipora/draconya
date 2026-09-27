@@ -231,6 +231,8 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
       },
       power: abilityPower(ability.power),
       damageType: ability.damageType,
+      // O tipo de ataque (#682) passa direto; ausente continua ausente — a forma decide.
+      ...(ability.kind === undefined ? {} : { kind: ability.kind }),
       ...(ability.presentation === undefined ? {} : {
         presentation: {
           ...(ability.presentation.missileKey === undefined

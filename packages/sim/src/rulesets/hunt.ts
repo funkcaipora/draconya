@@ -80,7 +80,7 @@ import {
   monsterSubject, nearestPrey,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
-import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
+import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
@@ -5335,10 +5335,12 @@ const slots = bot.groups.get(group);
           rawDamage: session.rng.integer(ability.power.min, ability.power.max),
           source: 'monster-attack',
           damageType: ability.damageType,
-          // A ORIGEM decide o bloqueio no `combat-v3` (#548): a ability CORPO A CORPO (a
-          // básica legada inclusive) bloqueia os dois; a de alcance/área é magia para o
-          // `blockHit`, como a do Canary sem `BLOCKARMOR`/`BLOCKSHIELD` declarado.
-          blockable: melee ? MELEE_BLOCK_FLAGS : MAGIC_BLOCK_FLAGS,
+          // O TIPO DE ATAQUE decide o bloqueio no `combat-v3` (#682, a regra de
+          // `Monsters::deserializeSpell` do Canary): o `melee` (a básica legada inclusive)
+          // bloqueia os dois; o `combat` FÍSICO passa só pela armadura, em qualquer alcance ou
+          // área; qualquer outro tipo é magia para o `blockHit`. `melee` acima continua
+          // decidindo SÓ a apresentação (`source`).
+          blockable: abilityBlockFlags(ability),
           ...(resolvedMonsterModifiers === undefined ? {} : { modifiers: resolvedMonsterModifiers }),
         },
         defender,
