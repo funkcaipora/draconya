@@ -24,8 +24,9 @@
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
   CompiledMitigation, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot, Progression,
-  RingEffect,
+  RingEffect, SpecializedMagicElement,
 } from '@draconya/content';
+import type { SpecializedMagicLevels } from './casting.js';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
 
@@ -659,6 +660,26 @@ export class Inventory {
     let total = 0;
     for (const carried of this.#equipped.values()) {
       total += catalog.get(carried.itemId)?.bonuses?.speed ?? 0;
+    }
+    return total;
+  }
+
+  /**
+   * O MAGIC LEVEL ESPECIALIZADO do que está vestido, somado POR ELEMENTO (#680). O Canary
+   * (`Player::getSpecializedMagicLevel`, `player.cpp:7606-7627`) varre os itens equipados na
+   * hora do cálculo — nada é aplicado no equip —, e é o que isto faz: molde de
+   * `combatModifiers()`. `undefined` quando NADA vestido declara o campo, o caso de todo o
+   * conteúdo hoje, e é o que mantém a fórmula bit a bit sem o chamador conferir por fora.
+   */
+  specializedMagicLevel(catalog: ReadonlyMap<string, Item>): SpecializedMagicLevels | undefined {
+    let total: Partial<Record<SpecializedMagicElement, number>> | undefined;
+    for (const carried of this.#equipped.values()) {
+      const points = catalog.get(carried.itemId)?.bonuses?.specializedMagicLevel;
+      if (points === undefined) continue;
+      total ??= {};
+      for (const [element, amount] of Object.entries(points) as [SpecializedMagicElement, number | undefined][]) {
+        if (amount !== undefined) total[element] = (total[element] ?? 0) + amount;
+      }
     }
     return total;
   }

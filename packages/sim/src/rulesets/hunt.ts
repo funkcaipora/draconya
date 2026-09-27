@@ -4159,7 +4159,11 @@ const slots = bot.groups.get(group);
     const magic = this.#options.skills.get('magic');
     const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
       + character.inventory.skillBonus(this.#options.items, 'magic');
-    return { skillLevel: magicLevel, powerScale: 1, magicLevel };
+    return {
+      skillLevel: magicLevel, powerScale: 1, magicLevel,
+      // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
+      specializedMagicLevel: character.inventory.specializedMagicLevel(this.#options.items),
+    };
   }
 
   /**
@@ -4183,6 +4187,8 @@ const slots = bot.groups.get(group);
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
       weaponAttack: character.inventory.weaponAttack(this.#options.items, character) ?? 0,
+      // O ML especializado por elemento (#680): só a fórmula que lê o ML o soma (`formulaSkill`).
+      specializedMagicLevel: character.inventory.specializedMagicLevel(this.#options.items),
     };
   }
 

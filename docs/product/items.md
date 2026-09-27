@@ -449,6 +449,17 @@ sem o quarto ponto, um personagem recém-criado com a bota já no kit (o level 2
 `dragon-party`, #526) mostrava a mesma velocidade com ou sem ela até a primeira entrada numa
 hunt.
 
+**Magic level especializado por elemento** (#680). `item.bonuses.specializedMagicLevel` é um
+mapa parcial elemento → pontos, as oito chaves `<elemento>magiclevelpoints` do Canary
+(`item_parse.cpp:915-941`): `physical`, `energy`, `earth`, `fire`, `ice`, `holy`, `death` e
+`healing` (`SPECIALIZED_MAGIC_ELEMENTS`) — `firemagiclevelpoints` vira `fire`, e assim por
+diante; `arcane`/`drown`/`lifedrain`/`manadrain` não têm chave e o schema os recusa.
+`Inventory.specializedMagicLevel` soma por elemento o que está VESTIDO (a varredura de
+`Player::getSpecializedMagicLevel`, `player.cpp:7606-7627`), `undefined` quando nada declara.
+Só o termo de ML da fórmula do MESMO elemento lê o valor (ver `docs/product/combat.md`, "Fórmula
+canônica"). Nenhum item autoral declara o campo: os 46 do `items.xml` chegam pelo importador
+(#573). O gasto de carga por uso (`useCharges`) fica para quando `charges` for consumido.
+
 **Anel com carga**, além do colar (ver "Duração e carga do equipamento", acima): o Might Ring é
 `kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy/Life
 Ring (efeito permanente enquanto vestido, sem carga). `#consumeAmuletCharge` foi alargado para

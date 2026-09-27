@@ -4958,6 +4958,51 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
   });
 });
 
+describe('o ML especializado do item vestido soma na runa do MESMO elemento (#680)', () => {
+  // Coeficiente enorme e sem termo de level: o sorteio da runa é `integer(1000×ML', 1000×ML')`,
+  // e ML' = ML (0 no herói) + o especializado de fogo. Com fire +2 a faixa vira [2000, 2000].
+  const fireRune = {
+    id: 'fire-test-rune', name: 'Fire Test Rune', price: 1, group: 'attack',
+    requires: { level: 1 },
+    effect: {
+      kind: 'damage', basePower: 1, range: 6, damageType: 'fire',
+      formula: { levelFactor: 0, skillMin: 1000, skillMax: 1000, baseMin: 0, baseMax: 0 },
+    },
+  };
+  const fireHat = {
+    id: 'fire-hat', name: 'Fire Hat', kind: 'armor', slot: 'head', weight: 1, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 2 } },
+  };
+  const rolls = (equipped: boolean): number[][] => {
+    const spy = vi.spyOn(Rng.prototype, 'integer');
+    try {
+      const { session } = withSpells(botConfig({
+        rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'fire-test-rune' } }],
+      }), {
+        gold: 10_000, health: 5_000, supplies: [...supplies, fireRune], items: [...items, fireHat],
+        ...(equipped
+          ? { inventory: { backpack: [], equipped: { head: { instanceId: 'h1', itemId: 'fire-hat', quantity: 1 } } } }
+          : {}),
+      }, 'bold');
+      run(session, 20_000, 100);
+      expect(session.aggregates.suppliesUsed).toBeGreaterThan(0);
+      return spy.mock.calls.map((call) => [...call]);
+    } finally {
+      spy.mockRestore();
+    }
+  };
+
+  it('o ruleset passa o campo: a faixa da runa de fogo sai com ML + 2', () => {
+    // Mutação que mata: `#runeScaling` sem `specializedMagicLevel` — a faixa ficaria [1, 1].
+    const withHat = rolls(true);
+    const bare = rolls(false);
+    expect(withHat).toContainEqual([2_000, 2_000]);
+    // Sem o item, o ML 0 do herói: `max(1, 0)` = 1 — e nunca a faixa do especializado.
+    expect(bare).toContainEqual([1, 1]);
+    expect(bare).not.toContainEqual([2_000, 2_000]);
+  });
+});
+
 // --- a densidade REAL da área governa "targets >= N" (#480) -----------------------------------
 
 describe('a condição "targets >= N" conta o FOOTPRINT da área, não um círculo no jogador (#480)', () => {

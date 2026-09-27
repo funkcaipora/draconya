@@ -448,7 +448,15 @@ não mais a exceção. O que o motor ganhou:
   Paladin); ausente (= `vocation`) é a skill da vocação (`vocation.spellSkill`: `magic`,
   `distance` no Paladin, `melee` no Knight), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
   Knight e as Ethereal Spear). `scaling: 'magic'` com termo de ataque de arma é recusado no boot.
-  Na magia e na runa de CURA é sempre o MAGIC LEVEL (#475). Desde o #523, TODA magia de
+  Na magia e na runa de CURA é sempre o MAGIC LEVEL (#475). Onde o termo é o MAGIC LEVEL (cura,
+  `scaling: 'magic'` e a runa com `formula`), ele ganha o **ML especializado** do elemento do
+  efeito (#680): `healing` na cura, o `damageType` no dano — o `getMagicLevelSkill` do Canary
+  (`combat.cpp:1979`), soma dos itens vestidos em `bonuses.specializedMagicLevel`
+  (`Inventory.specializedMagicLevel`, lido na conjuração por `formulaSkill` em `casting.ts`). A
+  SKILLVALUE, o `basePower` provisório e o `requires.magicLevel` da runa não somam; Mass Healing
+  declara `includeSpecializedMagicLevel: false` porque o script dela lê `getMagicLevel()` cru.
+  Nenhum item do catálogo declara o campo ainda (a importação é o #573): o resultado de hoje é
+  bit a bit o mesmo, sem perfil novo. Desde o #523, TODA magia de
   dano/cura com correspondente real no Canary declara `formula` — só ficam de fora as três
   genéricas pré-vocação (`heal`/`strike`/`blast`, que o Tibia não tem) e três magias inventadas
   antes da auditoria sem nome correspondente no Canary (`divine-barrage`, `ethereal-barrage`,

@@ -75,6 +75,20 @@ describe('huntSchema (#360)', () => {
   });
 });
 
+describe('itemSchema — ML especializado por elemento (#680)', () => {
+  const wand = { id: 'eldritch-wand', name: 'Eldritch Wand', kind: 'weapon', slot: 'hand', weight: 20, value: 0 };
+
+  it('aceita pontos por elemento das oito chaves do Canary', () => {
+    const parsed = itemSchema.parse({ ...wand, bonuses: { specializedMagicLevel: { fire: 1, energy: 1 } } });
+    expect(parsed.bonuses?.specializedMagicLevel).toEqual({ fire: 1, energy: 1 });
+  });
+
+  it('recusa elemento sem `<elemento>magiclevelpoints` no Canary, e ponto não positivo', () => {
+    expect(() => itemSchema.parse({ ...wand, bonuses: { specializedMagicLevel: { arcane: 1 } } })).toThrow();
+    expect(() => itemSchema.parse({ ...wand, bonuses: { specializedMagicLevel: { fire: 0 } } })).toThrow();
+  });
+});
+
 describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)', () => {
   const consumable = {
     id: 'blessing-charge', name: 'Carga de Bênção', kind: 'consumable',
