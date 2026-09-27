@@ -24,13 +24,20 @@
 //
 // **O que fica de fora, e aparece no relatório** (`docs/reference/catalog/items-report.md`):
 // munição/arremessável (M34-04), spellbook/varinha sem elemento reconhecido, quiver (contêiner
-// + escudo, sem forma no schema), arma `fist` (família não declarável), preço (M34-03, `value`
-// sai sempre `0`) e todo atributo lido sem campo correspondente no schema desta base.
+// + escudo, sem forma no schema), arma `fist` (família não declarável) e todo atributo lido sem
+// campo correspondente no schema desta base.
+//
+// **Preço (`value`, M34-03/#574)**: `items.xml` não carrega preço — vem de
+// `data-otservbr-global/npc/*.lua`, lido por `npc-prices.ts` (`readNpcShopPrices`) e passado
+// aqui como `ItemPriceLookup`. `value` é o MAIOR `sell` observado para o `id` do item entre
+// todo NPC (exceto o Nah'Bob — ver o cabeçalho de `npc-prices.ts`); `0` quando nenhum NPC vende
+// (o mesmo "não se vende" do schema, §22.1).
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { CatalogEntity, CatalogSource } from './generated-writer.js';
 import { slugify } from './monsters.js';
+import { readNpcShopPrices, type ShopPriceObservation } from './npc-prices.js';
 import { registerCatalogType, type CatalogImportContext, type CatalogImportResult } from './registry.js';
 import type { SkippedEntity } from './report.js';
 import { attrOptional, childrenOf, readXmlFile, type XmlElement } from './xml.js';
@@ -227,7 +234,14 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
  * (o item some da fatia e some no relatório), e atributo lido mas fora do schema vira
  * `ignoredFields` (some só das notas).
  */
-export function convertItem(item: XmlElement, path: string, commit: string): ConvertedItem | undefined {
+/** `value` do item — `sellMaxByClientId` de `npc-prices.ts`, indexado pelo `id` numérico do Canary. */
+export interface ItemPriceLookup {
+  readonly sellMaxByClientId: ReadonlyMap<number, ShopPriceObservation>;
+}
+
+export function convertItem(
+  item: XmlElement, path: string, commit: string, prices?: ItemPriceLookup,
+): ConvertedItem | undefined {
   const id = attrOptional(item, 'id');
   const name = attrOptional(item, 'name');
   if (id === undefined || name === undefined) return undefined; // faixa (fromid/toid) ou sem nome: fora do corte.
@@ -256,6 +270,11 @@ export function convertItem(item: XmlElement, path: string, commit: string): Con
 
   const blockers: string[] = [];
   const weight = numberValue(attrs, 'weight');
+  // Preço de venda (M34-03/#574): o MAIOR `sell` que algum NPC paga por este `id` numérico do
+  // Canary (`npc-prices.ts`, exceto o Nah'Bob). `0` é "não se vende" no schema (§22.1) — o caso
+  // de nenhum NPC comum vender o item (ex. Royal Helmet, confirmado pelo TibiaWiki).
+  const canaryId = Number(id);
+  const sellObservation = prices?.sellMaxByClientId.get(canaryId);
   const entity: Record<string, unknown> = {
     id: slug,
     name,
@@ -265,9 +284,7 @@ export function convertItem(item: XmlElement, path: string, commit: string): Con
           : classification.kind === 'amulet' ? 'amulet'
             : classification.kind === 'armor' ? 'armor' : 'other',
     weight: weight === undefined ? 0 : weight / 100,
-    // Preço de venda (M34-03, fora do escopo desta issue): `items.xml` não carrega preço nenhum
-    // — é dado de NPC, em outro lugar do Canary —, e `0` é "não se vende" no schema (§22.1).
-    value: 0,
+    value: sellObservation?.amount ?? 0,
   };
   const slot = classification.slot ?? (scriptSlot === undefined ? undefined : SLOT_MAP[scriptSlot]);
   if (slot !== undefined) entity['slot'] = slot;
@@ -440,6 +457,7 @@ export function convertItem(item: XmlElement, path: string, commit: string): Con
 /** O que a reconciliação confere entre o autoral e o gerado — os campos NUMÉRICOS simples. */
 const RECONCILED_FIELDS: readonly string[] = [
   'weight', 'attack', 'armor', 'defense', 'extraDefense', 'charges', 'durationMs', 'imbuementSlots', 'cleavePercent',
+  'value',
 ];
 
 function readJson(path: string): Record<string, unknown> | undefined {
@@ -497,7 +515,7 @@ export function reconcileAuthored(
   if (diffs.length === 0) return undefined;
   return {
     id: generated.id,
-    reason: `Reconciliação do importador de itens (#573) contra o Canary items.xml em \`${canaryCommit.slice(0, 12)}\`: ${diffs.join('; ')}.`,
+    reason: `Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em \`${canaryCommit.slice(0, 12)}\`: ${diffs.join('; ')}.`,
     patch,
   };
 }
@@ -522,6 +540,8 @@ function countBy(values: readonly string[]): string {
 export interface ItemsReaderOptions {
   /** `packages/content/data/items`, relativo à raiz — onde os 73 autorais moram (ADR 0014). */
   readonly authoredDir: string;
+  /** Preço de NPC (#574) — omitido, todo `value` sai `0` (o comportamento de antes do #574). */
+  readonly prices?: ItemPriceLookup;
 }
 
 /** Lê o `items.xml` inteiro e converte cada `<item>` das categorias de caça. */
@@ -529,7 +549,7 @@ export function readItemCatalog(ctx: CatalogImportContext, options: ItemsReaderO
   const root = readXmlFile(join(ctx.canaryDir, CANARY_ITEMS_XML));
   const converted: ConvertedItem[] = [];
   for (const item of childrenOf(root, 'item')) {
-    const result = convertItem(item, CANARY_ITEMS_XML, ctx.canaryCommit);
+    const result = convertItem(item, CANARY_ITEMS_XML, ctx.canaryCommit, options.prices);
     if (result !== undefined) converted.push(result);
   }
 
@@ -565,7 +585,8 @@ export function readItemCatalog(ctx: CatalogImportContext, options: ItemsReaderO
     + 'conflito real aparecer).',
     `Reconciliação (ADR 0014): ${overrides.length} item(ns) autoral(is) com override gravado em `
     + `\`${AUTHORED_ITEMS_DIR}/overrides/\` — o id nunca muda, só a correção.`,
-    'Preço (\`value\`, M34-03, fora do escopo): sempre `0` — `items.xml` não carrega preço; é dado de NPC, noutra parte do Canary.',
+    'Preço (\`value\`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary '
+    + '(exceto o Nah\'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.',
     '`stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.',
     `Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): ${countBy(allIgnored) || 'nenhum'}.`,
   ];
@@ -596,7 +617,8 @@ registerCatalogType({
   run: (ctx) => {
     const repoRoot = repoRootFrom(import.meta.url);
     const authoredDir = join(repoRoot, AUTHORED_ITEMS_DIR);
-    const result = readItemCatalog(ctx, { authoredDir });
+    const prices = readNpcShopPrices(ctx);
+    const result = readItemCatalog(ctx, { authoredDir, prices });
     writeOverrides(join(authoredDir, 'overrides'), result.overrides);
     return result;
   },

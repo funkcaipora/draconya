@@ -1,11 +1,12 @@
 {
   "id": "glacier-amulet",
-  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: weight: 5.5 → 5; charges: 20 → 200; requires.level: (ausente) → 60.",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: weight: 5.5 → 5; charges: 20 → 200; value: 0 → 1500; requires.level: (ausente) → 60.",
   "patch": {
     "weight": 5,
     "charges": 200,
     "requires": {
       "level": 60
-    }
+    },
+    "value": 1500
   }
 }

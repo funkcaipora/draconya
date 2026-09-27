@@ -1,7 +1,8 @@
 {
   "id": "wand-of-starstorm",
-  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 2.",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 2; value: 18000 → 3600.",
   "patch": {
-    "imbuementSlots": 2
+    "imbuementSlots": 2,
+    "value": 3600
   }
 }

@@ -18,8 +18,8 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 ## Notas
 
 - 7420 `<item>` lidos das categorias de caça; 5473 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
-- Reconciliação (ADR 0014): 28 item(ns) autoral(is) com override gravado em `packages/content/data/items/overrides/` — o id nunca muda, só a correção.
-- Preço (`value`, M34-03, fora do escopo): sempre `0` — `items.xml` não carrega preço; é dado de NPC, noutra parte do Canary.
+- Reconciliação (ADR 0014): 37 item(ns) autoral(is) com override gravado em `packages/content/data/items/overrides/` — o id nunca muda, só a correção.
+- Preço (`value`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary (exceto o Nah'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.
 - `stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.
 - Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), augments (75), showduration (73), shootType (67), decayTo (64), loottype (47), skillfist (47), mantra (38), transformdeequipto (28), stopduration (27), showCharges (22), showattributes (20), transformequipto (18), lifeleechchance (16), manaleechchance (16), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), magicshieldCapacityflat (4), magicshieldCapacitypercent (4), containersize (2), decayto (2), fluidsource (2), perfectshotrange (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectshotdamage (1), perfectShotDamage (1), wrapableto (1).
 

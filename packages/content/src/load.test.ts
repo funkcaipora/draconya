@@ -69,7 +69,7 @@ describe('loadContent', () => {
     for (const item of content.items.values()) {
       expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
     }
-    expect(content.items.get('bow')?.value).toBe(130);
+    expect(content.items.get('bow')?.value).toBe(400);
     expect(content.items.get('cheese')?.value).toBe(0);
   });
 
@@ -393,7 +393,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const content = loadContent(DATA);
     const rune = content.supplies.get('avalanche-rune');
     expect(rune).toMatchObject({
-      price: 14,
+      price: 64,
       requires: { level: 30, magicLevel: 4 },
       effect: { kind: 'damage', basePower: 45, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
     });
@@ -475,7 +475,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
   it('content.supplies é o catálogo ABSTRATO, com price e group de cooldown (ADR 0026 d.3)', () => {
     const content = loadContent(DATA);
     expect(content.supplies.get('health-potion')).toMatchObject({
-      id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+      id: 'health-potion', name: 'Poção de Vida', price: 50, group: 'potion',
       effect: { kind: 'heal', amountRange: { min: 125, max: 175 } }, requires: {},
     });
     expect(content.supplies.get('avalanche-rune')?.group).toBe('attack');

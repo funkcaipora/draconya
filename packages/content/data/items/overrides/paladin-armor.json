@@ -1,7 +1,8 @@
 {
   "id": "paladin-armor",
-  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 1.",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 1; value: 12000 → 15000.",
   "patch": {
-    "imbuementSlots": 1
+    "imbuementSlots": 1,
+    "value": 15000
   }
 }

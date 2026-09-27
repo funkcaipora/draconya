@@ -1,7 +1,8 @@
 {
   "id": "broadsword",
-  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 3.",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 3; value: 500 → 10.",
   "patch": {
-    "imbuementSlots": 3
+    "imbuementSlots": 3,
+    "value": 10
   }
 }

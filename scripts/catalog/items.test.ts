@@ -473,6 +473,26 @@ describe('convertItem', () => {
   it('item sem primarytype nem atributo de bônus (água) some silenciosamente', () => {
     expect(convert('90041')).toBeUndefined();
   });
+
+  it('sem prices (4º parâmetro omitido): value sai 0 — o comportamento de antes do #574', () => {
+    const item = convert('90001');
+    expect(item?.entity['value']).toBe(0);
+  });
+
+  it('com prices: value é o maior sell agregado para o id do Canary (#574)', () => {
+    const item = itemsOf(ITEMS_XML).find((el) => el.attributes['id'] === '90001');
+    const prices = {
+      sellMaxByClientId: new Map([[90001, { amount: 30, itemName: 'test sword', npcFile: 'test.lua' }]]),
+    };
+    const converted = convertItem(item!, PATH, COMMIT, prices);
+    expect(converted?.entity['value']).toBe(30);
+  });
+
+  it('com prices mas sem observação para este id: value continua 0', () => {
+    const item = itemsOf(ITEMS_XML).find((el) => el.attributes['id'] === '90001');
+    const converted = convertItem(item!, PATH, COMMIT, { sellMaxByClientId: new Map() });
+    expect(converted?.entity['value']).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -492,6 +512,26 @@ describe('readItemCatalog e reconcileAuthored', () => {
     withTempDir((dir) => {
       const generated = { id: 'ghost', name: 'Ghost', source: { engine: 'canary' as const, commit: COMMIT, path: PATH } };
       expect(reconcileAuthored(generated, dir, COMMIT)).toBeUndefined();
+    });
+  });
+
+  it('reconcileAuthored: value divergente (#574) vira patch — sword já correto não gera override', () => {
+    withTempDir((dir) => {
+      writeFileSync(join(dir, 'mace.json'), JSON.stringify({ id: 'mace', name: 'Mace', kind: 'weapon', weight: 34, value: 0, attack: 28 }));
+      const generatedMace = {
+        id: 'mace', name: 'Mace', kind: 'weapon', weight: 34, value: 30, attack: 28,
+        source: { engine: 'canary' as const, commit: COMMIT, path: PATH },
+      };
+      const override = reconcileAuthored(generatedMace, dir, COMMIT);
+      expect(override?.patch).toEqual({ value: 30 });
+      expect(override?.reason).toMatch(/value: 0 → 30/);
+
+      writeFileSync(join(dir, 'sword.json'), JSON.stringify({ id: 'sword', name: 'Sword', kind: 'weapon', weight: 35, value: 25, attack: 14 }));
+      const generatedSword = {
+        id: 'sword', name: 'Sword', kind: 'weapon', weight: 35, value: 25, attack: 14,
+        source: { engine: 'canary' as const, commit: COMMIT, path: PATH },
+      };
+      expect(reconcileAuthored(generatedSword, dir, COMMIT)).toBeUndefined();
     });
   });
 

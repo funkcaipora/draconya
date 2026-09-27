@@ -1,0 +1,7 @@
+{
+  "id": "strange-helmet",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: value: 0 → 500.",
+  "patch": {
+    "value": 500
+  }
+}

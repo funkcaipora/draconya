@@ -4,7 +4,7 @@
     "name": "acorn",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 10,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16,7 +16,7 @@
     "name": "afflicted strider head",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28,7 +28,7 @@
     "name": "afflicted strider worms",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -40,7 +40,7 @@
     "name": "ancient belt buckle",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -64,7 +64,7 @@
     "name": "ancient liche bone",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 28000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -76,7 +76,7 @@
     "name": "ancient stone",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -100,7 +100,7 @@
     "name": "antlers",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -112,7 +112,7 @@
     "name": "ape fur",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -124,7 +124,7 @@
     "name": "apron",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 1300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -160,7 +160,7 @@
     "name": "badger fur",
     "kind": "other",
     "weight": 0.65,
-    "value": 0,
+    "value": 15,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -172,7 +172,7 @@
     "name": "bamboo stick",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -184,7 +184,7 @@
     "name": "banana sash",
     "kind": "other",
     "weight": 0.68,
-    "value": 0,
+    "value": 55,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -196,7 +196,7 @@
     "name": "basalt fetish",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -208,7 +208,7 @@
     "name": "basalt figurine",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -220,7 +220,7 @@
     "name": "bashmu fang",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -232,7 +232,7 @@
     "name": "bashmu feather",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -244,7 +244,7 @@
     "name": "bashmu tongue",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -256,7 +256,7 @@
     "name": "bat wing",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -268,7 +268,7 @@
     "name": "battle stone",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -280,7 +280,7 @@
     "name": "bear paw",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -292,7 +292,7 @@
     "name": "beetle carapace",
     "kind": "other",
     "weight": 35,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -304,7 +304,7 @@
     "name": "behemoth claw",
     "kind": "other",
     "weight": 12.5,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -316,7 +316,7 @@
     "name": "black hood",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 190,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -328,7 +328,7 @@
     "name": "black wool",
     "kind": "other",
     "weight": 1.18,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -340,7 +340,7 @@
     "name": "blazing bone",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 610,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -352,7 +352,7 @@
     "name": "blemished spawn abdomen",
     "kind": "other",
     "weight": 2.7,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -364,7 +364,7 @@
     "name": "blemished spawn head",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -376,7 +376,7 @@
     "name": "blemished spawn tail",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -388,7 +388,7 @@
     "name": "blood preservation",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -400,7 +400,7 @@
     "name": "bloodstained scythe",
     "kind": "other",
     "weight": 8.1,
-    "value": 0,
+    "value": 4200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -412,7 +412,7 @@
     "name": "bloody dwarven beard",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 110,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -424,7 +424,7 @@
     "name": "bloody pincers",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -436,7 +436,7 @@
     "name": "bloody tears",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 70000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -448,7 +448,7 @@
     "name": "blue goanna scale",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 230,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -460,7 +460,7 @@
     "name": "boar man hoof",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -472,7 +472,7 @@
     "name": "boggy dreads",
     "kind": "other",
     "weight": 1.69,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -484,7 +484,7 @@
     "name": "bola",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 35,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -496,7 +496,7 @@
     "name": "bone fetish",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -508,7 +508,7 @@
     "name": "bone shoulderplate",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -520,7 +520,7 @@
     "name": "bone toothpick",
     "kind": "other",
     "weight": 20,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -532,7 +532,7 @@
     "name": "bonecarving knife",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 190,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -544,7 +544,7 @@
     "name": "bonelord eye",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -556,7 +556,7 @@
     "name": "bony tail",
     "kind": "other",
     "weight": 0.92,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -568,7 +568,7 @@
     "name": "book page",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 640,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -580,7 +580,7 @@
     "name": "bright bell",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -592,7 +592,7 @@
     "name": "brimstone fangs",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 380,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -604,7 +604,7 @@
     "name": "brimstone shell",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -616,7 +616,7 @@
     "name": "brinebrute claw",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 2600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -628,7 +628,7 @@
     "name": "broken crossbow",
     "kind": "other",
     "weight": 1.3,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -640,7 +640,7 @@
     "name": "broken draken mail",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 340,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -652,7 +652,7 @@
     "name": "broken gladiator shield",
     "kind": "other",
     "weight": 6.4,
-    "value": 0,
+    "value": 190,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -664,7 +664,7 @@
     "name": "broken halberd",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -676,7 +676,7 @@
     "name": "broken helmet",
     "kind": "other",
     "weight": 1.56,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -688,7 +688,7 @@
     "name": "broken key ring",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 8000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -700,7 +700,7 @@
     "name": "broken longbow",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 130,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -712,7 +712,7 @@
     "name": "broken macuahuitl",
     "kind": "other",
     "weight": 24,
-    "value": 0,
+    "value": 1000,
     "slot": "hand",
     "attack": 1,
     "defense": 1,
@@ -727,7 +727,7 @@
     "name": "broken mitmah necklace",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -739,7 +739,7 @@
     "name": "broken shamanic staff",
     "kind": "other",
     "weight": 1.28,
-    "value": 0,
+    "value": 35,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -751,7 +751,7 @@
     "name": "broken slicer",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -763,7 +763,7 @@
     "name": "broken throwing axe",
     "kind": "other",
     "weight": 11,
-    "value": 0,
+    "value": 230,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -775,7 +775,7 @@
     "name": "broodrider saddle",
     "kind": "other",
     "weight": 3.9,
-    "value": 0,
+    "value": 2800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -787,7 +787,7 @@
     "name": "capricious heart",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 2100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -799,7 +799,7 @@
     "name": "capricious robe",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -811,7 +811,7 @@
     "name": "carniphila seeds",
     "kind": "other",
     "weight": 0.35,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -823,7 +823,7 @@
     "name": "carnisylvan bark",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 230,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -835,7 +835,7 @@
     "name": "carnisylvan finger",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -847,7 +847,7 @@
     "name": "carnivostrich feather",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 630,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -859,7 +859,7 @@
     "name": "carrion worm fang",
     "kind": "other",
     "weight": 0.88,
-    "value": 0,
+    "value": 35,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -871,7 +871,7 @@
     "name": "cave chimera head",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -883,7 +883,7 @@
     "name": "cave chimera leg",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -895,7 +895,7 @@
     "name": "cave devourer eyes",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -907,7 +907,7 @@
     "name": "cave devourer legs",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -919,7 +919,7 @@
     "name": "cave devourer maw",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -943,7 +943,7 @@
     "name": "centipede leg",
     "kind": "other",
     "weight": 0.69,
-    "value": 0,
+    "value": 28,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -967,7 +967,7 @@
     "name": "chasm spawn abdomen",
     "kind": "other",
     "weight": 2.7,
-    "value": 0,
+    "value": 240,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -979,7 +979,7 @@
     "name": "chasm spawn head",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 850,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -991,7 +991,7 @@
     "name": "chasm spawn tail",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1003,7 +1003,7 @@
     "name": "cheese cutter",
     "kind": "other",
     "weight": 0.45,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1015,7 +1015,7 @@
     "name": "cheesy figurine",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1027,7 +1027,7 @@
     "name": "cheesy membership card",
     "kind": "other",
     "weight": 2.7,
-    "value": 0,
+    "value": 120000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1039,7 +1039,7 @@
     "name": "chicken feather",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1051,7 +1051,7 @@
     "name": "cliff strider claw",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1063,7 +1063,7 @@
     "name": "coal",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1087,7 +1087,7 @@
     "name": "cobra crest",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1099,7 +1099,7 @@
     "name": "cobra tongue",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 15,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1123,7 +1123,7 @@
     "name": "colourful feather",
     "kind": "other",
     "weight": 0.36,
-    "value": 0,
+    "value": 110,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1135,7 +1135,7 @@
     "name": "colourful feathers",
     "kind": "other",
     "weight": 4.5,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1147,7 +1147,7 @@
     "name": "colourful snail shell",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1159,7 +1159,7 @@
     "name": "compass",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 45,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1171,7 +1171,7 @@
     "name": "compound eye",
     "kind": "other",
     "weight": 1.65,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1183,7 +1183,7 @@
     "name": "condensed energy",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1195,7 +1195,7 @@
     "name": "coral branch",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 360,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1207,7 +1207,7 @@
     "name": "corrupt naga scales",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 570,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1219,7 +1219,7 @@
     "name": "corrupted flag",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1231,7 +1231,7 @@
     "name": "cow bell",
     "kind": "other",
     "weight": 7.2,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1243,7 +1243,7 @@
     "name": "cowbell",
     "kind": "other",
     "weight": 4,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1255,7 +1255,7 @@
     "name": "crab man claws",
     "kind": "other",
     "weight": 2.3,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1267,7 +1267,7 @@
     "name": "crab pincers",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 35,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1279,7 +1279,7 @@
     "name": "cracked alabaster vase",
     "kind": "other",
     "weight": 4.5,
-    "value": 0,
+    "value": 180,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1291,7 +1291,7 @@
     "name": "crawler head plating",
     "kind": "other",
     "weight": 2.65,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1303,7 +1303,7 @@
     "name": "cry-stal",
     "kind": "other",
     "weight": 9.7,
-    "value": 0,
+    "value": 3200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1315,7 +1315,7 @@
     "name": "crystal bone",
     "kind": "other",
     "weight": 12,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1327,7 +1327,7 @@
     "name": "crystal of the mitmah",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1339,7 +1339,7 @@
     "name": "crystalline spikes",
     "kind": "other",
     "weight": 3.4,
-    "value": 0,
+    "value": 440,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1351,7 +1351,7 @@
     "name": "crystallized anger",
     "kind": "other",
     "weight": 12,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1363,7 +1363,7 @@
     "name": "cultish mask",
     "kind": "other",
     "weight": 1.65,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1375,7 +1375,7 @@
     "name": "cultish robe",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1387,7 +1387,7 @@
     "name": "cultish symbol",
     "kind": "other",
     "weight": 0.82,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1399,7 +1399,7 @@
     "name": "curious matter",
     "kind": "other",
     "weight": 4.5,
-    "value": 0,
+    "value": 430,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1411,7 +1411,7 @@
     "name": "cursed bone",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 6000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1423,7 +1423,7 @@
     "name": "cursed shoulder spikes",
     "kind": "other",
     "weight": 0.97,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1435,7 +1435,7 @@
     "name": "cyclops toe",
     "kind": "other",
     "weight": 1.11,
-    "value": 0,
+    "value": 55,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1459,7 +1459,7 @@
     "name": "damaged armor plates",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1471,7 +1471,7 @@
     "name": "damaged worm head",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 8000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1483,7 +1483,7 @@
     "name": "damselfly eye",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 25,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1495,7 +1495,7 @@
     "name": "damselfly wing",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1507,7 +1507,7 @@
     "name": "dandelion seeds",
     "kind": "other",
     "weight": 1.3,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1519,7 +1519,7 @@
     "name": "dangerous proto matter",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1531,7 +1531,7 @@
     "name": "dark bell",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1543,7 +1543,7 @@
     "name": "dark obsidian splinter",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 4400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1555,7 +1555,7 @@
     "name": "dark rosary",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 48,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1567,7 +1567,7 @@
     "name": "darklight basalt chunk",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 3800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1579,7 +1579,7 @@
     "name": "darklight core",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 4100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1591,7 +1591,7 @@
     "name": "darklight matter",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 5500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1603,7 +1603,7 @@
     "name": "dead weight",
     "kind": "other",
     "weight": 7.5,
-    "value": 0,
+    "value": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1627,7 +1627,7 @@
     "name": "decayed finger bone",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 5100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1639,7 +1639,7 @@
     "name": "deepling breaktime snack",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1651,7 +1651,7 @@
     "name": "deepling claw",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 430,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1663,7 +1663,7 @@
     "name": "deepling guard belt buckle",
     "kind": "other",
     "weight": 2.6,
-    "value": 0,
+    "value": 230,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1675,7 +1675,7 @@
     "name": "deepling ridge",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 360,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1687,7 +1687,7 @@
     "name": "deepling scales",
     "kind": "other",
     "weight": 4.8,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1699,7 +1699,7 @@
     "name": "deepling warts",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 180,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1711,7 +1711,7 @@
     "name": "deeptags",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1723,7 +1723,7 @@
     "name": "deepworm jaws",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1735,7 +1735,7 @@
     "name": "deepworm spike roots",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1747,7 +1747,7 @@
     "name": "deepworm spikes",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1759,7 +1759,7 @@
     "name": "demon dust",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 300,
     "durationMs": 300000,
     "source": {
       "engine": "canary",
@@ -1772,7 +1772,7 @@
     "name": "demon horn",
     "kind": "other",
     "weight": 10,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1784,7 +1784,7 @@
     "name": "demonic essence",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1796,7 +1796,7 @@
     "name": "demonic finger",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1808,7 +1808,7 @@
     "name": "demonic skeletal hand",
     "kind": "other",
     "weight": 1.32,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1820,7 +1820,7 @@
     "name": "diremaw brainpan",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1832,7 +1832,7 @@
     "name": "diremaw legs",
     "kind": "other",
     "weight": 2.29,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1844,7 +1844,7 @@
     "name": "dirty turban",
     "kind": "other",
     "weight": 1.34,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1856,7 +1856,7 @@
     "name": "distorted heart",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 2100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1868,7 +1868,7 @@
     "name": "distorted robe",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1880,7 +1880,7 @@
     "name": "downy feather",
     "kind": "other",
     "weight": 0.32,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1892,7 +1892,7 @@
     "name": "dowser",
     "kind": "other",
     "weight": 3.6,
-    "value": 0,
+    "value": 35,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1904,7 +1904,7 @@
     "name": "dragolisk eye",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 690,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1916,7 +1916,7 @@
     "name": "dragolisk poison gland",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 475,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1928,7 +1928,7 @@
     "name": "dragon blood",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1940,7 +1940,7 @@
     "name": "dragon claw",
     "kind": "other",
     "weight": 12.5,
-    "value": 0,
+    "value": 8000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1964,7 +1964,7 @@
     "name": "dragon tongue",
     "kind": "other",
     "weight": 5.5,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1976,7 +1976,7 @@
     "name": "draken sulphur",
     "kind": "other",
     "weight": 0.68,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1988,7 +1988,7 @@
     "name": "draken wristbands",
     "kind": "other",
     "weight": 0.78,
-    "value": 0,
+    "value": 430,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2012,7 +2012,7 @@
     "name": "dream essence egg",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 205,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2060,7 +2060,7 @@
     "name": "dung ball",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 130,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2084,7 +2084,7 @@
     "name": "earflap",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 40,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2096,7 +2096,7 @@
     "name": "elder bonelord tentacle",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2120,7 +2120,7 @@
     "name": "elven astral observer",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2132,7 +2132,7 @@
     "name": "elven hoof",
     "kind": "other",
     "weight": 2.29,
-    "value": 0,
+    "value": 115,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2144,7 +2144,7 @@
     "name": "elven scouting glass",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2156,7 +2156,7 @@
     "name": "elvish talisman",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 45,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2168,7 +2168,7 @@
     "name": "emerald tortoise shell",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 2150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2180,7 +2180,7 @@
     "name": "empty honey glass",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2192,7 +2192,7 @@
     "name": "enchanted chicken wing",
     "kind": "other",
     "weight": 10,
-    "value": 0,
+    "value": 20000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2204,7 +2204,7 @@
     "name": "energy ball",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2216,7 +2216,7 @@
     "name": "energy soil",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2228,7 +2228,7 @@
     "name": "energy vein",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2240,7 +2240,7 @@
     "name": "ensouled essence",
     "kind": "other",
     "weight": 1.35,
-    "value": 0,
+    "value": 820,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2252,7 +2252,7 @@
     "name": "eternal flames",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2264,7 +2264,7 @@
     "name": "execowtioner mask",
     "kind": "other",
     "weight": 3.2,
-    "value": 0,
+    "value": 240,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2288,7 +2288,7 @@
     "name": "eyeless devourer legs",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2300,7 +2300,7 @@
     "name": "eyeless devourer maw",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2312,7 +2312,7 @@
     "name": "eyeless devourer tongue",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2324,7 +2324,7 @@
     "name": "Fafnar symbol",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 950,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2336,7 +2336,7 @@
     "name": "fairy wings",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2348,7 +2348,7 @@
     "name": "falcon crest",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2360,7 +2360,7 @@
     "name": "fiery heart",
     "kind": "other",
     "weight": 1.14,
-    "value": 0,
+    "value": 375,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2372,7 +2372,7 @@
     "name": "fig leaf",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2384,7 +2384,7 @@
     "name": "fir cone",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 25,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2408,7 +2408,7 @@
     "name": "fish eye",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 500000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2420,7 +2420,7 @@
     "name": "fish fin",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2432,7 +2432,7 @@
     "name": "flawless ice crystal",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2444,7 +2444,7 @@
     "name": "flintstone",
     "kind": "other",
     "weight": 3.75,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2456,7 +2456,7 @@
     "name": "flotsam",
     "kind": "other",
     "weight": 2.9,
-    "value": 0,
+    "value": 330,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2492,7 +2492,7 @@
     "name": "fox paw",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2504,7 +2504,7 @@
     "name": "frazzle skin",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2516,7 +2516,7 @@
     "name": "frazzle tongue",
     "kind": "other",
     "weight": 6.8,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2528,7 +2528,7 @@
     "name": "frost giant pelt",
     "kind": "other",
     "weight": 2.48,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2540,7 +2540,7 @@
     "name": "frosty heart",
     "kind": "other",
     "weight": 1.86,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2577,7 +2577,7 @@
     "name": "frozen lightning",
     "kind": "other",
     "weight": 7,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2613,7 +2613,7 @@
     "name": "fur shred",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2625,7 +2625,7 @@
     "name": "gauze bandage",
     "kind": "other",
     "weight": 0.97,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2637,7 +2637,7 @@
     "name": "gear crystal",
     "kind": "other",
     "weight": 0.95,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2649,7 +2649,7 @@
     "name": "gear wheel",
     "kind": "other",
     "weight": 0.05,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2661,7 +2661,7 @@
     "name": "ghastly dragon head",
     "kind": "other",
     "weight": 12,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2673,7 +2673,7 @@
     "name": "ghostly tissue",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2685,7 +2685,7 @@
     "name": "ghoul snack",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2709,7 +2709,7 @@
     "name": "giant eye",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 380,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2721,7 +2721,7 @@
     "name": "giant pacifier",
     "kind": "other",
     "weight": 9,
-    "value": 0,
+    "value": 170,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2733,7 +2733,7 @@
     "name": "giant tentacle",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2745,7 +2745,7 @@
     "name": "girlish hair decoration",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2757,7 +2757,7 @@
     "name": "girtablilu warrior carapace",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 520,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2769,7 +2769,7 @@
     "name": "gland",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2781,7 +2781,7 @@
     "name": "glimmering soil",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2793,7 +2793,7 @@
     "name": "glistening bone",
     "kind": "other",
     "weight": 12,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2805,7 +2805,7 @@
     "name": "gloom wolf fur",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 70,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2817,7 +2817,7 @@
     "name": "glooth injection tube",
     "kind": "other",
     "weight": 14,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2841,7 +2841,7 @@
     "name": "glowing rune",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2853,7 +2853,7 @@
     "name": "goanna claw",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 950,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2865,7 +2865,7 @@
     "name": "goanna meat",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 190,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2877,7 +2877,7 @@
     "name": "goblin ear",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2889,7 +2889,7 @@
     "name": "gold-brocaded cloth",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 175,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2925,7 +2925,7 @@
     "name": "golden lotus brooch",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2937,7 +2937,7 @@
     "name": "golden sun coin",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 11000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2961,7 +2961,7 @@
     "name": "golden tiger coin",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 11000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2973,7 +2973,7 @@
     "name": "goosebump leather",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2985,7 +2985,7 @@
     "name": "gorerilla mane",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 2750,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2997,7 +2997,7 @@
     "name": "gorerilla tail",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 2650,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3009,7 +3009,7 @@
     "name": "gorger antlers",
     "kind": "other",
     "weight": 6.3,
-    "value": 0,
+    "value": 2250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3045,7 +3045,7 @@
     "name": "green bandage",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3057,7 +3057,7 @@
     "name": "green dragon leather",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3069,7 +3069,7 @@
     "name": "green dragon scale",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3081,7 +3081,7 @@
     "name": "grimace",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 120000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3093,7 +3093,7 @@
     "name": "guidebook",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3105,7 +3105,7 @@
     "name": "half-digested stones",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 40,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3117,7 +3117,7 @@
     "name": "half-eaten brain",
     "kind": "other",
     "weight": 0.64,
-    "value": 0,
+    "value": 85,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3129,7 +3129,7 @@
     "name": "hand",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 1450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3153,7 +3153,7 @@
     "name": "hardened bone",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 70,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3165,7 +3165,7 @@
     "name": "harpy feathers",
     "kind": "other",
     "weight": 3.9,
-    "value": 0,
+    "value": 730,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3177,7 +3177,7 @@
     "name": "hatched rorc egg",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3189,7 +3189,7 @@
     "name": "hazardous heart",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3201,7 +3201,7 @@
     "name": "hazardous robe",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 3000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3213,7 +3213,7 @@
     "name": "headpecker beak",
     "kind": "other",
     "weight": 3.9,
-    "value": 0,
+    "value": 2800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3225,7 +3225,7 @@
     "name": "headpecker feather",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 1300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3237,7 +3237,7 @@
     "name": "heaven blossom",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3249,7 +3249,7 @@
     "name": "hellhound slobber",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3261,7 +3261,7 @@
     "name": "hellhunter eye",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 2950,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3273,7 +3273,7 @@
     "name": "hellspawn tail",
     "kind": "other",
     "weight": 1.25,
-    "value": 0,
+    "value": 475,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3285,7 +3285,7 @@
     "name": "hemp rope",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3297,7 +3297,7 @@
     "name": "hideous chunk",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 510,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3309,7 +3309,7 @@
     "name": "high guard flag",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3321,7 +3321,7 @@
     "name": "high guard shoulderplates",
     "kind": "other",
     "weight": 1.03,
-    "value": 0,
+    "value": 130,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3345,7 +3345,7 @@
     "name": "holy ash",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3357,7 +3357,7 @@
     "name": "holy orchid",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3369,7 +3369,7 @@
     "name": "honeycomb",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 40,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3393,7 +3393,7 @@
     "name": "horoscope",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 40,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3417,7 +3417,7 @@
     "name": "huge shell",
     "kind": "other",
     "weight": 3.2,
-    "value": 0,
+    "value": 15000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3429,7 +3429,7 @@
     "name": "huge spiky snail shell",
     "kind": "other",
     "weight": 3.8,
-    "value": 0,
+    "value": 8000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3441,7 +3441,7 @@
     "name": "human teeth",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3453,7 +3453,7 @@
     "name": "humongous chunk",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 540,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3465,7 +3465,7 @@
     "name": "hydra egg",
     "kind": "other",
     "weight": 20,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3477,7 +3477,7 @@
     "name": "hydra head",
     "kind": "other",
     "weight": 13,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3489,7 +3489,7 @@
     "name": "hydrophytes",
     "kind": "other",
     "weight": 0.45,
-    "value": 0,
+    "value": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3501,7 +3501,7 @@
     "name": "iced soil",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3513,7 +3513,7 @@
     "name": "incantation notes",
     "kind": "other",
     "weight": 4.4,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3525,7 +3525,7 @@
     "name": "infernal heart",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 2100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3537,7 +3537,7 @@
     "name": "infernal robe",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3549,7 +3549,7 @@
     "name": "instable proto matter",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3561,7 +3561,7 @@
     "name": "iron ore",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3573,7 +3573,7 @@
     "name": "ivory carving",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3585,7 +3585,7 @@
     "name": "jagged sickle",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 150000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3597,7 +3597,7 @@
     "name": "jaws",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 3900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3609,7 +3609,7 @@
     "name": "jewelled belt",
     "kind": "other",
     "weight": 1.24,
-    "value": 0,
+    "value": 180,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3621,7 +3621,7 @@
     "name": "jungle moa claw",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3633,7 +3633,7 @@
     "name": "jungle moa egg",
     "kind": "other",
     "weight": 8.4,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3645,7 +3645,7 @@
     "name": "jungle moa feather",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 140,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3657,7 +3657,7 @@
     "name": "Katex' blood",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3669,7 +3669,7 @@
     "name": "kollos shell",
     "kind": "other",
     "weight": 4.59,
-    "value": 0,
+    "value": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3681,7 +3681,7 @@
     "name": "lamassu hoof",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 330,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3693,7 +3693,7 @@
     "name": "lamassu horn",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 240,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3705,7 +3705,7 @@
     "name": "lancer beetle shell",
     "kind": "other",
     "weight": 1.07,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3717,7 +3717,7 @@
     "name": "lancet",
     "kind": "other",
     "weight": 4.9,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3729,7 +3729,7 @@
     "name": "lavafungus head",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3741,7 +3741,7 @@
     "name": "lavafungus ring",
     "kind": "other",
     "weight": 0.4,
-    "value": 0,
+    "value": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3753,7 +3753,7 @@
     "name": "lavaworm jaws",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 1100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3765,7 +3765,7 @@
     "name": "lavaworm spike roots",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3777,7 +3777,7 @@
     "name": "lavaworm spikes",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 750,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3789,7 +3789,7 @@
     "name": "legionnaire flags",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3801,7 +3801,7 @@
     "name": "liodile fang",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 480,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3813,7 +3813,7 @@
     "name": "lion cloak patch",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 190,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3825,7 +3825,7 @@
     "name": "lion crest",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3837,7 +3837,7 @@
     "name": "lion seal",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3849,7 +3849,7 @@
     "name": "lizard essence",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3861,7 +3861,7 @@
     "name": "lizard heart",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 530,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3873,7 +3873,7 @@
     "name": "lizard leather",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3885,7 +3885,7 @@
     "name": "lizard scale",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3897,7 +3897,7 @@
     "name": "longing eyes",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 8000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3909,7 +3909,7 @@
     "name": "lost bracers",
     "kind": "other",
     "weight": 2.9,
-    "value": 0,
+    "value": 140,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3933,7 +3933,7 @@
     "name": "luminous orb",
     "kind": "other",
     "weight": 0.94,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3945,7 +3945,7 @@
     "name": "mad froth",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3957,7 +3957,7 @@
     "name": "magic sulphur",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 8000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3969,7 +3969,7 @@
     "name": "magma clump",
     "kind": "other",
     "weight": 3.1,
-    "value": 0,
+    "value": 570,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3981,7 +3981,7 @@
     "name": "makara fin",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3993,7 +3993,7 @@
     "name": "makara tongue",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4005,7 +4005,7 @@
     "name": "mammoth tusk",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4017,7 +4017,7 @@
     "name": "mantassin tail",
     "kind": "other",
     "weight": 1.14,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4029,7 +4029,7 @@
     "name": "manticore ear",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 310,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4041,7 +4041,7 @@
     "name": "manticore tail",
     "kind": "other",
     "weight": 7.5,
-    "value": 0,
+    "value": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4053,7 +4053,7 @@
     "name": "mantosaurus jaw",
     "kind": "other",
     "weight": 4.2,
-    "value": 0,
+    "value": 2800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4065,7 +4065,7 @@
     "name": "marsh stalker beak",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 65,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4077,7 +4077,7 @@
     "name": "marsh stalker feather",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4101,7 +4101,7 @@
     "name": "Maxxenius head",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 500000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4125,7 +4125,7 @@
     "name": "mega dragon heart",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 1100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4137,7 +4137,7 @@
     "name": "mercurial wing",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 2500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4149,7 +4149,7 @@
     "name": "metal jaw",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4161,7 +4161,7 @@
     "name": "metal spike",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4173,7 +4173,7 @@
     "name": "metal toe",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 430,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4185,7 +4185,7 @@
     "name": "milk churn",
     "kind": "other",
     "weight": 20,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4197,7 +4197,7 @@
     "name": "minotaur horn",
     "kind": "other",
     "weight": 1.11,
-    "value": 0,
+    "value": 75,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4209,7 +4209,7 @@
     "name": "minotaur leather",
     "kind": "other",
     "weight": 0.4,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4221,7 +4221,7 @@
     "name": "miraculum",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4233,7 +4233,7 @@
     "name": "molten dragon essence",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 840,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4245,7 +4245,7 @@
     "name": "moohtant horn",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 140,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4257,7 +4257,7 @@
     "name": "moon pin",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 18000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4269,7 +4269,7 @@
     "name": "mother soil",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4281,7 +4281,7 @@
     "name": "mould heart",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 2100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4293,7 +4293,7 @@
     "name": "mould robe",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4305,7 +4305,7 @@
     "name": "mouldy powder",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4317,7 +4317,7 @@
     "name": "mutated bat ear",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 420,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4329,7 +4329,7 @@
     "name": "mutated flesh",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4341,7 +4341,7 @@
     "name": "mutated rat tail",
     "kind": "other",
     "weight": 1.43,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4365,7 +4365,7 @@
     "name": "mystical hourglass",
     "kind": "other",
     "weight": 0.96,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4377,7 +4377,7 @@
     "name": "naga archer scales",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 340,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4389,7 +4389,7 @@
     "name": "naga armring",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4401,7 +4401,7 @@
     "name": "naga earring",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 380,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4413,7 +4413,7 @@
     "name": "naga warrior scales",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 340,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4425,7 +4425,7 @@
     "name": "natural soil",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4437,7 +4437,7 @@
     "name": "necromantic robe",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4449,7 +4449,7 @@
     "name": "necromantic rust",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4461,7 +4461,7 @@
     "name": "nettle blossom",
     "kind": "other",
     "weight": 0.88,
-    "value": 0,
+    "value": 75,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4473,7 +4473,7 @@
     "name": "nettle spit",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 25,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4485,7 +4485,7 @@
     "name": "neutral matter",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4497,7 +4497,7 @@
     "name": "nighthunter wing",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4509,7 +4509,7 @@
     "name": "Nimmersatt's seal",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 520,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4521,7 +4521,7 @@
     "name": "noble amulet",
     "kind": "other",
     "weight": 0.65,
-    "value": 0,
+    "value": 430000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4533,7 +4533,7 @@
     "name": "noble cape",
     "kind": "other",
     "weight": 1.3,
-    "value": 0,
+    "value": 425000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4545,7 +4545,7 @@
     "name": "noble turban",
     "kind": "other",
     "weight": 1.44,
-    "value": 0,
+    "value": 430,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4557,7 +4557,7 @@
     "name": "nose ring",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4581,7 +4581,7 @@
     "name": "odd organ",
     "kind": "other",
     "weight": 4.5,
-    "value": 0,
+    "value": 410,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4593,7 +4593,7 @@
     "name": "ogre ear stud",
     "kind": "other",
     "weight": 16,
-    "value": 0,
+    "value": 180,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4605,7 +4605,7 @@
     "name": "ogre nose ring",
     "kind": "other",
     "weight": 21,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4617,7 +4617,7 @@
     "name": "old girtablilu carapace",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 570,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4629,7 +4629,7 @@
     "name": "old royal diary",
     "kind": "other",
     "weight": 1.3,
-    "value": 0,
+    "value": 220000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4641,7 +4641,7 @@
     "name": "orc leather",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4653,7 +4653,7 @@
     "name": "orc tooth",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4665,7 +4665,7 @@
     "name": "orc tusk",
     "kind": "other",
     "weight": 10,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4677,7 +4677,7 @@
     "name": "orcish gear",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 85,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4713,7 +4713,7 @@
     "name": "parder fur",
     "kind": "other",
     "weight": 2.9,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4725,7 +4725,7 @@
     "name": "parder tooth",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4737,7 +4737,7 @@
     "name": "peacock feather fan",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4761,7 +4761,7 @@
     "name": "pelvis bone",
     "kind": "other",
     "weight": 1.3,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4821,7 +4821,7 @@
     "name": "perfect behemoth fang",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4833,7 +4833,7 @@
     "name": "petrified scream",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4845,7 +4845,7 @@
     "name": "phantasmal hair",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4857,7 +4857,7 @@
     "name": "pig foot",
     "kind": "other",
     "weight": 0.98,
-    "value": 0,
+    "value": 10,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4869,7 +4869,7 @@
     "name": "pirate coin",
     "kind": "other",
     "weight": 0.4,
-    "value": 0,
+    "value": 110,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4881,7 +4881,7 @@
     "name": "Plagueroot offshoot",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 280000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4893,7 +4893,7 @@
     "name": "plasma pearls",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4905,7 +4905,7 @@
     "name": "plasmatic lightning",
     "kind": "other",
     "weight": 7,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4917,7 +4917,7 @@
     "name": "poison gland",
     "kind": "other",
     "weight": 0.33,
-    "value": 0,
+    "value": 210,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4929,7 +4929,7 @@
     "name": "poison spider shell",
     "kind": "other",
     "weight": 1.3,
-    "value": 0,
+    "value": 10,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4941,7 +4941,7 @@
     "name": "poisoned fang",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 130,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4953,7 +4953,7 @@
     "name": "poisonous slime",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4965,7 +4965,7 @@
     "name": "polar bear paw",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4977,7 +4977,7 @@
     "name": "prehemoth claw",
     "kind": "other",
     "weight": 8.5,
-    "value": 0,
+    "value": 2300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4989,7 +4989,7 @@
     "name": "prehemoth horns",
     "kind": "other",
     "weight": 11,
-    "value": 0,
+    "value": 3000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5085,7 +5085,7 @@
     "name": "pristine worm head",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 15000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5097,7 +5097,7 @@
     "name": "protective charm",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5109,7 +5109,7 @@
     "name": "pulverized ore",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5121,7 +5121,7 @@
     "name": "purple robe",
     "kind": "other",
     "weight": 2.29,
-    "value": 0,
+    "value": 110,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5133,7 +5133,7 @@
     "name": "quara bone",
     "kind": "other",
     "weight": 1.44,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5145,7 +5145,7 @@
     "name": "quara eye",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5157,7 +5157,7 @@
     "name": "quara pincers",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 410,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5169,7 +5169,7 @@
     "name": "quara tentacle",
     "kind": "other",
     "weight": 1.07,
-    "value": 0,
+    "value": 140,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5181,7 +5181,7 @@
     "name": "quill",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 1100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5193,7 +5193,7 @@
     "name": "rare earth",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5205,7 +5205,7 @@
     "name": "ravenous circlet",
     "kind": "other",
     "weight": 0.4,
-    "value": 0,
+    "value": 220000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5241,7 +5241,7 @@
     "name": "red dragon leather",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5253,7 +5253,7 @@
     "name": "red dragon scale",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5265,7 +5265,7 @@
     "name": "red goanna scale",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 270,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5277,7 +5277,7 @@
     "name": "red hair dye",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 40,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5289,7 +5289,7 @@
     "name": "red lantern",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5301,7 +5301,7 @@
     "name": "rhindeer antlers",
     "kind": "other",
     "weight": 5.7,
-    "value": 0,
+    "value": 680,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5313,7 +5313,7 @@
     "name": "rhino hide",
     "kind": "other",
     "weight": 8,
-    "value": 0,
+    "value": 175,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5325,7 +5325,7 @@
     "name": "rhino horn",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 265,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5337,7 +5337,7 @@
     "name": "rhino horn carving",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5349,7 +5349,7 @@
     "name": "ripptor claw",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 2600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5361,7 +5361,7 @@
     "name": "ripptor scales",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5373,7 +5373,7 @@
     "name": "ritual tooth",
     "kind": "other",
     "weight": 0.55,
-    "value": 0,
+    "value": 135,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5385,7 +5385,7 @@
     "name": "rogue naga scales",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 570,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5397,7 +5397,7 @@
     "name": "roots",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5409,7 +5409,7 @@
     "name": "rope belt",
     "kind": "other",
     "weight": 0.97,
-    "value": 0,
+    "value": 66,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5421,7 +5421,7 @@
     "name": "rorc egg",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5433,7 +5433,7 @@
     "name": "rorc feather",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 70,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5445,7 +5445,7 @@
     "name": "rotten feather",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5457,7 +5457,7 @@
     "name": "rotten heart",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 74000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5469,7 +5469,7 @@
     "name": "rotten roots",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 3800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5481,7 +5481,7 @@
     "name": "rotten vermin ichor",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 4500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5493,7 +5493,7 @@
     "name": "sabretooth",
     "kind": "other",
     "weight": 1.28,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5505,7 +5505,7 @@
     "name": "sabretooth fur",
     "kind": "other",
     "weight": 1.35,
-    "value": 0,
+    "value": 2500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5517,7 +5517,7 @@
     "name": "safety pin",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5529,7 +5529,7 @@
     "name": "sandcrawler shell",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5541,7 +5541,7 @@
     "name": "scarab pincers",
     "kind": "other",
     "weight": 2.3,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5553,7 +5553,7 @@
     "name": "scorpion charm",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 620,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5565,7 +5565,7 @@
     "name": "scorpion tail",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 25,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5577,7 +5577,7 @@
     "name": "scythe leg",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5589,7 +5589,7 @@
     "name": "sea horse figurine",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 42000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5601,7 +5601,7 @@
     "name": "sea serpent scale",
     "kind": "other",
     "weight": 1.46,
-    "value": 0,
+    "value": 520,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5613,7 +5613,7 @@
     "name": "seacrest hair",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 260,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5625,7 +5625,7 @@
     "name": "seacrest pearl",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5637,7 +5637,7 @@
     "name": "seacrest scale",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5649,7 +5649,7 @@
     "name": "seeds",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5685,7 +5685,7 @@
     "name": "shaggy tail",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 25,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5697,7 +5697,7 @@
     "name": "shamanic hood",
     "kind": "other",
     "weight": 0.9,
-    "value": 0,
+    "value": 45,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5709,7 +5709,7 @@
     "name": "shamanic talisman",
     "kind": "other",
     "weight": 1.28,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5733,7 +5733,7 @@
     "name": "shark fins",
     "kind": "other",
     "weight": 6.2,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5745,7 +5745,7 @@
     "name": "shimmering beetles",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5757,7 +5757,7 @@
     "name": "shiny stone",
     "kind": "other",
     "weight": 1.56,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5769,7 +5769,7 @@
     "name": "signet ring",
     "kind": "other",
     "weight": 0.7,
-    "value": 0,
+    "value": 480000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5781,7 +5781,7 @@
     "name": "silencer claws",
     "kind": "other",
     "weight": 4.2,
-    "value": 0,
+    "value": 390,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5793,7 +5793,7 @@
     "name": "silencer resonating chamber",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5805,7 +5805,7 @@
     "name": "silken bookmark",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 1300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5817,7 +5817,7 @@
     "name": "silky fur",
     "kind": "other",
     "weight": 1.14,
-    "value": 0,
+    "value": 35,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5829,7 +5829,7 @@
     "name": "silver foxmouse coin",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 11000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5841,7 +5841,7 @@
     "name": "silver moon coin",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 11000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5853,7 +5853,7 @@
     "name": "sineater wing",
     "kind": "other",
     "weight": 4.7,
-    "value": 0,
+    "value": 2100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5865,7 +5865,7 @@
     "name": "single human eye",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5877,7 +5877,7 @@
     "name": "skull belt",
     "kind": "other",
     "weight": 1.15,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5889,7 +5889,7 @@
     "name": "skull fetish",
     "kind": "other",
     "weight": 4.4,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5901,7 +5901,7 @@
     "name": "skull shatterer",
     "kind": "other",
     "weight": 3.8,
-    "value": 0,
+    "value": 170,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5913,7 +5913,7 @@
     "name": "skunk tail",
     "kind": "other",
     "weight": 1.05,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5925,7 +5925,7 @@
     "name": "slime heart",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5937,7 +5937,7 @@
     "name": "slime mould",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 175,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5949,7 +5949,7 @@
     "name": "slimy leaf tentacle",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5961,7 +5961,7 @@
     "name": "slimy leg",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 4500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5973,7 +5973,7 @@
     "name": "small energy ball",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5997,7 +5997,7 @@
     "name": "small notebook",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 480,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6009,7 +6009,7 @@
     "name": "small oil lamp",
     "kind": "other",
     "weight": 9,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6021,7 +6021,7 @@
     "name": "small pitchfork",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 70,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6033,7 +6033,7 @@
     "name": "small treasure chest",
     "kind": "other",
     "weight": 8,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6045,7 +6045,7 @@
     "name": "small tropical fish",
     "kind": "other",
     "weight": 2.2,
-    "value": 0,
+    "value": 380,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6057,7 +6057,7 @@
     "name": "smoldering eye",
     "kind": "other",
     "weight": 31.5,
-    "value": 0,
+    "value": 470000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6069,7 +6069,7 @@
     "name": "snake skin",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6081,7 +6081,7 @@
     "name": "sniper gloves",
     "kind": "other",
     "weight": 4,
-    "value": 0,
+    "value": 2000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6093,7 +6093,7 @@
     "name": "some grimeleech wings",
     "kind": "other",
     "weight": 8.5,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6105,7 +6105,7 @@
     "name": "soul stone",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 6000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6117,7 +6117,7 @@
     "name": "spark sphere",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6129,7 +6129,7 @@
     "name": "sparkion claw",
     "kind": "other",
     "weight": 8,
-    "value": 0,
+    "value": 290,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6141,7 +6141,7 @@
     "name": "sparkion legs",
     "kind": "other",
     "weight": 7.5,
-    "value": 0,
+    "value": 310,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6153,7 +6153,7 @@
     "name": "sparkion stings",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6165,7 +6165,7 @@
     "name": "sparkion tail",
     "kind": "other",
     "weight": 7.5,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6177,7 +6177,7 @@
     "name": "spectral gold nugget",
     "kind": "other",
     "weight": 1.35,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6189,7 +6189,7 @@
     "name": "spectral silver nugget",
     "kind": "other",
     "weight": 1.35,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6201,7 +6201,7 @@
     "name": "spellreaper staff totem",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 3100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6213,7 +6213,7 @@
     "name": "sphinx feather",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 470,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6225,7 +6225,7 @@
     "name": "sphinx tiara",
     "kind": "other",
     "weight": 3.5,
-    "value": 0,
+    "value": 360,
     "slot": "head",
     "source": {
       "engine": "canary",
@@ -6238,7 +6238,7 @@
     "name": "spider fangs",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 10,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6250,7 +6250,7 @@
     "name": "spider silk",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6274,7 +6274,7 @@
     "name": "spidris mandible",
     "kind": "other",
     "weight": 2.38,
-    "value": 0,
+    "value": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6286,7 +6286,7 @@
     "name": "spiked iron ball",
     "kind": "other",
     "weight": 1.25,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6310,7 +6310,7 @@
     "name": "spitter nose",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 340,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6322,7 +6322,7 @@
     "name": "spooky blue eye",
     "kind": "other",
     "weight": 0.86,
-    "value": 0,
+    "value": 95,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6334,7 +6334,7 @@
     "name": "Srezz' eye",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6346,7 +6346,7 @@
     "name": "stalking seeds",
     "kind": "other",
     "weight": 0.4,
-    "value": 0,
+    "value": 1800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6382,7 +6382,7 @@
     "name": "star herb",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 15,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6394,7 +6394,7 @@
     "name": "stone herb",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6406,7 +6406,7 @@
     "name": "stone nose",
     "kind": "other",
     "weight": 2.6,
-    "value": 0,
+    "value": 590,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6418,7 +6418,7 @@
     "name": "stone wing",
     "kind": "other",
     "weight": 1.53,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6430,7 +6430,7 @@
     "name": "strange proto matter",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6442,7 +6442,7 @@
     "name": "strange symbol",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6454,7 +6454,7 @@
     "name": "streaked devourer eyes",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6466,7 +6466,7 @@
     "name": "streaked devourer legs",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6478,7 +6478,7 @@
     "name": "streaked devourer maw",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6490,7 +6490,7 @@
     "name": "striped fur",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6502,7 +6502,7 @@
     "name": "sulphider shell",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 2200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6514,7 +6514,7 @@
     "name": "sulphur powder",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 1900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6526,7 +6526,7 @@
     "name": "sulphurous stone",
     "kind": "other",
     "weight": 1.42,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6538,7 +6538,7 @@
     "name": "sun brooch",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 18000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6550,7 +6550,7 @@
     "name": "swamp grass",
     "kind": "other",
     "weight": 0.94,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6562,7 +6562,7 @@
     "name": "swampling moss",
     "kind": "other",
     "weight": 2.7,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6574,7 +6574,7 @@
     "name": "swarmer antenna",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 130,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6598,7 +6598,7 @@
     "name": "tarantula egg",
     "kind": "other",
     "weight": 0.4,
-    "value": 0,
+    "value": 80,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6610,7 +6610,7 @@
     "name": "tarnished rhino figurine",
     "kind": "other",
     "weight": 7.5,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6634,7 +6634,7 @@
     "name": "telescope eye",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 1600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6646,7 +6646,7 @@
     "name": "tentacle piece",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6658,7 +6658,7 @@
     "name": "terramite legs",
     "kind": "other",
     "weight": 1.14,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6670,7 +6670,7 @@
     "name": "terramite shell",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 170,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6682,7 +6682,7 @@
     "name": "terrorbird beak",
     "kind": "other",
     "weight": 1.17,
-    "value": 0,
+    "value": 95,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6694,7 +6694,7 @@
     "name": "thick fur",
     "kind": "other",
     "weight": 1.25,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6706,7 +6706,7 @@
     "name": "thorn",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6730,7 +6730,7 @@
     "name": "tooth file",
     "kind": "other",
     "weight": 5.09,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6742,7 +6742,7 @@
     "name": "torn shirt",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6754,7 +6754,7 @@
     "name": "trapped bad dream monster",
     "kind": "other",
     "weight": 12,
-    "value": 0,
+    "value": 900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6766,7 +6766,7 @@
     "name": "tremendous tyrant head",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 930,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6778,7 +6778,7 @@
     "name": "tremendous tyrant shell",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 740,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6790,7 +6790,7 @@
     "name": "trollroot",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 50,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6802,7 +6802,7 @@
     "name": "tunnel tyrant head",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6814,7 +6814,7 @@
     "name": "tunnel tyrant shell",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6826,7 +6826,7 @@
     "name": "turtle shell",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 90,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6838,7 +6838,7 @@
     "name": "tusk",
     "kind": "other",
     "weight": 10,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6862,7 +6862,7 @@
     "name": "two-headed turtle heads",
     "kind": "other",
     "weight": 7.6,
-    "value": 0,
+    "value": 460,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6886,7 +6886,7 @@
     "name": "undead heart",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6898,7 +6898,7 @@
     "name": "undertaker fangs",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 2700,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6910,7 +6910,7 @@
     "name": "unholy bone",
     "kind": "other",
     "weight": 1.25,
-    "value": 0,
+    "value": 480,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6922,7 +6922,7 @@
     "name": "vampire dust",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6934,7 +6934,7 @@
     "name": "vampire teeth",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 275,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6946,7 +6946,7 @@
     "name": "varnished diremaw brainpan",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 750,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6958,7 +6958,7 @@
     "name": "varnished diremaw legs",
     "kind": "other",
     "weight": 2.29,
-    "value": 0,
+    "value": 670,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6970,7 +6970,7 @@
     "name": "venison",
     "kind": "other",
     "weight": 3.8,
-    "value": 0,
+    "value": 55,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -6994,7 +6994,7 @@
     "name": "vexclaw talon",
     "kind": "other",
     "weight": 9,
-    "value": 0,
+    "value": 1100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7006,7 +7006,7 @@
     "name": "vibrant heart",
     "kind": "other",
     "weight": 0.75,
-    "value": 0,
+    "value": 2100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7018,7 +7018,7 @@
     "name": "vibrant robe",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 1200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7030,7 +7030,7 @@
     "name": "volatile proto matter",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7042,7 +7042,7 @@
     "name": "war crystal",
     "kind": "other",
     "weight": 1.45,
-    "value": 0,
+    "value": 460,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7054,7 +7054,7 @@
     "name": "wardragon claw",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 550,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7066,7 +7066,7 @@
     "name": "wardragon tooth",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 730,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7078,7 +7078,7 @@
     "name": "warwolf fur",
     "kind": "other",
     "weight": 1.05,
-    "value": 0,
+    "value": 30,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7090,7 +7090,7 @@
     "name": "waspoid claw",
     "kind": "other",
     "weight": 2.15,
-    "value": 0,
+    "value": 320,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7102,7 +7102,7 @@
     "name": "waspoid wing",
     "kind": "other",
     "weight": 0.99,
-    "value": 0,
+    "value": 190,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7114,7 +7114,7 @@
     "name": "werebadger claws",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7126,7 +7126,7 @@
     "name": "werebadger skull",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 185,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7138,7 +7138,7 @@
     "name": "werebear fur",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 195,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7150,7 +7150,7 @@
     "name": "werebear skull",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 195,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7162,7 +7162,7 @@
     "name": "wereboar hooves",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 175,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7174,7 +7174,7 @@
     "name": "wereboar tusks",
     "kind": "other",
     "weight": 1.9,
-    "value": 0,
+    "value": 165,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7186,7 +7186,7 @@
     "name": "werecrocodile tongue",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 570,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7198,7 +7198,7 @@
     "name": "werefox tail",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7210,7 +7210,7 @@
     "name": "werehyaena nose",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 220,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7222,7 +7222,7 @@
     "name": "werehyaena talisman",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7234,7 +7234,7 @@
     "name": "werepanther claw",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7246,7 +7246,7 @@
     "name": "weretiger tooth",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 490,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7258,7 +7258,7 @@
     "name": "werewolf fangs",
     "kind": "other",
     "weight": 1.6,
-    "value": 0,
+    "value": 180,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7270,7 +7270,7 @@
     "name": "werewolf fur",
     "kind": "other",
     "weight": 1.12,
-    "value": 0,
+    "value": 380,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7282,7 +7282,7 @@
     "name": "white deer antlers",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7294,7 +7294,7 @@
     "name": "white deer skin",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 245,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7306,7 +7306,7 @@
     "name": "wild flowers",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7318,7 +7318,7 @@
     "name": "wimp tooth chain",
     "kind": "other",
     "weight": 2.4,
-    "value": 0,
+    "value": 120,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7330,7 +7330,7 @@
     "name": "winged tail",
     "kind": "other",
     "weight": 4.5,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7342,7 +7342,7 @@
     "name": "winter wolf fur",
     "kind": "other",
     "weight": 1.1,
-    "value": 0,
+    "value": 20,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7354,7 +7354,7 @@
     "name": "witch broom",
     "kind": "other",
     "weight": 3.33,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7366,7 +7366,7 @@
     "name": "withered pauldrons",
     "kind": "other",
     "weight": 1.4,
-    "value": 0,
+    "value": 850,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7378,7 +7378,7 @@
     "name": "withered scalp",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 900,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7390,7 +7390,7 @@
     "name": "wolf paw",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 70,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7402,7 +7402,7 @@
     "name": "wood",
     "kind": "other",
     "weight": 5,
-    "value": 0,
+    "value": 5,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7414,7 +7414,7 @@
     "name": "wool",
     "kind": "other",
     "weight": 1.18,
-    "value": 0,
+    "value": 15,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7438,7 +7438,7 @@
     "name": "worm sponge",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 4200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7450,7 +7450,7 @@
     "name": "writhing brain",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 370000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7462,7 +7462,7 @@
     "name": "writhing heart",
     "kind": "other",
     "weight": 0.6,
-    "value": 0,
+    "value": 185000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7474,7 +7474,7 @@
     "name": "wyrm scale",
     "kind": "other",
     "weight": 1.8,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7486,7 +7486,7 @@
     "name": "wyvern talisman",
     "kind": "other",
     "weight": 2.25,
-    "value": 0,
+    "value": 265,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7498,7 +7498,7 @@
     "name": "yapunac dagger",
     "kind": "other",
     "weight": 2,
-    "value": 0,
+    "value": 240,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7510,7 +7510,7 @@
     "name": "yielocks",
     "kind": "other",
     "weight": 2.95,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7522,7 +7522,7 @@
     "name": "yielowax",
     "kind": "other",
     "weight": 4.75,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7534,7 +7534,7 @@
     "name": "Yirkas' egg",
     "kind": "other",
     "weight": 2.5,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7546,7 +7546,7 @@
     "name": "young lich worm",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 25000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7558,7 +7558,7 @@
     "name": "zaogun flag",
     "kind": "other",
     "weight": 0.98,
-    "value": 0,
+    "value": 600,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -7570,7 +7570,7 @@
     "name": "zaogun shoulderplates",
     "kind": "other",
     "weight": 1.03,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

@@ -4,7 +4,7 @@
     "name": "alloy legs",
     "kind": "armor",
     "weight": 45,
-    "value": 0,
+    "value": 11000,
     "slot": "legs",
     "armor": 6,
     "requires": {
@@ -55,7 +55,7 @@
     "name": "bast skirt",
     "kind": "armor",
     "weight": 3.5,
-    "value": 0,
+    "value": 750,
     "slot": "legs",
     "source": {
       "engine": "canary",
@@ -68,7 +68,7 @@
     "name": "blue legs",
     "kind": "armor",
     "weight": 18,
-    "value": 0,
+    "value": 15000,
     "slot": "legs",
     "armor": 8,
     "source": {
@@ -82,7 +82,7 @@
     "name": "brass legs",
     "kind": "armor",
     "weight": 38,
-    "value": 0,
+    "value": 49,
     "slot": "legs",
     "armor": 5,
     "source": {
@@ -96,7 +96,7 @@
     "name": "broken Iks faulds",
     "kind": "armor",
     "weight": 15,
-    "value": 0,
+    "value": 530,
     "slot": "legs",
     "armor": 1,
     "source": {
@@ -110,7 +110,7 @@
     "name": "chain legs",
     "kind": "armor",
     "weight": 35,
-    "value": 0,
+    "value": 25,
     "slot": "legs",
     "armor": 3,
     "source": {
@@ -138,7 +138,7 @@
     "name": "crown legs",
     "kind": "armor",
     "weight": 65,
-    "value": 0,
+    "value": 60,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -189,7 +189,7 @@
     "name": "demon legs",
     "kind": "armor",
     "weight": 70,
-    "value": 0,
+    "value": 84,
     "slot": "legs",
     "armor": 9,
     "source": {
@@ -203,7 +203,7 @@
     "name": "depth ocrea",
     "kind": "armor",
     "weight": 48,
-    "value": 0,
+    "value": 16000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -229,7 +229,7 @@
     "name": "dragon scale legs",
     "kind": "armor",
     "weight": 48,
-    "value": 0,
+    "value": 180,
     "slot": "legs",
     "armor": 10,
     "source": {
@@ -243,7 +243,7 @@
     "name": "dwarven legs",
     "kind": "armor",
     "weight": 49,
-    "value": 0,
+    "value": 40000,
     "slot": "legs",
     "armor": 7,
     "absorb": {
@@ -486,7 +486,7 @@
     "name": "glacier kilt",
     "kind": "armor",
     "weight": 19,
-    "value": 0,
+    "value": 11000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -552,7 +552,7 @@
     "name": "golden legs",
     "kind": "armor",
     "weight": 56,
-    "value": 0,
+    "value": 30000,
     "slot": "legs",
     "armor": 9,
     "requires": {
@@ -572,7 +572,7 @@
     "name": "grasshopper legs",
     "kind": "armor",
     "weight": 32,
-    "value": 0,
+    "value": 15000,
     "slot": "legs",
     "armor": 7,
     "requires": {
@@ -686,7 +686,7 @@
     "name": "knight legs",
     "kind": "armor",
     "weight": 70,
-    "value": 0,
+    "value": 5000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -706,7 +706,7 @@
     "name": "leaf legs",
     "kind": "armor",
     "weight": 12,
-    "value": 0,
+    "value": 500,
     "slot": "legs",
     "source": {
       "engine": "canary",
@@ -719,7 +719,7 @@
     "name": "leather legs",
     "kind": "armor",
     "weight": 18,
-    "value": 0,
+    "value": 9,
     "slot": "legs",
     "armor": 1,
     "source": {
@@ -746,7 +746,7 @@
     "name": "legs of enlightenment",
     "kind": "armor",
     "weight": 21,
-    "value": 0,
+    "value": 400,
     "slot": "legs",
     "armor": 4,
     "requires": {
@@ -792,7 +792,7 @@
     "name": "lightning legs",
     "kind": "armor",
     "weight": 19,
-    "value": 0,
+    "value": 11000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -821,7 +821,7 @@
     "name": "magma legs",
     "kind": "armor",
     "weight": 19,
-    "value": 0,
+    "value": 11000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -850,7 +850,7 @@
     "name": "mammoth fur shorts",
     "kind": "armor",
     "weight": 1.5,
-    "value": 0,
+    "value": 850,
     "slot": "legs",
     "source": {
       "engine": "canary",
@@ -1081,7 +1081,7 @@
     "name": "ornate legs",
     "kind": "armor",
     "weight": 77,
-    "value": 0,
+    "value": 40000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -1104,7 +1104,7 @@
     "name": "pirate knee breeches",
     "kind": "armor",
     "weight": 12,
-    "value": 0,
+    "value": 200,
     "slot": "legs",
     "armor": 1,
     "source": {
@@ -1118,7 +1118,7 @@
     "name": "plate legs",
     "kind": "armor",
     "weight": 50,
-    "value": 0,
+    "value": 115,
     "slot": "legs",
     "armor": 7,
     "source": {
@@ -1480,7 +1480,7 @@
     "name": "studded legs",
     "kind": "armor",
     "weight": 26,
-    "value": 0,
+    "value": 15,
     "slot": "legs",
     "armor": 2,
     "source": {
@@ -1508,7 +1508,7 @@
     "name": "terra legs",
     "kind": "armor",
     "weight": 19,
-    "value": 0,
+    "value": 11000,
     "slot": "legs",
     "armor": 8,
     "requires": {
@@ -1551,7 +1551,7 @@
     "name": "wereboar loincloth",
     "kind": "armor",
     "weight": 13,
-    "value": 0,
+    "value": 1500,
     "slot": "legs",
     "armor": 6,
     "source": {

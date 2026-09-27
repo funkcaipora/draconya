@@ -4,7 +4,7 @@
     "name": "ancient coin",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -16,7 +16,7 @@
     "name": "angel figurine",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 36000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -28,7 +28,7 @@
     "name": "Arbaziloth shoulder piece",
     "kind": "other",
     "weight": 0.25,
-    "value": 0,
+    "value": 450000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -100,7 +100,7 @@
     "name": "black pearl",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 280,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -112,7 +112,7 @@
     "name": "blood goblet",
     "kind": "other",
     "weight": 4.9,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -124,7 +124,7 @@
     "name": "blue crystal shard",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -136,7 +136,7 @@
     "name": "blue crystal splinter",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -148,7 +148,7 @@
     "name": "blue gem",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -160,7 +160,7 @@
     "name": "blue glass plate",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 60,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -172,7 +172,7 @@
     "name": "brown crystal splinter",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -208,7 +208,7 @@
     "name": "cobalt ridge",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 1490000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -232,7 +232,7 @@
     "name": "coral brooch",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 750,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -244,7 +244,7 @@
     "name": "crunor idol",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 30000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -268,7 +268,7 @@
     "name": "crystal wand",
     "kind": "other",
     "weight": 28,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -280,7 +280,7 @@
     "name": "crystallized blood",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 270000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -292,7 +292,7 @@
     "name": "cyan crystal fragment",
     "kind": "other",
     "weight": 0.15,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -340,7 +340,7 @@
     "name": "diabolic skull",
     "kind": "other",
     "weight": 2.1,
-    "value": 0,
+    "value": 19000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -352,7 +352,7 @@
     "name": "diamond",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 15000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -364,7 +364,7 @@
     "name": "dragon figurine",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 45000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -400,7 +400,7 @@
     "name": "eldritch crystal",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 48000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -412,7 +412,7 @@
     "name": "emerald bangle",
     "kind": "other",
     "weight": 1.79,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -424,7 +424,7 @@
     "name": "exalted seal",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 190000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -460,7 +460,7 @@
     "name": "fiery tear",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 1070000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -484,7 +484,7 @@
     "name": "gemmed figurine",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 3500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -496,7 +496,7 @@
     "name": "giant amethyst",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 60000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -508,7 +508,7 @@
     "name": "giant emerald",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 90000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -520,7 +520,7 @@
     "name": "giant ruby",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 70000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -532,7 +532,7 @@
     "name": "giant sapphire",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 60000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -544,7 +544,7 @@
     "name": "giant topaz",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 80000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -592,7 +592,7 @@
     "name": "gold ingot",
     "kind": "other",
     "weight": 18,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -604,7 +604,7 @@
     "name": "gold nugget",
     "kind": "other",
     "weight": 0.8,
-    "value": 0,
+    "value": 850,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -616,7 +616,7 @@
     "name": "gold-scaled sentinel",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 380000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -652,7 +652,7 @@
     "name": "golden cheese wedge",
     "kind": "other",
     "weight": 2.8,
-    "value": 0,
+    "value": 6000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -664,7 +664,7 @@
     "name": "golden dustbin",
     "kind": "other",
     "weight": 7.2,
-    "value": 0,
+    "value": 7000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -700,7 +700,7 @@
     "name": "golden skull",
     "kind": "other",
     "weight": 4.3,
-    "value": 0,
+    "value": 9000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -724,7 +724,7 @@
     "name": "greater guardian gem",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -736,7 +736,7 @@
     "name": "greater marksman gem",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -748,7 +748,7 @@
     "name": "greater mystic gem",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -760,7 +760,7 @@
     "name": "greater sage gem",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -784,7 +784,7 @@
     "name": "green crystal fragment",
     "kind": "other",
     "weight": 0.15,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -796,7 +796,7 @@
     "name": "green crystal shard",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -808,7 +808,7 @@
     "name": "green crystal splinter",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 400,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -820,7 +820,7 @@
     "name": "green gem",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -832,7 +832,7 @@
     "name": "green glass plate",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 180,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -844,7 +844,7 @@
     "name": "gruesome fan",
     "kind": "other",
     "weight": 1.7,
-    "value": 0,
+    "value": 15000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -856,7 +856,7 @@
     "name": "guardian gem",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -942,7 +942,7 @@
     "name": "hexagonal ruby",
     "kind": "other",
     "weight": 1.25,
-    "value": 0,
+    "value": 30000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -978,7 +978,7 @@
     "name": "lesser guardian gem",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -990,7 +990,7 @@
     "name": "lesser marksman gem",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1002,7 +1002,7 @@
     "name": "lesser mystic gem",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1014,7 +1014,7 @@
     "name": "lesser sage gem",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1038,7 +1038,7 @@
     "name": "lion figurine",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1062,7 +1062,7 @@
     "name": "marksman gem",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1122,7 +1122,7 @@
     "name": "moonstone",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 13000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1134,7 +1134,7 @@
     "name": "mucus plug",
     "kind": "other",
     "weight": 85,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1158,7 +1158,7 @@
     "name": "mystic gem",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1170,7 +1170,7 @@
     "name": "onyx chip",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1182,7 +1182,7 @@
     "name": "opal",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1194,7 +1194,7 @@
     "name": "orichalcum pearl",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 40,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1206,7 +1206,7 @@
     "name": "ornate locket",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 18000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1218,7 +1218,7 @@
     "name": "pet pig",
     "kind": "other",
     "weight": 6,
-    "value": 0,
+    "value": 1500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1266,7 +1266,7 @@
     "name": "prismatic quartz",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 450,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1290,7 +1290,7 @@
     "name": "rainbow quartz",
     "kind": "other",
     "weight": 1,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1314,7 +1314,7 @@
     "name": "red crystal fragment",
     "kind": "other",
     "weight": 0.15,
-    "value": 0,
+    "value": 800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1326,7 +1326,7 @@
     "name": "red gem",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1338,7 +1338,7 @@
     "name": "royal almandine",
     "kind": "other",
     "weight": 1.75,
-    "value": 0,
+    "value": 460000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1400,7 +1400,7 @@
     "name": "sage gem",
     "kind": "other",
     "weight": 0.5,
-    "value": 0,
+    "value": 5000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1412,7 +1412,7 @@
     "name": "scarab coin",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 100,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1448,7 +1448,7 @@
     "name": "silver brooch",
     "kind": "other",
     "weight": 1.15,
-    "value": 0,
+    "value": 150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1534,7 +1534,7 @@
     "name": "small amethyst",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1546,7 +1546,7 @@
     "name": "small diamond",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 300,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1558,7 +1558,7 @@
     "name": "small emerald",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1570,7 +1570,7 @@
     "name": "small enchanted amethyst",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1582,7 +1582,7 @@
     "name": "small enchanted emerald",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1594,7 +1594,7 @@
     "name": "small enchanted ruby",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1606,7 +1606,7 @@
     "name": "small enchanted sapphire",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1618,7 +1618,7 @@
     "name": "small ruby",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1630,7 +1630,7 @@
     "name": "small sapphire",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 250,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1642,7 +1642,7 @@
     "name": "small topaz",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 200,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1678,7 +1678,7 @@
     "name": "solid rage",
     "kind": "other",
     "weight": 3,
-    "value": 0,
+    "value": 310,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1798,7 +1798,7 @@
     "name": "tiara",
     "kind": "other",
     "weight": 1.5,
-    "value": 0,
+    "value": 11000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1822,7 +1822,7 @@
     "name": "tiger eye",
     "kind": "other",
     "weight": 1.2,
-    "value": 0,
+    "value": 350,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1846,7 +1846,7 @@
     "name": "unicorn figurine",
     "kind": "other",
     "weight": 6.5,
-    "value": 0,
+    "value": 50000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1882,7 +1882,7 @@
     "name": "violet crystal shard",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 1500,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1894,7 +1894,7 @@
     "name": "violet gem",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 10000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1906,7 +1906,7 @@
     "name": "violet glass plate",
     "kind": "other",
     "weight": 0.1,
-    "value": 0,
+    "value": 2150,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1942,7 +1942,7 @@
     "name": "white gem",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 12000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1954,7 +1954,7 @@
     "name": "white pearl",
     "kind": "other",
     "weight": 0.2,
-    "value": 0,
+    "value": 160,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1966,7 +1966,7 @@
     "name": "yellow gem",
     "kind": "other",
     "weight": 0.3,
-    "value": 0,
+    "value": 1000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

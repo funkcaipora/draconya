@@ -1,6 +1,6 @@
 {
   "id": "serpent-sword",
-  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: extraDefense: (ausente) → 1.",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: extraDefense: (ausente) → 1.",
   "patch": {
     "extraDefense": 1
   }

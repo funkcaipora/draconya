@@ -113,7 +113,7 @@
     "name": "axe ring",
     "kind": "ring",
     "weight": 0.9,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -155,7 +155,7 @@
     "name": "butterfly ring",
     "kind": "ring",
     "weight": 1.2,
-    "value": 0,
+    "value": 2000,
     "slot": "finger",
     "armor": 2,
     "requires": {
@@ -262,7 +262,7 @@
     "name": "club ring",
     "kind": "ring",
     "weight": 0.9,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -275,7 +275,7 @@
     "name": "crystal ring",
     "kind": "ring",
     "weight": 0.9,
-    "value": 0,
+    "value": 250,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -288,7 +288,7 @@
     "name": "death ring",
     "kind": "ring",
     "weight": 0.8,
-    "value": 0,
+    "value": 1000,
     "slot": "finger",
     "armor": 1,
     "absorb": {
@@ -307,7 +307,7 @@
     "name": "dwarven ring",
     "kind": "ring",
     "weight": 1.1,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -361,7 +361,7 @@
     "name": "energy ring",
     "kind": "ring",
     "weight": 0.8,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "requires": {
       "vocationId": [
@@ -440,7 +440,7 @@
     "name": "gold ring",
     "kind": "ring",
     "weight": 1,
-    "value": 0,
+    "value": 8000,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -453,7 +453,7 @@
     "name": "horn",
     "kind": "ring",
     "weight": 1.2,
-    "value": 0,
+    "value": 300,
     "slot": "finger",
     "armor": 1,
     "source": {
@@ -467,7 +467,7 @@
     "name": "life ring",
     "kind": "ring",
     "weight": 0.8,
-    "value": 0,
+    "value": 50,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -493,7 +493,7 @@
     "name": "might ring",
     "kind": "ring",
     "weight": 1,
-    "value": 0,
+    "value": 250,
     "slot": "finger",
     "charges": 20,
     "absorb": {
@@ -530,7 +530,7 @@
     "name": "power ring",
     "kind": "ring",
     "weight": 0.8,
-    "value": 0,
+    "value": 50,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -799,7 +799,7 @@
     "name": "stealth ring",
     "kind": "ring",
     "weight": 1,
-    "value": 0,
+    "value": 200,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -838,7 +838,7 @@
     "name": "sword ring",
     "kind": "ring",
     "weight": 0.9,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -851,7 +851,7 @@
     "name": "time ring",
     "kind": "ring",
     "weight": 0.9,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "source": {
       "engine": "canary",
@@ -864,7 +864,7 @@
     "name": "wedding ring",
     "kind": "ring",
     "weight": 0.4,
-    "value": 0,
+    "value": 100,
     "slot": "finger",
     "source": {
       "engine": "canary",
