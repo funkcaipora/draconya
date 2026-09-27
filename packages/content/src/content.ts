@@ -824,6 +824,12 @@ export function buildContent(raw: RawContent): Content {
     if (item.kind !== 'container' && item.initialSlots !== undefined) {
       problems.push(`item "${item.id}": initialSlots só vale em kind "container"`);
     }
+    // Slot de imbuement (#604, ADR 0046) só em peça que se VESTE e não empilha: o imbuement é
+    // estado da instância, e instância com overlay não empilha (d.3) — num item empilhável o
+    // slot seria um número que nenhuma pilha poderia usar.
+    if (item.imbuementSlots !== undefined && (item.slot === undefined || item.stackable)) {
+      problems.push(`item "${item.id}": imbuementSlots só vale em item que se veste e não empilha`);
+    }
   }
   for (const piece of progression?.startingKit ?? []) {
     const item = itemDefinitions.get(piece.itemId);

@@ -4545,6 +4545,25 @@ describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
     await host.release('p1', 1000, 'logout');
     expect(saved[0]).toMatchObject({ layout: { r1: { container: 'satchel', index: 9 } }, equipment: {} });
   });
+
+  it('o extrato leva o overlay por instância; `null` é a instância igual à definição (#604)', async () => {
+    // Mutação que mata: esquecer `overlays` no extrato do fim de sessão — o imbuement aplicado
+    // (ou vencido) na hunt morreria no logout.
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(countingRuleset().ruleset, { itemCatalog, progression, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    const rules = { backpackSlots: 0, satchelSlots: 10, row: 5 };
+    hero.inventory.ensureContainers(rules);
+    hero.inventory.add({ instanceId: 'r1', itemId: 'rock', quantity: 1 }, itemCatalog, hero, rules);
+    hero.inventory.add({ instanceId: 'r2', itemId: 'rock', quantity: 1 }, itemCatalog, hero, rules);
+    const imbued = { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] };
+    hero.inventory.setOverlay('r1', imbued);
+    await host.release('p1', 1000, 'logout');
+    expect(saved[0]).toMatchObject({ overlays: { r1: imbued, r2: null } });
+  });
 });
 
 describe('a party no hospedeiro: um extrato por membro, saída por dentro do sim, retomada com N (#194, ADR 0027)', () => {
