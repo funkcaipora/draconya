@@ -1,0 +1,353 @@
+[
+  {
+    "id": "annihilation",
+    "name": "Annihilation",
+    "manaCost": 300,
+    "cooldownMs": 30000,
+    "minLevel": 110,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.256,
+        "skillMin": 0,
+        "skillMax": 0,
+        "baseMin": 16.64,
+        "baseMax": 43.52,
+        "skillAttackMin": 0.2176,
+        "skillAttackMax": 0.256
+      },
+      "range": 1
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/annihilation.lua"
+    }
+  },
+  {
+    "id": "berserk",
+    "name": "Berserk",
+    "manaCost": 115,
+    "cooldownMs": 4000,
+    "minLevel": 35,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.22,
+        "skillMin": 0.55,
+        "skillMax": 1.65,
+        "baseMin": 0,
+        "baseMax": 0,
+        "attackMin": 0.55,
+        "attackMax": 1.65
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/berserk.lua"
+    }
+  },
+  {
+    "id": "bruise-bane",
+    "name": "Bruise Bane",
+    "manaCost": 10,
+    "cooldownMs": 1000,
+    "minLevel": 1,
+    "vocationId": "knight",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.795,
+        "skillMax": 1.795,
+        "baseMin": 0,
+        "baseMax": 5,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/bruise_bane.lua"
+    }
+  },
+  {
+    "id": "brutal-strike",
+    "name": "Brutal Strike",
+    "manaCost": 30,
+    "cooldownMs": 6000,
+    "minLevel": 16,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.256,
+        "skillMin": 0,
+        "skillMax": 0,
+        "baseMin": 5.12,
+        "baseMax": 11.52,
+        "skillAttackMin": 0.0256,
+        "skillAttackMax": 0.0512
+      },
+      "range": 1
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/brutal_strike.lua"
+    }
+  },
+  {
+    "id": "executioners-throw",
+    "name": "Executioner's Throw",
+    "manaCost": 225,
+    "cooldownMs": 18000,
+    "minLevel": 300,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.256,
+        "skillMin": 0,
+        "skillMax": 0,
+        "baseMin": 21.76,
+        "baseMax": 51.2,
+        "skillAttackMin": 0.2176,
+        "skillAttackMax": 0.256
+      },
+      "range": 5
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/executioners_throw.lua"
+    }
+  },
+  {
+    "id": "fair-wound-cleansing",
+    "name": "Fair Wound Cleansing",
+    "manaCost": 90,
+    "cooldownMs": 1000,
+    "minLevel": 300,
+    "vocationId": "knight",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.4,
+        "skillMin": 8,
+        "skillMax": 15.9,
+        "baseMin": 50,
+        "baseMax": 102,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/fair_wound_cleansing.lua"
+    }
+  },
+  {
+    "id": "fierce-berserk",
+    "name": "Fierce Berserk",
+    "manaCost": 340,
+    "cooldownMs": 6000,
+    "minLevel": 90,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.22,
+        "skillMin": 1.21,
+        "skillMax": 3.3,
+        "baseMin": 0,
+        "baseMax": 0,
+        "attackMin": 2.42,
+        "attackMax": 6.6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/fierce_berserk.lua"
+    }
+  },
+  {
+    "id": "front-sweep",
+    "name": "Front Sweep",
+    "manaCost": 200,
+    "cooldownMs": 6000,
+    "minLevel": 70,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.22,
+        "skillMin": 0,
+        "skillMax": 0,
+        "baseMin": 34.1,
+        "baseMax": 49.5,
+        "skillAttackMin": 0.044,
+        "skillAttackMax": 0.088
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/front_sweep.lua"
+    }
+  },
+  {
+    "id": "groundshaker",
+    "name": "Groundshaker",
+    "manaCost": 160,
+    "cooldownMs": 8000,
+    "minLevel": 33,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.256,
+        "skillMin": 0.64,
+        "skillMax": 1.408,
+        "baseMin": 0,
+        "baseMax": 0,
+        "attackMin": 0.64,
+        "attackMax": 1.408
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/groundshaker.lua"
+    }
+  },
+  {
+    "id": "intense-wound-cleansing",
+    "name": "Intense Wound Cleansing",
+    "manaCost": 200,
+    "cooldownMs": 600000,
+    "minLevel": 80,
+    "vocationId": "knight",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 70,
+        "skillMax": 92,
+        "baseMin": 438,
+        "baseMax": 544,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/intense_wound_cleansing.lua"
+    }
+  },
+  {
+    "id": "lesser-front-sweep",
+    "name": "Lesser Front Sweep",
+    "manaCost": 6,
+    "cooldownMs": 6000,
+    "minLevel": 1,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.22,
+        "skillMin": 0,
+        "skillMax": 0,
+        "baseMin": 7.7,
+        "baseMax": 15.4,
+        "skillAttackMin": 0.022,
+        "skillAttackMax": 0.044
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/lesser_front_sweep.lua"
+    }
+  },
+  {
+    "id": "whirlwind-throw",
+    "name": "Whirlwind Throw",
+    "manaCost": 40,
+    "cooldownMs": 6000,
+    "minLevel": 28,
+    "vocationId": "knight",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.256,
+        "skillMin": 0.426666667,
+        "skillMax": 1.28,
+        "baseMin": 0,
+        "baseMax": 0,
+        "attackMin": 0.426666667,
+        "attackMax": 1.28
+      },
+      "range": 5
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/whirlwind_throw.lua"
+    }
+  },
+  {
+    "id": "wound-cleansing",
+    "name": "Wound Cleansing",
+    "manaCost": 40,
+    "cooldownMs": 1000,
+    "minLevel": 8,
+    "vocationId": "knight",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4,
+        "skillMax": 7.95,
+        "baseMin": 25,
+        "baseMax": 51,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/wound_cleansing.lua"
+    }
+  }
+]
