@@ -1,0 +1,184 @@
+[
+  {
+    "id": "pirate-skeleton",
+    "name": "Pirate Skeleton",
+    "class": "undead",
+    "health": 190,
+    "experience": 85,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.25
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 176,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.48,
+        "min": 1,
+        "max": 25
+      },
+      "items": [
+        {
+          "itemId": "skull",
+          "chance": 0.0446
+        },
+        {
+          "itemId": "bone",
+          "chance": 0.0425
+        },
+        {
+          "itemId": "big-bone",
+          "chance": 0.0514
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.0055
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.01003
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.0096
+        },
+        {
+          "itemId": "spooky-blue-eye",
+          "chance": 0.0473
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/pirate_skeleton.lua"
+    },
+    "bestiary": {
+      "class": "undead",
+      "race": "undead",
+      "raceId": 256,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 195
+  },
+  {
+    "id": "undead-cavebear",
+    "name": "Undead Cavebear",
+    "class": "undead",
+    "health": 450,
+    "experience": 600,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 28,
+    "defense": 27,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.25
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.72,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 218,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.3182,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "maxilla",
+          "chance": 0.1364
+        },
+        {
+          "itemId": "cavebear-skull",
+          "chance": 0.026
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.013
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/undead_cavebear.lua"
+    },
+    "bestiary": {
+      "class": "undead",
+      "race": "undead",
+      "raceId": 696,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 384
+  }
+]

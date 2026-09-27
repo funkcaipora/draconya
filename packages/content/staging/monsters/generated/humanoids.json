@@ -1,0 +1,1998 @@
+[
+  {
+    "id": "chakoya-tribewarden",
+    "name": "Chakoya Tribewarden",
+    "class": "humanoid",
+    "health": 68,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 9,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.15,
+        "fire": 0.25,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.33,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 124,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7959,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "short-sword",
+          "chance": 0.0481
+        },
+        {
+          "itemId": "bone-shield",
+          "chance": 0.0103
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.1937
+        },
+        {
+          "itemId": "northern-pike",
+          "chance": 0.0006
+        },
+        {
+          "itemId": "rainbow-trout",
+          "chance": 0.0005
+        },
+        {
+          "itemId": "green-perch",
+          "chance": 0.001
+        },
+        {
+          "itemId": "mammoth-whopper",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "fireproof-horn",
+          "chance": 0.0035
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/chakoya_tribewarden.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 319,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 249
+  },
+  {
+    "id": "corym-charlatan",
+    "name": "Corym Charlatan",
+    "class": "humanoid",
+    "health": 250,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 105
+    },
+    "armor": 17,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.25,
+        "earth": 0.25,
+        "holy": -0.05,
+        "death": 0.15
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.62,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 35
+      },
+      "items": [
+        {
+          "itemId": "cheese",
+          "chance": 0.1
+        },
+        {
+          "itemId": "bola",
+          "chance": 0.07692
+        },
+        {
+          "itemId": "spike-shield",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "ratana",
+          "chance": 0.00909
+        },
+        {
+          "itemId": "life-preserver",
+          "chance": 0.00854
+        },
+        {
+          "itemId": "cheese-cutter",
+          "chance": 0.05882
+        },
+        {
+          "itemId": "cheesy-figurine",
+          "chance": 0.00518
+        },
+        {
+          "itemId": "earflap",
+          "chance": 0.07142
+        },
+        {
+          "itemId": "soft-cheese",
+          "chance": 0.125
+        },
+        {
+          "itemId": "rat-cheese",
+          "chance": 0.14285
+        },
+        {
+          "itemId": "leather-harness",
+          "chance": 0.00537
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/corym_charlatan.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 916,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 532
+  },
+  {
+    "id": "dwarf",
+    "name": "Dwarf",
+    "class": "humanoid",
+    "health": 90,
+    "experience": 45,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 8,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.1,
+        "fire": -0.05,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.35,
+        "min": 1,
+        "max": 8
+      },
+      "items": [
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.001
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.15
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.25
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.08
+        },
+        {
+          "itemId": "copper-shield",
+          "chance": 0.1
+        },
+        {
+          "itemId": "pick",
+          "chance": 0.1
+        },
+        {
+          "itemId": "letter",
+          "chance": 0.08
+        },
+        {
+          "itemId": "leather-legs",
+          "chance": 0.1
+        },
+        {
+          "itemId": "white-mushroom",
+          "chance": 0.5
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.007
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/dwarf.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 69,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 69
+  },
+  {
+    "id": "dwarf-guard",
+    "name": "Dwarf Guard",
+    "class": "humanoid",
+    "health": 245,
+    "experience": 165,
+    "attack": {
+      "min": 0,
+      "max": 140
+    },
+    "armor": 15,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.2,
+        "fire": -0.05,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.02,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 206,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.4,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "axe-ring",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.006
+        },
+        {
+          "itemId": "battle-hammer",
+          "chance": 0.04
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.016
+        },
+        {
+          "itemId": "scale-armor",
+          "chance": 0.092
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.06
+        },
+        {
+          "itemId": "leather-boots",
+          "chance": 0.4
+        },
+        {
+          "itemId": "white-mushroom",
+          "chance": 0.55,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0051
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0038
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0028
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 20,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/dwarf_guard.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 70,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 70
+  },
+  {
+    "id": "dwarf-henchman",
+    "name": "Dwarf Henchman",
+    "class": "humanoid",
+    "health": 350,
+    "experience": 15,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 16,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.64,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/dwarf_henchman.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 379,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 160
+  },
+  {
+    "id": "dwarf-miner",
+    "name": "Dwarf Miner",
+    "health": 120,
+    "experience": 60,
+    "attack": {
+      "min": 0,
+      "max": 35
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.33333,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.00793
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.14285
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "pick",
+          "chance": 0.11111
+        },
+        {
+          "itemId": "leather-legs",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.03846
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.00793
+        }
+      ]
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/dwarf_miner.lua"
+    },
+    "outfitId": 160
+  },
+  {
+    "id": "frost-troll",
+    "name": "Frost Troll",
+    "class": "humanoid",
+    "health": 55,
+    "experience": 23,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 6,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.15,
+        "earth": -0.1,
+        "fire": 0.4,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.23,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5084,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "twigs",
+          "chance": 0.083
+        },
+        {
+          "itemId": "rapier",
+          "chance": 0.155
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.215
+        },
+        {
+          "itemId": "wooden-shield",
+          "chance": 0.1585
+        },
+        {
+          "itemId": "coat",
+          "chance": 0.012
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.18
+        },
+        {
+          "itemId": "frosty-ear-of-a-troll",
+          "chance": 0.02
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/frost_troll.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 53,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 53
+  },
+  {
+    "id": "furious-orc-berserker",
+    "name": "Furious Orc Berserker",
+    "health": 210,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 1,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/furious_orc_berserker.lua"
+    },
+    "outfitId": 8
+  },
+  {
+    "id": "island-troll",
+    "name": "Island Troll",
+    "class": "humanoid",
+    "health": 50,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 6,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.2,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 126,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "rope",
+          "chance": 0.08
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "hand-axe",
+          "chance": 0.18
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.2
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.05
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.1
+        },
+        {
+          "itemId": "wooden-shield",
+          "chance": 0.16
+        },
+        {
+          "itemId": "leather-boots",
+          "chance": 0.105
+        },
+        {
+          "itemId": "mango",
+          "chance": 0.05
+        },
+        {
+          "itemId": "wood",
+          "chance": 0.3
+        },
+        {
+          "itemId": "marlin",
+          "chance": 0.0004
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/island_troll.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 277,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 282
+  },
+  {
+    "id": "little-corym-charlatan",
+    "name": "Little Corym Charlatan",
+    "class": "humanoid",
+    "health": 90,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 3,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.23,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/little_corym_charlatan.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 920,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 1
+    },
+    "outfitId": 532
+  },
+  {
+    "id": "minotaur",
+    "name": "Minotaur",
+    "class": "humanoid",
+    "health": 100,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 11,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.2,
+        "ice": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 168,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.675,
+        "min": 1,
+        "max": 25
+      },
+      "items": [
+        {
+          "itemId": "bronze-amulet",
+          "chance": 0.0011
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.05
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.04
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.1284
+        },
+        {
+          "itemId": "brass-helmet",
+          "chance": 0.077
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.1
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.2002
+        },
+        {
+          "itemId": "shovel",
+          "chance": 0.0031
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.05
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.0209,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/minotaur.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 25,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 25
+  },
+  {
+    "id": "minotaur-bruiser",
+    "name": "Minotaur Bruiser",
+    "health": 100,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 11,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.18,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 168,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.657,
+        "min": 1,
+        "max": 15
+      },
+      "items": [
+        {
+          "itemId": "plate-shield",
+          "chance": 0.2
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.129
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.1
+        },
+        {
+          "itemId": "brass-helmet",
+          "chance": 0.078
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.05
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.05
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.04
+        },
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.02,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "shovel",
+          "chance": 0.0031
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/minotaur_bruiser.lua"
+    },
+    "outfitId": 25
+  },
+  {
+    "id": "minotaur-guard",
+    "name": "Minotaur Guard",
+    "class": "humanoid",
+    "health": 185,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 15,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.2,
+        "ice": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.83,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5964,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "double-axe",
+          "chance": 0.004
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0298
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.0439
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0215
+        },
+        {
+          "itemId": "fishing-rod",
+          "chance": 0.0048
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.01
+        },
+        {
+          "itemId": "minotaur-trophy",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.004
+        },
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.0833,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "piece-of-warrior-armor",
+          "chance": 0.0504
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 20,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/minotaur_guard.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 29,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 29
+  },
+  {
+    "id": "minotaur-invader",
+    "name": "Minotaur Invader",
+    "class": "humanoid",
+    "health": 1850,
+    "experience": 1600,
+    "attack": {
+      "min": 0,
+      "max": 350
+    },
+    "armor": 40,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.2,
+        "ice": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.76,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5964,
+        "min": 1,
+        "max": 160
+      },
+      "items": [
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.0833,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "piece-of-warrior-armor",
+          "chance": 0.0504
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.01
+        },
+        {
+          "itemId": "minotaur-trophy",
+          "chance": 0.0009
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/minotaur_invader.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 1109,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 2
+    },
+    "outfitId": 29
+  },
+  {
+    "id": "orc",
+    "name": "Orc",
+    "class": "humanoid",
+    "health": 70,
+    "experience": 25,
+    "attack": {
+      "min": 0,
+      "max": 35
+    },
+    "armor": 4,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.2,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8481,
+        "min": 1,
+        "max": 14
+      },
+      "items": [
+        {
+          "itemId": "sabre",
+          "chance": 0.0585
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.0496
+        },
+        {
+          "itemId": "studded-helmet",
+          "chance": 0.0295
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0786
+        },
+        {
+          "itemId": "studded-shield",
+          "chance": 0.073
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.1016
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.0059
+        },
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/orc.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 5,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 5
+  },
+  {
+    "id": "orc-warrior",
+    "name": "Orc Warrior",
+    "class": "humanoid",
+    "health": 125,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 60
+    },
+    "armor": 8,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.3,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.65,
+        "min": 1,
+        "max": 15
+      },
+      "items": [
+        {
+          "itemId": "poison-dagger",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0736
+        },
+        {
+          "itemId": "copper-shield",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.15
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.007
+        },
+        {
+          "itemId": "broken-helmet",
+          "chance": 0.108
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.04
+        },
+        {
+          "itemId": "light-bandana",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 11,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/orc_warrior.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 7,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 7
+  },
+  {
+    "id": "running-elite-orc-guard",
+    "name": "Running Elite Orc Guard",
+    "health": 950,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "manadrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 234,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 950,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/running_elite_orc_guard.lua"
+    },
+    "outfitId": 2
+  },
+  {
+    "id": "troll",
+    "name": "Troll",
+    "class": "humanoid",
+    "health": 50,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 15
+    },
+    "armor": 6,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.2,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 126,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.653,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "rope",
+          "chance": 0.0795
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "hand-axe",
+          "chance": 0.18
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.13
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.05
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.12
+        },
+        {
+          "itemId": "wooden-shield",
+          "chance": 0.0473
+        },
+        {
+          "itemId": "leather-boots",
+          "chance": 0.1
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.15
+        },
+        {
+          "itemId": "bunch-of-troll-hair",
+          "chance": 0.01
+        },
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/troll.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 15,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 15
+  },
+  {
+    "id": "troll-champion",
+    "name": "Troll Champion",
+    "class": "humanoid",
+    "health": 75,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 35
+    },
+    "armor": 10,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 138,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.64,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.25
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.0545
+        },
+        {
+          "itemId": "wooden-shield",
+          "chance": 0.06
+        },
+        {
+          "itemId": "arrow",
+          "chance": 0.0545,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "leather-boots",
+          "chance": 0.09
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.0965
+        },
+        {
+          "itemId": "bunch-of-troll-hair",
+          "chance": 0.03
+        },
+        {
+          "itemId": "trollroot",
+          "chance": 0.0075
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/troll_champion.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 392,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 281
+  },
+  {
+    "id": "troll-guard",
+    "name": "Troll Guard",
+    "class": "humanoid",
+    "health": 60,
+    "experience": 25,
+    "attack": {
+      "min": 0,
+      "max": 9
+    },
+    "armor": 4,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 126,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.58,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "rope",
+          "chance": 0.1
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.03
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.14,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 17,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/troll_guard.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 745,
+      "toKill": 5,
+      "firstUnlock": 1,
+      "secondUnlock": 3,
+      "charmsPoints": 30,
+      "stars": 2,
+      "occurrence": 3
+    },
+    "outfitId": 281
+  },
+  {
+    "id": "young-troll",
+    "name": "Young Troll",
+    "health": 30,
+    "experience": 12,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 2,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.58,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "rope",
+          "chance": 0.1
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.14
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/humanoids/young_troll.lua"
+    },
+    "outfitId": 15
+  }
+]
