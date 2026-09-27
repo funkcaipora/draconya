@@ -56,6 +56,7 @@ import {
 import { playerArmor, playerDefense, playerMitigation } from '../combat/player-defense.js';
 import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
+import { rollCombatValue } from '../combat/combat-value.js';
 import { rollDistanceHit } from '../combat/distance-hit.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
@@ -5329,10 +5330,11 @@ const slots = bot.groups.get(group);
     for (const character of targets) {
       const defender = this.#playerDefender(character);
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
-      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`).
+      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`). No
+      // `combat-v3` o sorteio é a normal truncada do Canary (#681); antes, uniforme.
       const result = resolveDamage(
         {
-          rawDamage: session.rng.integer(ability.power.min, ability.power.max),
+          rawDamage: rollCombatValue(session.rng, ability.power.min, ability.power.max, this.#options.combat),
           source: 'monster-attack',
           damageType: ability.damageType,
           // O TIPO DE ATAQUE decide o bloqueio no `combat-v3` (#682, a regra de
@@ -5481,7 +5483,9 @@ const slots = bot.groups.get(group);
     if (!session.rng.chance(defense.chance)) return;
 
     if (defense.heal !== undefined) {
-      const healed = monster.heal(definition.health, session.rng.integer(defense.heal.min, defense.heal.max));
+      // Normal truncada no `combat-v3` (#681, `monster.cpp:2218` → `combat.cpp:189`); uniforme antes.
+      const amount = rollCombatValue(session.rng, defense.heal.min, defense.heal.max, this.#options.combat);
+      const healed = monster.heal(definition.health, amount);
       // De vida cheia, zero repôs — sem evento, como a regeneração passiva (`#onRegen`): um "+0"
       // flutuando por cadência é ruído que uma hunt desanexada não precisa produzir.
       if (healed > 0) {

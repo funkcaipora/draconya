@@ -676,6 +676,34 @@ distribuição que a #522 introduziu para corpo a corpo e distância. `resolveWe
 usar `normalRandomInt` para `fixedDamage` sob `combat-v2`; `combat-v1` continua com `rng.integer`
 (uniforme), como sempre — preservando o v1 bit a bit.
 
+### Magia, runa, poção e ataque/cura de monstro: a normal truncada no `combat-v3` (#681)
+
+O Canary sorteia TODO valor de dano e cura que não é de arma pela mesma `normal_random(min, max)`
+— `Combat::getCombatDamage` (`combat.cpp:154-229`) em todos os ramos, o callback
+`onGetFormulaValues` (`combat.cpp:2046`), e `doTargetCombatHealth`/`doTargetCombatMana`
+(`global_functions.cpp:372`/`:455`) que a poção chama. Sob `combat-v3` o Draconya segue isso: os
+seis pontos abaixo passam por `rollCombatValue` (`packages/sim/src/combat/combat-value.ts`), que
+devolve `normalRandomInt` no `combat-v3` e o `rng.integer` uniforme de sempre no `combat-v1`/`v2`
+(e para o chamador sem contexto de combate) — v1/v2 bit a bit, ADR 0031. A faixa (`min`/`max`)
+não muda em nenhum ponto; muda só a distribuição: em `[0, 100]`, a uniforme põe ~10,9 % dos
+sorteios em `[0, 10]`, a normal truncada ~3,4 %. A normal consome o sorteio mesmo com
+`min === max` (a ability de poder fixo, o `firefield` 0..0 do Dragon Lord).
+
+| Ponto (`packages/sim/src`) | O que sorteia | Canary | Distribuição no `combat-v3` |
+|---|---|---|---|
+| `casting.ts` `powerOf` (fórmula) | magia/runa com `formula` (dano e cura) | `combat.cpp:2046` | **normal** |
+| `casting.ts` `powerOf` (`basePower`) | magia com `basePower` provisório | `combat.cpp:195` | **normal** |
+| `casting.ts` `fixedAmount` | poção de vida/mana/espírito (`amountRange`) | `global_functions.cpp:372`/`:455` | **normal** (sem `rng`, o mínimo, como sempre) |
+| `casting.ts` runa de ataque | runa de dano | `combat.cpp:2046` | **normal** |
+| `rulesets/hunt.ts` ability de monstro | `ability.power` (a básica sintetizada inclusive) | `combat.cpp:189` | **normal** |
+| `rulesets/hunt.ts` defesa de cura | `defense.heal` | `monster.cpp:2218` + `combat.cpp:189` | **normal** |
+| `combat/weapon-power.ts` | arma | — | já por perfil (#522) |
+| `combat/blockhit.ts` | defesa/armadura | `Creature::blockHit` `uniform_random` | uniforme |
+| `conditions.ts` | dano de condição, velocidade | `condition.cpp:1908`/`:2547` `uniform_random` | uniforme |
+
+Drunk, loot e escolha de alvo (`conditions.ts`, `loot.ts`, `monster/target-strategy.ts`) não são
+valor de combate e continuam uniformes.
+
 ### Chance de acerto à distância (`WeaponDistance::useWeapon`)
 
 Só a DISTÂNCIA rola acerto ofensivo; corpo a corpo continua sempre acertando — o Canary também
