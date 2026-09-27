@@ -70,15 +70,27 @@ const BLOCKING_STATES: Partial<Record<InteractableKind, ReadonlySet<string>>> = 
 };
 
 /**
- * O par de estados que um `kind` alterna ao ser usado (T1). `null` para quem não tem um "outro
- * lado" neste escopo (rope-spot/ladder são um passo, não uma troca de estado; baú/placa/
- * teleporte nem chegam a ter `state` mutável).
+ * O par de estados que um `kind` alterna (T1 + T3, #734). `null` para quem não tem um "outro
+ * lado" neste escopo (rope-spot/ladder são um passo, não uma troca de estado; baú/placa/livro
+ * nem chegam a ter `state` mutável).
+ *
+ * `teleport` e `pressure-plate` entram aqui porque `toggle()`/`otherState()` são o mecanismo
+ * COMPARTILHADO por clique (lever/door/grass/stone-pile, via `useOnMap`) E por passo
+ * (pressure-plate, via step-in/step-out; teleport gated por alavanca, "abrir por N s") — mas
+ * NENHUM dos dois é click-usável: `HuntRuleset.useOnMap` recusa os dois kinds explicitamente
+ * (`NOT_CLICK_USABLE`, ADR 0050 d.6 T3), mesmo `isToggleable` valendo `true` para eles. Um
+ * teleporte "sempre ligado" (o comum, `initialState: 'default'`) fica FORA deste par — `default`
+ * não é `closed` nem `open`, `otherState` devolve `null`, e ninguém tenta alternar um teleporte
+ * que nunca foi pensado para ser fechado; só quem é AUTORADO com `initialState: 'closed'` (uma
+ * alavanca `links` para ele) entra no par.
  */
 const TOGGLE_PAIR: Partial<Record<InteractableKind, readonly [string, string]>> = {
   door: ['closed', 'open'],
   grass: ['uncut', 'cut'],
   'stone-pile': ['pile', 'hole'],
   lever: ['down', 'up'],
+  teleport: ['closed', 'open'],
+  'pressure-plate': ['up', 'down'],
 };
 
 /** O outro estado do par, ou `null` quando este `kind` não alterna (T1). */
@@ -176,6 +188,25 @@ export class TileOverrides {
 
   floorChangeAt(x: number, y: number, z: number): WorldPoint | null {
     return this.at({ x, y, z })?.floorChange ?? null;
+  }
+
+  /**
+   * O destino de um teleporte AQUI, se houver um ativo (#734, ADR 0050 d.6 T3). `null` sempre
+   * que: não há interativo neste tile; o interativo não é `teleport`; o estado é `closed` (o
+   * único jeito de um teleporte estar INATIVO — uma alavanca que ainda não o abriu, T3 "abrir
+   * teleporte por N s"); ou o conteúdo não carrega `target` (nunca deveria acontecer — todo
+   * `kind: 'teleport'` do importador carrega `target`, mas um snapshot de conteúdo em versão
+   * divergente não pode gerar exceção, invariante 7).
+   *
+   * O `target` que sai daqui é a coordenada LOCAL do conteúdo (`scripts/import-map.ts` já
+   * converte na importação) — pode estar FORA de `[0, width)`×`[0, height)` quando o OTBM
+   * apontava para fora do recorte importado, e é `movement.ts#move()` quem faz essa checagem
+   * (a mesma que já faz para o destino de uma escada): esta função não sabe o tamanho do mapa.
+   */
+  teleportTargetAt(x: number, y: number, z: number): WorldPoint | null {
+    const current = this.at({ x, y, z });
+    if (current === null || current.kind !== 'teleport' || current.state === 'closed') return null;
+    return this.#contentOf.get(current.interactableId)?.target ?? null;
   }
 
   /** O conteúdo fixo de um interativo — `revertMs`, `requires`, `links`, `kind`. */

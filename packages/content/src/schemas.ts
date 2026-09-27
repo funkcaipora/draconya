@@ -4070,10 +4070,14 @@ export const tilemapSchema = z.object({
    */
   interactables: z.array(z.object({
     at: point,
-    /** O que este tile é (ADR 0050 d.1). `hole`/`teleport` ficam para o T2/T3 do plano. */
+    /**
+     * O que este tile é (ADR 0050 d.1). `pressure-plate` entra no T3 (#734): reage a
+     * step-in/step-out, nunca a `useOnMap` — o mesmo par de estados de `lever`
+     * (`TOGGLE_PAIR`/`links`), só que quem troca o estado é o passo, não o clique.
+     */
     kind: z.enum([
       'door', 'locked-door', 'level-door', 'quest-door', 'grass', 'stone-pile', 'hole',
-      'rope-spot', 'ladder', 'lever', 'chest', 'sign', 'teleport',
+      'rope-spot', 'ladder', 'lever', 'chest', 'sign', 'teleport', 'pressure-plate',
     ]),
     /** O estado no instante da importação (`locked`/`closed`/`open`, `uncut`/`cut`, `down`/`up`,
      * `pile`/`hole`, ou `default` para o que só tem um estado). Vocabulário por `kind`, não

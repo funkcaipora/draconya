@@ -361,12 +361,12 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     if (index !== undefined) {
       if (tile.ground !== null) {
         const feature = index.classifyGround(tile.ground);
-        if (feature !== null) interactables.push(interactableOf(local, feature, null));
+        if (feature !== null) interactables.push(interactableOf(local, feature, null, region));
       }
       for (const item of tile.items) {
         const feature = index.classifyItem(item) ?? classifyByAttributes(item);
         if (feature === null) continue;
-        interactables.push(interactableOf(local, feature, item));
+        interactables.push(interactableOf(local, feature, item, region));
         if (feature.kind === 'chest' || feature.kind === 'sign' || feature.kind === 'teleport') {
           observedAppearances[feature.appearanceKey] = { default: item.id };
         }
@@ -439,11 +439,26 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
  * Monta a entrada de `interactables[]` (#727, ADR 0050 d.1) a partir da classificação. `item` é
  * `null` para um interativo classificado pelo CHÃO (só rope spot) — chão não carrega `aid`/`uid`/
  * `text`/teleporte, então os campos opcionais ficam ausentes.
+ *
+ * `target` (#734, ADR 0050 d.6 T3) só entra quando cai DENTRO do recorte importado, convertido
+ * para coordenada LOCAL (a mesma subtração de `region.x[0]`/`region.y[0]` que `at` já leva — `z`
+ * não desloca, como em todo o resto deste arquivo: o andar é absoluto). `tilemapSchema.point`
+ * exige `x`/`y` NÃO-NEGATIVOS (como `at`); um `ATTR_TELE_DEST` do OTBM real aponta em coordenada
+ * do MUNDO e pode cair FORA do recorte (outra cidade, outro andar nunca trazido para cá) — uma
+ * coordenada assim ficaria negativa depois de convertida, e o schema a recusaria no boot. Em vez
+ * de inventar uma exceção só para `target`, o importador OMITE o campo quando isso acontece:
+ * `target` ausente é exatamente o que `TileOverrides.teleportTargetAt` já entende como "sem
+ * destino alcançável" — a mesma degradação de `Teleport::addThing` do Canary para `destPos`
+ * (0,0,0) ou um `destTile` que não existe (não teleporta; nunca erro de importação).
  */
 function interactableOf(
   at: { x: number; y: number; z: number }, feature: ClassifiedFeature, item: OtbmItem | null,
+  region: Region,
 ): NonNullable<TilemapInput['interactables']>[number] {
   const requires = feature.requiresTool === undefined ? undefined : { tool: feature.requiresTool };
+  const dest = item?.teleportDestination;
+  const inRegion = dest !== undefined
+    && dest.x >= region.x[0] && dest.x <= region.x[1] && dest.y >= region.y[0] && dest.y <= region.y[1];
   return {
     at,
     kind: feature.kind,
@@ -454,8 +469,8 @@ function interactableOf(
     ...(item?.text === undefined ? {} : { text: item.text }),
     ...(requires === undefined ? {} : { requires }),
     ...(feature.revertMs === undefined ? {} : { revertMs: feature.revertMs }),
-    ...(item?.teleportDestination === undefined ? {} : {
-      target: { x: item.teleportDestination.x, y: item.teleportDestination.y, z: item.teleportDestination.z },
+    ...(!inRegion || dest === undefined ? {} : {
+      target: { x: dest.x - region.x[0], y: dest.y - region.y[0], z: dest.z },
     }),
   };
 }
