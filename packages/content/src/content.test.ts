@@ -567,9 +567,32 @@ describe('a defesa dos itens e do perfil (CMB-04)', () => {
     expect(content.items.get('shield')?.defense).toBe(12);
   });
 
-  it('recusa defense em armadura, arma de duas mãos e wand', () => {
-    // Bow/twoHanded não deixa defesa residual, e wand/rod não bloqueia: os dois são conteúdo
-    // quebrado, e o boot é o lugar de descobrir.
+  it('aceita defense na arma corpo a corpo de duas mãos (#687, Broadsword 23)', () => {
+    const broadsword = {
+      id: 'broadsword', name: 'Broadsword', kind: 'weapon', slot: 'hand', weight: 52.5, value: 0,
+      twoHanded: true, attack: 26, defense: 23, weapon: { kind: 'melee' },
+    };
+    expect(buildContent(base({ items: [broadsword] })).items.get('broadsword')?.defense).toBe(23);
+  });
+
+  it('recusa element fora da arma corpo a corpo e aceita nela (#687)', () => {
+    const elementalWand = { ...wand, defense: 0, weapon: { ...wand.weapon, element: { type: 'fire', attack: 5 } } };
+    expect(() => buildContent(base({ items: [elementalWand] })))
+      .toThrow(/element só vale em arma corpo a corpo/);
+    const fireSword = { ...sword, weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true } };
+    const compiled = buildContent(base({ items: [fireSword] })).items.get('sword');
+    expect(compiled?.weapon?.element).toEqual({ type: 'fire', attack: 11 });
+    expect(compiled?.weapon?.wieldUnproperly).toBe(true);
+  });
+
+  it('recusa element physical', () => {
+    const physical = { ...sword, weapon: { kind: 'melee', element: { type: 'physical', attack: 3 } } };
+    expect(() => buildContent(base({ items: [physical] }))).toThrow(/physical/);
+  });
+
+  it('recusa defense em armadura, bow e wand', () => {
+    // Bow não deixa defesa residual, e wand/rod não bloqueia: os dois são conteúdo quebrado, e
+    // o boot é o lugar de descobrir.
     expect(() => buildContent(base({ items: [helmet] }))).toThrow(/defense só vale/);
     expect(() => buildContent(base({ items: [bow, arrow] })))
       .toThrow(/defense só vale/);

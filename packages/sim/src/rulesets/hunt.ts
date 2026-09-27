@@ -57,6 +57,8 @@ import { playerArmor, playerDefense, playerMitigation } from '../combat/player-d
 import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { rollCombatValue } from '../combat/combat-value.js';
+import { resolveWeaponHit } from '../combat/weapon-power.js';
+import type { WeaponHit } from '../combat/weapon-power.js';
 import { rollDistanceHit } from '../combat/distance-hit.js';
 import {
   afterAttackBlock, afterShieldBlock, distanceTries, meleeTries,
@@ -3680,12 +3682,25 @@ export class HuntRuleset implements Ruleset {
     }
 
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
-    const weapon = character.inventory.weapon(this.#options.items, character);
+    // `combat-v3` (#687): a arma que ficou na mão abaixo do level exigido — o level caiu com
+    // ela vestida — bate metade com `wieldUnproperly`, ou NÃO bate (`damagePercent` 0): como o
+    // `useWeapon` do Canary que devolve `false`, sem golpe de punho e sem prática. v1/v2 leem
+    // `weapon()` como sempre, e a arma abaixo do level segue virando mão vazia (ADR 0031).
+    let weapon: Item | null;
+    let damagePercent = 100;
+    if (this.#options.combat.compatibilityProfile === 'combat-v3') {
+      const held = character.inventory.heldWeapon(this.#options.items, character);
+      if (held !== null && held.damagePercent === 0) return;
+      weapon = held?.item ?? null;
+      damagePercent = held?.damagePercent ?? 100;
+    } else {
+      weapon = character.inventory.weapon(this.#options.items, character);
+    }
     const how = weapon?.weapon;
     // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
     // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
     if (how?.kind === 'wand' && character.mana < (how.manaPerHit ?? 0)) return;
-    this.#strike(session, character, target, weapon, how);
+    this.#strike(session, character, target, weapon, how, damagePercent);
     // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
     // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -5808,7 +5823,7 @@ const slots = bot.groups.get(group);
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    weapon: Item | null, how: ResolvedWeapon | undefined,
+    weapon: Item | null, how: ResolvedWeapon | undefined, damagePercent = 100,
   ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
@@ -5871,7 +5886,7 @@ const slots = bot.groups.get(group);
       };
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, profile),
+          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical,
           source: 'basic-attack',
           damageType: profile.damageType,
           modifiers: this.#attackerModifiers(character),
@@ -5905,7 +5920,7 @@ const slots = bot.groups.get(group);
       // perfil da wand/rod não tem `power`, então NÃO há multiplicador de weapon skill (DT-02).
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, how),
+          rawDamage: this.#weaponPower(session, character, how, damagePercent).physical,
           source: 'basic-attack',
           damageType: how.damageType,
           modifiers: this.#attackerModifiers(character),
@@ -5924,15 +5939,28 @@ const slots = bot.groups.get(group);
     // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
     // o `attack`, o alcance e o tipo de `combat.player`.
     const profile: WeaponProfile = how ?? this.#options.unarmed;
+    const hit = this.#weaponPower(session, character, profile, damagePercent);
     const result = resolveDamage(
       {
-        rawDamage: this.#weaponPower(session, character, profile),
+        rawDamage: hit.physical,
         source: 'basic-attack',
         damageType: profile.damageType,
         modifiers: this.#attackerModifiers(character),
         // Corpo a corpo (ou desarmado) bloqueia os dois — o default de `MELEE_BLOCK_FLAGS`,
         // explícito aqui só por simetria com os outros dois ramos de `#strike`.
         blockable: MELEE_BLOCK_FLAGS,
+        // O elemento da arma (#687, só `combat-v3`) é o componente secundário do golpe (#473):
+        // sem escudo nem armadura, como o `blockHit(…, false, false)` do Canary — só perde para
+        // resistência e imunidade. Sem elemento (ou total zero) não há secundário nem sorteio.
+        ...(hit.elemental > 0 && profile.element !== undefined
+          ? {
+            secondary: {
+              rawDamage: hit.elemental,
+              damageType: profile.element.type,
+              blockable: MAGIC_BLOCK_FLAGS,
+            },
+          }
+          : {}),
       },
       defender, 'pve', this.#options.combat, session.rng, session.nowMs,
     );
@@ -5956,23 +5984,28 @@ const slots = bot.groups.get(group);
    * (`meleeDamageMultiplier`/`distDamageMultiplier`, #522) só o `combat-v2` lê; passar o valor
    * sempre é inofensivo — o v1 nunca teve multiplicador de vocação.
    */
-  #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
+  #weaponPower(
+    session: Session, character: CharacterRuntime, profile: WeaponProfile, damagePercent: number,
+  ): WeaponHit {
     const family = this.#options.weaponFamilies.get(profile.family);
     const skillLevel = this.#skillLevelOf(character, family);
     const vocation = this.#vocationOf(character);
     const vocationMultiplier = family?.kind === 'distance'
       ? vocation?.distDamageMultiplier ?? 1
       : vocation?.meleeDamageMultiplier ?? 1;
-    const power = resolveWeaponPower(
+    const hit = resolveWeaponHit(
       profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
+      damagePercent,
     );
-    if (family?.kind === 'distance') {
-      return Math.round(power * character.conditions.damageDealtScale('distance'));
+    // A postura vale para as duas partes do golpe (#687), cada uma arredondada.
+    if (family?.kind === 'distance' || family?.kind === 'melee') {
+      const scale = character.conditions.damageDealtScale(family.kind);
+      return {
+        physical: Math.round(hit.physical * scale),
+        elemental: Math.round(hit.elemental * scale),
+      };
     }
-    if (family?.kind === 'melee') {
-      return Math.round(power * character.conditions.damageDealtScale('melee'));
-    }
-    return power;
+    return hit;
   }
 
   /**

@@ -408,6 +408,9 @@ export function compileItem(
           : {}),
         // O `hitChance` da arma (#524) é só dado — a chance de acerto à distância é a #522.
         ...(raw.hitChance === undefined ? {} : { hitChance: raw.hitChance }),
+        // Elemento e `unproperly` (#687): só dado aqui; só o `combat-v3` os lê no `sim`.
+        ...(raw.element === undefined ? {} : { element: raw.element }),
+        ...(raw.wieldUnproperly === undefined ? {} : { wieldUnproperly: raw.wieldUnproperly }),
       };
     }
   }
@@ -771,6 +774,10 @@ export function buildContent(raw: RawContent): Content {
       if (weapon.damage !== undefined && weapon.damage.min > weapon.damage.max) {
         problems.push(`item "${item.id}": damage.min maior que damage.max`);
       }
+      // O elemento da arma (#687) só entra no golpe corpo a corpo; munição elemental é a #575.
+      if (weapon.element !== undefined && weapon.kind !== 'melee') {
+        problems.push(`item "${item.id}": element só vale em arma corpo a corpo`);
+      }
     }
     if (item.kind === 'container' && item.slot !== 'back') {
       problems.push(`item "${item.id}": container tem de ter slot "back" — é a mochila`);
@@ -781,14 +788,15 @@ export function buildContent(raw: RawContent): Content {
     if (item.twoHanded && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": twoHanded só faz sentido em arma`);
     }
-    // Defesa (CMB-04) só nas combinações aprovadas: escudo, ou arma corpo a corpo de UMA mão.
-    // Bow/twoHanded e wand/rod não têm defesa residual, e a arma de duas mãos não deixa escudo
-    // de sobra — o `Inventory` já recusa as duas juntas, e aqui a recusa é sobre o dado.
-    const meleeOneHanded = item.kind === 'weapon' && !item.twoHanded
-      && (item.weapon?.kind ?? 'melee') === 'melee';
-    if (item.defense > 0 && item.kind !== 'shield' && !meleeOneHanded) {
+    // Defesa (CMB-04) só nas combinações aprovadas: escudo, ou arma corpo a corpo — de uma ou
+    // de duas mãos (#687: o `Player::getDefense` do Canary conta a `defense` de qualquer arma que
+    // não seja escudo, e a Broadsword tem 23). Bow e wand/rod não têm defesa residual. Só o
+    // `combat-v3` lê a defesa da arma de duas mãos (`#playerDefenseV3`); o `defenseSource` do
+    // v1/v2 continua ignorando-a, bit a bit (ADR 0031).
+    const melee = item.kind === 'weapon' && (item.weapon?.kind ?? 'melee') === 'melee';
+    if (item.defense > 0 && item.kind !== 'shield' && !melee) {
       problems.push(
-        `item "${item.id}": defense só vale em escudo ou arma corpo a corpo de uma mão`,
+        `item "${item.id}": defense só vale em escudo ou arma corpo a corpo`,
       );
     }
     // extraDefense/spellbook/quiver (#549, M30-02): a mesma disciplina do `defense` acima —
