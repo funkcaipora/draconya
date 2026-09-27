@@ -560,15 +560,18 @@ concordam em peso, `hitChance`, alcance e `attack`.
   (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
   arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
   vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
-- **Serpent Sword e Fire Sword (#520) perdem o componente elemental embutido.** O Tibia real dá
-  `elementearth 8` à Serpent Sword e `elementfire 11` à Fire Sword — dano elemental somado ao
-  físico no MESMO golpe. `weapon.damageType` é um tipo só por arma (CMB-03); `attack` fica com o
-  total, e o componente elemental não aparece. As duas armas continuam batendo o número certo em
-  físico; só o "queima também" some.
-- **Defesa residual de arma de duas mãos (#520) não é copiada.** O Tibia real dá `defense` a
-  Broadsword, Double Axe e Dragon Slayer mesmo sendo de duas mãos; `buildContent` recusa
-  `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — regra
-  de antes da #520, não uma exceção criada para ela. O número simplesmente não entra no item.
+- **Serpent Sword e Fire Sword (#687) têm o elemento em `weapon.element`.** `attack` é só o
+  físico (24 e 18); `elementfire 11` e `elementearth 8` do Canary moram em
+  `weapon.element: { type, attack }`. No `combat-v3` o golpe sorteia sobre `attack + element` e
+  divide o total por truncamento; o elemental não perde para escudo nem armadura. v1/v2 ignoram
+  o campo. Ver `docs/product/combat.md`, "Elemento da arma e arma vestida abaixo do level".
+- **Arma de duas mãos tem defesa (#687).** Broadsword 23, Double Axe 12 e Dragon Slayer 28, como
+  no Canary. `buildContent` aceita `defense` em escudo e em arma corpo a corpo de uma ou duas
+  mãos; bow e wand/rod continuam recusados. Só o `combat-v3` lê a defesa da arma de duas mãos.
+- **`weapon.wieldUnproperly` (#687)** é o `unproperly` do Canary: a arma que ficou na mão abaixo
+  do level exigido bate metade no `combat-v3` em vez de não bater. Declarado em Fire Sword,
+  Double Axe, Dragon Slayer, Dragon Hammer, Dragonbone Staff e Mystic Blade; a Spike Sword não
+  tem.
 - **Dragonbone Staff (#520) é club, não wand/rod.** O nome sugere conjuração, mas o Tibia real a
   modela como arma de club corpo a corpo (`weaponType club`), sem `mana`/`fromDamage`/`toDamage`
   no script de equip — e é assim que o catálogo a declara.

@@ -10663,3 +10663,83 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     expect(withDrunk.drunkRolls).toBeGreaterThan(0);
   });
 });
+
+describe('arma vestida abaixo do level e elemento da arma no combat-v3 (#687)', () => {
+  // O level caiu com a arma na mão (penalidade de morte): o personagem de level 1 segurando
+  // arma de level 30 é o mesmo estado, sem precisar morrer para chegar nele.
+  const spikeSword = {
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon', slot: 'hand',
+    weight: 50, value: 0, attack: 24, defense: 10, requires: { level: 30 },
+  };
+  const fireSword = {
+    id: 'fire-sword', name: 'Fire Sword', kind: 'weapon', slot: 'hand',
+    weight: 23, value: 0, attack: 24, defense: 20, requires: { level: 30 },
+    weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+  };
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+  const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+  const holding = (itemId: string): InventoryState => ({
+    backpack: [], equipped: { hand: { instanceId: 'h1', itemId, quantity: 1 } },
+  });
+  const loaded = (combatProfile: object): Content =>
+    content({ items: [...items, spikeSword, fireSword], combat: [combatProfile] });
+
+  it('v3: sem wieldUnproperly a arma não bate — nem golpe de punho, nem prática', () => {
+    const { session, hero } = start({
+      loaded: loaded(combatV3), difficulty: 'bold', health: 5_000, inventory: holding('spike-sword'),
+    });
+    const before = hero.skills.getState()['melee'] ?? null;
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero')).toHaveLength(0);
+    expect(hero.skills.getState()['melee'] ?? null).toEqual(before);
+    expect(session.notableEvents.filter((e) => e.type === 'skill-up')).toHaveLength(0);
+  });
+
+  it('v2: a mesma arma abaixo do level segue virando punho (bit a bit)', () => {
+    const { session } = start({
+      loaded: loaded(combatV2), difficulty: 'bold', health: 5_000, inventory: holding('spike-sword'),
+    });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero').length)
+      .toBeGreaterThan(0);
+  });
+
+  it('v3: com wieldUnproperly bate, e o elemento vai como secundário sem escudo nem armadura', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session } = start({
+      loaded: loaded(combatV3), difficulty: 'bold', health: 5_000, inventory: holding('fire-sword'),
+    });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero').length)
+      .toBeGreaterThan(0);
+    const swings = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'basic-attack');
+    const elemental = swings.filter(([intent]) => intent.secondary !== undefined);
+    expect(elemental.length).toBeGreaterThan(0);
+    for (const [intent] of elemental) {
+      expect(intent.secondary?.damageType).toBe('fire');
+      expect(intent.secondary?.blockable).toEqual({ armor: false, shield: false });
+      expect(intent.secondary?.rawDamage).toBeGreaterThan(0);
+    }
+  });
+
+  it('v2: o elemento é ignorado — nenhum golpe leva secundário', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session, hero } = start({
+      loaded: loaded(combatV2), difficulty: 'bold', health: 5_000, inventory: holding('fire-sword'),
+    });
+    hero.level = 30;
+    run(session, 20_000, 100);
+    const swings = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'basic-attack');
+    expect(swings.length).toBeGreaterThan(0);
+    expect(swings.every(([intent]) => intent.secondary === undefined)).toBe(true);
+  });
+});

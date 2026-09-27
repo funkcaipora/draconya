@@ -456,6 +456,10 @@ export interface WeaponProfile {
   readonly fixedDamage?: { readonly min: number; readonly max: number };
   /** O `hitChance` da arma (#524), só dado — ver o comentário em `weaponSchema`. */
   readonly hitChance?: number;
+  /** O componente elemental do golpe (#687), só corpo a corpo e só no `combat-v3`. */
+  readonly element?: { readonly type: DamageType; readonly attack: number };
+  /** Abaixo do level exigido bate metade em vez de não bater (#687, `combat-v3`). */
+  readonly wieldUnproperly?: boolean;
 }
 
 export const weaponSchema = z.strictObject({
@@ -486,6 +490,21 @@ export const weaponSchema = z.strictObject({
    * (`chance de acerto à distância`); este campo carrega o número para quando ela existir.
    */
   hitChance: z.number().int().min(-100).max(100).optional(),
+  /**
+   * O componente elemental da arma (#687) — o `element<tipo>` do Canary (`elementfire 11` da
+   * Fire Sword). `attack` do item continua só o FÍSICO; este é o ataque elemental somado a ele
+   * no sorteio do golpe e dividido de volta por truncamento. Só o `combat-v3` lê; v1/v2 ignoram
+   * (ADR 0031). Só em arma corpo a corpo — munição elemental é a #575.
+   */
+  element: z.strictObject({
+    type: z.enum(DAMAGE_TYPES).refine((t) => t !== 'physical', 'elemento não pode ser physical'),
+    attack: z.number().int().positive(),
+  }).optional(),
+  /**
+   * O `unproperly` do Canary (#687): vestida abaixo do level exigido — o level caiu com a arma
+   * na mão —, a arma bate METADE em vez de não bater. Só o `combat-v3` lê.
+   */
+  wieldUnproperly: z.boolean().optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 

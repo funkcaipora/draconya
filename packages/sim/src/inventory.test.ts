@@ -259,6 +259,36 @@ describe('equipar (§21.4)', () => {
     expect(greatSwordInHand.weaponAttack(catalog, wearer({ level: 20 }))).toBe(40);
   });
 
+  it('`heldWeapon()`: abaixo do level, 50 com wieldUnproperly e 0 sem — nunca mão vazia (#687)', () => {
+    // O `playerWeaponCheck` do Canary: a arma que ficou na mão depois de uma perda de level bate
+    // metade (`unproperly`) ou não bate. Ao contrário de `weapon()`, não vira punho.
+    const fireSword = define({
+      id: 'fire-sword', kind: 'weapon', slot: 'hand', weight: 23, attack: 24, defense: 20,
+      requires: { level: 30 },
+      weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+    });
+    const spikeSword = define({
+      id: 'spike-sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24, defense: 10,
+      requires: { level: 30 },
+    });
+    const withThem = new Map([...catalog, ['fire-sword', fireSword], ['spike-sword', spikeSword]]);
+    const holding = (id: string): Inventory => Inventory.fromState({
+      backpack: [], equipped: { hand: carried(id) },
+    });
+
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: fireSword, damagePercent: 50 });
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: spikeSword, damagePercent: 0 });
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    // `weapon()` não muda: abaixo do level continua mão vazia (v1/v2).
+    expect(holding('fire-sword').weapon(withThem, wearer({ level: 20 }))).toBeNull();
+    // Vocação errada e mão vazia continuam `null`.
+    expect(holding('druid-staff').heldWeapon(catalog, wearer())).toBeNull();
+    expect(new Inventory().heldWeapon(catalog, wearer())).toBeNull();
+  });
+
   it('recusa equipar o que ele não tem', () => {
     expect(new Inventory().equip('sword', wearer(), catalog))
       .toEqual({ ok: false, reason: 'not-carried' });
