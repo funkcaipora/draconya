@@ -130,11 +130,6 @@ export interface SessionReceipt {
    * — a mesma idempotência que a `UNIQUE (session_id, seq)` dá ao ledger.
    */
   readonly acquired?: readonly BoxedItem[];
-  /**
-   * O que caiu e NÃO coube (§21.6). Vai para a Caixa de Loot da Sessão, não para o banco:
-   * expirar precisa significar que o item nunca existiu.
-   */
-  readonly lootBox?: readonly BoxedItem[];
 }
 
 /** Um lugar de container, como o extrato e o banco o guardam (#160). */
@@ -360,6 +355,5 @@ function parseReceipt(raw: string): SessionReceipt | null {
       ? { storages: value['storages'] as CharacterStorageMap }
       : {}),
     ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
-    ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),
   };
 }

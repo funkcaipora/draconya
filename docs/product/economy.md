@@ -141,9 +141,10 @@ O que vale do desenho original:
 
 ## Divergências do PRD
 
-~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
-catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
-Sessão se não. Ver [`items.md`](./items.md).
+~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88; ADR 0048):**
+existe catálogo, `loot.items` é conferido contra ele, e o item cai no cadáver — mochila se o
+filtro de Quick Loot aceitar e couber, senão fica no cadáver até ele decair. Ver
+[`items.md`](./items.md).
 
 **O §20.1 está de volta.** O PRD tratava o supply como abstração que debitava gold por uso, e é o
 que a implementação faz hoje: poção, runa e munição não são itens físicos; usar um supply

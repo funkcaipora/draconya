@@ -1879,22 +1879,8 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: VOCATION_REFUSAL[result.reason] });
       return;
     }
-    if (result.kit === undefined) {
-      if (result.weapon === 'in-loot-box') {
-        viewer.send({
-          type: 'system-message', level: 'info',
-          text: 'A arma da sua vocação não coube na mochila e foi para a Caixa de Loot.',
-        });
-      }
-    } else {
-      for (const piece of result.kit) {
-        if (piece.status !== 'in-loot-box') continue;
-        viewer.send({
-          type: 'system-message', level: 'info',
-          text: `A peça "${catalog.get(piece.itemId)?.name ?? piece.itemId}" do seu kit não coube na mochila e foi para a Caixa de Loot.`,
-        });
-      }
-    }
+    // Peso nunca recusa o grant de vocação/kit (ADR 0048 decisão 7, `Inventory.forceAdd`): não
+    // há mais status "não coube" para avisar aqui — o que sobra é só vestir ou ficar na mochila.
     hosted.dirty.add(character.id);
     const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
@@ -3693,13 +3679,11 @@ export class SessionHost {
       // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
       ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
       // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
-      // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu; o
-      // que ainda escreve `lootBox` é o grant de vocação/kit e a liquidação de bolsa sem
-      // cadáver de monstro à mão (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`).
+      // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu, e com
+      // ela o campo `lootBox` do extrato: o grant de vocação/kit e a liquidação de bolsa
+      // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
+      // sempre entra na mochila — não sobra nada para carregar aqui.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
-      ...(owner === undefined || owner.lootBox.length === 0
-        ? {}
-        : { lootBox: owner.lootBox }),
     });
 
     // O extrato agora é durável no Redis e será a fonte que o ledger aplica no Postgres.
@@ -3743,7 +3727,6 @@ export class SessionHost {
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
-      ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
     });
     hosted.dirty.delete(characterId);
   }

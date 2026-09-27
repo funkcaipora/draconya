@@ -7514,8 +7514,9 @@ const slots = bot.groups.get(group);
    * — com quem sai incluído —, no fim, e ao desligar `splitLoot`. Cada entrada é dividida só
    * entre `eligible ∩ present`; cada um recebe a cota em `goldDelta` e `goldGained`; o resto vai
    * um gold por membro na ordem de entrada. O que não se vende (`value: 0`) vai para a mochila
-   * do líder, e o que não couber para a caixa dele. Registrado no extrato — "vendeu nada" também
-   * é informação.
+   * do líder — peso ignorado (`forceAdd`, ADR 0048 decisão 7: sem cadáver de monstro à mão para
+   * segurar o excedente, e o item já não pôde virar gold). Registrado no extrato — "vendeu
+   * nada" também é informação.
    */
   #settle(
     session: Session, present: readonly CharacterRuntime[], reason: 'leave' | 'end' | 'toggle',
@@ -7542,10 +7543,8 @@ const slots = bot.groups.get(group);
     this.#bagWeight = 0;
     const leader = this.#leader(session) ?? present[0];
     if (leader !== undefined) {
-      const wearer = withReservedCapacity(leader, 0);
       for (const item of unsold) {
-        if (leader.inventory.add(item, this.#options.items, wearer, this.#containerRules(leader)).ok) continue;
-        leader.lootBox.push(item);
+        leader.inventory.forceAdd(item, this.#options.items, this.#containerRules(leader));
       }
     }
     session.record('party-settlement', `${String(total)}/${String(present.length)}`);

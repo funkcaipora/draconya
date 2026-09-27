@@ -135,6 +135,5 @@ export async function settleSnapshotAsReceipt(
       overlays: overlaysOfState(owner.inventory),
       acquired: acquiredByState(owner.inventory, snapshot.id),
     }),
-    ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
   });
 }

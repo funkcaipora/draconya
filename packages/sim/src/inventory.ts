@@ -9,17 +9,19 @@
 // decisão 6, o modelo do Huntera) o item tem LUGAR — a mochila é um vetor posicional de 20
 // lugares (o item nas costas), a bolsa é um vetor fixo do personagem de 10, e os dois crescem
 // por linhas, sem limite, enquanto houver capacidade. O lugar nunca recusa loot — o bot não
-// pode parar de caçar por mochila cheia (invariante 11) —, só o peso recusa, e aí a Caixa de
-// Loot segura.
+// pode parar de caçar por mochila cheia (invariante 11) —, só o peso recusa. `add` recusa por
+// peso; `forceAdd` (ADR 0048 decisão 7, retirada da Caixa de Loot da Sessão) ignora — é o que
+// usam os dois casos que não têm cadáver de monstro para segurar o excedente: o grant de
+// vocação/kit e a liquidação da bolsa de party (ver `character.ts`/`rulesets/hunt.ts`).
 //
 // **`Inventory` não conhece conteúdo.** Os tamanhos iniciais e a linha chegam como números
 // (`ContainerRules`) de quem tem a tabela — o ruleset em `onEnter`, o host no `move` —, porque
 // `CharacterRuntime` constrói o inventário sem conteúdo nenhum.
 //
-// **Item no chão não existe** (§21.5). O que existe é o que está nos containers, o que está
-// equipado, e o que está na Caixa de Loot da Sessão. Sem `stackpos`, sem cadáver como
-// container, sem item largado — o §26 do documento de referência lista isso como rejeição
-// deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
+// **Item no chão não existe, à parte do cadáver** (§21.5, emendado pelo ADR 0048). O que existe
+// é o que está nos containers, o que está equipado, e o que caiu de monstro e ainda não foi
+// coletado (`CorpseState.items`, `rulesets/hunt.ts`). Sem `stackpos`, sem item largado pelo
+// jogador — o §26 do documento de referência foi emendado pelo mesmo ADR.
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
@@ -318,9 +320,9 @@ export class Inventory {
    * Põe num container, se o PESO couber: pilha → primeiro lugar livre → uma linha a mais.
    *
    * Sem mochila nas costas o loot vai para a bolsa (ADR 0026 d.6): a bolsa é do personagem.
-   * Recusa só por peso: o item que não cabe vai para a Caixa de Loot da Sessão (§21.5), e
-   * quem chama decide o que fazer com `over-capacity`. O lugar nunca recusa — o bot não pode
-   * parar de caçar por mochila cheia.
+   * Recusa só por peso — `over-capacity` —, e quem chama decide o que fazer (hoje: o item fica
+   * no cadáver do monstro, ADR 0048 decisão 7). O lugar nunca recusa — o bot não pode parar de
+   * caçar por mochila cheia.
    */
   add(
     item: CarriedItem, catalog: ReadonlyMap<string, Item>, wearer: Wearer, rules: ContainerRules,
@@ -333,7 +335,27 @@ export class Inventory {
     if (this.weight(catalog) + added > wearer.capacity) {
       return { ok: false, reason: 'over-capacity' };
     }
+    return this.#place(item, definition, rules);
+  }
 
+  /**
+   * Como `add`, mas ignora o peso (ADR 0048 decisão 7): usado só onde recusar destruiria o
+   * item e não sobra cadáver de monstro para segurar o excedente — o grant de vocação/kit
+   * (`chooseVocation`/`#grantKitPiece` em `character.ts`) e o que a bolsa de party não vendeu
+   * (`#settle` em `rulesets/hunt.ts`). Os dois já preferiam nunca recusar por peso antes da
+   * Caixa de Loot da Sessão sair; sem ela, ignorar é o que resta.
+   */
+  forceAdd(
+    item: CarriedItem, catalog: ReadonlyMap<string, Item>, rules: ContainerRules,
+  ): InventoryResult {
+    const definition = catalog.get(item.itemId);
+    if (definition === undefined) return { ok: false, reason: 'not-carried' };
+    if (item.quantity > MAX_STACK) return { ok: false, reason: 'stack-too-large' };
+    return this.#place(item, definition, rules);
+  }
+
+  /** Pilha → primeiro lugar livre → uma linha a mais. Peso já foi decidido por quem chamou. */
+  #place(item: CarriedItem, definition: Item, rules: ContainerRules): InventoryResult {
     const target = this.#equipped.has('back') ? this.#backpack : this.#satchel;
     // Empilhável junta na pilha existente, até o teto. Não empilhável vira lugar novo, sempre:
     // duas espadas são duas identidades, e é essa identidade que carrega a proveniência.

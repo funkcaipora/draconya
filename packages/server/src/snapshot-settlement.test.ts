@@ -62,7 +62,7 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(saved[0]?.aggregates).toEqual(snapshot.aggregatesByCharacter?.['a']);
   });
 
-  it('carries stamina, skills, bestiary, ammo, stock, vocation, equipment and the loot box of the OWNER', async () => {
+  it('carries stamina, skills, bestiary, ammo, stock, vocation and equipment of the OWNER', async () => {
     const imbued = { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] };
     const { receipts, saved } = fakeReceipts();
     const snapshot: SessionSnapshot = {
@@ -80,7 +80,6 @@ describe('settleSnapshotAsReceipt (#527)', () => {
           backpack: [{ instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 }],
           equipped: { hand: { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued } },
         },
-        lootBox: [{ instanceId: 's-old:3', itemId: 'dragon-hide', quantity: 1 }],
       }],
     };
     await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts });
@@ -102,7 +101,6 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       { instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 },
       { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued },
     ]);
-    expect(receipt?.lootBox).toEqual([{ instanceId: 's-old:3', itemId: 'dragon-hide', quantity: 1 }]);
   });
 
   it('omits every optional field when the participant record has none of them', async () => {
@@ -115,7 +113,6 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(receipt).not.toHaveProperty('ammo');
     expect(receipt).not.toHaveProperty('vocation');
     expect(receipt).not.toHaveProperty('equipment');
-    expect(receipt).not.toHaveProperty('lootBox');
   });
 
   it('rejects when the character never participated in that session, leaving no receipt saved', async () => {
