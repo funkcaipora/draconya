@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
   botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, routeSchema, spellAreaSchema, spellFormulaSchema,
+  tilemapSchema,
 } from './schemas.js';
 
 describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
@@ -191,6 +192,38 @@ describe('itemSchema — `use.keyId` só em `use.tool: "key"` (#732, ADR 0050 d.
   it('recusa `keyId` numa ferramenta que não é chave — machete não precisa de id nenhum', () => {
     const { use: _use, ...rest } = key;
     expect(() => itemSchema.parse({ ...rest, use: { tool: 'machete', keyId: 1 } })).toThrow(/keyId/);
+  });
+});
+
+describe('tilemapSchema.interactables — `reward` só em `kind: "chest"` (#733, ADR 0050 d.6 T2)', () => {
+  const mapOf = (interactable: Record<string, unknown>): Record<string, unknown> => ({
+    id: 'm', z: 0, grid: ['...'], interactables: [{
+      at: { x: 0, y: 0, z: 0 }, initialState: 'default', appearanceKey: 'chest-1', ...interactable,
+    }],
+  });
+
+  it('aceita `reward` num baú', () => {
+    const parsed = tilemapSchema.parse(mapOf({ kind: 'chest', uid: 1, reward: { itemId: 'sword' } }));
+    // `quantity` tem default 1 — um baú sem quantidade declarada dá exatamente uma unidade.
+    expect(parsed.interactables[0]?.reward).toEqual({ itemId: 'sword', quantity: 1 });
+  });
+
+  it('aceita quantidade explícita', () => {
+    const parsed = tilemapSchema.parse(
+      mapOf({ kind: 'chest', uid: 1, reward: { itemId: 'sword', quantity: 3 } }),
+    );
+    expect(parsed.interactables[0]?.reward).toEqual({ itemId: 'sword', quantity: 3 });
+  });
+
+  it('recusa `reward` fora de `chest` — uma porta não entrega item', () => {
+    expect(() => tilemapSchema.parse(
+      mapOf({ kind: 'quest-door', initialState: 'closed', reward: { itemId: 'sword' } }),
+    )).toThrow(/reward/);
+  });
+
+  it('baú sem `reward` é válido — nem todo baú deste recorte já tem prêmio configurado', () => {
+    const parsed = tilemapSchema.parse(mapOf({ kind: 'chest', uid: 1 }));
+    expect(parsed.interactables[0]?.reward).toBeUndefined();
   });
 });
 

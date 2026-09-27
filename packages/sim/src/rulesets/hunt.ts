@@ -42,7 +42,7 @@ import {
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
-import { isToggleable, TileOverrides } from '../tile-overrides.js';
+import { chestStorageKeyOf, isToggleable, TileOverrides } from '../tile-overrides.js';
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
@@ -363,18 +363,24 @@ export type SlotOutcome =
   | { readonly ok: false; readonly reason: SlotRefusal; readonly retryInMs: number };
 
 /**
- * Por que `useOnMap` recusou (#729, ADR 0050 d.7; `level-too-low` desde #732, ADR 0050 d.6 T2).
- * `not-usable` cobre tanto "nada usável aqui" quanto um `kind` fora do T1/T2 (`quest-door`,
- * `chest`, `sign`…) — o mesmo motivo que `isToggleable` já unifica, para não inventar
- * comportamento de requisito que o T3 ainda não tem (spec da #729, "não invente"). `missing-tool`
- * cobre a porta de chave sem a chave certa na mochila — uma chave É uma ferramenta
- * (`use.tool: 'key'`), e `#hasTool` confere o `keyId` quando o `tool` pedido é `'key'` — e,
- * desde a #734, também `teleport`/`pressure-plate`: os dois têm `TOGGLE_PAIR` (para o mecanismo
- * de link), mas nenhum é acionado por CLIQUE (`NOT_CLICK_USABLE`) — teleporte reage a pisar,
- * placa a step-in/step-out.
+ * Por que `useOnMap` recusou (#729, ADR 0050 d.7; `level-too-low` desde #732, ADR 0050 d.6 T2;
+ * `quest-incomplete`/`already-looted`/`no-capacity`/`unknown-item` desde #733, T2 completo).
+ * `not-usable` cobre tanto "nada usável aqui" quanto um `kind` fora do T1/T2/T3 (`sign` sem
+ * `text`…) — o mesmo motivo que `isToggleable` já unifica, para não inventar comportamento de
+ * requisito que o conteúdo não pede (spec da #729, "não invente"). `missing-tool` cobre a porta
+ * de chave sem a chave certa na mochila — uma chave É uma ferramenta (`use.tool: 'key'`), e
+ * `#hasTool` confere o `keyId` quando o `tool` pedido é `'key'` — e, desde a #734, também
+ * `teleport`/`pressure-plate`: os dois têm `TOGGLE_PAIR` (para o mecanismo de link), mas nenhum
+ * é acionado por CLIQUE (`NOT_CLICK_USABLE`) — teleporte reage a pisar, placa a step-in/step-out.
+ * `quest-incomplete` é a porta de quest fechada sem o storage exigido; `already-looted`/
+ * `no-capacity`/`unknown-item` são do baú (`#useChest`) — respectivamente já coletado por este
+ * personagem, mochila sem espaço (storage NÃO marcado — o baú continua de pé para a próxima
+ * tentativa) e `reward.itemId` fora do catálogo carregado (recusa defensiva, como `#deliverLoot`
+ * já faz para loot de monstro).
  */
 export type UseOnMapRejection =
-  | 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool' | 'level-too-low';
+  | 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool' | 'level-too-low'
+  | 'quest-incomplete' | 'already-looted' | 'no-capacity' | 'unknown-item';
 
 /**
  * UM tile cujo id de aparência muda (#729, ADR 0050 d.7): o par `{ fromState, toState }` do
@@ -2040,6 +2046,11 @@ export class HuntRuleset implements Ruleset {
     }
     const current = this.#tileOverrides.at(position);
     if (current === null) return { ok: false, reason: 'nothing-there' };
+    // Baú (#733, ADR 0050 d.6 T2): NUNCA passa por `isToggleable`/`#useInteractable` — não tem
+    // par de estados, entrega item uma vez. Desviado ANTES da conferência de toggle, que
+    // recusaria com `not-usable` — o mesmo desvio que a porta de level/quest usa a MAIS, não
+    // um caminho concorrente.
+    if (current.kind === 'chest') return this.#useChest(session, character, current.interactableId);
     if (!isToggleable(current.kind) || NOT_CLICK_USABLE.has(current.kind)) {
       return { ok: false, reason: 'not-usable' };
     }
@@ -2054,6 +2065,16 @@ export class HuntRuleset implements Ruleset {
       && requires?.level !== undefined && character.level < requires.level
     ) {
       return { ok: false, reason: 'level-too-low' };
+    }
+    // Porta de quest (#733, ADR 0050 d.6 T2): `player:getStorageValue(item.actionid) ~= -1` do
+    // Canary (`doors.lua`) virou `getStorageValue(requires.storageKey) >= 1` — o Draconya usa
+    // `>= 1` (não `~= -1`) porque `0` já é um valor guardado ("aceitou mas não concluiu",
+    // `docs/product/quests.md`), e esta porta exige a quest CONCLUÍDA (DT-01 da spec da #733).
+    if (
+      current.kind === 'quest-door' && current.state === 'closed'
+      && requires?.storageKey !== undefined && character.getStorageValue(requires.storageKey) < 1
+    ) {
+      return { ok: false, reason: 'quest-incomplete' };
     }
     const tool = toolRequiredNow(current.kind, current.state, requires);
     if (tool !== undefined && !this.#hasTool(character, tool, requires?.keyId)) {
@@ -2078,12 +2099,13 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Tenta usar UM interativo — abrir a porta (comum, de level, de chave), cortar o capim, cavar
-   * a pile, puxar a alavanca (ADR 0050 d.4-d.5, T2 desde #732), pressionar/soltar uma placa
-   * (#734, ADR 0050 d.6 T3). Devolve as mudanças de aparência (o próprio + os linkados que
-   * também alternaram, #729) quando o estado mudou; `null` sem tocar em nada — kind sem par de
-   * estados (`quest-door`/`chest`, fora do escopo), level insuficiente para uma porta de level,
-   * ou ferramenta exigida (inclusive a chave certa) que este personagem não carrega.
+   * Tenta usar UM interativo — abrir a porta (comum, de level, de chave, de quest), cortar o
+   * capim, cavar a pile, puxar a alavanca (ADR 0050 d.4-d.5, T2 completo desde #733),
+   * pressionar/soltar uma placa (#734, ADR 0050 d.6 T3). Devolve as mudanças de aparência (o
+   * próprio + os linkados que também alternaram, #729) quando o estado mudou; `null` sem tocar
+   * em nada — kind sem par de estados (`chest`, fora do escopo — tem caminho próprio em
+   * `#useChest`), level/storage insuficiente para a porta correspondente, ou ferramenta exigida
+   * (inclusive a chave certa) que este personagem não carrega.
    *
    * `character` é `null` para um step-in/step-out de MONSTRO (#734, `#onSteppedOnto`/
    * `#onSteppedOffOf`, abaixo): monstro não carrega ferramenta, então qualquer interativo que
@@ -2103,14 +2125,19 @@ export class HuntRuleset implements Ruleset {
     if (current === null || !isToggleable(current.kind)) return null;
     const content = this.#tileOverrides.contentOf(interactableId);
     const requires = content?.requires;
-    // Porta de level (#732): a MESMA conferência de `useOnMap`, para o walker (que chama esta
-    // função direto, sem passar por `useOnMap`) nunca abrir uma porta que o personagem não
-    // cumpre — as duas leem o MESMO `#tileOverrides`/conteúdo, então nunca divergem. `character`
-    // nulo (step-in/step-out de MONSTRO, #734) nunca cumpre um requisito de level — a mesma
-    // degradação de "sem ferramenta" que `#hasTool` já devolve para `tool`, abaixo.
+    // Porta de level/quest (#732/#733): a MESMA conferência de `useOnMap`, para o walker (que
+    // chama esta função direto, sem passar por `useOnMap`) nunca abrir uma porta que o
+    // personagem não cumpre — as duas leem o MESMO `#tileOverrides`/conteúdo, então nunca
+    // divergem. `character` nulo (step-in/step-out de MONSTRO, #734) nunca cumpre um requisito
+    // de level nem de storage — a mesma degradação de "sem ferramenta" que `#hasTool` já devolve
+    // para `tool`, abaixo.
     if (
       current.kind === 'level-door' && current.state === 'closed' && requires?.level !== undefined
       && (character === null || character.level < requires.level)
+    ) return null;
+    if (
+      current.kind === 'quest-door' && current.state === 'closed' && requires?.storageKey !== undefined
+      && (character === null || character.getStorageValue(requires.storageKey) < 1)
     ) return null;
     const tool = toolRequiredNow(current.kind, current.state, requires);
     if (tool !== undefined && (character === null || !this.#hasTool(character, tool, requires?.keyId))) return null;
@@ -2160,6 +2187,52 @@ export class HuntRuleset implements Ruleset {
       }
     }
     return changes;
+  }
+
+  /**
+   * O baú de quest (#733, ADR 0050 d.6 T2): `uid` + storage do personagem, o mesmo par que o
+   * ADR 0050 já descreve para o Canary. NUNCA passa por `isToggleable`/`toggle` — não tem par de
+   * estados, entrega item uma vez — e por isso não devolve `TileAppearanceChange` nenhum
+   * (`changes: []`): o baú não muda de aparência ao ser usado neste escopo.
+   *
+   * A ordem das conferências é a que MENOS vaza: já coletado recusa antes de saber se o item
+   * existe no catálogo, e o catálogo é conferido antes de gastar capacidade. O item entra pelo
+   * MESMO caminho do loot de cadáver/kit (`inventory.add`, `instanceId` determinístico
+   * `lootSeq`) — é o que faz o prêmio atravessar `SessionReceipt.acquired` → `jobs/ledger.ts`
+   * como qualquer item adquirido em sessão (invariante 10). Sem capacidade, o storage NÃO é
+   * marcado (DT-03 da spec da #733): o baú continua de pé para quando a mochila esvaziar.
+   */
+  #useChest(session: Session, character: CharacterRuntime, interactableId: string): UseOnMapResult {
+    const content = this.#tileOverrides.contentOf(interactableId);
+    const uid = content?.uid;
+    const reward = content?.reward;
+    if (content === null || uid === undefined || reward === undefined) {
+      return { ok: false, reason: 'not-usable' };
+    }
+    const storageKey = chestStorageKeyOf(uid);
+    if (character.getStorageValue(storageKey) >= 1) return { ok: false, reason: 'already-looted' };
+    const definition = this.#options.items.get(reward.itemId);
+    if (definition === undefined) {
+      // Conteúdo com referência solta — o mapa é importado antes do catálogo de itens estar
+      // completo (#573/#754), então isto é esperado até lá, nunca um erro do jogador. Registrado
+      // (não só recusado) para o extrato acusar qual baú aponta item que ainda não existe.
+      session.record('chest-unknown-item', `${interactableId}:${reward.itemId}`);
+      return { ok: false, reason: 'unknown-item' };
+    }
+    // Sem reserva de bolsa de party: o prêmio é PESSOAL, atribuído a quem usou o baú — não é
+    // loot de abate compartilhável, então a capacidade disponível é a do personagem inteira.
+    const wearer = withReservedCapacity(character, 0);
+    const instanceId = this.#party !== undefined
+      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
+      : `${session.id}:${String(character.lootSeq++)}`;
+    const carried: CarriedItem = { instanceId, itemId: reward.itemId, quantity: reward.quantity };
+    if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
+      return { ok: false, reason: 'no-capacity' };
+    }
+    character.setStorageValue(storageKey, 1);
+    session.credit(character.id, 'itemsLooted', carried.quantity);
+    session.record('chest-looted', interactableId);
+    return { ok: true, changes: [] };
   }
 
   /**

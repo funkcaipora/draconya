@@ -37,6 +37,12 @@ const keyDoor: TilemapInteractable = {
   at: { x: 15, y: 2, z: 7 }, kind: 'locked-door', initialState: 'locked', appearanceKey: 'key-door-1',
   aid: 42, requires: { tool: 'key', keyId: 42 },
 };
+// T2 completo (#733, ADR 0050 d.6): porta de quest — mesmo mecanismo de `level-door`, gate por
+// storage em vez de nível.
+const questDoor: TilemapInteractable = {
+  at: { x: 17, y: 2, z: 7 }, kind: 'quest-door', initialState: 'closed', appearanceKey: 'quest-door-1',
+  requires: { storageKey: 'quest:example' },
+};
 // Teleporte e placa de pressão (T3, #734, ADR 0050 d.6).
 const teleport: TilemapInteractable = {
   at: { x: 19, y: 2, z: 7 }, kind: 'teleport', initialState: 'default', appearanceKey: 'teleport-1',
@@ -88,6 +94,11 @@ describe('overrideFromInteractable — o estado inicial vem do conteúdo', () =>
     expect(overrideFromInteractable(keyDoor).blocked).toBe(true);
     expect(overrideFromInteractable({ ...keyDoor, initialState: 'closed' }).blocked).toBe(true);
     expect(overrideFromInteractable({ ...keyDoor, initialState: 'open' }).blocked).toBe(false);
+  });
+
+  it('porta de quest fechada bloqueia, como a porta de level (#733)', () => {
+    expect(overrideFromInteractable(questDoor).blocked).toBe(true);
+    expect(overrideFromInteractable({ ...questDoor, initialState: 'open' }).blocked).toBe(false);
   });
 });
 
@@ -245,6 +256,21 @@ describe('TileOverrides — o índice por tile (ADR 0050 d.1: no máximo um por 
     overrides.toggle(id, 0); // locked → open
     overrides.closeDoorIfVacant(15, 2, 7, false);
     expect(overrides.get(id)?.state).toBe('closed');
+  });
+
+  it('porta de quest fechada bloqueia, alterna para `open`, e fecha sozinha ao esvaziar (#733)', () => {
+    const overrides = TileOverrides.fromInteractables([questDoor]);
+    const id = interactableIdOf(questDoor.at);
+    expect(overrides.blockedAt(17, 2, 7)).toBe(true);
+    const opened = overrides.toggle(id, 0);
+    expect(opened).toEqual({
+      interactableId: id, kind: 'quest-door', state: 'open', blocked: false, floorChange: null,
+    });
+    expect(overrides.blockedAt(17, 2, 7)).toBe(false);
+    overrides.closeDoorIfVacant(17, 2, 7, false);
+    expect(overrides.get(id)).toEqual({
+      interactableId: id, kind: 'quest-door', state: 'closed', blocked: true, floorChange: null,
+    });
   });
 });
 

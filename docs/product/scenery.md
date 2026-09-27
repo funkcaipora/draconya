@@ -3,14 +3,14 @@
 **Status:** parcial — o importador **classifica** porta, capim, stone pile, rope spot, ladder,
 alavanca, baú, placa e teleporte a partir do OTBM real (#727, ADR 0050 d.1); o mecanismo que muda
 de estado por sessão (`TileOverrides`, #728, ADR 0050 d.2-d.5, d.8) existe para o T1 (porta comum,
-capim, stone pile, alavanca), para a METADE do T2 — porta de level e porta de chave (#732, ADR
-0050 d.6) — e para o T3 inteiro (#734): teleporte de fato (pisar redireciona, gated por alavanca
-por `revertMs`) e placa de pressão (step-in/step-out, com o mesmo `links`/cascade da alavanca) —
-ver "Teleporte e placa de pressão (T3, #734)" abaixo. O JOGADOR já pode acionar isso e ver o
-resultado — `use-on-map`, `look` e `tile-update` (#729, ADR 0050 d.7) — e não só o walker
-automático. Livro com texto já estava resolvido pelo mecanismo genérico de `look` do #729
-(qualquer `kind` com `text` no conteúdo é lido — nenhum código novo precisou). Rope spot/ladder
-como passo de andar, e o resto do T2 (porta de quest, baú com storage) continuam em aberto.
+capim, stone pile, alavanca), para o T2 INTEIRO — porta de level e de chave (#732), porta de
+quest e baú com storage (#733), ADR 0050 d.6 — e para o T3 inteiro (#734): teleporte de fato
+(pisar redireciona, gated por alavanca por `revertMs`) e placa de pressão (step-in/step-out, com o
+mesmo `links`/cascade da alavanca) — ver "Teleporte e placa de pressão (T3, #734)" abaixo. O
+JOGADOR já pode acionar isso e ver o resultado — `use-on-map`, `look` e `tile-update` (#729, ADR
+0050 d.7) — e não só o walker automático. Livro com texto já estava resolvido pelo mecanismo
+genérico de `look` do #729 (qualquer `kind` com `text` no conteúdo é lido — nenhum código novo
+precisou). Rope spot/ladder como passo de andar continuam em aberto.
 **PRD:** cenário e uso de item no mapa (não numerado no PRD original; nasceu do pedido "cenário,
 itens usáveis do cenário como alavancas, portas, matos... tudo 100%")
 **Épico:** E18 (Jogável ponta a ponta)
@@ -67,10 +67,34 @@ DIRETO para `open` (nunca passa por `closed`, como `key_door.lua`) com uma chave
 ferramenta comum — uma chave É uma ferramenta, `use.tool: 'key'`). Destrancada, ela alterna
 `closed`↔`open` livremente, sem chave nenhuma — o key_door.lua do Canary só confere a chave
 contra o estado TRANCADO, nunca contra os outros dois. As duas fecham sozinhas ao esvaziar
-(`TileOverrides.closeDoorIfVacant`), como a porta comum — sem prazo próprio. Porta de quest e
-baú com storage (o resto do T2) continuam fora: sem storage por personagem satisfazível ainda
-para elas na hunt (`character-storage.ts`, #731, existe mas nenhum conteúdo usa `storageKey` de
-porta ainda), classificá-las como bloqueantes as prenderia para sempre — pior que hoje.
+(`TileOverrides.closeDoorIfVacant`), como a porta comum — sem prazo próprio.
+
+**Porta de quest e baú com `uid` (T2 completo, #733, ADR 0050 d.6).** A porta de quest usa o
+MESMO mecanismo da de level — bloqueia **fechada**, e confere no MOMENTO de usar —, só trocando o
+requisito: `character.getStorageValue(requires.storageKey) >= 1` (o
+`player:getStorageValue(item.actionid) ~= -1` de `doors.lua`, com uma divergência deliberada —
+`>= 1`, não `~= -1` — porque `0` já é um valor guardado neste sistema, "aceitou mas não concluiu"
+`docs/product/quests.md`; insuficiente recusa `quest-incomplete`). Ela fecha sozinha ao esvaziar,
+como as demais. O baú NÃO é `isToggleable` — não tem par de estados, `useOnMap` desvia para
+`HuntRuleset#useChest` antes da conferência de toggle — e entrega `reward.itemId`×`quantity` do
+conteúdo pelo MESMO caminho do loot de cadáver/kit (`inventory.add`, `instanceId` determinístico
+`sessionId[:characterId]:lootSeq`, o que faz o prêmio atravessar `SessionReceipt.acquired` →
+`jobs/ledger.ts` como item adquirido em sessão, invariante 10), marcando
+`chestStorageKeyOf(uid) = 1` no `CharacterRuntime` só quando o item efetivamente COUBE — sem
+capacidade, `no-capacity` e o storage NÃO é marcado (o baú continua de pé para a próxima
+tentativa); já coletado por este personagem, `already-looted`; `reward.itemId` fora do catálogo
+carregado, `unknown-item` (registrado com `session.record`, defensivo — o mapa é importado antes
+do catálogo de itens estar completo, #573/#754). O storage é POR PERSONAGEM: dois personagens
+coletam o mesmo baú, cada um uma vez.
+
+`requires.storageKey` da porta de quest e `reward` do baú REAIS de Thais (os 3 quest-doors e os 3
+chests com `uid` de `packages/content/data/maps/thais.json`, #727) não entram nesta issue — sem
+o OTBM de origem (ausente neste checkout, como #732 já registrou para `requires.level`/
+`requires.keyId`) e sem quest de verdade desenhada (`docs/product/quests.md`: "quest de verdade
+ainda não implementada"), qualquer valor seria fabricado sem lastro. O mecanismo é coberto por
+teste sintético e por teste que usa a classificação REAL desses seis interativos (posição, `kind`,
+`appearanceKey`, `uid`) como fixture — só `requires`/`reward` são acrescentados no teste, nunca no
+arquivo de conteúdo.
 
 ## O jogador usa e olha (#729, ADR 0050 d.7)
 
@@ -100,11 +124,16 @@ overlay ativo (`tileOverrides`, por `"x,y,z"`) como um overlay DINÂMICO sobre a
 
 Recusas de `use-on-map` (`system-message`, em português, seguindo a convenção já em vigor no
 `host.ts` — não o inglês que o ADR 0050 cita como referência do Tibia): fora de alcance, nada ali,
-`kind` fora do T1/T2 (`quest-door`/`chest`/`sign`/… — a mesma decisão de `isToggleable`, "não
-invente" requisito que o T3 ainda não tem), level insuficiente numa porta de level
-(`level-too-low`, #732) e ferramenta ausente (`missing-tool`) — inclusive a chave certa de uma
+`kind` sem comportamento configurado (`sign` sem `text`, `chest` sem `reward`/… — a mesma decisão
+de `isToggleable`, "não invente" requisito que o conteúdo não pede), level insuficiente numa
+porta de level (`level-too-low`, #732), storage insuficiente numa porta de quest
+(`quest-incomplete`, #733) e ferramenta ausente (`missing-tool`) — inclusive a chave certa de uma
 porta trancada: o catálogo real não tem NENHUM item com `use.tool` até a #573/#754 (paralela,
 catálogo de itens do Canary) landing, então toda porta de chave real recusa por essa razão hoje.
+O baú (#733) tem três recusas próprias: `already-looted` (já coletado por este personagem),
+`no-capacity` (mochila sem espaço — o storage NÃO é marcado) e `unknown-item` (`reward.itemId`
+fora do catálogo carregado, registrado para o extrato acusar qual baú aponta item que ainda não
+existe).
 
 `appearances.scenery` — gerado em `data/appearances/generated/scenery.json`, nunca à mão — guarda
 só as `appearanceKey` que algum mapa importado realmente usa (não a tabela do Canary inteira, que
@@ -204,8 +233,10 @@ número de TILES com essa classificação, não de portas fisicamente distintas.
   origem (`otservbr.otbm`, conferido pelo `sha256` do `source`), que não está neste checkout —
   fica para quando um recorte novo com portas desse tipo for importado, ou como issue própria de
   wiring do importador.
-- `[ABERTO]` Porta de quest e baú com `uid` (o resto do T2) precisa do motor de storage por
-  personagem, que `docs/product/quests.md` ainda não tem — ADR 0050 grupo 3, #733.
+- ~~`[ABERTO]` Porta de quest e baú com `uid` (o resto do T2).~~ → **Resolvido (#733):** ver
+  "Porta de quest e baú com `uid`" acima. Como em #732, `requires.storageKey`/`reward` REAIS dos
+  3 quest-doors e 3 chests de Thais ficam de fora — sem o OTBM de origem e sem quest desenhada,
+  fica para quando um dos dois existir, ou como issue própria de wiring do importador.
 - ~~`[ABERTO]` T3 (teleporte de fato, placa de pressão, livro com texto por página) — ADR 0050,
   escopo três camadas.~~ → **Resolvido (#734):** ver "Teleporte e placa de pressão (T3, #734)"
   acima. Livro já estava coberto pelo `look` genérico do #729. Nenhum dos quatro mapas tem placa
