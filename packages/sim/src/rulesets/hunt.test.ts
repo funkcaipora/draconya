@@ -3190,6 +3190,82 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
   });
 });
 
+// --- rates do servidor (#691) ----------------------------------------------------------------
+
+describe('rates do servidor (#691)', () => {
+  const withRates = (rates: Record<string, unknown>, over: Partial<RawContent> = {}): Content =>
+    content({ progression: [{ ...progression, rates }], ...over });
+
+  it('experience 2 dobra a XP DEPOIS do Bestiário: rato de 5 XP rende 10', () => {
+    const { session, hero } = start({ loaded: withRates({ experience: 2 }) });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience * 2);
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('com useStages, o stage do level decide; o rate simples é ignorado', () => {
+    const { session, hero } = start({
+      loaded: withRates({ experience: 2, useStages: true, experienceStages: [{ minLevel: 1, maxLevel: 1, multiplier: 3 }] }),
+    });
+    session.advanceBy(100);
+    while (session.aggregates.kills === 0) session.advanceBy(100);
+    // O primeiro abate é pago no level 1: stage × 3, não o `experience` 2.
+    expect(hero.xp).toBe(rat.experience * 3);
+  });
+
+  it('monster.attack 2 dobra o rawDamage do monstro, com a mesma semente e o mesmo sorteio', () => {
+    const biter = { ...rat, attack: { min: 0, max: 8 }, health: 100_000 };
+    const hitsOf = (rates: Record<string, unknown>): number[] => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({ loaded: withRates(rates, { monsters: [biter] }) });
+      run(session, 20_000, 100);
+      return vi.mocked(resolveDamage).mock.calls
+        .filter(([intent]) => intent.source === 'monster-attack')
+        .map(([intent]) => intent.rawDamage);
+    };
+    const neutral = hitsOf({});
+    const doubled = hitsOf({ monster: { attack: 2 } });
+    expect(neutral.length).toBeGreaterThan(3);
+    expect(new Set(neutral).size).toBeGreaterThan(1);
+    expect(doubled).toEqual(neutral.map((damage) => damage * 2));
+    // O bloco `boss` não vale para monstro comum.
+    expect(hitsOf({ boss: { attack: 2 } })).toEqual(neutral);
+  });
+
+  it('boss usa o bloco boss para o ataque', () => {
+    const boss = { ...rat, attack: { min: 0, max: 8 }, health: 100_000, boss: true };
+    const hitsOf = (rates: Record<string, unknown>): number[] => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({ loaded: withRates(rates, { monsters: [boss] }) });
+      run(session, 20_000, 100);
+      return vi.mocked(resolveDamage).mock.calls
+        .filter(([intent]) => intent.source === 'monster-attack')
+        .map(([intent]) => intent.rawDamage);
+    };
+    const neutral = hitsOf({});
+    expect(hitsOf({ boss: { attack: 3 } })).toEqual(neutral.map((damage) => damage * 3));
+    expect(hitsOf({ monster: { attack: 3 } })).toEqual(neutral);
+  });
+
+  it('loot 0 desliga o gold do abate', () => {
+    const { session, hero } = start({ loaded: withRates({ loot: 0 }) });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.goldGained).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('skill 2 sobe o corpo a corpo mais rápido no mesmo tempo', () => {
+    const levelOf = (rates: Record<string, unknown>): number => {
+      const { session, hero } = start({ difficulty: 'bold', loaded: withRates(rates) });
+      run(session, 30_000, 100);
+      return hero.skills.getState()['melee']?.level ?? 0;
+    };
+    expect(levelOf({ skill: 2 })).toBeGreaterThan(levelOf({}));
+  });
+});
+
 // --- skills sobem pelo USO (FUN-75) ----------------------------------------------------------
 
 describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
