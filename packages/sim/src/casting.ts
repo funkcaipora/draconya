@@ -93,6 +93,13 @@ export interface CastSuccess {
    * ele quem agenda o vencimento — a mesma divisão do dano resolvido.
    */
   readonly condition?: ConditionState;
+  /**
+   * As CHAVES de condição que este efeito remove do recipiente (#590: Cure Poison e afins, puras
+   * ou combinadas com cura — Fair Wound Cleansing). Devolvida, não removida: só o ruleset tem a
+   * fila de eventos, e cancelar `condition-expire`/`condition-tick` do que foi removido é dele —
+   * a mesma divisão de `condition` acima.
+   */
+  readonly dispel?: readonly string[];
 }
 
 export interface CastRefused {
@@ -248,6 +255,11 @@ export interface HealEffect {
   readonly basePower?: number | undefined;
   readonly amount?: number | undefined;
   readonly formula?: SpellFormula | undefined;
+  /**
+   * A cura COMPOSTA (#590: Fair Wound Cleansing, Nature's Embrace, Restoration no Canary) — as
+   * chaves de condição que o MESMO lançamento remove do recipiente, ao lado da cura.
+   */
+  readonly dispel?: { readonly types: readonly string[] } | undefined;
 }
 
 /** O efeito que `powerOf` resolve: magia, supply ou cura. `damageType` só existe no de dano. */
@@ -506,7 +518,11 @@ export function castSpell(
         ok: true,
         healed: executeHealing(caster, recipient, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        ...(effect.dispel === undefined ? {} : { dispel: effect.dispel.types }),
       };
+    // Dispel puro (#590: Cure Poison e afins) — sem cura, sem sorteio: a magia só remove.
+    case 'dispel':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, dispel: effect.types };
     case 'heal-over-time':
       return cast({
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
@@ -726,6 +742,7 @@ export function useSupply(
         ok: true,
         healed: executeHealing(user, recipient, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paidFromStockRune ? 0 : supply.price,
+        ...(effect.dispel === undefined ? {} : { dispel: effect.dispel.types }),
       };
     }
     if (!hasStockHeal && !purse.canAfford(supply.price)) {
@@ -745,6 +762,35 @@ export function useSupply(
         ? 0
         : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng, combat)),
       damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
+      ...(effect.dispel === undefined ? {} : { dispel: effect.dispel.types }),
+    };
+  }
+
+  // Dispel puro (#590, Antidote Rune): sem cura, sem sorteio — o uso só remove condição do
+  // recipiente. Mesma ordem de sempre: level, vocação, e só então o gold.
+  if (supply.effect.kind === 'dispel') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+    const hasStockDispel = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockDispel && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockDispel = hasStockDispel && spendStock(user, supply.id);
+    if (!paidFromStockDispel) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockDispel ? 0 : supply.price, dispel: effect.types,
     };
   }
 

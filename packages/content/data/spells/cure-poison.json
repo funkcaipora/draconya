@@ -1,0 +1,15 @@
+{
+  "id": "cure-poison",
+  "name": "Cure Poison",
+  "description": "Remove o veneno.",
+  "manaCost": 30,
+  "cooldownMs": 6000,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "minLevel": 10,
+  "effect": {
+    "kind": "dispel",
+    "types": ["poison"]
+  },
+  "_open": "Canary `data/scripts/spells/healing/cure_poison.lua` (main, 2026-09-27): words \"exana pox\", id 29, level 10, mana 30, cooldown 6000/1000, só `COMBAT_PARAM_DISPEL` (CONDITION_POISON) — sem cura. Vocação: TODAS (druid/elder druid, knight/elite knight, paladin/royal paladin, sorcerer/master sorcerer, monk/exalted monk — o Draconya não tem monge, e as demais são as quatro vocações do jogo), por isso sem `vocationId` — a quarta magia genérica do catálogo (#590), ao lado de heal/strike/blast. `types: [\"poison\"]` é a MESMA chave que `field.condition.key` já usa em conteúdo real (`burning` no Dragon Lord) — vocabulário livre de `ConditionState.key`, não um enum fechado."
+}

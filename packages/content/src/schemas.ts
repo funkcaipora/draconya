@@ -1267,6 +1267,10 @@ export const supplySchema = z.object({
       target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
+      /** A cura COMPOSTA (#590), como na magia — ver `spellEffectSchema`. */
+      dispel: z.object({
+        types: z.array(z.string().min(1)).min(1),
+      }).optional(),
     }).refine(
       (effect) => effect.amount !== undefined || effect.amountRange !== undefined
         || effect.basePower !== undefined || effect.formula !== undefined,
@@ -1319,6 +1323,17 @@ export const supplySchema = z.object({
     z.object({
       kind: z.literal('condition'),
       condition: z.lazy(() => conditionSpecSchema),
+    }),
+    /**
+     * Runa de dispel puro (#590, Canary `antidote_rune.lua`: só `COMBAT_PARAM_DISPEL`, sem cura
+     * nenhuma). Sem `target`/`range` declarados o uso é SEMPRE no próprio usuário — o mesmo
+     * caminho de `recipient` default de `useSupply` —, e a runa não ganha a mira à distância que
+     * o Canary tem (`allowFarUse`/`needTarget`): mirar outro personagem por esta runa fica fora
+     * do recorte desta issue (§12).
+     */
+    z.object({
+      kind: z.literal('dispel'),
+      types: z.array(z.string().min(1)).min(1),
     }),
   ]),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
@@ -3954,6 +3969,15 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     range: z.number().int().positive().optional(),
     /** Forma de grupo (Mass Healing): `circle` centrado no lançador. `buildContent` confere. */
     area: spellAreaSchema.optional(),
+    /**
+     * A cura COMPOSTA (#590, Canary `fair_wound_cleansing.lua`/`nature's_embrace.lua`/
+     * `restoration.lua`: `COMBAT_PARAM_DISPEL` ao lado de `COMBAT_PARAM_TYPE, COMBAT_HEALING`).
+     * Ausente é a cura de sempre, sem remoção nenhuma; declarado, o alvo perde as condições
+     * destas chaves no MESMO lançamento que cura — nunca um segundo efeito.
+     */
+    dispel: z.object({
+      types: z.array(z.string().min(1)).min(1),
+    }).optional(),
   }),
   /**
    * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
@@ -4016,6 +4040,17 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
   }),
   /** Dano vira mana enquanto vale. */
   z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
+  /**
+   * Remove condição do lançador, sem curar (#590, Canary `cure_{poison,burning,curse,
+   * electrification,bleeding}.lua`: só `COMBAT_PARAM_DISPEL`, sem `COMBAT_PARAM_TYPE,
+   * COMBAT_HEALING`). `types` são as CHAVES de `ConditionState.key` que a magia remove — o
+   * mesmo vocabulário que `field.condition.key` já declara (`"burning"` no Dragon Lord). Chave
+   * ausente no alvo não é erro: a magia sai igual, sem efeito nenhum a remover.
+   */
+  z.object({
+    kind: z.literal('dispel'),
+    types: z.array(z.string().min(1)).min(1),
+  }),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 

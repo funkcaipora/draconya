@@ -2930,6 +2930,24 @@
     "heal": {
       "effect": 13
     },
+    "cure-poison": {
+      "effect": 13
+    },
+    "cure-burning": {
+      "effect": 13
+    },
+    "cure-electrification": {
+      "effect": 13
+    },
+    "cure-bleeding-druid": {
+      "effect": 13
+    },
+    "cure-bleeding-knight": {
+      "effect": 13
+    },
+    "cure-curse": {
+      "effect": 13
+    },
     "strike": {
       "effect": 12,
       "missile": 5
@@ -3206,6 +3224,9 @@
   "supplies": {
     "health-potion": {
       "effect": 14
+    },
+    "antidote-rune": {
+      "effect": 13
     },
     "mana-potion": {
       "effect": 13

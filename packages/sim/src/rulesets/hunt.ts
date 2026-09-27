@@ -5042,6 +5042,12 @@ const slots = bot.groups.get(group);
       // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
       tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
     });
+    // Dispel (#590): o `castSpell` devolve as CHAVES a remover, e quem tem a fila (para
+    // cancelar `condition-expire`/`condition-tick`) é o ruleset — a mesma divisão da condição
+    // abaixo. Vale para o RECIPIENTE: o mesmo alvo que a cura composta cura, quando há cura.
+    if (result.dispel !== undefined) {
+      this.#dispelConditions(session, recipient, result.dispel);
+    }
     // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
     // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
     if (result.condition !== undefined) {
@@ -5561,6 +5567,24 @@ const slots = bot.groups.get(group);
     }
   }
 
+  /**
+   * Remove condições ESPECÍFICAS de um alvo por chave (#590: Cure Poison e afins, puras ou
+   * combinadas com cura). Diferente de `#cancelConditions` — que zera TUDO na morte/saída —,
+   * aqui só as chaves que o efeito declarou saem; o resto do alvo continua intocado (o critério
+   * da issue: Cure Poison remove o poison e NÃO o burning). Chave ausente no alvo não é erro —
+   * a magia sai igual, sem nada para remover.
+   */
+  #dispelConditions(session: Session, target: ConditionTarget, types: readonly string[]): void {
+    const id = this.#subjectOf(target);
+    for (const type of types) {
+      if (target.conditions.get(type) === null) continue;
+      const subject = conditionSubject(id, type);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      target.conditions.remove(type);
+    }
+  }
+
   // --- campos de tile (CMB-07) ---------------------------------------------------------------
 
   /**
@@ -5728,6 +5752,11 @@ const slots = bot.groups.get(group);
       // E a CONTAGEM, que é outra pergunta: "gastei 4.000 de gold" e "bebi 80 poções" contam
       // coisas diferentes sobre a mesma hunt, e o §16.1 pede as duas.
       session.credit(character.id, 'suppliesUsed', 1);
+      // Dispel (#590, Antidote Rune): mesma divisão de `#castSpell` — o `useSupply` devolve as
+      // chaves, o ruleset cancela o evento e remove.
+      if (result.dispel !== undefined) {
+        this.#dispelConditions(session, recipient, result.dispel);
+      }
       // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
       // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
       session.emit({

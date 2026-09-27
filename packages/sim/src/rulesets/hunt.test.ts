@@ -10112,6 +10112,79 @@ describe('monstro evita campo que não pode atravessar (M29-05)', () => {
   });
 });
 
+describe('dispel: cura de condição (#590, Cure Poison e afins)', () => {
+  const curePoison = {
+    id: 'cure-poison-test', name: 'Cure Poison', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'dispel' as const, types: ['poison'] },
+  };
+  const fairWoundCleansingTest = {
+    id: 'fair-wound-cleansing-test', name: 'Fair Wound Cleansing', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'heal' as const, amount: 30, dispel: { types: ['poison'] } },
+  };
+
+  it('remove o poison e NÃO toca o burning, cancelando só o vencimento pendente do que saiu', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: true }],
+        do: { kind: 'spell', spellId: 'cure-poison-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [curePoison], monsters: false },
+    );
+    const expiresAtMs = session.nowMs + 60_000;
+    // Aplicado direto no `Conditions` do personagem, como o CMB-07 documenta: `castSpell`
+    // DEVOLVE a condição, quem agenda é o ruleset — aqui simulamos as duas já agendadas, como
+    // se uma ability de monstro (`field.condition.key`, o mesmo vocabulário de `"burning"` no
+    // Dragon Lord) as tivesse aplicado antes deste teste começar.
+    hero.conditions.apply({ key: 'poison', targetId: hero.id, expiresAtMs });
+    hero.conditions.apply({ key: 'burning', targetId: hero.id, expiresAtMs });
+    session.scheduleIn('condition-expire', 60_000, { subject: `${hero.id}/poison` });
+    session.scheduleIn('condition-expire', 60_000, { subject: `${hero.id}/burning` });
+
+    session.advanceBy(1_500);
+
+    expect(hero.conditions.get('poison')).toBeNull();
+    expect(hero.conditions.get('burning')).not.toBeNull();
+    const events = session.snapshot().schedule.events;
+    expect(events.some((e) => e.subject === `${hero.id}/poison`)).toBe(false);
+    expect(events.some((e) => e.subject === `${hero.id}/burning`)).toBe(true);
+  });
+
+  it('a cura composta cura E remove no MESMO lançamento — as duas coisas, não uma escolhida', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'hp', op: '<=', percent: 100 }],
+        do: { kind: 'spell', spellId: 'fair-wound-cleansing-test' },
+      }]),
+      { mana: 1_000, health: 900, spells: [fairWoundCleansingTest], monsters: false },
+    );
+    hero.conditions.apply({
+      key: 'poison', targetId: hero.id, expiresAtMs: session.nowMs + 60_000,
+    });
+    session.scheduleIn('condition-expire', 60_000, { subject: `${hero.id}/poison` });
+
+    session.advanceBy(1_500);
+
+    // Cooldown de 1 s: dois lançamentos em 1 500 ms (0 e ~1 000), 30 de cura cada — a soma prova
+    // que a cura ACONTECEU nos dois, não só no primeiro em que havia condição para remover.
+    expect(hero.health).toBe(960);
+    expect(hero.conditions.get('poison')).toBeNull();
+  });
+
+  it('sem a condição no alvo a magia sai igual — recusar por "nada para remover" não existe', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: false }],
+        do: { kind: 'spell', spellId: 'cure-poison-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [curePoison], monsters: false },
+    );
+    session.advanceBy(1_500);
+    // Dois lançamentos (cooldown 1 s em 1 500 ms) — a magia SAI toda vez, mesmo sem "poison"
+    // nenhum para limpar: gastou a mana as duas vezes.
+    expect(hero.mana).toBe(980);
+  });
+});
+
 describe('outcomes avançados na hunt (CMB-08)', () => {
   // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
   // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.
