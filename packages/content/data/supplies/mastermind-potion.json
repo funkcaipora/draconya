@@ -1,0 +1,24 @@
+{
+  "id": "mastermind-potion",
+  "name": "Mastermind Potion",
+  "description": "Aumenta o magic level em 3 por 10 minutos. Somente Sorcerer e Druid.",
+  "price": 0,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
+  "effect": {
+    "kind": "condition",
+    "condition": {
+      "key": "mastermind-potion",
+      "durationMs": 600000,
+      "effect": {
+        "kind": "buff",
+        "skillDeltas": { "magic": 3 }
+      }
+    }
+  },
+  "requires": {
+    "vocationId": ["sorcerer", "druid"]
+  },
+  "_open": "#576, M34-05. Canary `data/scripts/actions/items/potions.lua` (`things/sources/canary`, commit 47dfd51), item id 7440: `CONDITION_PARAM_TICKS = 10*60*1000`, `CONDITION_PARAM_STAT_MAGICPOINTS = 3`, `vocations = { SORCERER, DRUID }` — sem restrição de level. `skillDeltas.magic` porque a skill `magic` do catálogo (`data/skills/magic.json`) É o magic level (FUN-92, o mesmo campo que `#runeScaling`/`#spellScaling` já leem) — não existe skill `magicLevel` separada. `key` própria (`mastermind-potion`), pela razão do Berserk/Bullseye: o Canary usa `CONDITION_PARAM_SUBID = JeanPierreMagicLevel`, independente do buff de magia. `actionExhaustMs` 1000 (#690), como as demais poções de buff. `price` 0: PENDENTE de #574 (M34-03) — não foi encontrado NPC do Canary que VENDE esta poção (só `fiona.lua`, que a COMPRA do jogador por 500). `appearances.supplies.effect` 13 é `CONST_ME_MAGIC_BLUE` (o `effect = CONST_ME_MAGIC_BLUE` do `potions.lua`), verificado contra a legenda auditada do pacote 13.32 em `docs/reference/catalog/monsters-report.md` (\"blueshimmer effect 13\", CMB-09) — a mesma conferência que já sustenta `protector`/`mana-potion` (effect 13)."
+}

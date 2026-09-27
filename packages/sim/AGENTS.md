@@ -171,7 +171,9 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **No modo compartilhado a bolsa é da SESSÃO, e a capacidade dela é derivada** (#192, ADR
   0027). `#bag` guarda gold e itens; a capacidade é `Σ capacity` dos presentes calculada na
   hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
-  pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
+  pela tabela. O excedente força a entrada na mochila do líder, peso ignorado (`forceAdd`, ADR
+  0048 decisão 7 — sem a Caixa de Loot da Sessão, não há mais para onde mandar); `itemsLooted`
+  conta para todo presente.
 Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no cadáver) e
   `autoSell` vira gold no drop, cortado pelo `autoSellLimit` do líder; cada `BagEntry`/
   `GoldEntry` guarda `eligible` = presentes no abate (§16.1), e `#settle` vende por entrada —
@@ -222,9 +224,11 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   (o item em `back`, `initialSlots`) e bolsa (`progression.satchelInitialSlots`) são vetores com
   `null`; os tamanhos e a linha chegam por `ContainerRules` — `containerRulesFor` é a única
   ponte com o conteúdo, chamada em `onEnter`, em `onResume` (snapshot anterior ao formato, lido
-  como lista plana sem bump) e pelo host no `move`. O lugar NUNCA recusa loot: só o peso recusa,
-  e a Caixa segura. `move` é transação — valida tudo, depois escreve; a recusa não muta. A
-  mochila só sai vazia.
+  como lista plana sem bump) e pelo host no `move`. O lugar NUNCA recusa loot: só o peso recusa
+  (`add`) — o que não coube por capacidade fica no cadáver do monstro (ADR 0048 decisão 7);
+  `forceAdd` ignora o peso de propósito, para os dois casos sem cadáver à mão (grant de
+  vocação/kit, sobra da bolsa de party). `move` é transação — valida tudo, depois escreve; a
+  recusa não muta. A mochila só sai vazia.
 - **Capacidade é PESO, e o equipado conta** (`inventory.ts`, FUN-82). Sem contar o equipado, a
   estratégia ótima é vestir tudo para carregar o dobro. E `weaponAttack` devolve `null` sem
   arma, nunca zero: zero faria o personagem desarmado não machucar nada, e desarmado é como
@@ -322,7 +326,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
-  `corpseTtlMs` da hunt — hunt sem o campo não deixa cadáver. Os cadáveres entram no snapshot
+  `corpseTtlMs` do MONSTRO (#585, era da hunt) — monstro sem o campo não deixa cadáver. Os cadáveres entram no snapshot
   (`corpses`, `nextGroundItemId`), e o evento de apodrecer volta com a fila. O loot NUNCA passa
   pelo cadáver: já foi para a caixa antes de ele cair.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):

@@ -54,6 +54,25 @@ describe('Conditions', () => {
     expect(conditions.hasManaShield()).toBe(true);
   });
 
+  it('skillBonus soma o delta FLAT de skill pelas condições ativas (#576, Berserk/Bullseye/Mastermind)', () => {
+    const conditions = new Conditions();
+    expect(conditions.skillBonus('melee')).toBe(0);
+    // Berserk: +5 melee, -10 shielding.
+    conditions.apply({
+      key: 'berserk-potion', spellId: 'berserk-potion', expiresAtMs: 600_000,
+      skillDeltas: { melee: 5, shielding: -10 },
+    });
+    // Mastermind pode estar ativo ao mesmo tempo (chaves diferentes, #576) — soma em `magic`.
+    conditions.apply({
+      key: 'mastermind-potion', spellId: 'mastermind-potion', expiresAtMs: 600_000,
+      skillDeltas: { magic: 3 },
+    });
+    expect(conditions.skillBonus('melee')).toBe(5);
+    expect(conditions.skillBonus('shielding')).toBe(-10);
+    expect(conditions.skillBonus('magic')).toBe(3);
+    expect(conditions.skillBonus('distance')).toBe(0);
+  });
+
   it('serializes and comes back the same', () => {
     const conditions = new Conditions();
     conditions.apply(haste());
@@ -384,6 +403,27 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     );
     monster.conditions.apply(buff);
     expect(monster.speedScale).toBeGreaterThan(1);
+  });
+
+  it('`conditionFromSpec` compila `buff.skillDeltas` no estado de runtime (#576, Berserk Potion)', () => {
+    const condition = conditionFromSpec(
+      {
+        key: 'berserk-potion', merge: 'refresh', durationMs: 600_000,
+        effect: { kind: 'buff', skillDeltas: { melee: 5, shielding: -10 } },
+      },
+      'hero', 'hero', 0, 'rune',
+    );
+    expect(condition).toMatchObject({
+      key: 'berserk-potion', targetId: 'hero', sourceId: 'hero', expiresAtMs: 600_000,
+      skillDeltas: { melee: 5, shielding: -10 },
+    });
+    // Sem `skillDeltas` no efeito, o campo não aparece no estado (#576: Blood Rage/Sharpshooter,
+    // que só declaram `damageDealtPercent`/`damageTakenPercent`, continuam bit a bit).
+    const plain = conditionFromSpec(
+      { key: 'buff', merge: 'refresh', durationMs: 8_000, effect: { kind: 'buff', damageTakenPercent: 15 } },
+      'hero', 'hero', 0, 'rune',
+    );
+    expect(plain.skillDeltas).toBeUndefined();
   });
 });
 

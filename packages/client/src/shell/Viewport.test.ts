@@ -39,6 +39,27 @@ describe('a fiação do alvo no Viewport (#428)', () => {
   });
 });
 
+describe('o clique num cadáver (#722, ADR 0048 d.4 — ajuste do DT-01)', () => {
+  it('sem criatura no ponto, tenta groundItemAt e GUARDA o pedido — não manda open-corpse direto', async () => {
+    const code = await source('./Viewport.tsx');
+    expect(code).toContain('handleRef.current?.groundItemAt(event.clientX, event.clientY)');
+    expect(code).toContain('requestCorpseApproach(groundItem.id, groundItem.position, performance.now())');
+    // O ajuste do DT-01: o clique NÃO manda `open-corpse` direto — quem manda é `useCorpseApproach`,
+    // quando o `world` disser que o personagem chegou perto.
+    expect(code).not.toMatch(/sendIntent\(\{ type: 'open-corpse'/);
+  });
+
+  it('escolher uma criatura cancela um pedido de cadáver em curso', async () => {
+    const code = await source('./Viewport.tsx');
+    expect(code).toContain('cancelCorpseApproach();');
+  });
+
+  it('o ViewportHandle expõe groundItemAt', async () => {
+    const code = await source('../world/viewport.ts');
+    expect(code).toContain('groundItemAt(clientX: number, clientY: number): GroundItem | null;');
+  });
+});
+
 describe('use-on-map e look no viewport (#729, ADR 0050 d.7)', () => {
   it('o duplo-clique sem criatura chama tileAt e requestTileUse (RF-06)', async () => {
     const code = await source('./Viewport.tsx');

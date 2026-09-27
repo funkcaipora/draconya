@@ -186,6 +186,23 @@ describe('Spawner', () => {
     expect(b?.position).toEqual(points19[1]);
   });
 
+  it('a point with `monsters` sorts between ITS candidates only, never the composition (#582)', () => {
+    // O caso do Canary em que dois `<monster>` do mesmo `<spawn>` caem na mesma posição, com
+    // `weight` (`spawn_monster.cpp:90-96`) — o Spawner sorteia entre os candidatos DO PONTO,
+    // nunca entre eles e a composição da dificuldade.
+    const heavyDragon = () => ({
+      at: points[0] as Point, radius: 1,
+      monsters: [{ monsterId: 'dragon', weight: 9 }, { monsterId: 'dragon-lord', weight: 1 }],
+    });
+    // Slot nunca ocupado (nenhum `occupy()`): cada `fill()` sorteia de novo, independente.
+    const spawner = new Spawner(1, cautious);
+    const rng = Rng.fromSeed('spawn');
+    const draws = Array.from({ length: 500 }, () => spawner.fill(0, cautious, heavyDragon, open, rng)?.monsterId);
+    expect(draws.some((d) => d === 'dragon')).toBe(true);
+    expect(draws.some((d) => d === 'dragon-lord')).toBe(true);
+    expect(draws.every((d) => d === 'dragon' || d === 'dragon-lord')).toBe(true);
+  });
+
   it('without a declared monster, the composition keeps deciding — unchanged behaviour', () => {
     const dense = { ...cautious, monsterCount: 1 };
     const spawner = new Spawner(1, dense);

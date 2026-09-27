@@ -7,8 +7,9 @@ import { bestiaryEntrySchema, MONSTER_CLASSES, monsterSchema } from '../../packa
 import { readSourceCommit } from './env.js';
 import type { CatalogEntity } from './generated-writer.js';
 import {
-  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, listMonsterFiles, loadReaderDeps,
-  lootChance, readMonsterCatalog, readTfsSpeeds, slugify, type MonsterReaderDeps,
+  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseTtlMsFromChain,
+  listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains, readMonsterCatalog,
+  readTfsSpeeds, slugify, type DecayStage, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
@@ -157,6 +158,14 @@ const ITEMS_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <items>
   <item id="3449" article="a" name="burst arrow" />
   <item fromid="10" toid="12" name="ranged thing" />
+  <item id="1" article="a" name="dead test drake">
+    <attribute key="duration" value="10"/>
+    <attribute key="decayTo" value="2"/>
+  </item>
+  <item id="2" article="a" name="dead test drake">
+    <attribute key="duration" value="5"/>
+    <attribute key="decayTo" value="0"/>
+  </item>
 </items>
 `;
 
@@ -238,6 +247,35 @@ describe('readTfsSpeeds', () => {
   });
 });
 
+describe('readCorpseDecayChains / corpseTtlMsFromChain (#585)', () => {
+  it('lê duration/decayTo do items.xml, e soma a cadeia inteira em ms', () => {
+    const ctx = fixture(false);
+    const chains = readCorpseDecayChains(join(ctx.canaryDir, 'data/items/items.xml'));
+    expect(chains.get(1)).toEqual({ durationSeconds: 10, decayTo: 2 });
+    expect(chains.get(2)).toEqual({ durationSeconds: 5, decayTo: 0 });
+    expect(corpseTtlMsFromChain(1, chains)).toBe(15000);
+  });
+
+  it('id sem cadeia (ou monstro sem `corpse`) devolve undefined', () => {
+    const chains: Map<number, DecayStage> = new Map();
+    expect(corpseTtlMsFromChain(undefined, chains)).toBeUndefined();
+    expect(corpseTtlMsFromChain(9999, chains)).toBeUndefined();
+  });
+
+  it('ciclo no decayTo não trava, e devolve undefined em vez de somar para sempre', () => {
+    const chains: Map<number, DecayStage> = new Map([
+      [1, { durationSeconds: 10, decayTo: 2 }],
+      [2, { durationSeconds: 10, decayTo: 1 }],
+    ]);
+    expect(corpseTtlMsFromChain(1, chains)).toBeUndefined();
+  });
+
+  it('item sem `decayTo` é o último estágio, e a soma para nele', () => {
+    const chains: Map<number, DecayStage> = new Map([[1, { durationSeconds: 42 }]]);
+    expect(corpseTtlMsFromChain(1, chains)).toBe(42000);
+  });
+});
+
 describe('convertMonster (fixture sintética)', () => {
   it('mapeia stats, flags, elementos, loot e Bestiário do Test Drake', () => {
     const ctx = fixture(false);
@@ -254,6 +292,9 @@ describe('convertMonster (fixture sintética)', () => {
       targetChange: { intervalMs: 4000, chance: 0.1 },
       targetStrategy: { nearest: 70, health: 10, damage: 10, random: 10 },
       runOnHealth: 300, staticAttack: 0.8, outfitId: 34,
+      // `monster.corpse = 1` (#585): 1 (duration 10 → decayTo 2) → 2 (duration 5 → decayTo 0),
+      // 10 + 5 = 15 s = 15000 ms.
+      corpseTtlMs: 15000,
       source: { engine: 'canary', commit: COMMIT, path: 'data-otservbr-global/monster/dragons/test_drake.lua' },
       bestiary: {
         class: 'dragon', race: 'dragon', raceId: 34, toKill: 1000, firstUnlock: 50, secondUnlock: 500,
@@ -296,6 +337,9 @@ describe('convertMonster (fixture sintética)', () => {
       attack: { min: 0, max: 20 },
       loot: { rollModel: 'canary', gold: { chance: 0.1, min: 100, max: 300 }, items: [] },
     });
+    // Test Rat não declara `monster.corpse` (#585): sem cadeia para seguir, sem `corpseTtlMs` —
+    // o default seguro de monstro sem cadáver.
+    expect(converted.entity['corpseTtlMs']).toBeUndefined();
     // O melee por skill/attack é mapeado (#684): nunca cai em "sem mapeador".
     expect(converted.notes.unmappedSpells).toEqual([]);
     expect(converted.notes.meleeVia).toEqual(['skill-attack']);
@@ -383,23 +427,28 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     expect(convertReal('mammals/rat.lua').entity['speed']).toBe(134);
   });
 
-  it('o Dragon gerado bate com o dragon.json autoral do #520 — onda de fogo, bola e cura', () => {
+  it('o Dragon gerado bate com o dragon promovido em data/monsters/generated/dragons.json (#581) — onda de fogo, bola e cura', () => {
     const dragon = convertReal('dragons/dragon.lua');
     expect(dragon.blockers).toEqual([]);
     const generated = monsterSchema.parse(asMonster(dragon.entity));
-    const authored = monsterSchema.parse(JSON.parse(
-      readFileSync(join(REPO_ROOT, 'packages/content/data/monsters/dragon.json'), 'utf8'),
-    ) as unknown);
-    // A ÚNICA diferença, e justificada: o Canary não declara `range` na onda (sem limite além da
-    // vista, `Monster::canUseSpell`); o leitor usa o comprimento da onda (8), e o autoral usou 7.
-    // Nenhum dos dois é número do Tibia — é o preenchimento que o schema exige.
+    // O `dragon.json` autoral saiu no #581 — Dragon/Dragon Lord/Rat/Rotworm passaram a viver
+    // direto em `generated/<fatia>.json`, regenerados uma única vez por aquela issue e
+    // preservados verbatim por `preserveHandAuthored` (`promote-monsters.ts`) daí em diante.
+    // Este teste compara a mesma coisa que sempre comparou — a conversão FRESCA do Canary contra
+    // o congelado — só que lendo do lugar novo.
+    const dragonsSlice = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'packages/content/data/monsters/generated/dragons.json'), 'utf8'),
+    ) as readonly Record<string, unknown>[];
+    const authoredRaw = dragonsSlice.find((entity) => entity['id'] === 'dragon');
+    if (authoredRaw === undefined) throw new Error('dragon não está em generated/dragons.json');
+    const authored = monsterSchema.parse(authoredRaw);
+    // O Canary não declara `range` na onda (sem limite além da vista, `Monster::canUseSpell`); o
+    // leitor usa o comprimento da onda (8) para preencher o que o schema exige — nem número do
+    // Tibia, nem divergência: o congelado em `generated/dragons.json` saiu do MESMO leitor (#581),
+    // então bate exatamente, sem ajuste nenhum.
     const firewave = generated.abilities?.find((ability) => ability.id === 'firewave');
     expect(firewave?.target.range).toBe(8);
-    const aligned = generated.abilities?.map((ability) => {
-      const { kind: _kind, ...rest } = ability as typeof ability & { kind?: string };
-      return ability.id === 'firewave' ? { ...rest, target: { ...rest.target, range: 7 } } : rest;
-    });
-    expect(aligned).toEqual(authored.abilities);
+    expect(generated.abilities).toEqual(authored.abilities);
     for (const field of [
       'class', 'health', 'experience', 'attack', 'attackIntervalMs', 'armor', 'defense', 'defenseMitigation',
       'damageType', 'mitigation', 'critChance', 'speed', 'aggroRadius', 'attackRange', 'targetDistance',

@@ -7,7 +7,7 @@
 // operação nula.
 
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Bestiary, Skills, levelForXp, readItemOverlay } from '@draconya/sim';
 import type {
   BestiaryState, CharacterStorageMap, ItemInstanceOverlay, SkillsState,
@@ -225,6 +225,10 @@ async function applyProgression(
   const ammunitionStock = receipt.ammunitionStock === undefined
     ? {} : { ammunitionStock: receipt.ammunitionStock };
 
+  // Comida ativa (#726, ADR 0049 decisão 5): ABSOLUTA e última-escrita-vence, como o estoque
+  // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
+  const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -248,6 +252,21 @@ async function applyProgression(
       // que já existisse derrubaria o extrato inteiro, e gold, XP e skills se perderiam junto
       // com ele. Identidade previsível é o que permite essa segurança sem conferência.
       .onConflictDoNothing();
+  }
+
+  // As instâncias vendidas/descartadas nesta sessão (#724, ADR 0048 d.8): apagadas na MESMA
+  // transação do ledger — é a primeira vez que uma sessão faz `item_instance` deixar de
+  // existir (`items.md` §"Como o item vai e volta do banco" ganha a exceção nomeada).
+  // Escopado por DONO, como `acquired`/`applyLayout`: um extrato não apaga item de outra
+  // conta, nem que traga o id dela. `DELETE` é idempotente por id — reprocessar o mesmo
+  // extrato (retry após falha) apaga zero linhas na segunda vez, nunca erro.
+  if (receipt.removedInstances !== undefined && receipt.removedInstances.length > 0) {
+    await tx
+      .delete(itemInstances)
+      .where(and(
+        eq(itemInstances.ownerCharacterId, receipt.characterId),
+        inArray(itemInstances.id, receipt.removedInstances),
+      ));
   }
 
   // O layout de equipamento (FUN-82). Escopado por dono dentro do próprio `applyEquipment`:
@@ -283,6 +302,7 @@ async function applyProgression(
       ...ammo,
       ...supplyStock,
       ...ammunitionStock,
+      ...fedMs,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

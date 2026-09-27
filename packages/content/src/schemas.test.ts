@@ -1,8 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
-  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, spellAreaSchema, spellFormulaSchema,
+  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, routeSchema, spellAreaSchema, spellFormulaSchema,
 } from './schemas.js';
+
+describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
+  const route = (spawnPoints: unknown): unknown => ({
+    id: 'r', mapId: 'm', tiles: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], spawnPoints,
+  });
+
+  it('aceita `monsters` com dois ou mais candidatos e peso default 1', () => {
+    const parsed = routeSchema.parse(route([
+      { routeIndex: 0, monsters: [{ monsterId: 'dragon' }, { monsterId: 'dragon-lord', weight: 3 }] },
+    ]));
+    expect(parsed.spawnPoints[0]?.monsters).toEqual([
+      { monsterId: 'dragon', weight: 1 }, { monsterId: 'dragon-lord', weight: 3 },
+    ]);
+  });
+
+  it('recusa `monsterId` e `monsters` juntos no mesmo ponto', () => {
+    expect(() => routeSchema.parse(route([
+      { routeIndex: 0, monsterId: 'dragon', monsters: [{ monsterId: 'dragon' }, { monsterId: 'wyvern' }] },
+    ]))).toThrow(/exclusivos/);
+  });
+
+  it('recusa `monsters` com um candidato só — isso é `monsterId`', () => {
+    expect(() => routeSchema.parse(route([
+      { routeIndex: 0, monsters: [{ monsterId: 'dragon' }] },
+    ]))).toThrow();
+  });
+});
 
 describe('spellAreaSchema — rows (#679)', () => {
   it('accepts odd widths, one per row', () => {
