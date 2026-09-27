@@ -4532,12 +4532,15 @@ const slots = bot.groups.get(group);
   /**
    * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
    * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
-   * Mind Control) — o item soma no magic level como soma no dano da runa e na cura da poção.
+   * Mind Control) MAIS o de condição (#576: Mastermind Potion soma 3 — `CONDITION_PARAM_BUFF_SPELL`
+   * do Canary é o que faz a poção valer para runa/magia, não só para o golpe) — as fontes somam
+   * no magic level como somam no dano da runa e na cura da poção.
    */
   #runeScaling(character: CharacterRuntime): SpellScaling {
     const magic = this.#options.skills.get('magic');
     const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
-      + character.inventory.skillBonus(this.#options.items, 'magic');
+      + character.inventory.skillBonus(this.#options.items, 'magic')
+      + character.conditions.skillBonus('magic');
     return {
       skillLevel: magicLevel, powerScale: 1, magicLevel,
       // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
@@ -4548,7 +4551,8 @@ const slots = bot.groups.get(group);
   /**
    * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
    * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
-   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid) — MAIS
+   * o de condição (#576: Mastermind Potion soma 3 em `magic`).
    *
    * `SPELL_SKILL_WEAPON` (#567) é a sentinela do Knight: desde a separação de `melee` em
    * `fist`/`club`/`sword`/`axe`, não há mais uma skill fixa para a magia dele — Berserk,
@@ -4564,12 +4568,14 @@ const slots = bot.groups.get(group);
     const magic = this.#options.skills.get('magic');
     return {
       skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
-        + character.inventory.skillBonus(this.#options.items, skillId),
+        + character.inventory.skillBonus(this.#options.items, skillId)
+        + character.conditions.skillBonus(skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
       magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
-        + character.inventory.skillBonus(this.#options.items, 'magic'),
+        + character.inventory.skillBonus(this.#options.items, 'magic')
+        + character.conditions.skillBonus('magic'),
       // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
@@ -4973,6 +4979,10 @@ const slots = bot.groups.get(group);
       });
       if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
       else this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
+      // Poção de buff (#576, CMB-07): o `useSupply` devolve a condição já com o USUÁRIO como
+      // alvo e origem (auto-alvo sempre, nunca o `recipient`) — quem agenda o vencimento é quem
+      // tem a fila, a mesma divisão do `#castSpell`.
+      if (result.condition !== undefined) this.#applyConditionTo(session, character, result.condition);
       return result;
     }
 
@@ -6681,9 +6691,11 @@ const slots = bot.groups.get(group);
   #skillLevelOf(character: CharacterRuntime, family: CompiledWeaponFamily | undefined): number {
     const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
     // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
-    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item.
+    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item — MAIS o de
+    // condição (#576: Berserk Potion soma 5 em `melee`, Bullseye Potion soma 5 em `distance`).
     return (skill === undefined ? 0 : character.skills.levelOf(skill))
-      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId))
+      + (family === undefined ? 0 : character.conditions.skillBonus(family.skillId));
   }
 
   /**
@@ -8103,9 +8115,13 @@ const slots = bot.groups.get(group);
     if (skillId === undefined) return source;
     const skill = this.#options.skills.get(skillId);
     if (skill === undefined) return source;
+    // O malus de condição (#576: Berserk/Bullseye tiram 10 de `shielding`) entra na MESMA skill
+    // que escala a defesa — `powerMultiplier` já pisa em `Math.max(0, …)`, então o malus nunca
+    // deixa o nível efetivo negativo, só encosta no piso de `startingLevel`.
+    const level = character.skills.levelOf(skill) + character.conditions.skillBonus(skillId);
     return {
       kind: source.kind,
-      defense: Math.round(source.defense * powerMultiplier(skill, character.skills.levelOf(skill))),
+      defense: Math.round(source.defense * powerMultiplier(skill, level)),
     };
   }
 

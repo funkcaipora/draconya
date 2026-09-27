@@ -1414,6 +1414,18 @@
     },
     "intense-healing-rune": {
       "effect": 13
+    },
+    "berserk-potion": {
+      "effect": 14
+    },
+    "mastermind-potion": {
+      "effect": 13
+    },
+    "bullseye-potion": {
+      "effect": 15
+    },
+    "magic-shield-potion": {
+      "effect": 38
     }
   },
   "hits": {

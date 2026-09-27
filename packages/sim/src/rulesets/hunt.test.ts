@@ -2529,6 +2529,71 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
   });
 });
 
+describe('poção de BUFF do Tibia — Berserk, Mastermind, Bullseye, Magic Shield (#576)', () => {
+  // O malus de `shielding` (#576: Berserk/Bullseye tiram 10) não entra na fixture do bot: o
+  // catálogo de teste deste arquivo não declara a skill `shielding` (nenhum teste daqui escala
+  // defesa sem declarar `combat.defense.skillId` explicitamente, e adicioná-la ao catálogo
+  // compartilhado colidiria com os testes de CMB-04 que já a montam localmente). O malus é
+  // coberto no nível de unidade — `Conditions.skillBonus`/`conditionFromSpec`
+  // (`conditions.test.ts`) e `useSupply` (`casting.test.ts`).
+  const berserkPotion = {
+    id: 'berserk-potion', name: 'Berserk Potion', price: 0, group: 'potion',
+    requires: { vocationId: 'knight' },
+    effect: {
+      kind: 'condition',
+      condition: {
+        key: 'berserk-potion', durationMs: 600_000,
+        effect: { kind: 'buff', skillDeltas: { melee: 5 } },
+      },
+    },
+  };
+  const magicShieldPotion = {
+    id: 'magic-shield-potion', name: 'Magic Shield Potion', price: 0, group: 'potion',
+    effect: {
+      kind: 'condition',
+      condition: { key: 'mana-shield', durationMs: 60_000, effect: { kind: 'mana-shield' } },
+    },
+  };
+
+  it('o bot bebe, e o buff soma na skill do personagem POR 600 s (Berserk: +5 melee)', () => {
+    const { session, hero } = withSpells(
+      botConfig({ potion: [supplyRule('berserk-potion')] }),
+      { health: 1_000, supplies: [...supplies, berserkPotion] },
+    );
+    hero.vocationId = 'knight';
+
+    session.advanceBy(50);
+    expect(hero.conditions.skillBonus('melee')).toBe(5);
+    expect(hero.conditions.get('berserk-potion')?.expiresAtMs).toBe(600_000);
+    // O vencimento em si (`CONDITION_EXPIRE` na fila, sem `if` algum lendo o relógio) é o
+    // mecanismo genérico do CMB-07, já coberto pelos testes de haste/buff/mana-shield de magia
+    // neste mesmo arquivo — esta issue só adiciona `skillDeltas` ao efeito `buff`, sem tocar o
+    // agendamento do vencimento.
+  });
+
+  it('restrição de vocação: sem ser Knight, o bot não bebe e o buff nunca aparece', () => {
+    const { session, hero } = withSpells(
+      botConfig({ potion: [supplyRule('berserk-potion')] }),
+      { health: 1_000, supplies: [...supplies, berserkPotion] },
+    );
+    // `hero.vocationId` fica `null` (o de sempre) — Berserk pede `knight`.
+    session.advanceBy(50);
+    expect(hero.conditions.skillBonus('melee')).toBe(0);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'supply-used')).toHaveLength(0);
+  });
+
+  it('Magic Shield Potion aplica a MESMA condição `mana-shield` da magia — auto-alvo, sem alcance', () => {
+    const { session, hero } = withSpells(
+      botConfig({ potion: [supplyRule('magic-shield-potion')] }),
+      { health: 1_000, supplies: [...supplies, magicShieldPotion] },
+    );
+    session.advanceBy(50);
+    expect(hero.conditions.hasManaShield()).toBe(true);
+    expect(ofKind(session.drainEvents(), 'supply-used')).toHaveLength(1);
+  });
+});
+
 describe('a equivalência entre taxas vale para magia e supply também', () => {
   it('1 Hz e 10 Hz dão o MESMO resultado, com cura, poção e magia de dano', () => {
     // É o teste que mais importa deste pacote, aplicado ao que esta issue acrescentou. Se
@@ -11933,6 +11998,9 @@ describe('linha de visão (#553)', () => {
     const before = { ...hero.position };
     run(session, 3_000, 100);
     expect(hero.position).toEqual(before);
+  });
+});
+
 describe('cenário usável — TileOverrides (#728, ADR 0050 d.2-d.5, d.8)', () => {
   // A MESMA geometria e a MESMA rota de dez tiles de sempre (`map`/`route`, acima) — só o que
   // está EM CIMA de dois dos tiles do laço muda: uma porta comum no lugar de `(4,2)` (o lado
