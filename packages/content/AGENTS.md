@@ -465,5 +465,12 @@ entre arquivos resolvem.
   lida" está respondida: não é). Nenhum item ou monstro do catálogo real declara os campos novos
   ainda — os quatro monstros do bestiário (rat, rotworm, dragon, dragon lord) ficam no default
   `critChance: 0`, a identidade; só 6 bosses do Canary declaram, fora do recorte hoje.
+- **`item.absorb`/`increase`/`reflect`/`cleavePercent` são PERCENTUAL INTEIRO** (M30-05, #552),
+  a escala do `items.xml` do Canary — diferente de `mitigation.resistances` (fração) e de
+  `combatModifiers` (pontos-base). O `combat-v3` aplica a absorção item a item com arredondamento,
+  e a conta inteira é a do Canary. `mitigation.resistances` de ITEM e `absorb.<tipo>.percent` são
+  o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
+  (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
+  reflexo de monstro (#683) vai reusar.
 
 Issue: FUN-8.

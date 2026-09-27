@@ -23,14 +23,24 @@
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot, Progression,
-  RingEffect, SpecializedMagicElement, SuppressibleCondition,
+  CompiledMitigation, CompiledReflect, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot,
+  Progression, RingEffect, SpecializedMagicElement, SuppressibleCondition,
 } from '@draconya/content';
 import type { SpecializedMagicLevels } from './casting.js';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
 import { hasItemOverlay, normalizeItemOverlay } from './item-overlay.js';
 import type { ItemInstanceOverlay } from './item-overlay.js';
+import type { DefenderAbsorb } from './combat/damage.js';
+
+/**
+ * A ordem em que o Canary varre os slots vestidos (`CONST_SLOT_FIRST..CONST_SLOT_LAST`: head,
+ * necklace, backpack, armor, right, left, legs, feet, ring, ammo) — a de `Player::blockHit`
+ * (#552). Importa porque a absorção percentual arredonda item a item: a ordem muda o número.
+ */
+const CANARY_SLOT_ORDER: readonly ItemSlot[] = [
+  'head', 'neck', 'back', 'chest', 'hand', 'shield', 'legs', 'feet', 'finger', 'ammo',
+];
 
 /** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */
 export const MAX_STACK = 100;
@@ -785,16 +795,30 @@ export class Inventory {
     let criticalDamage = 0;
     let lifeLeech = 0;
     let manaLeech = 0;
+    let increase: Partial<Record<DamageType, number>> | undefined;
     for (const carried of this.#equipped.values()) {
-      const modifiers = catalog.get(carried.itemId)?.combatModifiers;
+      const item = catalog.get(carried.itemId);
+      // O aumento por tipo (#552) é outro campo do item, mas o mesmo lado do golpe (o ATACANTE),
+      // e viaja no mesmo `DamageModifiers` para chegar a golpe, magia e runa sem outro parâmetro.
+      if (item?.increase !== undefined) {
+        increase ??= {};
+        for (const type of DAMAGE_TYPES) {
+          const value = item.increase[type];
+          if (value !== undefined) increase[type] = (increase[type] ?? 0) + value;
+        }
+      }
+      const modifiers = item?.combatModifiers;
       if (modifiers === undefined) continue;
       criticalChance += modifiers.criticalChance ?? 0;
       criticalDamage += modifiers.criticalDamage ?? 0;
       lifeLeech += modifiers.lifeLeech ?? 0;
       manaLeech += modifiers.manaLeech ?? 0;
     }
-    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0) return undefined;
+    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0 && increase === undefined) {
+      return undefined;
+    }
     return {
+      ...(increase === undefined ? {} : { increase }),
       ...(criticalChance === 0 ? {} : {
         critical: { chance: criticalChance / 10_000, multiplier: 1 + criticalDamage / 10_000 },
       }),
@@ -812,6 +836,90 @@ function stacksWith(definition: Item | undefined, a: CarriedItem, b: CarriedItem
   return definition?.stackable === true && a.itemId === b.itemId
     && !hasItemOverlay(a) && !hasItemOverlay(b);
 }
+
+/**
+ * A absorção do EQUIPAMENTO para o `combat-v3` (#552), na forma de `DefenderAbsorb`: a
+ * percentual de CADA item na ordem de slot do Canary — `absorb.percent` e a fração de
+ * `mitigation.resistances` (o mesmo `absorbpercent*`, ×100) — e a flat somada. `undefined`
+ * quando nada vestido absorve, o caso comum, sem alocação.
+ */
+export function equipmentAbsorb(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): DefenderAbsorb | undefined {
+  let items: Partial<Record<DamageType, number>>[] | undefined;
+  let flat: Partial<Record<DamageType, number>> | undefined;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    if (carried === null) continue;
+    const item = catalog.get(carried.itemId);
+    if (item === undefined) continue;
+    let percents: Partial<Record<DamageType, number>> | undefined;
+    for (const type of DAMAGE_TYPES) {
+      // A fração legada vira percentual limpo: `0,07 × 100` é `7,000000000000001` em ponto
+      // flutuante, e o arredondamento por item herdaria o resto.
+      const resistance = Math.round(item.mitigation.resistances[type] * 10_000) / 100;
+      const percent = (item.absorb?.[type]?.percent ?? 0) + resistance;
+      if (percent !== 0) (percents ??= {})[type] = percent;
+      const absorbFlat = item.absorb?.[type]?.flat ?? 0;
+      if (absorbFlat !== 0) {
+        flat ??= {};
+        flat[type] = (flat[type] ?? 0) + absorbFlat;
+      }
+    }
+    if (percents !== undefined) (items ??= []).push(percents);
+  }
+  if (items === undefined && flat === undefined) return undefined;
+  return { items: items ?? [], flat: flat ?? {} };
+}
+
+/**
+ * O reflexo do EQUIPAMENTO (#552): as tabelas compiladas dos itens vestidos, somadas (o
+ * `Player::getReflectPercent`/`getReflectFlat` do Canary soma todos os equipados).
+ * `undefined` quando nada vestido reflete.
+ */
+export function equipmentReflect(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): CompiledReflect | undefined {
+  let total: { percent: Record<DamageType, number>; flat: Record<DamageType, number> } | undefined;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    const reflect = carried === null ? undefined : catalog.get(carried.itemId)?.reflect;
+    if (reflect === undefined) continue;
+    total ??= { percent: { ...ZERO_BY_TYPE }, flat: { ...ZERO_BY_TYPE } };
+    for (const type of DAMAGE_TYPES) {
+      total.percent[type] += reflect.percent[type];
+      total.flat[type] += reflect.flat[type];
+    }
+  }
+  return total;
+}
+
+/** O `cleavepercent` somado do que está vestido (#552, `Player::getCleavePercent`). Zero é nada. */
+export function equipmentCleavePercent(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): number {
+  let total = 0;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    if (carried !== null) total += catalog.get(carried.itemId)?.cleavePercent ?? 0;
+  }
+  return total;
+}
+
+/**
+ * A mitigação do equipamento SEM a resistência (#552): no `combat-v3` a resistência do item é
+ * absorção item a item (`equipmentAbsorb`), e só as imunidades continuam no estágio de
+ * `mitigation`. Sem imunidade nenhuma, o objeto neutro de sempre — nenhuma alocação.
+ */
+export function immunitiesOnly(mitigation: CompiledMitigation): CompiledMitigation {
+  if (mitigation.immunities.size === 0) return NEUTRAL_MITIGATION;
+  return { resistances: NEUTRAL_MITIGATION.resistances, immunities: mitigation.immunities };
+}
+
+const ZERO_BY_TYPE: Readonly<Record<DamageType, number>> = {
+  physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+  drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+};
 
 /** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */
 const NEUTRAL_MITIGATION: CompiledMitigation = {

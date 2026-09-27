@@ -355,7 +355,8 @@ protocolo continua em pontos por segundo, derivado no `server` (`amount × 1000 
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
 | Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `drown`, `lifedrain`, `manadrain`, `arcane`) | 0 `[ABERTO — valor provisório: 0]`; inerte sob `combat-v3` (ver "combat.armorEffectiveness fica INERTE" acima) | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
-| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
+| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)`. No ITEM, sob `combat-v3`, é a absorção item a item (×100) | `mitigation.resistances` de monstro e item |
+| Absorção / aumento / reflexo / cleave de ITEM (M30-05, #552) | percentual INTEIRO, a escala do `items.xml` do Canary; nenhum item do catálogo atual declara ainda (os do Canary: `absorbpercent*` ~630 linhas, `reflectdamage` 5 itens, `cleavepercent` 6 itens) | `packages/content/src/schemas.ts`, `item.absorb`/`increase`/`reflect`/`cleavePercent` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary, #521, ADR 0037; pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
@@ -845,6 +846,10 @@ CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁT
    o ATACANTE). Esta é a posição FINAL, decidida no M30-04: a versão do #548 (M30-01) a colocava
    depois de toda a mitigação como placeholder documentado — nenhum teste a travava, e nenhum
    conteúdo real declarava `combat.modifiers` ainda;
+   - **absorção do `Creature`** (M30-05, #552; `applyAbsorbDamageModifications`): a absorção
+     FLAT do defensor (`absorb.<tipo>.flat` do item, sem descer de zero) e o AUMENTO do atacante
+     (`increase.<tipo>` do item, `d += round(d × p / 100)`), sem sorteio. O `manadrain` já chega
+     aqui capado à mana atual do alvo;
 3. imunidade explícita ao tipo (`mitigation.immunities`) — zera e para tudo, sem defesa, sem
    armadura, sem mitigação percentual;
 4. **defesa**: só enquanto o defensor tem CARGA de bloqueio (`blockCount`, no máximo duas,
@@ -858,13 +863,19 @@ CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁT
    `mitigation`, que é resistência/imunidade por TIPO): `dano −= dano × defenseMitigation ÷ 100`,
    sobre o que sobrou da armadura, para QUALQUER tipo de dano EXCETO lifedrain e manadrain (#547,
    M29-07: a mesma exceção do `Creature::mitigateDamage` do Canary — `drown` não é isento);
-7. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
-   antes, intocado por esta issue, só reposicionado depois do estágio novo;
+   - **absorção percentual ITEM A ITEM do jogador** (M30-05, #552; `Player::blockHit`): cada item
+     vestido, na ordem de slot do Canary, tira `round(d × p / 100)` do que sobrou —
+     `absorb.<tipo>.percent` e a resistência legada do item (`mitigation.resistances` × 100);
+7. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — os `elements` do
+   MONSTRO (`Monster::blockHit`, depois do `Creature::blockHit`; eles NÃO passam por
+   `getAbsorbPercent`). O jogador do `combat-v3` chega aqui só com as imunidades: a resistência
+   do item é a absorção acima;
 8. piso (`minimumDamageFraction`), sobre o poder BRUTO ORIGINAL — SEM o bônus do crítico —
    mantido como salvaguarda de PRODUTO do Draconya (o Canary não tem: lá um bloqueio pode
    legitimamente zerar um golpe, e não existe "piso" nenhum para o crítico reforçar). Pulado
    quando imune — o piso nunca revoga imunidade explícita;
-9. corte do Dodge, arredondamento só no fim.
+9. corte do Dodge, arredondamento só no fim;
+10. **reflexo** (M30-05, #552) — ver "Reflexo e cleave" abaixo.
 
 O LEECH (M30-04) não é um estágio deste pipeline: ele opera sobre o HP EFETIVAMENTE removido, não
 sobre o `DamageOutcome`, e é aplicado depois — ver a seção do CMB-08 mais abaixo.
@@ -1047,10 +1058,35 @@ são o Dragon e o Dragon Lord, conferidos contra `dragon.lua`/`dragon_lord.lua` 
 `defenseMitigation` é o valor DIRETO que o Canary usa — `0,99` tira 0,99 % do dano, não 99 %; o
 Canary o capa em 30.
 
+### Reflexo e cleave (M30-05, #552)
+
+**Reflexo** (`combat/reflect.ts`; Canary `game.cpp:7957-7981`). O item declara
+`reflect.<tipo>: { percent, flat }` (inteiros); `equipmentReflect` soma os vestidos. Sobre o dano
+JÁ bloqueado do golpe, volta ao ATACANTE `flat + floor(dano × percent / 100)`, com o teto
+`ceil(1 % da vida máxima do atacante)`. Reflexo SÓ flat de `physical` (o `reflectdamage` dos cinco
+itens do Canary) exige o atacante adjacente; com percentual, ou em tipo elemental, a distância
+não importa. A segunda resolução é uma EXTENSÃO contra o atacante: nunca reflete de volta, não
+critica, não faz leech, não bloqueia por defesa/armadura, e — refletida por jogador — é dano
+NEUTRO (não passa por absorção, imunidade nem resistência do monstro; a mitigação percentual e o
+piso continuam). Sai ANTES do dano no alvo, credita o dano e o DPS a quem refletiu, e a morte do
+monstro refletido é resolvida no fim da ability. Hoje só o golpe de ability de monstro contra o
+jogador reflete; o reflexo de MONSTRO é o #683, pelo mesmo `resolveReflect`
+(`reflector: 'monster'`: tipo original, sem a exceção de distância).
+
+**Cleave** (Canary `WeaponMelee::useWeapon`, `weapons.cpp:531-589`). `cleavePercent` (inteiro,
+somado entre os vestidos) faz o golpe corpo a corpo COM arma acertar os dois tiles que
+flanqueiam o alvo (`combat/cleave.ts`): alvo na mesma coluna → leste e oeste do alvo; mesma linha
+→ sul e norte; diagonal → os dois vizinhos comuns ao atacante e ao alvo. Cada monstro vivo nesses
+tiles leva uma rolagem PRÓPRIA do poder da arma × `cleavePercent / 100` (truncado), ANTES do
+golpe principal, como extensão (sem crítico, leech nem reflexo; o aumento por tipo vale), e
+pratica a skill uma vez. O punho não tem cleave.
+
+**Fora, por enquanto:** reflexo de tique de condição, reflexo do componente secundário, e
+consumo de carga por reflexo/cleave.
+
 ### O que fica para depois
 
-Absorção/aumento por tipo (`applyAbsorbDamageModifications`, o PRIMEIRO estágio do `Creature::
-blockHit`) e reflexo são o **M30-05**. Postura de luta de VERDADE (um seletor por personagem, em
+Absorção/aumento por tipo e reflexo fecharam com o **M30-05 (#552)** — seção seguinte. Postura de luta de VERDADE (um seletor por personagem, em
 vez do `'attack'` fixo que `playerDefense`/`playerMitigation` recebem desde o #549) é o
 **M30-03**. A exceção de lifedrain/manadrain na mitigação percentual (passo 6 acima) fechou com
 o **#547 (M29-07)**: `combat/damage.ts` calcula `mitigationExempt` do `intent.damageType`, e não

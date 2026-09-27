@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
-  buildContent, compileMonster, computeVersion, ContentError, placeholderAppearances,
+  buildContent, compileMonster, compileReflect, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
 import { monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf } from './schemas.js';
@@ -421,6 +421,72 @@ describe('combat-v3: defesa/armadura/mitigação do blockHit (#548, M30-01)', ()
       .toThrow(ContentError);
     expect(() => buildContent(base({ monsters: [{ ...rat, defenseMitigation: -0.1 }] })))
       .toThrow(ContentError);
+  });
+});
+
+describe('absorção, aumento, reflexo e cleave de item (M30-05, #552)', () => {
+  const helmet = {
+    id: 'spiritthorn-helmet', name: 'Spiritthorn Helmet', kind: 'armor',
+    slot: 'head', weight: 35, value: 0,
+  };
+
+  it('item sem os campos novos é o de sempre — nada compila, nada aparece', () => {
+    const item = buildContent(base({ items: [helmet] })).items.get('spiritthorn-helmet');
+    expect(item?.absorb).toBeUndefined();
+    expect(item?.increase).toBeUndefined();
+    expect(item?.reflect).toBeUndefined();
+    expect(item?.cleavePercent).toBeUndefined();
+  });
+
+  it('aceita absorb/increase/reflect/cleavePercent, e o reflexo compila em tabela completa', () => {
+    const item = buildContent(base({
+      items: [{
+        ...helmet,
+        absorb: { ice: { percent: 8 }, fire: { flat: 5 } },
+        increase: { death: 10 },
+        reflect: { physical: { flat: 13 }, fire: { percent: 20 } },
+        cleavePercent: 3,
+      }],
+    })).items.get('spiritthorn-helmet');
+    expect(item?.absorb).toEqual({ ice: { percent: 8 }, fire: { flat: 5 } });
+    expect(item?.increase).toEqual({ death: 10 });
+    expect(item?.cleavePercent).toBe(3);
+    expect(item?.reflect?.flat.physical).toBe(13);
+    expect(item?.reflect?.percent.fire).toBe(20);
+    // Tabela completa: todo tipo tem entrada, zero onde nada reflete.
+    expect(item?.reflect?.percent.ice).toBe(0);
+    expect(Object.keys(item?.reflect?.flat ?? {})).toHaveLength(11);
+  });
+
+  it('compileReflect de tabela só com zeros é ausente', () => {
+    expect(compileReflect(undefined)).toBeUndefined();
+    expect(compileReflect({})).toBeUndefined();
+  });
+
+  it('resistência e absorb.percent no MESMO tipo derrubam o boot (o mesmo absorbpercent*)', () => {
+    expect(() => buildContent(base({
+      items: [{ ...helmet, mitigation: { resistances: { ice: 0.08 } }, absorb: { ice: { percent: 8 } } }],
+    }))).toThrow(ContentError);
+    // Em tipos diferentes, os dois convivem.
+    expect(() => buildContent(base({
+      items: [{ ...helmet, mitigation: { resistances: { ice: 0.08 } }, absorb: { fire: { percent: 8 } } }],
+    }))).not.toThrow();
+  });
+
+  it('percentuais não inteiros, fora da faixa, ou chave desconhecida derrubam o boot', () => {
+    for (const bad of [
+      { absorb: { ice: { percent: 8.5 } } },
+      { absorb: { ice: { percent: 100 } } },
+      { absorb: { ice: { flat: -1 } } },
+      { increase: { ice: 101 } },
+      { reflect: { physical: { flat: 0 } } },
+      { reflect: { physical: { percent: 201 } } },
+      { reflect: { physical: { reflectdamage: 13 } } },
+      { cleavePercent: 0 },
+      { cleavePercent: 101 },
+    ]) {
+      expect(() => buildContent(base({ items: [{ ...helmet, ...bad }] }))).toThrow(ContentError);
+    }
   });
 });
 

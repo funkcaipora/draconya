@@ -658,6 +658,44 @@ export const itemCombatModifiersSchema = z.strictObject({
 export type ItemCombatModifiers = z.infer<typeof itemCombatModifiersSchema>;
 
 /**
+ * A absorção por tipo do item (M30-05, #552). **Percentual INTEIRO**, a escala do Canary
+ * (`absorbpercent*` em `data/items/items.xml`: `8` é 8 %) — não a fração de
+ * `mitigation.resistances`, porque o `combat-v3` aplica cada item em SEQUÊNCIA com arredondamento
+ * (`damage -= round(damage × p / 100)`, `Player::blockHit`, `player.cpp:3938-3962`), e a conta
+ * inteira é a que o Canary faz.
+ *
+ * `percent` é o `absorbpercent*`; negativo é o item que AUMENTA o dano recebido daquele tipo. É o
+ * MESMO atributo que `mitigation.resistances` já carregava nos itens do kit (o `_open` de cada um
+ * cita o `absorbpercent*` de origem): o `combat-v3` lê os dois como absorção do item, e por isso
+ * o item recusa declarar os dois no mesmo tipo (`itemSchema`). `flat` é o `absorbFlat` do
+ * `Creature` do Canary: subtraído ANTES da imunidade e da defesa, sem piso abaixo de zero.
+ */
+export const itemAbsorbSchema = z.strictObject({
+  percent: z.number().int().gte(-100).lt(100).optional(),
+  flat: z.number().int().positive().optional(),
+});
+
+/**
+ * O reflexo por tipo (M30-05, #552): `percent` INTEIRO do dano bloqueado e `flat` em pontos,
+ * devolvidos ao ATACANTE com o teto `ceil(1 % da vida máxima dele)` (`game.cpp:7957-7981`). O
+ * `reflectdamage` do Canary (5 itens) é `flat` de `physical` (`item_parse.cpp:971`).
+ */
+export const reflectSchema = z.strictObject({
+  percent: z.number().int().positive().max(200).optional(),
+  flat: z.number().int().positive().optional(),
+});
+
+/**
+ * O reflexo COMPILADO (#552): as duas tabelas completas por tipo, zero onde nada reflete. É a
+ * forma que o `Defender.reflect` do `sim` lê, e a que o reflexo de MONSTRO (#683) reusa — a fonte
+ * muda, o mecanismo não.
+ */
+export interface CompiledReflect {
+  readonly percent: Readonly<Record<DamageType, number>>;
+  readonly flat: Readonly<Record<DamageType, number>>;
+}
+
+/**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
  *
  * **Estrito, ao contrário dos outros schemas** (FUN-94). Zod DESCARTA chave desconhecida em
@@ -843,6 +881,25 @@ export const itemSchema = z.strictObject({
    * defensor (ver `Inventory.mitigation`).
    */
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * Absorção por tipo (M30-05, #552) — ver `itemAbsorbSchema`. Só o `combat-v3` lê; ausente é o
+   * item de sempre.
+   */
+  absorb: z.partialRecord(z.enum(DAMAGE_TYPES), itemAbsorbSchema).optional(),
+  /**
+   * Aumento do dano CAUSADO por tipo, em percentual INTEIRO (M30-05, #552): o `increasePercent`
+   * do atacante em `applyAbsorbDamageModifications` (`creature.cpp:935-940`), somado entre os
+   * equipados. Só o `combat-v3` lê.
+   */
+  increase: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().int().gt(-100).lte(100)).optional(),
+  /** Reflexo por tipo (M30-05, #552) — ver `reflectSchema`. Só o `combat-v3` lê. */
+  reflect: z.partialRecord(z.enum(DAMAGE_TYPES), reflectSchema).optional(),
+  /**
+   * O `cleavepercent` do Canary (M30-05, #552; 6 itens em `items.xml`): o golpe CORPO A CORPO com
+   * arma também acerta os dois tiles que flanqueiam o alvo, com esta fração INTEIRA de uma rolagem
+   * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
+   */
+  cleavePercent: z.number().int().positive().max(100).optional(),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
   /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
@@ -857,6 +914,17 @@ export const itemSchema = z.strictObject({
     if (item.effect === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `effect`' });
   } else if (item.effect !== undefined) {
     ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `effect`' });
+  }
+  // `mitigation.resistances` e `absorb.percent` são o MESMO `absorbpercent*` do Canary (#552): os
+  // dois no mesmo tipo seria somar o atributo duas vezes, ou deixar a regra depender da ordem de
+  // leitura. Escolha um.
+  for (const type of DAMAGE_TYPES) {
+    if (item.absorb?.[type]?.percent !== undefined && item.mitigation.resistances[type] !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `"${type}" declara \`mitigation.resistances\` e \`absorb.percent\` ao mesmo tempo — escolha um`,
+      });
+    }
   }
 });
 
@@ -1189,12 +1257,14 @@ export type Ammunition = AmmunitionDefinition & {
  * saber que existe uma tabela, e a entidade sem aparência morre na montagem do conteúdo — não
  * no primeiro jogador que abrir a mochila.
  */
-export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
+export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation' | 'reflect'> & {
   readonly appearanceId: number;
   /** A arma com o tipo de dano já resolvido (CMB-03). Ausente em item que não é arma. */
   readonly weapon?: ResolvedWeapon;
   /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
   readonly mitigation: CompiledMitigation;
+  /** O reflexo compilado (#552). Ausente em item que não reflete nada — o caso comum. */
+  readonly reflect?: CompiledReflect;
 };
 
 // `spellAreaSchema`/`SpellArea` foram movidos para antes de `supplySchema`: o efeito de cura do
@@ -2514,8 +2584,8 @@ export const COMBAT_V2: CombatCompatibilityProfile = {
  * o Tibia nega o golpe inteiro ANTES do `blockHit` — a mesma posição que o Draconya já usa), e
  * `player-always-hit-melee` não muda (a chance de acerto ofensivo é FORA do escopo do #548).
  *
- * Absorção/aumento por tipo (`applyAbsorbDamageModifications`) e reflexo ficam de fora — são o
- * M30-05 (ADR 0040). Defesa e mitigação do JOGADOR continuam os números atuais (o que muda é só
+ * Absorção/aumento por tipo (`applyAbsorbDamageModifications` e o `absorbpercent*` de item),
+ * reflexo e cleave entraram como emenda no M30-05 (#552, ADR 0040). Defesa e mitigação do JOGADOR continuam os números atuais (o que muda é só
  * o MECANISMO que os consome): a fórmula própria do 13.x é o M30-02.
  */
 export const COMBAT_V3: CombatCompatibilityProfile = {
@@ -2547,6 +2617,13 @@ export interface DamageModifiers {
   readonly critical?: { readonly chance: number; readonly multiplier: number } | undefined;
   readonly lifeLeech?: number | undefined;
   readonly manaLeech?: number | undefined;
+  /**
+   * O aumento do dano causado por tipo (M30-05, #552) — o `increasePercent` do atacante, em
+   * percentual INTEIRO como no Canary (diferente dos campos acima, que são fração): aplicado no
+   * estágio de absorção do `combat-v3` (`damage += round(damage × p / 100)`), para o primário E o
+   * secundário, sem sorteio. `combat-v1`/`v2` o ignoram.
+   */
+  readonly increase?: Readonly<Partial<Record<DamageType, number>>> | undefined;
 }
 
 /**
