@@ -808,6 +808,17 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /**
+   * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
+   * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
+   * por personagem, como `sentParty`. É o gatilho de `#presentTileOverrides`: fecha a lacuna que
+   * `useOnMap` sozinho não cobria — o walker abrindo porta/capim sozinho (#728), a placa de
+   * pressão reagindo a pisar (#734) e o `TILE_REVERT` (capim, stone pile, teleporte gated por
+   * alavanca) nunca tinham `tile-update` nenhum além do clique explícito. Entrada AUSENTE é
+   * "nunca entregue" — o `session-attach` já leva o overlay inteiro em `session-state.world.
+   * tileUpdates` (`#sessionState`), e é isso que evita mandar de novo o que já foi.
+   */
+  readonly sentTileOverrides: Map<string, string>;
   /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
   sentParty: S2CProps<'party-state'> | null;
   /**
@@ -1989,6 +2000,42 @@ export class SessionHost {
   }
 
   /**
+   * O cenário que mudou de estado PASSIVAMENTE desde a última entrega (#734, ADR 0050 d.6 T3):
+   * o walker abrindo porta/capim sozinho no caminho da rota (#728), uma placa de pressão
+   * reagindo a step-in/step-out, ou um `TILE_REVERT` (capim, stone pile, teleporte gated por
+   * alavanca que fechou sozinho). `#requestUseOnMap` já broadcasta o SEU PRÓPRIO resultado na
+   * hora — isto NÃO duplica aquele caminho, porque `sentTileOverrides` já guarda o que foi
+   * mandado dali também (o mesmo mapa, escrito nos dois lugares).
+   *
+   * Compara o `state` de CADA interativo contra o último ENTREGUE (`hosted.sentTileOverrides`,
+   * o mesmo mecanismo de `sentBestiary`/`sentStats`) — nunca contra o `initialState` do
+   * conteúdo: é o que faz um interativo VOLTAR ao estado inicial (capim que recresceu, placa
+   * que soltou) também virar `tile-update`, ao contrário de `tileAppearanceChanges` (que só
+   * serve o resync de anexação, e por isso pode ficar cego para "voltou ao normal").
+   */
+  #presentTileOverrides(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.tileOverrideAppearances === undefined) return;
+    const scenery = this.#options.appearances?.scenery;
+    if (scenery === undefined) return;
+    for (const entry of ruleset.tileOverrideAppearances) {
+      const lastState = hosted.sentTileOverrides.get(entry.interactableId);
+      if (lastState === entry.state) continue;
+      const table = scenery[entry.appearanceKey];
+      const from = lastState === undefined ? undefined : table?.[lastState];
+      const to = table?.[entry.state];
+      hosted.sentTileOverrides.set(entry.interactableId, entry.state);
+      // Sem os dois lados resolvidos — pacote trocado no meio de uma sessão fixada numa versão
+      // anterior (invariante 7) —, nunca inventa substituição: registra o novo `state` como
+      // ENTREGUE (para não tentar de novo todo ciclo) e segue sem mandar nada.
+      if (from === undefined || to === undefined) continue;
+      const message: S2CMessage = { type: 'tile-update', position: entry.position, replace: [{ from, to }] };
+      for (const viewer of hosted.viewers) viewer.send(message);
+    }
+  }
+
+  /**
    * Resolve cada mudança de aparência do `sim` (posição + `appearanceKey` + par de estados) em
    * `tile-update` (S2C), pela tabela `appearances.scenery` — a MESMA indireção de
    * `ground-item-appear` resolvendo `corpses` (invariante 6: quem sabe a arte é o hospedeiro,
@@ -2450,6 +2497,10 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
+      // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
+      // o próprio `tile-update` na hora (`#requestUseOnMap`); isto cobre o resto.
+      this.#presentTileOverrides(hosted);
       this.#presentSlotState(hosted, nowMs);
       this.#presentPartyLive(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
@@ -3605,6 +3656,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
       sentConditions: new Map(),
@@ -4349,6 +4401,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
       sentConditions: new Map(),

@@ -73,6 +73,12 @@ export interface MovementWorld {
   blockedAt(x: number, y: number, z: number): boolean;
   /** Pisar aqui muda de andar — escada do mapa OU overlay (stone pile virada buraco, #728)? */
   floorChangeAt(x: number, y: number, z: number): WorldPoint | null;
+  /**
+   * Pisar aqui teleporta (#734, ADR 0050 d.6 T3)? `null` sem teleporte ativo aqui — inclusive um
+   * `closed` (gated por alavanca que ainda não abriu) ou cujo `target` cai fora do mapa (o
+   * `move()` que confere isso, não aqui: esta pergunta só resolve o CONTEÚDO, nunca geometria).
+   */
+  teleportAt(x: number, y: number, z: number): WorldPoint | null;
 }
 
 /**
@@ -220,7 +226,19 @@ export function move<P extends GridPoint>(
   // Pisar na escada leva ao destino dela (FUN-119): é o passo com `z` diferente que o
   // cliente já sabe interpolar — e o tile de chegada pode não ser adjacente, como no Tibia.
   const change = world.floorChangeAt(to.x, to.y, fromZ);
-  const dest: WorldPoint = change ?? { x: to.x, y: to.y, z: fromZ };
+  let dest: WorldPoint = change ?? { x: to.x, y: to.y, z: fromZ };
+
+  // Teleporte (#734, ADR 0050 d.6 T3): DIFERENTE de escada — o passo para `to` já é legal por
+  // si só (o tile do teleporte nunca bloqueia), então um destino inválido não pode recusar o
+  // passo inteiro (como faria com uma escada). Sem destino alcançável — fora do mapa, parede,
+  // ocupado —, a criatura simplesmente FICA no tile do teleporte, sem redirecionar: a mesma
+  // degradação de `Teleport::addThing` do Canary para `destPos` inválido ou `destTile` ausente
+  // (não teleporta; nunca um erro). Escada continua tendo prioridade — os dois nunca coexistem
+  // no mesmo tile de conteúdo real, mas a ordem é a mais segura das duas.
+  if (change === null) {
+    const teleportTarget = world.teleportAt(to.x, to.y, fromZ);
+    if (teleportTarget !== null && tileAdmits(world, teleportTarget) === null) dest = teleportTarget;
+  }
 
   world.vacate(from.x, from.y, fromZ);
   mover.position = ('z' in from ? { ...to, x: dest.x, y: dest.y, z: dest.z } : { ...to, x: dest.x, y: dest.y }) as P;
@@ -406,6 +424,10 @@ export class TileOccupancy implements MovementWorld {
 
   floorChangeAt(x: number, y: number, z: number = this.map.z): WorldPoint | null {
     return this.overrides?.floorChangeAt(x, y, z) ?? floorChangeAt(this.map, x, y, z);
+  }
+
+  teleportAt(x: number, y: number, z: number = this.map.z): WorldPoint | null {
+    return this.overrides?.teleportTargetAt(x, y, z) ?? null;
   }
 
   /**

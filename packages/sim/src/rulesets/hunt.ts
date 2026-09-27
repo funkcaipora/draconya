@@ -368,7 +368,10 @@ export type SlotOutcome =
  * `chest`, `sign`…) — o mesmo motivo que `isToggleable` já unifica, para não inventar
  * comportamento de requisito que o T3 ainda não tem (spec da #729, "não invente"). `missing-tool`
  * cobre a porta de chave sem a chave certa na mochila — uma chave É uma ferramenta
- * (`use.tool: 'key'`), e `#hasTool` confere o `keyId` quando o `tool` pedido é `'key'`.
+ * (`use.tool: 'key'`), e `#hasTool` confere o `keyId` quando o `tool` pedido é `'key'` — e,
+ * desde a #734, também `teleport`/`pressure-plate`: os dois têm `TOGGLE_PAIR` (para o mecanismo
+ * de link), mas nenhum é acionado por CLIQUE (`NOT_CLICK_USABLE`) — teleporte reage a pisar,
+ * placa a step-in/step-out.
  */
 export type UseOnMapRejection =
   | 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool' | 'level-too-low';
@@ -413,6 +416,7 @@ const SCENERY_LOOK_TEXT: Partial<Record<InteractableKind, string>> = {
   chest: 'Um baú.',
   sign: 'Uma placa.',
   teleport: 'Algo estranho.',
+  'pressure-plate': 'Uma placa de pressão no chão.',
 };
 
 /**
@@ -429,6 +433,15 @@ function toolRequiredNow(
   if (kind === 'locked-door' && state !== 'locked') return undefined;
   return requires?.tool;
 }
+
+/**
+ * `kind` cujo `TOGGLE_PAIR` existe só para o mecanismo de `toggle`/link (#734, ADR 0050 d.6 T3)
+ * — nunca para o CLIQUE do jogador. Teleporte reage a PISAR (`movement.ts#move`, gated pela
+ * alavanca que o liga); placa de pressão reage a step-in/step-out (`#onSteppedOnto`/
+ * `#onSteppedOffOf`, abaixo). `useOnMap` os recusa aqui mesmo `isToggleable` valendo `true` —
+ * clicar numa placa ou num teleporte não é um caso do T1 nem do T3.
+ */
+const NOT_CLICK_USABLE: ReadonlySet<InteractableKind> = new Set(['teleport', 'pressure-plate']);
 
 /**
  * O estado de UM slot do conjunto ativo (AB-09, UC-BAR-003). É APRESENTAÇÃO: espelha a mesma
@@ -1980,6 +1993,35 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * TODO interativo, com o suficiente para resolver aparência — não só quem difere do
+   * `initialState` como `tileAppearanceChanges` (#729). É a leitura do host para o `tile-update`
+   * PASSIVO (#734, ADR 0050 d.6 T3): o walker abrindo uma porta sozinho (#728), uma placa de
+   * pressão reagindo a step-in/step-out, ou um `TILE_REVERT` (capim, stone pile, teleporte
+   * gated) — nenhum desses passa por `useOnMap`, então nenhum tinha `tile-update` até aqui.
+   * `tileAppearanceChanges` continuaria CEGO para "voltou ao estado inicial" (o id some da
+   * lista filtrada); aqui todo interativo aparece sempre, e quem decide se mudou desde a
+   * última entrega é o host, comparando contra o que ele mesmo já mandou (`sentTileOverrides`).
+   * PURO: mesma garantia de `tileAppearanceChanges`.
+   */
+  get tileOverrideAppearances(): readonly {
+    readonly interactableId: string; readonly position: WorldPoint;
+    readonly appearanceKey: string; readonly state: string;
+  }[] {
+    const entries: Array<{
+      interactableId: string; position: WorldPoint; appearanceKey: string; state: string;
+    }> = [];
+    for (const state of this.#tileOverrides.getState()) {
+      const content = this.#tileOverrides.contentOf(state.interactableId);
+      if (content === null) continue;
+      entries.push({
+        interactableId: state.interactableId, position: content.at,
+        appearanceKey: content.appearanceKey, state: state.state,
+      });
+    }
+    return entries;
+  }
+
+  /**
    * O jogador pediu para usar um tile (#729, ADR 0050 d.7): a porta, a alavanca, o capim, a
    * stone pile. Confere alcance (`canUse` do Canary — mesmo andar, adjacente, `|dx|<=1` e
    * `|dy|<=1`) ANTES de tocar em qualquer overlay, e só então delega a `#useInteractable` — a
@@ -1998,7 +2040,9 @@ export class HuntRuleset implements Ruleset {
     }
     const current = this.#tileOverrides.at(position);
     if (current === null) return { ok: false, reason: 'nothing-there' };
-    if (!isToggleable(current.kind)) return { ok: false, reason: 'not-usable' };
+    if (!isToggleable(current.kind) || NOT_CLICK_USABLE.has(current.kind)) {
+      return { ok: false, reason: 'not-usable' };
+    }
     const content = this.#tileOverrides.contentOf(current.interactableId);
     const requires = content?.requires;
     // Porta de level (#732, ADR 0050 d.6 T2): `player:getLevel() >= item.actionid - 1000` do
@@ -2035,18 +2079,25 @@ export class HuntRuleset implements Ruleset {
 
   /**
    * Tenta usar UM interativo — abrir a porta (comum, de level, de chave), cortar o capim, cavar
-   * a pile, puxar a alavanca (ADR 0050 d.4-d.5, T2 desde #732). Devolve as mudanças de aparência
-   * (o próprio + os linkados que também alternaram, #729) quando o estado mudou; `null` sem
-   * tocar em nada — kind sem par de estados (`quest-door`/`chest`/T3, fora do escopo), level
-   * insuficiente para uma porta de level, ou ferramenta exigida (inclusive a chave certa) que
-   * este personagem não carrega.
+   * a pile, puxar a alavanca (ADR 0050 d.4-d.5, T2 desde #732), pressionar/soltar uma placa
+   * (#734, ADR 0050 d.6 T3). Devolve as mudanças de aparência (o próprio + os linkados que
+   * também alternaram, #729) quando o estado mudou; `null` sem tocar em nada — kind sem par de
+   * estados (`quest-door`/`chest`, fora do escopo), level insuficiente para uma porta de level,
+   * ou ferramenta exigida (inclusive a chave certa) que este personagem não carrega.
    *
-   * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile); alavanca liga a
-   * quem está em `links` (ADR 0050 d.1) e alterna cada um também — sem re-entrar no MESMO id,
-   * que travaria numa alavanca que se referencia por engano de conteúdo.
+   * `character` é `null` para um step-in/step-out de MONSTRO (#734, `#onSteppedOnto`/
+   * `#onSteppedOffOf`, abaixo): monstro não carrega ferramenta, então qualquer interativo que
+   * EXIJA uma (`requires.tool`) simplesmente não reage a ele — a mesma regra de `#hasTool`
+   * devolvendo `false`, sem duplicar a checagem. Nenhum conteúdo real declara `requires.tool`
+   * numa placa de pressão hoje; a checagem existe para o dia em que alguém declarar.
+   *
+   * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile, ou uma placa/
+   * teleporte que o autor quis com prazo próprio); lever E pressure-plate ligam a quem está em
+   * `links` (ADR 0050 d.1, #734) e alternam cada um também — sem re-entrar no MESMO id, que
+   * travaria num interativo que se referencia por engano de conteúdo.
    */
   #useInteractable(
-    session: Session, character: CharacterRuntime, interactableId: string,
+    session: Session, character: CharacterRuntime | null, interactableId: string,
   ): readonly TileAppearanceChange[] | null {
     const current = this.#tileOverrides.get(interactableId);
     if (current === null || !isToggleable(current.kind)) return null;
@@ -2054,13 +2105,15 @@ export class HuntRuleset implements Ruleset {
     const requires = content?.requires;
     // Porta de level (#732): a MESMA conferência de `useOnMap`, para o walker (que chama esta
     // função direto, sem passar por `useOnMap`) nunca abrir uma porta que o personagem não
-    // cumpre — as duas leem o MESMO `#tileOverrides`/conteúdo, então nunca divergem.
+    // cumpre — as duas leem o MESMO `#tileOverrides`/conteúdo, então nunca divergem. `character`
+    // nulo (step-in/step-out de MONSTRO, #734) nunca cumpre um requisito de level — a mesma
+    // degradação de "sem ferramenta" que `#hasTool` já devolve para `tool`, abaixo.
     if (
-      current.kind === 'level-door' && current.state === 'closed'
-      && requires?.level !== undefined && character.level < requires.level
+      current.kind === 'level-door' && current.state === 'closed' && requires?.level !== undefined
+      && (character === null || character.level < requires.level)
     ) return null;
     const tool = toolRequiredNow(current.kind, current.state, requires);
-    if (tool !== undefined && !this.#hasTool(character, tool, requires?.keyId)) return null;
+    if (tool !== undefined && (character === null || !this.#hasTool(character, tool, requires?.keyId))) return null;
 
     const next = this.#tileOverrides.toggle(interactableId, session.nowMs);
     if (next === null) return null;
@@ -2081,9 +2134,10 @@ export class HuntRuleset implements Ruleset {
       fromState: current.state, toState: next.state,
     }];
 
-    // Alavanca (ADR 0050 d.1): liga a quem está em `links` e alterna CADA um também — nunca o
-    // PRÓPRIO id de novo, o que evitaria um laço se o conteúdo (por engano) linkar a si mesma.
-    if (current.kind === 'lever') {
+    // Alavanca e placa de pressão (ADR 0050 d.1, #734): ligam a quem está em `links` e
+    // alternam CADA um também — nunca o PRÓPRIO id de novo, o que evitaria um laço se o
+    // conteúdo (por engano) linkar a si mesma.
+    if (current.kind === 'lever' || current.kind === 'pressure-plate') {
       for (const linkedId of this.#tileOverrides.links(interactableId)) {
         if (linkedId === interactableId) continue;
         const before = this.#tileOverrides.get(linkedId);
@@ -6651,8 +6705,36 @@ const slots = bot.groups.get(group);
       if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
         this.#enterField(session, mover);
       }
+      // Placa de pressão (#734, ADR 0050 d.6 T3): `#step` é o ÚNICO lugar que escreve posição
+      // (comentário do topo do arquivo), então é o único choke point que cobre bot, monstro E o
+      // `walk` do socket sem duplicar a checagem em cada chamador. Pressiona o destino ANTES de
+      // soltar a origem — a ordem só importa quando `from`/`to` fossem a MESMA placa, que
+      // `canOccupy` já recusa como `same-tile`, então não há ambiguidade real.
+      const character = mover instanceof CharacterRuntime ? mover : null;
+      this.#onSteppedOnto(session, character, result.to);
+      this.#onSteppedOffOf(session, character, result.from);
     }
     return result;
+  }
+
+  /** Pisou numa placa de pressão OCIOSA (`up`): pressiona, com o cascade de `links` de sempre. */
+  #onSteppedOnto(session: Session, character: CharacterRuntime | null, at: WorldPoint): void {
+    const current = this.#tileOverrides.at(at);
+    if (current === null || current.kind !== 'pressure-plate' || current.state !== 'up') return;
+    this.#useInteractable(session, character, current.interactableId);
+  }
+
+  /**
+   * Saiu de uma placa PRESSIONADA (`down`): solta. A ocupação de tile é EXCLUSIVA (invariante 8
+   * na letra do `sim` — `TileOccupancy.#occupied` é um `Set` por tile, `canOccupy` recusa
+   * `tile-occupied`), então a origem de um passo aceito está SEMPRE vazia neste ponto — não há
+   * "ainda tem alguém ali" para conferir, ao contrário da porta (`closeDoorIfVacant`), cujo
+   * `stillOccupied` é defensivo para um caso que nem chega a existir hoje.
+   */
+  #onSteppedOffOf(session: Session, character: CharacterRuntime | null, at: WorldPoint): void {
+    const current = this.#tileOverrides.at(at);
+    if (current === null || current.kind !== 'pressure-plate' || current.state !== 'down') return;
+    this.#useInteractable(session, character, current.interactableId);
   }
 
   /**

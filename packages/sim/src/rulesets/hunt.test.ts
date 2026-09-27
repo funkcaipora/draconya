@@ -12820,3 +12820,135 @@ describe('useOnMap — porta de level e porta de chave (T2, #732, ADR 0050 d.6)'
     });
   });
 });
+
+describe('placa de pressão — step-in/step-out (#734, ADR 0050 d.6 T3)', () => {
+  // A mesma geometria/laço de sempre: a placa fica no lugar da porta em (4,2,7), no CAMINHO do
+  // walker — reage sozinha ao passo, nunca a `useOnMap`. Liga uma porta em (1,3,7) por `links`,
+  // igual ao par lever→door já testado acima, para provar que o MESMO cascade vale para a placa.
+  const plateMap = {
+    ...map,
+    id: 'plate-arena',
+    interactables: [
+      {
+        at: { x: 4, y: 2, z: 7 }, kind: 'pressure-plate', initialState: 'up', appearanceKey: 'plate-1',
+        links: ['9001'],
+      },
+      { at: { x: 1, y: 3, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-2', aid: 9001 },
+    ],
+  };
+  const plateRoute = { ...route, id: 'plate-loop', mapId: 'plate-arena' };
+  const plateHunt = { ...hunt, mapId: 'plate-arena', routeId: 'plate-loop' };
+  const loaded = () => content({ maps: [plateMap], routes: [plateRoute], hunts: [plateHunt] });
+
+  const runUntil = (session: Session, predicate: () => boolean, maxMs: number): boolean => {
+    for (let elapsed = 0; elapsed < maxMs; elapsed += 100) {
+      if (predicate()) return true;
+      session.advanceBy(100);
+    }
+    return predicate();
+  };
+
+  it('pisar pressiona sozinho (up→down) e liga o link — automação legítima, invariante 11', () => {
+    const { session, ruleset } = start({ loaded: loaded() });
+    const plate = () => ruleset.tileOverrides.find((o) => o.kind === 'pressure-plate');
+    const door = () => ruleset.tileOverrides.find((o) => o.kind === 'door');
+    expect(plate()).toMatchObject({ state: 'up', blocked: false });
+    expect(door()).toMatchObject({ state: 'closed' });
+    expect(runUntil(session, () => plate()?.state === 'down', 15_000)).toBe(true);
+    expect(door()).toMatchObject({ state: 'open' });
+  });
+
+  it('sair solta sozinho (down→up) e desliga o link de novo', () => {
+    const { session, ruleset } = start({ loaded: loaded() });
+    const plate = () => ruleset.tileOverrides.find((o) => o.kind === 'pressure-plate');
+    const door = () => ruleset.tileOverrides.find((o) => o.kind === 'door');
+    expect(runUntil(session, () => plate()?.state === 'down', 15_000)).toBe(true);
+    expect(runUntil(session, () => plate()?.state === 'up', 5_000)).toBe(true);
+    expect(door()).toMatchObject({ state: 'closed' });
+  });
+
+  it('useOnMap recusa not-usable — a placa reage só a PISAR, nunca a clique', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 }; // adjacente à placa em (4,2,7)
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'not-usable' });
+  });
+});
+
+describe('teleporte por pisar, e gated por alavanca (#734, ADR 0050 d.6 T3)', () => {
+  const teleportMap = {
+    ...map,
+    id: 'teleport-arena',
+    interactables: [{
+      at: { x: 4, y: 2, z: 7 }, kind: 'teleport', initialState: 'default', appearanceKey: 'tp-1',
+      target: { x: 1, y: 2, z: 7 },
+    }],
+  };
+  const teleportRoute = { ...route, id: 'teleport-loop', mapId: 'teleport-arena' };
+  const teleportHunt = { ...hunt, mapId: 'teleport-arena', routeId: 'teleport-loop' };
+  const loaded = () => content({ maps: [teleportMap], routes: [teleportRoute], hunts: [teleportHunt] });
+
+  it('o walker pisa no teleporte "sempre ligado" e é redirecionado no mesmo passo', () => {
+    const { session, hero } = start({ loaded: loaded() });
+    // O laço passa por (4,2,7): em algum vencimento o hero chega lá e sai direto em (1,2,7) —
+    // sem NUNCA ficar de pé em (4,2,7), o mesmo teste que provaria uma escada. Depois do
+    // redirecionamento o walker continua do PRÓXIMO índice do laço (como uma escada também
+    // desvia — o destino de um teleporte não é, em geral, um tile do laço autorado), então o
+    // que se prende aqui é só a chegada, não o resto do passeio.
+    let sawTeleportTile = false;
+    let sawTarget = false;
+    for (let elapsed = 0; elapsed < 15_000 && !sawTarget; elapsed += 100) {
+      session.advanceBy(100);
+      if (hero.position.x === 4 && hero.position.y === 2) sawTeleportTile = true;
+      if (hero.position.x === 1 && hero.position.y === 2) sawTarget = true;
+    }
+    expect(sawTarget).toBe(true);
+    expect(sawTeleportTile).toBe(false);
+  });
+
+  it('useOnMap recusa not-usable no tile do teleporte — reage só a pisar', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'not-usable' });
+  });
+
+  it('gated por alavanca: fechado não é `isToggleable`-ativo, e a alavanca o abre por revertMs (T3, "abrir teleporte por N s")', () => {
+    // A prova em nível de `movement.ts`/`tile-overrides.ts` (que a alavanca liga o teleporte, e
+    // que `move()` redireciona só quando ele está ativo) já está isolada e completa em
+    // `movement.test.ts`/`tile-overrides.test.ts`. Este teste prende a fronteira que só o
+    // `HuntRuleset` conhece: o MESMO `useOnMap`/`#useInteractable` que liga uma porta linkada
+    // (teste acima, "aciona a alavanca") também liga um TELEPORTE linkado — sem código novo por
+    // `kind` no cascade.
+    const gatedMap = {
+      ...map,
+      id: 'gated-teleport-arena',
+      interactables: [
+        {
+          at: { x: 4, y: 1, z: 7 }, kind: 'lever', initialState: 'down', appearanceKey: 'lever',
+          aid: 2772, links: ['9002'],
+        },
+        {
+          at: { x: 4, y: 2, z: 7 }, kind: 'teleport', initialState: 'closed', appearanceKey: 'tp-2',
+          target: { x: 1, y: 2, z: 7 }, aid: 9002, revertMs: 2_000,
+        },
+      ],
+    };
+    const loadedGated = content({
+      maps: [gatedMap], routes: [{ ...teleportRoute, mapId: 'gated-teleport-arena' }],
+      hunts: [{ ...teleportHunt, mapId: 'gated-teleport-arena', routeId: teleportRoute.id }],
+    });
+    const { session, ruleset, hero } = start({ loaded: loadedGated });
+    const teleport = () => ruleset.tileOverrides.find((o) => o.kind === 'teleport');
+    expect(teleport()).toMatchObject({ state: 'closed' });
+
+    hero.position = { x: 4, y: 2, z: 7 }; // adjacente à alavanca em (4,1,7)
+    const result = ruleset.useOnMap(session, hero.id, { x: 4, y: 1, z: 7 });
+    expect(result.ok).toBe(true);
+    expect(teleport()).toMatchObject({ state: 'open' });
+
+    // Reverte sozinho ao vencer — a mesma fila (`TILE_REVERT`) do capim/stone pile.
+    session.advanceBy(2_000);
+    expect(teleport()).toMatchObject({ state: 'closed' });
+  });
+});

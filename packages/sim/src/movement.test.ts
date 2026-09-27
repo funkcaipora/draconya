@@ -5,7 +5,7 @@ import {
   TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
-import { TileOverrides } from './tile-overrides.js';
+import { TileOverrides, interactableIdOf } from './tile-overrides.js';
 
 // Uma sala de 4×3 com uma parede no meio. Pequena de propósito: num mapa assim dá para dizer,
 // olhando, o que cada caso significa.
@@ -568,5 +568,73 @@ describe('TileOccupancy.overrides — o overlay de cenário usável (#728, ADR 0
     expect(w.blockedAt(2, 2, 7)).toBe(true); // a parede do meio da sala
     expect(w.blockedAt(1, 1, 7)).toBe(false);
     expect(w.floorChangeAt(1, 1, 7)).toBeNull();
+  });
+});
+
+describe('teleporte por pisar (#734, ADR 0050 d.6 T3)', () => {
+  const teleport: TilemapInteractable = {
+    at: { x: 3, y: 1, z: 7 }, kind: 'teleport', initialState: 'default', appearanceKey: 'tp-1',
+    target: { x: 1, y: 3, z: 7 },
+  };
+
+  it('pisar no teleporte redireciona DIRETO ao destino — um passo só, como uma escada', () => {
+    const overrides = TileOverrides.fromInteractables([teleport]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    const result = move(w, hero, to(3, 1));
+    expect(result).toMatchObject({ ok: true, to: { x: 1, y: 3, z: 7 } });
+    expect(hero.position).toEqual({ x: 1, y: 3, z: 7 });
+    expect(w.occupied(1, 3, 7)).toBe(true);
+    expect(w.occupied(3, 1, 7)).toBe(false); // o tile do teleporte não fica ocupado
+  });
+
+  it('destino fora do mapa: fica no tile do teleporte, sem erro — a mesma degradação do Canary para destPos inválido', () => {
+    const outOfBounds: TilemapInteractable = { ...teleport, target: { x: -5, y: 1, z: 7 } };
+    const overrides = TileOverrides.fromInteractables([outOfBounds]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    const result = move(w, hero, to(3, 1));
+    expect(result).toMatchObject({ ok: true, to: { x: 3, y: 1, z: 7 } });
+    expect(w.occupied(3, 1, 7)).toBe(true);
+  });
+
+  it('destino bloqueado (parede): fica no tile do teleporte', () => {
+    const intoWall: TilemapInteractable = { ...teleport, target: { x: 2, y: 2, z: 7 } }; // a parede do meio
+    const overrides = TileOverrides.fromInteractables([intoWall]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true, to: { x: 3, y: 1, z: 7 } });
+  });
+
+  it('destino OCUPADO por outra criatura: fica no tile do teleporte, nunca empilha dois na mesma célula', () => {
+    const overrides = TileOverrides.fromInteractables([teleport]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    const other = at(1, 3);
+    w.reset([hero, other]);
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true, to: { x: 3, y: 1, z: 7 } });
+  });
+
+  it('teleporte GATED por alavanca (`initialState: closed`) não redireciona antes de aberto', () => {
+    const gated: TilemapInteractable = { ...teleport, initialState: 'closed' };
+    const overrides = TileOverrides.fromInteractables([gated]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true, to: { x: 3, y: 1, z: 7 } });
+    // Uma alavanca (fora do escopo deste arquivo) chamaria `overrides.toggle` para abrir; aqui
+    // simulamos o mesmo efeito direto, e o PRÓXIMO passo já redireciona.
+    overrides.toggle(interactableIdOf(gated.at), 0);
+    const hero2 = at(2, 1);
+    w.reset([hero2]);
+    expect(move(w, hero2, to(3, 1))).toMatchObject({ ok: true, to: { x: 1, y: 3, z: 7 } });
+  });
+
+  it('sem overlay nenhum, `teleportAt` é sempre null — a Cidade não constrói TileOverrides', () => {
+    const w = new TileOccupancy(map);
+    expect(w.teleportAt(3, 1, 7)).toBeNull();
   });
 });
