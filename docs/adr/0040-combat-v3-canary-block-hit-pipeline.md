@@ -253,3 +253,25 @@ reverteu — com o contexto completo, a posição do M30-01 não sobrevive à co
   `targetsAffected`) e a fonte dos modificadores (item somado por `Inventory.combatModifiers`,
   monstro por `Monster.critChance`) são registradas em `docs/product/combat.md`, não aqui — não
   mudam nada da ORDEM de `blockHit` que este ADR decide.
+
+## Emenda — 2026-09-26: magia, runa, poção e ataque/cura de monstro pela normal truncada (#681)
+
+O `combat-v3` ainda não chegou na `main`, então esta é uma emenda dele pela decisão 3 — não um
+`combat-v4`. O Canary sorteia todo valor de dano e cura que não é de arma por `normal_random`
+(`combat.cpp:189`/`:195`/`:2046`, `global_functions.cpp:372`/`:455`); o Draconya já fazia isso para
+arma desde o `combat-v2` (#522), mas magia, runa, poção e a ability/cura de monstro seguiam no
+`rng.integer` uniforme.
+
+- **Um helper por perfil, `rollCombatValue`** (`combat/combat-value.ts`): `normalRandomInt` no
+  `combat-v3`, `rng.integer` no `combat-v1`/`v2` e para quem chama sem `combat` (fixture). Os seis
+  pontos de sorteio (`powerOf` nos dois caminhos, `fixedAmount`, a runa de ataque, a ability e a
+  defesa de cura do monstro) passam por ele. Uma regra só: o dia em que um perfil novo mudar a
+  distribuição, muda um lugar.
+- **A contagem de sorteios não muda de forma, o consumo muda de tamanho.** Cada ponto continua
+  sendo UM sorteio de valor, na mesma posição da ordem de RNG; no `combat-v3` esse sorteio custa
+  ~2,1 frações do `Rng` em vez de uma, como a arma já custa. A normal roda mesmo com
+  `min === max` (a mesma regra do `blockChance`).
+- **Dano de condição e velocidade continuam uniformes** — o Canary usa `uniform_random` ali
+  (`condition.cpp:1908`, `:2547`). Defesa/armadura (`Creature::blockHit`) idem.
+- `combat-v1`/`v2` bit a bit: os traces de `combat/traces/` (perfil `combat-v1`) passam sem
+  edição. Os pontos e a distribuição de cada um estão em `docs/product/combat.md`.

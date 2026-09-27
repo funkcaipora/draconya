@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
+import { evaluateSpellPower } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
 import { balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
+import { normalRandomInt } from './combat/weapon-power.js';
 import { Rng } from './rng.js';
 
 // Esquiva zero e armadura que conta inteira: aqui o assunto é o PORTÃO — level, cooldown,
@@ -1061,6 +1063,153 @@ describe('as runas de ataque com a fórmula canônica do Canary (#476)', () => {
         at(supply, supply.requires.magicLevel ?? 0),
       );
       expect(result.ok).toBe(true);
+    }
+  });
+});
+
+describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
+  // O Canary sorteia magia, runa e poção por `normal_random` (`combat.cpp:2046`,
+  // `global_functions.cpp:372`/`:455`). Cada caso compara com `normalRandomInt` sobre um CLONE
+  // do `Rng` no estado de antes — o valor é o primeiro sorteio da ação.
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  /** Pools grandes: a cura não pode ser clampada pelo teto, o assunto é o sorteio. */
+  const bigPools = (level: number, over: Partial<{ health: number; mana: number }> = {}): CharacterRuntime =>
+    new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: over.health ?? 1, maxHealth: 10_000,
+      mana: over.mana ?? 1_000, maxMana: 10_000,
+      level, xp: 0, vocationId: null,
+      staminaMs: null, staminaUpdatedAtMs: 0,
+      gold: 10_000, goldDelta: 0, alive: true, cooldowns: {},
+    });
+
+  it('poção `amountRange` 250–350 sorteia `normalRandomInt` — e o v1 continua `rng.integer`', () => {
+    const strongHeal: Supply = {
+      id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+      groupCooldownMs: 1_000, requires: {}, effect: { kind: 'heal', amountRange: { min: 250, max: 350 } },
+    };
+    for (let seed = 0; seed < 20; seed += 1) {
+      const source = Rng.fromSeed(`potion-v3-${seed}`);
+      const clone = new Rng(source.getState());
+      const user = bigPools(60);
+      expect(useSupply(user, strongHeal, null, v3, source, undefined, undefined, user, 0))
+        .toMatchObject({ ok: true, healed: normalRandomInt(clone, 250, 350) });
+
+      const v1Source = Rng.fromSeed(`potion-v3-${seed}`);
+      const v1Clone = new Rng(v1Source.getState());
+      const v1User = bigPools(60);
+      expect(useSupply(v1User, strongHeal, null, combat, v1Source, undefined, undefined, v1User, 0))
+        .toMatchObject({ ok: true, healed: v1Clone.integer(250, 350) });
+    }
+  });
+
+  it('poção de mana e a de espírito (`alsoMana`) também saem da normal', () => {
+    const spirit: Supply = {
+      id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+      groupCooldownMs: 1_000, requires: {},
+      effect: {
+        kind: 'heal', amountRange: { min: 250, max: 350 },
+        alsoMana: { amountRange: { min: 100, max: 200 } },
+      },
+    };
+    const strongMana: Supply = {
+      id: 'strong-mana-potion', name: 'Strong Mana Potion', price: 150, group: 'potion',
+      groupCooldownMs: 1_000, requires: {}, effect: { kind: 'mana', amountRange: { min: 115, max: 185 } },
+    };
+    const source = Rng.fromSeed('spirit-v3');
+    const clone = new Rng(source.getState());
+    const user = bigPools(90, { mana: 0 });
+    const result = useSupply(user, spirit, null, v3, source, undefined, undefined, user, 0);
+    const healed = normalRandomInt(clone, 250, 350);
+    expect(result).toMatchObject({ ok: true, healed, manaRestored: normalRandomInt(clone, 100, 200) });
+
+    const manaSource = Rng.fromSeed('mana-v3');
+    const manaClone = new Rng(manaSource.getState());
+    const manaUser = bigPools(60, { mana: 0 });
+    expect(useSupply(manaUser, strongMana, null, v3, manaSource, undefined, undefined, manaUser, 0))
+      .toMatchObject({ ok: true, manaRestored: normalRandomInt(manaClone, 115, 185) });
+  });
+
+  it('magia de cura com `formula` e com `basePower` provisório sorteiam pela normal', () => {
+    const magic = { skillLevel: 40, powerScale: 1, magicLevel: 40 };
+    const withFormula: Spell = {
+      ...heal, id: 'light-healing',
+      effect: {
+        kind: 'heal', basePower: 40,
+        formula: { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 8, baseMax: 11 },
+      },
+    };
+    const onlyBase: Spell = { ...heal, id: 'base-healing', effect: { kind: 'heal', basePower: 40 } };
+    // Fórmula: min = 10 + 40×1.4 + 8 = 74, max = 10 + 40×2.0 + 11 = 101. BP: a conversão provisória.
+    const base = evaluateSpellPower(undefined, 40, 50, 40, v3.spellPower);
+    const cases = [
+      { spell: withFormula, min: 74, max: 101 },
+      { spell: onlyBase, min: base.min, max: base.max },
+    ];
+    for (const { spell, min, max } of cases) {
+      const source = Rng.fromSeed(`heal-v3-${spell.id}`);
+      const clone = new Rng(source.getState());
+      expect(castSpell(bigPools(50), spell, null, 0, v3, source, magic))
+        .toMatchObject({ ok: true, healed: normalRandomInt(clone, min, max) });
+    }
+  });
+
+  it('runa de cura (UH) sorteia pela normal', () => {
+    const uhRune: Supply = {
+      id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 35,
+      group: 'healing', groupCooldownMs: 1_000, requires: { level: 24, magicLevel: 4 },
+      effect: {
+        kind: 'heal', range: 4,
+        formula: { levelFactor: 0.2, skillMin: 5.7, skillMax: 10.3, baseMin: 36, baseMax: 65 },
+      },
+    };
+    const source = Rng.fromSeed('uh-v3');
+    const clone = new Rng(source.getState());
+    const user = bigPools(50);
+    const result = useSupply(user, uhRune, null, v3, source, { skillLevel: 0, powerScale: 1, magicLevel: 40 }, undefined, user, 0);
+    // min = 10 + 40×5.7 + 36 = 274; max = 10 + 40×10.3 + 65 = 487.
+    expect(result).toMatchObject({ ok: true, healed: normalRandomInt(clone, 274, 487) });
+  });
+
+  it('runa de ataque (SD) sorteia pela normal', () => {
+    const suddenDeath: Supply = {
+      id: 'sudden-death-rune', name: 'Sudden Death Rune', price: 108,
+      group: 'attack', groupCooldownMs: 2_000, requires: { level: 45, magicLevel: 15 },
+      effect: {
+        kind: 'damage', range: 8, damageType: 'death',
+        formula: { levelFactor: 0.2, skillMin: 4.6, skillMax: 7.4, baseMin: 32, baseMax: 48 },
+      },
+    };
+    for (let seed = 0; seed < 10; seed += 1) {
+      const source = Rng.fromSeed(`sd-v3-${seed}`);
+      const clone = new Rng(source.getState());
+      const result = useSupply(
+        bigPools(45), suddenDeath, near({ distance: 5 }), v3, source,
+        { skillLevel: 15, powerScale: 1, magicLevel: 15 },
+      );
+      if (!result.ok) throw new Error('esperava usar a runa');
+      // Sem armadura, esquiva nem defesa, o golpe é o poder sorteado: min 110, max 168.
+      expect(result.hits[0]).toBe(normalRandomInt(clone, 110, 168));
+    }
+  });
+
+  it('magia de ataque com `formula` sorteia pela normal', () => {
+    const iceStrike: Spell = {
+      ...strike, id: 'ice-strike', manaCost: 12, minLevel: 8,
+      effect: {
+        kind: 'damage', basePower: 45, range: 3, damageType: 'ice',
+        formula: { levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 8, baseMax: 13 },
+      },
+    };
+    for (let seed = 0; seed < 10; seed += 1) {
+      const source = Rng.fromSeed(`ice-v3-${seed}`);
+      const clone = new Rng(source.getState());
+      const result = castSpell(
+        bigPools(50), iceStrike, near({ distance: 3 }), 0, v3, source, { skillLevel: 40, powerScale: 1 },
+      );
+      if (!result.ok) throw new Error('esperava lançar');
+      // min = 10 + 40×1.403 + 8 = 74; max = 10 + 40×2.203 + 13 = 111.
+      expect(result.hits[0]).toBe(normalRandomInt(clone, 74, 111));
     }
   });
 });
