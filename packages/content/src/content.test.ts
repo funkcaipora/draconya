@@ -290,6 +290,29 @@ describe('progression baseline', () => {
     expect(content.progression.startingHealth).toBe(150);
     expect(content.progression.vocationLevel).toBe(8);
   });
+
+  it('aceita faixas de bônus de XP ordenadas, com catch-all só no fim (#563)', () => {
+    const comFaixas = {
+      ...baseline,
+      experienceBonusByLevel: [{ maxLevel: 300, bonusPercent: 200 }, { bonusPercent: 100 }],
+    };
+    expect(buildContent(base({ progression: [comFaixas] })).progression.experienceBonusByLevel)
+      .toEqual([{ maxLevel: 300, bonusPercent: 200 }, { bonusPercent: 100 }]);
+  });
+
+  it('recusa faixa sem maxLevel fora da última, e faixas fora de ordem', () => {
+    const semMaxNoMeio = {
+      ...baseline,
+      experienceBonusByLevel: [{ bonusPercent: 100 }, { maxLevel: 300, bonusPercent: 200 }],
+    };
+    expect(() => buildContent(base({ progression: [semMaxNoMeio] })))
+      .toThrow(/sem maxLevel em 0 não é a última/);
+    const foraDeOrdem = {
+      ...baseline,
+      experienceBonusByLevel: [{ maxLevel: 300, bonusPercent: 200 }, { maxLevel: 100, bonusPercent: 100 }],
+    };
+    expect(() => buildContent(base({ progression: [foraDeOrdem] }))).toThrow(/fora de ordem em 1/);
+  });
 });
 
 describe('rates do servidor (#691)', () => {
@@ -1353,8 +1376,8 @@ describe('o Bestiário (FUN-113, §18)', () => {
   });
 
   it('recusa a lista vazia, o bônus negativo e o bônus FRACIONÁRIO', () => {
-    // Meio ponto passaria no schema e quebraria a conta em inteiro de `Bestiary.applyXpBonus`:
-    // a garantia do `floor` depende de `p × marcos` ser inteiro.
+    // Meio ponto passaria no schema e quebraria a conta em inteiro de `Bestiary.xpBonusPercent`
+    // somada em `applyExperienceBonus`: a garantia do `floor` depende de `p × marcos` inteiro.
     expect(() => buildContent(base({ bestiary: [{ ...bestiary, milestones: [] }] }))).toThrow(/bestiary/);
     expect(() => buildContent(base({ bestiary: [{ ...bestiary, xpBonusPercentPerMilestone: -1 }] }))).toThrow(/bestiary/);
     expect(() => buildContent(base({ bestiary: [{ ...bestiary, xpBonusPercentPerMilestone: 0.5 }] }))).toThrow(/bestiary/);

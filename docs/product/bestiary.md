@@ -12,9 +12,10 @@ e a regra de Guild War (§18.5), que não tem Guild War para valer
 O personagem acumula abates por monstro **de forma permanente** — o contador atravessa hunts,
 snapshot e extrato, e nunca desce. Cada monstro tem cinco marcos de contagem (10 000, 25 000,
 50 000, 100 000 e 200 000 abates), e cada marco alcançado, em qualquer monstro, concede **+1 %
-de XP PvE para sempre**. O bônus é **global**: é `1 + 0,01 × (marcos alcançados em todos os
-monstros, somados)`, aplicado à XP de todo abate — dois marcos no rato e um no morcego são
-+3 % na XP de qualquer coisa que o personagem mate daí em diante.
+de XP PvE para sempre**. O bônus é **global**: é `(marcos alcançados em todos os monstros,
+somados) × 1 %`, aplicado à XP de todo abate — dois marcos no rato e um no morcego são +3 % na
+XP de qualquer coisa que o personagem mate daí em diante. O bônus **soma-se** aos demais (faixa
+de level, VIP, evento) e a multiplicação acontece uma vez (#563, ver `progression.md`).
 
 Abate com stamina zero **não conta** (§18.6) — e não conta pela MESMA condição que já não paga
 XP nem loot: é um `if` só em `#onMonsterDied`, e duas condições divergiriam na primeira mudança
@@ -75,9 +76,11 @@ a 4 e passou a aceitar 0 a 5.
   10 000 ratos, a 5 XP cada antes do bônus.
 - Cada marco alcançado dá **+1 % de XP PvE permanente**, somado com os demais — de todos os
   monstros (DT-01, ver Divergências).
-- A XP de um abate é `floor(xp × (100 + 1 × marcos) / 100)`, em inteiro: `100 × 1,13` em ponto
-  flutuante é `112.99999999999999`, e o `floor` daria 112 onde a conta exata dá 113 — um abate
-  em cada setenta perderia um ponto sem ninguém conseguir explicar por quê.
+- A XP de um abate é `floor(xp × (100 + 1 × marcos + outros bônus) / 100)`, em inteiro: o
+  percentual do Bestiário **soma-se** ao da faixa de level e aos demais antes de uma
+  multiplicação só (#563). `100 × 1,13` em ponto flutuante é `112.99999999999999`, e o `floor`
+  daria 112 onde a conta exata dá 113 — um abate em cada setenta perderia um ponto sem ninguém
+  conseguir explicar por quê.
 - O abate que **alcança** um marco é pago com o multiplicador de antes; o marco vale do abate
   seguinte em diante (DT-04, ver Divergências).
 - Abate com stamina zero não conta, não dá XP e não dá loot — uma condição só.

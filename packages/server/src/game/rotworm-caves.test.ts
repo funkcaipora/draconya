@@ -72,16 +72,17 @@ describe('a Rotworm Caves real (#511)', () => {
     // da cura automática (heal com HP ≤ 70%), que já não garante os dez minutos inteiros. O
     // teste passa a medir o rendimento até o fim da janela OU até a morte, o que vier primeiro.
     //
-    // O invariante `xpGained === kills × 40` continua de pé QUANDO o herói sobrevive — só
-    // relaxa se ele morre, porque aí a penalidade de morte desconta um valor que não é múltiplo
-    // de 40. Perder os dois juntos (sobrevivência OU a fórmula fechada) escondia justamente a
+    // O invariante `xpGained === kills × 40 × 3` continua de pé QUANDO o herói sobrevive — o ×3
+    // é o bônus de level do conteúdo real (+200% até o level 300, #563) —, e só relaxa se ele
+    // morre, porque aí a penalidade de morte desconta um valor que não é múltiplo disso. Perder
+    // os dois juntos (sobrevivência OU a fórmula fechada) escondia justamente a
     // regressão que valeria pegar: uma morte precoce por engano ainda passaria se a asserção só
     // checasse `kills > 0`.
     const { session, ruleset } = enter(real(), 'cautious');
     run(session, 600_000, 100);
     expect(['death', null]).toContain(session.ended);
     if (session.ended === null) {
-      expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40);
+      expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
     }
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(session.aggregates.goldGained).toBeGreaterThan(0);
@@ -150,7 +151,7 @@ describe('a Rotworm Caves real (#511)', () => {
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
     expect(session.ended).toBeNull();
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40);
+    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
     const hoursFraction = 600_000 / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);

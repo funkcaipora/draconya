@@ -362,6 +362,7 @@ const PROGRESSION: Progression = {
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
   rates: NEUTRAL_RATES,
+  experienceBonusByLevel: [],
 };
 
 /** O monstro que compõe o cenário: ability em área, DOT e campo, tudo com número fixo. */

@@ -3,7 +3,8 @@ import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
 import {
-  applyDeathPenalty, grantXp, levelForXp, statsForLevel, totalXpForLevel, xpToCompleteLevel,
+  applyDeathPenalty, applyExperienceBonus, grantXp, levelExperienceBonusPercent, levelForXp,
+  statsForLevel, totalXpForLevel, xpToCompleteLevel,
 } from './progression.js';
 
 const baseline: Progression = {
@@ -15,6 +16,7 @@ const baseline: Progression = {
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  experienceBonusByLevel: [],
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
   rates: NEUTRAL_RATES,
@@ -292,5 +294,52 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     character.goldDelta = 500;
     applyDeathPenalty(character, { premium: false }, null, baseline);
     expect(character.goldDelta).toBe(500);
+  });
+});
+
+describe('bônus de XP por level (#563)', () => {
+  const comFaixas: Progression = {
+    ...baseline,
+    experienceBonusByLevel: [
+      { maxLevel: 300, bonusPercent: 200 },
+      { bonusPercent: 100 },
+    ],
+  };
+
+  it('a faixa vale até o teto INCLUSIVO, e a sem maxLevel é o catch-all', () => {
+    expect(levelExperienceBonusPercent(1, comFaixas)).toBe(200);
+    expect(levelExperienceBonusPercent(300, comFaixas)).toBe(200);
+    expect(levelExperienceBonusPercent(301, comFaixas)).toBe(100);
+    expect(levelExperienceBonusPercent(1_000, comFaixas)).toBe(100);
+  });
+
+  it('sem faixas (conteúdo de teste) o bônus é zero', () => {
+    expect(levelExperienceBonusPercent(50, baseline)).toBe(0);
+  });
+
+  it('aplica o percentual ADITIVO numa multiplicação só, em inteiro', () => {
+    expect(applyExperienceBonus(100, 0)).toBe(100);
+    // 100 + 200% = 300; 100 + 100% = 200.
+    expect(applyExperienceBonus(100, 200)).toBe(300);
+    expect(applyExperienceBonus(100, 100)).toBe(200);
+    // Soma de bônus (level 200% + Bestiário 13%) numa multiplicação: 100 × 3,13 = 313.
+    expect(applyExperienceBonus(100, 200 + 13)).toBe(313);
+    // 5 × 3,01 = 15,05 → 15: o piso é o inteiro.
+    expect(applyExperienceBonus(5, 200 + 1)).toBe(15);
+  });
+
+  it('a conta é em INTEIRO — 13% sobre 100 dá 113, não 112', () => {
+    // `1 + 0,01 × 13` é `1.13`, e `100 × 1.13` é `112.99999999999999`: o `floor` da conta em
+    // ponto flutuante devolveria 112. É a armadilha do acumulador fracionário, evitada pela
+    // mesma porta — não deixar o resíduo chegar ao arredondamento.
+    expect(Math.floor(100 * (1 + 0.01 * 13))).toBe(112);
+    expect(applyExperienceBonus(100, 13)).toBe(113);
+  });
+
+  it('somar aplica UM floor, e não encadear um por bônus', () => {
+    // Dois bônus de 50% sobre 7: somando dá +100% → floor(7 × 2) = 14. Encadeando um `floor`
+    // por bônus daria floor(floor(7 × 1,5) × 1,5) = floor(10 × 1,5) = 15 — um ponto a mais, e
+    // o floor duplo é justamente o que somar evita.
+    expect(applyExperienceBonus(7, 50 + 50)).toBe(14);
   });
 });

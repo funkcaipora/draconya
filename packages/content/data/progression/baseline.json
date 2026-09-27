@@ -50,6 +50,10 @@
     "health": { "ticksMs": 12000, "amount": 1 },
     "mana": { "ticksMs": 6000, "amount": 2 }
   },
+  "experienceBonusByLevel": [
+    { "maxLevel": 300, "bonusPercent": 200 },
+    { "bonusPercent": 100 }
+  ],
   "skillMultipliers": {
     "melee": 2.0,
     "distance": 2.0,

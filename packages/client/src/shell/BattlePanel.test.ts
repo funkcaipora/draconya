@@ -208,4 +208,35 @@ describe('o painel Batalha (#254)', () => {
     const source = await readFile(new URL('./BattlePanel.tsx', import.meta.url), 'utf8');
     expect(source).toContain('targetTracker.selectTarget(row.id, sendIntent)');
   });
+
+  it('só mostra criaturas que estão NA TELA (dentro do viewport visible window)', async () => {
+    world.selfId = 99;
+    world.creatures.set(99, creature(99, { name: 'você', position: { x: 10, y: 10, z: 7 } }));
+    // Perto / na tela:
+    world.creatures.set(1, creature(1, { name: 'Near Rat', position: { x: 12, y: 11, z: 7 } }));
+    // Longe / fora da tela (no mesmo andar):
+    world.creatures.set(2, creature(2, { name: 'Far Rotworm', position: { x: 50, y: 50, z: 7 } }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Near Rat');
+    expect(html).not.toContain('Far Rotworm');
+  });
+
+  it('respeita world.visibleWindow quando definido pelo viewport', async () => {
+    world.selfId = 99;
+    world.creatures.set(99, creature(99, { name: 'você', position: { x: 10, y: 10, z: 7 } }));
+    world.creatures.set(1, creature(1, { name: 'Inside Window', position: { x: 11, y: 10, z: 7 } }));
+    world.creatures.set(2, creature(2, { name: 'Outside Window', position: { x: 15, y: 10, z: 7 } }));
+
+    // Janela customizada apertada: minX: 9, maxX: 12, minY: 9, maxY: 12
+    world.visibleWindow = { minX: 9, maxX: 12, minY: 9, maxY: 12 };
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('Batalha · 1');
+    expect(html).toContain('Inside Window');
+    expect(html).not.toContain('Outside Window');
+  });
 });

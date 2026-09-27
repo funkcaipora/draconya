@@ -29,7 +29,7 @@ import {
 } from '../state/world.js';
 import {
   TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
-  zoomFor, type TileWindow,
+  visibleTiles, zoomFor, type TileWindow,
 } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
@@ -1178,6 +1178,7 @@ export async function mountViewport(
       }
     }
     const center = target();
+    world.visibleWindow = visibleTiles(center, view);
     const visibility = updateVisibility(nowMs);
     // D5, passo 1: a lista de andares da chave do prefetch é a REAL (sem o andar que está
     // sumindo): aquecer o que está indo embora é pedir folha para nada.
@@ -1305,6 +1306,7 @@ export async function mountViewport(
       targetFrame.destroy();
       overlay.destroy();
       book.clear();
+      world.visibleWindow = null;
       app.destroy(true, { children: true });
     },
   };
