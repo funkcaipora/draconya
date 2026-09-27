@@ -4267,10 +4267,14 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
    * durante o teste, sem lutar contra o motor.
    */
   const comDrop = (over: {
-    capacity?: number; staminaMs?: number; catalog?: boolean;
+    capacity?: number; staminaMs?: number; catalog?: boolean; loot?: BotConfigV2['loot'];
   } = {}) => {
     const loaded = buildContent(raw({
       monsters: [ratWithDrop],
+      // `corpseTtlMs` (ADR 0048): sem ele o cadáver não persiste, e o que não coube na
+      // mochila simplesmente desaparece em vez de ficar à espera — estes testes falam
+      // justamente do que sobra, então precisam de onde ele possa ficar.
+      hunts: [{ ...hunt, corpseTtlMs: 60_000 }],
       progression: [{
         ...progression, startingCapacity: over.capacity ?? 10_000, capacityPerLevel: 0,
       }],
@@ -4280,6 +4284,9 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
       // espada existia quando a hunt abriu e não existe mais.
       content: over.catalog === false ? { ...loaded, items: new Map() } : loaded,
       id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      // O filtro de Quick Loot (#722, ADR 0048 d.4) — só quando o teste pede um diferente do
+      // default (`skip` + vazio, pega tudo).
+      ...(over.loot === undefined ? {} : { botConfigs: { hero: botConfigV2([], { loot: over.loot }) } }),
     });
     const stats = statsForLevel(1, null, loaded.progression);
     const hero = new CharacterRuntime({
@@ -4315,17 +4322,17 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     }
   });
 
-  it('o que NÃO cabe vai para a Caixa de Loot da Sessão', () => {
-    // Capacidade para uma espada só (peso 50). A segunda não cabe e não se perde: ela vai para
-    // a caixa, que é o §21.6 em uma linha.
-    // Capacidade para uma espada só (peso 50).
-    const { session, hero } = comDrop({ capacity: 50 });
+  it('o que NÃO cabe fica no CADÁVER (ADR 0048)', () => {
+    // Capacidade para uma espada só (peso 50). A segunda não cabe e não se perde: fica no
+    // cadáver, que é a decisão 7 do ADR 0048 em uma linha — a Caixa de Loot saiu.
+    const { session, hero, ruleset } = comDrop({ capacity: 50 });
     run(session, 60_000, 100);
 
     expect([...hero.inventory.items()]).toHaveLength(1);
-    expect(hero.lootBox.length).toBeGreaterThan(0);
-    // E os ids continuam únicos entre a mochila e a caixa: o contador é um só.
-    const todos = [...hero.inventory.items(), ...hero.lootBox].map((i) => i.instanceId);
+    const noCadaver = ruleset.groundItems.flatMap((corpse) => corpse.items ?? []);
+    expect(noCadaver.length).toBeGreaterThan(0);
+    // E os ids continuam únicos entre a mochila e os cadáveres: o contador é um só.
+    const todos = [...hero.inventory.items(), ...noCadaver].map((i) => i.instanceId);
     expect(new Set(todos).size).toBe(todos.length);
   });
 
@@ -4364,21 +4371,28 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     expect(hero.lootSeq).toBe(0);
   });
 
-  it('a caixa e o contador atravessam o snapshot', () => {
-    const { session, hero } = comDrop({ capacity: 50 });
+  it('o cadáver e o contador atravessam o snapshot', () => {
+    const { session, hero, ruleset } = comDrop({ capacity: 50 });
     run(session, 60_000, 100);
-    const antes = { caixa: hero.lootBox.length, seq: hero.lootSeq };
-    expect(antes.caixa).toBeGreaterThan(0);
+    const antes = {
+      noCadaver: ruleset.groundItems.reduce((n, corpse) => n + (corpse.items?.length ?? 0), 0),
+      seq: hero.lootSeq,
+    };
+    expect(antes.noCadaver).toBeGreaterThan(0);
 
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
     const retomado = Session.fromSnapshot(
       snapshot,
-      huntRulesetFromSnapshot(snapshot, buildContent(raw({ monsters: [ratWithDrop] }))) as HuntRuleset,
+      huntRulesetFromSnapshot(
+        snapshot, buildContent(raw({ monsters: [ratWithDrop], hunts: [{ ...hunt, corpseTtlMs: 60_000 }] })),
+      ) as HuntRuleset,
       Rng.fromSeed(snapshot.id),
     );
 
     const voltou = retomado.participants[0] as CharacterRuntime;
-    expect(voltou.lootBox).toHaveLength(antes.caixa);
+    const depois = (retomado.ruleset as HuntRuleset).groundItems
+      .reduce((n, corpse) => n + (corpse.items?.length ?? 0), 0);
+    expect(depois).toBe(antes.noCadaver);
     // O contador precisa voltar: recomeçar geraria o mesmo id de novo, e como a inserção é
     // idempotente por id, o item novo seria descartado por parecer repetido.
     expect(voltou.lootSeq).toBe(antes.seq);
@@ -4408,6 +4422,92 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.mochila.length).toBeGreaterThan(0);
   });
+
+  describe('abrir o cadáver e pegar o que sobrou (#722, ADR 0048 decisão 4)', () => {
+    it('openCorpse devolve o que sobrou, para quem é dono e está perto', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0);
+      expect(corpse).toBeDefined();
+      // A rota anda o herói para longe de onde o rato morreu — aproxima para o teste falar só
+      // da elegibilidade, não da distância (que já tem teste próprio, abaixo).
+      hero.position = { ...corpse!.position };
+
+      const result = ruleset.openCorpse(session, hero.id, corpse!.id);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.corpse.id).toBe(corpse!.id);
+        expect(result.corpse.items?.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('openCorpse recusa not-found para um id que não existe (já apodreceu)', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const result = ruleset.openCorpse(session, hero.id, 999_999);
+      expect(result).toEqual({ ok: false, reason: 'not-found' });
+    });
+
+    it('openCorpse recusa not-yours para quem não é dono nem elegível', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const result = ruleset.openCorpse(session, 'someone-else', corpse.id);
+      expect(result).toEqual({ ok: false, reason: 'not-yours' });
+    });
+
+    it('openCorpse recusa too-far-away quando o personagem está longe', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      hero.position = { x: hero.position.x + 10, y: hero.position.y, z: hero.position.z };
+      const result = ruleset.openCorpse(session, hero.id, corpse.id);
+      expect(result).toEqual({ ok: false, reason: 'too-far-away' });
+    });
+
+    it('takeLoot(null) reaplica o filtro do personagem ao que sobrou no cadáver', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const antes = [...hero.inventory.items()].length;
+      // Abre capacidade para o item que sobrou entrar desta vez, e aproxima do cadáver.
+      hero.capacity = 10_000;
+      hero.position = { ...corpse.position };
+
+      const result = ruleset.takeLoot(session, hero.id, corpse.id, null);
+      expect(result).toEqual({ ok: true });
+      expect([...hero.inventory.items()].length).toBeGreaterThan(antes);
+      expect(corpse.items ?? []).toEqual([]);
+    });
+
+    it('takeLoot(instanceId) ignora o filtro e move só aquele item', () => {
+      const { session, hero, ruleset } = comDrop({
+        capacity: 50, loot: { filter: 'skip', itemIds: ['sword'], autoSell: [] },
+      });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const leftover = corpse.items![0]!;
+      hero.capacity = 10_000;
+      hero.position = { ...corpse.position };
+
+      const result = ruleset.takeLoot(session, hero.id, corpse.id, leftover.instanceId);
+      expect(result).toEqual({ ok: true });
+      expect([...hero.inventory.items()].some((i) => i.instanceId === leftover.instanceId)).toBe(true);
+      expect(corpse.items ?? []).not.toContainEqual(leftover);
+    });
+
+    it('takeLoot recusa not-enough-capacity sem mutar o cadáver', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const before = [...(corpse.items ?? [])];
+      hero.position = { ...corpse.position };
+
+      const result = ruleset.takeLoot(session, hero.id, corpse.id, before[0]!.instanceId);
+      expect(result).toEqual({ ok: false, reason: 'not-enough-capacity' });
+      expect(corpse.items ?? []).toEqual(before);
+    });
+  });
 });
 
 // --- os agregados do analisador (FUN-78) -----------------------------------------------------
@@ -4421,6 +4521,9 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
     const loaded = buildContent(raw({
       monsters: [ratWithDrop],
       items: [...items, backpackItem],
+      // `corpseTtlMs` (ADR 0048): o teste de excedente por peso precisa de onde o item que
+      // não coube possa ficar — sem cadáver, ele desapareceria em vez de esperar.
+      hunts: [{ ...hunt, corpseTtlMs: 60_000 }],
       progression: [{ ...progression, startingCapacity: capacity, capacityPerLevel: 0, satchelInitialSlots: 10, containerRow: 5 }],
     }));
     const session = createHuntSession({ content: loaded, id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0 });
@@ -4433,7 +4536,7 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
       inventory: { backpack: [], equipped: { back: { instanceId: 'kit:back', itemId: 'backpack', quantity: 1 } } },
     });
     session.enter(hero);
-    return { session, hero };
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
   };
 
   it('nasce com 20 lugares, e o 21º drop abre uma linha — a Caixa fica vazia enquanto o PESO cabe', () => {
@@ -4450,12 +4553,13 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
     expect(hero.inventory.satchel.every((p) => p === null)).toBe(true);
   });
 
-  it('com capacidade curta, o excedente vai para a Caixa — por peso, com lugar sobrando', () => {
-    const { session, hero } = withBackpack(18 + 50 * 3);
+  it('com capacidade curta, o excedente fica no CADÁVER — por peso, com lugar sobrando', () => {
+    const { session, hero, ruleset } = withBackpack(18 + 50 * 3);
     run(session, 120_000, 100);
     expect([...hero.inventory.items()]).toHaveLength(3);
     expect(hero.inventory.backpack).toHaveLength(20);
-    expect(hero.lootBox.length).toBeGreaterThan(0);
+    const noCadaver = ruleset.groundItems.flatMap((corpse) => corpse.items ?? []);
+    expect(noCadaver.length).toBeGreaterThan(0);
   });
 
   it('rende o mesmo a 10 Hz e a 1 Hz', () => {
@@ -4546,11 +4650,13 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     expect(session.aggregates.bestSpellHit).toBeLessThanOrEqual(80);
   });
 
-  it('o item conta no analisador mesmo quando não cabe na mochila', () => {
-    // Contar só o que coube faria a mochila cheia parecer hunt ruim — e a hunt rendeu, o que
-    // faltou foi espaço. São perguntas diferentes, e o §16.1 quer a primeira.
+  it('o item SÓ conta no analisador quando entra na mochila (ADR 0048 decisão 5)', () => {
+    // Antes deste ADR, "caiu" já contava — mochila cheia não fazia a hunt parecer ruim. Desde
+    // o ADR 0048, o que fica no cadáver não é loot "levado" ainda: `itemsLooted` conta só o que
+    // ENTROU na mochila ou foi vendido, e o resto — filtrado ou sem capacidade — não soma.
     const loaded = buildContent(raw({
       monsters: [ratWithDrop],
+      hunts: [{ ...hunt, corpseTtlMs: 60_000 }],
       progression: [{ ...progression, startingCapacity: 50, capacityPerLevel: 0 }],
     }));
     const session = createHuntSession({
@@ -4568,11 +4674,12 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
 
     run(session, 60_000, 100);
 
-    expect(hero.lootBox.length).toBeGreaterThan(0);
-    // Um item por abate, e todos contam — os que couberam e os que ficaram na caixa.
-    expect(session.aggregates.itemsLooted).toBe(session.aggregates.kills);
-    expect(session.aggregates.itemsLooted)
-      .toBe([...hero.inventory.items()].length + hero.lootBox.length);
+    const ruleset = session.ruleset as HuntRuleset;
+    const noCadaver = ruleset.groundItems.flatMap((corpse) => corpse.items ?? []);
+    expect(noCadaver.length).toBeGreaterThan(0);
+    // Menos abates do que a mochila comporta: sobrou item no cadáver, e ele não conta.
+    expect(session.aggregates.itemsLooted).toBeLessThan(session.aggregates.kills);
+    expect(session.aggregates.itemsLooted).toBe([...hero.inventory.items()].length);
   });
 
   it('consumível conta em QUANTIDADE, e o gold sai no USO', () => {

@@ -596,26 +596,23 @@ como líder e segue o fluxo de sempre (configurar e iniciar). Uma party de dois 
 instante em que o segundo chega: esperar "encher" faria dois jogadores esperarem para sempre,
 e o §15.2 admite começar com menos de quatro.
 
-## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
+## A Caixa de Loot da Sessão saiu (FUN-88, retirada pelo ADR 0048)
 
-`lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis
-e Postgres não é sobre velocidade: **expirar precisa significar que o item nunca existiu.** Uma
-linha em `item_instance` que ninguém consegue mais ver é pior que nenhuma — ela aparece em
-consulta de proveniência, em soma de patrimônio, e em toda auditoria escrita depois.
+Existiu em `lootbox:{sessionId}` no Redis, TTL de 30 minutos a partir do encerramento (§21.6):
+o transbordo do loot de MONSTRO que não coube na mochila. O ADR 0048 (decisão 7) a retirou —
+**"que ninguém lê, resgata nem mostra"** foi a auditoria que a condenou — porque o caso que ela
+cobria passou a ser "fica no cadáver" (`packages/sim`, `CorpseState.items`), como o Canary faz:
+o cadáver já tem prazo próprio (`corpseTtlMs`), e duas filas de "não coube" com prazos
+diferentes eram duas regras para explicar o que o Canary resolve com uma. Nada migrou: as
+chaves do Redis expiraram sozinhas.
 
-Três coisas que não podem mudar sem pensar duas vezes:
-
-- **A caixa é escrita pelo `game`, no encerramento**, e não pela varredura: o relógio começa
-  quando a sessão acaba, e quem sabe disso é quem a encerrou. Deixar para o `jobs` faria o prazo
-  começar até dez segundos depois, e por acaso.
-- **Quem expira é o TTL, não o ciclo.** O `jobs` só publica `draconya_loot_boxes_pending`. Um
-  contador de "expiradas" exigiria alguém observando o instante em que a chave some, e ninguém
-  observa — ela some sozinha. O alerta útil é a pilha CRESCENDO.
-- **O item da caixa ainda não é linha no banco.** Ele vira instância quando for resgatado.
-  Criá-la antes tornaria a expiração um `DELETE` que some com item de jogador.
-
-O prefixo `lootbox:` é distinto de `receipt:` e `receipts:char:` de propósito — pela mesma razão
-que a FUN-56 registrou: o `SCAN` de uma varredura não pode pegar a chave da outra.
+**`CharacterRuntime.lootBox` (`packages/sim/src/character.ts`) continua existindo** — só o
+CAMINHO do loot de monstro parou de escrever nele. Os outros dois consumidores não têm cadáver
+de monstro à mão e continuam usando o campo como sempre: o grant de vocação/kit
+(`chooseVocation`/`#grantKitPiece`, item que não coube na Cidade) e a liquidação da bolsa de
+party (`#settle`, `unsold` que não coube no líder ao vender). O campo `lootBox` do EXTRATO
+(`SessionReceipt.lootBox`, `game/host.ts`) segue existindo pela mesma razão — é como esses dois
+casos persistem no personagem — mesmo sem o `LootBoxStore`/Redis por trás.
 
 ## Como testar
 

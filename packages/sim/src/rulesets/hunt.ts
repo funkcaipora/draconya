@@ -21,7 +21,7 @@ import {
   SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
+  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt, HuntDifficulty,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
   PartyConfig, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
@@ -763,12 +763,40 @@ export interface HuntRulesetOptions {
   readonly premium?: boolean;
 }
 
-/** Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila. */
+/**
+ * Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila.
+ *
+ * Desde o ADR 0048 ele também CARREGA o loot (decisão 1): `items`/`gold` são o que ainda não
+ * foi coletado — o dono coleta no MESMO evento do abate (`#collectFromCorpse`), então o comum é
+ * já nascer com as duas listas vazias/zeradas. `ownerId`/`eligible` espelham `#lootRecipient`/
+ * `eligible` do abate (`null` em `splitLoot` — a bolsa é dona, e o cadáver não guarda nada).
+ * Os quatro são OPCIONAIS na leitura (snapshot anterior a este ADR não os tem — `ausente` é
+ * cadáver vazio, sem bump de `SNAPSHOT_FORMAT_VERSION`), mas sempre presentes ao criar.
+ */
 export interface CorpseState {
   readonly id: number;
   readonly monsterId: string;
   readonly position: WorldPoint;
+  /** MUTÁVEL: colhido por `#collectFromCorpse` e descartado por `#onCorpseDecay`. */
+  items?: CarriedItem[];
+  gold?: number;
+  readonly ownerId?: string | null;
+  readonly eligible?: readonly string[];
 }
+
+/** A recusa comum a `openCorpse`/`takeLoot` (#722, ADR 0048 d.4). */
+export type CorpseRefusal = 'not-found' | 'not-yours' | 'too-far-away';
+
+/** `takeLoot` acrescenta a recusa de capacidade — só ela é OMISSA em `openCorpse`, que não move nada. */
+export type TakeLootRefusal = CorpseRefusal | 'not-enough-capacity';
+
+export type OpenCorpseResult =
+  | { readonly ok: true; readonly corpse: CorpseState }
+  | { readonly ok: false; readonly reason: CorpseRefusal };
+
+export type TakeLootResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: TakeLootRefusal };
 
 /**
  * Quem pode carregar uma condição (CMB-07): personagem ou monstro. Os dois têm `conditions`,
@@ -936,6 +964,12 @@ function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptio
  * líder a cada abate; criá-lo vazio é o que evita alocar um `Set` por item de quem não vende.
  */
 const EMPTY_AUTO_SELL: ReadonlySet<string> = new Set();
+
+/**
+ * O filtro de Quick Loot de quem nunca configurou nenhum (ADR 0048 decisão 2): `skip` com lista
+ * vazia aceita tudo — o comportamento de sempre, de antes deste ADR.
+ */
+const DEFAULT_LOOT_FILTER: BotLoot = { filter: 'skip', itemIds: [], autoSell: [] };
 
 /**
  * O formato ANTIGO da bolsa no snapshot (`gold: number`, `items: CarriedItem[]`), lido só
@@ -2573,8 +2607,15 @@ export class HuntRuleset implements Ruleset {
     }
     this.#nextCreatureId = restored.nextCreatureId;
     // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
-    // da sessão já trouxe de volta (FUN-123).
-    this.#corpses = [...(restored.corpses ?? [])];
+    // da sessão já trouxe de volta (FUN-123). O loot (ADR 0048) é OPCIONAL na leitura: snapshot
+    // de antes deste ADR não tem as quatro chaves, e ausente é cadáver sem loot nenhum.
+    this.#corpses = (restored.corpses ?? []).map((corpse) => ({
+      ...corpse,
+      items: [...(corpse.items ?? [])],
+      gold: corpse.gold ?? 0,
+      ownerId: corpse.ownerId ?? null,
+      eligible: corpse.eligible ?? [],
+    }));
     // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
     // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
     this.#fields = Fields.fromState(restored.fields);
@@ -6973,6 +7014,10 @@ const slots = bot.groups.get(group);
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
     const recipient = isSummon ? null : this.#lootRecipient(session, killer, eligible);
+    // O que o cadáver nasce carregando (ADR 0048 decisão 1) — vazio no modo bolsa (o loot vai
+    // direto para ela, "como hoje") e quando não há destinatário nenhum.
+    let corpseGold = 0;
+    let corpseItems: CarriedItem[] = [];
     if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
@@ -6993,17 +7038,18 @@ const slots = bot.groups.get(group);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
       }
     } else if (!isSummon && definition !== undefined && recipient !== null) {
-      // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
-      // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
+      // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
+      // destino é o cadáver, não mais direto na mochila (ADR 0048 decisão 1). `corpseGold`/
+      // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
+      // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
+      // isso é o W3/#722.
       const loot = rollLoot(
         this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
       );
-      recipient.goldDelta += loot.gold;
-      session.credit(recipient.id, 'goldGained', loot.gold);
-      // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
-      // (FUN-63), e acrescentar destino não muda sorteio nenhum.
-      this.#deliverLoot(session, recipient, loot.items);
-      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold.
+      corpseGold = loot.gold;
+      corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
+      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold —
+      // são abstratos, sem cadáver (ADR 0048 decisão 1).
       this.#creditSupplies(session, [recipient], loot.supplies);
       this.#creditAmmunition(session, [recipient], loot.ammunition);
     }
@@ -7033,16 +7079,29 @@ const slots = bot.groups.get(group);
     // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
     // ele morre em z11 num mapa cujo andar padrão é z10.
     this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
-    // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
-    // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
-    // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
+    // O cadáver carrega o loot (FUN-123, ADR 0048 decisão 1): fica no tile por `corpseTtlMs` e
+    // some sozinho, levando o que ninguém coletou junto (decisão 5) — a arte é da tabela, no
+    // hospedeiro (invariante 6).
+    //
+    // A COLETA roda sempre, com `corpseTtlMs` ou sem — é o abate creditando gold e item de
+    // sempre, e gatear por um campo de conteúdo opcional quebraria toda hunt que nunca falou de
+    // cadáver. Só a PERSISTÊNCIA do que sobra (o cadáver visível, com prazo próprio) depende de
+    // `corpseTtlMs`: sem ele, o que o filtro não aceitou ou não coube não tem onde esperar, e
+    // desaparece — o "não deixa nada" de antes deste ADR, agora só para a sobra.
     const corpseTtlMs = this.#options.hunt.corpseTtlMs;
+    const corpse: CorpseState = {
+      id: corpseTtlMs === undefined ? 0 : this.#nextGroundItemId++,
+      monsterId: monster.monsterId,
+      position: this.#at(monster),
+      items: corpseItems,
+      gold: corpseGold,
+      ownerId: recipient?.id ?? null,
+      eligible: eligible.map((p) => p.id),
+    };
+    // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
+    // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
+    if (recipient !== null) this.#collectFromCorpse(session, corpse, recipient);
     if (corpseTtlMs !== undefined) {
-      const corpse: CorpseState = {
-        id: this.#nextGroundItemId++,
-        monsterId: monster.monsterId,
-        position: this.#at(monster),
-      };
       this.#corpses.push(corpse);
       session.emit({
         kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
@@ -7526,59 +7585,189 @@ const slots = bot.groups.get(group);
     return definition.loot;
   }
 
-  #deliverLoot(
-    session: Session, character: CharacterRuntime, items: readonly LootItem[],
-  ): void {
-    // O loot PESSOAL entra na mochila com a capacidade já descontada da reserva que a party fez
-    // dele (§11, DT-05). Hoje `#deliverLoot` só roda quando `#bag` é `null` (o modo compartilhado
-    // entrega pela bolsa), então `reserved` é 0; o `Wearer` derivado fica pela consistência e
-    // blinda o código se uma issue futura mudar quando este caminho roda com bolsa ativa.
+  /**
+   * Materializa o loot sorteado em itens do CADÁVER, com `instanceId` DETERMINÍSTICO (ADR 0048
+   * decisão 1/5) — o id é gasto AQUI, mesmo que o item nunca seja coletado e apodreça com o
+   * cadáver: a idempotência do invariante 10 vem da identidade previsível, não da contagem
+   * contígua. Ver a versão anterior a este ADR (`#deliverLoot`) para o mesmo argumento sobre o
+   * catálogo ser conferido antes de gastar o id.
+   */
+  #instantiateCorpseItems(
+    session: Session, recipient: CharacterRuntime, items: readonly LootItem[],
+  ): CarriedItem[] {
+    const carried: CarriedItem[] = [];
+    for (const rolled of items) {
+      if (this.#options.items.get(rolled.itemId) === undefined) continue;
+      // Em party (#191) o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam; em
+      // solo o formato é o de sempre. O critério é o TIPO de sessão (DT-03, #397), não a
+      // contagem de presentes.
+      const instanceId = this.#party !== undefined
+        ? `${session.id}:${recipient.id}:${String(recipient.lootSeq++)}`
+        : `${session.id}:${String(recipient.lootSeq++)}`;
+      carried.push({ instanceId, itemId: rolled.itemId, quantity: rolled.quantity });
+    }
+    return carried;
+  }
+
+  /**
+   * O limite de autovenda INDIVIDUAL (ADR 0048 decisão 2, PRD §22.1): o mesmo
+   * `party.autoSellItemTypes` da autovenda de party, mas lido pelo PRÓPRIO Premium do
+   * personagem — fora de party, `#options.premium` é quem diz (o mesmo fallback de
+   * `#onCharacterDied` para a penalidade de morte, D3).
+   */
+  #individualAutoSellLimit(characterId: string): number {
+    const premium = this.#party?.premiumByCharacter[characterId] ?? this.#options.premium ?? false;
+    return autoSellLimit({ [characterId]: premium }, characterId, this.#options.party.autoSellItemTypes);
+  }
+
+  /**
+   * O dono coleta do cadáver o que o filtro de Quick Loot aceita e cabe (ADR 0048 decisão 3): o
+   * `autoLoot` do Canary, sem trava de Premium (invariante 11) — roda no MESMO evento do abate,
+   * sem plateia (invariante 3). Gold é sempre coletado (o Quick Loot do Tibia sempre leva a
+   * moeda); item vendável em `loot.autoSell` vira gold na hora, cortado pelo limite do PRÓPRIO
+   * Premium; o resto FICA no cadáver — filtrado ou sem capacidade, sem diferença nenhuma: as
+   * duas são "não coletado" (§14 do `#deliverToBag` de antes já tratava OVERWEIGHT assim).
+   *
+   * `itemsLooted` conta só o que ENTROU na mochila ou foi vendido (decisão 5) — o que ficou no
+   * cadáver não é loot "levado" ainda, mesmo já tendo saído do sorteio.
+   */
+  #collectFromCorpse(session: Session, corpse: CorpseState, character: CharacterRuntime): void {
+    if ((corpse.gold ?? 0) > 0) {
+      const gold = corpse.gold ?? 0;
+      character.goldDelta += gold;
+      session.credit(character.id, 'goldGained', gold);
+      corpse.gold = 0;
+    }
+    const items = corpse.items ?? [];
+    if (items.length === 0) return;
+
+    const filter = this.#runnerOf(character.id).botConfig?.loot ?? DEFAULT_LOOT_FILTER;
+    const autoSellIds = new Set(filter.autoSell.slice(0, this.#individualAutoSellLimit(character.id)));
+    // A capacidade já descontada da reserva que a party fez dele (§11, DT-05) — como
+    // `#deliverLoot` fazia antes deste ADR; `reserved` é 0 fora do modo bolsa.
     const reserved = this.#bag === null
       ? 0
       : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
     const wearer = withReservedCapacity(character, reserved);
-    for (const rolled of items) {
-      // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
-      // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
-      // voo — e aí o certo é não entregar nada e não queimar identidade por um item que não
-      // vai existir.
-      if (this.#options.items.get(rolled.itemId) === undefined) continue;
 
-      // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
-      // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
-      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre. O critério é o
-      // TIPO de sessão, não a contagem de presentes (DT-03, #397): uma party pode ficar
-      // momentaneamente com 1 presente e depois crescer de novo por join em curso, e o formato
-      // de solo colidiria com o de quem entrar depois.
-      const instanceId = this.#party !== undefined
-        ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-        : `${session.id}:${String(character.lootSeq++)}`;
-      const carried: CarriedItem = {
-        instanceId,
-        itemId: rolled.itemId,
-        quantity: rolled.quantity,
-      };
-      // Conta no ANALISADOR aconteça o que acontecer com o destino: o item caiu, e é isso que
-      // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
-      session.credit(character.id, 'itemsLooted', carried.quantity);
+    const remaining: CarriedItem[] = [];
+    for (const item of items) {
+      const accepted = filter.filter === 'accept'
+        ? filter.itemIds.includes(item.itemId)
+        : !filter.itemIds.includes(item.itemId);
+      if (!accepted) { remaining.push(item); continue; }
 
-      if (character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) continue;
+      const definition = this.#options.items.get(item.itemId);
+      if (definition !== undefined && autoSellIds.has(item.itemId) && definition.value > 0) {
+        const amount = definition.value * item.quantity;
+        character.goldDelta += amount;
+        session.credit(character.id, 'goldGained', amount);
+        session.credit(character.id, 'itemsLooted', item.quantity);
+        continue;
+      }
 
-      // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
-      // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
-      // significar que ele nunca existiu, não que existe e ninguém consegue ver.
-      character.lootBox.push(carried);
+      if (character.inventory.add(item, this.#options.items, wearer, this.#containerRules(character)).ok) {
+        session.credit(character.id, 'itemsLooted', item.quantity);
+        continue;
+      }
+
+      // Não coube: fica no cadáver — a segunda chance é ELE, não uma caixa da sessão (ADR 0048
+      // decisão 7). O aviso é o mesmo de sempre, uma linha por sessão.
+      remaining.push(item);
       const runner = this.#runnerOf(character.id);
       if (runner.warnedFullBackpack) continue;
       runner.warnedFullBackpack = true;
-      // UMA linha no extrato, como o aviso de stamina. Uma por item encheria a lista curta da
-      // tela de retorno até ela deixar de ser lista — e o que o jogador precisa saber é que a
-      // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+    corpse.items = remaining;
     // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
-    // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
+    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
     this.#rebalanceBag(session);
+  }
+
+  /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */
+  #corpseById(groundItemId: number): CorpseState | undefined {
+    return this.#corpses.find((corpse) => corpse.id === groundItemId);
+  }
+
+  /**
+   * Confere se o personagem pode abrir/pegar deste cadáver (#722, ADR 0048 d.4): dono, ou
+   * presente na elegibilidade do abate — o `Player::canOpenCorpse` da party, espelhado por
+   * `ownerId`/`eligible` (que `#onMonsterDied` já grava, ver `CorpseState`).
+   */
+  #canLootCorpse(corpse: CorpseState, characterId: string): boolean {
+    return corpse.ownerId === characterId || (corpse.eligible ?? []).includes(characterId);
+  }
+
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4): confere dono/elegibilidade e distância
+   * (≤ 1, mesmo andar — o `areInRange<1,1,0>`/`Actions::canUse` do Canary, ver §5 da spec da
+   * issue) e devolve o que ainda está lá. PURA: não muta nada — abrir não é coletar
+   * (invariante 3), ao contrário de `takeLoot`.
+   */
+  openCorpse(session: Session, characterId: string, groundItemId: number): OpenCorpseResult {
+    const corpse = this.#corpseById(groundItemId);
+    if (corpse === undefined) return { ok: false, reason: 'not-found' };
+    if (!this.#canLootCorpse(corpse, characterId)) return { ok: false, reason: 'not-yours' };
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'not-found' };
+    if (
+      !sameFloor(character.position.z, corpse.position.z)
+      || distance(character.position, corpse.position) > 1
+    ) {
+      return { ok: false, reason: 'too-far-away' };
+    }
+    return { ok: true, corpse };
+  }
+
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático do abate (#722, ADR 0048 d.4).
+   *
+   * `instanceId: null` é o CLIQUE do Tibia: reaplica o MESMO filtro de Quick Loot do
+   * personagem (`#collectFromCorpse`, que já credita ouro e autovenda) a tudo que ainda está
+   * no cadáver — idempotente quando não sobrou nada. Um `instanceId` é arrastar ESTE item
+   * específico da janela, IGNORANDO o filtro — o "segunda chance" do Canary; ouro não é
+   * tocado nesse ramo, porque ouro não tem `instanceId` para arrastar (o clique já o cobre).
+   */
+  takeLoot(
+    session: Session, characterId: string, groundItemId: number, instanceId: string | null,
+  ): TakeLootResult {
+    const corpse = this.#corpseById(groundItemId);
+    if (corpse === undefined) return { ok: false, reason: 'not-found' };
+    if (!this.#canLootCorpse(corpse, characterId)) return { ok: false, reason: 'not-yours' };
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'not-found' };
+    if (
+      !sameFloor(character.position.z, corpse.position.z)
+      || distance(character.position, corpse.position) > 1
+    ) {
+      return { ok: false, reason: 'too-far-away' };
+    }
+
+    if (instanceId === null) {
+      this.#collectFromCorpse(session, corpse, character);
+      return { ok: true };
+    }
+
+    const items = corpse.items ?? [];
+    const index = items.findIndex((item) => item.instanceId === instanceId);
+    if (index === -1) return { ok: false, reason: 'not-found' };
+    const item = items[index];
+    if (item === undefined) return { ok: false, reason: 'not-found' };
+
+    // A mesma reserva de capacidade que `#collectFromCorpse` usa (§11, DT-05) — `reserved` é 0
+    // fora do modo bolsa.
+    const reserved = this.#bag === null
+      ? 0
+      : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
+    const wearer = withReservedCapacity(character, reserved);
+    const result = character.inventory.add(item, this.#options.items, wearer, this.#containerRules(character));
+    if (!result.ok) return { ok: false, reason: 'not-enough-capacity' };
+
+    session.credit(character.id, 'itemsLooted', item.quantity);
+    corpse.items = items.filter((_, i) => i !== index);
+    this.#rebalanceBag(session);
+    return { ok: true };
   }
 
   /**

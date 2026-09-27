@@ -306,6 +306,13 @@ export interface HudState {
    */
   readonly followState: FollowStateView | null;
 
+  /**
+   * A janela do cadáver ABERTA agora (#722, ADR 0048 d.4): o que o servidor mandou no último
+   * `corpse-contents` — `null` até o jogador abrir um, ou depois que ele fecha. É estado de
+   * TELA, não de jogo (DT-03 da spec da issue): não persiste entre sessões, e reanexar não a
+   * reabre sozinha — quem quiser ver o cadáver de novo clica nele outra vez.
+   */
+  readonly corpse: S2CProps<'corpse-contents'> | null;
   readonly targetId: number | null;
   readonly conditions: readonly ActiveCondition[];
   readonly conditionsReceivedAtMs: number;
@@ -352,6 +359,7 @@ export const INITIAL_HUD: HudState = {
   partySpending: null,
   partyEndVote: null,
   followState: null,
+  corpse: null,
   targetId: null,
   conditions: [],
   conditionsReceivedAtMs: 0,

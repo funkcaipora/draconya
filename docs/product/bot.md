@@ -58,6 +58,11 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   id de monstro; postura `stand` (padrão), `follow`, `keep-distance`.
 - Regras de saída: `hp-below`, `out-of-gold`, `party-member-lost`, `out-of-capacity`, com teto de
   4 slots em `bot/baseline.json`.
+- **O filtro de Quick Loot** (`loot`, ADR 0048 decisão 2): `filter` (`'accept'` ou `'skip'`,
+  padrão `'skip'`), `itemIds` (padrão vazia — com `skip` e lista vazia, aceita tudo, o
+  comportamento de antes deste ADR) e `autoSell` (vende ao coletar, cortado pelo limite do
+  PRÓPRIO Premium — 5 tipos Free, 20 Premium, o mesmo `party.autoSellItemTypes`). Campo novo com
+  default, como `follow`: config salva antes deste ADR volta pegando tudo, sem venda automática.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.

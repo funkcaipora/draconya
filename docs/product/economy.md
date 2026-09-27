@@ -1,6 +1,6 @@
 # Economia, consumíveis e Market
 
-**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e loot de item com Caixa de Loot da Sessão (FUN-88) implementados; autovenda, Market e Coins não implementados
+**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e o cadáver com loot e filtro de Quick Loot por personagem, com autovenda individual e de party (FUN-88, ADR 0048) implementados; Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
 **Épico:** E5 (consumível, ledger); E13 (Market, Coins por gold)
 
@@ -83,8 +83,14 @@ ser altamente auditável e consistente.
   instante do abate: é **regra de runtime**, calculada a cada drop, não um campo novo em
   `itemSchema` — `value` continua sendo o único campo do catálogo usado pela venda. A venda
   (automática ou settlement) divide cada entrada entre `eligible ∩ presentes`; `value: 0` não se
-  vende e vai para o líder. É a primeira venda ao NPC do jogo, e usa o mesmo campo que a autovenda
-  (§22.1) vai usar. Ver `party.md`.
+  vende e vai para o líder. É a primeira venda ao NPC do jogo. Ver `party.md`.
+- **A autovenda individual (§22.1) existe desde o ADR 0048.** Fora de party (ou com `splitLoot`
+  desligado), o filtro de Quick Loot de cada personagem (`botConfig.loot`, ver `bot.md`) tem sua
+  própria lista `autoSell`: ao coletar o item do cadáver, se ele está na lista e `value > 0`,
+  vende na hora ao `value` do catálogo — mesmo campo que a venda de party usa — e o gold vira
+  `goldDelta`/`goldGained` direto, sem passar pela mochila. O limite de tipos (5 Free, 20
+  Premium) é o mesmo `party.autoSellItemTypes` da venda de party, mas lido do Premium do
+  **próprio personagem**, nunca do líder.
 
 ## Parâmetros de balanceamento
 
