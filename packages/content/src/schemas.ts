@@ -346,7 +346,24 @@ const lootRollSchema = z.object({
  * (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo existente que só declara
  * `itemId` continua válido sem mudar uma vírgula.
  */
+/**
+ * Os modelos de rolagem de loot (#685). Só um além do padrão: `canary`, o `generateLootRoll` do
+ * Canary (`monstertype.lua`) — fator 95–105 % por linha, rolagem inteira em `[0, 100000]` e a
+ * quantidade da MESMA rolagem. O padrão (campo ausente) não tem nome aqui de propósito: é o
+ * FUN-63, e toda semente já gravada depende de ele continuar sendo o que o ausente significa.
+ */
+export const LOOT_ROLL_MODELS = ['canary'] as const;
+export type LootRollModel = (typeof LOOT_ROLL_MODELS)[number];
+
 export const lootTableSchema = z.object({
+  /**
+   * Como a tabela é sorteada (#685). AUSENTE é o modelo FUN-63 (preserva toda semente gravada);
+   * `canary` é o `generateLootRoll` do Canary. O leitor de monstros (#578) grava `canary` em toda
+   * tabela gerada; os monstros autorais não o declaram e rendem bit a bit o de antes
+   * (invariante 7). Numa tabela `canary`, linha `itemId` com `max > 1` exige item `stackable` —
+   * o Canary daria 1 —, e `buildContent` recusa a que não empilha.
+   */
+  rollModel: z.enum(LOOT_ROLL_MODELS).optional(),
   gold: lootRollSchema.optional(),
   /**
    * Itens de verdade, supply OU munição. `buildContent` confere cada `itemId`/`supplyId`/

@@ -1073,10 +1073,25 @@ export function buildContent(raw: RawContent): Content {
   // Loot de SUPPLY e de MUNIÇÃO (#520) é a mesma conferência do outro lado: a linha declara
   // exatamente um de `itemId`/`supplyId`/`ammunitionId` (o schema já garante isso), e cada um
   // confere contra o catálogo dele.
+  //
+  // Numa tabela `canary` (#685), a linha de ITEM com `max > 1` precisa de item empilhável: o
+  // `generateLootRoll` do Canary só tira a quantidade da rolagem quando o item é `stackable`, e
+  // dá 1 no resto — aceitar a linha faria o Draconya criar uma pilha que o Canary nunca cria.
+  // Supply, munição e gold são sempre pilha e não passam por isso.
   for (const monster of monsterDefinitions.values()) {
+    const canary = monster.loot.rollModel === 'canary';
     for (const line of monster.loot.items) {
       if (line.itemId !== undefined) {
-        if (itemDefinitions.has(line.itemId)) continue;
+        const item = itemDefinitions.get(line.itemId);
+        if (item !== undefined) {
+          if (canary && line.max > 1 && !item.stackable) {
+            problems.push(
+              `monstro "${monster.id}": loot.items "${line.itemId}" tem max > 1 mas não empilha `
+                + '(o Canary daria 1)',
+            );
+          }
+          continue;
+        }
         problems.push(
           `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
             + 'no catálogo',

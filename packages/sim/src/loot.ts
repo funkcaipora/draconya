@@ -8,6 +8,19 @@
 import type { LootRoll, LootTable } from '@draconya/content';
 import type { Rng } from './rng.js';
 
+/**
+ * `MAX_LOOTCHANCE` do Canary (#685): a chance do arquivo é em cem-milésimos, e a #578 a guarda
+ * como fração (`chance / 100000`) — `round(fração × 100000)` devolve o número original.
+ */
+export const CANARY_LOOT_CHANCE_SCALE = 100_000;
+
+/**
+ * O `config.factor` do `generateLootRoll` (prey de loot, wealth duplex, boosted creature, charm
+ * Gut): 1 até esses sistemas existirem, cada um no seu épico. O `rateLoot` do servidor não é o
+ * fator: é a #691 que o traz (ver o ponto de encaixe em `rollCanaryLine`).
+ */
+const LOOT_FACTOR = 1;
+
 export interface LootItem {
   readonly itemId: string;
   readonly quantity: number;
@@ -56,12 +69,16 @@ const NO_AMMUNITION: readonly LootAmmunition[] = [];
  * sortear não muda a sequência nenhuma (FUN-63).
  */
 export function rollLoot(table: LootTable, rng: Rng): LootResult {
-  const gold = table.gold === undefined ? 0 : rollLine(table.gold, rng);
+  // O modelo é CAMPO da tabela (#685, invariante 7): ausente é o FUN-63, bit a bit; `canary` é
+  // o `generateLootRoll` do Canary. A ordem (gold, depois itens na ordem da tabela) é a mesma
+  // nos dois — o que muda é quantos sorteios cada linha consome.
+  const roll = table.rollModel === 'canary' ? rollCanaryLine : rollLine;
+  const gold = table.gold === undefined ? 0 : roll(table.gold, rng);
   let items: LootItem[] | null = null;
   let supplies: LootSupply[] | null = null;
   let ammunition: LootAmmunition[] | null = null;
   for (const line of table.items) {
-    const quantity = rollLine(line, rng);
+    const quantity = roll(line, rng);
     if (quantity === 0) continue;
     if (line.itemId !== undefined) {
       (items ??= []).push({ itemId: line.itemId, quantity });
@@ -88,4 +105,31 @@ function rollLine(line: LootRoll, rng: Rng): number {
   if (line.chance <= 0) return 0;
   if (!rng.chance(line.chance)) return 0;
   return line.min === line.max ? line.min : rng.integer(line.min, line.max);
+}
+
+/**
+ * Uma linha pelo `generateLootRoll` do Canary (#685, `monstertype.lua`). SEMPRE dois sorteios,
+ * nesta ordem, mesmo com `chance: 0` — o fator e a rolagem —, porque é o que o Canary faz, e a
+ * quantidade NÃO é um terceiro sorteio: sai da MESMA rolagem que decidiu o drop, então um drop
+ * "apertado" (rolagem alta) tende a vir numa pilha diferente de um folgado. Consequência que
+ * surpreende: uma linha "100 %" cai só ~98,6 % das vezes (fator abaixo de 1 e a rolagem inclui
+ * o 100000).
+ *
+ * Linha não-empilhável chega aqui com `min = max = 1` (o `buildContent` recusa o resto), e a
+ * conta devolve 1 — o mesmo que o ramo não-empilhável do Canary.
+ */
+function rollCanaryLine(line: LootRoll, rng: Rng): number {
+  const chance = Math.round(line.chance * CANARY_LOOT_CHANCE_SCALE);
+  // A ordem das operações é a do Canary: reassociar muda o último bit do double e, na fronteira,
+  // o drop.
+  const dynamicFactor = LOOT_FACTOR * (rng.integer(95, 105) / 100);
+  const adjustedChance = chance * dynamicFactor;
+  // `getLootRandom` com rateLoot 1: inteiro em [0, 100000], os DOIS extremos inclusos.
+  // PONTO DE ENCAIXE do rate de loot (#691): no Canary o `rateLoot` divide a ROLAGEM
+  // (`random × 100 / max(1, rateLoot × 100)`), não a chance — e a quantidade sai da rolagem já
+  // dividida. Quando a #691 e esta se encontrarem, o rate entra aqui, sobre `randValue`, e não
+  // pela chance como no `rollLine`.
+  const randValue = rng.integer(0, CANARY_LOOT_CHANCE_SCALE);
+  if (randValue >= adjustedChance) return 0;
+  return (randValue % (line.max - line.min + 1)) + line.min;
 }

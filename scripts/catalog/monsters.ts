@@ -616,8 +616,8 @@ export function convertMonster(
     targetDistance: Math.max(1, num(flags['targetDistance']) ?? 1),
     blockable: bool(flags['isBlockable']) ?? false,
     loot: {
-      // `rollModel: 'canary'` (#685): a tabela gerada rola do jeito do Canary. O schema ainda não
-      // declara o campo — o `lootTableSchema` é `z.object` e o descarta ao validar — até o #685.
+      // `rollModel: 'canary'` (#685): a tabela gerada rola do jeito do Canary — fator 95–105 %,
+      // rolagem em cem-milésimos e quantidade da mesma rolagem (`rollCanaryLine`, `sim/loot.ts`).
       rollModel: 'canary',
       ...(loot.gold === undefined ? {} : { gold: loot.gold }),
       items: loot.items,

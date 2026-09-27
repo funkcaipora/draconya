@@ -365,6 +365,23 @@ desabilitar uma linha não mudar o que as outras rendem. O gold vira `goldDelta`
 loot no chão e sem caixa de loot: o produto rejeita isso de propósito (§26 da referência); o
 cadáver que fica é só visual (FUN-123, ver "Divergências").
 
+A tabela escolhe **como** é sorteada, pelo campo `loot.rollModel` (#685):
+
+- **Ausente — o modelo FUN-63.** `rng.chance(fração)` decide o drop e, se cair, um
+  `rng.integer(min, max)` independente dá a quantidade; `chance: 0` e `min === max` não consomem
+  sorteio. É o dos quatro monstros autorais (Rat, Rotworm, Dragon, Dragon Lord), e continua bit a
+  bit o de sempre — toda semente já gravada depende disso (invariante 7).
+- **`canary` — o `generateLootRoll` do Canary**, que o leitor de monstros (#578) grava em toda
+  tabela gerada. Cada linha consome SEMPRE dois sorteios, mesmo com `chance: 0`: um fator
+  `integer(95, 105) / 100` multiplica a chance em cem-milésimos (`round(fração × 100000)`), e a
+  linha cai se uma rolagem inteira em `[0, 100000]` ficar **abaixo** da chance ajustada. A
+  quantidade sai da MESMA rolagem — `rolagem % (max − min + 1) + min` —, então ela é
+  correlacionada com a sorte do drop. Consequência: uma linha "100 %" cai só **~98,6 %** das
+  vezes (fator abaixo de 1, e a rolagem inclui o 100000). O `buildContent` recusa, numa tabela
+  `canary`, a linha de item com `max > 1` cujo item não é `stackable` — o Canary daria 1.
+  O `factor` do Canary (prey de loot, wealth, boosted creature, charm Gut) é fixo em 1 até esses
+  sistemas existirem; `unique` e o filtro de reward boss ficam com o sistema de boss.
+
 ### Abate comum não é evento notável
 
 `notableEvents` é a lista curta da tela de retorno (§16.2). Uma hunt de oito horas com uma linha

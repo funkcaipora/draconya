@@ -504,6 +504,33 @@ describe('a sessão em si', () => {
     expect(session.aggregates.goldGained).toBe(0);
   });
 
+  it('monstro de tabela canary (#685): mesma semente, mesmo loot a 1 Hz e a 10 Hz', () => {
+    // O modelo do Canary consome dois sorteios por linha e tira a quantidade da rolagem; nada
+    // disso pode depender da cadência — o sorteio é estágio do evento de morte, não do tick.
+    const canaryRat = {
+      ...rat,
+      loot: {
+        rollModel: 'canary',
+        gold: { chance: 0.6, min: 1, max: 30 },
+        items: [{ itemId: 'sword', chance: 0.5, min: 1, max: 1 }],
+      },
+    };
+    const loaded = content({ monsters: [canaryRat] });
+    const at = (stepMs: number) => {
+      const { session, hero } = start({ loaded, difficulty: 'bold' });
+      run(session, 120_000, stepMs);
+      return {
+        kills: session.aggregates.kills,
+        gold: session.aggregates.goldGained,
+        items: [...hero.inventory.items(), ...hero.lootBox].map((i) => `${i.instanceId}/${i.itemId}`),
+      };
+    };
+    const fast = at(100);
+    expect(at(1_000)).toEqual(fast);
+    expect(fast.kills).toBeGreaterThan(2);
+    expect(fast.gold).toBeGreaterThan(0);
+  });
+
   it('a atribuição de dano atravessa o snapshot, e o abate retomado credita igual', () => {
     // Sem a atribuição no snapshot, o abate depois de uma retomada creditaria só a quem
     // bateu depois dela. Aqui a retomada acontece no MEIO da luta, e o resultado tem que ser
