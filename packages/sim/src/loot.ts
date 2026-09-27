@@ -16,8 +16,8 @@ export const CANARY_LOOT_CHANCE_SCALE = 100_000;
 
 /**
  * O `config.factor` do `generateLootRoll` (prey de loot, wealth duplex, boosted creature, charm
- * Gut): 1 até esses sistemas existirem, cada um no seu épico. O `rateLoot` do servidor não é o
- * fator: é a #691 que o traz (ver o ponto de encaixe em `rollCanaryLine`).
+ * Gut): 1 até esses sistemas existirem, cada um no seu épico. O `rateLoot` do servidor (#691) não é
+ * o fator: ele divide a rolagem em `rollCanaryLine`.
  */
 const LOOT_FACTOR = 1;
 
@@ -56,6 +56,7 @@ export interface LootResult {
 const NO_ITEMS: readonly LootItem[] = [];
 const NO_SUPPLIES: readonly LootSupply[] = [];
 const NO_AMMUNITION: readonly LootAmmunition[] = [];
+const EMPTY_LOOT: LootResult = { gold: 0, items: NO_ITEMS, supplies: NO_SUPPLIES, ammunition: NO_AMMUNITION };
 
 /**
  * Sorteia a tabela com o `Rng` da SESSÃO, nunca `Math.random`: sem isso, uma sessão retomada
@@ -68,17 +69,22 @@ const NO_AMMUNITION: readonly LootAmmunition[] = [];
  * `supplyId` ou `ammunitionId`; separar os três resultados em listas diferentes DEPOIS de
  * sortear não muda a sequência nenhuma (FUN-63).
  */
-export function rollLoot(table: LootTable, rng: Rng): LootResult {
+export function rollLoot(table: LootTable, rng: Rng, lootRate = 1): LootResult {
+  // `rateLoot <= 0` desliga o loot (#691, `monster.cpp:3431` do Canary): nada cai, e NENHUM
+  // sorteio é consumido — o loot desligado não pode deslocar a sequência do resto da hunt. Vale
+  // para os dois modelos: no Canary o `rateLoot` 0 nem chega ao `generateLootRoll`.
+  if (lootRate <= 0) return EMPTY_LOOT;
   // O modelo é CAMPO da tabela (#685, invariante 7): ausente é o FUN-63, bit a bit; `canary` é
   // o `generateLootRoll` do Canary. A ordem (gold, depois itens na ordem da tabela) é a mesma
-  // nos dois — o que muda é quantos sorteios cada linha consome.
+  // nos dois — o que muda é quantos sorteios cada linha consome, e onde o rate entra (na chance
+  // no FUN-63, na rolagem no `canary`).
   const roll = table.rollModel === 'canary' ? rollCanaryLine : rollLine;
-  const gold = table.gold === undefined ? 0 : roll(table.gold, rng);
+  const gold = table.gold === undefined ? 0 : roll(table.gold, rng, lootRate);
   let items: LootItem[] | null = null;
   let supplies: LootSupply[] | null = null;
   let ammunition: LootAmmunition[] | null = null;
   for (const line of table.items) {
-    const quantity = roll(line, rng);
+    const quantity = roll(line, rng, lootRate);
     if (quantity === 0) continue;
     if (line.itemId !== undefined) {
       (items ??= []).push({ itemId: line.itemId, quantity });
@@ -101,9 +107,13 @@ export function rollLoot(table: LootTable, rng: Rng): LootResult {
  * sequência das outras — semente é contrato. `min === max` também não consome o sorteio de
  * intervalo, pela mesma razão: quantidade fixa não tem o que sortear.
  */
-function rollLine(line: LootRoll, rng: Rng): number {
+function rollLine(line: LootRoll, rng: Rng, lootRate: number): number {
   if (line.chance <= 0) return 0;
-  if (!rng.chance(line.chance)) return 0;
+  // O rate de loot (#691) multiplica a CHANCE, com teto 1 — o `getLootRandom` do Canary
+  // (`random × 100 / max(1, rateLoot)`): um rate entre 0 e 1 age como 1. Com rate 1 a chamada
+  // é exatamente a de sempre.
+  const chance = lootRate === 1 ? line.chance : Math.min(1, line.chance * Math.max(1, lootRate));
+  if (!rng.chance(chance)) return 0;
   return line.min === line.max ? line.min : rng.integer(line.min, line.max);
 }
 
@@ -118,18 +128,21 @@ function rollLine(line: LootRoll, rng: Rng): number {
  * Linha não-empilhável chega aqui com `min = max = 1` (o `buildContent` recusa o resto), e a
  * conta devolve 1 — o mesmo que o ramo não-empilhável do Canary.
  */
-function rollCanaryLine(line: LootRoll, rng: Rng): number {
+function rollCanaryLine(line: LootRoll, rng: Rng, lootRate: number): number {
   const chance = Math.round(line.chance * CANARY_LOOT_CHANCE_SCALE);
   // A ordem das operações é a do Canary: reassociar muda o último bit do double e, na fronteira,
   // o drop.
   const dynamicFactor = LOOT_FACTOR * (rng.integer(95, 105) / 100);
   const adjustedChance = chance * dynamicFactor;
-  // `getLootRandom` com rateLoot 1: inteiro em [0, 100000], os DOIS extremos inclusos.
-  // PONTO DE ENCAIXE do rate de loot (#691): no Canary o `rateLoot` divide a ROLAGEM
-  // (`random × 100 / max(1, rateLoot × 100)`), não a chance — e a quantidade sai da rolagem já
-  // dividida. Quando a #691 e esta se encontrarem, o rate entra aqui, sobre `randValue`, e não
-  // pela chance como no `rollLine`.
-  const randValue = rng.integer(0, CANARY_LOOT_CHANCE_SCALE);
+  // `getLootRandom`: inteiro em [0, 100000], os DOIS extremos inclusos, DIVIDIDO pelo rate de
+  // loot (#691, `random × 100 / max(1, rateLoot × SCHEDULE_LOOT_RATE)`, com o schedule em 100):
+  // no modelo `canary` o rate não multiplica a chance como no `rollLine` — ele encolhe a
+  // rolagem, e a quantidade sai da rolagem JÁ dividida. Rate entre 0 e 1 age como 1 (o
+  // `max(1, …)`). Com rate 1 a rolagem é o inteiro de sempre, bit a bit.
+  const rawValue = rng.integer(0, CANARY_LOOT_CHANCE_SCALE);
+  const randValue = lootRate <= 1 ? rawValue : rawValue / lootRate;
   if (randValue >= adjustedChance) return 0;
-  return (randValue % (line.max - line.min + 1)) + line.min;
+  // Com rate > 1 a rolagem é fracionária (Lua divide em ponto flutuante), e o `%` do Lua sobre
+  // ela também; a contagem chega ao item truncada — o `Game.createItem` a lê como inteiro.
+  return Math.trunc(randValue % (line.max - line.min + 1)) + line.min;
 }

@@ -16,10 +16,11 @@
 // primeira importação para `data/` — loot resolvido, aparência gravada, Bestiário mesclado — é o
 // M35-03 (#580). O registro aponta `packages/content/staging/monsters` até lá.
 //
-// **O que fica de fora nesta issue, e aparece no relatório** (`docs/reference/catalog/
-// monsters-report.md`): monstro com ataque além do `melee` simples, com magia de defesa ou com
-// invocação — o mapeamento é do M35-02 (#579) —; aparência que o pacote 13.32 não desenha; e as
-// pastas `familiars/`, `trainers/` e `traps/`, que não são caça.
+// **Ataque, defesa e invocação** passam pelos mapeadores de `monster-abilities.ts` (M35-02, #579).
+//
+// **O que fica de fora, e aparece no relatório** (`docs/reference/catalog/monsters-report.md`):
+// monstro com ataque/defesa sem mapeador ou que invoca um monstro não gerado; aparência que o
+// pacote 13.32 não desenha; e as pastas `familiars/`, `trainers/` e `traps/`, que não são caça.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -28,6 +29,11 @@ import type { CatalogEntity, CatalogSource } from './generated-writer.js';
 import { registerCatalogType, type CatalogImportContext, type CatalogImportResult } from './registry.js';
 import type { SkippedEntity } from './report.js';
 import { attrOptional, readXmlFile } from './xml.js';
+import {
+  ABILITY_KIND_SUPPORTED, AREA_ROWS_SUPPORTED, mapSpell, mapSummons, RANDOM_TOTAL_REASON, uniqueIds,
+  type PresentationUse,
+} from './monster-abilities.js';
+import { extractEnum, MAGIC_EFFECT_ENUM, MAGIC_EFFECT_HEADER, SHOOT_TYPE_ENUM } from './enums.js';
 import { repoRootFrom } from './env.js';
 
 /** A raiz dos monstros dentro do checkout do Canary. */
@@ -248,6 +254,10 @@ export interface MonsterReaderDeps {
   readonly itemNames: ReadonlyMap<number, string>;
   readonly tfsSpeeds: ReadonlyMap<string, number>;
   readonly outfitRanges: readonly IdRange[];
+  /** `CONST_ME_*` → id (`MagicEffectClasses`), só para o relatório resolver as chaves. */
+  readonly effectIds: ReadonlyMap<string, number>;
+  /** `CONST_ANI_*` → id (`ShootType_t`). */
+  readonly missileIds: ReadonlyMap<string, number>;
 }
 
 export interface LootLine {
@@ -291,6 +301,16 @@ export interface MonsterNotes {
   readonly mitigationClamped: boolean;
   /** Campos do Lua lidos e deliberadamente ignorados nesta issue. */
   readonly ignoredFields: readonly string[];
+  /** Entradas de ataque/defesa sem mapeador (M35-02) — cada uma bloqueia o monstro. */
+  readonly unmappedSpells: readonly UnmappedSpell[];
+  /** Entradas descartadas de propósito (só apresentação no Canary). */
+  readonly droppedSpells: readonly string[];
+  /** Forma do Canary aproximada por outra do Draconya (a onda sem `rows`, TODO #679). */
+  readonly spellNotes: readonly string[];
+  /** Chaves de apresentação usadas, com a constante de origem. */
+  readonly presentation: readonly PresentationUse[];
+  /** Os monstros que este invoca — o catálogo confere que cada um foi gerado. */
+  readonly summonedIds: readonly string[];
 }
 
 export interface ConvertedMonster {
@@ -336,38 +356,62 @@ export function maxMeleeDamage(skill: number, attack: number): number {
   return Math.ceil(skill * (attack * 0.05) + attack * 0.5);
 }
 
-interface MeleeResult {
-  readonly attack: { readonly min: number; readonly max: number } | number;
-  readonly intervalMs: number;
+/** Um nome de ataque/defesa sem mapeador, e o motivo — vai para o relatório. */
+export interface UnmappedSpell {
+  readonly name: string;
+  readonly reason: string;
 }
 
-/** O `melee` simples, ou os nomes de ataque que este leitor ainda não mapeia (M35-02). */
-function readAttacks(attacks: readonly LuaValue[]): { melee: MeleeResult | undefined; unmapped: string[] } {
-  const unmapped: string[] = [];
-  let melee: MeleeResult | undefined;
-  for (const raw of attacks) {
-    if (!isRecord(raw)) { unmapped.push('(linha sem tabela)'); continue; }
-    const name = str(raw['name']) ?? '(sem nome)';
-    if (name !== 'melee') { unmapped.push(name); continue; }
-    const chance = num(raw['chance']) ?? 100;
-    // `melee` com condição (veneno no golpe), com `type` elemental, ou com chance < 100 não é o
-    // golpe básico do `monsterSchema` — é uma ability, e ability é o M35-02.
-    if (melee !== undefined || chance < 100 || raw['condition'] !== undefined || raw['type'] !== undefined) {
-      unmapped.push('melee (condição/tipo/chance/duplicado)');
-      continue;
+interface SpellsResult {
+  readonly abilities: Record<string, unknown>[];
+  readonly defenses: Record<string, unknown>[];
+  readonly unmapped: UnmappedSpell[];
+  readonly dropped: string[];
+  readonly notes: string[];
+  readonly presentation: PresentationUse[];
+}
+
+/**
+ * `monster.attacks` e as magias de `monster.defenses` pelos mapeadores de
+ * `monster-abilities.ts` (M35-02). A ordem da lista é a do Lua — ela é a ordem das rolagens.
+ */
+function readSpells(
+  monsterId: string, attacks: readonly LuaValue[], defenses: readonly LuaValue[], deps: MonsterReaderDeps,
+): SpellsResult {
+  const result: SpellsResult = { abilities: [], defenses: [], unmapped: [], dropped: [], notes: [], presentation: [] };
+  // Sem os enums (fixture sem `src/`), toda constante vale.
+  const knownConstant = deps.effectIds.size === 0 || deps.missileIds.size === 0
+    ? undefined
+    : (constant: string, role: 'missile' | 'effect'): boolean => (role === 'missile' ? deps.missileIds : deps.effectIds).has(constant);
+  for (const [list, entries] of [['attacks', attacks], ['defenses', defenses]] as const) {
+    for (const raw of entries) {
+      const mapped = mapSpell(raw, {
+        monsterId, list, presentation: result.presentation, ...(knownConstant === undefined ? {} : { knownConstant }),
+      });
+      switch (mapped.kind) {
+        case 'ability': result.abilities.push(mapped.ability); result.notes.push(...mapped.notes); break;
+        case 'defense': result.defenses.push(mapped.defense); result.notes.push(...mapped.notes); break;
+        case 'dropped': result.dropped.push(mapped.reason); break;
+        case 'unmapped': result.unmapped.push({ name: mapped.name, reason: mapped.reason }); break;
+      }
     }
-    const intervalMs = num(raw['interval']) ?? DEFAULT_ATTACK_INTERVAL_MS;
-    const skill = num(raw['skill']);
-    const attackValue = num(raw['attack']);
-    if (skill !== undefined && attackValue !== undefined && skill > 0 && attackValue > 0) {
-      melee = { attack: { min: 0, max: maxMeleeDamage(skill, attackValue) }, intervalMs };
-      continue;
-    }
-    const a = Math.abs(num(raw['minDamage']) ?? 0);
-    const b = Math.abs(num(raw['maxDamage']) ?? 0);
-    melee = { attack: { min: Math.min(a, b), max: Math.max(a, b) }, intervalMs };
   }
-  return { melee, unmapped };
+  return {
+    ...result,
+    abilities: uniqueIds(result.abilities),
+    defenses: uniqueIds(result.defenses),
+  };
+}
+
+/**
+ * O `melee` sozinho, sem nada além do que a ability básica do boot já sintetiza de `attack`/
+ * `attackIntervalMs` — nesse caso `abilities` fica AUSENTE e o monstro vai pelo caminho legado,
+ * bit a bit o de sempre (CMB-06).
+ */
+function isPlainMelee(abilities: readonly Record<string, unknown>[]): boolean {
+  if (abilities.length !== 1) return false;
+  const only = abilities[0] as Record<string, unknown>;
+  return only['id'] === 'melee' && only['presentation'] === undefined && only['condition'] === undefined;
 }
 
 interface LootResult {
@@ -512,6 +556,7 @@ export function convertMonster(
   const emptyNotes: MonsterNotes = {
     droppedCoinLines: [], clampedWeaknesses: [], elementImmunities: [], unmappedElements: [],
     speedSource: 'canary-x2', mitigationClamped: false, ignoredFields: [],
+    unmappedSpells: [], droppedSpells: [], spellNotes: [], presentation: [], summonedIds: [],
   };
   if (typeName === undefined) {
     return {
@@ -544,20 +589,15 @@ export function convertMonster(
     blockers.push(`outfit ${lookType} fora do pacote 13.32`);
   }
 
-  const attacks = readAttacks(positionalOf(raw['attacks']));
-  if (attacks.unmapped.length > 0) {
-    blockers.push(`ataque sem mapeador (M35-02): ${[...new Set(attacks.unmapped)].sort().join(', ')}`);
-  }
   const defensesRaw = raw['defenses'];
-  const defenseSpells = positionalOf(defensesRaw).map((spell) => (isRecord(spell) ? str(spell['name']) ?? '?' : '?'));
-  if (defenseSpells.length > 0) {
-    blockers.push(`defesa com magia sem mapeador (M35-02): ${[...new Set(defenseSpells)].sort().join(', ')}`);
+  const spells = readSpells(id, positionalOf(raw['attacks']), positionalOf(defensesRaw), deps);
+  if (spells.unmapped.length > 0) {
+    const reasons = [...new Set(spells.unmapped.map((spell) => `${spell.name} (${spell.reason})`))].sort();
+    blockers.push(`sem mapeador: ${reasons.join(', ')}`);
   }
-  const summonTable = raw['summon'];
-  const summonEntries = isRecord(summonTable) ? positionalOf(summonTable['summons']) : [];
-  if (summonEntries.length > 0 || positionalOf(raw['summons']).length > 0) {
-    blockers.push('invocação (M35-02)');
-  }
+  const summons = mapSummons(raw['summon'], slugify);
+  for (const problem of summons.problems) blockers.push(problem);
+  const melee = spells.abilities.find((ability) => ability['id'] === 'melee');
 
   const defenses = isRecord(defensesRaw) ? defensesRaw : {};
   const mitigationRaw = num(defenses['mitigation']) ?? 0;
@@ -599,7 +639,7 @@ export function convertMonster(
     ...(typeof bestiary === 'object' ? { class: bestiary.class } : {}),
     health,
     experience: num(raw['experience']) ?? 0,
-    attack: attacks.melee?.attack ?? 0,
+    attack: (melee?.['power'] as { min: number; max: number } | undefined) ?? 0,
     armor: num(defenses['armor']) ?? 0,
     defense: num(defenses['defense']) ?? 0,
     damageType: 'physical',
@@ -609,7 +649,7 @@ export function convertMonster(
     canWalkOnFire: bool(flags['canWalkOnFire']) ?? true,
     canWalkOnPoison: bool(flags['canWalkOnPoison']) ?? true,
     canWalkOnEnergy: bool(flags['canWalkOnEnergy']) ?? true,
-    attackIntervalMs: attacks.melee?.intervalMs ?? DEFAULT_ATTACK_INTERVAL_MS,
+    attackIntervalMs: (melee?.['cadenceMs'] as number | undefined) ?? DEFAULT_ATTACK_INTERVAL_MS,
     speed: speed.speed,
     aggroRadius: CANARY_AGGRO_RADIUS,
     attackRange: 1,
@@ -622,6 +662,10 @@ export function convertMonster(
       ...(loot.gold === undefined ? {} : { gold: loot.gold }),
       items: loot.items,
     },
+    // As abilities declaradas (M35-02). O `melee` sozinho e simples fica AUSENTE: é exatamente a
+    // básica que o boot sintetiza de `attack`/`attackIntervalMs` (CMB-06).
+    ...(spells.abilities.length === 0 || isPlainMelee(spells.abilities) ? {} : { abilities: spells.abilities }),
+    ...(spells.defenses.length === 0 ? {} : { defenses: spells.defenses }),
   };
   const changeInterval = num(changeTarget['interval']) ?? 0;
   if (changeInterval > 0) {
@@ -638,10 +682,11 @@ export function convertMonster(
   if (runHealth > 0) entity['runOnHealth'] = runHealth;
   const staticChance = num(flags['staticAttackChance']);
   if (staticChance !== undefined) entity['staticAttack'] = Math.min(Math.max(staticChance, 0), 100) / 100;
-  if (attacks.melee === undefined && attacks.unmapped.length === 0) {
+  if (melee === undefined && spells.abilities.length === 0 && spells.unmapped.length === 0) {
     entity['_open'] = 'Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.';
   }
   entity['source'] = source;
+  if (summons.summons !== undefined) entity['summons'] = summons.summons;
   // Staging (#580 separa): a ficha de Bestiário e o outfit não moram na entidade de `data/`.
   if (typeof bestiary === 'object') entity['bestiary'] = bestiary;
   if (lookType > 0) entity['outfitId'] = lookType;
@@ -659,6 +704,11 @@ export function convertMonster(
       speedSource: speed.source,
       mitigationClamped,
       ignoredFields,
+      unmappedSpells: spells.unmapped,
+      droppedSpells: spells.dropped,
+      spellNotes: spells.notes,
+      presentation: spells.presentation,
+      summonedIds: summons.summonedIds,
     },
   };
 }
@@ -716,6 +766,24 @@ export function readMonsterCatalog(ctx: CatalogImportContext, deps: MonsterReade
     }
     seen.add(monster.id);
     generated.push(monster);
+  }
+  // A invocação aponta monstro por id (`summons.entries[].monsterId`), e o boot recusa id que não
+  // existe: quem invoca um monstro que não foi gerado também sai — até não sobrar nenhum (a
+  // cadeia pode ter mais de um elo).
+  const summonBlocked = new Map<string, string[]>();
+  for (;;) {
+    const ids = new Set(generated.map((monster) => monster.id));
+    const orphan = generated.filter((monster) => monster.notes.summonedIds.some((summoned) => !ids.has(summoned)));
+    if (orphan.length === 0) break;
+    for (const monster of orphan) {
+      const missing = monster.notes.summonedIds.filter((summoned) => !ids.has(summoned));
+      summonBlocked.set(monster.id, missing);
+      generated.splice(generated.indexOf(monster), 1);
+      const name = typeof monster.entity['name'] === 'string' ? monster.entity['name'] : monster.id;
+      skipped.push({ id: monster.id, name, reason: `invoca monstro não gerado: ${[...new Set(missing)].sort().join(', ')}`, source: monster.entity.source });
+    }
+  }
+  for (const monster of generated) {
     const slice = slices.get(monster.folder) ?? [];
     slice.push(monster.entity);
     slices.set(monster.folder, slice);
@@ -746,8 +814,128 @@ export function readMonsterCatalog(ctx: CatalogImportContext, deps: MonsterReade
   if (mitigation.length > 0) notes.push(`\`defenses.mitigation\` acima de 30 recortada: ${mitigation.join(', ')}.`);
   notes.push(`Campos lidos e ignorados nesta issue (arquivos gerados): ${countBy(generated.flatMap((m) => m.notes.ignoredFields)) || 'nenhum'}.`);
   notes.push(`Pastas fora do catálogo: ${[...SKIPPED_FOLDERS].sort().map((folder) => `\`${folder}/\``).join(', ')}.`);
+  notes.push(...spellNotes(converted, generated, summonBlocked, deps));
 
   return { slices, skipped, notes, converted };
+}
+
+/** A meta de cobertura do M35-02: fração dos monstros de caça importáveis que sai gerada. */
+export const HUNT_COVERAGE_TARGET = 0.7;
+
+/** O monstro é de CAÇA: tem ficha de Bestiário (boss e criatura de evento não têm). */
+function isHunt(monster: ConvertedMonster): boolean {
+  return typeof monster.entity['bestiary'] === 'object';
+}
+
+/**
+ * Importável: nada o bloqueia além do mapeamento de ataque/defesa/invocação — a aparência está
+ * no pacote, o loot resolve, tem vida e velocidade. É o denominador da meta do M35-02.
+ */
+function isImportable(monster: ConvertedMonster): boolean {
+  return monster.blockers.every((blocker) => blocker.startsWith('sem mapeador:'));
+}
+
+function percent(part: number, whole: number): string {
+  return whole === 0 ? '—' : `${((part / whole) * 100).toFixed(1)} %`;
+}
+
+/** As notas do M35-02: cobertura, nomes sem mapeador, descartes, aproximações e apresentação. */
+function spellNotes(
+  converted: readonly ConvertedMonster[], generated: readonly ConvertedMonster[],
+  summonBlocked: ReadonlyMap<string, readonly string[]>, deps: MonsterReaderDeps,
+): string[] {
+  const notes: string[] = [];
+  const generatedIds = new Set(generated.map((monster) => monster.id));
+  const hunt = converted.filter(isHunt);
+  const importable = hunt.filter(isImportable);
+  const importableGenerated = importable.filter((monster) => generatedIds.has(monster.id));
+  const ratio = importable.length === 0 ? 0 : importableGenerated.length / importable.length;
+  notes.push(
+    `Cobertura (M35-02): ${importableGenerated.length} de ${importable.length} monstros de caça importáveis gerados `
+    + `(${percent(importableGenerated.length, importable.length)}; meta ${percent(HUNT_COVERAGE_TARGET, 1)}`
+    + `${ratio >= HUNT_COVERAGE_TARGET ? ', atingida' : ', NÃO atingida'}). `
+    + `Caça = tem ficha de Bestiário (${hunt.length} lidos); importável = nada o bloqueia além do mapeamento de `
+    + 'ataque/defesa/invocação (aparência no pacote 13.32, loot resolvível, vida e velocidade).',
+  );
+  // Nome sem mapeador → monstros afetados (um monstro conta uma vez por nome).
+  const byName = new Map<string, { monsters: Set<string>; reasons: Set<string> }>();
+  for (const monster of converted) {
+    for (const spell of monster.notes.unmappedSpells) {
+      const entry = byName.get(spell.name) ?? { monsters: new Set<string>(), reasons: new Set<string>() };
+      entry.monsters.add(monster.id);
+      entry.reasons.add(spell.reason);
+      byName.set(spell.name, entry);
+    }
+  }
+  const rows = [...byName.entries()]
+    .sort(([a, x], [b, y]) => y.monsters.size - x.monsters.size || a.localeCompare(b))
+    .map(([name, entry]) => `\`${name}\` ${entry.monsters.size} (${[...entry.reasons].sort().join('; ')})`);
+  notes.push(`Ataque/defesa sem mapeador — nome, monstros lidos afetados e motivo: ${rows.join(', ') || 'nenhum'}.`);
+  const onlyBlocker = importable.filter((monster) => !generatedIds.has(monster.id) && !summonBlocked.has(monster.id));
+  const soleNames: string[] = [];
+  for (const monster of onlyBlocker) {
+    soleNames.push(...new Set(monster.notes.unmappedSpells.map((spell) => spell.name)));
+  }
+  notes.push(
+    `Entre os ${onlyBlocker.length} de caça importáveis que ficaram fora só pelo mapeamento, os nomes que os seguram: `
+    + `${countBy(soleNames) || 'nenhum'}.`,
+  );
+  // A meta revista: quanto do que falta depende só de mecanismo que o Draconya ainda não tem
+  // (a invisibilidade do #559 e o total de condição sorteado), e quanto é magia com nome próprio
+  // — área e fórmula em script Lua, que um leitor de DADO não alcança.
+  const mechanismOnly = onlyBlocker.filter((monster) => monster.notes.unmappedSpells.every(
+    (spell) => spell.name === 'invisible' || spell.reason === RANDOM_TOTAL_REASON,
+  ));
+  const scripted = onlyBlocker.filter((monster) => monster.notes.unmappedSpells.some(
+    (spell) => spell.reason === 'magia com nome próprio (script Lua)',
+  ));
+  if (ratio < HUNT_COVERAGE_TARGET) {
+    notes.push(
+      `Meta revista (M35-02): ${percent(importableGenerated.length, importable.length)} com os mapeadores de dado. `
+      + `${mechanismOnly.length} dos que faltam dependem SÓ da invisibilidade (#559) e/ou do total de condição sorteado `
+      + `(\`condition\` com min ≠ max, sem forma no schema) — com os dois, a cobertura iria a `
+      + `${percent(importableGenerated.length + mechanismOnly.length, importable.length)}. ${scripted.length} usam alguma magia com `
+      + 'nome próprio (script Lua em `data-otservbr-global/scripts/spells/monster/`), que precisa de um mapeador por magia. '
+      + 'A meta de 70 % passa a valer depois do #559 e do total sorteado; até lá, a meta desta issue é a cobertura acima.',
+    );
+  }
+  if (summonBlocked.size > 0) {
+    notes.push(`Invocação de monstro não gerado (o monstro sai junto): ${[...summonBlocked.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([id, missing]) => `\`${id}\` → ${[...new Set(missing)].join(', ')}`).join('; ')}.`);
+  }
+  const summoners = generated.filter((monster) => monster.entity['summons'] !== undefined).map((monster) => `\`${monster.id}\``);
+  notes.push(`Invocação gerada (\`summons\`): ${summoners.join(', ') || 'nenhuma'}.`);
+  const dropped = generated.flatMap((monster) => monster.notes.droppedSpells);
+  notes.push(`Descartado por ser só apresentação no Canary (monstros gerados): ${countBy(dropped) || 'nenhum'}.`);
+  const approximated = generated.flatMap((monster) => monster.notes.spellNotes);
+  notes.push(
+    `Forma aproximada (monstros gerados): ${countBy(approximated) || 'nenhuma'}. `
+    + `\`kind\` (#682) ${ABILITY_KIND_SUPPORTED ? 'preenchido' : 'NÃO preenchido — o schema desta base ainda não o declara; regenerar depois do #682'}; `
+    + `onda em \`rows\` (#679) ${AREA_ROWS_SUPPORTED ? 'preenchida' : 'NÃO — o schema desta base não tem `rows`, e a onda de monstro sai na `wave` antiga (TODO #679)'}.`,
+  );
+  // Chave de apresentação → o id do Canary (`MagicEffectClasses`/`ShootType_t`): as linhas que o
+  // #580 grava em `appearances.abilities`, conferidas contra o pacote lá.
+  const keys = new Map<string, Set<string>>();
+  for (const use of generated.flatMap((monster) => monster.notes.presentation)) {
+    const id = use.role === 'missile' ? deps.missileIds.get(use.constant) : deps.effectIds.get(use.constant);
+    const set = keys.get(use.key) ?? new Set<string>();
+    set.add(`${use.role} ${id ?? '?'}`);
+    keys.set(use.key, set);
+  }
+  notes.push(
+    `Chaves de apresentação dos gerados (${keys.size}), com o id do Canary para \`appearances.abilities\` (#580): `
+    + `${[...keys.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, ids]) => `\`${key}\` ${[...ids].sort().join('/')}`).join(', ') || 'nenhuma'}.`,
+  );
+  return notes;
+}
+
+/** Os dois enums de apresentação do Canary; sem o cabeçalho (fixture), mapas vazios. */
+function readPresentationEnums(canaryDir: string): { effectIds: Map<string, number>; missileIds: Map<string, number> } {
+  try {
+    const header = readFileSync(join(canaryDir, MAGIC_EFFECT_HEADER), 'utf8');
+    return { effectIds: extractEnum(header, MAGIC_EFFECT_ENUM), missileIds: extractEnum(header, SHOOT_TYPE_ENUM) };
+  } catch {
+    return { effectIds: new Map(), missileIds: new Map() };
+  }
 }
 
 /** As entradas que o leitor busca fora do Lua, a partir do contexto e do repositório. */
@@ -756,6 +944,7 @@ export function loadReaderDeps(ctx: CatalogImportContext, repoRoot: string): Mon
     itemNames: readItemNames(join(ctx.canaryDir, CANARY_ITEMS_XML)),
     tfsSpeeds: ctx.forgottenServerCommit === '' ? new Map() : readTfsSpeeds(ctx.forgottenServerDir),
     outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1332.json')),
+    ...readPresentationEnums(ctx.canaryDir),
   };
 }
 

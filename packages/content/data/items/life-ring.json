@@ -5,6 +5,8 @@
   "slot": "finger",
   "weight": 2,
   "value": 100,
-  "ringEffect": { "kind": "regen-boost", "percent": 300 },
-  "_open": "Peso e preço provisórios — o PRD (§21) não fixa número de anel, e docs/reference/huntera-observed.md não observa nenhum. O BÔNUS (SV-16, +300% da regeneração base) é definitivo. appearanceId resolvido via /assets, conferido de olho a 32 px."
+  "bonuses": {
+    "regeneration": { "healthGain": 2, "healthTicksMs": 6000, "manaGain": 8, "manaTicksMs": 6000 }
+  },
+  "_open": "Peso e preço provisórios — o PRD (§21) não fixa número de anel, e docs/reference/huntera-observed.md não observa nenhum. A REGENERAÇÃO é a do Canary `items.xml` id 3089 (`healthgain` 2 / `healthticks` 6000, `managain` 8 / `manaticks` 6000), própria do item e somada à da vocação (#688). A duração (`duration` 1200 s) e a forma ativa/inativa ficam para #689. appearanceId resolvido via /assets, conferido de olho a 32 px."
 }

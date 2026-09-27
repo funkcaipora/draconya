@@ -12,16 +12,17 @@
     "kind": "damage",
     "basePower": 120,
     "area": {
-      "shape": "wave",
-      "length": 4
+      "shape": "rows",
+      "widths": [1, 1, 3, 3, 3]
     },
     "damageType": "earth",
     "formula": {
       "skillMin": 3.5,
       "skillMax": 7,
       "baseMin": 0,
-      "baseMax": 0
+      "baseMax": 0,
+      "scaling": "magic"
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Área do Canary (`data/scripts/spells/attack/terra_wave.lua`, main, 2026-09-24): AREA_SQUAREWAVE5 tem 4 fileiras, não 5; fórmula já batia."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Área do Canary (`data/scripts/spells/attack/terra_wave.lua`, main, 2026-09-24): AREA_SQUAREWAVE5 tem 5 fileiras, larguras 1,1,3,3,3 do lançador para fora (11 tiles), contando a do `3`. A fileira do `3` conta: o motor a ancora um passo à frente do lançador (`spells.cpp:337` `getCasterPosition`) e atinge todo valor não-zero (`combat.cpp:2309` `AreaCombat::getList`) — #679. Fórmula já batia."
 }

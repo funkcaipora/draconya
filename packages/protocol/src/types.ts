@@ -422,6 +422,8 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   }),
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /** Fileiras à frente, uma largura ímpar cada (#679). */
+  z.object({ shape: z.literal('rows'), widths: z.array(z.number().int().positive()).min(1) }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
 ]);

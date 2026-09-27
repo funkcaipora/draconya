@@ -23,6 +23,11 @@ grupo pronto, os slots ligados são tentados em ordem; o primeiro que consegue e
 grupo pelo cooldown dele, e quem não consegue agora é **pulado no mesmo ciclo** — sem mana, sem
 gold, sem alvo, ou em cooldown individual.
 
+Poção e runa ainda dividem um terceiro relógio, a **exaustão de ação** de 1000 ms (#690, o
+`nextPotionAction` do Canary, `actionExhaustMs` no supply): uma poção logo depois de uma runa de
+ataque espera 1000 ms mesmo com o grupo `potion` livre. O slot em exaustão é pulado no ciclo e o
+grupo volta no vencimento dela — adiado, não perdido. Magia não lê este relógio.
+
 O jogador também administra targeting: mirar no alvo mais próximo, no de menor ou maior HP, ou
 no alvo que ele escolheu clicando no mundo; priorizar ou ignorar criaturas específicas; e a
 postura (parado na rota, seguir o alvo, manter distância).
@@ -214,7 +219,8 @@ por cooldown.
 | Cooldown de fallback de um grupo | 1 s | `packages/content/data/bot/baseline.json`, `categoryCooldownMs` |
 | Grupo de cooldown por magia | `attack` / `healing` / `support` | `packages/content/data/spells/*.json`, campo `group` |
 | Grupo de cooldown por supply | `potion` / `attack` | `packages/content/data/supplies/*.json`, campo `group` |
-| Preço do supply (gold no uso) | poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]`; as nove poções do Tibia (#524, kit level 200) 115–480, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
+| Exaustão de ação compartilhada (poção + runa) | 1000 ms (`timeBetweenExActions` do Canary, #690) | `packages/content/data/supplies/*.json`, campo `actionExhaustMs` |
+| Preço do supply (gold no uso) | small health potion 20 (#690, `buy` de NPC do Canary, NÃO provisório); poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]`; as nove poções do Tibia (#524, kit level 200) 115–480, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
 | Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]`; power bolt 10 (#524, NÃO provisório) | `packages/content/data/ammunition/*.json`, campo `price` |
 | Raio de busca de alvo | 8 tiles | `packages/content/data/bot/baseline.json`, `targetSearchRadius` |
 | Teto de regras de saída | 4 | `packages/content/data/bot/baseline.json`, `slots.exit` |

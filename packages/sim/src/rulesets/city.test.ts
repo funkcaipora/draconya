@@ -1,4 +1,4 @@
-import { buildTilemap, compileItem, itemSchema } from '@draconya/content';
+import { NEUTRAL_RATES, buildTilemap, compileItem, itemSchema } from '@draconya/content';
 import type { Item, Progression } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
@@ -82,11 +82,12 @@ describe('chegar na Cidade (FUN-120)', () => {
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
       vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
       startingSpeed: 300, speedPerLevel: 2,
-      regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
       xp: { kind: 'power', base: 20, exponent: 2 },
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
       skillMultipliers: {},
       mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+      rates: NEUTRAL_RATES,
     };
     const session = new Session({
       id: 'thais', contentVersion: 'v1',
@@ -116,11 +117,12 @@ describe('chegar na Cidade (FUN-120)', () => {
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
       vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
       startingSpeed: 220, speedPerLevel: 2,
-      regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
       xp: { kind: 'power', base: 20, exponent: 2 },
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
       skillMultipliers: {},
       mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+      rates: NEUTRAL_RATES,
     };
     const items = new Map<string, Item>([[
       'boots-of-haste',

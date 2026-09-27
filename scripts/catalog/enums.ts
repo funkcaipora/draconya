@@ -122,3 +122,6 @@ export const BESTIARY_TYPE_ENUM = 'BestiaryType_t';
 /** `src/utils/utils_definitions.hpp`, enum `MagicEffectClasses` — `CONST_ME_HITAREA`, … */
 export const MAGIC_EFFECT_HEADER = 'src/utils/utils_definitions.hpp';
 export const MAGIC_EFFECT_ENUM = 'MagicEffectClasses';
+
+/** Mesmo arquivo, enum `ShootType_t` — `CONST_ANI_FIRE`, … (o projétil). */
+export const SHOOT_TYPE_ENUM = 'ShootType_t';

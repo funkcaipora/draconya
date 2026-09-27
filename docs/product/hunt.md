@@ -382,6 +382,15 @@ A tabela escolhe **como** é sorteada, pelo campo `loot.rollModel` (#685):
   O `factor` do Canary (prey de loot, wealth, boosted creature, charm Gut) é fixo em 1 até esses
   sistemas existirem; `unique` e o filtro de reward boss ficam com o sistema de boss.
 
+**O rate de loot** (`progression.rates.loot`, #691) multiplica a chance de cada linha, com teto 1
+(`max(1, rate)`, como o `getLootRandom` do Canary), no modelo FUN-63. No modelo `canary` ele
+DIVIDE a rolagem em vez de multiplicar a chance — o `getLootRandom` literal —, e a quantidade sai
+da rolagem já dividida (truncada); rate 2 dobra a chance efetiva e rate 1 é bit a bit o de sempre.
+Nos dois modelos, `0` desliga o loot sem consumir sorteio nenhum, para o loot desligado não
+deslocar a sequência do resto da hunt. Os rates de vida,
+defesa e ataque de monstro e de boss também moram lá — ver [`progression.md`](./progression.md),
+"Rates do servidor".
+
 ### Abate comum não é evento notável
 
 `notableEvents` é a lista curta da tela de retorno (§16.2). Uma hunt de oito horas com uma linha
@@ -521,6 +530,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
 | A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 670 000 ms — soma da cadeia de decaimento do Canary `items.xml` (dead dragon/dead dragon lord: 10 s → 300 s → 300 s → 60 s, `decayTo` até sumir, não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
+| Rate de loot e escala de monstro/boss (#691) | neutros (1); o conteúdo real não declara | `data/progression/baseline.json`, `rates.loot` / `rates.monster` / `rates.boss`; `data/monsters/*.json`, `boss` |
 | Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
 
 ## Em aberto

@@ -17,21 +17,21 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, floorChangeAt, floorChangeToward,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS, floorChangeAt, floorChangeToward,
   isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt, HuntDifficulty,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Progression, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
+  PartyConfig, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
   Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource } from '../area.js';
 import {
-  NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
+  NOT_IN_CATALOG, actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey,
   ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
@@ -45,6 +45,9 @@ import type { TileFieldState } from '../fields.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
+import { reflectedDamageIntent } from '../combat/reflect.js';
+import { cleavePower, cleaveTiles } from '../combat/cleave.js';
+import type { ReflectAttacker, ReflectedDamage } from '../combat/reflect.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import {
   combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
@@ -56,13 +59,22 @@ import {
 import { playerArmor, playerDefense, playerMitigation } from '../combat/player-defense.js';
 import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
+import { rollCombatValue } from '../combat/combat-value.js';
+import { resolveWeaponHit } from '../combat/weapon-power.js';
+import type { WeaponHit } from '../combat/weapon-power.js';
 import { rollDistanceHit } from '../combat/distance-hit.js';
+import {
+  afterAttackBlock, afterShieldBlock, distanceTries, meleeTries,
+} from '../combat/attack-practice.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import {
+  applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
+} from '../rates.js';
 import {
   autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
   settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
@@ -80,14 +92,16 @@ import {
   monsterSubject, nearestPrey,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
-import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
+import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { containerRulesFor } from '../inventory.js';
+import {
+  containerRulesFor, equipmentAbsorb, equipmentCleavePercent, equipmentReflect, immunitiesOnly,
+} from '../inventory.js';
 import {
   TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
 } from '../movement.js';
@@ -187,6 +201,19 @@ export const END_VOTE_WINDOW_MS = 60_000;
 const EQUIP_EXPIRE = 'equip-expire';
 function equipExpirySubject(characterId: string, slot: ItemSlot): string {
   return `${characterId}:${slot}`;
+}
+
+/**
+ * Um ganho da regeneração PRÓPRIA de um item vestido (#688, `bonuses.regeneration`): a
+ * `CONDITION_REGENERATION` que o Canary cria por slot em `MoveEvent::EquipItem`. Um evento por
+ * ganho, no instante exato (invariante 2), somado à regeneração da vocação e independente dela —
+ * as cadências diferem. O subject é `<characterId>:<slot>:<health|mana>`, o que permite
+ * cancelar por slot quando o item sai.
+ */
+const ITEM_REGEN = 'item-regen';
+type ItemRegenResource = 'health' | 'mana';
+function itemRegenSubject(characterId: string, slot: ItemSlot, what: ItemRegenResource): string {
+  return `${characterId}:${slot}:${what}`;
 }
 
 /**
@@ -1866,15 +1893,18 @@ export class HuntRuleset implements Ruleset {
     this.#schedulePlayerAttack(session, character.id, 0);
     if (attackIntervalMs <= 0) throw new Error('attackIntervalMs must be positive');
 
-    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
-    // Taxa zero não é intervalo infinito: é "não regenera", e então não há evento nenhum.
-    if (healthPerSecond > 0) {
-      session.scheduleIn(HEALTH_REGEN, 0, {
+    const regen = this.#regenOf(character);
+    // Primeiro pulso DEPOIS de `ticksMs` (#678): o contador do Canary começa em 0, e entrar na
+    // hunt não é poção. `amount` zero é "não regenera", e então não há evento nenhum.
+    if (regen.health.amount > 0) {
+      session.scheduleIn(HEALTH_REGEN, regen.health.ticksMs, {
         priority: EventPriority.Upkeep, subject: character.id,
       });
     }
-    if (manaPerSecond > 0) {
-      session.scheduleIn(MANA_REGEN, 0, { priority: EventPriority.Upkeep, subject: character.id });
+    if (regen.mana.amount > 0) {
+      session.scheduleIn(MANA_REGEN, regen.mana.ticksMs, {
+        priority: EventPriority.Upkeep, subject: character.id,
+      });
     }
 
     // Spawn e regras de saída são da INSTÂNCIA, não do participante (#203): entram na fila com
@@ -2087,6 +2117,7 @@ export class HuntRuleset implements Ruleset {
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
+      case ITEM_REGEN: return this.#onItemRegen(session, event.subject);
       case AUTOMATION: return this.#onAutomation(session, event.subject);
       default:
         // Um grupo do bot venceu (AB-07): `bot:<group>`. Um evento de tipo que este ruleset não
@@ -2126,7 +2157,9 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Regeneração passiva (FUN-36), um ponto por vencimento.
+   * Regeneração passiva (FUN-36): um PULSO por vencimento (#678) — `amount` pontos a cada
+   * `ticksMs`, como a `ConditionRegeneration` do Canary (`condition.cpp`), que soma o intervalo
+   * num contador e, ao passar de `ticks`, aplica o `amount` de uma vez.
    *
    * Vale mesmo com stamina zerada: regenerar não é recompensa, é sobrevivência — e o §10.2 é
    * explícito que o personagem continua podendo morrer, não que ele passa a morrer mais
@@ -2139,13 +2172,11 @@ export class HuntRuleset implements Ruleset {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
 
-    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
-    const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
-    if (perSecond <= 0) return;
-
-    const ring = character.inventory.ringEffect(this.#options.items);
-    const bonusPercent = ring?.kind === 'regen-boost' ? ring.percent : 0;
-    const amount = Math.round(1 * (1 + bonusPercent / 100));
+    const pulse = this.#regenOf(character)[what];
+    if (pulse.amount <= 0) return;
+    // Só a vocação: o Life Ring regenera pelos PRÓPRIOS eventos (`ITEM_REGEN`, #688), somados
+    // a este pulso, e nunca o multiplica.
+    const { amount } = pulse;
 
     if (what === 'health') {
       // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
@@ -2157,10 +2188,11 @@ export class HuntRuleset implements Ruleset {
       character.mana = Math.min(character.maxMana, character.mana + amount);
     }
 
-    // `r` por segundo é um evento a cada `1000 / r` ms. Escrever assim, em vez de somar
-    // `r * dtMs / 1000` num acumulador fracionário, é o que mantém a conta exata: somar
-    // `0,1` dez vezes em ponto flutuante dá `0,9999…` e some uma unidade a cada dez.
-    session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, 1000 / perSecond, {
+    // O próximo pulso vence em `ticksMs` inteiros — nada de acumulador fracionário nem de
+    // `1000 / taxa` em ponto flutuante. Relê a vocação de AGORA (promoção, #566), como o
+    // `updateRegeneration` do Canary. Com o recurso cheio o pulso se perde, e o próximo segue
+    // agendado — o Canary também zera o contador.
+    session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, pulse.ticksMs, {
       priority: EventPriority.Upkeep, subject: characterId,
     });
   }
@@ -3673,12 +3705,25 @@ export class HuntRuleset implements Ruleset {
     }
 
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
-    const weapon = character.inventory.weapon(this.#options.items, character);
+    // `combat-v3` (#687): a arma que ficou na mão abaixo do level exigido — o level caiu com
+    // ela vestida — bate metade com `wieldUnproperly`, ou NÃO bate (`damagePercent` 0): como o
+    // `useWeapon` do Canary que devolve `false`, sem golpe de punho e sem prática. v1/v2 leem
+    // `weapon()` como sempre, e a arma abaixo do level segue virando mão vazia (ADR 0031).
+    let weapon: Item | null;
+    let damagePercent = 100;
+    if (this.#options.combat.compatibilityProfile === 'combat-v3') {
+      const held = character.inventory.heldWeapon(this.#options.items, character);
+      if (held !== null && held.damagePercent === 0) return;
+      weapon = held?.item ?? null;
+      damagePercent = held?.damagePercent ?? 100;
+    } else {
+      weapon = character.inventory.weapon(this.#options.items, character);
+    }
     const how = weapon?.weapon;
     // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
     // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
     if (how?.kind === 'wand' && character.mana < (how.manaPerHit ?? 0)) return;
-    this.#strike(session, character, target, weapon, how);
+    this.#strike(session, character, target, weapon, how, damagePercent);
     // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
     // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -3779,6 +3824,14 @@ const slots = bot.groups.get(group);
         if (!external.perform(slot.act, view)) continue; // recusou → próximo no mesmo ciclo
         this.#scheduleBot(session, group, characterId, this.#botCooldownMs());
         return;
+      }
+      // A exaustão de ação compartilhada (#690): a poção logo depois de uma runa ESPERA — o
+      // "adiar" do `playerUseItemEx` do Canary é a volta no vencimento, como a recusa por
+      // cooldown. Nada é pago nem sorteado antes dela.
+      const exhaustWait = this.#actionExhaustWaitOf(character, slot.act, session.nowMs);
+      if (exhaustWait > 0) {
+        if (exhaustWait > retryInMs) retryInMs = exhaustWait;
+        continue;
       }
       const result = this.#perform(session, character, slot.act, recipient);
       if (result.ok) {
@@ -4071,6 +4124,10 @@ const slots = bot.groups.get(group);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe. Um
       // `manadrain` sai daqui com `healthDamage: 0` sempre — a vida do monstro nunca se move.
       const applied = applyDamageOutcome(monster, outcome, character, 1, false, targetsAffected);
+      // Magia e runa também passam pelo `blockHit` do alvo no Canary: um acerto limpo recarrega
+      // os contadores de sangue e de escudo (#686). Não rendem try de ARMA — a prática delas é
+      // de magia, por mana.
+      this.#noteAttackBlock(character, outcome);
       // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
       // (`lastStepBlocked`) concede UMA passagem pelo campo que o prendia — nunca de graça, e
       // nunca ao andar livre. Zero de dano (`chance: 0`/overkill de mira que já matou) não arma.
@@ -4091,6 +4148,8 @@ const slots = bot.groups.get(group);
       // Life leech (M30-04): o mesmo evento e a mesma base (`healthDamage`) do `#land` — nunca o
       // resolvido, overkill não rende leech. Mana leech repõe em silêncio, como lá.
       this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
+      // Reflexo e cura por elemento do monstro (#683) — o mesmo ponto do `#land`.
+      this.#afterMonsterHit(session, character, monster, outcome);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
   }
@@ -4123,7 +4182,7 @@ const slots = bot.groups.get(group);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
-        this.#collect(monster);
+        this.#collect(character, monster);
       }
       if (this.#spellHits.length === 0) return null;
       this.#aim.distance = 0;
@@ -4133,7 +4192,7 @@ const slots = bot.groups.get(group);
 
     const primary = this.#targetInRange(character, range);
     if (primary === null) return null;
-    this.#collect(primary);
+    this.#collect(character, primary);
 
     if (area !== undefined) {
       this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
@@ -4141,7 +4200,7 @@ const slots = bot.groups.get(group);
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
-        this.#collect(monster);
+        this.#collect(character, monster);
       }
     }
 
@@ -4159,7 +4218,11 @@ const slots = bot.groups.get(group);
     const magic = this.#options.skills.get('magic');
     const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
       + character.inventory.skillBonus(this.#options.items, 'magic');
-    return { skillLevel: magicLevel, powerScale: 1, magicLevel };
+    return {
+      skillLevel: magicLevel, powerScale: 1, magicLevel,
+      // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
+      specializedMagicLevel: character.inventory.specializedMagicLevel(this.#options.items),
+    };
   }
 
   /**
@@ -4183,6 +4246,8 @@ const slots = bot.groups.get(group);
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
       weaponAttack: character.inventory.weaponAttack(this.#options.items, character) ?? 0,
+      // O ML especializado por elemento (#680): só a fórmula que lê o ML o soma (`formulaSkill`).
+      specializedMagicLevel: character.inventory.specializedMagicLevel(this.#options.items),
     };
   }
 
@@ -4196,6 +4261,10 @@ const slots = bot.groups.get(group);
    * um segundo retorno.
    */
   #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+    // Item que suprime a condição (#688, Dwarven Ring): ela não entra, como a recusa de
+    // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
+    if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
+      && target.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return;
     const subject = conditionSubject(this.#subjectOf(target), condition.key);
     const previous = target.conditions.get(condition.key);
     const tick = tickOf(condition);
@@ -4362,6 +4431,12 @@ const slots = bot.groups.get(group);
       damageType: intent.damageType,
     });
     this.#emitHealth(session, target);
+    // A cura por elemento (#683) só com um DONO criatura — o `if (attacker)` do Canary: o tique
+    // de condição que um personagem aplicou cura o monstro que cura com aquele tipo; o de campo
+    // (`sourceId` é o id do campo, não de criatura) não cura.
+    if (condition.sourceId !== undefined && this.#conditionTargetOf(session, condition.sourceId) !== null) {
+      this.#healMonsterByElement(session, target, outcome);
+    }
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
   }
 
@@ -4510,7 +4585,7 @@ const slots = bot.groups.get(group);
   }
 
   /** Põe o monstro na mira, com a armadura e a mitigação que o conteúdo dá a ele. */
-  #collect(monster: MonsterRuntime): void {
+  #collect(character: CharacterRuntime, monster: MonsterRuntime): void {
     this.#spellHits.push(monster);
     // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual para
     // magia. Quando esquiva de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
@@ -4520,6 +4595,12 @@ const slots = bot.groups.get(group);
       dodgeChance: 0,
       mitigation: definition?.mitigation,
       defenseMitigation: definition?.defenseMitigation,
+      // A cura por elemento e o reflexo do monstro (#683) valem para magia e runa como para o
+      // golpe — o Canary os resolve em `combatBlockHit`, qualquer que seja a origem.
+      elementHealing: definition?.elementHealing,
+      reflect: definition?.reflect === undefined
+        ? undefined : { reflector: 'monster', table: definition.reflect },
+      attacker: this.#reflectAttackerFor(character, monster),
     });
   }
 
@@ -4644,6 +4725,11 @@ const slots = bot.groups.get(group);
    * `spell:<id>` é consultado à parte — sem isso, uma magia de `cooldownMs: 4000` num grupo de
    * `1000` aparecia `ready` no `slotStates` e o `#perform` recusava por 3 s (DT-08). O supply
    * usa o mesmo caminho com o livro do grupo. Zero é "pode executar".
+   *
+   * O supply que declara `actionExhaustMs` (#690) lê também a exaustão de ação compartilhada
+   * (`exhaust:action`), que atravessa os grupos: a poção logo depois de uma runa de ataque
+   * ESPERA, como o `nextPotionAction` do Canary — o uso é adiado pelo `retryInMs`, não perdido.
+   * Magia não lê este livro: a falada do Canary usa `nextAction`/`spellCooldown`, outro relógio.
    */
   #cooldownWaitOf(character: CharacterRuntime, action: BotActionV2, nowMs: number): number {
     const { cooldownKey, group } = this.#cooldownOf(action);
@@ -4654,7 +4740,20 @@ const slots = bot.groups.get(group);
       character.cooldowns.remainingMs(cooldownKey, nowMs),
       character.cooldowns.remainingMs(groupCooldownKey(group), nowMs),
       character.cooldowns.remainingMs(individualKey, nowMs),
+      this.#actionExhaustWaitOf(character, action, nowMs),
     );
+  }
+
+  /**
+   * Quanto falta para a exaustão de ação compartilhada (#690) liberar ESTA ação. Zero para magia,
+   * para item e para o supply que não declara `actionExhaustMs` (fixture, Magic Shield Potion):
+   * só quem trava o livro o lê. O ciclo automático do bot o confere antes de `#perform`, porque
+   * poção e runa moram em grupos de bot DIFERENTES e cada grupo só se reagenda pelo próprio livro.
+   */
+  #actionExhaustWaitOf(character: CharacterRuntime, action: BotAction, nowMs: number): number {
+    if (action.kind !== 'supply') return 0;
+    if (this.#options.supplies.get(action.supplyId)?.actionExhaustMs === undefined) return 0;
+    return character.cooldowns.remainingMs(actionExhaustKey(), nowMs);
   }
 
   /**
@@ -5007,12 +5106,68 @@ const slots = bot.groups.get(group);
       const equipped = character.inventory.equippedAt(slot);
       if (equipped === null) continue;
       const definition = this.#options.items.get(equipped.itemId);
-      if (definition?.durationMs === undefined) continue;
+      if (definition === undefined) continue;
+      this.#scheduleItemRegen(session, character.id, slot, definition);
+      if (definition.durationMs === undefined) continue;
       session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
         priority: EventPriority.Housekeeping,
         subject: equipExpirySubject(character.id, slot),
       });
     }
+  }
+
+  /**
+   * Agenda o PRIMEIRO ganho da regeneração de um item recém-vestido (#688): `*TicksMs` depois,
+   * como a `ConditionRegeneration` do Canary, que acumula o intervalo antes de curar. Ganho zero
+   * é "não regenera este recurso", e então não há evento.
+   */
+  #scheduleItemRegen(session: Session, characterId: string, slot: ItemSlot, item: Item): void {
+    const regen = item.bonuses?.regeneration;
+    if (regen === undefined) return;
+    if (regen.healthGain > 0) {
+      session.scheduleIn(ITEM_REGEN, regen.healthTicksMs, {
+        priority: EventPriority.Upkeep, subject: itemRegenSubject(characterId, slot, 'health'),
+      });
+    }
+    if (regen.manaGain > 0) {
+      session.scheduleIn(ITEM_REGEN, regen.manaTicksMs, {
+        priority: EventPriority.Upkeep, subject: itemRegenSubject(characterId, slot, 'mana'),
+      });
+    }
+  }
+
+  /** Tira os eventos de regeneração de um slot (#688): o item saiu, a regeneração dele acaba. */
+  #cancelItemRegen(session: Session, characterId: string, slot: ItemSlot): void {
+    session.cancelEvent(ITEM_REGEN, itemRegenSubject(characterId, slot, 'health'));
+    session.cancelEvent(ITEM_REGEN, itemRegenSubject(characterId, slot, 'mana'));
+  }
+
+  /**
+   * Um ganho da regeneração de item venceu (#688). Confere que o slot ainda tem um item que
+   * regenera — o cancelamento no desequip cobre o caso comum, e a guarda cobre o resto —, cura e
+   * reagenda pela cadência do item que está vestido AGORA.
+   */
+  #onItemRegen(session: Session, subject: string): void {
+    const [characterId, slot, what] = subject.split(':') as [string, ItemSlot, ItemRegenResource];
+    const character = findById(session.participants, characterId);
+    // Morto não regenera, e o evento morre com ele, como em `#onRegen`.
+    if (character === null || !character.alive) return;
+    const equipped = character.inventory.equippedAt(slot);
+    const regen = equipped === null
+      ? undefined
+      : this.#options.items.get(equipped.itemId)?.bonuses?.regeneration;
+    if (regen === undefined) return;
+    const gain = what === 'health' ? regen.healthGain : regen.manaGain;
+    if (gain <= 0) return;
+    if (what === 'health') {
+      // Só a barra, e só quando repôs — a mesma regra de `#onRegen`.
+      if (character.heal(gain) > 0) this.#emitCharacterHealth(session, character);
+    } else {
+      character.mana = Math.min(character.maxMana, character.mana + gain);
+    }
+    session.scheduleIn(ITEM_REGEN, what === 'health' ? regen.healthTicksMs : regen.manaTicksMs, {
+      priority: EventPriority.Upkeep, subject,
+    });
   }
 
   /** O que agenda e cancela o vencimento por duração, e reavalia a velocidade. Closure pura sobre a `Session`. */
@@ -5029,10 +5184,17 @@ const slots = bot.groups.get(group);
             priority: EventPriority.Housekeeping, subject,
           });
         }
+        // A regeneração também é cancelada SEMPRE (#688): trocar Life Ring por Life Ring cria a
+        // condição de novo no Canary, e o primeiro ganho volta a sair `*TicksMs` depois.
+        this.#cancelItemRegen(session, characterId, slot);
+        if (definition !== undefined) {
+          this.#scheduleItemRegen(session, characterId, slot, definition);
+        }
         this.#recomputeSpeed(session, characterId);
       },
       onUnequip: (slot) => {
         session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(characterId, slot));
+        this.#cancelItemRegen(session, characterId, slot);
         this.#recomputeSpeed(session, characterId);
       },
     };
@@ -5103,7 +5265,9 @@ const slots = bot.groups.get(group);
     const definition = this.#options.items.get(equipped.itemId);
     if (definition?.charges === undefined) return;
     const protects = definition.mitigation.immunities.has(damageType)
-      || definition.mitigation.resistances[damageType] > 0;
+      || definition.mitigation.resistances[damageType] > 0
+      // `absorb.percent` (#552) é o mesmo `absorbpercent*`: gasta carga como a resistência.
+      || (definition.absorb?.[damageType]?.percent ?? 0) > 0;
     if (!protects) return;
     if (character.inventory.consumeCharge(slot, definition.charges) > 0) return;
     session.record(recordType, equipped.itemId);
@@ -5324,22 +5488,39 @@ const slots = bot.groups.get(group);
     // crítico UMA vez, ANTES do laço por alvo, e `rollSharedCriticalOutcome` faz cada
     // `resolveDamage` por alvo herdar o MESMO resultado — nunca um jogador critica e outro não
     // no mesmo golpe do monstro.
-    const monsterModifiers = monsterCriticalModifiers(this.#options.monsters.get(monster.monsterId));
+    const monsterDefinition = this.#options.monsters.get(monster.monsterId);
+    const monsterModifiers = monsterCriticalModifiers(monsterDefinition);
     const resolvedMonsterModifiers = rollSharedCriticalOutcome(monsterModifiers, session.rng);
+    // O rate de ataque de monstro/boss (#691): multiplica o dano SORTEADO, não a faixa — o
+    // sorteio é o mesmo, e a sequência do `Rng` não muda. Neutro (1) devolve o sorteio intacto.
+    const attackRate = creatureRatesFor(
+      this.#options.progression.rates, monsterDefinition?.boss ?? false,
+    ).attack;
     for (const character of targets) {
       const defender = this.#playerDefender(character);
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
-      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`).
+      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`). No
+      // `combat-v3` o sorteio é a normal truncada do Canary (#681); antes, uniforme.
       const result = resolveDamage(
         {
-          rawDamage: session.rng.integer(ability.power.min, ability.power.max),
+          rawDamage: applyAttackRate(rollCombatValue(session.rng, ability.power.min, ability.power.max, this.#options.combat), attackRate),
           source: 'monster-attack',
           damageType: ability.damageType,
-          // A ORIGEM decide o bloqueio no `combat-v3` (#548): a ability CORPO A CORPO (a
-          // básica legada inclusive) bloqueia os dois; a de alcance/área é magia para o
-          // `blockHit`, como a do Canary sem `BLOCKARMOR`/`BLOCKSHIELD` declarado.
-          blockable: melee ? MELEE_BLOCK_FLAGS : MAGIC_BLOCK_FLAGS,
+          // O TIPO DE ATAQUE decide o bloqueio no `combat-v3` (#682, a regra de
+          // `Monsters::deserializeSpell` do Canary): o `melee` (a básica legada inclusive)
+          // bloqueia os dois; o `combat` FÍSICO passa só pela armadura, em qualquer alcance ou
+          // área; qualquer outro tipo é magia para o `blockHit`. `melee` acima continua
+          // decidindo SÓ a apresentação (`source`).
+          blockable: abilityBlockFlags(ability),
           ...(resolvedMonsterModifiers === undefined ? {} : { modifiers: resolvedMonsterModifiers }),
+          // Contra quem o reflexo do equipamento volta (#552): a vida máxima do monstro (o teto
+          // de 1 %) e a distância dele ao alvo (a exceção do físico flat). Só o `combat-v3` lê.
+          ...(monsterDefinition === undefined ? {} : {
+            attacker: {
+              maxHealth: monsterDefinition.health,
+              distance: distance(monster.position, character.position),
+            },
+          }),
         },
         defender,
         'pve',
@@ -5347,6 +5528,12 @@ const slots = bot.groups.get(group);
         session.rng,
         session.nowMs,
       );
+      // O reflexo sai ANTES do dano no alvo, como no Canary (`Combat::doCombatHealth` contra o
+      // atacante no fim do bloqueio, antes de a vida do alvo mudar) — um monstro que morre pelo
+      // próprio golpe refletido ainda acerta este golpe.
+      if (result.reflected !== undefined && monster.alive) {
+        this.#reflectOntoMonster(session, character, monster, result.reflected);
+      }
       this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
@@ -5363,6 +5550,38 @@ const slots = bot.groups.get(group);
     if (ability.field !== undefined) {
       this.applyField(session, ability.field, this.#at(primary), 'monster');
     }
+    // O reflexo (#552) pode ter matado o monstro no meio da ability. Quem aplica dano não decide
+    // morte: o pipeline resolve depois do golpe inteiro, como faz depois do golpe do personagem.
+    if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+  }
+
+  /**
+   * A SEGUNDA resolução do reflexo (#552, M30-05): o dano que o equipamento do personagem devolve
+   * ao monstro que o atacou. É uma EXTENSÃO (`reflectedDamageIntent`): passa por `resolveDamage`
+   * contra a defesa do monstro sem bloqueio por defesa/armadura, nunca reflete de volta, não
+   * critica e não faz leech (`attacker` nulo em `applyDamageOutcome`). O crédito do dano é do
+   * personagem — ele conta para quem matou e para o DPS, como qualquer golpe dele.
+   *
+   * Não resolve a morte: quem chama decide quando (`#executeMonsterAbility`, depois do golpe
+   * inteiro). O reflexo do MONSTRO sobre o personagem (#683) é o espelho deste, com o mesmo
+   * `resolveReflect`.
+   */
+  #reflectOntoMonster(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
+  ): void {
+    const outcome = resolveDamage(
+      reflectedDamageIntent(reflected), this.#monsterDefender(monster), 'pve', this.#options.combat,
+      session.rng, session.nowMs,
+    );
+    const applied = applyDamageOutcome(monster, outcome, null);
+    recordDamage(monster.contribution, character.id, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+      amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(monster),
+      damageType: outcome.damageType,
+    });
+    this.#emitHealth(session, monster);
+    session.creditDamage(character.id, applied.healthDamage);
   }
 
   /**
@@ -5395,23 +5614,24 @@ const slots = bot.groups.get(group);
       damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
-    // Shielding sobe pelo USO (CMB-04): uma vez por ataque ELEGÍVEL recebido — há fonte de
-    // defesa e o golpe é do tipo que a defesa aprova. Nunca por tick, nunca por dano aplicado:
-    // um bloqueio total (ou um golpe de 0) ainda é um bloqueio praticado.
+    // Shielding sobe pelo USO (CMB-04). Em `combat-v1`/`v2`: uma vez por ataque ELEGÍVEL
+    // recebido — há fonte de defesa e o golpe é do TIPO que a defesa aprova
+    // (`combat.defense.blockTypes`). Nunca por tick, nunca por dano aplicado.
     //
-    // Em `combat-v1`/`v2` "aprova" é por TIPO de dano (`combat.defense.blockTypes`) — a única
-    // coisa que existia antes do `combat-v3`. No `combat-v3` (#548, achado da revisão do PR
-    // #642) a elegibilidade do dano em si já não é por tipo: é por ORIGEM (`blockable.shield`,
-    // a mesma flag que `resolveBlockHit` usa — corpo a corpo bloqueia, magia/distância pura não).
-    // Continuar checando `blockTypes` aqui destreinaria (ou treinaria errado) no dia em que o
-    // catálogo tiver uma ability corpo a corpo elemental — hoje nenhuma tem, então as duas regras
-    // ainda concordam, mas por coincidência do catálogo, não por desenho.
-    const shieldEligible = this.#options.combat.compatibilityProfile === 'combat-v3'
-      ? (outcome.intent.blockable?.shield ?? MELEE_BLOCK_FLAGS.shield)
-      : (this.#options.combat.defense?.blockTypes.includes(ability.damageType) ?? false);
-    if (this.#options.combat.defense !== undefined
+    // No `combat-v3` (#686) a regra é a do Canary (`Player::onBlockHit`), e substitui a
+    // elegibilidade por origem que o #548 tinha posto aqui: o escudo só treina quando o golpe
+    // recebido FOI bloqueado (defesa ou armadura) com carga de bloqueio, ainda há bloqueios de
+    // escudo guardados (`shieldBlockCount`, recarregado pelo golpe limpo do PRÓPRIO personagem)
+    // e é ESCUDO na mão — arma de uma mão não treina shielding. Apanhar, por si só, não treina.
+    if (this.#isV3()) {
+      const shield = afterShieldBlock(
+        character.attackPractice, outcome, defender.defense?.kind === 'shield',
+      );
+      character.attackPractice = shield.state;
+      if (shield.tries > 0) this.#gainSkills(session, character, 'shield-block', shield.tries);
+    } else if (this.#options.combat.defense !== undefined
       && defender.defense !== undefined && defender.defense.kind !== 'none'
-      && shieldEligible) {
+      && this.#options.combat.defense.blockTypes.includes(ability.damageType)) {
       this.#gainSkills(session, character, 'shield-block', 1);
     }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
@@ -5479,7 +5699,9 @@ const slots = bot.groups.get(group);
     if (!session.rng.chance(defense.chance)) return;
 
     if (defense.heal !== undefined) {
-      const healed = monster.heal(definition.health, session.rng.integer(defense.heal.min, defense.heal.max));
+      // Normal truncada no `combat-v3` (#681, `monster.cpp:2218` → `combat.cpp:189`); uniforme antes.
+      const amount = rollCombatValue(session.rng, defense.heal.min, defense.heal.max, this.#options.combat);
+      const healed = monster.heal(definition.health, amount);
       // De vida cheia, zero repôs — sem evento, como a regeneração passiva (`#onRegen`): um "+0"
       // flutuando por cadência é ruído que uma hunt desanexada não precisa produzir.
       if (healed > 0) {
@@ -5623,6 +5845,10 @@ const slots = bot.groups.get(group);
   #drunkTarget<P extends GridPoint>(session: Session, mover: Movable<P>, to: P): P {
     if (!(mover instanceof CharacterRuntime) && !(mover instanceof MonsterRuntime)) return to;
     if (!mover.conditions.hasDrunk()) return to;
+    // O drunk que já estava ativo quando o item suprimidor foi vestido fica oculto (#688, o
+    // `hasCondition` do Canary devolve false): sem desvio, e sem consumir sorteio.
+    if (mover instanceof CharacterRuntime
+      && mover.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return to;
     const { direction } = rollDrunkDeviation(session.rng);
     // `speak` (r <= 4, "Hicks!") fica sem consumidor: o Draconya ainda não tem evento de fala de
     // criatura (docs/product/combat.md) — presentação, não regra de hunt (ADR 0037 d.6).
@@ -5785,11 +6011,13 @@ const slots = bot.groups.get(group);
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    weapon: Item | null, how: ResolvedWeapon | undefined,
+    weapon: Item | null, how: ResolvedWeapon | undefined, damagePercent = 100,
   ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
     const defender = this.#monsterDefender(monster);
+    // Contra quem o reflexo do monstro volta (#683) — ausente no monstro que não reflete.
+    const reflectAttacker = this.#reflectAttackerFor(character, monster);
 
     if (weapon !== null && how?.kind === 'distance') {
       const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
@@ -5824,10 +6052,15 @@ const slots = bot.groups.get(group);
       // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
       // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
       const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
-      // A prática é do TIRO, não do acerto (CMB-05): imunidade, bloqueio e agora o erro de
-      // pontaria não impedem a skill de subir — ela sai do gatilho da família, nunca do dano.
-      this.#practice(session, character, how.family, 1);
+      // `combat-v1`/`v2`: a prática é do TIRO, não do acerto (CMB-05) — imunidade, bloqueio e
+      // o erro de pontaria não impedem a skill de subir. No `combat-v3` (#686) quantos tries o
+      // tiro rende vem do tipo de bloqueio (`distanceTries`): 2 limpo, 1 bloqueado, 0 imune.
+      if (!this.#isV3()) this.#practice(session, character, how.family, 1);
       if (!hit) {
+        // O tiro errado não passa pelo `blockHit` do alvo — vale o estado do tiro ANTERIOR.
+        if (this.#isV3()) {
+          this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+        }
         // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
         // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
         return;
@@ -5843,17 +6076,21 @@ const slots = bot.groups.get(group);
       };
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, profile),
+          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical,
           source: 'basic-attack',
           damageType: profile.damageType,
           modifiers: this.#attackerModifiers(character),
           // Distância bloqueia por armadura, mas NÃO por escudo no `combat-v3` (#548) —
           // `WeaponDistance` do Canary não seta `blockedByShield`.
           blockable: DISTANCE_BLOCK_FLAGS,
+          ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
         },
         defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
       this.#land(session, character, monster, result, 'melee');
+      if (this.#isV3()) {
+        this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+      }
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
       // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
       return;
@@ -5874,13 +6111,14 @@ const slots = bot.groups.get(group);
       // perfil da wand/rod não tem `power`, então NÃO há multiplicador de weapon skill (DT-02).
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, how),
+          rawDamage: this.#weaponPower(session, character, how, damagePercent).physical,
           source: 'basic-attack',
           damageType: how.damageType,
           modifiers: this.#attackerModifiers(character),
           // Wand/rod não bloqueiam nem por armadura nem por escudo no `combat-v3` (#548) — o
           // `WeaponWand` do Canary não declara nenhum dos dois; é dano MÁGICO.
           blockable: MAGIC_BLOCK_FLAGS,
+          ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
         },
         defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
@@ -5893,22 +6131,109 @@ const slots = bot.groups.get(group);
     // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
     // o `attack`, o alcance e o tipo de `combat.player`.
     const profile: WeaponProfile = how ?? this.#options.unarmed;
+    // O cleave (#552) sai ANTES do golpe principal, como no Canary; só com ARMA corpo a corpo —
+    // o punho do Canary (`Weapon::useFist`) não passa por `WeaponMelee::useWeapon`.
+    if (weapon !== null && how?.kind === 'melee') this.#cleave(session, character, monster, profile, damagePercent);
+    const hit = this.#weaponPower(session, character, profile, damagePercent);
     const result = resolveDamage(
       {
-        rawDamage: this.#weaponPower(session, character, profile),
+        rawDamage: hit.physical,
         source: 'basic-attack',
         damageType: profile.damageType,
         modifiers: this.#attackerModifiers(character),
         // Corpo a corpo (ou desarmado) bloqueia os dois — o default de `MELEE_BLOCK_FLAGS`,
         // explícito aqui só por simetria com os outros dois ramos de `#strike`.
         blockable: MELEE_BLOCK_FLAGS,
+        // O elemento da arma (#687, só `combat-v3`) é o componente secundário do golpe (#473):
+        // sem escudo nem armadura, como o `blockHit(…, false, false)` do Canary — só perde para
+        // resistência e imunidade. Sem elemento (ou total zero) não há secundário nem sorteio.
+        ...(hit.elemental > 0 && profile.element !== undefined
+          ? {
+            secondary: {
+              rawDamage: hit.elemental,
+              damageType: profile.element.type,
+              blockable: MAGIC_BLOCK_FLAGS,
+            },
+          }
+          : {}),
+        ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
       },
       defender, 'pve', this.#options.combat, session.rng, session.nowMs,
     );
     this.#land(session, character, monster, result, 'melee');
-    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
-    // alvo seja imune ou já esteja morto — praticar não depende do dano final (CMB-05).
-    this.#practice(session, character, profile.family, 1);
+    // `combat-v1`/`v2`: o golpe ACONTECEU, conta como uso, tenha ele acertado forte ou de
+    // raspão, e mesmo que o alvo seja imune ou já esteja morto (CMB-05). No `combat-v3` (#686)
+    // é o tipo de bloqueio que decide: 1 try, ou 0 contra imune e bloqueado sem sangue.
+    this.#practice(session, character, profile.family,
+      this.#isV3() ? meleeTries(character.attackPractice) : 1);
+  }
+
+  /**
+   * O cleave do golpe corpo a corpo (M30-05, #552; `WeaponMelee::useWeapon` do Canary): com
+   * `cleavePercent` vestido, cada monstro vivo nos dois tiles que flanqueiam o alvo
+   * (`cleaveTiles`) leva uma rolagem PRÓPRIA de poder da arma na fração do cleave. É EXTENSÃO
+   * (`damage.extension = true` no Canary): sem crítico, sem leech e sem reflexo — o intent não
+   * declara crítico nem leech, só o aumento por tipo do atacante, que o `blockHit` do alvo aplica
+   * a qualquer golpe. Bloqueia como corpo a corpo, e cada vítima pratica a skill uma vez
+   * (`onUsedWeapon` roda por `internalUseWeapon`).
+   *
+   * Só no `combat-v3`: os perfis anteriores não conhecem o atributo, e o item que o declara não
+   * muda um golpe congelado neles. A morte das vítimas é resolvida aqui, depois de todas — a
+   * regra de colher antes de aplicar (FUN-92) — e antes do golpe principal, que é de outro tile.
+   */
+  #cleave(
+    session: Session, character: CharacterRuntime, target: MonsterRuntime, profile: WeaponProfile,
+    damagePercent: number,
+  ): void {
+    if (this.#options.combat.compatibilityProfile !== 'combat-v3') return;
+    const percent = equipmentCleavePercent(character.inventory, this.#options.items);
+    if (percent <= 0) return;
+    const tiles = cleaveTiles(character.position, target.position);
+    if (tiles === null) return;
+    const victims: MonsterRuntime[] = [];
+    for (const tile of tiles) {
+      for (const candidate of this.#monsters) {
+        if (candidate !== target && candidate.alive
+          && candidate.position.x === tile.x && candidate.position.y === tile.y
+          && sameFloor(candidate.position.z, target.position.z)) {
+          victims.push(candidate);
+        }
+      }
+    }
+    if (victims.length === 0) return;
+    const increase = this.#attackerModifiers(character)?.increase;
+    for (const victim of victims) {
+      // O golpe do cleave é o `internalUseWeapon` inteiro na fração (`weapons.cpp:282-306`): o
+      // `damageModifier` do `unproperly` (#687) e a divisão físico/elemento vêm ANTES, e a fração
+      // corta os dois componentes, cada um truncado.
+      const hit = this.#weaponPower(session, character, profile, damagePercent);
+      const elemental = cleavePower(hit.elemental, percent);
+      const result = resolveDamage(
+        {
+          rawDamage: cleavePower(hit.physical, percent),
+          source: 'basic-attack',
+          damageType: profile.damageType,
+          ...(increase === undefined ? {} : { modifiers: { increase } }),
+          blockable: MELEE_BLOCK_FLAGS,
+          extension: true,
+          ...(elemental > 0 && profile.element !== undefined
+            ? {
+              secondary: {
+                rawDamage: elemental,
+                damageType: profile.element.type,
+                blockable: MAGIC_BLOCK_FLAGS,
+              },
+            }
+            : {}),
+        },
+        this.#monsterDefender(victim), 'pve', this.#options.combat, session.rng, session.nowMs,
+      );
+      this.#land(session, character, victim, result, 'melee');
+      this.#practice(session, character, profile.family, 1);
+    }
+    for (const victim of victims) {
+      if (!victim.alive) resolveDeath(session, { kind: 'monster', monster: victim });
+    }
   }
 
   /**
@@ -5923,23 +6248,28 @@ const slots = bot.groups.get(group);
    * (`meleeDamageMultiplier`/`distDamageMultiplier`, #522) só o `combat-v2` lê; passar o valor
    * sempre é inofensivo — o v1 nunca teve multiplicador de vocação.
    */
-  #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
+  #weaponPower(
+    session: Session, character: CharacterRuntime, profile: WeaponProfile, damagePercent: number,
+  ): WeaponHit {
     const family = this.#options.weaponFamilies.get(profile.family);
     const skillLevel = this.#skillLevelOf(character, family);
     const vocation = this.#vocationOf(character);
     const vocationMultiplier = family?.kind === 'distance'
       ? vocation?.distDamageMultiplier ?? 1
       : vocation?.meleeDamageMultiplier ?? 1;
-    const power = resolveWeaponPower(
+    const hit = resolveWeaponHit(
       profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
+      damagePercent,
     );
-    if (family?.kind === 'distance') {
-      return Math.round(power * character.conditions.damageDealtScale('distance'));
+    // A postura vale para as duas partes do golpe (#687), cada uma arredondada.
+    if (family?.kind === 'distance' || family?.kind === 'melee') {
+      const scale = character.conditions.damageDealtScale(family.kind);
+      return {
+        physical: Math.round(hit.physical * scale),
+        elemental: Math.round(hit.elemental * scale),
+      };
     }
-    if (family?.kind === 'melee') {
-      return Math.round(power * character.conditions.damageDealtScale('melee'));
-    }
-    return power;
+    return hit;
   }
 
   /**
@@ -6020,6 +6350,24 @@ const slots = bot.groups.get(group);
     this.#gainSkills(session, character, skill.gain.on, amount);
   }
 
+  /**
+   * `onAttackedCreatureBlockHit` do Canary (#686): o personagem vê o tipo de bloqueio do golpe
+   * que desferiu — o primário, depois o secundário, e a última chamada vence (`combatBlockHit`).
+   * `combat-v1`/`v2` não produzem tipo, e aqui nada muda.
+   */
+  #noteAttackBlock(character: CharacterRuntime, outcome: DamageOutcome): void {
+    if (outcome.blockType === undefined) return;
+    let state = afterAttackBlock(character.attackPractice, outcome.blockType);
+    const secondary = outcome.secondaryOutcome?.blockType;
+    if (secondary !== undefined) state = afterAttackBlock(state, secondary);
+    character.attackPractice = state;
+  }
+
+  /** O perfil `combat-v3` (#548, ADR 0040) — congelado na sessão pelo conteúdo (invariante 7). */
+  #isV3(): boolean {
+    return this.#options.combat.compatibilityProfile === 'combat-v3';
+  }
+
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
   #land(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
@@ -6029,6 +6377,7 @@ const slots = bot.groups.get(group);
     // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
     const applied = applyDamageOutcome(monster, outcome, character);
+    this.#noteAttackBlock(character, outcome);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
     // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
     // pelo caminho de golpe corpo a corpo/wand.
@@ -6056,6 +6405,80 @@ const slots = bot.groups.get(group);
     // O DPS, ao contrário do recorde, soma o APLICADO (#431): overkill e absorção por mana
     // shield não são dano que saiu da barra de ninguém.
     session.creditDamage(character.id, applied.healthDamage);
+    // O reflexo e a cura por elemento do monstro (#683), nesta ordem — a do Canary no fim de
+    // `combatBlockHit`. Ausentes do outcome (v1/v2, ou monstro que não os declara), nada acontece.
+    this.#afterMonsterHit(session, character, monster, outcome);
+  }
+
+  /**
+   * O que o golpe do personagem desencadeia no MONSTRO depois de aplicado (#683): o reflexo dele
+   * contra o personagem e a cura por elemento. Um ponto só, chamado de `#land` e de `#applyHits`
+   * — os dois caminhos em que o personagem acerta um monstro —, para as duas regras não
+   * divergirem entre golpe e magia.
+   */
+  #afterMonsterHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, outcome: DamageOutcome,
+  ): void {
+    if (outcome.reflected !== undefined && character.alive) {
+      this.#reflectOntoCharacter(session, character, monster, outcome.reflected);
+    }
+    this.#healMonsterByElement(session, monster, outcome);
+  }
+
+  /**
+   * A SEGUNDA resolução do reflexo do MONSTRO (#683): o espelho de `#reflectOntoMonster` (#552),
+   * com o mesmo `reflectedDamageIntent` — EXTENSÃO, sem bloqueio por defesa/armadura, sem
+   * crítico, sem leech, nunca reflete de volta. O tipo é o ORIGINAL (refletor `monster`), então a
+   * absorção, a imunidade e a resistência do equipamento do personagem valem contra ele.
+   *
+   * Vem DEPOIS do dano no monstro — a ordem do fluxo da spec —, e por isso sai mesmo quando o
+   * golpe matou o monstro: o reflexo do Canary é decidido no bloqueio, antes de a vida mudar. O
+   * teto de 1 % da vida máxima do personagem faz a morte por reflexo exigir um personagem já no
+   * último 1 %; quando acontece, é resolvida aqui, como em `#applyMonsterHit`.
+   */
+  #reflectOntoCharacter(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
+  ): void {
+    const outcome = resolveDamage(
+      reflectedDamageIntent(reflected), this.#playerDefender(character), 'pve', this.#options.combat,
+      session.rng, session.nowMs,
+    );
+    const applied = applyDamageOutcome(
+      character, outcome, null, character.conditions.damageTakenScale(),
+      this.#hasEnergyShield(character),
+    );
+    recordDamage(character.contribution, monster.subject, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: character.id, attackerId: monster.subject,
+      amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(character),
+      damageType: outcome.damageType,
+    });
+    this.#emitCharacterHealth(session, character);
+    // HP caiu: o mesmo despertar de `#applyMonsterHit` — bot, curandeiros e automações.
+    this.#armBot(session, character.id);
+    this.#armHealersOf(session);
+    this.#armAutomations(session, character.id);
+    if (character.health <= 0) session.kill(character);
+  }
+
+  /**
+   * A cura por elemento (#683, `monster.heals`): depois do dano e do reflexo (`combatBlockHit`
+   * do Canary cura por último), a soma do primário com o secundário — o `damageHeal` único de
+   * lá. Monstro morto não cura: o golpe que mata não gera evento. De vida cheia, zero repôs e
+   * nada é emitido — a mesma regra da defesa de cura (`#onMonsterDefense`).
+   */
+  #healMonsterByElement(session: Session, monster: MonsterRuntime, outcome: DamageOutcome): void {
+    const amount = (outcome.elementHealing ?? 0) + (outcome.secondaryOutcome?.elementHealing ?? 0);
+    if (amount <= 0 || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const healed = monster.heal(definition.health, amount);
+    if (healed <= 0) return;
+    session.emit({
+      kind: 'creature-healed', creatureId: monster.subject, amount: healed, source: 'monster',
+      position: this.#at(monster),
+    });
+    this.#emitHealth(session, monster);
   }
 
   /**
@@ -6132,7 +6555,10 @@ const slots = bot.groups.get(group);
       // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
       // diferente por quem está usando.
       const factor = skillFactorFor(definition, vocation, this.#options.progression);
-      if (character.skills.gain(definition, points, factor) > 0) {
+      // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
+      // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
+      const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
+      if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
         session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
       }
     }
@@ -6173,7 +6599,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = rollLoot(definition.loot, session.rng);
+        const loot = rollLoot(definition.loot, session.rng, this.#options.progression.rates.loot);
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -6190,7 +6616,9 @@ const slots = bot.groups.get(group);
     } else if (!isSummon && definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
-      const loot = rollLoot(this.#lootTableFor(definition, recipient), session.rng);
+      const loot = rollLoot(
+        this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
+      );
       recipient.goldDelta += loot.gold;
       session.credit(recipient.id, 'goldGained', loot.gold);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
@@ -6408,7 +6836,12 @@ const slots = bot.groups.get(group);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
-      const experience = member.bestiary.applyXpBonus(share, this.#options.bestiary);
+      // O rate de XP (#691) multiplica DEPOIS do bônus (o `baseRate` do Canary), pelo level de
+      // CADA membro: é no `onGainExperience` de cada um que o Canary o aplica.
+      const experience = applyRate(
+        member.bestiary.applyXpBonus(share, this.#options.bestiary),
+        experienceRateFor(this.#options.progression.rates, member.level),
+      );
       const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
       session.credit(member.id, 'xpGained', experience);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
@@ -6865,9 +7298,9 @@ const slots = bot.groups.get(group);
    * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
-   * para todo mundo.
+   * para todo mundo. Em pulsos desde #678.
    */
-  #regenOf(character: CharacterRuntime): { healthPerSecond: number; manaPerSecond: number } {
+  #regenOf(character: CharacterRuntime): Regen {
     return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
   }
 
@@ -6882,8 +7315,8 @@ const slots = bot.groups.get(group);
    */
   #playerDefender(character: CharacterRuntime): Defender {
     // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
-    // partir dos poucos slots vestidos — não é varredura de tabela de resistência. Igual nos
-    // três perfis: nem #548 nem esta issue mexem em `mitigation` (resistência por tipo).
+    // partir dos poucos slots vestidos — não é varredura de tabela de resistência. `combat-v1`/
+    // `v2` a usam inteira; o `combat-v3` (#552) tira dela a resistência, que vira `absorb`.
     const mitigation = character.inventory.mitigation(this.#options.items);
     const blockCharge = character.blockCharge;
 
@@ -6901,10 +7334,17 @@ const slots = bot.groups.get(group);
       // (aqui e as duas de baixo) usam o MESMO equipamento do MESMO golpe.
       const weaponItem = character.inventory.weapon(this.#options.items, character);
       const shieldItem = character.inventory.shield(this.#options.items, character);
+      // A absorção e o reflexo do equipamento (#552, M30-05): a resistência do ITEM é o
+      // `absorbpercent*` do Canary, aplicado item a item DEPOIS da armadura (`Player::blockHit`)
+      // — por isso ela sai de `mitigation` (que fica só com as imunidades) e entra em `absorb`.
+      const absorb = equipmentAbsorb(character.inventory, this.#options.items);
+      const reflect = equipmentReflect(character.inventory, this.#options.items);
       return {
         armor: playerArmor(character.inventory.armor(this.#options.items)),
         dodgeChance: this.#options.player.dodgeChance,
-        mitigation,
+        mitigation: immunitiesOnly(mitigation),
+        ...(absorb === undefined ? {} : { absorb }),
+        ...(reflect === undefined ? {} : { reflect: { reflector: 'player' as const, table: reflect } }),
         defense: {
           kind: shieldItem !== null ? 'shield' : weaponItem !== null ? 'weapon' : 'none',
           defense: this.#playerDefenseV3(character, weaponItem, shieldItem),
@@ -7047,7 +7487,23 @@ const slots = bot.groups.get(group);
       defenseMitigation: definition?.defenseMitigation,
       defense: { kind: 'monster', defense: definition?.defense ?? 0 },
       blockCharge: monster.blockCharge,
+      // A cura por elemento e o reflexo do monstro (#683): ausentes no monstro que não os
+      // declara — o caso comum, que não paga objeto nenhum. Só o `combat-v3` os lê.
+      ...(definition?.elementHealing === undefined ? {} : { elementHealing: definition.elementHealing }),
+      ...(definition?.reflect === undefined
+        ? {} : { reflect: { reflector: 'monster' as const, table: definition.reflect } }),
     };
+  }
+
+  /**
+   * O ATACANTE que o reflexo do monstro precisa (#683): a vida máxima do personagem (o teto de
+   * 1 %) e a distância dele ao monstro. `undefined` quando o monstro não reflete nada — o intent
+   * de sempre, sem objeto novo por golpe. O reflexo de monstro vale a qualquer distância; a
+   * distância viaja só porque `ReflectAttacker` a exige.
+   */
+  #reflectAttackerFor(character: CharacterRuntime, monster: MonsterRuntime): ReflectAttacker | undefined {
+    if (this.#options.monsters.get(monster.monsterId)?.reflect === undefined) return undefined;
+    return { maxHealth: character.maxHealth, distance: distance(character.position, monster.position) };
   }
 
   /**

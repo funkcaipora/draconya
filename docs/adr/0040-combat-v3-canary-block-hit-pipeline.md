@@ -253,3 +253,126 @@ reverteu — com o contexto completo, a posição do M30-01 não sobrevive à co
   `targetsAffected`) e a fonte dos modificadores (item somado por `Inventory.combatModifiers`,
   monstro por `Monster.critChance`) são registradas em `docs/product/combat.md`, não aqui — não
   mudam nada da ORDEM de `blockHit` que este ADR decide.
+
+## Emenda — 2026-09-26: a ability de monstro decide pelo TIPO DE ATAQUE, não pela forma (#682)
+
+A emenda do M30-01 acima dizia que "uma ability de monstro decide pela FORMA (`isMeleeAbility`)
+[…] — não um campo novo". A forma não basta, e esta emenda a substitui. No Canary a flag vem do
+NOME do ataque e do TIPO de dano (`Monsters::deserializeSpell`, `monsters.cpp:105-120`): `melee`
+seta `BLOCKARMOR` e `BLOCKSHIELD`; `combat` com `COMBAT_PHYSICALDAMAGE` seta só `BLOCKARMOR`
+(origem `ranged`), em qualquer alcance ou área; `combat` de outro tipo, nenhum. Pela forma, a
+pedra do Stone Golem e a lança do Hunter (físicas, alcance > 1) chegavam ao `blockHit` como
+magia, e a armadura não tirava nada.
+
+- **O conteúdo diz o que o ataque É; a engine decide o bloqueio.** `monsterAbilitySchema` ganha
+  `kind?: 'melee' | 'combat'` — um campo semântico, não as flags cruas: a parte da emenda do
+  M30-01 que diz "as flags são do MECANISMO, não do conteúdo" continua valendo. `kind: 'melee'`
+  exige `damageType: 'physical'` (o Canary fixa o tipo no `melee`); o boot recusa o resto.
+- **`abilityBlockFlags` (`packages/sim/src/monster/ability.ts`)** é a regra: corpo a corpo é o
+  `kind` declarado, ou, ausente, a forma (`isMeleeAbility`) — o conteúdo escrito à mão e a
+  ability básica do boot não mudam. Fora do corpo a corpo, físico → `DISTANCE_BLOCK_FLAGS`,
+  qualquer outro tipo → `MAGIC_BLOCK_FLAGS`. O campo existe porque 30 `combat` físicos do Canary
+  têm alcance 1 sem área e a forma os confundiria com `melee` (escudo indevido).
+- **Emenda do `combat-v3`, sem perfil novo.** O v3 não chegou à `main` (decisão 3), e
+  `blockable` já é ignorado em `combat-v1`/`v2` — os dois ficam bit a bit sem ramo de perfil.
+  Nenhum número do catálogo atual muda: rat, rotworm, dragon e dragon-lord só têm físico em
+  `melee` de alcance 1.
+- **A apresentação continua pela forma.** `isMeleeAbility` segue decidindo o `source` do
+  `creature-hit`; trocar isso pela regra nova seria uma mudança visual que ninguém pediu.
+- **Nota sobre a carga de bloqueio.** Como `Creature::blockHit` do Canary, a carga
+  (`blockCount`) é gasta sempre que UMA das flags vale — um `combat` físico gasta carga pela
+  armadura mesmo sem o escudo rolar nada (`resolveBlockHit`, inalterado).
+
+## Emenda — 2026-09-26: magia, runa, poção e ataque/cura de monstro pela normal truncada (#681)
+
+O `combat-v3` ainda não chegou na `main`, então esta é uma emenda dele pela decisão 3 — não um
+`combat-v4`. O Canary sorteia todo valor de dano e cura que não é de arma por `normal_random`
+(`combat.cpp:189`/`:195`/`:2046`, `global_functions.cpp:372`/`:455`); o Draconya já fazia isso para
+arma desde o `combat-v2` (#522), mas magia, runa, poção e a ability/cura de monstro seguiam no
+`rng.integer` uniforme.
+
+- **Um helper por perfil, `rollCombatValue`** (`combat/combat-value.ts`): `normalRandomInt` no
+  `combat-v3`, `rng.integer` no `combat-v1`/`v2` e para quem chama sem `combat` (fixture). Os seis
+  pontos de sorteio (`powerOf` nos dois caminhos, `fixedAmount`, a runa de ataque, a ability e a
+  defesa de cura do monstro) passam por ele. Uma regra só: o dia em que um perfil novo mudar a
+  distribuição, muda um lugar.
+- **A contagem de sorteios não muda de forma, o consumo muda de tamanho.** Cada ponto continua
+  sendo UM sorteio de valor, na mesma posição da ordem de RNG; no `combat-v3` esse sorteio custa
+  ~2,1 frações do `Rng` em vez de uma, como a arma já custa. A normal roda mesmo com
+  `min === max` (a mesma regra do `blockChance`).
+- **Dano de condição e velocidade continuam uniformes** — o Canary usa `uniform_random` ali
+  (`condition.cpp:1908`, `:2547`). Defesa/armadura (`Creature::blockHit`) idem.
+- `combat-v1`/`v2` bit a bit: os traces de `combat/traces/` (perfil `combat-v1`) passam sem
+  edição. Os pontos e a distribuição de cada um estão em `docs/product/combat.md`.
+
+## Emenda — 2026-09-26: absorção, aumento, reflexo e cleave (M30-05, #552)
+
+O `combat-v3` ainda não está na `main`, então o M30-05 é emenda deste perfil, não um `combat-v4`.
+Nenhum campo novo é lido por `combat-v1`/`v2` (`resolveMitigation` intocado).
+
+- **Dois estágios de absorção, em dois lugares, como no Canary.** A absorção FLAT do defensor e o
+  AUMENTO do atacante por tipo (`applyAbsorbDamageModifications`, `creature.cpp:924-942`) vêm
+  ANTES da imunidade e da defesa. A absorção PERCENTUAL do item (`absorbpercent*`) NÃO é esse
+  estágio: o Canary a aplica em `Player::blockHit` (`player.cpp:3938-3962`), DEPOIS do
+  `Creature::blockHit` inteiro (defesa, armadura, mitigação percentual), um item por vez e
+  arredondando a cada um — dois itens de 20 % tiram 36 %, não 40 %. A issue pedia "20 % de ice em
+  100 → 80 antes da defesa"; o número (80) vale, a posição segue o código do Canary, que é a
+  fonte (ADR 0037).
+- **A resistência de ITEM (`mitigation.resistances`) vira essa absorção item a item sob o v3.** É
+  o mesmo `absorbpercent*` que o kit do #524 já importava como fração; o jogador do `combat-v3`
+  chega ao estágio de resistência só com as imunidades (`immunitiesOnly`, `inventory.ts`). O
+  schema aceita também `absorb.<tipo>.percent` (inteiro, a escala do Canary) e recusa os dois no
+  mesmo tipo do mesmo item.
+- **Os `elements` do MONSTRO não passam por `getAbsorbPercent`** — conferido: `Monster::blockHit`
+  (`monster.cpp:1402-1426`) os aplica DEPOIS de `Creature::blockHit`. Por isso a resistência do
+  monstro continua o estágio de `mitigation.resistances`, na posição em que o #548 já a deixou.
+- **O reflexo é um campo do outcome, e a segunda resolução é do ruleset.** `resolveDamage` calcula
+  `DamageOutcome.reflected` (`combat/reflect.ts`: `flat + floor(bloqueado × p / 100)`, teto
+  `ceil(1 % da vida máxima do atacante)`, físico SÓ flat do jogador exige o atacante adjacente);
+  quem aplica resolve `reflectedDamageIntent` contra o atacante. O intent do reflexo é EXTENSÃO
+  (`intent.extension`): nunca reflete de volta, não critica, não faz leech, não bloqueia por
+  defesa/armadura. Refletido por JOGADOR é o `COMBAT_NEUTRALDAMAGE` do Canary; o Draconya não tem
+  o tipo neutro, e `intent.neutral` faz a segunda resolução pular absorção, aumento, imunidade e
+  resistência (a mitigação percentual e o piso continuam, como para qualquer tipo). O mecanismo é
+  POR FONTE (`DefenderReflect.reflector: 'player' | 'monster'`): o reflexo de monstro (#683) reusa
+  o mesmo `resolveReflect`, com o tipo original e sem a exceção de distância.
+- **O reflexo sai ANTES do dano no alvo**, como o `Combat::doCombatHealth` do Canary no fim do
+  bloqueio, e a morte do monstro refletido é resolvida depois da ability inteira.
+- **Cleave (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`)**: só golpe corpo a corpo COM arma;
+  cada monstro nos dois tiles que flanqueiam o alvo leva uma rolagem PRÓPRIA do poder da arma na
+  fração inteira do `cleavePercent`, ANTES do golpe principal, como extensão (sem crítico, leech
+  nem reflexo), e pratica a skill uma vez (`onUsedWeapon` por `internalUseWeapon`). A rolagem
+  extra só existe quando o equipamento declara o atributo.
+- **Fora desta emenda:** reflexo do tique de condição (o Canary reflete dano de condição com
+  atacante; aqui só o golpe de ability reflete), o reflexo do componente SECUNDÁRIO (o Canary só o
+  olha quando o alvo é monstro — é do #683), cargas gastas pelo reflexo/cleave (`useCharges`), e
+  o sinal do `absorbFlat` do Canary, que nenhum código escreve no `47dfd51` — aqui "absorver"
+  subtrai.
+
+## Emenda — 2026-09-26: elemento no monstro — cura, reflexo e -200 % (M30-G6, #683)
+
+Mais uma emenda do perfil (d.3): `combat-v3` ainda não está na `main`. `combat-v1`/`v2` não leem
+nenhum dos campos, e o `DamageOutcome` deles não ganha chave nenhuma (`elementHealing` é
+OPCIONAL, ausente quando zero) — os traces do `combat-v1` passam sem edição.
+
+- **Vulnerabilidade até -200 % só no MONSTRO.** `monsterMitigationSchema` (`[-2, 1)`) é o
+  `mitigationSchema` com outro piso; o item continua `[-1, 1)`. O estágio de resistência já
+  fazia `dano × (1 − r)`, então `-2` triplica sem mudança no resolver. `elements ≥ 100` do Canary
+  é IMUNIDADE (regra do importador, #578), não resistência — o piso de dano do Draconya daria
+  dano > 0 onde o Canary dá 0.
+- **Cura por elemento (`monster.heals`).** `ceil(dano já crítico × p / 100)`, calculada no resolver
+  ANTES do `blockHit` (`Game::combatBlockHit`) — a imunidade não a impede — e aplicada pelo
+  ruleset depois do dano e do reflexo, somando o componente secundário. Só com atacante criatura
+  (o `if (attacker)` do Canary): o tique de campo não cura. **Diferença residual:** o Canary cura
+  dentro do `combatBlockHit`, ANTES de o dano mudar a vida; aqui a cura vem DEPOIS e o golpe que
+  mata não cura — a ordem que a spec do #683 fixou. Só é observável quando o golpe é letal e a
+  cura o compensaria.
+- **Reflexo do monstro (`monster.reflects`)** pelo mecanismo do #552, sem código novo de cálculo:
+  `Defender.reflect = { reflector: 'monster', table }`. **Unidade:** percentual INTEIRO, a do
+  `reflectSchema` do item — a spec previa fração ÷100, mas o #552 fixou a escala do Canary, e a
+  cura por elemento seguiu a mesma escala pelo mesmo motivo (conta inteira dentro do `ceil`). A
+  segunda resolução contra o personagem é do ruleset, depois do dano no monstro.
+- **Fora desta emenda:** reflexo do componente secundário (a conta do Canary usa o valor do
+  PRIMÁRIO com o tipo do secundário, `game.cpp:8016-8039`, e nenhum conteúdo o exercita), reflexo
+  de tique de condição, reflexo `flat` de monstro, `addReflectElement` em jogo, Wheel e
+  `BUFF_DAMAGERECEIVED`.

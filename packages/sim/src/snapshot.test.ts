@@ -117,6 +117,23 @@ describe('snapshot fidelity', () => {
   });
 });
 
+describe('attack practice in the snapshot (#686)', () => {
+  it('omits the initial state and round trips a changed one', () => {
+    const fresh = character();
+    expect(fresh.getState()).not.toHaveProperty('attackPractice');
+
+    const session = newSession('practice');
+    const p = session.participants[0];
+    if (p === undefined) throw new Error('sem participante');
+    p.attackPractice = {
+      lastBlockType: 'armor', addAttackSkill: true, bloodHitCount: 12, shieldBlockCount: 29,
+    };
+    const snap = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
+    const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
+    expect(resumed.participants[0]?.attackPractice).toEqual(p.attackPractice);
+  });
+});
+
 describe('snapshot format guards', () => {
   it('rejects the legacy format without attempting to restore it', () => {
     // Snapshot persistido antigo: os nomes em português são a fixture da migração.

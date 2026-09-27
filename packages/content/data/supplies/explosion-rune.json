@@ -5,6 +5,7 @@
   "price": 25,
   "group": "attack",
   "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
   "requires": {
     "level": 31,
     "magicLevel": 6
