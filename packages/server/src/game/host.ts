@@ -15,7 +15,7 @@
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, FollowState, GridPoint, MemberLeft, PartyEvent, PresenceEvent,
-  Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
+  Receipt, Session, SessionSnapshot, SessionType, SkillProgress, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -27,7 +27,8 @@ import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitL
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, TileAppearanceChange, UseOnMapRejection,
+  VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -250,6 +251,18 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
+};
+
+/**
+ * A recusa de `use-on-map` em palavras (#729, ADR 0050 d.7). `not-usable` cobre tanto "nada
+ * usável ali" quanto um `kind` fora do T1 (`locked-door`, `chest`, `sign`…) — a mesma decisão
+ * de `UseOnMapRejection`, para não inventar um texto de requisito que o T2/T3 ainda não tem.
+ */
+const USE_ON_MAP_REFUSAL: Readonly<Record<UseOnMapRejection, string>> = {
+  'out-of-range': 'Está longe demais.',
+  'nothing-there': 'Não há nada para usar aqui.',
+  'not-usable': 'Isso não pode ser usado assim.',
+  'missing-tool': 'Você precisa da ferramenta certa para isso.',
 };
 
 /** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */
@@ -1438,6 +1451,16 @@ export class SessionHost {
         // o alvo e confirma/recusa é o servidor (#470).
         this.#requestSelectTarget(viewer, message.creatureId, message.seq);
         return;
+      case 'use-on-map':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL posição; alcance, estado, requisito e
+        // ferramenta são do servidor (#729, ADR 0050 d.7).
+        this.#requestUseOnMap(viewer, message.position);
+        return;
+      case 'look':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL posição; o texto vem do conteúdo, nunca
+        // do cliente (#729, ADR 0050 d.7).
+        this.#requestLook(viewer, message.position);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -1702,6 +1725,64 @@ export class SessionHost {
       if (id === creatureId) return subject;
     }
     return null;
+  }
+
+  /**
+   * Usar o que está no tile (#729, ADR 0050 d.7): porta, alavanca, capim, stone pile. Sucesso é
+   * `tile-update` BROADCAST para todos os viewers da sessão (DT-01: cenário é compartilhado,
+   * quem mais está olhando o mesmo tile precisa ver a porta abrir também); recusa é
+   * `system-message`, só para quem pediu.
+   */
+  #requestUseOnMap(viewer: Viewer, position: WorldPoint): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.useOnMap === undefined) return;
+    const result = ruleset.useOnMap(hosted.session, viewer.characterId, position);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: USE_ON_MAP_REFUSAL[result.reason] });
+      return;
+    }
+    for (const update of this.#tileUpdatesFor(result.changes)) {
+      const message: S2CMessage = { type: 'tile-update', ...update };
+      for (const other of hosted.viewers) other.send(message);
+    }
+  }
+
+  /**
+   * Olhar uma posição (#729, ADR 0050 d.7): o texto — placa ou descrição padrão — vem do `sim`,
+   * que já o resolveu do conteúdo. Só para quem pediu, nunca broadcast.
+   */
+  #requestLook(viewer: Viewer, position: WorldPoint): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.look === undefined) return;
+    viewer.send({ type: 'look-result', text: ruleset.look(position).text });
+  }
+
+  /**
+   * Resolve cada mudança de aparência do `sim` (posição + `appearanceKey` + par de estados) em
+   * `tile-update` (S2C), pela tabela `appearances.scenery` — a MESMA indireção de
+   * `ground-item-appear` resolvendo `corpses` (invariante 6: quem sabe a arte é o hospedeiro,
+   * nunca o `content`). Uma mudança cujo `appearanceKey` não está na tabela — pacote de assets
+   * trocado no meio de uma sessão fixada numa versão anterior (invariante 7) — não gera
+   * mensagem: nunca inventa substituição sem os dois lados (`from`/`to`) resolvidos.
+   */
+  #tileUpdatesFor(
+    changes: readonly TileAppearanceChange[],
+  ): Array<{ position: WorldPoint; replace: Array<{ from: number; to: number }> }> {
+    const scenery = this.#options.appearances?.scenery;
+    if (scenery === undefined) return [];
+    const updates: Array<{ position: WorldPoint; replace: Array<{ from: number; to: number }> }> = [];
+    for (const change of changes) {
+      const table = scenery[change.appearanceKey];
+      const from = table?.[change.fromState];
+      const to = table?.[change.toState];
+      if (from === undefined || to === undefined) continue;
+      updates.push({ position: change.position, replace: [{ from, to }] });
+    }
+    return updates;
   }
 
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
@@ -3788,6 +3869,10 @@ export class SessionHost {
           const appearanceId = this.#options.monsterCatalog?.get(corpse.monsterId)?.corpseAppearanceId;
           return appearanceId === undefined ? [] : [{ id: corpse.id, position: corpse.position, appearanceId }];
         }),
+        // O overlay de cenário ATIVO (#729, ADR 0050 d.7): todo interativo cujo estado hoje
+        // difere do inicial, para quem reanexa aplicar por cima da pilha estática que já
+        // carrega — a MESMA resolução de `tile-update`, pela tabela `appearances.scenery`.
+        tileUpdates: this.#tileUpdatesFor(ruleset.tileAppearanceChanges ?? []),
       },
       // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.
       aggregates: { ...session.aggregatesOf(characterId) },

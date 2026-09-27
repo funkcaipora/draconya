@@ -18,6 +18,7 @@ vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 import { Container, drawOrder, Graphics, Sprite, Texture, type GraphicsOp } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
+import { applyTileUpdate } from '../state/world.js';
 import { prefetchTiles, renderTiles, TILE, toScreen, visibleTiles, viewFor, zoomFor } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import { veilTint } from './floors.js';
@@ -1393,6 +1394,79 @@ describe('viewport: métricas de desenvolvimento (issue #388)', () => {
     const stats = viewport.handle.stats();
     expect(stats.frames).toBe(3);
     expect(stats.lastFrameMs).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('viewport: cenário usável — tile-update patcheia a pilha do tile (#729, ADR 0050 d.7)', () => {
+  const DOOR_CLOSED = 200;
+  const DOOR_OPEN = 201;
+  const SCENERY_CATALOG: SyntheticCatalog = {
+    ...CATALOG,
+    [DOOR_CLOSED]: { kind: 'object' },
+    [DOOR_OPEN]: { kind: 'object' },
+  };
+
+  it('substitui o id da PILHA quando `world.tileOverrides` tem uma entrada para o tile', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(SCENERY_CATALOG, { now: clock.now });
+    const scene = fieldScene(6, 6, [7], { '2,2,7': { ground: DOOR_CLOSED, items: [] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 0, y: 0, z: 7 }, 0);
+
+    await viewport.tick(0);
+    art.flush();
+    await viewport.tick(16);
+
+    const closedBitmap = await art.object(DOOR_CLOSED, 0, 0);
+    expect(spriteWith(viewport.floorLayers(7).ground, closedBitmap)).toBeDefined();
+
+    applyTileUpdate({ x: 2, y: 2, z: 7 }, [{ from: DOOR_CLOSED, to: DOOR_OPEN }]);
+    await viewport.tick(32); // a versão do overlay entra na chave: repinta sem a câmera andar
+    art.flush();
+    await viewport.tick(48);
+
+    const openBitmap = await art.object(DOOR_OPEN, 0, 0);
+    expect(spriteWith(viewport.floorLayers(7).ground, openBitmap)).toBeDefined();
+    expect(spriteWith(viewport.floorLayers(7).ground, closedBitmap)).toBeUndefined();
+  });
+
+  it('repinta o tile MESMO sem a câmera andar (terrainRepaints sobe com tileOverridesVersion)', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(SCENERY_CATALOG, { now: clock.now });
+    const scene = fieldScene(6, 6, [7], { '2,2,7': { ground: DOOR_CLOSED, items: [] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 0, y: 0, z: 7 }, 0);
+
+    await viewport.tick(0);
+    await viewport.tick(16);
+    const before = viewport.handle.stats().terrainRepaints;
+
+    applyTileUpdate({ x: 2, y: 2, z: 7 }, [{ from: DOOR_CLOSED, to: DOOR_OPEN }]);
+    await viewport.tick(32);
+    expect(viewport.handle.stats().terrainRepaints).toBe(before + 1);
+  });
+
+  it('um replace vazio (a porta fechou de novo) some com a entrada e volta ao id ORIGINAL da cena', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(SCENERY_CATALOG, { now: clock.now });
+    const scene = fieldScene(6, 6, [7], { '2,2,7': { ground: DOOR_CLOSED, items: [] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 0, y: 0, z: 7 }, 0);
+    await viewport.tick(0);
+    art.flush();
+    await viewport.tick(16);
+
+    applyTileUpdate({ x: 2, y: 2, z: 7 }, [{ from: DOOR_CLOSED, to: DOOR_OPEN }]);
+    await viewport.tick(32);
+    art.flush();
+    await viewport.tick(48);
+    applyTileUpdate({ x: 2, y: 2, z: 7 }, []);
+    await viewport.tick(64);
+    art.flush();
+    await viewport.tick(80);
+
+    const closedBitmap = await art.object(DOOR_CLOSED, 0, 0);
+    expect(spriteWith(viewport.floorLayers(7).ground, closedBitmap)).toBeDefined();
   });
 });
 

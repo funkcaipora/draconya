@@ -61,6 +61,28 @@ export const CLIENT_TO_SERVER = {
    * 20: o 19 é do `party-settings`.
    */
   'party-end-vote': 20,
+  // 21/22 são reservados pela PR #741 (#724, "sell-items"/"discard-item"), 23/24 pela PR #749
+  // (#722, "open-corpse"/"take-loot") e 25/26 pela PR #752 (#726, "use-item"/"use-item-on") —
+  // nenhuma delas mesclada nesta base (`728-tile-overrides`). Não estão aqui porque o CÓDIGO
+  // delas não está: esta branch não implementa nenhuma das seis, só reserva os números
+  // seguintes livres (conferido com `gh pr diff 741/749/752`, 2026-09-27).
+  /**
+   * Usar o que está NO TILE (#729, ADR 0050 d.7): porta, alavanca, capim, stone pile. INTENÇÃO:
+   * o cliente diz QUAL posição; alcance (`canUse`, mesmo andar e adjacente), estado, requisito
+   * e ferramenta são do servidor (invariante 4). `seq` é o mesmo padrão de `select-target`: o
+   * cliente descarta resposta obsoleta, quando manda mais de um pedido em sequência. Sucesso é
+   * `tile-update` (broadcast, DT-01); recusa é `system-message`.
+   *
+   * 27: o maior opcode reservado até aqui é o 26 (#726, ainda sem código nesta branch).
+   */
+  'use-on-map': 27,
+  /**
+   * Olhar uma posição (#729, ADR 0050 d.7): o "You see …" do Tibia, para placa e cenário. Sem
+   * `creatureId`/`instanceId` nesta entrega (DT-04, spec da #729) — sem gatilho de UI hoje.
+   *
+   * 28: o 27 é do `use-on-map`.
+   */
+  look: 28,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -209,6 +231,28 @@ export const SERVER_TO_CLIENT = {
    * 35: o 34 é do `target-changed`.
    */
   'target-cancel': 35,
+  // 36 é reservado pela PR #749 (#722, "corpse-contents") e pela PR #752 (#726, "use-result") —
+  // as duas nasceram da mesma base sem se ver e vão precisar de rebase entre si, o que não é
+  // problema desta issue. 37 é reservado pela PR #752 também, para uma segunda mensagem. Nenhuma
+  // das duas está mesclada em `728-tile-overrides` (conferido com `gh pr diff 749/752`,
+  // 2026-09-27); esta branch usa os dois números seguintes livres.
+  /**
+   * O tile mudou de aparência (#729, ADR 0050 d.7): a pilha do tile na posição, com os pares
+   * `{ from, to }` de id de aparência que o cliente troca — a mesma indireção de
+   * `ground-item-appear` resolvendo `corpses`, aqui resolvendo `appearances.scenery`
+   * (invariante 6: quem sabe a arte é o servidor, nunca o `content`). Broadcast para todos os
+   * viewers da sessão (DT-01) — cenário é compartilhado, ao contrário de `player-stats`.
+   *
+   * 38: o maior opcode reservado até aqui é o 37 (#726, ainda sem código nesta branch).
+   */
+  'tile-update': 38,
+  /**
+   * A resposta ao `look` (#729): o texto — placa, ou uma descrição padrão do `kind` de
+   * cenário. Só para quem pediu, nunca broadcast.
+   *
+   * 39: o 38 é do `tile-update`.
+   */
+  'look-result': 39,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

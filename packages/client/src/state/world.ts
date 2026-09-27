@@ -143,6 +143,17 @@ export interface World {
    * precisa saber que um cadáver caiu sem varrer o mapa a cada quadro.
    */
   groundItemsVersion: number;
+  /**
+   * O overlay de cenário usável (#729, ADR 0050 d.7): por tile (`"x,y,z"`), a lista de
+   * substituições de id de aparência que este tile tem sobre a pilha ESTÁTICA de `things/` — a
+   * porta trocou o id fechado pelo aberto, o capim trocou o alto pelo cortado. Chega por
+   * `tile-update` (delta) e por `session-state.world.tileUpdates` (o overlay inteiro, que
+   * SUBSTITUI — como `groundItems`). O `world` não avisa ninguém (ADR 0007); quem lê é o
+   * viewport, no próprio pintor de pilha.
+   */
+  readonly tileOverrides: Map<string, ReadonlyArray<{ readonly from: number; readonly to: number }>>;
+  /** Sobe a cada mudança em `tileOverrides` — a MESMA razão de `groundItemsVersion`. */
+  tileOverridesVersion: number;
   /** A janela de tiles visíveis na tela agora (FUN-23, #254). Atualizada pelo viewport. */
   visibleWindow: TileWindow | null;
   readonly effects: Effect[];
@@ -163,6 +174,8 @@ export const world: World = {
   ambience: 'surface',
   groundItems: new Map(),
   groundItemsVersion: 0,
+  tileOverrides: new Map(),
+  tileOverridesVersion: 0,
   selfId: null,
   visibleWindow: null,
   creatures: new Map(),
@@ -170,6 +183,39 @@ export const world: World = {
   missiles: [],
   texts: [],
 };
+
+/** A chave de `tileOverrides` — a mesma forma `"x,y,z"` usada em `world/tile-approach.ts`. */
+export function tileOverrideKey(position: Point): string {
+  return `${String(position.x)},${String(position.y)},${String(position.z)}`;
+}
+
+/**
+ * Um `tile-update` chegou (#729): substitui o overlay DESTE tile pelo `replace` novo — nunca
+ * acumula por cima do que já havia, porque o servidor já manda o par `{ from, to }` RESOLVIDO
+ * contra o estado atual, e um `replace` vazio (o servidor nunca manda isso hoje, mas o schema
+ * permite) apaga a entrada — o mesmo `delete` de `ground-item-disappear`.
+ */
+export function applyTileUpdate(
+  position: Point, replace: ReadonlyArray<{ readonly from: number; readonly to: number }>,
+): void {
+  const key = tileOverrideKey(position);
+  if (replace.length === 0) world.tileOverrides.delete(key);
+  else world.tileOverrides.set(key, replace);
+  world.tileOverridesVersion += 1;
+}
+
+/**
+ * O `session-state` chegou: o overlay inteiro SUBSTITUI (#729, a mesma regra de `groundItems`
+ * no `session-state` — mesclar deixaria uma porta que fechou enquanto ninguém olhava desenhada
+ * aberta para sempre).
+ */
+export function replaceTileOverrides(
+  updates: ReadonlyArray<{ readonly position: Point; readonly replace: ReadonlyArray<{ readonly from: number; readonly to: number }> }>,
+): void {
+  world.tileOverrides.clear();
+  for (const update of updates) world.tileOverrides.set(tileOverrideKey(update.position), update.replace);
+  world.tileOverridesVersion += 1;
+}
 
 /**
  * Teto de cada lista de transitórios.
@@ -285,6 +331,8 @@ export function enterInstance(
   world.ambience = ambience;
   world.groundItems.clear();
   world.groundItemsVersion += 1;
+  world.tileOverrides.clear();
+  world.tileOverridesVersion += 1;
   world.selfId = null;
   world.creatures.clear();
   clearTransients();

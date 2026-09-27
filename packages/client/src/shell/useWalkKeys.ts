@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { sendIntent } from '../net/current.js';
 import { world } from '../state/world.js';
+import { cancelTileApproach } from './tile-approach.js';
 import { DEFAULT_STEP_MS, WalkKeys, directionOf, nextWalkDelay } from './walk-keys.js';
 
 /** O foco está num campo de texto? Andar ali seria apagar o que o jogador digita. */
@@ -78,6 +79,9 @@ export function useWalkKeys(): void {
       const active = keys.press(event.code);
       // Direção nova (ou primeira): manda AGORA. Repetir a mesma tecla não muda o ritmo.
       if (active !== null && active !== before) {
+        // Andar pelo teclado cancela um pedido de usar tile em curso (#729) — o jogador mudou
+        // de intenção, e o `walk` já em voo não pode virar `use-on-map` de um clique antigo.
+        cancelTileApproach();
         stop();
         send();
       }

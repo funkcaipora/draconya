@@ -11680,3 +11680,140 @@ describe('cenário usável — TileOverrides (#728, ADR 0050 d.2-d.5, d.8)', () 
     });
   });
 });
+
+describe('useOnMap, look e tileAppearanceChanges — o jogador usa e olha o cenário (#729, ADR 0050 d.7)', () => {
+  // A MESMA geometria do bloco acima, com a porta em (4,2,7) e o capim em (2,3,7) — mas aqui
+  // o hero é posicionado À MÃO, adjacente ao interativo, para exercitar `useOnMap`/`look`
+  // diretamente, sem esperar o walker percorrer o laço inteiro (esse caminho já tem teste
+  // próprio, acima).
+  const doorMap = {
+    ...map,
+    id: 'door-arena-729',
+    interactables: [
+      { at: { x: 4, y: 2, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1' },
+      {
+        at: { x: 2, y: 3, z: 7 }, kind: 'grass', initialState: 'uncut', appearanceKey: 'grass-1',
+        requires: { tool: 'machete' }, revertMs: 2_000,
+      },
+      { at: { x: 1, y: 3, z: 7 }, kind: 'sign', initialState: 'default', appearanceKey: 'sign-1', text: 'Beware of the rats.' },
+    ],
+  };
+  const doorRoute = { ...route, id: 'door-loop-729', mapId: 'door-arena-729' };
+  const doorHunt = { ...hunt, mapId: 'door-arena-729', routeId: 'door-loop-729' };
+  const testMachete = {
+    id: 'test-machete-729', name: 'Test Machete', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'machete' as const },
+  };
+  const loaded = () => content({
+    maps: [doorMap], routes: [doorRoute], hunts: [doorHunt], items: [...items, testMachete],
+  });
+  const withMachete = {
+    backpack: [{ instanceId: 'machete-729', itemId: 'test-machete-729', quantity: 1 }],
+    satchel: [], equipped: {},
+  };
+
+  it('abre a porta adjacente e devolve a mudança de aparência (RF-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 }; // adjacente à porta em (4,2,7)
+    const result = ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(result).toEqual({
+      ok: true,
+      changes: [{
+        position: { x: 4, y: 2, z: 7 }, appearanceKey: 'door-1', fromState: 'closed', toState: 'open',
+      }],
+    });
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'door')).toMatchObject({ state: 'open' });
+  });
+
+  it('aciona a alavanca e devolve TAMBÉM a mudança do linkado (RF-01)', () => {
+    const leverMap = {
+      ...map,
+      id: 'lever-arena-729',
+      interactables: [
+        {
+          at: { x: 4, y: 1, z: 7 }, kind: 'lever', initialState: 'down', appearanceKey: 'lever',
+          aid: 2772, links: ['9001'],
+        },
+        {
+          at: { x: 1, y: 3, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-2',
+          aid: 9001,
+        },
+      ],
+    };
+    const loadedLever = content({
+      maps: [leverMap], routes: [{ ...doorRoute, mapId: 'lever-arena-729' }],
+      hunts: [{ ...doorHunt, mapId: 'lever-arena-729', routeId: doorRoute.id }],
+    });
+    const { session, ruleset, hero } = start({ loaded: loadedLever });
+    hero.position = { x: 4, y: 2, z: 7 }; // adjacente à alavanca em (4,1,7)
+    const result = ruleset.useOnMap(session, hero.id, { x: 4, y: 1, z: 7 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.changes).toEqual([
+      { position: { x: 4, y: 1, z: 7 }, appearanceKey: 'lever', fromState: 'down', toState: 'up' },
+      { position: { x: 1, y: 3, z: 7 }, appearanceKey: 'door-2', fromState: 'closed', toState: 'open' },
+    ]);
+  });
+
+  it('recusa out-of-range a mais de um tile de distância (RF-02)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 1, y: 1, z: 7 }; // longe da porta em (4,2,7)
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'out-of-range' });
+  });
+
+  it('recusa nothing-there num tile sem interativo (RF-02)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 2, y: 2, z: 7 };
+    expect(ruleset.useOnMap(session, hero.id, { x: 2, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'nothing-there' });
+  });
+
+  it('recusa missing-tool no capim sem machete no catálogo — nunca corta sem ferramenta (RF-02)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() }); // sem withMachete
+    hero.position = { x: 2, y: 2, z: 7 }; // adjacente ao capim em (2,3,7)
+    expect(ruleset.useOnMap(session, hero.id, { x: 2, y: 3, z: 7 }))
+      .toEqual({ ok: false, reason: 'missing-tool' });
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'grass')).toMatchObject({ state: 'uncut' });
+  });
+
+  it('corta o capim com a machete no inventário (RF-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded(), inventory: withMachete });
+    hero.position = { x: 2, y: 2, z: 7 };
+    const result = ruleset.useOnMap(session, hero.id, { x: 2, y: 3, z: 7 });
+    expect(result.ok).toBe(true);
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'grass')).toMatchObject({ state: 'cut' });
+  });
+
+  it('recusa not-usable numa placa (kind sem par de estados) (RF-02)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 1, y: 2, z: 7 }; // adjacente à placa em (1,3,7)
+    expect(ruleset.useOnMap(session, hero.id, { x: 1, y: 3, z: 7 }))
+      .toEqual({ ok: false, reason: 'not-usable' });
+  });
+
+  it('look devolve o text da placa (RF-03)', () => {
+    const { ruleset } = start({ loaded: loaded() });
+    expect(ruleset.look({ x: 1, y: 3, z: 7 })).toEqual({ text: 'Beware of the rats.' });
+  });
+
+  it('look devolve uma descrição padrão do kind sem text próprio (RF-03)', () => {
+    const { ruleset } = start({ loaded: loaded() });
+    expect(ruleset.look({ x: 4, y: 2, z: 7 }).text).toMatch(/porta/i);
+  });
+
+  it('look devolve o texto genérico sem interativo nenhum ali (RF-03)', () => {
+    const { ruleset } = start({ loaded: loaded() });
+    expect(ruleset.look({ x: 2, y: 2, z: 7 }).text).toBe('Você não vê nada de especial.');
+  });
+
+  it('tileAppearanceChanges está vazio sem ninguém ter usado nada, e ganha uma entrada por uso (RF-05)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    expect(ruleset.tileAppearanceChanges).toEqual([]);
+    hero.position = { x: 4, y: 1, z: 7 };
+    ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(ruleset.tileAppearanceChanges).toEqual([{
+      position: { x: 4, y: 2, z: 7 }, appearanceKey: 'door-1', fromState: 'closed', toState: 'open',
+    }]);
+  });
+});

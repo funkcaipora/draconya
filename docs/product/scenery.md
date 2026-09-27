@@ -3,8 +3,10 @@
 **Status:** parcial — o importador **classifica** porta, capim, stone pile, rope spot, ladder,
 alavanca, baú, placa e teleporte a partir do OTBM real (#727, ADR 0050 d.1); o mecanismo que muda
 de estado por sessão (`TileOverrides`, #728, ADR 0050 d.2-d.5, d.8) existe para o T1 (porta comum,
-capim, stone pile, alavanca) — rope spot/ladder como passo de andar, e T2/T3 (porta de chave/
-level/quest, baú, teleporte, placa de pressão) continuam em aberto.
+capim, stone pile, alavanca); o JOGADOR já pode acionar isso e ver o resultado — `use-on-map`,
+`look` e `tile-update` (#729, ADR 0050 d.7) — e não só o walker automático. Rope spot/ladder como
+passo de andar, e T2/T3 (porta de chave/level/quest, baú, teleporte, placa de pressão) continuam
+em aberto.
 **PRD:** cenário e uso de item no mapa (não numerado no PRD original; nasceu do pedido "cenário,
 itens usáveis do cenário como alavancas, portas, matos... tudo 100%")
 **Épico:** E18 (Jogável ponta a ponta)
@@ -45,13 +47,45 @@ sozinho, sem ferramenta, quando ela está no caminho da rota (ADR 0050 d.4); cap
 bloqueiam **intactos**, exigem ferramenta (`use.tool` do item — hoje só um item de teste declara,
 a machete/pá reais são a #573) e decaem sozinhos de volta em `revertMs` (evento `TILE_REVERT` na
 fila, invariante 2 — nada por tique); a stone pile virada buraco desce um andar
-(`floorChange`). Alavanca nunca bloqueia — o walker não a aciona sozinho, só `#useOnMap` (#729,
-protocolo, fora do escopo da #728) —, mas já alterna `down`↔`up` e liga interativos por `aid`
+(`floorChange`). Alavanca nunca bloqueia — o walker não a aciona sozinho, só o jogador, por
+`HuntRuleset.useOnMap` (#729) —, mas já alterna `down`↔`up` e liga interativos por `aid`
 (`links`) quando usada. Porta comum FECHA sozinha quando o tile esvazia e ninguém está nele
 (`TileOccupancy.vacate` → `TileOverrides.closeDoorIfVacant`), nunca por prazo. O overlay entra no
 snapshot (`HuntRulesetState.tileOverrides`, opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`).
 T2 (porta de chave/level/quest, baú) continua fora: sem requisito satisfazível (level/storage por
 personagem), classificá-las como bloqueantes as prenderia para sempre — pior que hoje.
+
+## O jogador usa e olha (#729, ADR 0050 d.7)
+
+Antes desta issue, o único caminho para acionar um interativo era o WALKER automático, dentro do
+passo da rota — o jogador não tinha como pedir o mesmo de propósito, e o cliente não desenhava a
+mudança. `HuntRuleset.useOnMap(session, characterId, position)` (`packages/sim/src/rulesets/
+hunt.ts`) é o caminho do jogador: confere alcance (`canUse` do Canary — mesmo andar, adjacente,
+`|dx| <= 1` e `|dy| <= 1`) e delega para o MESMO `#useInteractable` que o walker usa, para as duas
+portas nunca divergirem em requisito ou ferramenta. `HuntRuleset.look(position)` devolve o `text`
+de uma placa, ou uma descrição padrão por `kind`, ou o texto genérico sem interativo nenhum ali —
+sem conferir alcance (o AOI do servidor já limita o que a tela mostra).
+
+No fio: C2S `use-on-map { position, seq? }` (27) e `look { position }` (28); S2C `tile-update
+{ position, replace: [{ from, to }] }` (38, BROADCAST para todos os viewers da sessão — cenário é
+compartilhado, não por personagem) e `look-result { text }` (39, só para quem pediu).
+`session-state.world.tileUpdates[]` leva o overlay INTEIRO (todo interativo cujo estado difere do
+inicial do conteúdo) para quem reanexa, no mesmo contrato de `tile-update` — o servidor resolve os
+dois lados (`from`/`to`) pela tabela `appearances.scenery`, nunca inventando substituição sem os
+dois ids resolvidos (conteúdo em versão divergente vira SEM mensagem, não erro).
+
+No cliente: clique/duplo-clique num tile manda `use-on-map`, andando até lá primeiro se não
+estiver adjacente (o mesmo padrão de `corpse-approach.ts`, #722/#749 — `shell/tile-approach.ts`,
+`world/tile-approach.ts`); clique direito manda `look`, sem aproximação. `state/world.ts` guarda o
+overlay ativo (`tileOverrides`, por `"x,y,z"`) como um overlay DINÂMICO sobre a pilha estática de
+`things/` — a mesma forma de `groundItems`/`groundItemsVersion` para os cadáveres —, e
+`world/viewport.ts` aplica o `replace` no próprio pintor de tile, sem esperar `session-state`.
+
+Recusas de `use-on-map` (`system-message`, em português, seguindo a convenção já em vigor no
+`host.ts` — não o inglês que o ADR 0050 cita como referência do Tibia): fora de alcance, nada ali,
+`kind` fora do T1 (`locked-door`/`chest`/`sign`/… — a mesma decisão de `isToggleable`, "não
+invente" requisito que o T2/T3 ainda não tem) e ferramenta ausente (o catálogo real não tem NENHUM
+item com `use.tool` até a #573 — a recusa é sempre `missing-tool` até lá).
 
 `appearances.scenery` — gerado em `data/appearances/generated/scenery.json`, nunca à mão — guarda
 só as `appearanceKey` que algum mapa importado realmente usa (não a tabela do Canary inteira, que
@@ -101,6 +135,7 @@ número de TILES com essa classificação, não de portas fisicamente distintas.
 - `[ABERTO]` Rope spot e ladder como passo de andar (o walker atravessando, `floorChange` por
   `use`) — o plano original das W8-W10 os lista no T1, mas o pedido desta issue (#728) restringiu
   o escopo a porta/capim/stone-pile/alavanca; ficou para uma issue de acompanhamento.
-- `[ABERTO]` `use-on-map`/`look`/`tile-update` (protocolo e cliente) — #729. Sem eles, a alavanca
-  só é acionável por automação futura do bot, nunca pelo jogador — e o cliente não vê a porta
-  abrir (a arte da pilha por tile continua estática até a #729 patchear).
+- ~~`[ABERTO]` `use-on-map`/`look`/`tile-update` (protocolo e cliente) — #729.~~ → **Resolvido
+  (#729):** ver "O jogador usa e olha" acima. `look` cobre só posição (placa/descrição de
+  `kind`) — `creatureId`/`instanceId` do ADR 0050 d.7 ficam para quando o menu de contexto de
+  criatura/item existir (sem gatilho de UI hoje).

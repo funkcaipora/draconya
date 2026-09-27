@@ -109,7 +109,7 @@ describe('world deltas', () => {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
@@ -135,7 +135,10 @@ describe('world deltas', () => {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { mapId: 'rat-cellars', creatures: [], groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }] },
+      world: {
+        mapId: 'rat-cellars', creatures: [], tileUpdates: [],
+        groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }],
+      },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
@@ -146,6 +149,70 @@ describe('world deltas', () => {
     applyMessage(spawn(1), 0);
     applyMessage({ type: 'creature-disappear', id: 1 }, 0);
     expect(world.creatures.has(1)).toBe(false);
+  });
+});
+
+describe('cenário usável: tile-update, look-result e o overlay do session-state (#729, ADR 0050 d.7)', () => {
+  it('tile-update guarda o replace por tile e sobe a versão', () => {
+    const before = world.tileOverridesVersion;
+    applyMessage({
+      type: 'tile-update', position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }],
+    }, 0);
+    expect(world.tileOverrides.get('4,2,7')).toEqual([{ from: 1638, to: 1639 }]);
+    expect(world.tileOverridesVersion).toBe(before + 1);
+  });
+
+  it('um replace VAZIO apaga a entrada (a mesma regra de ground-item-disappear)', () => {
+    applyMessage({
+      type: 'tile-update', position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }],
+    }, 0);
+    applyMessage({ type: 'tile-update', position: { x: 4, y: 2, z: 7 }, replace: [] }, 0);
+    expect(world.tileOverrides.has('4,2,7')).toBe(false);
+  });
+
+  it('look-result entra no chat como system-message de nível info', () => {
+    applyMessage({ type: 'look-result', text: 'A wooden door.' }, 0);
+    const last = hud.get().systemMessages.at(-1);
+    expect(last).toMatchObject({ level: 'info', text: 'A wooden door.' });
+  });
+
+  it('session-state SUBSTITUI o overlay inteiro, como substitui groundItems', () => {
+    applyMessage({
+      type: 'tile-update', position: { x: 1, y: 1, z: 7 }, replace: [{ from: 1, to: 2 }],
+    }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: {
+        mapId: 'rat-cellars', creatures: [], groundItems: [],
+        tileUpdates: [{ position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }] }],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
+      notableEvents: [],
+    }, 0);
+    // A entrada de ANTES do session-state some (não é a mesclagem — é substituição inteira).
+    expect(world.tileOverrides.has('1,1,7')).toBe(false);
+    expect(world.tileOverrides.get('4,2,7')).toEqual([{ from: 1638, to: 1639 }]);
+  });
+
+  it('session-state sem tileUpdates (nó anterior a esta issue) esvazia o overlay sem lançar', () => {
+    applyMessage({
+      type: 'tile-update', position: { x: 1, y: 1, z: 7 }, replace: [{ from: 1, to: 2 }],
+    }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: { mapId: 'rat-cellars', creatures: [], groundItems: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    } as unknown as S2CMessage, 0);
+    expect(world.tileOverrides.size).toBe(0);
   });
 });
 
@@ -187,7 +254,7 @@ describe('as cores de outfit (FUN-104)', () => {
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [],
+      world: { groundItems: [], tileUpdates: [],
         mapId: 'rat-cellars',
         creatures: [
           { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1, colors },
@@ -359,7 +426,7 @@ describe('combat transients (FUN-106)', () => {
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 0);
@@ -540,7 +607,7 @@ describe('session-state', () => {
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
       speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [],
+    world: { groundItems: [], tileUpdates: [],
       mapId: 'rat-cellars',
       creatures: creatures.map((c) => ({
         id: c.id, position: at(c.x, c.y), appearanceId: 1,
@@ -647,7 +714,7 @@ describe('o analisador (FUN-83)', () => {
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
       speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120,
       kills: 12, deaths: 0, itemsLooted: 4, suppliesUsed: 7, bestBasicHit: 88,
@@ -736,7 +803,7 @@ describe('o analisador ao vivo (FUN-110)', () => {
         creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35,
         level: 8, xp: 4_200, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
       notableEvents: [{ atMs: 1_000, type: 'level-up' }],
     }, 5_000);
@@ -797,7 +864,7 @@ describe('a party v2 no estado (#405, ADR 0035)', () => {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -900,7 +967,7 @@ describe('o follow-state do bot (#406, ADR 0035 d.9)', () => {
         creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], mapId: null, creatures: [] },
+      world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 1);
@@ -915,7 +982,7 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -1155,7 +1222,7 @@ describe('jogadores online (SV-07/SV-15, #351)', () => {
       health: 100, maxHealth: 100, mana: 50, maxMana: 50, level: 1, xp: 0, vocationId: null,
       speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,

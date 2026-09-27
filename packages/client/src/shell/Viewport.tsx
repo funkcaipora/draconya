@@ -5,6 +5,7 @@ import { sendIntent } from '../net/current.js';
 import { targetTracker } from '../state/target.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
+import { cancelTileApproach, requestTileUse } from './tile-approach.js';
 import { TextureBook } from '../world/textures.js';
 import { loadStackMap, sceneFromStack } from '../world/scene.js';
 import type { Scene } from '../world/scene.js';
@@ -91,9 +92,42 @@ export function Viewport() {
     if (!(event.target instanceof HTMLCanvasElement)) return;
     const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
     if (id === null || id === world.selfId) return;
+    // Escolher uma criatura cancela um pedido de usar tile em curso (#729) — o jogador mudou de
+    // alvo.
+    cancelTileApproach();
     // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O rastreador antecipa
     // a moldura no mesmo quadro e decide o toggle quando o clique é no alvo atual (#471).
     targetTracker.selectTarget(id, sendIntent);
+  };
+
+  /**
+   * Duplo-clique num tile SEM criatura ali usa o cenário (#729, ADR 0050 d.7): porta, alavanca,
+   * capim, stone pile. Manda `walk-to` na hora e GUARDA o pedido — `useTileApproach` manda
+   * `use-on-map` sozinho quando a posição própria ficar a alcance (o `world` não avisa
+   * ninguém, ADR 0007), sem recusar `out-of-range` de um clique de longe — o mesmo padrão de
+   * `corpse-approach.ts` (#722/#749). Duplo-clique EM CIMA de uma criatura não faz nada aqui:
+   * usar cenário sob um monstro/personagem não é um caso do T1.
+   */
+  const onCanvasDoubleClick = (event: MouseEvent<HTMLDivElement>): void => {
+    if (!(event.target instanceof HTMLCanvasElement)) return;
+    const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
+    if (id !== null) return;
+    const position = handleRef.current?.tileAt(event.clientX, event.clientY) ?? null;
+    if (position === null) return;
+    requestTileUse(position, performance.now());
+  };
+
+  /**
+   * Clique direito olha a posição (#729, ADR 0050 d.7): o "You see …" do Tibia, sem aproximação
+   * — o servidor não confere alcance para `look` (a tela já só mostra o que está no campo de
+   * visão). `preventDefault` troca o menu de contexto do navegador pela intenção do jogo.
+   */
+  const onCanvasContextMenu = (event: MouseEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    if (!(event.target instanceof HTMLCanvasElement)) return;
+    const position = handleRef.current?.tileAt(event.clientX, event.clientY) ?? null;
+    if (position === null) return;
+    sendIntent({ type: 'look', position });
   };
 
   useEffect(() => {
@@ -151,7 +185,10 @@ export function Viewport() {
   }, [loaded]);
 
   return (
-    <div className="viewport" ref={holder} onClick={onCanvasClick}>
+    <div
+      className="viewport" ref={holder} onClick={onCanvasClick}
+      onDoubleClick={onCanvasDoubleClick} onContextMenu={onCanvasContextMenu}
+    >
       {/* O canvas é anexado pelo Pixi; este filho React absoluto pinta o status por cima dele. */}
       <WorldStatusOverlay handleRef={handleRef} />
     </div>
