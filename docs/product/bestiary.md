@@ -69,13 +69,16 @@ no Canary estrelas de 0 (inofensivo, 13 monstros) a 5 (desafiador, 53) — o sch
 a 4 e passou a aceitar 0 a 5.
 
 **A primeira promoção (#580) trouxe 933 fichas** — os 939 monstros do corte do Canary, menos Rat,
-Rotworm, Dragon e Dragon Lord (hand-authored, só o #581 os regenera) e menos dois monstros de
+Rotworm, Dragon e Dragon Lord (fora do alcance de `pnpm catalog:promote-monsters` por decisão —
+`HAND_AUTHORED_MONSTER_IDS` — e regenerados à parte pelo #581) e menos dois monstros de
 quest (`eshtaba-the-conjurer`, `leiden`) cujo `summons.entries` repete o mesmo `monsterId` com
 chances diferentes — o `sim` só aceita uma entrada por id (`content.ts`), e a saída honesta foi
 deixá-los fora da promoção em vez de inventar uma chance que o Canary não escreveu.
 `scripts/catalog/promote-monsters.ts` e o relatório de cobertura
 (`docs/reference/catalog/monsters-promotion-report.md`) detalham os dois casos e o que mais ficou
-de fora.
+de fora. **O #581 fechou as quatro fichas que faltavam** — Rat e Rotworm entraram em `entries`
+pela primeira vez (vinham sem ficha nenhuma); Dragon e Dragon Lord já tinham a ficha hand-authored
+de antes, e os números batiam com o que o leitor do Canary produz, então continuam como estavam.
 
 ## Regras
 

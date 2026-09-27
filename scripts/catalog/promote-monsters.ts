@@ -21,8 +21,13 @@
 // `packages/content/src/load.ts` para qualquer `data/<tipo>/`. Uma linha de `loot.items` cujo
 // `itemId` não existe nesse catálogo, ou que pede `max > 1` de um item que não empilha
 // (`rollModel: "canary"`, a mesma regra de `content.ts`), é removida e contada no relatório —
-// nunca falha o boot em silêncio. Rat, Rotworm, Dragon e Dragon Lord (#581) continuam
-// hand-authored: nunca promovidos por aqui, e o exercício vive só no relatório.
+// nunca falha o boot em silêncio. Rat, Rotworm, Dragon e Dragon Lord nunca são promovidos POR
+// ESTE SCRIPT — o #581 é quem os regenerou, uma única vez, direto em `generated/<fatia>.json`
+// (Rat em `mammals.json`, Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`),
+// com override próprio (`data/monsters/overrides/`) para o que o Draconya ainda precisa manter
+// diferente do Canary puro (`blockable`, até o #582+/M36-05 converter as duas hunts). Rodar este
+// script de novo NUNCA sobrescreve essas quatro entradas — `preserveHandAuthored` as reconduz de
+// volta à fatia a cada escrita, e `--check` as trata como parte do "em dia" pela mesma função.
 //
 // Determinístico e SEM depender de `CANARY_DIR`: a entrada é o que já está commitado em
 // `staging/monsters/generated/` e `data/items/`, então rodar duas vezes no mesmo commit produz
@@ -38,7 +43,10 @@ import {
   formatGeneratedSlice, listGeneratedSlices, writeGeneratedSlice, type CatalogEntity,
 } from './generated-writer.js';
 
-/** Rat, Rotworm, Dragon e Dragon Lord (#581) — regenerados só por aquela issue, nunca por esta. */
+/** Rat, Rotworm, Dragon e Dragon Lord — regenerados só pelo #581, nunca por esta promoção. Desde
+ *  o #581 eles JÁ VIVEM em `generated/<fatia>.json` (`preserveHandAuthored` os mantém lá); este
+ *  conjunto continua existindo para que uma reimportação futura do Canary NUNCA os sobrescreva
+ *  em silêncio — a regeneração deles é sempre um ato deliberado, nunca automático. */
 export const HAND_AUTHORED_MONSTER_IDS: ReadonlySet<string> = new Set([
   'rat', 'rotworm', 'dragon', 'dragon-lord',
 ]);
@@ -333,14 +341,33 @@ function formatReport(repoRoot: string, result: PromotionResult): string {
   return lines.join('\n');
 }
 
+/**
+ * Uma entidade de `HAND_AUTHORED_MONSTER_IDS` já commitada em `generated/<fatia>.json` nunca sai
+ * de `computePromotion` — mas, desde o #581, ela PODE morar na mesma fatia que o resto (Rat em
+ * `mammals.json`, Dragon e Dragon Lord em `dragons.json`, …), colocada lá por aquela issue, não
+ * por esta promoção. Sem preservá-la aqui, a próxima `pnpm catalog:promote-monsters` a apagaria
+ * — o mesmo problema que `mergeJsonMap` já resolve para `bestiary`/`appearances`, só que para um
+ * ARRAY em vez de um mapa por id. `fresh` nunca contém um id de `HAND_AUTHORED_MONSTER_IDS`
+ * (ver `computePromotion`), então a união abaixo nunca duplica: é sempre fresh + o que já está
+ * no disco para esses ids, e mais nada.
+ */
+function preserveHandAuthored(fresh: readonly CatalogEntity[], onDisk: readonly CatalogEntity[]): CatalogEntity[] {
+  const preserved = onDisk.filter((entity) => HAND_AUTHORED_MONSTER_IDS.has(entity.id));
+  return [...fresh, ...preserved];
+}
+
 /** Escreve a promoção inteira em disco: `data/monsters/generated/`, os dois `baseline.json` e o
- *  relatório. Idempotente — rodar duas vezes no mesmo commit produz o mesmo byte a byte. */
+ *  relatório. Idempotente — rodar duas vezes no mesmo commit produz o mesmo byte a byte, desde
+ *  que o que já está em disco para um id de `HAND_AUTHORED_MONSTER_IDS` não mude entre as duas
+ *  rodadas (#581 é quem muda isso — nunca esta escrita). */
 export function writePromotion(repoRoot: string): PromotionResult {
   const result = computePromotion(repoRoot);
   const monstersGeneratedDir = join(repoRoot, 'packages/content/data/monsters/generated');
   mkdirSync(monstersGeneratedDir, { recursive: true });
+  const committedBefore = listGeneratedSlices(monstersGeneratedDir);
   for (const [slice, entities] of result.slices) {
-    writeGeneratedSlice(join(monstersGeneratedDir, `${slice}.json`), entities);
+    const onDisk = committedBefore.get(slice) ?? [];
+    writeGeneratedSlice(join(monstersGeneratedDir, `${slice}.json`), preserveHandAuthored(entities, onDisk));
   }
   mergeJsonMap(
     join(repoRoot, 'packages/content/data/bestiary/baseline.json'),
@@ -364,7 +391,11 @@ export interface CheckOutcome {
   readonly detail?: string;
 }
 
-/** Recomputa em memória e compara com `data/monsters/generated/` — nunca escreve nada. */
+/** Recomputa em memória e compara com `data/monsters/generated/` — nunca escreve nada. Uma
+ *  fatia com id de `HAND_AUTHORED_MONSTER_IDS` já commitado (Rat, Rotworm, Dragon, Dragon Lord,
+ *  desde o #581) é comparada com esse id devolvido a `fresh` também — `preserveHandAuthored` é
+ *  a MESMA função que `writePromotion` usa para escrever, para as duas nunca divergirem sobre o
+ *  que "em dia" significa. */
 export function checkPromotion(repoRoot: string): CheckOutcome[] {
   const result = computePromotion(repoRoot);
   const committed = listGeneratedSlices(join(repoRoot, 'packages/content/data/monsters/generated'));
@@ -383,7 +414,8 @@ export function checkPromotion(repoRoot: string): CheckOutcome[] {
       outcomes.push({ slice, status: 'stale', detail: `generated/${slice}.json não existe — rode pnpm catalog:promote-monsters` });
       continue;
     }
-    outcomes.push(formatGeneratedSlice(fresh) === formatGeneratedSlice(onDisk)
+    const expected = preserveHandAuthored(fresh, onDisk);
+    outcomes.push(formatGeneratedSlice(expected) === formatGeneratedSlice(onDisk)
       ? { slice, status: 'fresh' }
       : { slice, status: 'stale', detail: 'a fatia recomputada difere da versionada' });
   }

@@ -1281,13 +1281,17 @@ interface MonsterAbility {
   saiu do escopo do CMB-08 e entrou no #546 — ver a seção "Invocação de monstro por monstro"
   abaixo.
 
-O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
-teste de que a normalização preserva o resultado entregue.
+O Rat, em `packages/content/data/monsters/generated/mammals.json` desde o #581, continua sem
+`abilities` — é o caso legado, e é o teste de que a normalização preserva o resultado entregue.
 
-**O catálogo (#580) trouxe 933 monstros gerados** para `packages/content/data/monsters/generated/`,
-ao lado de Rat, Rotworm, Dragon e Dragon Lord (hand-authored, só o #581 os regenera). O que ficou
-de fora do corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado
-(#573/#574) — está em `docs/reference/catalog/monsters-promotion-report.md`;
+**O catálogo (#580) trouxe 933 monstros gerados** para `packages/content/data/monsters/generated/`.
+Rat, Rotworm, Dragon e Dragon Lord ficaram fora daquela promoção por decisão
+(`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`) — o #581 os regenerou à parte,
+uma única vez, direto na mesma pasta (Rat em `mammals.json`, Rotworm em `vermins.json`, Dragon e
+Dragon Lord em `dragons.json`), com override (`data/monsters/overrides/`) para o `blockable: true`
+temporário que Rat Cellars e Rotworm Caves ainda exigem até o #582+/M36-05. O que ficou de fora do
+corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado (#573/#574)
+— está em `docs/reference/catalog/monsters-promotion-report.md`;
 `scripts/catalog/promote-monsters.ts` é quem separa `bestiary`/`outfitId` do monstro ao promover.
 
 ## IA de monstro do TFS: chance, onda direcional, defesa, troca de alvo e fuga (#518)

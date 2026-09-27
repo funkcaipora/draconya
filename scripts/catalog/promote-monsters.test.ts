@@ -223,4 +223,39 @@ describe('writePromotion / checkPromotion', () => {
     const bestiary = JSON.parse(readFileSync(join(workdir, 'packages/content/data/bestiary/baseline.json'), 'utf8'));
     expect(bestiary.entries).not.toHaveProperty('badger');
   });
+
+  it('preserva Rat já commitado em generated/mammals.json entre duas rodadas (#581)', () => {
+    workdir = mkdtempSync(join(tmpdir(), 'promote-monsters-'));
+    setupFixture(workdir, { mammals: [badger()] });
+    // Simula o estado pós-#581: Rat já vive em generated/mammals.json, colocado por aquela
+    // issue — nunca pela promoção. `rat` também está em HAND_AUTHORED_MONSTER_IDS, então
+    // `computePromotion` nunca o devolve em `slices`, mesmo que a fixture do Canary abaixo o
+    // reintroduza em staging (o que aconteceria numa reimportação futura de verdade).
+    setupFixture(workdir, {
+      mammals: [badger(), badger({ id: 'rat', name: 'Rat' })],
+    });
+    const monstersGeneratedDir = join(workdir, 'packages/content/data/monsters/generated');
+    mkdirSync(monstersGeneratedDir, { recursive: true });
+    const { bestiary: _bestiary, outfitId: _outfitId, ...ratOnDisk } = badger({ id: 'rat', name: 'Rat' });
+    writeFileSync(
+      join(monstersGeneratedDir, 'mammals.json'),
+      JSON.stringify([{ ...ratOnDisk, blockable: false }], null, 2),
+    );
+
+    writePromotion(workdir);
+
+    const generated = readGeneratedSlice(join(monstersGeneratedDir, 'mammals.json'));
+    expect(generated.map((e) => e.id).sort()).toEqual(['badger', 'rat']);
+    // Rat continua vindo do que já estava em disco (#581), não da reimportação do Canary —
+    // `computePromotion` nunca promove um id de `HAND_AUTHORED_MONSTER_IDS`.
+    expect(generated.find((e) => e.id === 'rat')).not.toHaveProperty('bestiary');
+
+    const outcomes = checkPromotion(workdir);
+    expect(outcomes.find((o) => o.slice === 'mammals')).toEqual({ slice: 'mammals', status: 'fresh' });
+
+    // Rodar de novo, sem nada mudar, não apaga nem duplica o Rat preservado.
+    writePromotion(workdir);
+    const generatedAgain = readGeneratedSlice(join(monstersGeneratedDir, 'mammals.json'));
+    expect(generatedAgain.map((e) => e.id).sort()).toEqual(['badger', 'rat']);
+  });
 });

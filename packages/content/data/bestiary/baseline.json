@@ -3793,6 +3793,17 @@
       "stars": 4,
       "occurrence": 0
     },
+    "rat": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 21,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
     "red-butterfly": {
       "class": "vermin",
       "race": "vermin",
@@ -3879,6 +3890,17 @@
       "secondUnlock": 500,
       "charmsPoints": 25,
       "stars": 3,
+      "occurrence": 0
+    },
+    "rotworm": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 26,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
       "occurrence": 0
     },
     "sacred-spider": {
