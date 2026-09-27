@@ -1429,12 +1429,18 @@ interface MonsterTargetStrategy {
   encurralado, fica parado (ADR 0009). As abilities CORPO A CORPO (`isMeleeAbility`: sem área,
   alcance 1) nem são armadas nem executam enquanto foge; as de alcance continuam saindo — passo
   e ataque são decisões independentes, como no TFS (`getNextStep` × `doAttacking`).
-- **`staticAttack` (aceito, ainda NÃO wired)**: o campo existe no schema
-  (`monster.staticAttack`, fração de vencimentos em que o monstro fica parado em vez de dar um
-  passo aleatório colado no alvo — TFS `staticattack`/`randomStepping`), mas o motor de passo
-  daqui não tem um "pensamento" periódico independente do passo em si; simular o shuffle exigiria
-  um evento novo só para isso. Decisão explícita do #518 ("implementar só se couber sem mexer no
-  determinismo; senão registrar como divergência") — ver "Divergências do PRD" abaixo.
+- **`staticAttack` (dança de alvo, #543, TFS `staticattack`/`randomStepping`,
+  `Monster::getDanceStep`)**: fração de vencimentos em que o monstro FICA PARADO colado no alvo;
+  `1 − staticAttack` é a fração de dança. Um evento `MONSTER_DANCE` próprio (1000 ms, decisão de
+  produto do Draconya — o Canary não tem um "think" de movimento separado do passo) só existe
+  agendado ENQUANTO o monstro está colado, sem passo a dar (`decideMonsterAction` devolvendo
+  `'attack'`) — armado e desarmado por `#onMonsterStep`, nunca uma varredura periódica fora do
+  engajamento (invariante 2). Cada vencimento rola UMA `rng.chance(1 − staticAttack)`; a dança
+  escolhida move o monstro por `danceStep` (`monster/step.ts`) para um dos até quatro vizinhos
+  CARDINAIS que preservam a MESMA distância Chebyshev ao alvo — nunca aproxima, nunca afasta, e
+  nunca perde a capacidade de atacar (a distância preservada garante isso sozinha). A dança
+  durante a fuga (`isMonsterFleeing`) fica fora do escopo: `decideMonsterAction` nunca devolve
+  `'attack'` fugindo, então o ramo nunca é armado nesse estado.
 - **`scheduledDefenses` viaja no snapshot** (opcional, sem bump de formato), como
   `scheduledAbilities`: sem ele, a hunt retomada reagendaria a defesa que já tinha evento na
   fila e curaria em dobro no primeiro vencimento.
@@ -2335,14 +2341,6 @@ ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
-- **`monster.staticAttack` é aceito no schema, mas não muda comportamento nenhum** (#518). O
-  TFS usa este número para decidir se o monstro, podendo atacar, fica parado ou dá um passo
-  aleatório colado no alvo (`randomStepping`/`getDanceStep`) — puramente cosmético, não afeta
-  dano nem cadência de ataque. O motor de passo do Draconya não tem um "pensamento" periódico
-  independente do passo em si (`decideMonsterAction` só roda quando o `MONSTER_STEP` vence), e
-  criar um evento novo só para o shuffle era escopo maior do que o #518 pedia. Fica registrado
-  aqui, não como `[ABERTO]` — o número é conhecido (Dragon: 80%, `staticAttack: 0.8`), só o
-  mecanismo que falta implementar.
 - **Três magias sem correspondente no Canary** (`divine-barrage.json`, `ethereal-barrage.json`,
   `forked-thorns.json`, mais o self-buff `divine-defiance.json`): DUAS varreduras do #523 no
   `opentibiabr/canary` local (`things/sources/canary` — `data/`, `data-otservbr-global/` e

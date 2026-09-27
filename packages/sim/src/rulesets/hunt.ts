@@ -96,7 +96,7 @@ import {
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
-import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { danceStep, distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
@@ -182,6 +182,17 @@ const SUMMON_SPAWN_RADIUS = 1;
  * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
  */
 const MONSTER_TARGET_CHANGE = 'monster-target-change';
+/**
+ * A dança de alvo (#543, TFS/Canary `Monster::getDanceStep`): o passo lateral cosmético de quem
+ * já está colado e sem passo a dar. Mesmo desenho do `MONSTER_TARGET_CHANGE` — subject `m:<id>`
+ * exato, cancelado de graça por `resolveDeath` (`cancelEvents(subject)`) —, mas diferente dele
+ * na vida útil: NÃO roda a hunt inteira, só enquanto a adjacência se mantém (`MonsterRuntime.
+ * danceArmed`). Um monstro perseguindo ou sem alvo não paga o timer.
+ */
+const MONSTER_DANCE = 'monster-dance';
+/** A cadência PRÓPRIA da dança (#543) — decisão de produto do Draconya, não réplica de um
+ * "think" de movimento do Canary, que não tem um relógio separado do passo em si. */
+const DANCE_INTERVAL_MS = 1_000;
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
@@ -2882,6 +2893,7 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_DEFENSE: return this.#onMonsterDefense(session, event.subject);
       case MONSTER_SUMMON: return this.#onMonsterSummon(session, event.subject);
       case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
+      case MONSTER_DANCE: return this.#onMonsterDance(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case PENDING_MANUAL_ACTION: return this.#onPendingManualAction(session, event.subject);
@@ -6484,12 +6496,69 @@ const slots = bot.groups.get(group);
     // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
     // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
     this.#armMonsterAbilities(session, monster, definition, target);
+    // A dança (#543) só existe agendada enquanto o monstro está colado, sem passo a dar — é
+    // exatamente `action.kind === 'attack'`, a tradução deste motor para "getNextStep devolveu
+    // falso" do Canary. `#onMonsterStep` é o único lugar que ARMA (aqui) e DESARMA (a condição
+    // caiu) — `#onMonsterDance` só decide se reagenda A SI MESMO uma vez já em voo.
+    if (definition.staticAttack !== undefined) {
+      if (action.kind === 'attack' && !monster.danceArmed) {
+        monster.danceArmed = true;
+        session.scheduleIn(MONSTER_DANCE, DANCE_INTERVAL_MS, {
+          priority: EventPriority.Movement, subject,
+        });
+      } else if (action.kind !== 'attack' && monster.danceArmed) {
+        monster.danceArmed = false;
+        session.cancelEvent(MONSTER_DANCE, subject);
+      }
+    }
     // Um monstro que entrou no raio de busca vira alvo na hora (#444): sem isto, quem se
     // aproxima de fora da tela só seria notado no próximo passo do personagem.
     for (const character of session.participants) {
       this.#autoSelectTarget(session, character);
       this.#armBot(session, character.id);
     }
+  }
+
+  /**
+   * A dança de alvo venceu (#543, TFS/Canary `Monster::doFollowCreature`/`getDanceStep`,
+   * mecanismo — não código, ADR 0019). Não escolhe alvo (a dança reage ao que já está
+   * perseguido, como o Canary usa `getAttackedCreature`, não uma busca nova) e não muda
+   * `lastStepBlocked`/`ignoresFieldDamage`: esses dois são do passo de PERSEGUIÇÃO
+   * (`#onMonsterStep`), e a dança é um timer independente que só se aproveita da mesma
+   * mecânica de passo (`#step`) para o commit.
+   *
+   * A condição pode ter caído entre o armamento e este vencimento (o alvo morreu, saiu do
+   * alcance, o monstro morreu) — é aqui que ela é revalidada, e é aqui que o evento MORRE sem
+   * reagendar quando cai: a outra metade do "cancelado quando a condição cai" (a primeira
+   * metade é o desarme ativo de `#onMonsterStep`).
+   */
+  #onMonsterDance(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined || definition.staticAttack === undefined) return;
+    const target = findById(session.participants, monster.targetId);
+    const blocked = this.#blockedForMonster(monster, definition);
+    const action = decideMonsterAction(
+      monster, target, definition, blocked,
+      (from, to) => isSightClear(this.#world.map, from, to),
+    );
+    if (action.kind !== 'attack' || target === null) {
+      monster.danceArmed = false;
+      return;
+    }
+
+    // A cadência corre INDEPENDENTE do resultado do sorteio — o mesmo `doAttacking`/`onThinkDefense`
+    // de sempre: o intervalo continua enquanto a adjacência se mantém, falhe ou acerte a rolagem.
+    session.scheduleIn(MONSTER_DANCE, DANCE_INTERVAL_MS, {
+      priority: EventPriority.Movement, subject,
+    });
+    // Ausente é sempre parado, sem sorteio — mas `staticAttack` já foi conferido acima, então
+    // este SEMPRE consome exatamente UMA rolagem (o mesmo contrato de `ability.chance`/
+    // `blockChance`/`modifiers.critical`), mesmo com `staticAttack` 0 ou 1.
+    if (!session.rng.chance(1 - definition.staticAttack)) return;
+    const to = danceStep(monster.position, target.position, blocked, session.rng);
+    if (to !== null) this.#step(session, monster, to, subject);
   }
 
   /**

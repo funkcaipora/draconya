@@ -13314,3 +13314,71 @@ describe('useOnMap — baú de quest com uid (T2 completo, #733, ADR 0050 d.6)',
     expect([...other.inventory.items()].find((item) => item.itemId === 'test-reward-733')?.quantity).toBe(2);
   });
 });
+
+describe('dança de alvo (#543, staticAttack sem tick, `Monster::getDanceStep`)', () => {
+  // O herói fica PARADO (nenhum `PLAYER_STEP` sobrevive ao `cancelEvents` logo abaixo), então
+  // toda mudança de posição do monstro DEPOIS de chegar colado só pode vir da dança — a rota do
+  // personagem, que embaralharia a leitura, sai da equação.
+  const dancer = { ...rat, staticAttack: 0.8 };
+  const loaded = content({ monsters: [dancer] });
+
+  /** Deixa o monstro chegar e ficar colado, com o herói parado. */
+  function settle(loadedContent: Content = loaded) {
+    const { session, hero, ruleset } = start({ loaded: loadedContent, health: 100_000 });
+    session.cancelEvents(hero.id); // sem passo do herói: só a dança move alguém daqui pra frente
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta instância');
+    return { session, hero, monster };
+  }
+
+  it('chega e fica colado, adjacente ao alvo parado', () => {
+    const { hero, monster } = settle();
+    expect(distance(monster.position, hero.position)).toBe(1);
+  });
+
+  it('com staticAttack 0,8 e seed fixa, a taxa de dança fica perto de 20% em 1000 vencimentos, '
+    + 'e o monstro NUNCA perde a adjacência dançando', () => {
+    const { session, hero, monster } = settle();
+    const samples = 1_000;
+    let danced = 0;
+    for (let i = 0; i < samples; i++) {
+      const before = { ...monster.position };
+      run(session, 1_000, 100);
+      if (monster.position.x !== before.x || monster.position.y !== before.y) danced++;
+      // A dança preserva a distância EXATA ao alvo — nunca aproxima, nunca afasta (o mesmo
+      // filtro que `danceStep` aplica em `monster/step.test.ts`).
+      expect(distance(monster.position, hero.position)).toBe(1);
+    }
+    const rate = danced / samples;
+    // `1 - staticAttack` = 0,2. A amostra é de 1.000 vencimentos de Bernoulli(0,2): o desvio
+    // padrão é ~0,0126, então a banda abaixo é generosa (~8 desvios) sem deixar de pegar um
+    // sorteio que passou a rodar em outra sequência de RNG.
+    expect(rate).toBeGreaterThan(0.1);
+    expect(rate).toBeLessThan(0.3);
+  });
+
+  it('monstro SEM staticAttack nunca dança — nenhum passo enquanto está só colado', () => {
+    const { session, hero, ruleset } = start({ loaded: content({ monsters: [rat] }), health: 100_000 });
+    session.cancelEvents(hero.id);
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta instância');
+    expect(distance(monster.position, hero.position)).toBe(1);
+    const before = { ...monster.position };
+    run(session, 10_000, 100);
+    expect(monster.position).toEqual(before);
+  });
+
+  it('`danceArmed` sobrevive ao snapshot — sem ele, a hunt retomada dobraria o evento', () => {
+    const { session, monster } = settle();
+    expect(monster.danceArmed).toBe(true);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const resumedMonster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (resumedMonster === undefined) throw new Error('sem monstro');
+    expect(resumedMonster.danceArmed).toBe(true);
+  });
+});
