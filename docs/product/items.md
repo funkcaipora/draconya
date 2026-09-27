@@ -661,6 +661,58 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | amuleto | Dragon Necklace | Dragon Necklace | Dragon Necklace | Dragon Necklace |
 | anel | Might Ring | Might Ring | Might Ring | Might Ring |
 
+## O importador de itens do Canary (M34-02, #573)
+
+`scripts/catalog/items.ts` lê `data/items/items.xml` do checkout do Canary (o mesmo padrão de
+`monsters.ts`, #578) e converte cada `<item>` das categorias de caça — arma (corpo a corpo,
+distância com lançador de verdade, wand e rod), escudo e spellbook, capacete, armadura, pernas,
+bota, anel, amuleto, valuables e produto de criatura — para a forma do `itemSchema`.
+
+```
+pnpm catalog:import items          # escreve packages/content/staging/items/generated/*.json
+pnpm catalog:import items --check  # regenera em memória e compara
+```
+
+**Staging, não `data/`, por ora.** A auditoria de 2026-09-26 (`docs/tibia-math-plan.md`) contou
+1439 `itemId` citados pelo loot de monstro gerado (#578), dos quais só 82 existiam no catálogo
+antes desta issue; gerar 1300+ itens direto em `data/` sem reconciliar cada um arriscaria o boot.
+Com o importador, **989 dos 1439** resolvem — a promoção do que sobrar (loot de monstro
+apontando item de verdade) é issue à parte. O registro do tipo `items` aponta
+`packages/content/staging/items` até lá, como `staging/monsters` já faz.
+
+**Reconciliação dos 73 itens autorais (ADR 0014: o id nunca muda).** Quando o slug gerado bate com
+um arquivo de `data/items/*.json`, o importador compara os campos numéricos simples, `requires.level`
+e `weapon.manaPerHit` contra o Canary e grava a diferença em `data/items/overrides/<id>.json` —
+nunca editando o autoral. Rodar contra `47dfd51f4528` (o commit desta entrega) corrigiu:
+
+| Item | Divergência | Override |
+|---|---|---|
+| Sword, Fire Sword, Serpent Sword | `extraDefense` ausente → 1 (o `extradef` do Canary) | `sword.json`, `fire-sword.json`, `serpent-sword.json` |
+| Spike Sword | `defense` 10 → 21, `extraDefense` ausente → 2, `imbuementSlots` ausente → 2 | `spike-sword.json` |
+| Wand of Vortex / Snakebite Rod | `manaPerHit` estava TROCADO entre as duas (1↔2) e faltava `requires.level: 6` nas duas | `wand-of-vortex.json`, `snakebite-rod.json` |
+| Glacier Amulet | `charges` 20 → 200, `weight` 5,5 → 5 oz, faltava `requires.level: 60` | `glacier-amulet.json` |
+| Energy Ring / Life Ring | `weight` 2 → 0,8 oz | `energy-ring.json`, `life-ring.json` |
+| + 19 outros (kit level 200, loot do Dragon/Dragon Lord) | `imbuementSlots` (17) e `extraDefense` — nenhum dos dois existia no schema quando #524/#520 foram escritos | ver `packages/content/data/items/overrides/` |
+
+**Um divergência conhecida que o importador NÃO reconcilia**: o Glacier Amulet real (Canary id 815)
+também declara `absorbpercentenergy -10` (uma FRAQUEZA a energia) — o autoral só tem
+`mitigation.resistances.ice`, e a reconciliação só compara campo numérico simples/`requires`/
+`weapon.manaPerHit`, não mistura `mitigation` (autoral) com `absorb` (formato do importador) sem
+risco de dessincronizar os dois. Fica registrado aqui para quando alguém tratar `absorb` no
+Glacier Amulet manualmente.
+
+**O que fica de fora, e por quê** (`docs/reference/catalog/items-report.md`):
+
+- **Preço (`value`, M34-03)** — `items.xml` não carrega preço nenhum (é dado de NPC, noutra parte
+  do Canary); todo item gerado sai `value: 0`.
+- **`stackable`** — é um flag de `items.otb`, binário, que este leitor não abre; nunca declarado
+  (fica no default `false`).
+- **Munição e arremessável (M34-04)** — "distance weapons" sem `ammotype` (spear, throwing star,
+  royal spear…) é o próprio projétil, não um lançador; fica fora, junto com o catálogo de munição.
+- **Quiver** — contêiner *e* escudo ao mesmo tempo; o `itemSchema` não tem essa combinação.
+- **Arma `fist`** — a família não é declarável (o motor a usa só como fallback desarmado, DT-01).
+- **`skillfist`** — sem skill correspondente no Draconya (só `melee`/`distance`/`shielding`/`magic`).
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -671,16 +723,16 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | Autovenda — tipos configuráveis (Free) | 5 | `party.autoSellItemTypes.free` (`packages/content/data/party/baseline.json`) |
 | Autovenda — tipos configuráveis (Premium) | 20 | `party.autoSellItemTypes.premium` (`packages/content/data/party/baseline.json`) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
-| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); nenhum item autorado declara ainda — o importador (M34-02) preenche | `packages/content/data/items/*.json`, campo `imbuementSlots` |
+| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); o importador de itens (#573) preenche em todo item gerado e reconciliou 19 dos 73 autorais (sword 2, spike sword 2, magic plate armor 2, entre outros) | `packages/content/data/items/*.json`, `overrides/*.json`, campo `imbuementSlots` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
-| Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
-| Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Peso do Energy Ring / Life Ring | 0,8 oz cada (Canary `items.xml` id 3051/3052, weight 80 — reconciliado pelo importador de itens, `overrides/{energy-ring,life-ring}.json`, #573) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
+| Preço de venda do Energy Ring / Life Ring | 100 / 50 gold — maior `sell` de NPC do Canary (M34-03/#574, não mais provisório; Life Ring reconciliado em `overrides/life-ring.json`) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
 | Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |
-| Suprimentos — `price` / `group` | poção de vida 45 / `potion` `[ABERTO — preço provisório]`; poção de mana 50 / `potion` `[ABERTO — idem]`; avalanche rune 14 / `attack` `[ABERTO — idem]` | `packages/content/data/supplies/*.json` |
-| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/blessing-charge.json` |
-| Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
-| Colar — `charges` / resistência / peso / `value` | glacier amulet 20 cargas / gelo 0,2 / 5,5 oz / 0 `[ABERTO — cargas, resistência, peso e valor provisórios]` | `packages/content/data/items/glacier-amulet.json` |
-| Escudo — `defense` / peso / `value` | wooden shield 14 / 40 oz / 0 `[ABERTO — defense, peso e valor provisórios]` | `packages/content/data/items/wooden-shield.json` |
+| Suprimentos — `price` / `group` | poção de vida 50 / `potion`; poção de mana 56 / `potion`; avalanche rune 64 / `attack` — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/*.json` |
+| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` (não é item do Canary `items.xml`, fora do corte de #574) | `packages/content/data/items/blessing-charge.json` |
+| Munição — `attack` / `price` / `requires.level` | arrow 25 / 2 / —; burst arrow 27 / 15 / —; sniper arrow 28 / 5 / 20; onyx arrow 38 / 7 / 40 — `price` é o menor `buy` de NPC do Canary (M34-03/#574, não mais provisório; `attack`/`requires.level` continuam do TibiaWiki) | `packages/content/data/ammunition/*.json` |
+| Colar — `charges` / resistência / peso / `value` / level | glacier amulet 200 cargas / gelo 0,2 / 5 oz / 1500 / level 60 — cargas, peso, `value` (M34-03/#574, maior `sell` do NPC Rashid) e level reconciliados contra o Canary `items.xml` id 815 pelo importador de itens (`overrides/glacier-amulet.json`) | `packages/content/data/items/glacier-amulet.json`, `overrides/` |
+| Escudo — `defense` / peso / `value` | wooden shield 14 `[ABERTO — defense e peso provisórios]` / 40 oz `[ABERTO — idem]` / 5 (M34-03/#574, maior `sell` de NPC do Canary, `overrides/wooden-shield.json`, não mais provisório) | `packages/content/data/items/wooden-shield.json`, `overrides/` |
 | Kit level 200 — atributos e preço de NPC | os 19 itens da tabela do kit, acima (armor/attack/defense/weight/`value`/`bonuses`/`requires`) — números do Canary `items.xml` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/items/*.json` (as 16 peças novas), `packages/content/data/ammunition/power-bolt.json` |
 | Poções do Tibia — `amountRange` / `requires` / `price` | as nove poções da tabela, acima — números do Canary `potions.lua` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/supplies/{strong,great,ultimate,supreme}-*.json` |
 | Loot do Dragon (#520) — 21 linhas | atributos e `value` do Canary `items.xml`; preço de NPC do Tibia real via TibiaWiki quando o Canary só tinha oferta custom (ADR 0037 d.4) — 18 itens novos + `supplyId: strong-health-potion` + `ammunitionId: burst-arrow` (já existia) | `packages/content/data/items/{dragon-ham,steel-shield,crossbow,dragons-tail,longsword,steel-helmet,broadsword,plate-legs,wand-of-inferno,green-dragon-scale,green-dragon-leather,double-axe,dragon-hammer,serpent-sword,small-diamond,dragon-shield,life-crystal,dragonbone-staff}.json` |

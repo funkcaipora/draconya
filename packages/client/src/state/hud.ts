@@ -40,8 +40,12 @@ export interface SkillProgress {
   percent: number;
 }
 
+/** #568: `melee` virou quatro skills na #567 — cada tipo de arma treina a sua. */
 export interface PlayerSkills {
-  melee: SkillProgress;
+  fist: SkillProgress;
+  club: SkillProgress;
+  sword: SkillProgress;
+  axe: SkillProgress;
   distance: SkillProgress;
   magic: SkillProgress;
 }
@@ -330,7 +334,10 @@ export const INITIAL_HUD: HudState = {
   capacity: 0, gold: 0, staminaMs: 0,
   speed: 0,
   skills: {
-    melee: { level: 0, percent: 0 },
+    fist: { level: 0, percent: 0 },
+    club: { level: 0, percent: 0 },
+    sword: { level: 0, percent: 0 },
+    axe: { level: 0, percent: 0 },
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },

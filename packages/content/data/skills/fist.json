@@ -1,0 +1,9 @@
+{
+  "id": "fist",
+  "name": "Punho",
+  "startingLevel": 10,
+  "curve": { "base": 50, "factor": 1.5 },
+  "gain": { "on": "melee-hit", "points": 1 },
+  "damagePerLevel": 0.02,
+  "_open": "Separada da skill `melee` no #567: `melee`/`club`/`sword`/`axe` do Draconya viravam UMA skill só, e o Tibia real treina cada tipo de arma à parte — soco não sobe machado. Base 50 é a `skillBase` do fist do Canary (`Vocation::skillBase`, #521/#567, ADR 0037), verificada em `opentibiabr/canary` `main` 2026-09-26. `factor` 1.5 é o FALLBACK sem vocação (`<skill id=\"0\">` da vocação `None` do `vocations.xml`) — é o único dos quatro tipos em que o fallback DIFERE de club/sword/axe (2.0); cada vocação real sobe por `vocationSchema.skillMultipliers.fist`. `damagePerLevel` continua provisório, herdado da antiga `melee.json`."
+}

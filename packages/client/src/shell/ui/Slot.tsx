@@ -27,6 +27,12 @@ export interface SlotProps {
    * `<button>` o engolia. Retrocompatível — um handler sem parâmetro continua atribuível.
    */
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  /**
+   * O clique direito (AB-09, ADR 0049 decisão 1): a barra de ações o usa para abrir a
+   * configuração do slot, agora que o clique esquerdo dispara. Opcional — só quem precisa do
+   * gesto o passa; os outros consumidores do `Slot` (equipamento, container) não mudam.
+   */
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   /** Nome completo para tooltip nativo — o texto/rótulo visível pode vir cortado. */
   title?: string;
@@ -44,7 +50,7 @@ export interface SlotProps {
 export function Slot({
   as = 'button',
   label, hotkey, count, empty, size, kind = 'action', icon, selected, dashed, element, onClick,
-  className, title, ariaLabel, draggable, onDragStart, onDragOver, onDrop,
+  onContextMenu, className, title, ariaLabel, draggable, onDragStart, onDragOver, onDrop,
 }: SlotProps) {
   const rootClass = [
     'ui-slot',
@@ -88,6 +94,7 @@ export function Slot({
       className={rootClass}
       data-kind={kind}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       title={title}
       aria-label={ariaLabel}
       draggable={draggable}

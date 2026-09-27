@@ -208,6 +208,22 @@ export const C2S_SCHEMAS = {
   'use-slot': z.object({
     set: z.number().int().min(0).max(3),
     slot: z.number().int().min(0).max(23),
+    /**
+     * A mira (AB-09, ADR 0049 decisão 2). INTENÇÃO: o cliente diz QUEM/ONDE apontou; alcance,
+     * linha de visão (#553 quando pousar) e elegibilidade continuam do servidor (invariante 4).
+     * `creatureId` é o id numérico de QUALQUER criatura (monstro OU personagem) — o host resolve
+     * qual dos dois é. `position` mira um tile vazio (runa de área); sem monstro nem personagem
+     * no id, ou fora do mapa, o servidor recusa (`no-target`), nunca adivinha. Opcional: sem
+     * `target`, vale o alvo default de sempre (alvo fixado, senão o candidato do bot).
+     */
+    target: z.union([
+      z.object({ creatureId: z.number().int().positive() }),
+      z.object({
+        position: z.object({
+          x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
+        }),
+      }),
+    ]).optional(),
   }),
   /**
    * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL

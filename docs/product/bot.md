@@ -225,8 +225,8 @@ por cooldown.
 | Grupo de cooldown por magia | `attack` / `healing` / `support` | `packages/content/data/spells/*.json`, campo `group` |
 | Grupo de cooldown por supply | `potion` / `attack` | `packages/content/data/supplies/*.json`, campo `group` |
 | Exaustão de ação compartilhada (poção + runa) | 1000 ms (`timeBetweenExActions` do Canary, #690) | `packages/content/data/supplies/*.json`, campo `actionExhaustMs` |
-| Preço do supply (gold no uso) | small health potion 20 (#690, `buy` de NPC do Canary, NÃO provisório); poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]`; as nove poções do Tibia (#524, kit level 200) 115–480, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
-| Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]`; power bolt 10 (#524, NÃO provisório) | `packages/content/data/ammunition/*.json`, campo `price` |
+| Preço do supply (gold no uso) | small health potion 20; poção de vida 50; poção de mana 56; avalanche 64 — menor `buy` de NPC do Canary (M34-03/#574, NÃO provisório); as nove poções do Tibia (#524, kit level 200) 115–650, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
+| Preço do tiro de munição | arrow 2; burst arrow 15; sniper arrow 5; onyx arrow 7 — menor `buy` de NPC do Canary (M34-03/#574, NÃO provisório); power bolt 7 (idem) | `packages/content/data/ammunition/*.json`, campo `price` |
 | Raio de busca de alvo | 8 tiles | `packages/content/data/bot/baseline.json`, `targetSearchRadius` |
 | Teto de regras de saída | 4 | `packages/content/data/bot/baseline.json`, `slots.exit` |
 | Baseline v2 por vocação (slots + automações) | cavaleiro: arma/escudo por vida; paladino: munição por alvos; sorcerer: renovar anel; druid: renovar colar `[ABERTO — provisório]` | `packages/content/data/bot/baseline.json`, `defaultConfigByVocation` |
@@ -679,21 +679,44 @@ mensagem de erro.
 **Nada de estado do bot é calculado no cliente**: o cooldown e o bloqueio vêm do `slot-state`, e a
 recusa da tecla do `slot-result`. A munição selecionada vem do `player-stats.ammo`.
 
-**O clique simples abre o `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da
-imagem do "Configurar ação" do cliente Tibia em vez do kit de três `Select` do #426: abas
-**Magias / Runas / Itens** (magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`;
-item é o resto), uma lista à esquerda ordenada por level exigido e um painel de detalhe à
-direita — título, `Lv. X+` (e `ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/
-Cura/Efeito, Custo, Cooldown e Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente
-por `spellPowerRange` (`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic
-level do personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de
-verdade continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior
-à #436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
-`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. **Shift+clique desliga o
-automático** (`auto: false`) — o atalho continua manual. O
-`AutomationsPanel` lista uma linha por automação do rascunho (interruptor, nome, resumo dos
-parâmetros, ⚙ e ×), com "+ Adicionar" abrindo o catálogo de modelos; os modais
-`AddAutomationModal`/`AutomationConfigModal` editam. O `ExitRulesPopover` grava a lista `exit`.
+**O clique esquerdo DISPARA o slot; o clique direito CONFIGURA** (#725, ADR 0049 decisão 1) — o
+gesto do Tibia, emendando o ADR 0032 d.3 (que fazia o clique simples abrir a configuração). Slot
+vazio não tem o que disparar: o clique — esquerdo ou direito — continua abrindo o
+`ActionConfigModal`, único jeito de chegar lá sem um ⚙ na barra. **Shift+clique continua
+desligando o automático** (`auto: false`), sem disparar nem configurar — o atalho continua manual.
+Slot sem tecla é configuração válida desde sempre (DT-02, ADR 0032): ele só não responde a
+teclado, o clique basta. `BOT_HOTKEYS` ganhou as 10 combinações `shift+1…shift+0`/`shift+F1…
+shift+F12` (32 teclas para 24 slots — ADR 0049 decisão 1 emenda o DT-02, que deixava dois slots
+sem tecla própria); `Shift` sozinho compõe a tecla no teclado, sem armar mira nenhuma — mirar um
+aliado específico é gesto de clique, não de atalho.
+
+**Uma ação de ALIADO (`targets: 'friend'` no catálogo — cura, suporte) precisa de MIRA** (ADR
+0049 decisão 2): o clique nesse slot arma o modo de mira em vez de disparar sem alvo, e o
+PRÓXIMO clique no mundo (Viewport) ou na Batalha (`BattlePanel`) completa a intenção com
+`use-slot.target: { creatureId }` — o mesmo id numérico que `select-target` já usa. O estado de
+mira mora em `state/aim.ts`, ao lado do `targetTracker` (mesmo padrão, mesmo motivo: `apply.ts`
+zera os dois no `session-state`); Esc cancela sem mandar nada. Toda outra ação (ataque, runa,
+self) dispara direto, com o alvo default de sempre — fixado se houver, senão o candidato do bot;
+mirar um monstro específico por clique e mirar um tile vazio (`target.position`, para runa de
+área) o protocolo e o `sim` já aceitam, mas nenhum caminho do cliente os envia ainda — fica para
+quando houver pedido concreto. O servidor confere alcance (`effect.range`) e devolve `out-of-
+range`/`no-target` em palavras no `slot-result`, como toda recusa; linha de visão é a #553,
+paralela a esta issue.
+
+**O `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da imagem do "Configurar
+ação" do cliente Tibia em vez do kit de três `Select` do #426: abas **Magias / Runas / Itens**
+(magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`; item é o resto), uma lista
+à esquerda ordenada por level exigido e um painel de detalhe à direita — título, `Lv. X+` (e
+`ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/Cura/Efeito, Custo, Cooldown e
+Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente por `spellPowerRange`
+(`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic level do
+personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de verdade
+continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior à
+#436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
+`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. O `AutomationsPanel`
+lista uma linha por automação do rascunho (interruptor, nome, resumo dos parâmetros, ⚙ e ×), com
+"+ Adicionar" abrindo o catálogo de modelos; os modais `AddAutomationModal`/`AutomationConfigModal`
+editam. O `ExitRulesPopover` grava a lista `exit`.
 
 **O interruptor salva sozinho.** Não há botão "Salvar" na barra: mudar o conjunto, o alvo, uma
 regra ou uma automação agenda um `bot-config` com **debounce de 300 ms** (ADR 0028); o Salvar do

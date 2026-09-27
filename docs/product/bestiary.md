@@ -64,9 +64,18 @@ Charms já existe. Quando o Cyclopedia (#321) ganhar essa tela, o dado já está
 **O leitor de monstros do Canary (#578) gera a ficha junto com o monstro.** `scripts/catalog/
 monsters.ts` converte `monster.Bestiary` e `monster.raceId` para a forma de `bestiaryEntrySchema`
 (`raceId` entrou como campo opcional); a ficha fica em `packages/content/staging/monsters/` ao lado
-do monstro até a primeira importação para `data/` (#580) mesclá-la em `entries`. O leitor achou
+do monstro até `pnpm catalog:promote-monsters` (#580) mesclá-la em `entries`. O leitor achou
 no Canary estrelas de 0 (inofensivo, 13 monstros) a 5 (desafiador, 53) — o schema aceitava só 1
 a 4 e passou a aceitar 0 a 5.
+
+**A primeira promoção (#580) trouxe 933 fichas** — os 939 monstros do corte do Canary, menos Rat,
+Rotworm, Dragon e Dragon Lord (hand-authored, só o #581 os regenera) e menos dois monstros de
+quest (`eshtaba-the-conjurer`, `leiden`) cujo `summons.entries` repete o mesmo `monsterId` com
+chances diferentes — o `sim` só aceita uma entrada por id (`content.ts`), e a saída honesta foi
+deixá-los fora da promoção em vez de inventar uma chance que o Canary não escreveu.
+`scripts/catalog/promote-monsters.ts` e o relatório de cobertura
+(`docs/reference/catalog/monsters-promotion-report.md`) detalham os dois casos e o que mais ficou
+de fora.
 
 ## Regras
 

@@ -201,3 +201,51 @@ describe('settleGoldDelta', () => {
     expect(hero.getState()).toMatchObject({ gold: 11_045, goldDelta: 0 });
   });
 });
+
+describe('storages (#731)', () => {
+  it('reads -1 (the Tibia convention) for a key never set', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(-1);
+  });
+
+  it('sets and reads a storage back', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(1);
+  });
+
+  it('setting -1 erases the key, back to "never set"', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    hero.setStorageValue('quest:rat-cellars', -1);
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(-1);
+    expect(hero.storages.has('quest:rat-cellars')).toBe(false);
+  });
+
+  it('always includes storages in getState, even when drained back to empty (#536 lesson)', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('a', 1);
+    hero.setStorageValue('a', -1);
+    expect(hero.getState().storages).toEqual({});
+  });
+
+  it('round-trips through a snapshot', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    hero.setStorageValue('quest:progress', 0);
+
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+
+    expect(restored.getStorageValue('quest:rat-cellars')).toBe(1);
+    expect(restored.getStorageValue('quest:progress')).toBe(0);
+    expect(restored.getStorageValue('quest:never-touched')).toBe(-1);
+  });
+
+  it('drops a crooked stored value defensively instead of throwing (readCharacterStorage)', () => {
+    const hero = new CharacterRuntime(state({
+      storages: { good: 2, bad: Number.NaN } as unknown as Readonly<Record<string, number>>,
+    }));
+    expect(hero.getStorageValue('good')).toBe(2);
+    expect(hero.getStorageValue('bad')).toBe(-1);
+  });
+});

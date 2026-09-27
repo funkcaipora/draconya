@@ -1,0 +1,7 @@
+{
+  "id": "spellbook-of-mind-control",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: value: 2000 → 13000.",
+  "patch": {
+    "value": 13000
+  }
+}

@@ -147,6 +147,10 @@ async function main(): Promise<void> {
               // `game`, que não fala com o Postgres.
               listItemInstances: (characterId: string) =>
                 repository.listItemInstances(characterId),
+              // Os storages do personagem (#731, ADR 0050 d.6 T2): a semente do motor de
+              // quest, pela mesma razão e o mesmo caminho de `listItemInstances`.
+              listCharacterStorages: (characterId: string) =>
+                repository.listCharacterStorages(characterId),
               // A party antes da hunt (#195): formulário em Redis, limites do conteúdo.
               party: new PartyStore(redis),
               matchmakingLevelRange: content.party.matchmakingLevelRange,

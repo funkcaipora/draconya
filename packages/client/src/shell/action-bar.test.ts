@@ -65,6 +65,21 @@ describe('slotForHotkey', () => {
     expect(slotForHotkey(sets, 1, 'Digit1')).toBeNull();
   });
 
+  it('Shift compõe 32 teclas para 24 slots (ADR 0049 decisão 1, RF-05)', () => {
+    expect(hotkeyForKey('Digit1', true)).toBe('shift+1');
+    expect(hotkeyForKey('Digit0', true)).toBe('shift+0');
+    expect(hotkeyForKey('F1', true)).toBe('shift+F1');
+    expect(hotkeyForKey('F12', true)).toBe('shift+F12');
+    // Sem Shift continua igual — as duas teclas do mesmo `code` são DISTINTAS no vocabulário.
+    expect(hotkeyForKey('Digit1', false)).toBe('1');
+    expect(hotkeyForKey('KeyA', true)).toBeNull();
+
+    const sets = setsWith(spellSlot({ hotkey: 'shift+1' }), 2, 9);
+    expect(slotForHotkey(sets, 2, 'Digit1', true)).toEqual({ set: 2, slot: 9 });
+    // A mesma tecla, sem Shift, não bate no slot que só configurou `shift+1`.
+    expect(slotForHotkey(sets, 2, 'Digit1', false)).toBeNull();
+  });
+
   it('tecla fora do vocabulário ou conjunto inexistente devolve null', () => {
     const sets = setsWith(spellSlot({ hotkey: '1' }));
     expect(slotForHotkey(sets, 0, 'KeyZ')).toBeNull();
@@ -91,6 +106,22 @@ describe('slotView', () => {
     expect(view).toMatchObject({ label: 'Cura', hotkey: '1', cooldownMs: 0, blocked: false });
     // O catálogo v2 não carrega elemento — nada de cor inventada.
     expect(view?.element).toBeUndefined();
+    // `heal` não tem `targets: 'friend'` no catálogo: dispara direto, sem mira.
+    expect(view?.needsAim).toBe(false);
+  });
+
+  it('ação de ALIADO (`targets: \'friend\'`) precisa de MIRA (ADR 0049 decisão 2, RF-06)', () => {
+    const friendCatalogue = catalogue({
+      bot: {
+        ...catalogue().bot,
+        spells: [{
+          id: 'friend-heal', name: 'Cura Amiga', manaCost: 20, minLevel: 1, vocationId: null,
+          effect: 'heal', group: 'healing', targets: 'friend',
+        }],
+      },
+    });
+    const view = slotView({ do: { kind: 'spell', spellId: 'friend-heal' }, when: [], auto: true }, friendCatalogue, null);
+    expect(view?.needsAim).toBe(true);
   });
 
   it('suprimento: nome do catálogo, sem pilha nem contagem', () => {

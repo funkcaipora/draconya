@@ -71,6 +71,13 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.corpses)) {
     check(`corpses.${id}`, 'object', object);
   }
+  // O cenário usável (#727, ADR 0050 d.1): cada estado de cada interativo é um id de arte —
+  // uma porta com o id "aberto" fora do pacote é o mesmo quadrado invisível, ao trocar a placa.
+  for (const [key, states] of Object.entries(appearances.scenery)) {
+    for (const [state, object] of Object.entries(states)) {
+      check(`scenery.${key}.${state}`, 'object', object);
+    }
+  }
   for (const [id, map] of Object.entries(appearances.maps)) {
     check(`maps.${id}.floor`, 'object', map.floor);
     // Um número vira as quatro peças iguais (`wallSetOf`), e as quatro são conferidas como

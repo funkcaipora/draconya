@@ -1,0 +1,8 @@
+{
+  "id": "dragon-shield",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 1; value: 0 → 360.",
+  "patch": {
+    "imbuementSlots": 1,
+    "value": 360
+  }
+}

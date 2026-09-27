@@ -17,8 +17,8 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS, floorChangeAt, floorChangeToward,
-  isBlocked, migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
+  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
@@ -42,6 +42,8 @@ import {
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
+import { isToggleable, TileOverrides } from '../tile-overrides.js';
+import type { InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
@@ -95,6 +97,7 @@ import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import {
@@ -183,6 +186,14 @@ const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
 /** O cadáver apodreceu (FUN-123): sai do chão. */
 const CORPSE = 'corpse';
+/**
+ * Um interativo reverte sozinho (#728, ADR 0050 d.3): capim cortado volta a crescer, buraco
+ * enche de volta. Evento na fila (invariante 2) — nunca um prazo somado por tick —, agendado no
+ * `toggle` que abre o estado temporário e cancelado se alguém usar de novo antes de vencer. O
+ * `subject` é o `interactableId` (a posição, `interactableIdOf`); porta não agenda este evento —
+ * ela fecha no `vacate` (`TileOverrides.closeDoorIfVacant`), e alavanca não decai.
+ */
+const TILE_REVERT = 'tile-revert';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
 /**
@@ -269,6 +280,24 @@ const BOT_GROUP_PREFIX = 'bot:';
  * `migrateBotConfigV1` a normaliza no boundary. A união some no AB-09.
  */
 type BotConfigInput = BotConfigV2 | BotConfig;
+
+/**
+ * O alvo explícito de um `use-slot` manual (AB-09, ADR 0049 decisão 2), já traduzido pelo host a
+ * partir do `creatureId`/`position` numéricos do fio — o `sim` nunca vê o número, só o domínio
+ * que já conhece (`subject` de monstro, `characterId`, ou tile). `null`/ausente é "sem mira": cai
+ * no default de sempre (alvo fixado, senão o candidato do bot).
+ */
+export type UseSlotTarget =
+  | { readonly kind: 'monster'; readonly subject: string }
+  | { readonly kind: 'character'; readonly characterId: string }
+  | { readonly kind: 'position'; readonly position: FloorPoint }
+  /**
+   * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
+   * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
+   * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
+   * default, que executaria contra um alvo que ele não escolheu.
+   */
+  | { readonly kind: 'invalid' };
 
 /**
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
@@ -1018,6 +1047,14 @@ export interface HuntRulesetState {
    */
   readonly fields?: readonly TileFieldState[];
   /**
+   * O overlay de cenário usável (#728, ADR 0050 d.2): porta, capim, stone pile e alavanca, por
+   * `interactableId` (a posição). Opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`: ausente é
+   * "ninguém mexeu em nada ainda", o estado que `TileOverrides.fromInteractables` já produz a
+   * partir do conteúdo — o mesmo grau de compatibilidade que `fields` (CMB-07) já tem. Os
+   * eventos `TILE_REVERT` pendentes já vêm na fila serializada da sessão.
+   */
+  readonly tileOverrides?: readonly TileOverrideState[];
+  /**
    * A configuração do bot, CRUA (FUN-81).
    *
    * Crua e não compilada: `CompiledBot` é um vetor de closures, e closure não serializa. O
@@ -1136,6 +1173,13 @@ interface Runner {
    * resultado (passo de verdade, `not-adjacent`, companheiro, parede).
    */
   sameTileStreak: number;
+  /**
+   * Já registrou `route-blocked` no extrato para o bloqueio ATUAL (#728, ADR 0050 d.4)? Evita
+   * uma linha por vencimento parado — zera assim que o passo deixa de ser recusado por
+   * interativo. NUNCA persiste no snapshot, como `followPath`: perder a flag numa retomada só
+   * custa uma linha extra no extrato, nunca um comportamento errado.
+   */
+  routeBlockedWarned: boolean;
   /**
    * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_MARGIN`/
    * `PARTY_REGROUP_FLOOR_CHANGE_RADIUS`, válvula `MAX_REGROUP_WAIT_MS`). `null` fora de uma
@@ -1327,6 +1371,14 @@ export class HuntRuleset implements Ruleset {
    */
   #fields = new Fields();
 
+  /**
+   * O overlay de cenário usável desta sessão (#728, ADR 0050 d.2): porta, capim, stone pile e
+   * alavanca. Construído do CONTEÚDO fixado (`Tilemap.interactables`, #727) — nunca do disco —
+   * e mutado só por esta sessão (invariante 9). `TileOccupancy.overrides` referencia a MESMA
+   * instância; `restore()` a atualiza por mutação (`restoreState`), nunca a substitui.
+   */
+  readonly #tileOverrides: TileOverrides;
+
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
 
@@ -1429,7 +1481,8 @@ export class HuntRuleset implements Ruleset {
       'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
-    this.#world = new TileOccupancy(options.map);
+    this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
+    this.#world = new TileOccupancy(options.map, { overrides: this.#tileOverrides });
     // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
     const basics = new Map<AmmoFamily, Ammunition>();
     for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -1477,8 +1530,14 @@ export class HuntRuleset implements Ruleset {
    *
    * Cooldown é conferido ANTES de executar, e a ação que não aconteceu não inicia cooldown
    * nenhum — a ordem da elegibilidade é o ponto caro aqui.
+   *
+   * `target` é a mira (ADR 0049 decisão 2): já traduzido pelo host para o domínio do `sim`.
+   * Sem ele, vale o default de sempre (alvo fixado, senão o candidato do bot).
    */
-  useSlot(session: Session, characterId: string, set: number, slotIndex: number): SlotOutcome {
+  useSlot(
+    session: Session, characterId: string, set: number, slotIndex: number,
+    target?: UseSlotTarget,
+  ): SlotOutcome {
     const character = findById(session.participants, characterId);
     const runner = this.#runners.get(characterId);
     if (character === null || !character.alive || runner === undefined) {
@@ -1494,7 +1553,16 @@ export class HuntRuleset implements Ruleset {
     const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
     if (wait > 0) return refuse('on-cooldown', wait);
 
-    const result = this.#perform(session, character, entry.do);
+    // A mira (ADR 0049 decisão 2): resolve recipiente de aliado OU alvo explícito de
+    // monstro/posição. `null` é "não se aplica" (ação sem alvo mirável — o `target` é ruído e é
+    // ignorado, RF-12 da spec); só uma recusa TIPADA interrompe o disparo.
+    const resolved = this.#resolveManualTarget(session, character, entry.do, target);
+    if (resolved !== null && !resolved.ok) return refuse(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#perform(session, character, entry.do, recipient, explicit);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
@@ -1596,6 +1664,80 @@ export class HuntRuleset implements Ruleset {
   /** Os campos de tile ativos agora (CMB-07): leitura para snapshot, host e teste. */
   get fields(): readonly TileFieldState[] {
     return this.#fields.getState();
+  }
+
+  /** O overlay de cenário usável desta sessão (#728): leitura para snapshot, host e teste. */
+  get tileOverrides(): readonly TileOverrideState[] {
+    return this.#tileOverrides.getState();
+  }
+
+  /**
+   * Tenta usar UM interativo — abrir a porta, cortar o capim, cavar a pile, puxar a alavanca
+   * (ADR 0050 d.4-d.5). Devolve `true` quando o estado mudou (e portanto o tile deixou de
+   * bloquear, se era esse o caso); `false` sem tocar em nada — kind sem par de estados (T2/T3,
+   * fora do escopo desta issue), ou ferramenta exigida que este personagem não carrega.
+   *
+   * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile); alavanca liga a
+   * quem está em `links` (ADR 0050 d.1) e alterna cada um também — sem re-entrar no MESMO id,
+   * que travaria numa alavanca que se referencia por engano de conteúdo.
+   */
+  #useInteractable(session: Session, character: CharacterRuntime, interactableId: string): boolean {
+    const current = this.#tileOverrides.get(interactableId);
+    if (current === null || !isToggleable(current.kind)) return false;
+    const tool = this.#tileOverrides.contentOf(interactableId)?.requires?.tool;
+    if (tool !== undefined && !this.#hasTool(character, tool)) return false;
+
+    const next = this.#tileOverrides.toggle(interactableId, session.nowMs);
+    if (next === null) return false;
+    session.cancelEvent(TILE_REVERT, interactableId);
+    if (next.revertAtMs !== undefined) {
+      session.scheduleIn(TILE_REVERT, next.revertAtMs - session.nowMs, {
+        priority: EventPriority.Housekeeping, subject: interactableId,
+      });
+    }
+    session.record('tile-used', `${current.kind}:${interactableId}`);
+
+    // Alavanca (ADR 0050 d.1): liga a quem está em `links` e alterna CADA um também — nunca o
+    // PRÓPRIO id de novo, o que evitaria um laço se o conteúdo (por engano) linkar a si mesma.
+    if (current.kind === 'lever') {
+      for (const linkedId of this.#tileOverrides.links(interactableId)) {
+        if (linkedId === interactableId) continue;
+        const linked = this.#tileOverrides.toggle(linkedId, session.nowMs);
+        if (linked === null) continue;
+        session.cancelEvent(TILE_REVERT, linkedId);
+        if (linked.revertAtMs !== undefined) {
+          session.scheduleIn(TILE_REVERT, linked.revertAtMs - session.nowMs, {
+            priority: EventPriority.Housekeeping, subject: linkedId,
+          });
+        }
+      }
+    }
+    return true;
+  }
+
+  /** Este personagem carrega uma ferramenta que serve para `tool` — equipada ou na mochila. */
+  #hasTool(character: CharacterRuntime, tool: InteractableTool): boolean {
+    for (const item of character.inventory.items()) {
+      if (this.#options.items.get(item.itemId)?.use?.tool === tool) return true;
+    }
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped !== null && this.#options.items.get(equipped.itemId)?.use?.tool === tool) return true;
+    }
+    return false;
+  }
+
+  /**
+   * O prazo de reversão de um interativo venceu (#728, ADR 0050 d.3): capim volta a crescer,
+   * buraco enche de volta. Só reverte se o estado AINDA é o que agendou o prazo — usar de novo
+   * antes de vencer já cancelou este evento (`#useInteractable`), mas um snapshot restaurado de
+   * um formato anterior a esta issue nunca teria este evento, então a defesa nunca é o caminho
+   * comum, só a rede de segurança.
+   */
+  #onTileRevert(session: Session, interactableId: string): void {
+    const current = this.#tileOverrides.get(interactableId);
+    if (current === null || current.revertAtMs === undefined) return;
+    this.#tileOverrides.toggle(interactableId, session.nowMs);
   }
 
   /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
@@ -2088,6 +2230,7 @@ export class HuntRuleset implements Ruleset {
       // de jogo. Uma sessão restaurada recalcula na hora se precisar; nada observa a diferença.
       followPath: null,
       followStuckSinceMs: null,
+      routeBlockedWarned: false,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2147,6 +2290,7 @@ export class HuntRuleset implements Ruleset {
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
+      case TILE_REVERT: return this.#onTileRevert(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
@@ -2353,6 +2497,7 @@ export class HuntRuleset implements Ruleset {
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
       fields: this.#fields.getState(),
+      tileOverrides: this.#tileOverrides.getState(),
       nextGroundItemId: this.#nextGroundItemId,
       warnedExhausted: state.warnedExhausted,
       warnedFullBackpack: state.warnedFullBackpack,
@@ -2474,6 +2619,11 @@ export class HuntRuleset implements Ruleset {
     // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
     // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
     this.#fields = Fields.fromState(restored.fields);
+    // MUTAÇÃO, não substituição (#728): `TileOccupancy.overrides` já referencia esta MESMA
+    // instância desde o construtor — trocar `this.#tileOverrides` deixaria o mundo lendo um
+    // objeto velho, sempre no estado inicial do conteúdo. Ausente é "nenhuma sessão anterior
+    // mexeu em nada", que já é o que `TileOverrides.fromInteractables` produziu na construção.
+    this.#tileOverrides.restoreState(restored.tileOverrides);
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
@@ -2852,6 +3002,27 @@ export class HuntRuleset implements Ruleset {
     runner.walker.resume();
     const to = runner.walker.step();
     if (to === null) return null;
+    // O walker usa o tile interativo bloqueante antes de pisar (#728, ADR 0050 d.4): a rota
+    // autorada pode atravessar tile usável (porta comum, no T1 desta issue), e quem a percorre
+    // abre sozinho — é automação legítima (invariante 11), não desvio de caminho (ADR 0009: a
+    // rota continua sendo a mesma lista fixa de tiles, nunca recalculada em volta da porta).
+    const blockingHere = this.#tileOverrides.at(to);
+    if (blockingHere !== null && blockingHere.blocked) {
+      if (this.#useInteractable(session, character, blockingHere.interactableId)) {
+        runner.routeBlockedWarned = false;
+      } else {
+        // Sem ferramenta (T2/T3, fora do escopo desta issue) ou kind sem par de estados: segura
+        // como faria com parede, e registra UMA vez — não uma linha por vencimento parado.
+        runner.walker.hold();
+        if (!runner.routeBlockedWarned) {
+          runner.routeBlockedWarned = true;
+          session.record('route-blocked', character.id);
+        }
+        return null;
+      }
+    } else {
+      runner.routeBlockedWarned = false;
+    }
     if (this.#partyRegroupBlocked(session, runner, character, to)) {
       // O LÍDER esperando a party se juntar (#527) — achado numa QA ao vivo com o bot config
       // real: sem haste igual entre vocações, quem não é o líder cai para trás em combate, e o
@@ -3168,9 +3339,15 @@ export class HuntRuleset implements Ruleset {
     // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
     if (d === want) return null;
 
+    // `keep-distance` só RECUA com visão livre até o alvo (#553): o TFS só deixa um monstro
+    // que mantém distância se afastar quando ele ainda enxerga quem persegue — recuar às cegas
+    // podia levar a se afastar do alvo sem motivo, quando na prática ele já perdeu a linha por
+    // outra razão. Sem visão, mantém a posição — a mesma "decidiu ficar parado" de `d === want`.
     const to = d > want
       ? greedyStep(from, target.position, blocked)
-      : fleeStep(from, target.position, blocked);
+      : (isSightClear(this.#world.map, from, target.position)
+        ? fleeStep(from, target.position, blocked)
+        : null);
     // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
     if (to === null) return null;
@@ -3385,8 +3562,8 @@ export class HuntRuleset implements Ruleset {
     // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
     const z = from.z ?? this.#world.map.z;
     const pathBlocked: Blocked = (x, y) => {
-      if (isBlocked(this.#world.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
-      if (grounded && floorChangeAt(this.#world.map, x, y, z) !== null) return true;
+      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (grounded && this.#world.floorChangeAt(x, y, z) !== null) return true;
       if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
       return false;
     };
@@ -3924,10 +4101,11 @@ const slots = bot.groups.get(group);
   #perform(
     session: Session, character: CharacterRuntime, action: BotAction,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient, explicit);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -3955,6 +4133,51 @@ const slots = bot.groups.get(group);
       return effect.range ?? null;
     }
     return null;
+  }
+
+  /**
+   * Traduz o `target` de um `use-slot` manual (D11, ADR 0049 decisão 2) em recipiente de aliado
+   * OU alvo explícito de monstro/posição, ou recusa tipada.
+   *
+   * `null`: a ação não é mirável — nem `friend` (cura/suporte) nem dano — e `target` é ruído,
+   * ignorado sem recusa nenhuma (RF-12 da spec da #725); inclui a magia/runa de área centrada no
+   * LANÇADOR, porque `#needsTarget` já devolve `false` para ela (RF-13).
+   */
+  #resolveManualTarget(
+    session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
+  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
+    | { ok: false; reason: SlotRefusal } | null {
+    const healRange = this.#healRangeOf(action);
+    if (healRange !== null) {
+      // Ação de ALIADO: sem `target`, cai no default — `#perform` já assume `recipient =
+      // character` (curar A SI MESMO, como hoje, RF-12).
+      if (target === undefined) return null;
+      if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+      if (target.kind !== 'character') return null; // mira de monstro/posição não se aplica
+      const member = findById(session.participants, target.characterId);
+      if (member === null || !member.alive) return { ok: false, reason: 'no-target' };
+      if (!sameFloor(character.position.z, member.position.z)
+        || distance(character.position, member.position) > (healRange || 1)) {
+        return { ok: false, reason: 'out-of-range' };
+      }
+      return { ok: true, recipient: member };
+    }
+
+    const damageEffect = action.kind === 'spell'
+      ? this.#options.spells.get(action.spellId)?.effect
+      : action.kind === 'supply'
+        ? this.#options.supplies.get(action.supplyId)?.effect
+        : undefined;
+    if (damageEffect === undefined || !this.#needsTarget(damageEffect)) return null;
+    if (target === undefined) return null;
+    if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+    if (target.kind === 'character') return null; // não se aplica — ignorado (RF-12)
+    if (target.kind === 'monster') {
+      const monster = this.#monsterBySubject.get(target.subject);
+      if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
+      return { ok: true, explicit: monster };
+    }
+    return { ok: true, explicit: target.position };
   }
 
   /**
@@ -4014,14 +4237,15 @@ const slots = bot.groups.get(group);
   #castSpell(
     session: Session, character: CharacterRuntime, spellId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
     const aim = spell.effect.kind === 'damage'
-      ? this.#aimFor(character, spell.effect.range, spell.effect.area)
+      ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
-        ? this.#aimFor(character, spell.effect.range, undefined)
+        ? this.#aimFor(character, spell.effect.range, undefined, explicit)
         : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
@@ -4225,9 +4449,15 @@ const slots = bot.groups.get(group);
    *
    * Os vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`. A única alocação por
    * lançamento é o `Set` de chaves da forma, do tamanho dela.
+   *
+   * `explicit` é a mira manual (ADR 0049 decisão 2): um `MonsterRuntime` (alvo apontado) ou um
+   * `FloorPoint` (tile apontado, para runa de área sobre chão vazio). Área centrada no
+   * LANÇADOR ignora `explicit` (última frase da decisão 2) — a forma sai do lançador de
+   * qualquer forma, e é por isso que o ramo abaixo nem olha o parâmetro.
    */
   #aimFor(
     character: CharacterRuntime, range: number | undefined, area: SpellArea | undefined,
+    explicit?: MonsterRuntime | FloorPoint,
   ): SpellAim | null {
     this.#spellHits.length = 0;
     this.#spellTargets.length = 0;
@@ -4238,6 +4468,10 @@ const slots = bot.groups.get(group);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        // Cada alvo da forma precisa da PRÓPRIA visão (#553, RF-05) — a onda cobre um cone
+        // inteiro, e alguém atrás de uma parede não é atingido só porque outro, mais à frente,
+        // está.
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
       if (this.#spellHits.length === 0) return null;
@@ -4246,21 +4480,51 @@ const slots = bot.groups.get(group);
       return this.#aim;
     }
 
-    const primary = this.#targetInRange(character, range);
-    if (primary === null) return null;
-    this.#collect(character, primary);
+    let primary: MonsterRuntime | null = null;
+    let primaryPoint: WorldPoint;
+    if (explicit === undefined) {
+      primary = this.#targetInRange(character, range);
+      if (primary === null) return null;
+      primaryPoint = this.#at(primary);
+    } else if ('position' in explicit) {
+      // Mira de MONSTRO (`MonsterRuntime`): precisa estar vivo e no MESMO andar (#519) — mas
+      // NÃO recusamos aqui por alcance: `aim.distance` carrega a distância real, e é
+      // `castSpell`/`useSupply` quem já confere `aim.distance > effect.range` e recusa
+      // `out-of-range` tipado (distinto de `no-target`, ADR 0049 decisão 2/RF-10). Filtrar aqui
+      // devolveria `null` → sempre `no-target`, escondendo a recusa certa.
+      if (!explicit.alive || !sameFloor(character.position.z, explicit.position.z)) return null;
+      primary = explicit;
+      primaryPoint = this.#at(explicit);
+    } else {
+      // Mira de POSIÇÃO (`FloorPoint`): sem monstro no tile, só vale para forma em área — alvo
+      // único mirado num tile vazio não tem o que acertar. Mesmo andar (#519); alcance fica
+      // para o chamador, pela mesma razão do ramo acima.
+      if (!sameFloor(character.position.z, explicit.z)) return null;
+      if (area === undefined) return null;
+      primaryPoint = { x: explicit.x, y: explicit.y, z: explicit.z ?? this.#world.map.z };
+    }
+    // A ESCOLHA do alvo (`#targetInRange`) ignora visão de propósito (DT-05 da spec #553): o
+    // bot continua mirando o mesmo alvo atrás da parede, em vez de trocar para um pior só
+    // porque este está sem linha agora. Só a CAPTURA final é filtrada — o golpe não sai. Vale
+    // igual para a mira manual (#725): alvo ou tile atrás da parede não é atingido.
+    if (!isSightClear(this.#world.map, character.position, primaryPoint)) return null;
+    if (primary !== null) this.#collect(character, primary);
 
     if (area !== undefined) {
-      this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
+      this.#aimTiles = areaTiles(area, character.position, character.direction, primaryPoint);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
     }
+    // Sem alvo primário e sem colheita de área (mira de posição vazia): nenhum alvo, `null`
+    // como sempre.
+    if (this.#spellHits.length === 0) return null;
 
-    this.#aim.distance = distance(character.position, primary.position);
+    this.#aim.distance = distance(character.position, primaryPoint);
     this.#aim.targets = this.#spellTargets;
     return this.#aim;
   }
@@ -4285,9 +4549,17 @@ const slots = bot.groups.get(group);
    * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
    * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
    * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   *
+   * `SPELL_SKILL_WEAPON` (#567) é a sentinela do Knight: desde a separação de `melee` em
+   * `fist`/`club`/`sword`/`axe`, não há mais uma skill fixa para a magia dele — Berserk,
+   * Groundshaker etc. escalam pela skill da FAMÍLIA da arma que está na mão agora, resolvida
+   * do mesmo jeito que `#weaponPower` resolve o golpe (`Inventory.weapon`, desarmado cai no
+   * perfil `fist` de `content.unarmed`).
    */
   #spellScaling(character: CharacterRuntime): SpellScaling {
-    const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const spellSkill = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const skillId = spellSkill === SPELL_SKILL_WEAPON
+      ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
     const magic = this.#options.skills.get('magic');
     return {
@@ -4664,6 +4936,7 @@ const slots = bot.groups.get(group);
   #useSupply(
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -4671,7 +4944,7 @@ const slots = bot.groups.get(group);
     // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
     // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
     const aim = supply.effect.kind === 'damage'
-      ? this.#aimFor(character, supply.effect.range, supply.effect.area)
+      ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
@@ -5406,6 +5679,7 @@ const slots = bot.groups.get(group);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(
       monster, target, definition, this.#blockedForMonster(monster, definition),
+      (from, to) => isSightClear(this.#world.map, from, to),
     );
     // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
     // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
@@ -5472,6 +5746,7 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
       monster.attackReady = true;
       return;
@@ -5510,9 +5785,11 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
-      // Alvo saiu do alcance (ou o monstro está fugindo e esta ability é corpo a corpo): NÃO
-      // bate, e a ability volta a ficar engatilhada — `#armMonsterAbilities` a re-arma.
+      // Alvo saiu do alcance, ou a visão fechou (#553), ou o monstro está fugindo e esta
+      // ability é corpo a corpo: NÃO bate, e a ability volta a ficar engatilhada —
+      // `#armMonsterAbilities` a re-arma.
       return;
     }
 
@@ -5537,6 +5814,7 @@ const slots = bot.groups.get(group);
     for (const ability of definition.abilities) {
       if (fleeing && isMeleeAbility(ability)) continue;
       if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (!isSightClear(this.#world.map, monster.position, target.position)) continue;
       if (ability.id === BASIC_ABILITY_ID) {
         if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
         continue;
@@ -5560,7 +5838,11 @@ const slots = bot.groups.get(group);
     primary: CharacterRuntime,
   ): void {
     const subject = monster.subject;
-    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
+    // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
+    // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants)
+      .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
     // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
@@ -6123,6 +6405,10 @@ const slots = bot.groups.get(group);
     const reflectAttacker = this.#reflectAttackerFor(character, monster);
 
     if (weapon !== null && how?.kind === 'distance') {
+      // Sem visão livre até o alvo (#553), o tiro NÃO sai — como sem munição, antes de gastar
+      // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
+      // reavalia, e acerta assim que a linha abrir.
+      if (!isSightClear(this.#world.map, character.position, monster.position)) return;
       const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
@@ -6401,6 +6687,18 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * A skill que a arma NA MÃO agora aponta (#567, `SPELL_SKILL_WEAPON`): a mesma leitura de
+   * `#strike` (`Inventory.weapon`), caindo no perfil `fist` de `content.unarmed` desarmado —
+   * nunca um nome fixo, porque `fist`/`club`/`sword`/`axe` são skills diferentes desde a
+   * separação de `melee`. Sem a família no catálogo (conteúdo de teste incompleto), `fist`.
+   */
+  #equippedWeaponSkillId(character: CharacterRuntime): string {
+    const item = character.inventory.weapon(this.#options.items, character);
+    const family = item?.weapon?.family ?? this.#options.unarmed.family;
+    return this.#options.weaponFamilies.get(family)?.skillId ?? 'fist';
+  }
+
+  /**
    * A chance de acerto à distância (#522, `combat-v2`): uma rolagem por tiro, SEMPRE consumida
    * quando o conteúdo declara `combat.distanceHitChance` — a mesma regra do bloqueio e do
    * crítico (ADR 0031). Conteúdo `combat-v1` (sem a tabela) não rola nada e sempre acerta, o
@@ -6436,9 +6734,15 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
-   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
-   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   * Pratica UMA vez pelo golpe, na skill que a família aponta — SÓ ELA (CMB-05, #567). A
+   * prática é o `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por
+   * mana gasta — e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * Chama `#gainSkill` DIRETO, na skill resolvida — nunca `#gainSkills` (o grupo inteiro de
+   * `sk.gain.on`): desde a separação de `melee` em `fist`/`club`/`sword`/`axe`, as quatro
+   * compartilham o MESMO gatilho `melee-hit`, e o grupo faria uma espada treinar `axe` junto —
+   * o defeito que o #567 existe para não introduzir. `distance`/`magic` continuam com uma
+   * skill só por grupo, então o comportamento delas não muda.
    *
    * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
    * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
@@ -6450,7 +6754,7 @@ const slots = bot.groups.get(group);
     if (definition === undefined) return;
     const skill = this.#options.skills.get(definition.skillId);
     if (skill === undefined) return;
-    this.#gainSkills(session, character, skill.gain.on, amount);
+    this.#gainSkill(session, character, skill, amount);
   }
 
   /**
@@ -6635,35 +6939,48 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Credita uso a toda skill alimentada por esta fonte.
+   * Credita uso a toda skill alimentada por esta fonte (`spell-cast`, `shield-block`): hoje uma
+   * skill só por grupo, então iterar ou chamar `#gainSkill` uma vez dá no mesmo — mas iterar é
+   * o que continua certo se um dia houver mais de uma nesse mesmo grupo.
    *
    * `amount` é o que a fonte rende: um golpe é um golpe; uma magia rende a MANA que gastou
    * (§9.4, modelo do Tibia). Sem isso, a forma ótima de subir magia seria lançar mil vezes a
    * magia mais barata, e o jogo viraria macro de spam.
-   *
-   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
-   * jogador quer ver ao voltar, ao lado do level up (§16.2).
    */
   #gainSkills(
     session: Session, character: CharacterRuntime, on: Skill['gain']['on'], amount: number,
   ): void {
-    if (amount <= 0) return;
     const definitions = this.#skillsByGain[on];
-    const vocation = this.#vocationOf(character);
     for (let i = 0; i < definitions.length; i += 1) {
-      const definition = definitions[i] as Skill;
-      const gain = definition.gain;
-      const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
-      // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
-      // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
-      // diferente por quem está usando.
-      const factor = skillFactorFor(definition, vocation, this.#options.progression);
-      // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
-      // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
-      const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
-      if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
-        session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
-      }
+      this.#gainSkill(session, character, definitions[i] as Skill, amount);
+    }
+  }
+
+  /**
+   * Credita uso a UMA skill (#567): a que a família de arma aponta, nunca o grupo inteiro de
+   * `gain.on` — é o que separa `fist`/`club`/`sword`/`axe` de verdade, depois de todas
+   * compartilharem o mesmo gatilho `melee-hit`. `#gainSkills`, acima, continua servindo os
+   * gatilhos que SÃO compartilhados de propósito.
+   *
+   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
+   * jogador quer ver ao voltar, ao lado do level up (§16.2).
+   */
+  #gainSkill(
+    session: Session, character: CharacterRuntime, definition: Skill, amount: number,
+  ): void {
+    if (amount <= 0) return;
+    const gain = definition.gain;
+    const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
+    // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
+    // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
+    // diferente por quem está usando.
+    const vocation = this.#vocationOf(character);
+    const factor = skillFactorFor(definition, vocation, this.#options.progression);
+    // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
+    // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
+    const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
+    if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
+      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
     }
   }
 
@@ -8035,7 +8352,7 @@ const slots = bot.groups.get(group);
     const base = this.#blockedFor(mover);
     const z = mover.position.z;
     return (x, y, stepZ, monsterId) => base(x, y, stepZ, monsterId)
-      || floorChangeAt(this.#world.map, x, y, z) !== null;
+      || this.#world.floorChangeAt(x, y, z) !== null;
   }
 
   /** Para o spawn não há quem se mova: só parede e ocupação. */
@@ -8072,7 +8389,7 @@ const slots = bot.groups.get(group);
   #spawnBlockedFor(session: Session): Blocked {
     const radius = this.#options.hunt.spawnClearRadius;
     return (x, y, z = this.#world.map.z, monsterId) => {
-      if (isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
       if (radius <= 0) return false;
       const definition = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
       if (definition !== undefined && !definition.blockable) return false;
@@ -8098,7 +8415,7 @@ const slots = bot.groups.get(group);
    */
   #summonBlockedFor(): Blocked {
     return (x, y, z = this.#world.map.z) =>
-      isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z);
+      this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z);
   }
 
   /**
