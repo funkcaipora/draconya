@@ -130,14 +130,58 @@
       },
       "items": [
         {
+          "itemId": "crystal-necklace",
+          "chance": 0.0253
+        },
+        {
+          "itemId": "strange-symbol",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0598
+        },
+        {
           "itemId": "double-axe",
           "chance": 0.1051
+        },
+        {
+          "itemId": "crowbar",
+          "chance": 0.001
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0393
+        },
+        {
+          "itemId": "dark-armor",
+          "chance": 0.0437
+        },
+        {
+          "itemId": "steel-boots",
+          "chance": 0.0038
         },
         {
           "itemId": "meat",
           "chance": 0.3,
           "min": 1,
           "max": 6
+        },
+        {
+          "itemId": "perfect-behemoth-fang",
+          "chance": 0.0109
+        },
+        {
+          "itemId": "behemoth-claw",
+          "chance": 0.0086
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "battle-stone",
+          "chance": 0.14
         }
       ]
     },
@@ -251,8 +295,40 @@
       },
       "items": [
         {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.01003
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.08
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.025
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.014
+        },
+        {
           "itemId": "meat",
           "chance": 0.3007
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0493
         }
       ]
     },
@@ -315,10 +391,38 @@
       },
       "items": [
         {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0068
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.08
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.02
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.016
+        },
+        {
           "itemId": "meat",
           "chance": 0.5043,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0675
         }
       ]
     },
@@ -413,12 +517,44 @@
       },
       "items": [
         {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "battle-axe",
+          "chance": 0.0545
+        },
+        {
           "itemId": "double-axe",
           "chance": 0.0088
         },
         {
+          "itemId": "battle-hammer",
+          "chance": 0.052
+        },
+        {
+          "itemId": "heavy-machete",
+          "chance": 0.02
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.002
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.02
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0619
+        },
+        {
           "itemId": "meat",
           "chance": 0.4995
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.1028
         }
       ]
     },
@@ -530,10 +666,42 @@
       },
       "items": [
         {
+          "itemId": "club-ring",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0814
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0135
+        },
+        {
           "itemId": "meat",
           "chance": 0.0497,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.0006
+        },
+        {
+          "itemId": "norse-shield",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "frost-giant-pelt",
+          "chance": 0.05
         }
       ]
     },
@@ -649,10 +817,38 @@
       },
       "items": [
         {
+          "itemId": "club-ring",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0796
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0149
+        },
+        {
           "itemId": "ham",
           "chance": 0.2099,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.001
+        },
+        {
+          "itemId": "norse-shield",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "frost-giant-pelt",
+          "chance": 0.048
         }
       ]
     },
@@ -765,7 +961,28 @@
         "min": 10000,
         "max": 10000
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "prehemoth-horns",
+          "chance": 0.1987
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.0705
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.0288
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.0116
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.0078
+        }
+      ]
     },
     "abilities": [
       {
@@ -885,6 +1102,46 @@
         {
           "itemId": "meat",
           "chance": 0.062
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.042
+        },
+        {
+          "itemId": "battle-stone",
+          "chance": 0.062
+        },
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.052
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.012
+        },
+        {
+          "itemId": "power-ring",
+          "chance": 0.022
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.012
+        },
+        {
+          "itemId": "bonebreaker",
+          "chance": 0.005
+        },
+        {
+          "itemId": "ogre-klubba",
+          "chance": 0.008
+        },
+        {
+          "itemId": "rusted-helmet",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "shamanic-mask",
+          "chance": 0.003
         }
       ]
     },
@@ -1026,8 +1283,32 @@
       },
       "items": [
         {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.129
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.2097
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.129
+        },
+        {
           "itemId": "wand-of-inferno",
           "chance": 0.1
+        },
+        {
+          "itemId": "wand-of-draconia",
+          "chance": 0.0215
+        },
+        {
+          "itemId": "wand-of-everblazing",
+          "chance": 0.0108
+        },
+        {
+          "itemId": "ogre-choppa",
+          "chance": 0.0054
         }
       ]
     },
@@ -1164,10 +1445,34 @@
       },
       "items": [
         {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.1727
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.1583
+        },
+        {
           "itemId": "meat",
           "chance": 0.0863,
           "min": 1,
           "max": 5
+        },
+        {
+          "itemId": "diamond-sceptre",
+          "chance": 0.0576
+        },
+        {
+          "itemId": "metal-spats",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0432
         }
       ]
     },
@@ -1288,7 +1593,40 @@
         "min": 100,
         "max": 300
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.0795
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.1583
+        },
+        {
+          "itemId": "shamanic-talisman",
+          "chance": 0.1023
+        },
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.125
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0455
+        },
+        {
+          "itemId": "bone-fetish",
+          "chance": 0.0227
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0114
+        }
+      ]
     },
     "abilities": [
       {
@@ -1476,7 +1814,24 @@
         "min": 1,
         "max": 130
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.012
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.012
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.012
+        },
+        {
+          "itemId": "shamanic-mask",
+          "chance": 0.003
+        }
+      ]
     },
     "abilities": [
       {
@@ -1595,7 +1950,48 @@
         "min": 1,
         "max": 130
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "bone-fetish",
+          "chance": 0.032
+        },
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.012
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.008
+        },
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.032
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.022
+        },
+        {
+          "itemId": "shamanic-talisman",
+          "chance": 0.012
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.012
+        },
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.006
+        },
+        {
+          "itemId": "ogre-scepta",
+          "chance": 0.003
+        },
+        {
+          "itemId": "shamanic-mask",
+          "chance": 0.003
+        }
+      ]
     },
     "abilities": [
       {
@@ -1761,7 +2157,28 @@
         "min": 1,
         "max": 120
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.2
+        },
+        {
+          "itemId": "bone-toothpick",
+          "chance": 0.049
+        },
+        {
+          "itemId": "beetle-carapace",
+          "chance": 0.018
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.097
+        },
+        {
+          "itemId": "dreaded-cleaver",
+          "chance": 0.003
+        }
+      ]
     },
     "abilities": [
       {

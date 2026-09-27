@@ -41,7 +41,28 @@
         "min": 1,
         "max": 105
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "dandelion-seeds",
+          "chance": 0.1487
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.0933
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.0082
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.0034
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.0021
+        }
+      ]
     },
     "abilities": [
       {
@@ -159,7 +180,32 @@
         "min": 1,
         "max": 112
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "wood-cape",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.00092
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.00719
+        },
+        {
+          "itemId": "prismatic-quartz",
+          "chance": 0.00719
+        }
+      ]
     },
     "abilities": [
       {
@@ -405,7 +451,28 @@
         "min": 1,
         "max": 136
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "leaf-legs",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "dandelion-seeds",
+          "chance": 0.058
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.00092
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.00492
+        }
+      ]
     },
     "abilities": [
       {
@@ -561,6 +628,38 @@
         {
           "itemId": "boots-of-haste",
           "chance": 0.0015
+        },
+        {
+          "itemId": "dandelion-seeds",
+          "chance": 0.12
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.018
+        },
+        {
+          "itemId": "flower-wreath",
+          "chance": 0.005
+        },
+        {
+          "itemId": "hibiscus-dress",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.01
+        },
+        {
+          "itemId": "colourful-snail-shell",
+          "chance": 0.12
+        },
+        {
+          "itemId": "dream-blossom-staff",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "butterfly-ring",
+          "chance": 0.0084
         }
       ]
     },
@@ -705,7 +804,28 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "dream-blossom-staff",
+          "chance": 0.0002
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.05155
+        },
+        {
+          "itemId": "shimmering-beetles",
+          "chance": 0.00591
+        },
+        {
+          "itemId": "rainbow-quartz",
+          "chance": 0.058
+        }
+      ]
     },
     "abilities": [
       {
@@ -849,8 +969,44 @@
           "max": 2
         },
         {
+          "itemId": "clerical-mace",
+          "chance": 0.05155
+        },
+        {
+          "itemId": "colourful-snail-shell",
+          "chance": 0.058
+        },
+        {
+          "itemId": "diamond-sceptre",
+          "chance": 0.034
+        },
+        {
+          "itemId": "coral-brooch",
+          "chance": 0.034
+        },
+        {
+          "itemId": "flower-wreath",
+          "chance": 0.034
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.034
+        },
+        {
+          "itemId": "summer-dress",
+          "chance": 0.034
+        },
+        {
+          "itemId": "wild-flowers",
+          "chance": 0.034
+        },
+        {
           "itemId": "boots-of-haste",
           "chance": 0.0005
+        },
+        {
+          "itemId": "butterfly-ring",
+          "chance": 0.001
         }
       ]
     },

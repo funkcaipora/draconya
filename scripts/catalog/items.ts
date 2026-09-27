@@ -448,6 +448,13 @@ export function convertItem(
   }
 
   entity['source'] = source;
+  // Aparência (#748, ADR 0038 decisão 2, o MESMO recurso que `outfitId` já usa em `monsters.ts`):
+  // o `id` do `<item>` do Canary É o `appearanceId` (o clientid do OTB) — conferido em
+  // `sword`/3264, o autoral existente. Staging carrega o número; `promote-items.ts` o extrai para
+  // `appearances/baseline.json.items` e o remove antes de escrever `data/items/generated/`, porque
+  // `itemSchema` não declara este campo.
+  if (Number.isFinite(canaryId) && canaryId > 0) entity['appearanceId'] = canaryId;
+  else blockers.push(`"id" do Canary não é um número de aparência válido: "${id}"`);
   return { id: slug, slice: classification.slice, entity: entity as CatalogEntity, blockers, ignoredFields };
 }
 

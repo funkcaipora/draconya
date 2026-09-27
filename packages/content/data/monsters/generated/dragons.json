@@ -195,6 +195,10 @@
         {
           "itemId": "green-mushroom",
           "chance": 0.0049
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.001
         }
       ]
     },
@@ -382,12 +386,24 @@
           "chance": 0.3039
         },
         {
+          "itemId": "bone-shoulderplate",
+          "chance": 0.1284
+        },
+        {
+          "itemId": "zaoan-shoes",
+          "chance": 0.0261
+        },
+        {
           "itemId": "tower-shield",
           "chance": 0.0231
         },
         {
           "itemId": "zaoan-legs",
           "chance": 0.013
+        },
+        {
+          "itemId": "zaoan-armor",
+          "chance": 0.006
         }
       ]
     },
@@ -535,6 +551,14 @@
         {
           "itemId": "life-crystal",
           "chance": 0.0089
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.0052
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0031
         },
         {
           "itemId": "tower-shield",
@@ -852,6 +876,14 @@
         {
           "itemId": "dragon-ham",
           "chance": 0.8286
+        },
+        {
+          "itemId": "frosty-heart",
+          "chance": 0.0857
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.0043
         }
       ]
     },
@@ -1030,15 +1062,43 @@
           "max": 3
         },
         {
+          "itemId": "hydra-head",
+          "chance": 0.1082
+        },
+        {
           "itemId": "small-sapphire",
           "chance": 0.0392
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0131
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0112
         },
         {
           "itemId": "life-crystal",
           "chance": 0.0093
         },
         {
+          "itemId": "ring-of-healing",
+          "chance": 0.0084
+        },
+        {
+          "itemId": "hydra-egg",
+          "chance": 0.0084
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0075
+        },
+        {
           "itemId": "boots-of-haste",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "medusa-shield",
           "chance": 0.0019
         },
         {
@@ -1240,6 +1300,34 @@
         "max": 4500
       },
       "items": [
+        {
+          "itemId": "wardragon-claw",
+          "chance": 0.1442
+        },
+        {
+          "itemId": "nimmersatts-seal",
+          "chance": 0.1062
+        },
+        {
+          "itemId": "dragon-tongue",
+          "chance": 0.0845
+        },
+        {
+          "itemId": "wardragon-tooth",
+          "chance": 0.0633
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.06007
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.04
+        },
+        {
+          "itemId": "white-gem",
+          "chance": 0.01
+        },
         {
           "itemId": "dragonbone-staff",
           "chance": 0.0074

@@ -38,12 +38,36 @@
       },
       "items": [
         {
+          "itemId": "twig-arms",
+          "chance": 0.9177
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0475
+        },
+        {
+          "itemId": "glacier-mask",
+          "chance": 0.0457
+        },
+        {
           "itemId": "hailstorm-rod",
           "chance": 0.0347
         },
         {
+          "itemId": "glacier-mask",
+          "chance": 0.0025
+        },
+        {
           "itemId": "glacier-amulet",
           "chance": 0.0329
+        },
+        {
+          "itemId": "moonlight-rod",
+          "chance": 0.0183
+        },
+        {
+          "itemId": "glacier-kilt",
+          "chance": 0.011
         }
       ]
     },
@@ -257,7 +281,12 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "small-topaz",
+          "chance": 0.0032
+        }
+      ]
     },
     "abilities": [
       {
@@ -438,7 +467,24 @@
         "min": 1,
         "max": 88
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "sword-ring",
+          "chance": 0.0057
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.004
+        },
+        {
+          "itemId": "heavily-rusted-armor",
+          "chance": 0.0079
+        },
+        {
+          "itemId": "gear-crystal",
+          "chance": 0.002
+        }
+      ]
     },
     "abilities": [
       {
@@ -545,12 +591,48 @@
       },
       "items": [
         {
+          "itemId": "yellow-gem",
+          "chance": 0.0055
+        },
+        {
           "itemId": "might-ring",
           "chance": 0.0094
         },
         {
           "itemId": "life-crystal",
           "chance": 0.0915
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0053
+        },
+        {
+          "itemId": "bonebreaker",
+          "chance": 0.0001
+        },
+        {
+          "itemId": "lightning-pendant",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "crystalline-armor",
+          "chance": 0.0002
+        },
+        {
+          "itemId": "gear-wheel",
+          "chance": 0.05
+        },
+        {
+          "itemId": "shockwave-amulet",
+          "chance": 0.0011
+        },
+        {
+          "itemId": "gear-crystal",
+          "chance": 0.05
+        },
+        {
+          "itemId": "slime-mould",
+          "chance": 0.0048
         }
       ]
     },
@@ -697,7 +779,28 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.0471
+        },
+        {
+          "itemId": "glorious-axe",
+          "chance": 0.0036
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.0412
+        },
+        {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.0105
+        },
+        {
+          "itemId": "crystalline-spikes",
+          "chance": 0.0798
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -764,6 +867,30 @@
         {
           "itemId": "tower-shield",
           "chance": 0.0082
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.017
+        },
+        {
+          "itemId": "ancient-stone",
+          "chance": 0.2002
+        },
+        {
+          "itemId": "shiny-stone",
+          "chance": 0.008
+        },
+        {
+          "itemId": "zaoan-sword",
+          "chance": 0.001
+        },
+        {
+          "itemId": "spiked-iron-ball",
+          "chance": 0.0996
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.004
         }
       ]
     },
@@ -827,8 +954,36 @@
       },
       "items": [
         {
+          "itemId": "stealth-ring",
+          "chance": 0.0045
+        },
+        {
+          "itemId": "gold-ring",
+          "chance": 0.0001
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.03003
+        },
+        {
+          "itemId": "golden-armor",
+          "chance": 0.0001
+        },
+        {
           "itemId": "green-mushroom",
           "chance": 0.0145
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.0052
+        },
+        {
+          "itemId": "gear-wheel",
+          "chance": 0.0094
+        },
+        {
+          "itemId": "slime-mould",
+          "chance": 0.0034
         }
       ]
     },
@@ -983,6 +1138,34 @@
         {
           "itemId": "green-mushroom",
           "chance": 0.0145
+        },
+        {
+          "itemId": "gear-wheel",
+          "chance": 0.0094
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0303
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.0052
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0045
+        },
+        {
+          "itemId": "slime-mould",
+          "chance": 0.0034
+        },
+        {
+          "itemId": "golden-armor",
+          "chance": 0.00013
+        },
+        {
+          "itemId": "gold-ring",
+          "chance": 0.00008
         }
       ]
     },
@@ -1123,7 +1306,24 @@
         "min": 1,
         "max": 55
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "halberd",
+          "chance": 0.01
+        },
+        {
+          "itemId": "gear-wheel",
+          "chance": 0.0484
+        },
+        {
+          "itemId": "heavily-rusted-armor",
+          "chance": 0.002
+        },
+        {
+          "itemId": "slime-mould",
+          "chance": 0.0031
+        }
+      ]
     },
     "abilities": [
       {
@@ -1237,7 +1437,20 @@
         "min": 1,
         "max": 130
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "gear-wheel",
+          "chance": 0.0484
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.01
+        },
+        {
+          "itemId": "slime-mould",
+          "chance": 0.0031
+        }
+      ]
     },
     "abilities": [
       {
@@ -1352,8 +1565,16 @@
       },
       "items": [
         {
+          "itemId": "daramian-mace",
+          "chance": 0.051
+        },
+        {
           "itemId": "steel-helmet",
           "chance": 0.0462
+        },
+        {
+          "itemId": "black-shield",
+          "chance": 0.0182
         }
       ]
     },
@@ -1458,7 +1679,52 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0227
+        },
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.0284
+        },
+        {
+          "itemId": "crystal-mace",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "sapphire-hammer",
+          "chance": 0.0149
+        },
+        {
+          "itemId": "glorious-axe",
+          "chance": 0.0334
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.1136
+        },
+        {
+          "itemId": "ancient-stone",
+          "chance": 0.1285
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.0696
+        },
+        {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.0681
+        },
+        {
+          "itemId": "stone-nose",
+          "chance": 0.18679
+        },
+        {
+          "itemId": "crystalline-spikes",
+          "chance": 0.1632
+        }
+      ]
     },
     "abilities": [
       {
@@ -1598,7 +1864,44 @@
         "min": 1,
         "max": 40
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0003
+        },
+        {
+          "itemId": "power-ring",
+          "chance": 0.0507
+        },
+        {
+          "itemId": "carlin-sword",
+          "chance": 0.025
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0198
+        },
+        {
+          "itemId": "ancient-stone",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "shiny-stone",
+          "chance": 0.0076
+        },
+        {
+          "itemId": "sulphurous-stone",
+          "chance": 0.1037
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0055
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -1672,6 +1975,30 @@
         {
           "itemId": "life-crystal",
           "chance": 0.0089
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.01001
+        },
+        {
+          "itemId": "bonebreaker",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "gear-wheel",
+          "chance": 0.01007
+        },
+        {
+          "itemId": "rusted-armor",
+          "chance": 0.002
+        },
+        {
+          "itemId": "rusted-legs",
+          "chance": 0.0005
+        },
+        {
+          "itemId": "gear-crystal",
+          "chance": 0.0227
         }
       ]
     },

@@ -28,7 +28,16 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "badger-fur",
+          "chance": 0.1023
+        },
+        {
+          "itemId": "acorn",
+          "chance": 0.0513
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -79,7 +88,12 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "bat-wing",
+          "chance": 0.0122
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -144,6 +158,14 @@
           "chance": 0.2,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "bear-paw",
+          "chance": 0.02
+        },
+        {
+          "itemId": "honeycomb",
+          "chance": 0.0046
         }
       ]
     },
@@ -199,6 +221,10 @@
           "chance": 0.7086,
           "min": 1,
           "max": 5
+        },
+        {
+          "itemId": "black-wool",
+          "chance": 0.01
         }
       ]
     },
@@ -472,7 +498,24 @@
         "min": 1,
         "max": 130
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "raw-meat",
+          "chance": 0.022
+        },
+        {
+          "itemId": "thick-fur",
+          "chance": 0.009
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.004
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.002
+        }
+      ]
     },
     "abilities": [
       {
@@ -574,6 +617,10 @@
           "chance": 0.5,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "antlers",
+          "chance": 0.0087
         }
       ]
     },
@@ -628,6 +675,14 @@
           "chance": 0.2,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "white-deer-antlers",
+          "chance": 0.2
+        },
+        {
+          "itemId": "white-deer-skin",
+          "chance": 0.2
         }
       ]
     },
@@ -1029,6 +1084,10 @@
           "chance": 0.3,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.0014
         }
       ]
     },
@@ -1131,6 +1190,14 @@
           "chance": 0.1985,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "white-deer-antlers",
+          "chance": 0.1952
+        },
+        {
+          "itemId": "white-deer-skin",
+          "chance": 0.2028
         }
       ]
     },
@@ -1380,10 +1447,18 @@
       },
       "items": [
         {
+          "itemId": "terra-amulet",
+          "chance": 0.06
+        },
+        {
           "itemId": "green-mushroom",
           "chance": 0.103,
           "min": 1,
           "max": 5
+        },
+        {
+          "itemId": "garlic-necklace",
+          "chance": 0.05
         }
       ]
     },
@@ -1506,6 +1581,10 @@
         {
           "itemId": "meat",
           "chance": 0.4932
+        },
+        {
+          "itemId": "fox-paw",
+          "chance": 0.0135
         }
       ]
     },
@@ -1687,10 +1766,22 @@
           "chance": 0.2012
         },
         {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.02
+        },
+        {
           "itemId": "meat",
           "chance": 0.55,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "gloom-wolf-fur",
+          "chance": 0.08
         }
       ]
     },
@@ -1758,6 +1849,10 @@
           "chance": 0.333,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "shaggy-tail",
+          "chance": 0.2555
         }
       ]
     },
@@ -2020,7 +2115,28 @@
         "min": 1,
         "max": 40
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "power-ring",
+          "chance": 0.003
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "club-ring",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "ape-fur",
+          "chance": 0.0098
+        }
+      ]
     },
     "defenses": [
       {
@@ -2176,6 +2292,22 @@
           "chance": 0.3,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.005
+        },
+        {
+          "itemId": "mammoth-whopper",
+          "chance": 0.028
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.005
+        },
+        {
+          "itemId": "thick-fur",
+          "chance": 0.0728
         }
       ]
     },
@@ -2236,7 +2368,28 @@
         "min": 1,
         "max": 45
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.0026
+        },
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.0105
+        },
+        {
+          "itemId": "banana-staff",
+          "chance": 0.001
+        },
+        {
+          "itemId": "ape-fur",
+          "chance": 0.01
+        },
+        {
+          "itemId": "banana-sash",
+          "chance": 0.018
+        }
+      ]
     },
     "abilities": [
       {
@@ -2659,6 +2812,10 @@
           "chance": 0.39,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "bamboo-stick",
+          "chance": 0.1
         }
       ]
     },
@@ -2723,6 +2880,22 @@
         {
           "itemId": "ham",
           "chance": 0.2467
+        },
+        {
+          "itemId": "parder-fur",
+          "chance": 0.1907
+        },
+        {
+          "itemId": "red-crystal-fragment",
+          "chance": 0.1403
+        },
+        {
+          "itemId": "barbarian-axe",
+          "chance": 0.0454
+        },
+        {
+          "itemId": "crimson-sword",
+          "chance": 0.0151
         }
       ]
     },
@@ -2834,6 +3007,10 @@
           "chance": 0.64,
           "min": 1,
           "max": 4
+        },
+        {
+          "itemId": "pig-foot",
+          "chance": 0.0095
         }
       ]
     },
@@ -2902,6 +3079,10 @@
           "chance": 0.5032,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "polar-bear-paw",
+          "chance": 0.0098
         }
       ]
     },
@@ -3072,12 +3253,28 @@
           "chance": 0.25
         },
         {
+          "itemId": "small-ruby",
+          "chance": 0.07692
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.07142
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.06666
+        },
+        {
           "itemId": "small-sapphire",
           "chance": 0.05555
         },
         {
           "itemId": "might-ring",
           "chance": 0.01204
+        },
+        {
+          "itemId": "crown-helmet",
+          "chance": 0.0101
         }
       ]
     },
@@ -3135,6 +3332,10 @@
           "chance": 0.7,
           "min": 1,
           "max": 4
+        },
+        {
+          "itemId": "wool",
+          "chance": 0.01
         }
       ]
     },
@@ -3195,7 +3396,16 @@
         "min": 1,
         "max": 35
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "ape-fur",
+          "chance": 0.01
+        },
+        {
+          "itemId": "banana-sash",
+          "chance": 0.05
+        }
+      ]
     },
     "abilities": [
       {
@@ -3298,6 +3508,10 @@
           "chance": 0.8617,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "silky-fur",
+          "chance": 0.2867
         }
       ]
     },
@@ -3349,7 +3563,12 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "skunk-tail",
+          "chance": 0.0092
+        }
+      ]
     },
     "abilities": [
       {
@@ -3424,7 +3643,12 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "acorn",
+          "chance": 0.5041
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -3484,6 +3708,10 @@
           "chance": 0.053,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0143
         }
       ]
     },
@@ -3539,7 +3767,24 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "hardened-bone",
+          "chance": 0.5032
+        },
+        {
+          "itemId": "rhino-hide",
+          "chance": 0.5032
+        },
+        {
+          "itemId": "rhino-horn",
+          "chance": 0.5032
+        },
+        {
+          "itemId": "raw-meat",
+          "chance": 0.5032
+        }
+      ]
     },
     "defenses": [
       {
@@ -3617,6 +3862,14 @@
         {
           "itemId": "meat",
           "chance": 0.34
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.079
+        },
+        {
+          "itemId": "fiery-heart",
+          "chance": 0.079
         }
       ]
     },
@@ -3780,6 +4033,10 @@
           "chance": 0.3519,
           "min": 1,
           "max": 4
+        },
+        {
+          "itemId": "striped-fur",
+          "chance": 0.1083
         }
       ]
     },
@@ -3968,6 +4225,14 @@
           "chance": 0.35,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "warwolf-fur",
+          "chance": 0.0523
         }
       ]
     },
@@ -4144,8 +4409,28 @@
       },
       "items": [
         {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.015
+        },
+        {
+          "itemId": "green-crystal-fragment",
+          "chance": 0.015
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.05
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.05
+        },
+        {
           "itemId": "leather-boots",
           "chance": 0.05
+        },
+        {
+          "itemId": "combat-knife",
+          "chance": 0.015
         }
       ]
     },
@@ -4289,6 +4574,10 @@
           "chance": 0.3519,
           "min": 1,
           "max": 4
+        },
+        {
+          "itemId": "striped-fur",
+          "chance": 0.1083
         }
       ]
     },
@@ -4467,6 +4756,10 @@
           "chance": 0.3,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "winter-wolf-fur",
+          "chance": 0.1
         }
       ]
     },
@@ -4526,6 +4819,10 @@
           "chance": 0.55,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0098
         }
       ]
     },
@@ -4585,6 +4882,10 @@
         "max": 60
       },
       "items": [
+        {
+          "itemId": "bunnyslippers",
+          "chance": 0.01333
+        },
         {
           "itemId": "meat",
           "chance": 0.33333,

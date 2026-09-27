@@ -42,10 +42,46 @@
       },
       "items": [
         {
+          "itemId": "werepanther-claw",
+          "chance": 0.1278
+        },
+        {
+          "itemId": "golden-sickle",
+          "chance": 0.0512
+        },
+        {
           "itemId": "meat",
           "chance": 0.055,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.0255
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0513
+        },
+        {
+          "itemId": "lightning-headband",
+          "chance": 0.072
+        },
+        {
+          "itemId": "ripper-lance",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0177
+        },
+        {
+          "itemId": "lightning-pendant",
+          "chance": 0.0471
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0262
         }
       ]
     },
@@ -229,10 +265,58 @@
       },
       "items": [
         {
+          "itemId": "bear-paw",
+          "chance": 0.008
+        },
+        {
           "itemId": "ham",
           "chance": 0.019,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "honeycomb",
+          "chance": 0.0045
+        },
+        {
+          "itemId": "werebear-fur",
+          "chance": 0.0058
+        },
+        {
+          "itemId": "werebear-skull",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0043
+        },
+        {
+          "itemId": "dreaded-cleaver",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.003
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.004
+        },
+        {
+          "itemId": "werewolf-amulet",
+          "chance": 0.001
+        },
+        {
+          "itemId": "relic-sword",
+          "chance": 0.002
+        },
+        {
+          "itemId": "time-ring",
+          "chance": 0.004
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.002
         }
       ]
     },
@@ -377,14 +461,46 @@
       },
       "items": [
         {
+          "itemId": "werecrocodile-tongue",
+          "chance": 0.108
+        },
+        {
           "itemId": "serpent-sword",
           "chance": 0.0591
+        },
+        {
+          "itemId": "crocodile-boots",
+          "chance": 0.0853
         },
         {
           "itemId": "meat",
           "chance": 0.055,
           "min": 1,
           "max": 4
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.03
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0512
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.028
+        },
+        {
+          "itemId": "bonebreaker",
+          "chance": 0.005
+        },
+        {
+          "itemId": "glorious-axe",
+          "chance": 0.0219
+        },
+        {
+          "itemId": "golden-sun-coin",
+          "chance": 0.0177
         }
       ]
     },
@@ -560,12 +676,44 @@
           "max": 2
         },
         {
+          "itemId": "crystal-sword",
+          "chance": 0.05
+        },
+        {
           "itemId": "serpent-sword",
           "chance": 0.05
         },
         {
+          "itemId": "rapier",
+          "chance": 0.05
+        },
+        {
+          "itemId": "lightning-headband",
+          "chance": 0.015
+        },
+        {
           "itemId": "steel-helmet",
           "chance": 0.015
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.015
+        },
+        {
+          "itemId": "ivory-carving",
+          "chance": 0.015
+        },
+        {
+          "itemId": "magma-legs",
+          "chance": 0.005
+        },
+        {
+          "itemId": "crown-helmet",
+          "chance": 0.005
+        },
+        {
+          "itemId": "lion-figurine",
+          "chance": 0.001
         }
       ]
     },
@@ -713,10 +861,42 @@
       },
       "items": [
         {
+          "itemId": "golden-sickle",
+          "chance": 0.0672
+        },
+        {
           "itemId": "meat",
           "chance": 0.055,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.0255
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0124
+        },
+        {
+          "itemId": "magma-monocle",
+          "chance": 0.0308
+        },
+        {
+          "itemId": "ripper-lance",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0177
+        },
+        {
+          "itemId": "magma-amulet",
+          "chance": 0.0277
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0262
         }
       ]
     },

@@ -40,12 +40,24 @@ item não existe, ou que pede pilha de item que não empilha — contada, nunca 
 nunca são promovidos por aqui — continuam hand-authored, e é a #581 quem os regenera. `load.ts`
 não lê `staging/`, e nada do jogo deve ler.
 
+**`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
+escreve lá — 1947 itens de caça, item ainda sem `slot` obrigatório resolvido para o motor.
+`pnpm catalog:promote-items` (#748) é o passo SEGUINTE, na mesma forma de `promote-monsters.ts`:
+lê `staging/items/generated/`, e escreve `data/items/generated/<fatia>.json` MENOS três exclusões,
+cada uma contada em `docs/reference/catalog/items-promotion-report.md`, nunca em silêncio — id que
+colide com item AUTORAL (os 73 de sempre; o autoral vence, ADR 0014), `appearanceId` (o `id` do
+`<item>` do Canary, que É o clientid do OTB) fora do inventário do pacote conferido (FUN-21; o
+Canary é mais novo que o pacote 13.32), e violação de uma regra que `buildContent` já impunha
+(a maioria armas sem `slot` que também declaram `imbuementSlots`). `appearanceId` é staging-only —
+o mesmo recurso que `outfitId` usa em monstro — e vira linha em `appearances/baseline.json.items`,
+nunca campo do item (`itemSchema` não o declara).
+
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
 ```
 data/items/backpack.json             # autoral, uma entidade por arquivo (de sempre)
-data/items/generated/weapons.json    # gerado por `pnpm catalog:import items` — um ARRAY por fatia
+data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
 data/monsters/rat.json               # autoral, hand-authored (#581 é quem regenera os quatro)
 data/monsters/generated/mammals.json # promovido por `pnpm catalog:promote-monsters` — um ARRAY

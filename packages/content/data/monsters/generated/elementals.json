@@ -173,7 +173,20 @@
         "min": 1,
         "max": 185
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.07142
+        },
+        {
+          "itemId": "obsidian-lance",
+          "chance": 0.04761
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.04761
+        }
+      ]
     },
     "abilities": [
       {

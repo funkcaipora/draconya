@@ -42,6 +42,22 @@
       },
       "items": [
         {
+          "itemId": "ancient-belt-buckle",
+          "chance": 0.17
+        },
+        {
+          "itemId": "cracked-alabaster-vase",
+          "chance": 0.2
+        },
+        {
+          "itemId": "rhino-horn-carving",
+          "chance": 0.13
+        },
+        {
+          "itemId": "ancient-coin",
+          "chance": 0.04
+        },
+        {
           "itemId": "meat",
           "chance": 0.5032,
           "min": 1,
@@ -50,6 +66,22 @@
         {
           "itemId": "boots-of-haste",
           "chance": 0.0023
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.01
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.042
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.02
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.03
         },
         {
           "itemId": "small-sapphire",
@@ -210,6 +242,14 @@
         {
           "itemId": "mace",
           "chance": 0.053
+        },
+        {
+          "itemId": "bone-shield",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "mammoth-whopper",
+          "chance": 0.0016
         }
       ]
     },
@@ -308,7 +348,20 @@
         "min": 1,
         "max": 20
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "short-sword",
+          "chance": 0.0481
+        },
+        {
+          "itemId": "bone-shield",
+          "chance": 0.0103
+        },
+        {
+          "itemId": "mammoth-whopper",
+          "chance": 0.0013
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 60000,
@@ -432,6 +485,38 @@
         {
           "itemId": "cheese",
           "chance": 0.1
+        },
+        {
+          "itemId": "bola",
+          "chance": 0.07692
+        },
+        {
+          "itemId": "spike-shield",
+          "chance": 0.00492
+        },
+        {
+          "itemId": "ratana",
+          "chance": 0.00909
+        },
+        {
+          "itemId": "life-preserver",
+          "chance": 0.00854
+        },
+        {
+          "itemId": "cheese-cutter",
+          "chance": 0.05882
+        },
+        {
+          "itemId": "cheesy-figurine",
+          "chance": 0.00518
+        },
+        {
+          "itemId": "earflap",
+          "chance": 0.07142
+        },
+        {
+          "itemId": "leather-harness",
+          "chance": 0.00537
         }
       ]
     },
@@ -495,6 +580,38 @@
         {
           "itemId": "cheese",
           "chance": 0.2
+        },
+        {
+          "itemId": "bola",
+          "chance": 0.07692
+        },
+        {
+          "itemId": "spike-shield",
+          "chance": 0.00645
+        },
+        {
+          "itemId": "ratana",
+          "chance": 0.02702
+        },
+        {
+          "itemId": "life-preserver",
+          "chance": 0.02941
+        },
+        {
+          "itemId": "cheese-cutter",
+          "chance": 0.08333
+        },
+        {
+          "itemId": "cheesy-figurine",
+          "chance": 0.00854
+        },
+        {
+          "itemId": "earflap",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "leather-harness",
+          "chance": 0.00561
         }
       ]
     },
@@ -588,8 +705,52 @@
       },
       "items": [
         {
+          "itemId": "heaven-blossom",
+          "chance": 0.105
+        },
+        {
+          "itemId": "dream-essence-egg",
+          "chance": 0.085
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.072
+        },
+        {
+          "itemId": "violet-crystal-shard",
+          "chance": 0.045
+        },
+        {
+          "itemId": "small-enchanted-ruby",
+          "chance": 0.06
+        },
+        {
+          "itemId": "red-crystal-fragment",
+          "chance": 0.045
+        },
+        {
+          "itemId": "ring-of-blue-plasma",
+          "chance": 0.025
+        },
+        {
+          "itemId": "collar-of-blue-plasma",
+          "chance": 0.009
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.013
+        },
+        {
           "itemId": "small-diamond",
           "chance": 0.006
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.01
+        },
+        {
+          "itemId": "crystal-crossbow",
+          "chance": 0.005
         }
       ]
     },
@@ -706,8 +867,40 @@
       },
       "items": [
         {
+          "itemId": "red-crystal-fragment",
+          "chance": 0.02
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0033
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.172
+        },
+        {
           "itemId": "life-crystal",
           "chance": 0.079
+        },
+        {
+          "itemId": "dream-essence-egg",
+          "chance": 0.0875
+        },
+        {
+          "itemId": "elven-astral-observer",
+          "chance": 0.076
+        },
+        {
+          "itemId": "glacier-mask",
+          "chance": 0.06
+        },
+        {
+          "itemId": "moonlight-rod",
+          "chance": 0.054
+        },
+        {
+          "itemId": "northwind-rod",
+          "chance": 0.0236
         },
         {
           "itemId": "glacier-amulet",
@@ -716,6 +909,22 @@
         {
           "itemId": "hailstorm-rod",
           "chance": 0.0266
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.0193
+        },
+        {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.021
+        },
+        {
+          "itemId": "elven-amulet",
+          "chance": 0.0126
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.0033
         }
       ]
     },
@@ -861,8 +1070,32 @@
       },
       "items": [
         {
+          "itemId": "dwarven-ring",
+          "chance": 0.001
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.15
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.25
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.08
+        },
+        {
+          "itemId": "copper-shield",
+          "chance": 0.1
+        },
+        {
           "itemId": "leather-legs",
           "chance": 0.1
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.007
         }
       ]
     },
@@ -925,6 +1158,26 @@
         {
           "itemId": "small-sapphire",
           "chance": 0.0071
+        },
+        {
+          "itemId": "spellbook",
+          "chance": 0.0036
+        },
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.0053
+        },
+        {
+          "itemId": "clerical-mace",
+          "chance": 0.0112
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0047
         }
       ]
     },
@@ -1035,16 +1288,44 @@
       },
       "items": [
         {
+          "itemId": "small-amethyst",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "axe-ring",
+          "chance": 0.0019
+        },
+        {
           "itemId": "double-axe",
           "chance": 0.006
+        },
+        {
+          "itemId": "battle-hammer",
+          "chance": 0.04
         },
         {
           "itemId": "steel-helmet",
           "chance": 0.016
         },
         {
+          "itemId": "scale-armor",
+          "chance": 0.092
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.06
+        },
+        {
           "itemId": "leather-boots",
           "chance": 0.4
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0051
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0028
         }
       ]
     },
@@ -1148,12 +1429,28 @@
       },
       "items": [
         {
+          "itemId": "dwarven-ring",
+          "chance": 0.00793
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.14285
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.06666
+        },
+        {
           "itemId": "leather-legs",
           "chance": 0.0909
         },
         {
           "itemId": "meat",
           "chance": 0.03846
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.00793
         }
       ]
     },
@@ -1210,8 +1507,32 @@
       },
       "items": [
         {
+          "itemId": "axe-ring",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "battle-axe",
+          "chance": 0.025
+        },
+        {
           "itemId": "crossbow",
           "chance": 0.03
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.08
+        },
+        {
+          "itemId": "soldier-helmet",
+          "chance": 0.12
+        },
+        {
+          "itemId": "dwarven-shield",
+          "chance": 0.03
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.003
         }
       ]
     },
@@ -1304,7 +1625,24 @@
         "min": 1,
         "max": 13
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "poison-dagger",
+          "chance": 0.0225
+        },
+        {
+          "itemId": "bone-shield",
+          "chance": 0.01
+        },
+        {
+          "itemId": "ripper-lance",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "tribal-mask",
+          "chance": 0.005
+        }
+      ]
     },
     "abilities": [
       {
@@ -1411,8 +1749,28 @@
           "chance": 0.108
         },
         {
+          "itemId": "studded-helmet",
+          "chance": 0.135
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0896
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.093
+        },
+        {
           "itemId": "leather-boots",
           "chance": 0.1141
+        },
+        {
+          "itemId": "heaven-blossom",
+          "chance": 0.0094
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.021
         }
       ]
     },
@@ -1506,8 +1864,40 @@
       },
       "items": [
         {
+          "itemId": "yellow-gem",
+          "chance": 0.0005
+        },
+        {
           "itemId": "life-crystal",
           "chance": 0.0097
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0116
+        },
+        {
+          "itemId": "elven-amulet",
+          "chance": 0.01999
+        },
+        {
+          "itemId": "sandals",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "green-tunic",
+          "chance": 0.07
+        },
+        {
+          "itemId": "holy-orchid",
+          "chance": 0.021
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.1
+        },
+        {
+          "itemId": "elven-astral-observer",
+          "chance": 0.0771
         }
       ]
     },
@@ -1651,8 +2041,40 @@
       },
       "items": [
         {
+          "itemId": "yellow-gem",
+          "chance": 0.0005
+        },
+        {
           "itemId": "life-crystal",
           "chance": 0.0097
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0116
+        },
+        {
+          "itemId": "elven-amulet",
+          "chance": 0.01999
+        },
+        {
+          "itemId": "sandals",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "green-tunic",
+          "chance": 0.07
+        },
+        {
+          "itemId": "holy-orchid",
+          "chance": 0.021
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.1
+        },
+        {
+          "itemId": "elven-astral-observer",
+          "chance": 0.0771
         }
       ]
     },
@@ -1796,6 +2218,22 @@
         {
           "itemId": "bow",
           "chance": 0.04
+        },
+        {
+          "itemId": "sandals",
+          "chance": 0.0118
+        },
+        {
+          "itemId": "heaven-blossom",
+          "chance": 0.0113
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.052
+        },
+        {
+          "itemId": "elven-scouting-glass",
+          "chance": 0.0975
         }
       ]
     },
@@ -1883,7 +2321,48 @@
         "min": 1,
         "max": 120
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "pirate-coin",
+          "chance": 0.1
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.04761
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.04761
+        },
+        {
+          "itemId": "ratana",
+          "chance": 0.05
+        },
+        {
+          "itemId": "life-preserver",
+          "chance": 0.05
+        },
+        {
+          "itemId": "cheese-cutter",
+          "chance": 0.16666
+        },
+        {
+          "itemId": "cheesy-figurine",
+          "chance": 0.03846
+        },
+        {
+          "itemId": "mouldy-powder",
+          "chance": 0.11111
+        },
+        {
+          "itemId": "lightning-boots",
+          "chance": 0.01612
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.03225
+        }
+      ]
     },
     "abilities": [
       {
@@ -1976,8 +2455,40 @@
       },
       "items": [
         {
+          "itemId": "gold-ingot",
+          "chance": 0.0039
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.1471
+        },
+        {
+          "itemId": "execowtioner-mask",
+          "chance": 0.1316
+        },
+        {
           "itemId": "meat",
           "chance": 0.0723
+        },
+        {
+          "itemId": "butchers-axe",
+          "chance": 0.009
+        },
+        {
+          "itemId": "crown-armor",
+          "chance": 0.0077
+        },
+        {
+          "itemId": "execowtioner-axe",
+          "chance": 0.0142
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0077
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0039
         }
       ]
     },
@@ -2104,6 +2615,22 @@
         {
           "itemId": "bow",
           "chance": 0.04
+        },
+        {
+          "itemId": "heaven-blossom",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.05
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.1528
+        },
+        {
+          "itemId": "flintstone",
+          "chance": 0.0034
         }
       ]
     },
@@ -2243,8 +2770,16 @@
       },
       "items": [
         {
+          "itemId": "rapier",
+          "chance": 0.155
+        },
+        {
           "itemId": "wooden-shield",
           "chance": 0.1585
+        },
+        {
+          "itemId": "coat",
+          "chance": 0.012
         }
       ]
     },
@@ -2492,12 +3027,28 @@
       },
       "items": [
         {
+          "itemId": "dagger",
+          "chance": 0.018
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0887
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.049
+        },
+        {
           "itemId": "leather-helmet",
           "chance": 0.0194
         },
         {
           "itemId": "leather-armor",
           "chance": 0.0251
+        },
+        {
+          "itemId": "goblin-ear",
+          "chance": 0.0091
         }
       ]
     },
@@ -2586,6 +3137,18 @@
         "max": 10
       },
       "items": [
+        {
+          "itemId": "dagger",
+          "chance": 0.103
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.154
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.013
+        },
         {
           "itemId": "leather-helmet",
           "chance": 0.1667
@@ -2686,6 +3249,18 @@
         "max": 9
       },
       "items": [
+        {
+          "itemId": "dagger",
+          "chance": 0.1828
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.089
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.05
+        },
         {
           "itemId": "leather-helmet",
           "chance": 0.1018
@@ -2831,6 +3406,18 @@
       },
       "items": [
         {
+          "itemId": "silver-amulet",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "hand-axe",
+          "chance": 0.18
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.05
+        },
+        {
           "itemId": "leather-helmet",
           "chance": 0.1
         },
@@ -2841,6 +3428,10 @@
         {
           "itemId": "leather-boots",
           "chance": 0.105
+        },
+        {
+          "itemId": "wood",
+          "chance": 0.3
         }
       ]
     },
@@ -2952,8 +3543,60 @@
       },
       "items": [
         {
+          "itemId": "fire-axe",
+          "chance": 0.0031
+        },
+        {
           "itemId": "knight-legs",
           "chance": 0.0031
+        },
+        {
+          "itemId": "black-shield",
+          "chance": 0.0371
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0528
+        },
+        {
+          "itemId": "chaos-mace",
+          "chance": 0.0016
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0078
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.102
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.2113
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0084
+        },
+        {
+          "itemId": "bloody-dwarven-beard",
+          "chance": 0.0173
+        },
+        {
+          "itemId": "buckle",
+          "chance": 0.1093
+        },
+        {
+          "itemId": "bonecarving-knife",
+          "chance": 0.0732
+        },
+        {
+          "itemId": "basalt-fetish",
+          "chance": 0.088
+        },
+        {
+          "itemId": "basalt-figurine",
+          "chance": 0.0947
         }
       ]
     },
@@ -3124,12 +3767,64 @@
       },
       "items": [
         {
+          "itemId": "dwarven-ring",
+          "chance": 0.0228
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0207
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.0038
+        },
+        {
           "itemId": "royal-helmet",
           "chance": 0.0015
         },
         {
+          "itemId": "guardian-shield",
+          "chance": 0.014
+        },
+        {
           "itemId": "tower-shield",
           "chance": 0.01002
+        },
+        {
+          "itemId": "black-shield",
+          "chance": 0.0064
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0849
+        },
+        {
+          "itemId": "magic-sulphur",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "chaos-mace",
+          "chance": 0.0055
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0064
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0205
+        },
+        {
+          "itemId": "violet-crystal-shard",
+          "chance": 0.035
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.0461
+        },
+        {
+          "itemId": "green-crystal-fragment",
+          "chance": 0.0687
         }
       ]
     },
@@ -3296,16 +3991,40 @@
       },
       "items": [
         {
+          "itemId": "bronze-amulet",
+          "chance": 0.0011
+        },
+        {
           "itemId": "sword",
           "chance": 0.05
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.04
         },
         {
           "itemId": "mace",
           "chance": 0.1284
         },
         {
+          "itemId": "brass-helmet",
+          "chance": 0.077
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.1
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.2002
+        },
+        {
           "itemId": "meat",
           "chance": 0.05
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0099
         }
       ]
     },
@@ -3371,8 +4090,24 @@
           "chance": 0.0083
         },
         {
+          "itemId": "brass-armor",
+          "chance": 0.0053
+        },
+        {
+          "itemId": "scale-armor",
+          "chance": 0.0053
+        },
+        {
           "itemId": "meat",
           "chance": 0.05
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.019
+        },
+        {
+          "itemId": "broken-crossbow",
+          "chance": 0.154
         }
       ]
     },
@@ -3463,8 +4198,20 @@
       },
       "items": [
         {
+          "itemId": "plate-shield",
+          "chance": 0.2
+        },
+        {
           "itemId": "mace",
           "chance": 0.129
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.1
+        },
+        {
+          "itemId": "brass-helmet",
+          "chance": 0.078
         },
         {
           "itemId": "sword",
@@ -3473,6 +4220,14 @@
         {
           "itemId": "meat",
           "chance": 0.05
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.04
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0098
         }
       ]
     },
@@ -3534,12 +4289,60 @@
       },
       "items": [
         {
+          "itemId": "cowbell",
+          "chance": 0.2248
+        },
+        {
+          "itemId": "cultish-robe",
+          "chance": 0.1472
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.2002
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.2071
+        },
+        {
           "itemId": "ham",
           "chance": 0.5941
         },
         {
+          "itemId": "bronze-amulet",
+          "chance": 0.1514
+        },
+        {
+          "itemId": "mino-shield",
+          "chance": 0.1267
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.0319
+        },
+        {
+          "itemId": "mino-lance",
+          "chance": 0.0181
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0057
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0017
+        },
+        {
           "itemId": "meat",
           "chance": 0.0802
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.1153
         }
       ]
     },
@@ -3656,6 +4459,22 @@
           "chance": 0.1167
         },
         {
+          "itemId": "taurus-mace",
+          "chance": 0.0536
+        },
+        {
+          "itemId": "cultish-robe",
+          "chance": 0.092
+        },
+        {
+          "itemId": "purple-robe",
+          "chance": 0.1623
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0022
+        },
+        {
           "itemId": "small-sapphire",
           "chance": 0.0217,
           "min": 1,
@@ -3666,6 +4485,14 @@
           "chance": 0.029,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0478
         }
       ]
     },
@@ -3761,6 +4588,22 @@
         {
           "itemId": "double-axe",
           "chance": 0.004
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0298
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.0439
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0215
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.01
         }
       ]
     },
@@ -3820,7 +4663,12 @@
         "min": 1,
         "max": 160
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.01
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -3881,12 +4729,24 @@
       },
       "items": [
         {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.006
+        },
+        {
           "itemId": "leather-helmet",
           "chance": 0.03
         },
         {
           "itemId": "leather-legs",
           "chance": 0.0519
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0229
+        },
+        {
+          "itemId": "taurus-mace",
+          "chance": 0.01
         }
       ]
     },
@@ -4040,11 +4900,23 @@
       },
       "items": [
         {
+          "itemId": "swampling-club",
+          "chance": 0.12
+        },
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.1
+        },
+        {
           "itemId": "leather-legs",
           "chance": 0.09
         },
         {
           "itemId": "leather-helmet",
+          "chance": 0.018
+        },
+        {
+          "itemId": "purple-robe",
           "chance": 0.018
         }
       ]
@@ -4195,11 +5067,31 @@
       },
       "items": [
         {
+          "itemId": "broken-crossbow",
+          "chance": 0.194
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0984
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0492
+        },
+        {
           "itemId": "meat",
           "chance": 0.0328
         },
         {
+          "itemId": "minotaur-leather",
+          "chance": 0.014
+        },
+        {
           "itemId": "crossbow",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "minotaur-horn",
           "chance": 0.0071
         }
       ]
@@ -4297,14 +5189,42 @@
       },
       "items": [
         {
+          "itemId": "giant-pacifier",
+          "chance": 0.0177
+        },
+        {
           "itemId": "meat",
           "chance": 0.0652
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0411
         },
         {
           "itemId": "small-diamond",
           "chance": 0.044,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.0241
+        },
+        {
+          "itemId": "moohtant-cudgel",
+          "chance": 0.0086
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "chaos-mace",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0028
         }
       ]
     },
@@ -4487,8 +5407,36 @@
       },
       "items": [
         {
+          "itemId": "sabre",
+          "chance": 0.0585
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.0496
+        },
+        {
+          "itemId": "studded-helmet",
+          "chance": 0.0295
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0786
+        },
+        {
+          "itemId": "studded-shield",
+          "chance": 0.073
+        },
+        {
           "itemId": "meat",
           "chance": 0.1016
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.0059
         }
       ]
     },
@@ -4551,8 +5499,32 @@
       },
       "items": [
         {
+          "itemId": "battle-axe",
+          "chance": 0.0611
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0728
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0089
+        },
+        {
           "itemId": "ham",
           "chance": 0.104
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.03
+        },
+        {
+          "itemId": "orcish-gear",
+          "chance": 0.094
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.04
         }
       ]
     },
@@ -4636,6 +5608,10 @@
       },
       "items": [
         {
+          "itemId": "sword-ring",
+          "chance": 0.0392
+        },
+        {
           "itemId": "longsword",
           "chance": 0.028
         },
@@ -4644,12 +5620,44 @@
           "chance": 0.0061
         },
         {
+          "itemId": "scimitar",
+          "chance": 0.0186
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0165
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.031
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.0165
+        },
+        {
           "itemId": "plate-legs",
           "chance": 0.0044
         },
         {
           "itemId": "royal-spear",
           "chance": 0.024
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0103
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.1951
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.02008
         }
       ]
     },
@@ -4743,6 +5751,14 @@
       },
       "items": [
         {
+          "itemId": "obsidian-lance",
+          "chance": 0.0111
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.0132
+        },
+        {
           "itemId": "crossbow",
           "chance": 0.0044
         },
@@ -4753,6 +5769,22 @@
         {
           "itemId": "meat",
           "chance": 0.246
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0389
+        },
+        {
+          "itemId": "shaggy-tail",
+          "chance": 0.1009
+        },
+        {
+          "itemId": "broken-crossbow",
+          "chance": 0.0483
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.038
         }
       ]
     },
@@ -4866,10 +5898,42 @@
       },
       "items": [
         {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.1021
+        },
+        {
+          "itemId": "obsidian-lance",
+          "chance": 0.011
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.0688
+        },
+        {
+          "itemId": "scale-armor",
+          "chance": 0.0061
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.099
+        },
+        {
           "itemId": "meat",
           "chance": 0.24,
           "min": 1,
           "max": 3
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.02
+        },
+        {
+          "itemId": "warwolf-fur",
+          "chance": 0.0941
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.0976
         }
       ]
     },
@@ -4949,7 +6013,32 @@
         "min": 1,
         "max": 5
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.01
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0875
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.021
+        },
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.103
+        },
+        {
+          "itemId": "shamanic-hood",
+          "chance": 0.0686
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.043
+        }
+      ]
     },
     "abilities": [
       {
@@ -5093,8 +6182,24 @@
           "chance": 0.03
         },
         {
+          "itemId": "studded-legs",
+          "chance": 0.1
+        },
+        {
+          "itemId": "studded-helmet",
+          "chance": 0.09
+        },
+        {
           "itemId": "meat",
           "chance": 0.302
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0015
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.023
         }
       ]
     },
@@ -5189,8 +6294,36 @@
       },
       "items": [
         {
+          "itemId": "poison-dagger",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0736
+        },
+        {
+          "itemId": "copper-shield",
+          "chance": 0.0056
+        },
+        {
           "itemId": "meat",
           "chance": 0.15
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.007
+        },
+        {
+          "itemId": "broken-helmet",
+          "chance": 0.108
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.04
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0098
         }
       ]
     },
@@ -5247,8 +6380,32 @@
       "rollModel": "canary",
       "items": [
         {
+          "itemId": "ice-rapier",
+          "chance": 0.2595
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.125
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.1942
+        },
+        {
+          "itemId": "crowbar",
+          "chance": 0.0781
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0955
+        },
+        {
           "itemId": "focus-cape",
           "chance": 0.0825
+        },
+        {
+          "itemId": "shark-fins",
+          "chance": 0.0175
         }
       ]
     },
@@ -5372,8 +6529,20 @@
           "chance": 0.125
         },
         {
+          "itemId": "grappling-hook",
+          "chance": 0.1942
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0955
+        },
+        {
           "itemId": "wand-of-starstorm",
           "chance": 0.0175
+        },
+        {
+          "itemId": "wand-of-voodoo",
+          "chance": 0.0145
         }
       ]
     },
@@ -5577,7 +6746,60 @@
         "min": 1,
         "max": 150
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "ancient-coin",
+          "chance": 0.06
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.025
+        },
+        {
+          "itemId": "cracked-alabaster-vase",
+          "chance": 0.15
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.043
+        },
+        {
+          "itemId": "prismatic-quartz",
+          "chance": 0.028
+        },
+        {
+          "itemId": "rhino-horn-carving",
+          "chance": 0.2
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.013
+        },
+        {
+          "itemId": "slightly-rusted-helmet",
+          "chance": 0.045
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.04
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.015
+        },
+        {
+          "itemId": "tarnished-rhino-figurine",
+          "chance": 0.15
+        },
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.02
+        },
+        {
+          "itemId": "wand-of-voodoo",
+          "chance": 0.008
+        }
+      ]
     },
     "abilities": [
       {
@@ -5735,15 +6957,51 @@
       },
       "items": [
         {
+          "itemId": "dream-essence-egg",
+          "chance": 0.137
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.0479
+        },
+        {
           "itemId": "knight-legs",
           "chance": 0.0445
+        },
+        {
+          "itemId": "glacier-kilt",
+          "chance": 0.0411
+        },
+        {
+          "itemId": "glacier-shoes",
+          "chance": 0.0377
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0377
         },
         {
           "itemId": "spellbook-of-mind-control",
           "chance": 0.024
         },
         {
+          "itemId": "crown-shield",
+          "chance": 0.0171
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.0171
+        },
+        {
+          "itemId": "ring-of-blue-plasma",
+          "chance": 0.0137
+        },
+        {
           "itemId": "tower-shield",
+          "chance": 0.0068
+        },
+        {
+          "itemId": "collar-of-green-plasma",
           "chance": 0.0068
         }
       ]
@@ -5905,6 +7163,14 @@
         {
           "itemId": "leather-boots",
           "chance": 0.095
+        },
+        {
+          "itemId": "wood",
+          "chance": 0.0214
+        },
+        {
+          "itemId": "swamp-grass",
+          "chance": 0.031
         }
       ]
     },
@@ -5994,6 +7260,18 @@
       },
       "items": [
         {
+          "itemId": "silver-amulet",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "hand-axe",
+          "chance": 0.18
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.05
+        },
+        {
           "itemId": "leather-helmet",
           "chance": 0.12
         },
@@ -6070,6 +7348,14 @@
       },
       "items": [
         {
+          "itemId": "silver-amulet",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.0545
+        },
+        {
           "itemId": "wooden-shield",
           "chance": 0.06
         },
@@ -6080,6 +7366,10 @@
         {
           "itemId": "meat",
           "chance": 0.0965
+        },
+        {
+          "itemId": "trollroot",
+          "chance": 0.0075
         }
       ]
     },
@@ -6141,6 +7431,10 @@
         "max": 12
       },
       "items": [
+        {
+          "itemId": "studded-club",
+          "chance": 0.03
+        },
         {
           "itemId": "meat",
           "chance": 0.14,
@@ -6217,8 +7511,36 @@
           "max": 2
         },
         {
+          "itemId": "onyx-chip",
+          "chance": 0.049
+        },
+        {
+          "itemId": "tarnished-rhino-figurine",
+          "chance": 0.1458
+        },
+        {
           "itemId": "energy-ring",
           "chance": 0.0766
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0381
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.0037
+        },
+        {
+          "itemId": "ancient-belt-buckle",
+          "chance": 0.17
+        },
+        {
+          "itemId": "cracked-alabaster-vase",
+          "chance": 0.2
+        },
+        {
+          "itemId": "ancient-coin",
+          "chance": 0.04
         }
       ]
     },

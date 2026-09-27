@@ -424,8 +424,16 @@
       },
       "items": [
         {
+          "itemId": "two-handed-sword",
+          "chance": 0.005
+        },
+        {
           "itemId": "mace",
           "chance": 0.02
+        },
+        {
+          "itemId": "poisonous-slime",
+          "chance": 0.03
         }
       ]
     },
@@ -795,6 +803,14 @@
         {
           "itemId": "bow",
           "chance": 0.0074
+        },
+        {
+          "itemId": "brass-helmet",
+          "chance": 0.0218
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.0049
         }
       ]
     },
@@ -902,6 +918,10 @@
         {
           "itemId": "mace",
           "chance": 0.02854
+        },
+        {
+          "itemId": "poisonous-slime",
+          "chance": 0.04761
         }
       ]
     },

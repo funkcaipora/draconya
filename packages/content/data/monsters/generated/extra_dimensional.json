@@ -41,7 +41,56 @@
         "min": 100,
         "max": 1000
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "broken-mitmah-necklace",
+          "chance": 0.1718
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.0762
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.0689
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.0408
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.0367
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0288
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0245
+        },
+        {
+          "itemId": "prismatic-quartz",
+          "chance": 0.0241
+        },
+        {
+          "itemId": "ruby-necklace",
+          "chance": 0.0181
+        },
+        {
+          "itemId": "gold-brocaded-cloth",
+          "chance": 0.0134
+        },
+        {
+          "itemId": "gold-nugget",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "ornate-crossbow",
+          "chance": 0.0014
+        }
+      ]
     },
     "abilities": [
       {
@@ -181,6 +230,34 @@
         {
           "itemId": "might-ring",
           "chance": 0.03846
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.00523
+        },
+        {
+          "itemId": "epee",
+          "chance": 0.00564
+        },
+        {
+          "itemId": "lightning-pendant",
+          "chance": 0.00862
+        },
+        {
+          "itemId": "lightning-legs",
+          "chance": 0.0048
+        },
+        {
+          "itemId": "shockwave-amulet",
+          "chance": 0.00571
+        },
+        {
+          "itemId": "yielowax",
+          "chance": 0.003
+        },
+        {
+          "itemId": "yielocks",
+          "chance": 0.0032
         }
       ]
     },
