@@ -1,0 +1,820 @@
+[
+  {
+    "id": "bug",
+    "name": "Bug",
+    "class": "vermin",
+    "health": 29,
+    "experience": 18,
+    "attack": {
+      "min": 0,
+      "max": 23
+    },
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.07,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5117,
+        "min": 1,
+        "max": 6
+      },
+      "items": [
+        {
+          "itemId": "cherry",
+          "chance": 0.0259,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/bug.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 45,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 45
+  },
+  {
+    "id": "butterfly",
+    "name": "Butterfly",
+    "class": "vermin",
+    "health": 2,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 8,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 0,
+      "damage": 0,
+      "random": 40
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/butterfly.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 227,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 227
+  },
+  {
+    "id": "carrion-worm",
+    "name": "Carrion Worm",
+    "class": "vermin",
+    "health": 145,
+    "experience": 70,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 8,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "earth": 0.2,
+        "fire": -0.05,
+        "ice": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.38,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 130,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 45
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.0946,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.021,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "carrion-worm-fang",
+          "chance": 0.1
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0021
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/carrion_worm.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 251,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 192
+  },
+  {
+    "id": "cockroach",
+    "name": "Cockroach",
+    "health": 1,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.01,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 5,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "cockroach-leg",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 1,
+    "staticAttack": 0.5,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/cockroach.lua"
+    },
+    "outfitId": 284
+  },
+  {
+    "id": "enpa-yolo",
+    "name": "Enpa Yolo",
+    "health": 65,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 8,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/enpa_yolo.lua"
+    },
+    "outfitId": 26
+  },
+  {
+    "id": "hibernal-moth",
+    "name": "Hibernal Moth",
+    "class": "vermin",
+    "health": 850,
+    "experience": 700,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 37,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.3,
+        "ice": 0.25
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/hibernal_moth.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 1737,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 1149
+  },
+  {
+    "id": "lacewing-moth",
+    "name": "Lacewing Moth",
+    "class": "vermin",
+    "health": 900,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 42,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": 0.3
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 380,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/lacewing_moth.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 1736,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 1148
+  },
+  {
+    "id": "rotworm",
+    "name": "Rotworm",
+    "class": "vermin",
+    "health": 65,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 8,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7176,
+        "min": 1,
+        "max": 17
+      },
+      "items": [
+        {
+          "itemId": "sword",
+          "chance": 0.03
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.045
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.2
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.2012
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.03,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "lump-of-dirt",
+          "chance": 0.1
+        },
+        {
+          "itemId": "legion-helmet",
+          "chance": 0.0189
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/rotworm.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 26,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 26
+  },
+  {
+    "id": "sandcrawler",
+    "name": "Sandcrawler",
+    "class": "vermin",
+    "health": 30,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 3
+    },
+    "armor": 2,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.07,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.33333,
+        "min": 1,
+        "max": 6
+      },
+      "items": [
+        {
+          "itemId": "sandcrawler-shell",
+          "chance": 0.02173
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/sandcrawler.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 641,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 350
+  },
+  {
+    "id": "spider",
+    "name": "Spider",
+    "class": "vermin",
+    "health": 20,
+    "experience": 12,
+    "attack": {
+      "min": 0,
+      "max": 9
+    },
+    "armor": 2,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 152,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6515,
+        "min": 1,
+        "max": 5
+      },
+      "items": [
+        {
+          "itemId": "spider-fangs",
+          "chance": 0.0096
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 6,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/spider.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 30,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 30
+  },
+  {
+    "id": "spidris-elite",
+    "name": "Spidris Elite",
+    "class": "vermin",
+    "health": 5000,
+    "experience": 4000,
+    "attack": {
+      "min": 0,
+      "max": 349
+    },
+    "armor": 55,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "fire": 0.15,
+        "ice": -0.03,
+        "holy": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.74,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 394,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-ruby",
+          "chance": 0.2328,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0112
+        },
+        {
+          "itemId": "death-ring",
+          "chance": 0.0448
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.204,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "giant-shimmering-pearl",
+          "chance": 0.0304
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.0925,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "spidris-mandible",
+          "chance": 0.2744
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.1321
+        },
+        {
+          "itemId": "calopteryx-cape",
+          "chance": 0.0128
+        },
+        {
+          "itemId": "carapace-shield",
+          "chance": 0.0117
+        },
+        {
+          "itemId": "hive-scythe",
+          "chance": 0.0139
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/vermins/spidris_elite.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 797,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 2
+    },
+    "outfitId": 457
+  }
+]

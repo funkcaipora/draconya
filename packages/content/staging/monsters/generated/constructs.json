@@ -1,0 +1,412 @@
+[
+  {
+    "id": "damaged-crystal-golem",
+    "name": "Damaged Crystal Golem",
+    "class": "construct",
+    "health": 500,
+    "experience": 0,
+    "attack": 0,
+    "armor": 30,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.86,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 268,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 500,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/damaged_crystal_golem.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 874,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 1
+    },
+    "outfitId": 508
+  },
+  {
+    "id": "enraged-crystal-golem",
+    "name": "Enraged Crystal Golem",
+    "class": "construct",
+    "health": 700,
+    "experience": 550,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.0471
+        },
+        {
+          "itemId": "glorious-axe",
+          "chance": 0.0036
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.0714
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.0827
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.0412
+        },
+        {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.0105
+        },
+        {
+          "itemId": "crystalline-spikes",
+          "chance": 0.0798
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/enraged_crystal_golem.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 873,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 508
+  },
+  {
+    "id": "eternal-guardian",
+    "name": "Eternal Guardian",
+    "class": "construct",
+    "health": 2500,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 62,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "energy": 0.1,
+        "fire": 0.7,
+        "ice": 0.1,
+        "holy": 0.2,
+        "death": 0.2
+      },
+      "immunities": [
+        "drown",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 204,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9993,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-stone",
+          "chance": 0.3023,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "guardian-halberd",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0082
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.017
+        },
+        {
+          "itemId": "ancient-stone",
+          "chance": 0.2002
+        },
+        {
+          "itemId": "shiny-stone",
+          "chance": 0.008
+        },
+        {
+          "itemId": "zaoan-sword",
+          "chance": 0.001
+        },
+        {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0186
+        },
+        {
+          "itemId": "spiked-iron-ball",
+          "chance": 0.0996
+        },
+        {
+          "itemId": "clay-lump",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "piece-of-marble-rock",
+          "chance": 0.0043
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.004
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/eternal_guardian.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 615,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 345
+  },
+  {
+    "id": "stone-golem",
+    "name": "Stone Golem",
+    "class": "construct",
+    "health": 270,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 30,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.15,
+        "fire": 0.2,
+        "ice": -0.1,
+        "death": 0.2
+      },
+      "immunities": [
+        "drown",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.64,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9,
+        "min": 1,
+        "max": 40
+      },
+      "items": [
+        {
+          "itemId": "small-stone",
+          "chance": 0.1389,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0003
+        },
+        {
+          "itemId": "power-ring",
+          "chance": 0.0507
+        },
+        {
+          "itemId": "carlin-sword",
+          "chance": 0.025
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0198
+        },
+        {
+          "itemId": "ancient-stone",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "shiny-stone",
+          "chance": 0.0076
+        },
+        {
+          "itemId": "sulphurous-stone",
+          "chance": 0.1037
+        },
+        {
+          "itemId": "piece-of-marble-rock",
+          "chance": 0.0038
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0055
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/stone_golem.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 67,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 67
+  }
+]

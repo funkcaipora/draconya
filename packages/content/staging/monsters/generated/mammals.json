@@ -1,0 +1,3176 @@
+[
+  {
+    "id": "badger",
+    "name": "Badger",
+    "class": "mammal",
+    "health": 23,
+    "experience": 5,
+    "attack": {
+      "min": 0,
+      "max": 12
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.07,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "badger-fur",
+          "chance": 0.1023
+        },
+        {
+          "itemId": "beetroot",
+          "chance": 0.4071
+        },
+        {
+          "itemId": "acorn",
+          "chance": 0.0513
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/badger.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 105,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 105
+  },
+  {
+    "id": "bat",
+    "name": "Bat",
+    "class": "mammal",
+    "health": 30,
+    "experience": 10,
+    "attack": {
+      "min": 0,
+      "max": 8
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "bat-wing",
+          "chance": 0.0122
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 3,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/bat.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 122,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 122
+  },
+  {
+    "id": "bear",
+    "name": "Bear",
+    "class": "mammal",
+    "health": 80,
+    "experience": 23,
+    "attack": {
+      "min": 0,
+      "max": 25
+    },
+    "armor": 6,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.1,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.3975,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.2,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "bear-paw",
+          "chance": 0.02
+        },
+        {
+          "itemId": "honeycomb",
+          "chance": 0.0046
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/bear.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 16,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 16
+  },
+  {
+    "id": "black-sheep",
+    "name": "Black Sheep",
+    "class": "mammal",
+    "health": 20,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.7086,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "black-wool",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/black_sheep.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 13,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 13
+  },
+  {
+    "id": "boar",
+    "name": "Boar",
+    "class": "mammal",
+    "health": 198,
+    "experience": 60,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 10,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 410,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.25,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "haunch-of-boar",
+          "chance": 0.2,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/boar.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 693,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 380
+  },
+  {
+    "id": "brown-horse",
+    "name": "Horse",
+    "class": "mammal",
+    "health": 75,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 248,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 75,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/brown_horse.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 752,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 1
+    },
+    "outfitId": 436
+  },
+  {
+    "id": "cat",
+    "name": "Cat",
+    "class": "mammal",
+    "health": 20,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 124,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 8,
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/cat.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 387,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 276
+  },
+  {
+    "id": "cave-rat",
+    "name": "Cave Rat",
+    "class": "mammal",
+    "health": 30,
+    "experience": 10,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.85,
+        "min": 1,
+        "max": 2
+      },
+      "items": [
+        {
+          "itemId": "cookie",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "cheese",
+          "chance": 0.3
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.097,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 3,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/cave_rat.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 56,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 56
+  },
+  {
+    "id": "deer",
+    "name": "Deer",
+    "class": "mammal",
+    "health": 25,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 196,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.8,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.5,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "antlers",
+          "chance": 0.0087
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/deer.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 31,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 31
+  },
+  {
+    "id": "dog",
+    "name": "Dog",
+    "class": "mammal",
+    "health": 20,
+    "experience": 0,
+    "attack": 0,
+    "armor": 5,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 124,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 8,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/dog.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 32,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 32
+  },
+  {
+    "id": "donkey",
+    "name": "Donkey",
+    "health": 45,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 2,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.2,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/donkey.lua"
+    },
+    "outfitId": 387
+  },
+  {
+    "id": "elephant",
+    "name": "Elephant",
+    "class": "mammal",
+    "health": 320,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 20,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.25,
+        "energy": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.39,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.3,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "tusk",
+          "chance": 0.01,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.0014
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/elephant.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 211,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 211
+  },
+  {
+    "id": "enraged-squirrel",
+    "name": "Enraged Squirrel",
+    "health": 35,
+    "experience": 15,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 300,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "walnut",
+          "chance": 0.0268
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/enraged_squirrel.lua"
+    },
+    "outfitId": 274
+  },
+  {
+    "id": "fox",
+    "name": "Fox",
+    "class": "mammal",
+    "health": 22,
+    "experience": 15,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.05,
+        "fire": -0.05,
+        "holy": 0.3
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.4932
+        },
+        {
+          "itemId": "fox-paw",
+          "chance": 0.0135
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/fox.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 1548,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1029
+  },
+  {
+    "id": "ghost-wolf",
+    "name": "Ghost Wolf",
+    "class": "undead",
+    "health": 160,
+    "experience": 65,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 12,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.35,
+        "earth": 0.1,
+        "fire": -0.05,
+        "holy": -0.05,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 270,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.65,
+        "min": 1,
+        "max": 20
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/ghost_wolf.lua"
+    },
+    "bestiary": {
+      "class": "undead",
+      "race": "undead",
+      "raceId": 1148,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 2
+    },
+    "outfitId": 730
+  },
+  {
+    "id": "giant-beaver",
+    "name": "Giant Beaver",
+    "health": 5290,
+    "experience": 0,
+    "attack": 0,
+    "armor": 120,
+    "defense": 110,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "manadrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 364,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/giant_beaver.lua"
+    },
+    "outfitId": 1536
+  },
+  {
+    "id": "gloom-wolf",
+    "name": "Gloom Wolf",
+    "class": "mammal",
+    "health": 200,
+    "experience": 70,
+    "attack": {
+      "min": 0,
+      "max": 92
+    },
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "fire": -0.05,
+        "ice": -0.05,
+        "holy": -0.05,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.65,
+        "min": 1,
+        "max": 48
+      },
+      "items": [
+        {
+          "itemId": "ham",
+          "chance": 0.2012
+        },
+        {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.02
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.55,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "gloom-wolf-fur",
+          "chance": 0.08
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 8,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/gloom_wolf.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 1139,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 1
+    },
+    "outfitId": 716
+  },
+  {
+    "id": "gnarlhound",
+    "name": "Gnarlhound",
+    "class": "mammal",
+    "health": 198,
+    "experience": 60,
+    "attack": {
+      "min": 0,
+      "max": 70
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 410,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.48,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.39075,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.333,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "shaggy-tail",
+          "chance": 0.2555
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/gnarlhound.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 630,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 341
+  },
+  {
+    "id": "grey-horse",
+    "name": "Horse",
+    "class": "mammal",
+    "health": 75,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 248,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 75,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/grey_horse.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 751,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 2
+    },
+    "outfitId": 434
+  },
+  {
+    "id": "horse",
+    "name": "Horse",
+    "class": "mammal",
+    "health": 75,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 248,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 75,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/horse.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 750,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 1
+    },
+    "outfitId": 435
+  },
+  {
+    "id": "husky",
+    "name": "Husky",
+    "class": "mammal",
+    "health": 140,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.13,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 264,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/husky.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 325,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 1
+    },
+    "outfitId": 258
+  },
+  {
+    "id": "hyaena",
+    "name": "Hyaena",
+    "class": "mammal",
+    "health": 60,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 1,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.13,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 196,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.3086,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.5013,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/hyaena.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 94,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 94
+  },
+  {
+    "id": "lion",
+    "name": "Lion",
+    "class": "mammal",
+    "health": 80,
+    "experience": 30,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "ice": -0.15,
+        "holy": 0.2,
+        "death": -0.08
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.45,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.1843,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "lions-mane",
+          "chance": 0.014
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/lion.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 41,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 41
+  },
+  {
+    "id": "mammoth",
+    "name": "Mammoth",
+    "class": "mammal",
+    "health": 320,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 20,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9,
+        "min": 1,
+        "max": 40
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.39
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.3,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.005
+        },
+        {
+          "itemId": "mammoth-whopper",
+          "chance": 0.028
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.005
+        },
+        {
+          "itemId": "thick-fur",
+          "chance": 0.0728
+        },
+        {
+          "itemId": "mammoth-tusk",
+          "chance": 0.075,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/mammoth.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 260,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 199
+  },
+  {
+    "id": "modified-gnarlhound",
+    "name": "Modified Gnarlhound",
+    "class": "mammal",
+    "health": 1500,
+    "experience": 0,
+    "attack": 0,
+    "armor": 200,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.9,
+        "energy": 0.9,
+        "fire": 0.9,
+        "ice": 0.9
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "holy"
+      ]
+    },
+    "defenseMitigation": 4.26,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 450,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/modified_gnarlhound.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 877,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 1
+    },
+    "outfitId": 515
+  },
+  {
+    "id": "mole",
+    "name": "Mole",
+    "class": "mammal",
+    "health": 200,
+    "experience": 100,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 20,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": 0.1,
+        "earth": 0.4,
+        "fire": -0.1,
+        "holy": -0.1,
+        "death": 0.4
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.64,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.1,
+        "min": 1,
+        "max": 78
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/mole.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 1570,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 1048
+  },
+  {
+    "id": "mushroom-sniffer",
+    "name": "Mushroom Sniffer",
+    "class": "mammal",
+    "health": 250,
+    "experience": 0,
+    "attack": 0,
+    "armor": 20,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.9,
+        "energy": 0.9,
+        "earth": 0.9,
+        "fire": 0.9,
+        "ice": 0.9,
+        "holy": 0.9,
+        "death": 0.9
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.64,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 110,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/mushroom_sniffer.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 870,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 60
+  },
+  {
+    "id": "panda",
+    "name": "Panda",
+    "class": "mammal",
+    "health": 80,
+    "experience": 23,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 8,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.2,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.705,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.39,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "bamboo-stick",
+          "chance": 0.1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/panda.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 123,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 123
+  },
+  {
+    "id": "pig",
+    "name": "Pig",
+    "class": "mammal",
+    "health": 25,
+    "experience": 0,
+    "attack": 0,
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 114,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.64,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "pig-foot",
+          "chance": 0.0095
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/pig.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 60,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 60
+  },
+  {
+    "id": "polar-bear",
+    "name": "Polar Bear",
+    "class": "mammal",
+    "health": 85,
+    "experience": 28,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "fire": 0.1,
+        "ice": 0.2,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.505,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.5032,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "polar-bear-paw",
+          "chance": 0.0098
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 5,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/polar_bear.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 42,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 42
+  },
+  {
+    "id": "poodle",
+    "name": "Poodle",
+    "health": 20,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 8,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/poodle.lua"
+    },
+    "outfitId": 473
+  },
+  {
+    "id": "rabbit",
+    "name": "Rabbit",
+    "class": "mammal",
+    "health": 15,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.8562,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "carrot",
+          "chance": 0.1,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/rabbit.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 74,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 74
+  },
+  {
+    "id": "rat",
+    "name": "Rat",
+    "class": "mammal",
+    "health": 20,
+    "experience": 5,
+    "attack": {
+      "min": 0,
+      "max": 8
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "ice": -0.1,
+        "holy": 0.2,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.07,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 134,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 4
+      },
+      "items": [
+        {
+          "itemId": "cheese",
+          "chance": 0.3941
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 5,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/rat.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 21,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 21
+  },
+  {
+    "id": "roaring-lion",
+    "name": "Roaring Lion",
+    "class": "mammal",
+    "health": 1000,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 140
+    },
+    "armor": 28,
+    "defense": 28,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "fire": 0.2,
+        "ice": -0.1,
+        "holy": 0.5
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 114
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.25
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.25
+        },
+        {
+          "itemId": "lions-mane",
+          "chance": 0.16666
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.07692
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.07142
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.05555
+        },
+        {
+          "itemId": "ankh",
+          "chance": 0.01612
+        },
+        {
+          "itemId": "might-ring",
+          "chance": 0.01204
+        },
+        {
+          "itemId": "crown-helmet",
+          "chance": 0.0101
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/roaring_lion.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 981,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 570
+  },
+  {
+    "id": "sheep",
+    "name": "Sheep",
+    "class": "mammal",
+    "health": 20,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.7,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "wool",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/sheep.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 14,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 14
+  },
+  {
+    "id": "silver-rabbit",
+    "name": "Silver Rabbit",
+    "class": "mammal",
+    "health": 15,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 184,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.8617,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "carrot",
+          "chance": 0.1115
+        },
+        {
+          "itemId": "silky-fur",
+          "chance": 0.2867
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.7,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/silver_rabbit.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 327,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 262
+  },
+  {
+    "id": "squirrel",
+    "name": "Squirrel",
+    "class": "mammal",
+    "health": 20,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "walnut",
+          "chance": 0.0114
+        },
+        {
+          "itemId": "peanut",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "acorn",
+          "chance": 0.5041
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/squirrel.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 384,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 274
+  },
+  {
+    "id": "war-wolf",
+    "name": "War Wolf",
+    "class": "mammal",
+    "health": 140,
+    "experience": 55,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 8,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "ice": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 264,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "ham",
+          "chance": 0.35,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "warwolf-fur",
+          "chance": 0.0523
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/war_wolf.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 3,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 3
+  },
+  {
+    "id": "water-buffalo",
+    "name": "Water Buffalo",
+    "class": "mammal",
+    "health": 390,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 35,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.336,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.392,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/water_buffalo.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 872,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 30,
+      "stars": 2,
+      "occurrence": 3
+    },
+    "outfitId": 523
+  },
+  {
+    "id": "white-deer",
+    "name": "White Deer",
+    "class": "mammal",
+    "health": 195,
+    "experience": 0,
+    "attack": 0,
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 208,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 195,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/white_deer.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 720,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 2
+    },
+    "outfitId": 400
+  },
+  {
+    "id": "wild-dog",
+    "name": "Wild Dog",
+    "health": 20,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 1,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/wild_dog.lua"
+    },
+    "outfitId": 32
+  },
+  {
+    "id": "wild-horse",
+    "name": "Wild Horse",
+    "class": "mammal",
+    "health": 75,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 248,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 75,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/wild_horse.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 730,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 10,
+      "stars": 1,
+      "occurrence": 3
+    },
+    "outfitId": 393
+  },
+  {
+    "id": "winter-wolf",
+    "name": "Winter Wolf",
+    "class": "mammal",
+    "health": 30,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "fire": 0.1,
+        "ice": 0.2,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.3,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "winter-wolf-fur",
+          "chance": 0.1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/winter_wolf.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 52,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 52
+  },
+  {
+    "id": "wolf",
+    "name": "Wolf",
+    "class": "mammal",
+    "health": 25,
+    "experience": 18,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.1,
+        "holy": 0.3,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 164,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.55,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "wolf-paw",
+          "chance": 0.0098
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 8,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/wolf.lua"
+    },
+    "bestiary": {
+      "class": "mammal",
+      "race": "mammal",
+      "raceId": 27,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 27
+  }
+]

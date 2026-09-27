@@ -1,0 +1,77 @@
+[
+  {
+    "id": "bane-bringer",
+    "name": "Bane Bringer",
+    "class": "plant",
+    "health": 2500,
+    "experience": 400,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 17,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "energy": 0.9,
+        "earth": 0.9,
+        "fire": 0.9,
+        "ice": 0.9,
+        "holy": 0.9,
+        "death": 0.9
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "wooden-trash",
+          "chance": 0.1522,
+          "min": 1,
+          "max": 96
+        },
+        {
+          "itemId": "dry-piece-of-wood",
+          "chance": 1
+        }
+      ]
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/bane_bringer.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 679,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 310
+  }
+]

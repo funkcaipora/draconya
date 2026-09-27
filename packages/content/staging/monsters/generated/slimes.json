@@ -1,0 +1,75 @@
+[
+  {
+    "id": "midnight-spawn",
+    "name": "Midnight Spawn",
+    "class": "slime",
+    "health": 2000,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 40,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.1,
+        "earth": 0.8,
+        "fire": 0.3,
+        "ice": -0.1,
+        "holy": 0.3,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "midnight-shard",
+          "chance": 0.08333
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/slimes/midnight_spawn.lua"
+    },
+    "bestiary": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 584,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 315
+  }
+]

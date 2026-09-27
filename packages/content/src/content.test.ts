@@ -102,7 +102,9 @@ describe('classe do monstro (SV-20, #356)', () => {
   });
 
   it('monstro com classe fora do vocabulário fechado é rejeitado', () => {
-    const classeInvalida = { ...rat, class: 'reptile' };
+    // `reptile` era o exemplo daqui até o #578 trazer as 20 classes do Canary; `inkborn` é uma
+    // raça real do enum do Canary (`BESTY_RACE_INKBORN`) sem classe de Bestiário correspondente.
+    const classeInvalida = { ...rat, class: 'inkborn' };
     expect(() => buildContent(base({ monsters: [classeInvalida] }))).toThrow(ContentError);
   });
 });

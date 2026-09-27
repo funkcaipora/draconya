@@ -22,8 +22,8 @@ import type { CatalogImportContext, CatalogType } from './registry.js';
 import { getCatalogType, listCatalogTypes } from './registry.js';
 
 // Importar aqui (só pelo efeito colateral de `registerCatalogType`) é como um `<tipo>` novo
-// entra no comando — #573 em diante acrescenta uma linha como esta. Nenhuma hoje: #572 é a
-// infraestrutura, o registro fica para quem a usa.
+// entra no comando — uma linha por tipo.
+import './monsters.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -55,6 +55,7 @@ export function runImport(type: CatalogType, ctx: CatalogImportContext, repoRoot
     source: { engine: 'canary', commit: ctx.canaryCommit },
     slices: counts,
     skipped: result.skipped,
+    ...(result.notes === undefined ? {} : { notes: result.notes }),
   });
   return { type: type.id, slices: counts, skippedCount: result.skipped.length };
 }

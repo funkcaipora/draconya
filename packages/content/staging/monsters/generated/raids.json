@@ -1,0 +1,526 @@
+[
+  {
+    "id": "fleabringer",
+    "name": "Fleabringer",
+    "health": 265,
+    "experience": 100,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.25,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.75,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "shaggy-tail",
+          "chance": 0.9999
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/fleabringer.lua"
+    },
+    "outfitId": 341
+  },
+  {
+    "id": "foreman-kneebiter",
+    "name": "Foreman Kneebiter",
+    "health": 570,
+    "experience": 445,
+    "attack": {
+      "min": 60,
+      "max": 200
+    },
+    "armor": 15,
+    "defense": 22,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.9,
+        "fire": -0.05,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "iron-ore",
+          "chance": 0.025,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.06666
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/foreman_kneebiter.lua"
+    },
+    "outfitId": 70
+  },
+  {
+    "id": "giant-spider-wyda",
+    "name": "Giant Spider",
+    "health": 20,
+    "experience": 12,
+    "attack": {
+      "min": 0,
+      "max": 9
+    },
+    "armor": 2,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6515,
+        "min": 1,
+        "max": 5
+      },
+      "items": [
+        {
+          "itemId": "spider-fangs",
+          "chance": 0.0096
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 20,
+      "damage": 0,
+      "random": 10
+    },
+    "runOnHealth": 6,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/giant_spider_wyda.lua"
+    },
+    "outfitId": 38
+  },
+  {
+    "id": "orc-sambackpack",
+    "name": "Orc",
+    "health": 70,
+    "experience": 25,
+    "attack": {
+      "min": 0,
+      "max": 35
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8481,
+        "min": 1,
+        "max": 14
+      },
+      "items": [
+        {
+          "itemId": "old-and-used-backpack",
+          "chance": 1
+        },
+        {
+          "itemId": "sabre",
+          "chance": 0.0585
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.0496
+        },
+        {
+          "itemId": "studded-helmet",
+          "chance": 0.0295
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0786
+        },
+        {
+          "itemId": "studded-shield",
+          "chance": 0.073
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.1016
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.0059
+        },
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/orc_sambackpack.lua"
+    },
+    "outfitId": 5
+  },
+  {
+    "id": "rottie-the-rotworm",
+    "name": "Rottie the Rotworm",
+    "health": 65,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 60
+    },
+    "armor": 8,
+    "defense": 11,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.38,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.0623,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "copper-shield",
+          "chance": 0.0285
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.0326,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.325,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.03335
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.0316,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.03335
+        },
+        {
+          "itemId": "katana",
+          "chance": 0.009
+        },
+        {
+          "itemId": "legion-helmet",
+          "chance": 0.0125
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/rottie_the_rotworm.lua"
+    },
+    "outfitId": 26
+  },
+  {
+    "id": "rotworm-queen",
+    "name": "Rotworm Queen",
+    "health": 105,
+    "experience": 75,
+    "attack": {
+      "min": 5,
+      "max": 80
+    },
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.4,
+        "fire": -0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.58,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 126,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 47
+      },
+      "items": [
+        {
+          "itemId": "gland",
+          "chance": 0.03333
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.2,
+          "min": 1,
+          "max": 45
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/rotworm_queen.lua"
+    },
+    "outfitId": 295
+  },
+  {
+    "id": "zomba",
+    "name": "Zomba",
+    "health": 300,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 6,
+    "defense": 13,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.4,
+        "ice": -0.15,
+        "holy": 0.2,
+        "death": -0.08
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.4,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 25
+      },
+      "items": [
+        {
+          "itemId": "lions-mane",
+          "chance": 1,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.125
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/zomba.lua"
+    },
+    "outfitId": 570
+  }
+]

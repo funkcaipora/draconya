@@ -1,0 +1,411 @@
+[
+  {
+    "id": "azure-frog",
+    "name": "Azure Frog",
+    "class": "amphibic",
+    "health": 60,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 24
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7423,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "worm",
+          "chance": 0.0924
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/azure_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 268,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 226
+  },
+  {
+    "id": "bog-frog",
+    "name": "Bog Frog",
+    "class": "amphibic",
+    "health": 25,
+    "experience": 0,
+    "attack": 0,
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/bog_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 738,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 412
+  },
+  {
+    "id": "coral-frog",
+    "name": "Coral Frog",
+    "class": "amphibic",
+    "health": 60,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 24
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7559,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "worm",
+          "chance": 0.1131
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/coral_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 269,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 226
+  },
+  {
+    "id": "crimson-frog",
+    "name": "Crimson Frog",
+    "class": "amphibic",
+    "health": 60,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 24
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.76,
+        "min": 1,
+        "max": 11
+      },
+      "items": [
+        {
+          "itemId": "worm",
+          "chance": 0.1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/crimson_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 270,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 226
+  },
+  {
+    "id": "green-frog",
+    "name": "Green Frog",
+    "class": "amphibic",
+    "health": 25,
+    "experience": 0,
+    "attack": 0,
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 6,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/green_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 267,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 224
+  },
+  {
+    "id": "orchid-frog",
+    "name": "Orchid Frog",
+    "class": "amphibic",
+    "health": 60,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 24
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7323,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "worm",
+          "chance": 0.08
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/orchid_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 271,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 226
+  }
+]

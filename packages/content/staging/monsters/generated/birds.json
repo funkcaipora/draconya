@@ -1,0 +1,703 @@
+[
+  {
+    "id": "agressive-chicken",
+    "name": "Agressive Chicken",
+    "health": 15000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 128,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.0212,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "egg",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.1,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "chicken-feather",
+          "chance": 0.2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/agressive_chicken.lua"
+    },
+    "outfitId": 111
+  },
+  {
+    "id": "cave-parrot",
+    "name": "Cave Parrot",
+    "class": "bird",
+    "health": 30,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 2,
+    "defense": 6,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/cave_parrot.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 1307,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 217
+  },
+  {
+    "id": "chicken",
+    "name": "Chicken",
+    "class": "bird",
+    "health": 15,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 128,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.0212,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "egg",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.1,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "chicken-feather",
+          "chance": 0.2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/chicken.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 111,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 111
+  },
+  {
+    "id": "flamingo",
+    "name": "Flamingo",
+    "class": "bird",
+    "health": 25,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 168,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "downy-feather",
+          "chance": 0.0118
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/flamingo.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 212,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 212
+  },
+  {
+    "id": "parrot",
+    "name": "Parrot",
+    "class": "bird",
+    "health": 25,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/parrot.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 217,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 217
+  },
+  {
+    "id": "penguin",
+    "name": "Penguin",
+    "class": "bird",
+    "health": 33,
+    "experience": 1,
+    "attack": {
+      "min": 0,
+      "max": 3
+    },
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.07,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.0783,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "rainbow-trout",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "green-perch",
+          "chance": 0.0013
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 32,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/penguin.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 318,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 250
+  },
+  {
+    "id": "pigeon",
+    "name": "Pigeon",
+    "class": "bird",
+    "health": 30,
+    "experience": 0,
+    "attack": 0,
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 130,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/pigeon.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 915,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 1
+    },
+    "outfitId": 531
+  },
+  {
+    "id": "seagull",
+    "name": "Seagull",
+    "class": "bird",
+    "health": 25,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 3
+    },
+    "armor": 2,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.15,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 11,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/seagull.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 264,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 223
+  },
+  {
+    "id": "tame-terror-bird",
+    "name": "Tame Terror Bird",
+    "health": 300,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 13,
+    "defense": 13,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.54,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 212,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.4855,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.0954,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/tame_terror_bird.lua"
+    },
+    "outfitId": 218
+  },
+  {
+    "id": "terror-bird",
+    "name": "Terror Bird",
+    "class": "bird",
+    "health": 300,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 13,
+    "defense": 13,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": -0.1,
+        "ice": 0.2,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.54,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 212,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8243,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.4855,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "terrorbird-beak",
+          "chance": 0.1031
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.0954,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "colourful-feather",
+          "chance": 0.0309
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0069
+        },
+        {
+          "itemId": "seeds",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "feather-headdress",
+          "chance": 0.001
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/terror_bird.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 218,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 218
+  }
+]

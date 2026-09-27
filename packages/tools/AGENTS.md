@@ -16,8 +16,16 @@ generated/*.json`, nunca `packages/tools`. `scripts/catalog/xml.ts` (XML → ár
 MIT, JS puro, sem binário nativo, ADR 0013) e `enums.ts` (enum C++ → `Map<string, number>`, para
 resolver `COMBAT_*`/`BESTY_RACE_*`/`CONST_ME_*`) são as três peças que um importador de `<tipo>`
 novo usa; `registry.ts` é onde ele se registra (`registerCatalogType`) para o comando aceitar o
-nome. Nenhum `<tipo>` está registrado ainda nesta issue (#572) — é infraestrutura pura, os
-importadores de verdade (itens em #573, monstros em M35) entram depois. Limite de licença sem
+nome. O primeiro `<tipo>` registrado é `monsters` (#578, `scripts/catalog/monsters.ts`): lê
+`data-otservbr-global/monster/**/*.lua` (sem `familiars/`, `trainers/`, `traps/`) e escreve em
+`packages/content/staging/monsters/generated/` — **não** em `data/monsters/generated/`, porque o
+monstro gerado ainda não passa no boot (loot por slug de item sem o catálogo do #573, e sem linha na
+tabela de aparências); a primeira importação para `data/` é o #580. Monstro com ataque além do
+`melee` simples, magia de defesa ou invocação fica fora até o mapeamento de ataques (#579), e vai
+para `docs/reference/catalog/monsters-report.md` com o motivo; o que foi lido e não coube (moeda
+extra, fraqueza abaixo de −100 %, campo ignorado) vai para a seção "Notas" do mesmo relatório.
+A velocidade é a do TFS quando `FORGOTTENSERVER_DIR` tem o mesmo monstro, senão Canary × 2 (ADR
+0037 d.4) — sem o checkout do TFS, todo monstro cai no × 2, e a nota do relatório diz isso. Limite de licença sem
 exceção (ADR 0019/0038): o que sai do Canary é NÚMERO e FATO, nunca uma linha de Lua ou C++
 reproduzida — `lua-table.ts` só AVALIA expressão literal, nunca executa Lua de verdade.
 
