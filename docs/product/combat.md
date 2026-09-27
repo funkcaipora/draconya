@@ -852,10 +852,13 @@ manaLoss)` com só três argumentos (`game.cpp:9176`), e `checkDefense`/`checkAr
 verdade. Nenhuma carga de `blockCount` é gasta nesse caso — o Canary só decrementa o contador
 dentro do `checkDefense || checkArmor`, e os dois são falsos para manadrain.
 
-O treino de shielding (`#applyMonsterHit`, `hunt.ts`) segue a MESMA origem sob `combat-v3` —
-`blockable.shield`, não `combat.defense.blockTypes` — para não destreinar (ou treinar por
-engano) o dia em que o catálogo tiver uma ability corpo a corpo elemental (achado da revisão do
-PR #642; hoje nenhuma tem, então as duas regras ainda concordam por coincidência do catálogo).
+O treino de shielding (`#applyMonsterHit`, `hunt.ts`) sob `combat-v3` não olha
+`combat.defense.blockTypes`: desde o #686 ele segue o TIPO de bloqueio que este estágio devolve
+(`blockType`/`hadBlockCharge`) — só treina quando o golpe recebido foi bloqueado por defesa ou
+armadura, com carga, e com escudo na mão (`Player::onBlockHit`). O #548 tinha posto aqui a
+elegibilidade por origem (`blockable.shield`, achado da revisão do PR #642); o tipo de bloqueio a
+substitui e já herda a origem, porque só há `defense`/`armor` onde a origem permite. Ver
+[`progression.md`](./progression.md#no-combat-v3-o-try-depende-do-tipo-de-bloqueio-686).
 
 **`combat.armorEffectiveness` fica INERTE sob `combat-v3`.** O passo 4 (armadura) não olha mais
 `armorEffectiveness[damageType]` — a coluna que o `combat-v1`/`v2` usa para decidir SE a
@@ -1100,6 +1103,12 @@ Quatro coisas que a estrutura garante, e não a inspeção:
 - **A prática é uma só por golpe, e não depende do dano final.** Imunidade, resistência alta,
   bloqueio (CMB-04) ou alvo que morre no impacto não impedem a prática — ela sai do gatilho da
   skill da família (`melee-hit`, `distance-hit`, `spell-cast`), nunca de um `if` por nome.
+  **No `combat-v3` (#686) isto mudou:** quantos tries o golpe rende vem do tipo de bloqueio que
+  `resolveBlockHit` devolve (`blockType`/`hadBlockCharge` no `DamageOutcome`) — corpo a corpo 1
+  ou 0 (imune, ou bloqueado depois de 30 seguidos sem tirar sangue), distância 2/1/0 e o tiro
+  errado herdando o estado do anterior, e shielding só quando o golpe recebido foi bloqueado com
+  escudo na mão. A regra está em `combat/attack-practice.ts` e a tabela em
+  [`progression.md`](./progression.md#no-combat-v3-o-try-depende-do-tipo-de-bloqueio-686).
 
 O perfil é indexado no boot, junto das famílias e das skills: nenhuma varredura de catálogo por
 golpe. O `Item.weapon` compilado carrega família, tipo, alcance e fórmula, e é o que o ruleset lê.

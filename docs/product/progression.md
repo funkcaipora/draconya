@@ -330,7 +330,7 @@ todos **conteúdo**, em `packages/content/data/skills/`.
 | Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
 | Distância | cada tiro de arma de distância (#152) | multiplica o poder do tiro |
 | Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
-| Escudo | cada ataque físico elegível recebido (CMB-04) | multiplica a defesa do escudo ou da arma de uma mão |
+| Escudo | cada ataque físico elegível recebido (CMB-04); no `combat-v3`, só o bloqueado com escudo (#686) | multiplica a defesa do escudo ou da arma de uma mão |
 
 **Shielding sobe por bloqueio, não por ser atacado.** A prática é do evento elegível — o
 defensor tem escudo ou arma de uma mão e o ataque é de um tipo aprovado —, e não depende de o
@@ -338,6 +338,35 @@ bloqueio ter acontecido nem de quanto HP foi perdido: um bloqueio total ainda tr
 ataque elemental não treina. O rato parado, sem atacar, também não move a skill (não é por
 tick). A fórmula e a posição do sorteio estão em
 [`combat.md`](./combat.md) e na emenda do ADR 0031.
+
+### No `combat-v3`, o try depende do tipo de bloqueio (#686)
+
+Com o perfil `combat-v3` (ADR 0040), as três práticas acima seguem a regra do Canary
+(`combat/attack-practice.ts`). O alvo devolve o **tipo de bloqueio** do golpe
+(`resolveBlockHit`, antes da mitigação percentual): `none` (tirou sangue), `defense` (a defesa
+zerou), `armor` (a armadura zerou) ou `immunity`. O personagem guarda quatro campos em
+`CharacterRuntime.attackPractice`, zerados a cada sessão e nunca salvos no banco (só no snapshot
+quente, omitidos quando iniciais):
+
+| Evento | Efeito |
+|---|---|
+| golpe `none` | treina; `bloodHitCount` e `shieldBlockCount` voltam a 30 |
+| golpe `defense`/`armor` | treina só se `bloodHitCount > 0`, e gasta um — 30 bloqueados seguidos no máximo |
+| golpe `immunity` | não treina; contadores intactos |
+
+| Skill | Tries por golpe no `combat-v3` |
+|---|---|
+| Corpo a Corpo (e punho) | 1 se o golpe treina e não foi imune, senão 0 |
+| Distância | 2 no tiro limpo, 1 no bloqueado, 0 no imune ou sem sangue; o tiro **errado** usa o estado do tiro anterior |
+| Escudo | 1 quando o golpe RECEBIDO foi bloqueado (`defense`/`armor`) com carga de `blockCount`, `shieldBlockCount > 0` e **escudo** na mão — arma de uma mão não treina; o contador cai mesmo sem escudo |
+
+Magia, runa e wand também passam pelo tipo do alvo: um acerto limpo recarrega os contadores, mas
+não rende try de arma (a wand continua praticando magia por mana). Com secundário, a última
+chamada vence (o secundário). O primeiro golpe da sessão que for bloqueado, e o primeiro tiro
+errado, rendem 0 — nada nasce carregado. `30` e `2/1/0` são constantes do `sim`
+(`BLOOD_HIT_RECHARGE`, `distanceTries`), não conteúdo. `combat-v1`/`v2` seguem a regra de
+cima, bit a bit. O tique de condição do próprio personagem ainda não recarrega os contadores
+(no Canary ele passa pelo `blockHit`): fica para issue própria.
 
 ### O ritmo de cada skill é por VOCAÇÃO (#521, ADR 0037)
 
