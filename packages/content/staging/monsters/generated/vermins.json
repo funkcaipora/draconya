@@ -138,7 +138,8 @@
           "min": 0,
           "max": 600
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthstrike",
@@ -152,6 +153,7 @@
           "max": 650
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -173,6 +175,7 @@
           "max": 800
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "impactKey": "groundshaker"
         }
@@ -374,6 +377,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -404,6 +408,7 @@
           "max": 610
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "hitbypoison"
@@ -426,6 +431,7 @@
           "max": 750
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbypoison"
         }
@@ -835,7 +841,8 @@
           "min": 0,
           "max": 600
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "holyball",
@@ -854,6 +861,7 @@
           "max": 700
         },
         "damageType": "holy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "holy",
           "impactKey": "holydamage"
@@ -876,6 +884,7 @@
           "max": 650
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "blue-energy-spark"
         }
@@ -892,6 +901,7 @@
           "max": 850
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "missileKey": "ice"
         }
@@ -999,6 +1009,7 @@
           "max": 45
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -1188,6 +1199,7 @@
           "max": 228
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -1213,6 +1225,7 @@
           "max": 180
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "smallearth"
         }
@@ -1393,6 +1406,7 @@
           "max": 250
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -1446,6 +1460,7 @@
           "max": 100
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "missileKey": "ice",
           "impactKey": "icearea"
@@ -1642,7 +1657,8 @@
           "min": 0,
           "max": 300
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthwave",
@@ -1651,8 +1667,15 @@
         "target": {
           "range": 7,
           "area": {
-            "shape": "wave",
-            "length": 6
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              5,
+              5,
+              7,
+              7
+            ]
           }
         },
         "power": {
@@ -1660,6 +1683,7 @@
           "max": 300
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poisonarea"
         }
@@ -1671,8 +1695,12 @@
         "target": {
           "range": 3,
           "area": {
-            "shape": "wave",
-            "length": 3
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3
+            ]
           }
         },
         "power": {
@@ -1680,6 +1708,7 @@
           "max": 400
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poisonarea"
         }
@@ -1831,6 +1860,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -1851,8 +1881,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": 0,
@@ -1878,8 +1917,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -1887,6 +1935,7 @@
           "max": 300
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbypoison"
         }
@@ -1908,6 +1957,7 @@
           "max": 150
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poisonarea"
         }
@@ -2021,6 +2071,7 @@
           "max": 4
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -2046,6 +2097,7 @@
           "max": 12
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -2221,6 +2273,7 @@
           "max": 450
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -2251,6 +2304,7 @@
           "max": 0
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "poisonarea"
@@ -2273,6 +2327,7 @@
           "max": 150
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poisonarea"
         }
@@ -2458,6 +2513,7 @@
           "max": 400
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -2474,6 +2530,7 @@
           "max": 800
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energy",
           "impactKey": "energyarea"
@@ -2496,6 +2553,7 @@
           "max": 700
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "impactKey": "energyarea"
         }
@@ -2507,8 +2565,14 @@
         "target": {
           "range": 5,
           "area": {
-            "shape": "beam",
-            "length": 5
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -2516,6 +2580,7 @@
           "max": 560
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "green-rings"
         }
@@ -2655,6 +2720,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -2720,6 +2786,7 @@
           "max": 70
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -2895,6 +2962,7 @@
           "max": 10
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -2920,6 +2988,7 @@
           "max": 15
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -3021,6 +3090,7 @@
           "max": 74
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -3140,6 +3210,7 @@
           "max": 163
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -3302,7 +3373,8 @@
           "min": 0,
           "max": 315
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "physicalball",
@@ -3321,6 +3393,7 @@
           "max": 500
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "explosion",
           "impactKey": "explosionhit"
@@ -3470,7 +3543,8 @@
           "min": 0,
           "max": 4
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthstrike",
@@ -3484,6 +3558,7 @@
           "max": 20
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -3500,6 +3575,7 @@
           "max": 20
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -3594,6 +3670,7 @@
           "max": 35
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -3751,7 +3828,8 @@
           "min": 0,
           "max": 600
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "deathstrike",
@@ -3765,6 +3843,7 @@
           "max": 760
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "missileKey": "suddendeath",
           "impactKey": "mortarea"
@@ -3787,6 +3866,7 @@
           "max": 780
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "explosionhit"
         }
@@ -3808,6 +3888,7 @@
           "max": 700
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire",
           "impactKey": "explosionhit"
@@ -3885,6 +3966,7 @@
           "max": 77
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -3910,6 +3992,7 @@
           "max": 70
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -3979,6 +4062,7 @@
           "max": 100
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -4068,6 +4152,7 @@
           "max": 20
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -4281,6 +4366,7 @@
           "max": 160
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -4306,6 +4392,7 @@
           "max": 80
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -4466,6 +4553,7 @@
           "max": 50
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -4569,7 +4657,8 @@
           "min": 0,
           "max": 44
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthstrike",
@@ -4583,6 +4672,7 @@
           "max": 40
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -4800,7 +4890,8 @@
           "min": 0,
           "max": 298
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthball",
@@ -4819,6 +4910,7 @@
           "max": 310
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "green-rings"
@@ -5118,6 +5210,7 @@
           "max": 150
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -5148,6 +5241,7 @@
           "max": 160
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "poisonarea"
@@ -5298,6 +5392,7 @@
           "max": 102
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -5323,6 +5418,7 @@
           "max": 110
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -5421,7 +5517,8 @@
           "min": 0,
           "max": 99
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "drownstrike",
@@ -5435,6 +5532,7 @@
           "max": 100
         },
         "damageType": "drown",
+        "kind": "combat",
         "presentation": {
           "missileKey": "spear",
           "impactKey": "loseenergy"
@@ -5538,6 +5636,7 @@
           "max": 90
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -5568,6 +5667,7 @@
           "max": 0
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "carniphila"
@@ -5690,7 +5790,8 @@
           "min": 0,
           "max": 100
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthstrike",
@@ -5704,6 +5805,7 @@
           "max": 16
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -5870,7 +5972,8 @@
           "min": 0,
           "max": 400
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "icebeam",
@@ -5879,8 +5982,14 @@
         "target": {
           "range": 5,
           "area": {
-            "shape": "beam",
-            "length": 5
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -5888,6 +5997,7 @@
           "max": 650
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "iceattack"
         }
@@ -5909,6 +6019,7 @@
           "max": 700
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "missileKey": "ice",
           "impactKey": "icearea"
@@ -5926,6 +6037,7 @@
           "max": 950
         },
         "damageType": "holy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "holy",
           "impactKey": "holyarea"
@@ -6124,7 +6236,8 @@
           "min": 0,
           "max": 400
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "iceball",
@@ -6143,6 +6256,7 @@
           "max": 750
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "missileKey": "ice",
           "impactKey": "iceattack"
@@ -6165,6 +6279,7 @@
           "max": 750
         },
         "damageType": "holy",
+        "kind": "combat",
         "presentation": {
           "impactKey": "holyarea"
         }
@@ -6181,6 +6296,7 @@
           "max": 850
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "missileKey": "ice"
         }
@@ -6302,6 +6418,7 @@
           "max": 120
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -6357,6 +6474,7 @@
           "max": 70
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -6373,6 +6491,7 @@
           "max": 110
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -6491,6 +6610,7 @@
           "max": 20
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -6627,6 +6747,7 @@
           "max": 248
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -6657,6 +6778,7 @@
           "max": 180
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poisonarea"
         }
@@ -6673,6 +6795,7 @@
           "max": 100
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }

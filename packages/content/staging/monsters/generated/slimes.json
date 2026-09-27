@@ -53,7 +53,8 @@
           "min": 0,
           "max": 80
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "earthburst",
@@ -72,6 +73,7 @@
           "max": 20
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbypoison"
         }
@@ -83,8 +85,14 @@
         "target": {
           "range": 5,
           "area": {
-            "shape": "wave",
-            "length": 5
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
           }
         },
         "power": {
@@ -92,6 +100,7 @@
           "max": 60
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "green-rings"
         }
@@ -108,6 +117,7 @@
           "max": 0
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -209,7 +219,8 @@
           "min": 0,
           "max": 75
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "drunk",
@@ -244,6 +255,7 @@
           "max": 30
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energy",
           "impactKey": "energyhit"
@@ -502,6 +514,7 @@
           "max": 473
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -527,6 +540,7 @@
           "max": 200
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -548,6 +562,7 @@
           "max": 390
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poisonarea"
         }
@@ -569,6 +584,7 @@
           "max": 270
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "impactKey": "smallclouds"
         }

@@ -55,6 +55,7 @@
           "max": 24
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -204,6 +205,7 @@
           "max": 24
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -294,6 +296,7 @@
           "max": 24
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -378,6 +381,7 @@
           "max": 40
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -393,7 +397,8 @@
           "min": 400,
           "max": 700
         },
-        "damageType": "death"
+        "damageType": "death",
+        "kind": "combat"
       },
       {
         "id": "energystrike",
@@ -406,7 +411,8 @@
           "min": 200,
           "max": 450
         },
-        "damageType": "energy"
+        "damageType": "energy",
+        "kind": "combat"
       }
     ],
     "targetChange": {
@@ -496,6 +502,7 @@
           "max": 55
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -524,6 +531,7 @@
           "max": 34
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "green-rings"
@@ -688,6 +696,7 @@
           "max": 20
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -704,6 +713,7 @@
           "max": 32
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -815,6 +825,7 @@
           "max": 24
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -930,6 +941,7 @@
           "max": 60
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -1060,6 +1072,7 @@
           "max": 30
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -1088,6 +1101,7 @@
           "max": 17
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison",
           "impactKey": "green-rings"
