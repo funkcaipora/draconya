@@ -10,6 +10,7 @@
 
 import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
+import { aimTracker } from './aim.js';
 import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered, partyExited } from '../party/store.js';
@@ -366,6 +367,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // A reanexação zera a sequência do alvo: um `target-cancel` atrasado da sessão anterior
       // não pode fazer rollback para um alvo que já não existe (#471).
       targetTracker.reset();
+      // A mira da sessão anterior não pode sobreviver nem voltar (ADR 0049 decisão 2, #725):
+      // um `use-slot` armado antes da queda mandaria contra o alvo errado da hunt retomada.
+      aimTracker.reset();
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,

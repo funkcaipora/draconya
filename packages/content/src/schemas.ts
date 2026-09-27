@@ -3186,10 +3186,20 @@ export const BOT_SLOTS_PER_SET = 24;
 /** Rótulos do kit (ADR 0032 d.4): são do cliente, não mecânica. */
 export const BOT_SET_NAMES = ['Energia', 'Fogo', 'Gelo', 'Sagrado'] as const;
 
-/** 1–9, 0, F1–F12 = 22 teclas para 24 slots: `hotkey` é OPCIONAL por isso (DT-02). */
+/**
+ * 1–9, 0, F1–F12 = 22 teclas SEM modificador, e as mesmas 22 COM Shift = 32 no total, para 24
+ * slots (ADR 0049 decisão 1, emenda ao DT-02 do ADR 0032: 22 teclas para 24 slots deixava dois
+ * sem tecla própria). `hotkey` continua OPCIONAL — slot sem tecla dispara só pelo clique
+ * (AB-09/ADR 0049 decisão 1). Alargamento ADITIVO do enum: config salva com as 22 teclas antigas
+ * continua válida, sem bump de `BOT_VOCABULARY_VERSION`.
+ */
 export const BOT_HOTKEYS = [
   '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
   'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+  'shift+1', 'shift+2', 'shift+3', 'shift+4', 'shift+5',
+  'shift+6', 'shift+7', 'shift+8', 'shift+9', 'shift+0',
+  'shift+F1', 'shift+F2', 'shift+F3', 'shift+F4', 'shift+F5', 'shift+F6',
+  'shift+F7', 'shift+F8', 'shift+F9', 'shift+F10', 'shift+F11', 'shift+F12',
 ] as const;
 export const botHotkeySchema = z.enum(BOT_HOTKEYS);
 export type BotHotkey = z.infer<typeof botHotkeySchema>;

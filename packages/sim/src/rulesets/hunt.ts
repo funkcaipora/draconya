@@ -271,6 +271,24 @@ const BOT_GROUP_PREFIX = 'bot:';
 type BotConfigInput = BotConfigV2 | BotConfig;
 
 /**
+ * O alvo explícito de um `use-slot` manual (AB-09, ADR 0049 decisão 2), já traduzido pelo host a
+ * partir do `creatureId`/`position` numéricos do fio — o `sim` nunca vê o número, só o domínio
+ * que já conhece (`subject` de monstro, `characterId`, ou tile). `null`/ausente é "sem mira": cai
+ * no default de sempre (alvo fixado, senão o candidato do bot).
+ */
+export type UseSlotTarget =
+  | { readonly kind: 'monster'; readonly subject: string }
+  | { readonly kind: 'character'; readonly characterId: string }
+  | { readonly kind: 'position'; readonly position: FloorPoint }
+  /**
+   * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
+   * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
+   * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
+   * default, que executaria contra um alvo que ele não escolheu.
+   */
+  | { readonly kind: 'invalid' };
+
+/**
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
  * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
  *
@@ -1443,8 +1461,14 @@ export class HuntRuleset implements Ruleset {
    *
    * Cooldown é conferido ANTES de executar, e a ação que não aconteceu não inicia cooldown
    * nenhum — a ordem da elegibilidade é o ponto caro aqui.
+   *
+   * `target` é a mira (ADR 0049 decisão 2): já traduzido pelo host para o domínio do `sim`.
+   * Sem ele, vale o default de sempre (alvo fixado, senão o candidato do bot).
    */
-  useSlot(session: Session, characterId: string, set: number, slotIndex: number): SlotOutcome {
+  useSlot(
+    session: Session, characterId: string, set: number, slotIndex: number,
+    target?: UseSlotTarget,
+  ): SlotOutcome {
     const character = findById(session.participants, characterId);
     const runner = this.#runners.get(characterId);
     if (character === null || !character.alive || runner === undefined) {
@@ -1460,7 +1484,16 @@ export class HuntRuleset implements Ruleset {
     const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
     if (wait > 0) return refuse('on-cooldown', wait);
 
-    const result = this.#perform(session, character, entry.do);
+    // A mira (ADR 0049 decisão 2): resolve recipiente de aliado OU alvo explícito de
+    // monstro/posição. `null` é "não se aplica" (ação sem alvo mirável — o `target` é ruído e é
+    // ignorado, RF-12 da spec); só uma recusa TIPADA interrompe o disparo.
+    const resolved = this.#resolveManualTarget(session, character, entry.do, target);
+    if (resolved !== null && !resolved.ok) return refuse(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#perform(session, character, entry.do, recipient, explicit);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
@@ -3883,10 +3916,11 @@ const slots = bot.groups.get(group);
   #perform(
     session: Session, character: CharacterRuntime, action: BotAction,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient, explicit);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -3914,6 +3948,51 @@ const slots = bot.groups.get(group);
       return effect.range ?? null;
     }
     return null;
+  }
+
+  /**
+   * Traduz o `target` de um `use-slot` manual (D11, ADR 0049 decisão 2) em recipiente de aliado
+   * OU alvo explícito de monstro/posição, ou recusa tipada.
+   *
+   * `null`: a ação não é mirável — nem `friend` (cura/suporte) nem dano — e `target` é ruído,
+   * ignorado sem recusa nenhuma (RF-12 da spec da #725); inclui a magia/runa de área centrada no
+   * LANÇADOR, porque `#needsTarget` já devolve `false` para ela (RF-13).
+   */
+  #resolveManualTarget(
+    session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
+  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
+    | { ok: false; reason: SlotRefusal } | null {
+    const healRange = this.#healRangeOf(action);
+    if (healRange !== null) {
+      // Ação de ALIADO: sem `target`, cai no default — `#perform` já assume `recipient =
+      // character` (curar A SI MESMO, como hoje, RF-12).
+      if (target === undefined) return null;
+      if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+      if (target.kind !== 'character') return null; // mira de monstro/posição não se aplica
+      const member = findById(session.participants, target.characterId);
+      if (member === null || !member.alive) return { ok: false, reason: 'no-target' };
+      if (!sameFloor(character.position.z, member.position.z)
+        || distance(character.position, member.position) > (healRange || 1)) {
+        return { ok: false, reason: 'out-of-range' };
+      }
+      return { ok: true, recipient: member };
+    }
+
+    const damageEffect = action.kind === 'spell'
+      ? this.#options.spells.get(action.spellId)?.effect
+      : action.kind === 'supply'
+        ? this.#options.supplies.get(action.supplyId)?.effect
+        : undefined;
+    if (damageEffect === undefined || !this.#needsTarget(damageEffect)) return null;
+    if (target === undefined) return null;
+    if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+    if (target.kind === 'character') return null; // não se aplica — ignorado (RF-12)
+    if (target.kind === 'monster') {
+      const monster = this.#monsterBySubject.get(target.subject);
+      if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
+      return { ok: true, explicit: monster };
+    }
+    return { ok: true, explicit: target.position };
   }
 
   /**
@@ -3973,14 +4052,15 @@ const slots = bot.groups.get(group);
   #castSpell(
     session: Session, character: CharacterRuntime, spellId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
     const aim = spell.effect.kind === 'damage'
-      ? this.#aimFor(character, spell.effect.range, spell.effect.area)
+      ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
-        ? this.#aimFor(character, spell.effect.range, undefined)
+        ? this.#aimFor(character, spell.effect.range, undefined, explicit)
         : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
@@ -4184,9 +4264,15 @@ const slots = bot.groups.get(group);
    *
    * Os vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`. A única alocação por
    * lançamento é o `Set` de chaves da forma, do tamanho dela.
+   *
+   * `explicit` é a mira manual (ADR 0049 decisão 2): um `MonsterRuntime` (alvo apontado) ou um
+   * `FloorPoint` (tile apontado, para runa de área sobre chão vazio). Área centrada no
+   * LANÇADOR ignora `explicit` (última frase da decisão 2) — a forma sai do lançador de
+   * qualquer forma, e é por isso que o ramo abaixo nem olha o parâmetro.
    */
   #aimFor(
     character: CharacterRuntime, range: number | undefined, area: SpellArea | undefined,
+    explicit?: MonsterRuntime | FloorPoint,
   ): SpellAim | null {
     this.#spellHits.length = 0;
     this.#spellTargets.length = 0;
@@ -4205,12 +4291,33 @@ const slots = bot.groups.get(group);
       return this.#aim;
     }
 
-    const primary = this.#targetInRange(character, range);
-    if (primary === null) return null;
-    this.#collect(character, primary);
+    let primary: MonsterRuntime | null = null;
+    let primaryPoint: WorldPoint;
+    if (explicit === undefined) {
+      primary = this.#targetInRange(character, range);
+      if (primary === null) return null;
+      primaryPoint = this.#at(primary);
+    } else if ('position' in explicit) {
+      // Mira de MONSTRO (`MonsterRuntime`): precisa estar vivo e no MESMO andar (#519) — mas
+      // NÃO recusamos aqui por alcance: `aim.distance` carrega a distância real, e é
+      // `castSpell`/`useSupply` quem já confere `aim.distance > effect.range` e recusa
+      // `out-of-range` tipado (distinto de `no-target`, ADR 0049 decisão 2/RF-10). Filtrar aqui
+      // devolveria `null` → sempre `no-target`, escondendo a recusa certa.
+      if (!explicit.alive || !sameFloor(character.position.z, explicit.position.z)) return null;
+      primary = explicit;
+      primaryPoint = this.#at(explicit);
+    } else {
+      // Mira de POSIÇÃO (`FloorPoint`): sem monstro no tile, só vale para forma em área — alvo
+      // único mirado num tile vazio não tem o que acertar. Mesmo andar (#519); alcance fica
+      // para o chamador, pela mesma razão do ramo acima.
+      if (!sameFloor(character.position.z, explicit.z)) return null;
+      if (area === undefined) return null;
+      primaryPoint = { x: explicit.x, y: explicit.y, z: explicit.z ?? this.#world.map.z };
+    }
+    if (primary !== null) this.#collect(character, primary);
 
     if (area !== undefined) {
-      this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
+      this.#aimTiles = areaTiles(area, character.position, character.direction, primaryPoint);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
@@ -4218,8 +4325,11 @@ const slots = bot.groups.get(group);
         this.#collect(character, monster);
       }
     }
+    // Sem alvo primário e sem colheita de área (mira de posição vazia): nenhum alvo, `null`
+    // como sempre.
+    if (this.#spellHits.length === 0) return null;
 
-    this.#aim.distance = distance(character.position, primary.position);
+    this.#aim.distance = distance(character.position, primaryPoint);
     this.#aim.targets = this.#spellTargets;
     return this.#aim;
   }
@@ -4623,6 +4733,7 @@ const slots = bot.groups.get(group);
   #useSupply(
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -4630,7 +4741,7 @@ const slots = bot.groups.get(group);
     // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
     // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
     const aim = supply.effect.kind === 'damage'
-      ? this.#aimFor(character, supply.effect.range, supply.effect.area)
+      ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.

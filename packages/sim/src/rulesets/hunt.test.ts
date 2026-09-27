@@ -12,7 +12,8 @@ import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
 import { huntListings } from '../hunt/catalogue.js';
-import { MonsterRuntime } from '../monster/monster.js';
+import { FORWARD } from '../area.js';
+import { MonsterRuntime, monsterSubject } from '../monster/monster.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
@@ -10570,6 +10571,138 @@ describe('disparo manual de slot (AB-09, ADR 0032 d.3)', () => {
       };
     };
     expect(run(100)).toEqual(run(1_000));
+  });
+});
+
+// --- a mira do disparo manual (ADR 0049 decisão 2, #725) -------------------------------------
+
+describe('mira do disparo manual (ADR 0049 decisão 2, #725)', () => {
+  // `session.enter` reposiciona quem entra (o hero na rota, o segundo por `placeNear` —
+  // AGENTS.md de `sim`); a posição do construtor NUNCA é a final. As distâncias aqui são
+  // relativas à posição REAL depois de entrar, como `walkTo`/mutação direta já fazem alhures
+  // neste arquivo (`monster.position = {...}` depois de `session.enter`).
+  const newAlly = (id: string, health: number, maxHealth: number): CharacterRuntime =>
+    new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health, maxHealth, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+
+  it('monstro mirado fora do alcance recusa `out-of-range`, não `no-target` (RF-10)', () => {
+    // `strike` tem alcance 3; o rato está vivo, existe, e é a intenção do jogador — a recusa
+    // certa diz POR QUE não saiu, não o genérico de "nada para acertar".
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
+      { mana: 200 },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.position = { x: hero.position.x + 10, y: hero.position.y, z: hero.position.z };
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0, { kind: 'monster', subject: monsterSubject(monster.id) }))
+      .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+    expect(hero.mana).toBe(200); // recusado ANTES da mana — não gastou, não lançou.
+  });
+
+  it('monstro mirado que não existe mais recusa `no-target` (RF-10)', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
+      { mana: 200, monsters: false },
+    );
+    expect(ruleset.useSlot(session, 'hero', 0, 0, { kind: 'monster', subject: monsterSubject(9_999) }))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.mana).toBe(200);
+  });
+
+  it('cura mirada num ALIADO ao alcance cura o aliado, nunca o lançador (RF-11)', () => {
+    const friendHeal = {
+      id: 'friend-heal-725', name: 'Cura Amiga', manaCost: 20, cooldownMs: 1_000,
+      effect: { kind: 'heal' as const, amount: 60, target: 'friend' as const, range: 3 },
+    };
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'friend-heal-725' }, auto: false }]),
+      { health: 1_000, mana: 200, spells: [...spells, friendHeal], monsters: false },
+    );
+    const ally = newAlly('ally', 100, 1_000);
+    session.enter(ally);
+    ally.position = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0, { kind: 'character', characterId: 'ally' }))
+      .toEqual({ ok: true });
+    expect(ally.health).toBe(160);
+    expect(hero.health).toBe(1_000); // o lançador NÃO se curou — o alvo mirado é quem recebe.
+  });
+
+  it('aliado mirado fora do alcance da cura recusa `out-of-range` (RF-11)', () => {
+    const friendHeal = {
+      id: 'friend-heal-725', name: 'Cura Amiga', manaCost: 20, cooldownMs: 1_000,
+      effect: { kind: 'heal' as const, amount: 60, target: 'friend' as const, range: 3 },
+    };
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'friend-heal-725' }, auto: false }]),
+      { health: 1_000, mana: 200, spells: [...spells, friendHeal], monsters: false },
+    );
+    const ally = newAlly('ally', 100, 1_000);
+    session.enter(ally);
+    ally.position = { x: hero.position.x + 10, y: hero.position.y, z: hero.position.z };
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0, { kind: 'character', characterId: 'ally' }))
+      .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+  });
+
+  it('`target` numa ação sem alvo mirável (self-only) é ignorado, sem recusa nova (RF-12)', () => {
+    // `heal` (fixture de topo) não tem `target: 'friend'` nem é dano: é a cura de si mesmo de
+    // sempre. Mandar um `target` não muda nada — nem recusa, nem redireciona — nem quando o
+    // `subject` não resolve para monstro nenhum: `#needsTarget` já descarta a ação ANTES de
+    // tentar resolver. `monsters: false` evita que o rato bata primeiro e confunda a conta.
+    const withTarget = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'heal' }, auto: false }]),
+      { health: 100, mana: 200, monsters: false },
+    );
+    expect(withTarget.ruleset.useSlot(
+      withTarget.session, 'hero', 0, 0, { kind: 'monster', subject: monsterSubject(9_999) },
+    )).toEqual({ ok: true });
+    expect(withTarget.hero.health).toBe(160); // curou A SI MESMO — o `target` foi ruído.
+
+    const without = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'heal' }, auto: false }]),
+      { health: 100, mana: 200, monsters: false },
+    );
+    expect(without.ruleset.useSlot(without.session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(without.hero.health).toBe(160); // MESMO resultado, com ou sem `target`.
+  });
+
+  it('magia de área centrada no LANÇADOR ignora `target` (RF-13)', () => {
+    const wave = {
+      id: 'wave-725', name: 'Onda', manaCost: 10, cooldownMs: 500,
+      effect: {
+        kind: 'damage' as const, power: 40, damageType: 'fire' as const,
+        area: { shape: 'wave' as const, length: 3 },
+      },
+    };
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'wave-725' }, auto: false }]),
+      { mana: 200, spells: [...spells, wave] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    // À frente do herói, na direção que ele estiver olhando depois de andar 1 ms de rota —
+    // dentro do comprimento 3 da onda.
+    const f = FORWARD[hero.direction];
+    monster.position = { x: hero.position.x + f.x, y: hero.position.y + f.y, z: hero.position.z };
+    const before = monster.health;
+
+    // O `target` mira um monstro FORA da onda (bem longe) — se fosse respeitado, a onda não
+    // acertaria ninguém. Como a decisão 2 do ADR 0049 manda ignorá-lo em área self-origin, o
+    // golpe sai igual ao de sempre, sobre quem está na forma.
+    expect(ruleset.useSlot(
+      session, 'hero', 0, 0, { kind: 'position', position: { x: -50, y: -50, z: 7 } },
+    )).toEqual({ ok: true });
+    expect(monster.health).toBeLessThan(before);
   });
 });
 
