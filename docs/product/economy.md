@@ -37,6 +37,14 @@ ser altamente auditável e consistente.
   `Rng` da sessão; vira `goldDelta` no personagem e `goldGained` no extrato, e chega à linha do
   personagem pelo ledger com `(session_id, seq)` único — nunca por escrita direta em `gold`
   (invariante 10). Stamina zero bloqueia o loot como bloqueia a XP (§10.2).
+- A tabela declara o modelo de sorteio em `loot.rollModel` (#685): ausente é o FUN-63 (a chance é
+  a probabilidade exata, a quantidade é um sorteio à parte); `canary` é o do Canary, que o
+  catálogo importado usa — fator 95–105 % por linha, rolagem em cem-milésimos e quantidade tirada
+  da mesma rolagem. No `canary` a chance nominal não é sempre a efetiva: perto de 100 % ela cai
+  ("100 %" rende ~98,6 %), e quando a chance em cem-milésimos é menor que a largura da pilha a
+  quantidade puxa para o `min` (a rolagem que caiu é pequena demais para cobrir o intervalo).
+  Detalhe em
+  [`hunt.md`](./hunt.md), "O loot cai".
 - O encerramento só pode remover a sessão e seu snapshot depois de confirmar a gravação do
   extrato no Redis (#267). Tentativas concorrentes aguardam a mesma gravação; falha permite
   retry com o mesmo `(session_id, seq)`. Se o Redis gravou e a resposta se perdeu, repetir não
@@ -83,6 +91,8 @@ ser altamente auditável e consistente.
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Loot de gold por monstro (chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
+| Modelo de sorteio da tabela de loot | ausente (FUN-63) nos autorais; `canary` no catálogo importado | `loot.rollModel` do monstro (#685) |
+| Fator dinâmico por linha no modelo `canary` | 95–105 % (Canary `monstertype.lua`) | constante em `packages/sim/src/loot.ts` (`rollCanaryLine`) |
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
 | Preço de venda de cada item ao NPC | `value` por item — `bow` 130, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |

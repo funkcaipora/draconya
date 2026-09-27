@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LootTable } from '@draconya/content';
-import { rollLoot } from './loot.js';
+import { CANARY_LOOT_CHANCE_SCALE, rollLoot } from './loot.js';
 import { Rng } from './rng.js';
 
 const table = (over: Partial<LootTable> = {}): LootTable => ({ items: [], ...over });
@@ -156,3 +156,119 @@ describe('rollLoot', () => {
     });
   });
 });
+
+/** Conta cada `next()` — todo sorteio do `Rng` passa por ele (`integer`, `chance`, `fraction`). */
+class CountingRng extends Rng {
+  draws = 0;
+  override next(): number {
+    this.draws++;
+    return super.next();
+  }
+}
+
+/** Devolve os inteiros roteirizados, na ordem: é o jeito de fixar fator e rolagem de uma linha. */
+class ScriptedRng extends Rng {
+  readonly #values: number[];
+  constructor(values: readonly number[]) {
+    super({ a: 1, b: 2, c: 3, d: 4 });
+    this.#values = [...values];
+  }
+  override integer(min: number, max: number): number {
+    const value = this.#values.shift();
+    if (value === undefined) throw new Error('ScriptedRng: sorteio além do roteiro');
+    if (value < min || value > max) throw new Error(`ScriptedRng: ${value} fora de [${min}, ${max}]`);
+    return value;
+  }
+  override chance(): boolean {
+    throw new Error('ScriptedRng: o modelo canary não usa rng.chance');
+  }
+  get remaining(): number {
+    return this.#values.length;
+  }
+}
+
+/**
+ * O que a tabela sem `rollModel` rendia ANTES do #685, com a semente `fun63-regression` —
+ * medido contra o `loot.ts` da base da PR. É o contrato FUN-63 (DT-05) congelado em números.
+ */
+const FUN63_REGRESSION = [[3, 3], [10, 0], [0, 1], [0, 0], [1, 0], [0, 3], [0, 0], [4, 0]];
+
+const canary = (over: Partial<LootTable> = {}): LootTable => table({ rollModel: 'canary', ...over });
+
+describe('rollLoot com rollModel canary (#685)', () => {
+  it('consome exatamente dois sorteios por linha, inclusive a de chance zero', () => {
+    // Pular a linha zerada daria 4; sortear a quantidade à parte daria 7 ou mais.
+    const rng = new CountingRng(Rng.fromSeed('canary-count').getState());
+    rollLoot(canary({
+      gold: { chance: 0.5, min: 1, max: 10 },
+      items: [
+        { itemId: 'nothing', chance: 0, min: 1, max: 1 },
+        { itemId: 'ham', chance: 1, min: 1, max: 3 },
+      ],
+    }), rng);
+    expect(rng.draws).toBe(6);
+  });
+
+  it('uma linha "100 %" cai entre 98,0 % e 99,2 % das vezes (esperado ~98,6 %)', () => {
+    // `rng.chance(1)` mediria 100 %: é o modelo FUN-63 vazando para a tabela canary.
+    const t = canary({ gold: { chance: 1, min: 1, max: 1 } });
+    const rng = Rng.fromSeed('canary-hundred');
+    const kills = 100_000;
+    let drops = 0;
+    for (let i = 0; i < kills; i++) if (rollLoot(t, rng).gold > 0) drops++;
+    expect(drops / kills).toBeGreaterThanOrEqual(0.98);
+    expect(drops / kills).toBeLessThanOrEqual(0.992);
+  });
+
+  it('a quantidade sai da mesma rolagem que decidiu o drop', () => {
+    // Fator 100 (1,0) e rolagem 1234 com chance 50000: cai, e 1234 % 10 + 1 = 5.
+    const rng = new ScriptedRng([100, 1234]);
+    expect(rollLoot(canary({ gold: { chance: 0.5, min: 1, max: 10 } }), rng).gold).toBe(5);
+    expect(rng.remaining).toBe(0);
+  });
+
+  it('o fator vem antes e a comparação é estrita: fator 95 cai em 94999, não em 95000', () => {
+    const line = canary({ items: [{ itemId: 'ham', chance: 1, min: 1, max: 1 }] });
+    expect(rollLoot(line, new ScriptedRng([95, 94_999])).items).toEqual([{ itemId: 'ham', quantity: 1 }]);
+    expect(rollLoot(line, new ScriptedRng([95, 95_000])).items).toEqual([]);
+  });
+
+  it('a rolagem inclui o extremo 100000: com fator 100 a linha "100 %" falha nele', () => {
+    // 100000 × 1,05 = 105000 > 100000: com fator acima de 100 a linha "100 %" sempre cai;
+    // com fator 100, a rolagem 100000 (o extremo incluso) não cai.
+    const line = canary({ gold: { chance: 1, min: 1, max: 1 } });
+    expect(rollLoot(line, new ScriptedRng([101, CANARY_LOOT_CHANCE_SCALE])).gold).toBe(1);
+    expect(rollLoot(line, new ScriptedRng([100, CANARY_LOOT_CHANCE_SCALE])).gold).toBe(0);
+  });
+
+  it('min igual a max devolve min sem sorteio extra', () => {
+    const rng = new ScriptedRng([100, 7]);
+    expect(rollLoot(canary({ gold: { chance: 1, min: 3, max: 3 } }), rng).gold).toBe(3);
+    expect(rng.remaining).toBe(0);
+  });
+
+  it('a mesma semente produz a mesma sequência', () => {
+    const t = canary({
+      gold: { chance: 0.7, min: 1, max: 30 },
+      items: [{ supplyId: 'potion', chance: 0.3, min: 1, max: 4 }],
+    });
+    const run = (rng: Rng) => Array.from({ length: 50 }, () => rollLoot(t, rng));
+    expect(run(Rng.fromSeed('canary-same'))).toEqual(run(Rng.fromSeed('canary-same')));
+  });
+
+  it('a tabela sem rollModel rende o mesmo de antes para a mesma semente (FUN-63 intocado)', () => {
+    // Valores gravados antes do #685, com o `rollLine` de sempre: se o modelo padrão mudar,
+    // toda semente já gravada muda junto.
+    const t = table({
+      gold: { chance: 0.5, min: 1, max: 10 },
+      items: [{ itemId: 'ham', chance: 0.4, min: 1, max: 3 }],
+    });
+    const rng = Rng.fromSeed('fun63-regression');
+    const sequence = Array.from({ length: 8 }, () => {
+      const result = rollLoot(t, rng);
+      return [result.gold, result.items[0]?.quantity ?? 0];
+    });
+    expect(sequence).toEqual(FUN63_REGRESSION);
+  });
+});
+

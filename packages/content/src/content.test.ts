@@ -161,6 +161,40 @@ describe('a tabela de loot (FUN-63)', () => {
     const inverted = { ...rat, loot: { gold: { chance: 1, min: 5, max: 2 }, items: [] } };
     expect(() => buildContent(base({ monsters: [inverted] }))).toThrow(ContentError);
   });
+
+  describe('rollModel canary (#685)', () => {
+    const cheese = { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 0, stackable: true };
+    const sword = { id: 'sword', name: 'Sword', kind: 'other', weight: 50, value: 0 };
+    const withLine = (itemId: string, max: number, rollModel?: 'canary') => ({
+      ...rat,
+      loot: { ...(rollModel === undefined ? {} : { rollModel }), items: [{ itemId, chance: 0.5, min: 1, max }] },
+    });
+
+    it('aceita o campo e o devolve na tabela; ausente continua ausente', () => {
+      const loaded = buildContent(base({ items: [cheese], monsters: [withLine('cheese', 3, 'canary')] }));
+      expect(loaded.monsters.get('rat')?.loot.rollModel).toBe('canary');
+      expect(buildContent(base()).monsters.get('rat')?.loot.rollModel).toBeUndefined();
+    });
+
+    it('recusa item que não empilha com max > 1 — o Canary daria 1', () => {
+      expect(() => buildContent(base({ items: [sword], monsters: [withLine('sword', 3, 'canary')] })))
+        .toThrow(/loot\.items "sword" tem max > 1 mas não empilha/);
+    });
+
+    it('aceita o empilhável com max > 1, o não-empilhável com max 1, e o modelo padrão sem a regra', () => {
+      expect(() => buildContent(base({ items: [cheese], monsters: [withLine('cheese', 3, 'canary')] })))
+        .not.toThrow();
+      expect(() => buildContent(base({ items: [sword], monsters: [withLine('sword', 1, 'canary')] })))
+        .not.toThrow();
+      // Sem `rollModel`, a pilha de não-empilhável continua como era (FUN-63): a regra é do Canary.
+      expect(() => buildContent(base({ items: [sword], monsters: [withLine('sword', 3)] }))).not.toThrow();
+    });
+
+    it('recusa rollModel desconhecido', () => {
+      const other = { ...rat, loot: { rollModel: 'tfs', items: [] } };
+      expect(() => buildContent(base({ monsters: [other] }))).toThrow(ContentError);
+    });
+  });
 });
 
 describe('conteúdo inválido derruba, em vez de degradar', () => {
