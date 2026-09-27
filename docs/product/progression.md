@@ -285,7 +285,15 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
   CMB-05, e faltava só a skill acompanhar. O Knight (`vocation.spellSkill`) deixa de apontar uma
   skill fixa: `SPELL_SKILL_WEAPON` ("weapon") é a sentinela que o `sim` resolve pela FAMÍLIA da
   arma equipada, para Berserk/Groundshaker/Front Sweep/Fierce Berserk/Whirlwind Throw escalarem
-  certo trocando de arma. Migração do dado persistido e do painel do cliente ficam para a #568.
+  certo trocando de arma. ~~Migração do dado persistido e do painel do cliente ficam para a
+  #568~~ → **Resolvido pelo #568:** a migração `0013` (`packages/server/migrations`) copia
+  `skills.melee` para `club`/`sword`/`axe` de quem já tinha treinado corpo a corpo (mesma curva
+  que `melee` tinha antes da separação), com `coalesce` protegendo progresso real já gravado
+  depois do #567 e sem apagar `melee` (ADR 0014 — a chave fica órfã, sem uso, até uma remoção
+  declarada); `fist` nasce no inicial, porque não há como saber, olhando só o total acumulado em
+  `melee`, quanto veio de golpe desarmado. O painel Skills do cliente (`SkillsPanel.tsx`,
+  `state/hud.ts`, `state/apply.ts`, `shell/skills-preference.ts`) troca a linha única "Corpo a
+  Corpo" pelas quatro — Punho/Maça/Espada/Machado, cada uma com sua barra de progresso.
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
   PRD: o §9.3 define só o incremento **por vocação**. Desde a #521 (ADR 0037) esses números SÃO
   o Tibia (`gainhp`/`gainmana`/`gaincap` da vocação `None`, verificados no Canary

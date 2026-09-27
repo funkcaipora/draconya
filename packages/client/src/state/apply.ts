@@ -15,9 +15,11 @@ import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered, partyExited } from '../party/store.js';
 
 /**
- * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
- * — um registro por id de skill do conteúdo. Vazio é um nó `game` anterior à SV-04 (o `default`
- * do protocolo): mantém o que a tela já tinha em vez de zerar as barras.
+ * As skills que o painel mostra (#340, SV-04; #568 as separa por tipo de arma), do `skills` de
+ * `player-stats`/`session-state` — um registro por id de skill do conteúdo. Vazio é um nó `game`
+ * anterior à SV-04 (o `default` do protocolo): mantém o que a tela já tinha em vez de zerar as
+ * barras. Ausência de UMA chave (nó anterior ao #567, que ainda manda só `melee`) preserva o
+ * valor anterior daquela skill em vez de zerar — a mesma regra de campo opcional de sempre.
  */
 function skillsOf(
   skills: Readonly<Record<string, ProtocolSkillProgress>>, previous: PlayerSkills,
@@ -27,7 +29,10 @@ function skillsOf(
     const progress = skills[id];
     return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
   };
-  return { melee: of('melee'), distance: of('distance'), magic: of('magic') };
+  return {
+    fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
+    distance: of('distance'), magic: of('magic'),
+  };
 }
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
