@@ -10264,6 +10264,139 @@ describe('carga e duração do equipamento (#421, ADR 0032 d.8)', () => {
   });
 });
 
+describe('duração do anel por instância: pausa fora do dedo (#689)', () => {
+  // O `time-ring` da fixture dura 4000 ms VESTIDO. Os instantes abaixo são múltiplos de 1000
+  // para a mesma sequência rodar a 1 Hz e a 10 Hz (tempo lógico, invariante 3).
+  const rules = { backpackSlots: 0, satchelSlots: 20, row: 1 };
+  const twoRings: InventoryState = {
+    backpack: [
+      { instanceId: 'r1', itemId: 'time-ring', quantity: 1 },
+      { instanceId: 'r2', itemId: 'time-ring', quantity: 1 },
+    ],
+    equipped: {},
+  };
+  const find = (hero: CharacterRuntime, id: string) => [...hero.inventory.items()].find((i) => i.instanceId === id);
+
+  /** Avança até `untilMs` em passos de `stepMs`, anotando quando o dedo esvaziou. */
+  const advanceTo = (session: Session, hero: CharacterRuntime, untilMs: number, stepMs: number, seen: { atMs: number }) => {
+    while (session.nowMs < untilMs && session.ended === null) {
+      session.advanceBy(stepMs);
+      if (seen.atMs < 0 && hero.inventory.equippedAt('finger') === null) seen.atMs = session.nowMs;
+    }
+  };
+
+  it('tirar pausa e vestir retoma: vence no restante, não no prazo cheio (RF-02), igual a 1 Hz e a 10 Hz', () => {
+    const scenario = (stepMs: number) => {
+      const loaded = content();
+      const { session, hero } = start({ loaded, inventory: twoRings });
+      const seen = { atMs: -1 };
+      expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+      advanceTo(session, hero, 1_000, stepMs, seen);
+      expect(hero.inventory.unequip('finger', rules).ok).toBe(true);
+      expect(find(hero, 'r1')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+      // Fora do dedo o tempo não corre: 2 s depois, o restante é o mesmo.
+      advanceTo(session, hero, 3_000, stepMs, seen);
+      expect(find(hero, 'r1')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+      expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+      seen.atMs = -1;
+      advanceTo(session, hero, 8_000, stepMs, seen);
+      const expired = session.drainEvents().filter((e) => e.kind === 'equipment-changed');
+      return { atMs: seen.atMs, expired: expired.length, state: hero.inventory.getState(), snapshot: session.snapshot() };
+    };
+    const tenHz = scenario(100);
+    const oneHz = scenario(1_000);
+    // Mutação que mata: reagendar `durationMs` cheio no equip — venceria em 7000, não em 6000.
+    expect(tenHz.atMs).toBe(6_000);
+    expect(tenHz.expired).toBeGreaterThan(0);
+    expect(oneHz.atMs).toBe(tenHz.atMs);
+    expect(oneHz.state).toEqual(tenHz.state);
+    expect(oneHz.snapshot).toEqual(tenHz.snapshot);
+  });
+
+  it('vence no instante exato do restante (RF-02, a 10 Hz)', () => {
+    const loaded = content();
+    const { session, hero } = start({ loaded, inventory: twoRings });
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    session.advanceBy(1_500);
+    expect(hero.inventory.unequip('finger', rules).ok).toBe(true);
+    session.advanceBy(10_000);
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    session.advanceBy(2_499);
+    expect(hero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    session.advanceBy(1);
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+    expect(find(hero, 'r1')).toBeUndefined();
+  });
+
+  it('troca direta anel → anel guarda o restante do que saiu (RF-03)', () => {
+    const loaded = content();
+    const { session, hero } = start({ loaded, inventory: twoRings });
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    session.advanceBy(1_000);
+    // r2 entra no lugar de r1 sem `unequip`: é o `previous` do `onEquip`.
+    expect(hero.inventory.equip('r2', hero, loaded.items).ok).toBe(true);
+    expect(find(hero, 'r1')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+    session.advanceBy(1_000);
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    expect(find(hero, 'r2')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+    // r1 retoma os 3000 que sobraram: vence em 2000 + 3000.
+    session.advanceBy(2_999);
+    expect(hero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    session.advanceBy(1);
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+    expect(find(hero, 'r2')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+  });
+
+  it('o restante guardado atravessa o snapshot (RF-04)', () => {
+    const loaded = content();
+    const { session, hero } = start({ loaded, inventory: twoRings });
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    session.advanceBy(1_000);
+    expect(hero.inventory.unequip('finger', rules).ok).toBe(true);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+    );
+    const resumedHero = resumed.participants[0] as CharacterRuntime;
+    expect(find(resumedHero, 'r1')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+    expect(resumedHero.inventory.equip('r1', resumedHero, loaded.items).ok).toBe(true);
+    resumed.advanceBy(2_999);
+    expect(resumedHero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    resumed.advanceBy(1);
+    expect(resumedHero.inventory.equippedAt('finger')).toBeNull();
+  });
+
+  it('o anel vestido no fim da hunt guarda o restante, e a próxima hunt retoma dele', () => {
+    // Sem isto, sair e voltar renovaria o anel de graça: o evento morre com a sessão.
+    const loaded = content();
+    const first = start({ loaded, inventory: twoRings });
+    expect(first.hero.inventory.equip('r1', first.hero, loaded.items).ok).toBe(true);
+    first.session.advanceBy(1_000);
+    first.session.end('manual-exit');
+    expect(first.hero.inventory.equippedAt('finger')?.overlay).toEqual({ durationRemainingMs: 3_000 });
+
+    const second = start({ loaded, inventory: first.hero.inventory.getState() });
+    second.session.advanceBy(2_999);
+    expect(second.hero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    second.session.advanceBy(1);
+    expect(second.hero.inventory.equippedAt('finger')).toBeNull();
+  });
+
+  it('o restante preserva os outros campos do overlay (ADR 0046)', () => {
+    const loaded = content();
+    const imbued = { imbuements: [{ slot: 0, typeId: 'x', remainingMs: 10 }] };
+    const { session, hero } = start({
+      loaded,
+      inventory: { backpack: [{ instanceId: 'r1', itemId: 'time-ring', quantity: 1, overlay: imbued }], equipped: {} },
+    });
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    session.advanceBy(500);
+    expect(hero.inventory.unequip('finger', rules).ok).toBe(true);
+    expect(find(hero, 'r1')?.overlay).toEqual({ ...imbued, durationRemainingMs: 3_500 });
+  });
+});
+
 describe('bônus de equipamento — kit level 200 (#524)', () => {
   it('boots of haste soma direto em character.speed ao entrar na hunt', () => {
     const loaded = content();

@@ -714,6 +714,11 @@ export class Session {
     return this.#schedule.cancel(kind, subject);
   }
 
+  /** O instante lógico em que vence o evento `kind`/`subject` pendente, ou `null` (ver `Schedule.dueAtOf`). */
+  dueAtOf(kind: string, subject: string): number | null {
+    return this.#schedule.dueAtOf(kind, subject);
+  }
+
   /** Quantos eventos esperam. Existe para métrica e teste; não é regra de jogo. */
   get pendingEvents(): number {
     return this.#schedule.size;

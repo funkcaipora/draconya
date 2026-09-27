@@ -1878,6 +1878,28 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
   });
 });
 
+describe('forma ativa do item vestido (#689)', () => {
+  const anel = { id: 'ring', name: 'Ring', kind: 'ring', slot: 'finger', weight: 2, value: 0, durationMs: 600_000 };
+  const queijo = { id: 'cheese', name: 'Cheese', kind: 'other', weight: 1, value: 0 };
+
+  it('vira `equippedAppearanceId` no item; sem linha, ausente', () => {
+    const raw = base({ items: [anel, queijo] });
+    const semLinha = buildContent(raw);
+    expect(semLinha.items.get('ring')?.equippedAppearanceId).toBeUndefined();
+    const comLinha = buildContent({ ...raw, appearances: [{ ...placeholderAppearances(raw), equippedItems: { ring: 7 } }] });
+    expect(comLinha.items.get('ring')?.equippedAppearanceId).toBe(7);
+    expect(comLinha.items.get('ring')?.durationMs).toBe(600_000);
+  });
+
+  it('linha órfã, ou de item que não se veste, derruba o boot', () => {
+    const raw = base({ items: [anel, queijo] });
+    const orfa = { ...raw, appearances: [{ ...placeholderAppearances(raw), equippedItems: { 'no-such-ring': 7 } }] };
+    expect(() => buildContent(orfa)).toThrow(/appearances.equippedItems mapeia "no-such-ring"/);
+    const naoVeste = { ...raw, appearances: [{ ...placeholderAppearances(raw), equippedItems: { cheese: 7 } }] };
+    expect(() => buildContent(naoVeste)).toThrow(/appearances.equippedItems mapeia "cheese"/);
+  });
+});
+
 describe('famílias de arma e proficiências (CMB-05, #333)', () => {
   const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
   const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };

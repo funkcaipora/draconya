@@ -1951,7 +1951,9 @@ export class HuntRuleset implements Ruleset {
     // manual ficam indistinguíveis por presença, e `character.alive` só é confiável antes dele.
     this.#interruptFollowersOf(session, character);
     // O observer sai com ele: a Cidade não simula, e uma closure apontando para a sessão que
-    // ele deixou vazaria. A carga/duração dele não o segue (fora do escopo, §12).
+    // ele deixou vazaria. O prazo do anel vestido fica guardado na instância (#689) — o evento
+    // morre aqui, o restante não.
+    this.#parkEquipment(session, character);
     character.inventory.setEquipmentObserver(null);
     // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
     this.#cancelConditions(session, character);
@@ -2285,6 +2287,7 @@ export class HuntRuleset implements Ruleset {
     // O observer morre com a sessão: os eventos dele não vão mais vencer, e a closure não pode
     // segurar uma sessão encerrada.
     for (const character of session.participants) {
+      this.#parkEquipment(session, character);
       character.inventory.setEquipmentObserver(null);
     }
     // A bolsa é vendida e dividida entre os presentes (#192); os extratos saem DEPOIS disto,
@@ -5109,7 +5112,8 @@ const slots = bot.groups.get(group);
       if (definition === undefined) continue;
       this.#scheduleItemRegen(session, character.id, slot, definition);
       if (definition.durationMs === undefined) continue;
-      session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+      // O que sobrou da última vez que ele esteve no corpo (#689); ausente é cheio.
+      session.scheduleIn(EQUIP_EXPIRE, equipped.overlay?.durationRemainingMs ?? definition.durationMs, {
         priority: EventPriority.Housekeeping,
         subject: equipExpirySubject(character.id, slot),
       });
@@ -5170,17 +5174,61 @@ const slots = bot.groups.get(group);
     });
   }
 
+  /**
+   * Guarda na instância o prazo RESTANTE do item com duração que está saindo do slot (#689): fora
+   * do corpo o prazo pausa, e vestir de novo retoma daqui — o `stopduration` do Canary. Tem de
+   * rodar ANTES do `cancelEvent`, porque o restante é lido do próprio `EQUIP_EXPIRE` agendado: a
+   * fila é a verdade única do prazo, e a instância não guarda `dueAtMs` nenhum (DT-03).
+   *
+   * Roda só no desequip, nunca por tick (invariante 2), e a conta é em tempo lógico, então sai
+   * igual a 1 Hz e a 10 Hz (invariante 3). O restante mora no overlay da #604, que já atravessa
+   * snapshot, extrato e ticket sem mudança nenhuma.
+   */
+  #stashRemaining(session: Session, character: CharacterRuntime, slot: ItemSlot, item: CarriedItem): void {
+    if (this.#options.items.get(item.itemId)?.durationMs === undefined) return;
+    const dueAt = session.dueAtOf(EQUIP_EXPIRE, equipExpirySubject(character.id, slot));
+    // Snapshot anterior sem o evento, ou o próprio vencimento (o item já foi destruído): nada a
+    // guardar, e o item degrada para "cheio" — a degradação já declarada em `onResume`.
+    if (dueAt === null) return;
+    // `max(1, …)`: sair no mesmo instante do vencimento não ressuscita o prazo cheio.
+    character.inventory.setOverlay(item.instanceId, {
+      ...item.overlay, durationRemainingMs: Math.max(1, dueAt - session.nowMs),
+    });
+  }
+
+  /**
+   * Guarda o restante de TUDO o que ele tem vestido com prazo, na saída da hunt (#689). O anel
+   * continua no dedo, mas a Cidade não simula nada (§37): sem isto o prazo morreria com a
+   * sessão e a próxima hunt o reagendaria cheio — sair e voltar renovaria o anel de graça.
+   * Roda antes do extrato (que sai depois de `onLeave`/`onEnd`), então o restante vai no
+   * overlay para o banco. Na Cidade o prazo fica pausado, como fora do dedo.
+   *
+   * E cancela o `EQUIP_EXPIRE` dele: o subject é `<id>:<slot>`, e um evento órfão na fila
+   * venceria sobre o anel se ele voltasse à mesma sessão.
+   */
+  #parkEquipment(session: Session, character: CharacterRuntime): void {
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped !== null) this.#stashRemaining(session, character, slot, equipped);
+      session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(character.id, slot));
+    }
+  }
+
   /** O que agenda e cancela o vencimento por duração, e reavalia a velocidade. Closure pura sobre a `Session`. */
   #equipmentObserver(session: Session, characterId: string): EquipmentObserver {
     return {
-      onEquip: (slot, item) => {
+      onEquip: (slot, item, previous) => {
         const subject = equipExpirySubject(characterId, slot);
-        // Cancela SEMPRE, inclusive quando o novo item não dura: um anel de duração que saiu
-        // para outro anel tem de perder o prazo antigo.
+        // Troca direta anel → anel: o que saiu guarda o que sobrou dele antes do cancelamento.
+        const character = previous === null ? null : findById(session.participants, characterId);
+        if (previous !== null && character !== null) this.#stashRemaining(session, character, slot, previous);
+        // Cancela SEMPRE, inclusive quando o novo item não dura: o prazo agendado no slot é do
+        // item que saiu, e não pode vencer sobre o que entrou.
         session.cancelEvent(EQUIP_EXPIRE, subject);
         const definition = this.#options.items.get(item.itemId);
         if (definition?.durationMs !== undefined) {
-          session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+          // Retoma de onde parou (#689); a primeira vestida é o prazo cheio.
+          session.scheduleIn(EQUIP_EXPIRE, item.overlay?.durationRemainingMs ?? definition.durationMs, {
             priority: EventPriority.Housekeeping, subject,
           });
         }
@@ -5192,7 +5240,9 @@ const slots = bot.groups.get(group);
         }
         this.#recomputeSpeed(session, characterId);
       },
-      onUnequip: (slot) => {
+      onUnequip: (slot, item) => {
+        const character = findById(session.participants, characterId);
+        if (character !== null) this.#stashRemaining(session, character, slot, item);
         session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(characterId, slot));
         this.#cancelItemRegen(session, characterId, slot);
         this.#recomputeSpeed(session, characterId);
