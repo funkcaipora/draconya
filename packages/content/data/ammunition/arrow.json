@@ -3,6 +3,6 @@
   "name": "Arrow",
   "family": "arrow",
   "attack": 25,
-  "price": 1,
-  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 25 é do TibiaWiki; o preço 1 por tiro é provisório. Aparência: ícone 3447 e projétil (missile 3) auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+  "price": 2,
+  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 25 é do TibiaWiki. `price` 2 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 3447 (ex. `asnarus.lua`), não mais provisório. Aparência: ícone 3447 e projétil (missile 3) auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
 }

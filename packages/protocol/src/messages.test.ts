@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { decodeS2C, encodeS2C } from './codec.js';
+import { decodeC2S, decodeS2C, encodeC2S, encodeS2C } from './codec.js';
 import {
   CLIENT_TO_SERVER, BURNED_OPCODES_C2S, BURNED_OPCODES_S2C,
   OPCODE_TO_NAME_C2S, OPCODE_TO_NAME_S2C, SERVER_TO_CLIENT,
 } from './messages.js';
 import { C2S_SCHEMAS, S2C_SCHEMAS } from './types.js';
-import type { S2CMessage } from './types.js';
+import type { C2SMessage, S2CMessage } from './types.js';
 
 describe('English payload contract', () => {
   it('accepts English directions and rejects the legacy payload', () => {
@@ -131,6 +131,8 @@ describe('the inventory message (FUN-90, FUN-108)', () => {
     satchel: [],
     equipped: { hand: sword },
     capacity: { used: 130, total: 400 },
+    supplies: [],
+    ammunition: [],
   };
 
   it('round trips the equipped item WHOLE: id, item and quantity, like a backpack entry', () => {
@@ -190,7 +192,7 @@ describe('outfit colours on the creature (FUN-104)', () => {
         creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
+      world: { groundItems: [], tileUpdates: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -248,7 +250,7 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
       creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
   };
@@ -537,7 +539,35 @@ describe('vocation choice (#154)', () => {
     // Nada além do id: a arma, o slot e os stats são do servidor (invariante 4).
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight', weapon: 'steel-axe' }).success).toBe(true);
   });
+});
 
+describe('sell-items and discard-item (#724, ADR 0048 d.8)', () => {
+  it('are intention only: which instances, and the opcodes are 21 and 22', () => {
+    // O 20 é do `party-end-vote`. Mutação que mata: trocar por 20 (duplicado) ou apagar a
+    // linha (o schema fica órfão e o teste estrutural reprova).
+    expect(CLIENT_TO_SERVER['party-end-vote']).toBe(20);
+    expect(CLIENT_TO_SERVER['sell-items']).toBe(21);
+    expect(CLIENT_TO_SERVER['discard-item']).toBe(22);
+  });
+
+  it('sell-items carries a non-empty list of instance ids, never value or gold', () => {
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: ['i1'] }).success).toBe(true);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: ['i1', 'i2'] }).success).toBe(true);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: [] }).success).toBe(false);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: [''] }).success).toBe(false);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({}).success).toBe(false);
+    // Nada além dos ids: quem decide se vendem e por quanto é o servidor (invariante 4).
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: ['i1'], gold: 100 }).success).toBe(true);
+  });
+
+  it('discard-item carries exactly one instance id', () => {
+    expect(C2S_SCHEMAS['discard-item'].safeParse({ instanceId: 'i1' }).success).toBe(true);
+    expect(C2S_SCHEMAS['discard-item'].safeParse({ instanceId: '' }).success).toBe(false);
+    expect(C2S_SCHEMAS['discard-item'].safeParse({}).success).toBe(false);
+  });
+});
+
+describe('vocation choice extras (#154)', () => {
   it('carries the vocation in player-stats and session-state, null until chosen', () => {
     // `default(null)`: um nó `game` anterior manda sem, e o cliente não abre o diálogo por
     // isso — `vocationLevel` também vem `0` do catálogo antigo.
@@ -610,7 +640,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       },
       magicLevel: { level: 2, percentToNext: 80 },
     },
-    world: { groundItems: [], mapId: 'arena', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], mapId: 'arena', creatures: [] },
     aggregates: { durationMs: 12000, xpGained: 500, goldGained: 100, goldSpent: 0, kills: 5, deaths: 0 },
     notableEvents: [],
   };
@@ -1029,7 +1059,7 @@ describe('the party block of the analyzer and the session state (#393)', () => {
         creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { mapId: null, creatures: [], groundItems: [] },
+      world: { mapId: null, creatures: [], groundItems: [], tileUpdates: [] },
       aggregates,
       notableEvents: [],
     };
@@ -1267,7 +1297,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { mapId: 'rats-cave', creatures: [], groundItems: [] },
+      world: { mapId: 'rats-cave', creatures: [], groundItems: [], tileUpdates: [] },
       aggregates: { durationMs: 5000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -1389,5 +1419,55 @@ describe('slot intents and state (AB-09)', () => {
       type: 'slot-state',
       slots: [{ set: 0, slot: 0, state: 'quebrado', remainingMs: 0 }],
     } as unknown as S2CMessage))).toBeNull();
+  });
+});
+
+describe('usable scenery: use-on-map, look, tile-update (#729, ADR 0050 d.7)', () => {
+  it('round trips use-on-map and look C2S, with and without the optional seq', () => {
+    const useOnMap: C2SMessage = { type: 'use-on-map', position: { x: 10, y: 12, z: 7 }, seq: 3 };
+    const useOnMapNoSeq: C2SMessage = { type: 'use-on-map', position: { x: 10, y: 12, z: 7 } };
+    const look: C2SMessage = { type: 'look', position: { x: 10, y: 12, z: 7 } };
+    expect(decodeC2S(encodeC2S(useOnMap))).toEqual([useOnMap]);
+    expect(decodeC2S(encodeC2S(useOnMapNoSeq))).toEqual([useOnMapNoSeq]);
+    expect(decodeC2S(encodeC2S(look))).toEqual([look]);
+  });
+
+  it('round trips tile-update and look-result S2C', () => {
+    const tileUpdate: S2CMessage = {
+      type: 'tile-update',
+      position: { x: 10, y: 12, z: 7 },
+      replace: [{ from: 1638, to: 1639 }],
+    };
+    const lookResult: S2CMessage = { type: 'look-result', text: 'A wooden door.' };
+    expect(decodeS2C(encodeS2C(tileUpdate))).toEqual([tileUpdate]);
+    expect(decodeS2C(encodeS2C(lookResult))).toEqual([lookResult]);
+  });
+
+  it('the session state carries the active tile overlay, empty by default', () => {
+    const base = {
+      sessionType: 'hunt' as const,
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0,
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    const withoutOverlay = S2C_SCHEMAS['session-state']
+      .parse({ ...base, world: { mapId: null, creatures: [] } });
+    expect(withoutOverlay.world.tileUpdates).toEqual([]);
+
+    const withOverlay = S2C_SCHEMAS['session-state'].parse({
+      ...base,
+      world: {
+        mapId: null,
+        creatures: [],
+        tileUpdates: [{ position: { x: 1, y: 2, z: 3 }, replace: [{ from: 1, to: 2 }] }],
+      },
+    });
+    expect(withOverlay.world.tileUpdates).toEqual([
+      { position: { x: 1, y: 2, z: 3 }, replace: [{ from: 1, to: 2 }] },
+    ]);
   });
 });

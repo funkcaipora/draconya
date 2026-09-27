@@ -30,20 +30,29 @@ import { readCatalog } from '../packages/client/src/assets/catalog.js';
 import { Reader, WIRE_LENGTH, WIRE_VARINT } from '../packages/client/src/assets/protobuf.js';
 import { DEFAULT_GROUND_SPEED } from '../packages/content/src/map.js';
 import { tilemapSchema } from '../packages/content/src/schemas.js';
-import type { TilemapInput } from '../packages/content/src/schemas.js';
+import type { Point, TilemapInput } from '../packages/content/src/schemas.js';
 import { readOtbmTiles } from './otbm.js';
-import type { OtbmTile, Region } from './otbm.js';
+import type { OtbmItem, OtbmTile, Region } from './otbm.js';
+import { buildSceneryIndex, classifyByAttributes } from './scenery.js';
+import type { CanaryTables, ClassifiedFeature, SceneryIndex } from './scenery.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAPS_DIR = join(ROOT, 'packages', 'content', 'data', 'maps');
+const SCENERY_TABLES_PATH = join(ROOT, 'packages', 'content', 'data', 'scenery', 'canary-tables.json');
+const GENERATED_SCENERY_PATH = join(ROOT, 'packages', 'content', 'data', 'appearances', 'generated', 'scenery.json');
 
-/** Um tile depois do recorte, em coordenadas do MAPA REAL. */
+/**
+ * Um tile depois do recorte, em coordenadas do MAPA REAL.
+ *
+ * `items` guarda o `OtbmItem` INTEIRO — não só `{ id, count? }` — porque `aid`/`uid`/`text`
+ * (#727, ADR 0050 d.1) moram nele, e é a partir daqui que o cenário usável é classificado.
+ */
 export interface RegionTile {
   readonly x: number;
   readonly y: number;
   readonly z: number;
   readonly ground: number | null;
-  readonly items: ReadonlyArray<{ readonly id: number; readonly count?: number }>;
+  readonly items: readonly OtbmItem[];
 }
 
 export interface ImportOptions {
@@ -68,6 +77,12 @@ export interface ImportOptions {
   readonly version: string;
   /** Segue com ids que o pacote não tem (viram andáveis e são reportados). Padrão: erro. */
   readonly allowUnknown?: boolean;
+  /**
+   * O cenário usável (#727, ADR 0050 d.1) — porta, capim, stone pile, rope spot, ladder,
+   * alavanca, baú, placa. Ausente é o mapa sem classificação nenhuma (o comportamento de
+   * sempre): `--check` e os testes que não falam de cenário continuam idênticos.
+   */
+  readonly sceneryIndex?: SceneryIndex;
 }
 
 /** O que vai para `things/<versão>/maps/<id>.json`. Coordenadas LOCAIS ao recorte. */
@@ -91,12 +106,21 @@ export interface ImportReport {
   readonly unknownIds: readonly number[];
   readonly stairCandidates: ReadonlyArray<{ readonly x: number; readonly y: number; readonly z: number; readonly id: number; readonly name?: string }>;
   readonly region: Region;
+  /** Quantos interativos por `kind` (#727) — o número que o relatório e o PR citam. */
+  readonly interactablesByKind: ReadonlyMap<string, number>;
 }
 
 export interface ImportResult {
   readonly content: TilemapInput;
   readonly stack: StackMap;
   readonly report: ImportReport;
+  /**
+   * `appearances.scenery` deste mapa (#727, ADR 0050 d.1): as entradas ESTÁTICAS do
+   * `sceneryIndex` (porta, capim, pile, rope spot, ladder, alavanca — sempre as mesmas,
+   * independente do mapa) mais as OBSERVADAS neste recorte (baú, placa, teleporte). Ausente
+   * quando `options.sceneryIndex` não foi passado.
+   */
+  readonly sceneryAppearances?: Readonly<Record<string, Readonly<Record<string, number>>>>;
 }
 
 const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
@@ -122,17 +146,50 @@ const exists = (tile: RegionTile): boolean => tile.ground !== null || tile.items
  * Bloqueado quando o chão ou qualquer item da pilha tem `unpass`. Tile sem chão e com item é
  * decidido pelos itens — o degrau de escada é assim. Id desconhecido não bloqueia, e é
  * reportado.
+ *
+ * Um cenário CLASSIFICADO (#727, ADR 0050 d.1) — pela tabela do Canary (`sceneryIndex`) ou por
+ * `aid`/`uid`/`text` (baú, placa, teleporte) — é EXCLUÍDO deste cálculo: o tile de uma porta
+ * comum fechada não vira mais `#` na grade, quem sabe se dá para pisar ali agora é o interativo
+ * (o `TileOverrides` da #728), nunca a grade estática. Sem isto, uma porta trancada de Thais
+ * seria `#` para sempre, e o bot nunca chegaria perto dela para o dia em que a #728 souber
+ * destrancar.
  */
-function blockedOf(tile: RegionTile, flagsOf: ImportOptions['flagsOf'], unknown: Set<number>): boolean {
+function blockedOf(
+  tile: RegionTile, flagsOf: ImportOptions['flagsOf'], unknown: Set<number>, sceneryIndex?: SceneryIndex,
+): boolean {
+  let blocked = false;
+  const consider = (id: number, item: OtbmItem | null): void => {
+    const classified = item === null
+      ? sceneryIndex?.classifyGround(id)
+      : (sceneryIndex?.classifyItem(item) ?? classifyByAttributes(item));
+    if (classified != null) return;
+    const flags = flagsOf(id);
+    if (flags === null) { unknown.add(id); return; }
+    if (flags.unpass) blocked = true;
+  };
+  if (tile.ground !== null) consider(tile.ground, null);
+  for (const item of tile.items) consider(item.id, item);
+  return blocked;
+}
+
+/**
+ * Bloqueia LINHA DE VISÃO (#553) quando o chão ou qualquer item da pilha tem `unsight` — a
+ * flag do pacote 13.x que o TFS/Canary chamam de `CONST_PROP_BLOCKPROJECTILE`. Espelha
+ * `blockedOf` (`unpass`), com a MESMA regra de id desconhecido: não bloqueia, e é reportado
+ * pelo `unknown` compartilhado — o chamador já varre os mesmos ids uma vez para `blockedOf`.
+ * Bloqueio de PASSO e bloqueio de VISTA são flags independentes: um tile pode ter uma sem a
+ * outra, e por isso esta função nunca reaproveita o resultado de `blockedOf`.
+ */
+function blocksSightOf(tile: RegionTile, flagsOf: ImportOptions['flagsOf'], unknown: Set<number>): boolean {
   const ids = tile.ground === null ? [] : [tile.ground];
   for (const item of tile.items) ids.push(item.id);
-  let blocked = false;
+  let blocksSight = false;
   for (const id of ids) {
     const flags = flagsOf(id);
     if (flags === null) { unknown.add(id); continue; }
-    if (flags.unpass) blocked = true;
+    if (flags.unsight) blocksSight = true;
   }
-  return blocked;
+  return blocksSight;
 }
 
 /** Componente andável (4 vizinhos) a partir do tile-semente, no andar dele. */
@@ -178,10 +235,12 @@ const STAIR_NAME = /stair|ladder|ramp|hole|rope spot|trapdoor|sewer grate/i;
 export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions): ImportResult {
   const collected = collectTiles(source);
   const blocked = new Map<string, boolean>();
+  const blocksSight = new Map<string, boolean>();
   let dropped = 0;
   for (const [k, tile] of collected.tiles) {
     if (!exists(tile)) { collected.tiles.delete(k); dropped += 1; continue; }
-    blocked.set(k, blockedOf(tile, options.flagsOf, new Set()));
+    blocked.set(k, blockedOf(tile, options.flagsOf, new Set(), options.sceneryIndex));
+    blocksSight.set(k, blocksSightOf(tile, options.flagsOf, new Set()));
   }
 
   // Recorte à componente: fica a componente andável mais a borda de um tile (paredes, decoração).
@@ -218,7 +277,7 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
   // Os ids desconhecidos são os do que FICOU: um id de outra versão numa sala que o recorte
   // descartou não é problema do mapa escrito, e não deveria obrigar ninguém a --allow-unknown.
   const unknown = new Set<number>();
-  for (const tile of collected.tiles.values()) blockedOf(tile, options.flagsOf, unknown);
+  for (const tile of collected.tiles.values()) blockedOf(tile, options.flagsOf, unknown, options.sceneryIndex);
   if (unknown.size > 0 && !options.allowUnknown) {
     throw new Error(
       `${unknown.size} ids do mapa não existem no pacote (${[...unknown].slice(0, 10).join(', ')}…); `
@@ -261,29 +320,36 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     charOf.set(speed, char);
   });
 
-  const floors: Record<string, { grid: string[]; speed: string[] }> = {};
+  const floors: Record<string, { grid: string[]; speed: string[]; sight: string[] }> = {};
   const perFloor: Array<{ z: number; tiles: number; blocked: number; walkable: number }> = [];
   for (const z of floorsPresent) {
     const grid: string[] = [];
     const speedRows: string[] = [];
+    const sightRows: string[] = [];
     let count = 0;
     let blockedCount = 0;
     for (let y = region.y[0]; y <= region.y[1]; y++) {
       let row = '';
       let speedRow = '';
+      let sightRow = '';
       for (let x = region.x[0]; x <= region.x[1]; x++) {
         const k = key(x, y, z);
         const tile = collected.tiles.get(k);
-        if (tile === undefined) { row += '#'; speedRow += ' '; continue; }
+        if (tile === undefined) { row += '#'; speedRow += ' '; sightRow += '#'; continue; }
         count += 1;
+        // Bloqueio de visão (#553) é flag INDEPENDENTE do bloqueio de passo: um tile fora do
+        // mapa desenhado (sem tile nenhum) bloqueia os dois — nada existe ali para ver através
+        // —, mas dentro do mapa a grade `sight` segue `blocksSight`, nunca `blocked`.
+        sightRow += blocksSight.get(k) === true ? '#' : '.';
         if (blocked.get(k) === true) { row += '#'; speedRow += ' '; blockedCount += 1; continue; }
         row += '.';
         speedRow += charOf.get(speedOf(tile)) ?? ' ';
       }
       grid.push(row);
       speedRows.push(speedRow);
+      sightRows.push(sightRow);
     }
-    floors[String(z)] = { grid, speed: speedRows };
+    floors[String(z)] = { grid, speed: speedRows, sight: sightRows };
     perFloor.push({ z, tiles: count, blocked: blockedCount, walkable: count - blockedCount });
   }
 
@@ -291,6 +357,11 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
   const stackTiles: Array<[number, number, number, number, Array<number | [number, number]>]> = [];
   const sortedTiles = [...collected.tiles.values()].sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
   const stairCandidates: Array<{ x: number; y: number; z: number; id: number; name?: string }> = [];
+  const interactables: NonNullable<TilemapInput['interactables']> = [];
+  // O que `appearances.scenery` ganha por OBSERVAÇÃO (baú, placa, teleporte) — as tabelas do
+  // Canary já fecham porta/capim/pile/rope spot/ladder/alavanca dos dois lados, sem depender de
+  // qual mapa foi importado; isto aqui só existe quando o OTBM carrega o id.
+  const observedAppearances: Record<string, Record<string, number>> = {};
   for (const tile of sortedTiles) {
     if (tile.ground !== null) ids.add(tile.ground);
     for (const item of tile.items) ids.add(item.id);
@@ -310,6 +381,24 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
         if (id === null) continue;
         const name = options.nameOf(id);
         if (name !== undefined && STAIR_NAME.test(name)) stairCandidates.push({ ...local, id, name });
+      }
+    }
+
+    // Cenário usável (#727, ADR 0050 d.1): o chão classifica rope spot; cada item classifica por
+    // tabela do Canary primeiro, e por `aid`/`uid`/`text` quando nenhuma tabela casa.
+    const index = options.sceneryIndex;
+    if (index !== undefined) {
+      if (tile.ground !== null) {
+        const feature = index.classifyGround(tile.ground);
+        if (feature !== null) interactables.push(interactableOf(local, feature, null, region));
+      }
+      for (const item of tile.items) {
+        const feature = index.classifyItem(item) ?? classifyByAttributes(item);
+        if (feature === null) continue;
+        interactables.push(interactableOf(local, feature, item, region));
+        if (feature.kind === 'chest' || feature.kind === 'sign' || feature.kind === 'teleport') {
+          observedAppearances[feature.appearanceKey] = { default: item.id };
+        }
       }
     }
   }
@@ -337,9 +426,31 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     speedPalette,
     ...(entry === undefined ? {} : { entryPoint: entry }),
     floorChanges: [],
+    interactables,
     source: sourceField,
   };
   tilemapSchema.parse(content);
+
+  const interactablesByKind = new Map<string, number>();
+  for (const interactable of interactables) {
+    interactablesByKind.set(interactable.kind, (interactablesByKind.get(interactable.kind) ?? 0) + 1);
+  }
+
+  // Só as `appearanceKey` REALMENTE usadas por este mapa (#727) — nunca a tabela do Canary
+  // inteira. `staticAppearances` tem centenas de portas que o Tibia inteiro usa; a maioria não
+  // está nos quatro recortes do Draconya, e a maioria também não existe no INVENTÁRIO do pacote
+  // (`packs/tibia-1332.json` é uma sombra de Thais/Rat Cellars/Rotworm Caves/Dragon Lair, não do
+  // jogo inteiro — ADR 0025 d.9/FUN-21). Gerar a tabela toda faria `packProblems` reprovar ids
+  // que nenhum mapa importado usa, e o boot cairia por causa de porta que não existe aqui.
+  const usedAppearanceKeys = new Set(interactables.map((i) => i.appearanceKey));
+  const sceneryAppearances: Record<string, Record<string, number>> = {};
+  if (options.sceneryIndex !== undefined) {
+    for (const key of usedAppearanceKeys) {
+      const states = options.sceneryIndex.staticAppearances[key];
+      if (states !== undefined) sceneryAppearances[key] = states;
+    }
+    Object.assign(sceneryAppearances, observedAppearances);
+  }
 
   return {
     content,
@@ -347,8 +458,49 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     report: {
       tilesRead: collected.read, conflicts: collected.conflicts, dropped, perFloor,
       distinctIds: ids.size, unknownIds: [...unknown].sort((a, b) => a - b),
-      stairCandidates, region,
+      stairCandidates, region, interactablesByKind,
     },
+    ...(options.sceneryIndex === undefined ? {} : { sceneryAppearances }),
+  };
+}
+
+/**
+ * Monta a entrada de `interactables[]` (#727, ADR 0050 d.1) a partir da classificação. `item` é
+ * `null` para um interativo classificado pelo CHÃO (só rope spot) — chão não carrega `aid`/`uid`/
+ * `text`/teleporte, então os campos opcionais ficam ausentes.
+ *
+ * `target` (#734, ADR 0050 d.6 T3) só entra quando cai DENTRO do recorte importado, convertido
+ * para coordenada LOCAL (a mesma subtração de `region.x[0]`/`region.y[0]` que `at` já leva — `z`
+ * não desloca, como em todo o resto deste arquivo: o andar é absoluto). `tilemapSchema.point`
+ * exige `x`/`y` NÃO-NEGATIVOS (como `at`); um `ATTR_TELE_DEST` do OTBM real aponta em coordenada
+ * do MUNDO e pode cair FORA do recorte (outra cidade, outro andar nunca trazido para cá) — uma
+ * coordenada assim ficaria negativa depois de convertida, e o schema a recusaria no boot. Em vez
+ * de inventar uma exceção só para `target`, o importador OMITE o campo quando isso acontece:
+ * `target` ausente é exatamente o que `TileOverrides.teleportTargetAt` já entende como "sem
+ * destino alcançável" — a mesma degradação de `Teleport::addThing` do Canary para `destPos`
+ * (0,0,0) ou um `destTile` que não existe (não teleporta; nunca erro de importação).
+ */
+function interactableOf(
+  at: { x: number; y: number; z: number }, feature: ClassifiedFeature, item: OtbmItem | null,
+  region: Region,
+): NonNullable<TilemapInput['interactables']>[number] {
+  const requires = feature.requiresTool === undefined ? undefined : { tool: feature.requiresTool };
+  const dest = item?.teleportDestination;
+  const inRegion = dest !== undefined
+    && dest.x >= region.x[0] && dest.x <= region.x[1] && dest.y >= region.y[0] && dest.y <= region.y[1];
+  return {
+    at,
+    kind: feature.kind,
+    initialState: feature.initialState,
+    appearanceKey: feature.appearanceKey,
+    ...(item?.actionId === undefined ? {} : { aid: item.actionId }),
+    ...(item?.uniqueId === undefined ? {} : { uid: item.uniqueId }),
+    ...(item?.text === undefined ? {} : { text: item.text }),
+    ...(requires === undefined ? {} : { requires }),
+    ...(feature.revertMs === undefined ? {} : { revertMs: feature.revertMs }),
+    ...(!inRegion || dest === undefined ? {} : {
+      target: { x: dest.x - region.x[0], y: dest.y - region.y[0], z: dest.z },
+    }),
   };
 }
 
@@ -367,15 +519,27 @@ export function formatContentMap(map: TilemapInput): string {
     lines.push(`    "${z}": {`);
     lines.push('      "grid": [');
     floor.grid.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.grid.length - 1 ? '' : ','}`));
-    lines.push(floor.speed === undefined ? '      ]' : '      ],');
+    const hasMore = floor.speed !== undefined || floor.sight !== undefined;
+    lines.push(hasMore ? '      ],' : '      ]');
     if (floor.speed !== undefined) {
+      const moreAfterSpeed = floor.sight !== undefined;
       lines.push('      "speed": [');
       floor.speed.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.speed!.length - 1 ? '' : ','}`));
+      lines.push(moreAfterSpeed ? '      ],' : '      ]');
+    }
+    if (floor.sight !== undefined) {
+      lines.push('      "sight": [');
+      floor.sight.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.sight!.length - 1 ? '' : ','}`));
       lines.push('      ]');
     }
     lines.push(`    }${index === entries.length - 1 ? '' : ','}`);
   });
   lines.push('  },');
+  // Cenário usável (#727, ADR 0050 d.1). Só entra quando há algo a dizer — mapa sem interativo
+  // nenhum (Darashia Dragon Lair) não ganha uma linha vazia que ninguém pediu.
+  if (map.interactables !== undefined && map.interactables.length > 0) {
+    lines.push(`  "interactables": ${JSON.stringify(map.interactables)},`);
+  }
   lines.push(`  "source": ${JSON.stringify(map.source)}`);
   lines.push('}');
   return `${lines.join('\n')}\n`;
@@ -411,6 +575,23 @@ export function readObjectNames(bytes: Uint8Array): Map<number, string> {
     if (id !== 0 && name !== undefined) names.set(id, name);
   }
   return names;
+}
+
+/** As tabelas do Canary transcritas como dado (#727, ADR 0050 d.1) — `data/scenery/canary-tables.json`. */
+export function loadCanaryTables(path: string = SCENERY_TABLES_PATH): CanaryTables {
+  return JSON.parse(readFileSync(path, 'utf8')) as CanaryTables;
+}
+
+/**
+ * `appearances/generated/scenery.json` (#727, ADR 0050 d.1) — o formato de `appearancesSchema`,
+ * só com a seção `scenery` preenchida. `id`/`pack` existem porque o schema os exige, mas nenhum
+ * código lê o `pack` daqui: quem resolve `appearances.pack` continua sendo `baseline.json`
+ * (`content.ts` mescla as duas tabelas pela CHAVE, não pelo `pack` declarado).
+ */
+export function formatGeneratedScenery(
+  scenery: Readonly<Record<string, Readonly<Record<string, number>>>>, pack: string,
+): string {
+  return `${JSON.stringify({ id: 'scenery', pack, scenery }, null, 2)}\n`;
 }
 
 /** O pacote de arte em `things/<versão>/`: catálogo de aparências e nomes. */
@@ -455,9 +636,19 @@ export interface CheckOutcome {
  * máquina é `absent` (aviso, como o inventário do pacote); mapa autorado à mão é `hand-made`.
  * A pilha em `things/` não é comparada — ela não é versionada — só conferida presente.
  */
-export function checkMaps(mapsDir: string, thingsDir: string, version: string, otbmDir: string): CheckOutcome[] {
+export function checkMaps(
+  mapsDir: string, thingsDir: string, version: string, otbmDir: string,
+  sceneryTablesPath: string = SCENERY_TABLES_PATH, generatedSceneryPath: string = GENERATED_SCENERY_PATH,
+): CheckOutcome[] {
   const files = existsSync(mapsDir) ? readdirSync(mapsDir).filter((name) => name.endsWith('.json')).sort() : [];
   let pack: ReturnType<typeof loadPack> | null = null;
+  // As mesmas tabelas do Canary que `pnpm map:import` usa (#727) — sem elas, `--check` compararia
+  // `interactables` gerado contra `interactables` gerado sem classificação nenhuma, e todo mapa
+  // com cenário sairia "desatualizado" para sempre.
+  const sceneryIndex = existsSync(sceneryTablesPath) ? buildSceneryIndex(loadCanaryTables(sceneryTablesPath)) : undefined;
+  const generatedScenery: Record<string, Record<string, number>> = existsSync(generatedSceneryPath)
+    ? (JSON.parse(readFileSync(generatedSceneryPath, 'utf8')) as { scenery: Record<string, Record<string, number>> }).scenery
+    : {};
   return files.map((file) => {
     const committed = tilemapSchema.parse(JSON.parse(readFileSync(join(mapsDir, file), 'utf8')));
     if (committed.source === undefined) return { file, status: 'hand-made' };
@@ -477,11 +668,37 @@ export function checkMaps(mapsDir: string, thingsDir: string, version: string, o
       id: committed.id, region, flagsOf: flagsFrom(pack.catalogue),
       ...(entry === undefined ? {} : { entryPoint: entry }),
       defaultZ: committed.z, source: { file: committed.source.file, sha256 }, version, allowUnknown: true,
+      ...(sceneryIndex === undefined ? {} : { sceneryIndex }),
     });
     const before = JSON.stringify({ floors: committed.floors, speedPalette: committed.speedPalette ?? {} });
     const after = JSON.stringify({ floors: regenerated.content.floors, speedPalette: regenerated.content.speedPalette ?? {} });
     if (before !== after) {
       return { file, status: 'stale', detail: 'a geometria regenerada difere da versionada — o recorte foi editado à mão, ou o pacote mudou' };
+    }
+    // Cenário (#727): a mesma ordenação nos dois lados — `interactables` não tem ordem
+    // garantida por si só, só a ordem em que o OTBM entrega os tiles.
+    //
+    // A assinatura é ESTRUTURAL (`at`/`kind` só), não `(typeof committed.interactables)[number]`
+    // — `committed` (parseado, `reward.quantity` sempre presente quando há `reward`, #733) e
+    // `regenerated.content` (bruto, o importador nunca gera `reward`) são tipos ligeiramente
+    // diferentes, e esta função só lê os dois campos que ordenam.
+    const sortKey = (i: { readonly at: Point; readonly kind: string }): string =>
+      `${i.at.z}.${i.at.y}.${i.at.x}.${i.kind}`;
+    const committedInteractables = JSON.stringify([...committed.interactables].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
+    const regeneratedInteractables = JSON.stringify([...regenerated.content.interactables ?? []].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
+    if (committedInteractables !== regeneratedInteractables) {
+      return { file, status: 'stale', detail: 'os interativos (interactables) regenerados diferem dos versionados — rode pnpm map:import de novo' };
+    }
+    if (regenerated.sceneryAppearances !== undefined) {
+      for (const [appearanceKey, states] of Object.entries(regenerated.sceneryAppearances)) {
+        const committedStates = generatedScenery[appearanceKey];
+        if (JSON.stringify(committedStates) !== JSON.stringify(states)) {
+          return {
+            file, status: 'stale',
+            detail: `appearances/generated/scenery.json não tem "${appearanceKey}" com os estados regenerados — rode pnpm map:import de novo`,
+          };
+        }
+      }
     }
     const stackPath = join(thingsDir, version, 'maps', `${committed.id}.json`);
     if (!existsSync(stackPath)) return { file, status: 'stale', detail: `${stackPath} não existe — rode pnpm map:import de novo` };
@@ -506,7 +723,7 @@ if (import.meta.main) {
     strict: true,
   });
   const thingsDir = resolve(ROOT, values.things ?? process.env.THINGS_DIR ?? 'things');
-  const version = values.version ?? process.env.THINGS_VERSION ?? '1332';
+  const version = values.version ?? process.env.THINGS_VERSION ?? '1533';
   const otbmDir = join(thingsDir, 'maps');
 
   if (values.check) {
@@ -535,6 +752,10 @@ if (import.meta.main) {
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   const region: Region = { x: parseRange(values.x), y: parseRange(values.y), z: parseRange(values.z) };
   const pack = loadPack(thingsDir, version);
+  // O cenário usável (#727, ADR 0050 d.1): sem `data/scenery/canary-tables.json` o mapa importa
+  // como sempre importava — sem `interactables` nenhum — porque o arquivo é o que existe hoje
+  // no repositório, não uma dependência externa que possa faltar.
+  const sceneryIndex = existsSync(SCENERY_TABLES_PATH) ? buildSceneryIndex(loadCanaryTables()) : undefined;
   const started = performance.now();
   const result = importRegion(readOtbmTiles(bytes, region), {
     id: values.id, region, flagsOf: flagsFrom(pack.catalogue), nameOf: (id) => pack.names.get(id),
@@ -543,6 +764,7 @@ if (import.meta.main) {
     ...(values['default-z'] === undefined ? {} : { defaultZ: Number(values['default-z']) }),
     source: { file: otbmFile, sha256 }, version,
     ...(values['allow-unknown'] ? { allowUnknown: true } : {}),
+    ...(sceneryIndex === undefined ? {} : { sceneryIndex }),
   });
 
   // Se o mapa já existe com escadas autoradas, elas são preservadas: o importador regenera a
@@ -563,6 +785,27 @@ if (import.meta.main) {
   const stackPath = join(stackDir, `${values.id}.json`);
   writeFileSync(stackPath, formatStackMap(result.stack));
 
+  // `appearances/generated/scenery.json` (#727) é a UNIÃO de todos os mapas importados — cada
+  // `pnpm map:import` MESCLA a própria contribuição na tabela do disco, em vez de sobrescrever a
+  // dos outros três mapas. Chave repetida (a mesma porta em dois mapas) tem o mesmo par sempre,
+  // porque a tabela do Canary é a mesma para os quatro; só diverge se o Canary mudar.
+  let scenaryPath: string | undefined;
+  if (result.sceneryAppearances !== undefined) {
+    const previous = existsSync(GENERATED_SCENERY_PATH)
+      ? (JSON.parse(readFileSync(GENERATED_SCENERY_PATH, 'utf8')) as { scenery: Record<string, Record<string, number>> }).scenery
+      : {};
+    const merged = { ...previous, ...result.sceneryAppearances };
+    // O `pack` desta tabela é só documentação (nenhum código o lê — quem resolve
+    // `appearances.pack` continua sendo `baseline.json`); ele acompanha o de lá, quando existe.
+    const baselinePath = join(ROOT, 'packages', 'content', 'data', 'appearances', 'baseline.json');
+    const baselinePack = existsSync(baselinePath)
+      ? (JSON.parse(readFileSync(baselinePath, 'utf8')) as { pack?: string }).pack
+      : undefined;
+    mkdirSync(dirname(GENERATED_SCENERY_PATH), { recursive: true });
+    writeFileSync(GENERATED_SCENERY_PATH, formatGeneratedScenery(merged, baselinePack ?? `tibia-${version}`));
+    scenaryPath = GENERATED_SCENERY_PATH;
+  }
+
   const { report } = result;
   console.log(`importado "${values.id}" em ${Math.round(performance.now() - started)} ms`);
   console.log(`  região: x ${report.region.x[0]}..${report.region.x[1]}, y ${report.region.y[0]}..${report.region.y[1]}, z ${report.region.z[0]}..${report.region.z[1]} (${result.stack.width}×${result.stack.height})`);
@@ -573,6 +816,11 @@ if (import.meta.main) {
   for (const candidate of report.stairCandidates.slice(0, 80)) {
     console.log(`    (${candidate.x},${candidate.y},${candidate.z}) ${candidate.id}${candidate.name === undefined ? '' : ` ${candidate.name}`}`);
   }
+  if (report.interactablesByKind.size > 0) {
+    const summary = [...report.interactablesByKind].map(([kind, n]) => `${kind}: ${n}`).join(', ');
+    console.log(`  interativos (#727): ${summary}`);
+  }
   console.log(`  escrito: ${contentPath}`);
   console.log(`  escrito: ${stackPath}`);
+  if (scenaryPath !== undefined) console.log(`  escrito: ${scenaryPath}`);
 }

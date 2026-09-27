@@ -25,7 +25,8 @@ import { buildTilemap, type Tilemap } from '@draconya/content';
 import { NO_FLAGS } from '../assets/appearances.js';
 import type { AssetPack } from '../assets/pack.js';
 import {
-  interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
+  interpolate, tileOverrideKey, world,
+  type Creature, type Effect, type FloatingText, type GroundItem, type Missile,
 } from '../state/world.js';
 import {
   TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
@@ -46,7 +47,7 @@ import {
   creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
-import { pickCreature } from './pick.js';
+import { pickCreature, pickGroundItem } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
@@ -209,6 +210,19 @@ export interface ViewportHandle {
    * clique: quem manda a intenção `select-target` é o `shell`, nunca este módulo (invariante 4).
    */
   creatureAt(clientX: number, clientY: number): number | null;
+  /**
+   * O item do chão sob um ponto do canvas (#722, ADR 0048 d.4) — o cadáver que o clique abre.
+   * `null` sem item ali. Quem manda `open-corpse`/`walk-to` é o `shell`, nunca este módulo
+   * (invariante 4).
+   */
+  groundItemAt(clientX: number, clientY: number): GroundItem | null;
+  /**
+   * O tile sob um ponto do canvas (px do cliente), no andar da câmera (#729, ADR 0050 d.7).
+   * Diferente de `creatureAt`/`groundItemAt`: não pergunta o que está NELE, só ONDE ele é — o
+   * servidor decide se há algo usável ali (`use-on-map`) ou o que descrever (`look`), nunca o
+   * cliente (invariante 4).
+   */
+  tileAt(clientX: number, clientY: number): { readonly x: number; readonly y: number; readonly z: number };
   /** O alvo do servidor; desenha a moldura vermelha sobre a criatura de `id`. */
   setTargetId(id: number | null): void;
   destroy(): void;
@@ -583,8 +597,9 @@ export async function mountViewport(
     const floor = Math.round(center.z);
     const floors = visibility.floors;
     const floorsKey = floors.join(',');
-    // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele.
-    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
+    // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele. E o cenário usável
+    // (#729): a porta que abriu repinta o tile dela, sem esperar a janela andar.
+    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}:${world.tileOverridesVersion}`;
     if (key === painted) return;
     painted = key;
     terrainRepaints += 1;
@@ -605,8 +620,20 @@ export async function mountViewport(
     const stackAt = (x: number, y: number, z: number): TileStack | null => {
       const base = scene?.tileAt(x, y, z) ?? null;
       const extra = groundItemsAt.get(`${x},${y},${z}`);
-      if (extra === undefined) return base;
-      return base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] };
+      const withGround = extra === undefined
+        ? base
+        : (base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] });
+      // O cenário usável (#729, ADR 0050 d.7): a porta que abriu, o capim que foi cortado —
+      // aplicado por CIMA da pilha estática/do cadáver, trocando o id antigo pelo novo em
+      // `ground` e em cada item. Um tile sem overlay ativo (a maioria) não paga nada aqui além
+      // da consulta ao `Map`.
+      const replace = world.tileOverrides.get(tileOverrideKey({ x, y, z }));
+      if (replace === undefined || withGround === null) return withGround;
+      const substitute = (id: number): number => replace.find((r) => r.from === id)?.to ?? id;
+      return {
+        ground: substitute(withGround.ground),
+        items: withGround.items.map((item) => ({ ...item, id: substitute(item.id) })),
+      };
     };
 
     // Re-anexa os andares desta repintura, do fundo ao topo: o `root` de cada andar carrega
@@ -1270,6 +1297,28 @@ export async function mountViewport(
         { x: at.x, y: at.y, z: Math.round(center.z) },
         performance.now(),
       );
+    },
+    groundItemAt(clientX, clientY) {
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = tileAtScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return pickGroundItem(
+        world.groundItems.values(),
+        { x: at.x, y: at.y, z: Math.round(center.z) },
+      );
+    },
+    tileAt(clientX, clientY) {
+      // A MESMA conversão de `creatureAt`, sem escolher entre o que está no tile.
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = tileAtScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return { x: at.x, y: at.y, z: Math.round(center.z) };
     },
     setTargetId(id) {
       targetId = id;

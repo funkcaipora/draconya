@@ -211,8 +211,8 @@ describe('combate E2E pelo socket (M24-12, #477)', () => {
     const missileAt = all.indexOf(missiles[0] as S2CMessage);
     const effectAt = all.indexOf(effects[0] as S2CMessage);
     expect(effectAt).toBeGreaterThan(missileAt);
-    // Gold pelo preço real, uma vez por uso.
-    expect(fixture.hero().goldDelta).toBe(-14 * casts);
+    // Gold pelo preço real, uma vez por uso — 64 (M34-03/#574).
+    expect(fixture.hero().goldDelta).toBe(-64 * casts);
   });
 
   it('RF-02: com magic level 3 o slot-state explica "Magic level insuficiente.", e nada é gasto', () => {

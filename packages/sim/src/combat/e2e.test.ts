@@ -267,9 +267,9 @@ describe('combate E2E e paridade completa (M24-12, #477)', () => {
 
     const uses = session.aggregates.suppliesUsed;
     expect(uses).toBeGreaterThan(0);
-    // Gold debita no uso (§20.1), pelo preço REAL da runa — 14.
-    expect(session.aggregates.goldSpent).toBe(uses * 14);
-    expect(hero.goldDelta).toBe(-uses * 14);
+    // Gold debita no uso (§20.1), pelo preço REAL da runa — 64 (M34-03/#574).
+    expect(session.aggregates.goldSpent).toBe(uses * 64);
+    expect(hero.goldDelta).toBe(-uses * 64);
 
     const events = drain(session);
     const used = events.filter((event) => event.kind === 'supply-used');

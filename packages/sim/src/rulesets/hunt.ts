@@ -17,11 +17,11 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS, floorChangeAt, floorChangeToward,
-  isBlocked, migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
+  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
+  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
   PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
@@ -42,6 +42,8 @@ import {
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
+import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../tile-overrides.js';
+import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
@@ -95,6 +97,7 @@ import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import {
@@ -113,6 +116,7 @@ import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
+import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS, MAX_BLESSINGS } from '../food.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -195,6 +199,14 @@ const SPAWN_INITIAL = 'spawn-initial';
 const SPAWN_MATERIALIZE = 'spawn-materialize';
 /** O cadáver apodreceu (FUN-123): sai do chão. */
 const CORPSE = 'corpse';
+/**
+ * Um interativo reverte sozinho (#728, ADR 0050 d.3): capim cortado volta a crescer, buraco
+ * enche de volta. Evento na fila (invariante 2) — nunca um prazo somado por tick —, agendado no
+ * `toggle` que abre o estado temporário e cancelado se alguém usar de novo antes de vencer. O
+ * `subject` é o `interactableId` (a posição, `interactableIdOf`); porta não agenda este evento —
+ * ela fecha no `vacate` (`TileOverrides.closeDoorIfVacant`), e alavanca não decai.
+ */
+const TILE_REVERT = 'tile-revert';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
 /**
@@ -206,6 +218,23 @@ const END_VOTE_EXPIRE = 'end-vote-expire';
 const END_VOTE_SUBJECT = 'end-vote';
 /** A janela de aprovação, em tempo LÓGICO (ADR 0032 d.14). Conteúdo pode mudar sem ADR. */
 export const END_VOTE_WINDOW_MS = 60_000;
+
+/**
+ * O disparo manual ACEITO mas ADIADO pela exaustão de ação compartilhada (#726, ADR 0049
+ * decisão 6): agenda no vencimento do livro `exhaust:action`, e um segundo disparo antes disso
+ * SUBSTITUI o primeiro — `character.pendingManualAction` guarda qual, e o subject é o
+ * `characterId` (nunca dois pendentes do mesmo personagem ao mesmo tempo).
+ */
+const PENDING_MANUAL_ACTION = 'pending-manual-action';
+
+/**
+ * A exaustão de ação de um item da mochila/carga/comida que não declara `actionExhaustMs`
+ * próprio (comida, carga de bênção — só o SUPPLY do catálogo declara o campo, #690): o
+ * `timeBetweenExActions` do Canary/TFS (`configmanager.cpp`, default 1000 — distinto do
+ * `timeBetweenActions` de 200 usado por passo/ataque comuns). `use-item`/`use-item-on` são as
+ * "Ex actions" do Tibia (`playerUseItemEx`), e são elas que essa constante regula.
+ */
+const MANUAL_ITEM_EXHAUST_MS = 1_000;
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -283,6 +312,50 @@ const BOT_GROUP_PREFIX = 'bot:';
 type BotConfigInput = BotConfigV2 | BotConfig;
 
 /**
+ * O alvo explícito de um `use-slot` manual (AB-09, ADR 0049 decisão 2), já traduzido pelo host a
+ * partir do `creatureId`/`position` numéricos do fio — o `sim` nunca vê o número, só o domínio
+ * que já conhece (`subject` de monstro, `characterId`, ou tile). `null`/ausente é "sem mira": cai
+ * no default de sempre (alvo fixado, senão o candidato do bot).
+ */
+export type UseSlotTarget =
+  | { readonly kind: 'monster'; readonly subject: string }
+  | { readonly kind: 'character'; readonly characterId: string }
+  | { readonly kind: 'position'; readonly position: FloorPoint }
+  /**
+   * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
+   * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
+   * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
+   * default, que executaria contra um alvo que ele não escolheu.
+   */
+  | { readonly kind: 'invalid' };
+
+/**
+ * A referência a UM item/suprimento de um `use-item`/`use-item-on` (#726, ADR 0049 decisão 3):
+ * `instanceId` é uma unidade concreta na mochila/bolsa; `supplyId` é uma unidade do ESTOQUE
+ * abstrato (poção, runa, munição — ADR 0026 d.8/ADR 0044), sem instância própria — o MESMO
+ * caminho de `useSlot`/`#useSupply`, só que sem passar pela barra. Discriminada por qual CHAVE
+ * está presente — a mesma forma do `ref` do protocolo (`itemRefSchema`) e de
+ * `CharacterState.pendingManualAction.ref` — para viajar sem tradução entre os três.
+ */
+export type ItemRef =
+  | { readonly instanceId: string }
+  | { readonly supplyId: string };
+
+/**
+ * Por que `use-item`/`use-item-on` não aconteceu (#726, ADR 0049 decisão 3/7): as mesmas do
+ * slot, mais as três que só um item da mochila/estoque pode devolver — `not-carried` (a
+ * instância não está com o personagem), `not-usable` (o item existe, mas não tem `effect`
+ * executável hoje — ferramenta, ADR 0050, ainda não implementada) e `you-are-full` (comida no
+ * teto de `fedMs`, "You are full").
+ */
+export type UseItemRefusal = SlotRefusal | 'not-carried' | 'not-usable' | 'you-are-full';
+
+/** O resultado de `use-item`/`use-item-on`: sucesso — inclusive ACEITO e ADIADO (decisão 6) — ou recusa tipada. */
+export type UseItemOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: UseItemRefusal; readonly retryInMs: number };
+
+/**
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
  * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
  *
@@ -300,6 +373,93 @@ export type SlotRefusal =
 export type SlotOutcome =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: SlotRefusal; readonly retryInMs: number };
+
+/**
+ * Por que `useOnMap` recusou (#729, ADR 0050 d.7; `level-too-low` desde #732, ADR 0050 d.6 T2;
+ * `quest-incomplete`/`already-looted`/`no-capacity`/`unknown-item` desde #733, T2 completo).
+ * `not-usable` cobre tanto "nada usável aqui" quanto um `kind` fora do T1/T2/T3 (`sign` sem
+ * `text`…) — o mesmo motivo que `isToggleable` já unifica, para não inventar comportamento de
+ * requisito que o conteúdo não pede (spec da #729, "não invente"). `missing-tool` cobre a porta
+ * de chave sem a chave certa na mochila — uma chave É uma ferramenta (`use.tool: 'key'`), e
+ * `#hasTool` confere o `keyId` quando o `tool` pedido é `'key'` — e, desde a #734, também
+ * `teleport`/`pressure-plate`: os dois têm `TOGGLE_PAIR` (para o mecanismo de link), mas nenhum
+ * é acionado por CLIQUE (`NOT_CLICK_USABLE`) — teleporte reage a pisar, placa a step-in/step-out.
+ * `quest-incomplete` é a porta de quest fechada sem o storage exigido; `already-looted`/
+ * `no-capacity`/`unknown-item` são do baú (`#useChest`) — respectivamente já coletado por este
+ * personagem, mochila sem espaço (storage NÃO marcado — o baú continua de pé para a próxima
+ * tentativa) e `reward.itemId` fora do catálogo carregado (recusa defensiva, como `#deliverLoot`
+ * já faz para loot de monstro).
+ */
+export type UseOnMapRejection =
+  | 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool' | 'level-too-low'
+  | 'quest-incomplete' | 'already-looted' | 'no-capacity' | 'unknown-item';
+
+/**
+ * UM tile cujo id de aparência muda (#729, ADR 0050 d.7): o par `{ fromState, toState }` do
+ * `TileOverrideState`, mais o `appearanceKey`/posição do conteúdo — o que o `server` precisa
+ * para resolver os dois lados em `appearances.scenery` e montar o `tile-update` (invariante 6:
+ * quem resolve para id é o hospedeiro, nunca este pacote).
+ */
+export interface TileAppearanceChange {
+  readonly position: WorldPoint;
+  readonly appearanceKey: string;
+  readonly fromState: string;
+  readonly toState: string;
+}
+
+/** O resultado de `useOnMap`: as mudanças de aparência (self + linkados), ou recusa tipada. */
+export type UseOnMapResult =
+  | { readonly ok: true; readonly changes: readonly TileAppearanceChange[] }
+  | { readonly ok: false; readonly reason: UseOnMapRejection };
+
+/** O texto de `look` sem interativo, ou sem `text` próprio (#729). */
+const DEFAULT_LOOK_TEXT = 'Você não vê nada de especial.';
+
+/**
+ * Descrição padrão por `kind` de cenário, quando o conteúdo não tem `text` próprio (placa é a
+ * única que normalmente tem — as demais caem aqui). T2/T3 entram também: `look` não tem alcance
+ * nem exige requisito (DT-03/DT-04 da spec da #729), só descreve o que está lá.
+ */
+const SCENERY_LOOK_TEXT: Partial<Record<InteractableKind, string>> = {
+  door: 'Uma porta.',
+  'locked-door': 'Uma porta trancada.',
+  'level-door': 'Uma porta reforçada.',
+  'quest-door': 'Uma porta trancada.',
+  grass: 'Um capim alto.',
+  'stone-pile': 'Uma pilha de pedras.',
+  hole: 'Um buraco no chão.',
+  'rope-spot': 'Um lugar para prender uma corda.',
+  ladder: 'Uma escada.',
+  lever: 'Uma alavanca.',
+  chest: 'Um baú.',
+  sign: 'Uma placa.',
+  teleport: 'Algo estranho.',
+  'pressure-plate': 'Uma placa de pressão no chão.',
+};
+
+/**
+ * A ferramenta exigida NESTE estado, ou `undefined` (#732). Para todo `kind` do T1 (`grass`/
+ * `stone-pile`/`rope-spot`) a ferramenta vale sempre — só existe UMA transição que o jogador
+ * aciona. `locked-door` é diferente: a chave só tranca a transição `locked → open`
+ * (`key_door.lua` do Canary só confere `item.actionid` contra a porta TRANCADA); uma vez
+ * destrancada, ela alterna `closed`↔`open` livremente, como uma porta comum — do contrário toda
+ * reabertura pediria a chave de novo, e o Canary não faz isso.
+ */
+function toolRequiredNow(
+  kind: InteractableKind, state: string, requires: { readonly tool?: InteractableTool } | undefined,
+): InteractableTool | undefined {
+  if (kind === 'locked-door' && state !== 'locked') return undefined;
+  return requires?.tool;
+}
+
+/**
+ * `kind` cujo `TOGGLE_PAIR` existe só para o mecanismo de `toggle`/link (#734, ADR 0050 d.6 T3)
+ * — nunca para o CLIQUE do jogador. Teleporte reage a PISAR (`movement.ts#move`, gated pela
+ * alavanca que o liga); placa de pressão reage a step-in/step-out (`#onSteppedOnto`/
+ * `#onSteppedOffOf`, abaixo). `useOnMap` os recusa aqui mesmo `isToggleable` valendo `true` —
+ * clicar numa placa ou num teleporte não é um caso do T1 nem do T3.
+ */
+const NOT_CLICK_USABLE: ReadonlySet<InteractableKind> = new Set(['teleport', 'pressure-plate']);
 
 /**
  * O estado de UM slot do conjunto ativo (AB-09, UC-BAR-003). É APRESENTAÇÃO: espelha a mesma
@@ -340,6 +500,11 @@ function refusalOf(result: CastRefused): SlotRefusal {
 
 /** A recusa do manual, montada num lugar só. */
 function refuse(reason: SlotRefusal, retryInMs: number): SlotOutcome {
+  return { ok: false, reason, retryInMs };
+}
+
+/** A recusa de `use-item`/`use-item-on` (#726), pelo mesmo molde de `refuse`. */
+function refuseItem(reason: UseItemRefusal, retryInMs: number): UseItemOutcome {
   return { ok: false, reason, retryInMs };
 }
 
@@ -507,6 +672,28 @@ const FOLLOW_PATHFIND_RADIUS = 30;
 const FOLLOW_PATHFIND_DELAY_MS = 4_000;
 
 /**
+ * O raio (Chebyshev) do BFS limitado de um `walk-to` DISTANTE na hunt (#763, achado do QA da
+ * #730: `requestMove` só aceitava tile adjacente, e um clique num cadáver de longe nunca fazia
+ * o personagem chegar). O MESMO mecanismo do follow (`boundedPath`, ADR 0009 emenda) — bot é
+ * automação própria (ADR 0037), e um destino clicado pelo jogador tem a mesma natureza: não
+ * precisa da fidelidade ao Tibia que a rota AUTORADA mantém (que nunca faz path-finding, ADR
+ * 0009). Trinta tiles cobre qualquer clique plausível dentro do campo de visão sem varrer o
+ * mapa inteiro a cada pedido.
+ */
+const MANUAL_WALK_PATHFIND_RADIUS = 30;
+
+/**
+ * Quanto tempo o bot fica PAUSADO depois que o personagem chega ao destino de um `walk-to`
+ * distante (#763), OU depois de qualquer intenção manual (abrir cadáver, pegar loot, usar item,
+ * usar no mapa) mesmo sem `walk-to` nenhum antes — achado de QA ao vivo: um cadáver já
+ * adjacente abria a janela do `open-corpse` normalmente, mas o bot seguia andando embora, e o
+ * `take-loot` dois segundos depois batia em `too-far-away`. `#armManualWalkHold` (RE)INICIA a
+ * janela a cada uma dessas intenções — dez segundos é generoso para um clique duplo humano e
+ * curto o bastante para não prender a hunt inteira quando o jogador só clicou e foi embora.
+ */
+const MANUAL_WALK_HOLD_MS = 10_000;
+
+/**
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
@@ -556,6 +743,8 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.crossFloorStuckSinceMs === null ? {} : { crossFloorStuckSinceMs: runner.crossFloorStuckSinceMs }),
     ...(runner.sameTileStreak === 0 ? {} : { sameTileStreak: runner.sameTileStreak }),
     ...(runner.regroupSinceMs === null ? {} : { regroupSinceMs: runner.regroupSinceMs }),
+    ...(runner.manualWalkTo === null ? {} : { manualWalkTo: runner.manualWalkTo }),
+    ...(runner.manualWalkHoldUntilMs === null ? {} : { manualWalkHoldUntilMs: runner.manualWalkHoldUntilMs }),
   };
 }
 
@@ -771,12 +960,40 @@ export interface HuntRulesetOptions {
   readonly premium?: boolean;
 }
 
-/** Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila. */
+/**
+ * Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila.
+ *
+ * Desde o ADR 0048 ele também CARREGA o loot (decisão 1): `items`/`gold` são o que ainda não
+ * foi coletado — o dono coleta no MESMO evento do abate (`#collectFromCorpse`), então o comum é
+ * já nascer com as duas listas vazias/zeradas. `ownerId`/`eligible` espelham `#lootRecipient`/
+ * `eligible` do abate (`null` em `splitLoot` — a bolsa é dona, e o cadáver não guarda nada).
+ * Os quatro são OPCIONAIS na leitura (snapshot anterior a este ADR não os tem — `ausente` é
+ * cadáver vazio, sem bump de `SNAPSHOT_FORMAT_VERSION`), mas sempre presentes ao criar.
+ */
 export interface CorpseState {
   readonly id: number;
   readonly monsterId: string;
   readonly position: WorldPoint;
+  /** MUTÁVEL: colhido por `#collectFromCorpse` e descartado por `#onCorpseDecay`. */
+  items?: CarriedItem[];
+  gold?: number;
+  readonly ownerId?: string | null;
+  readonly eligible?: readonly string[];
 }
+
+/** A recusa comum a `openCorpse`/`takeLoot` (#722, ADR 0048 d.4). */
+export type CorpseRefusal = 'not-found' | 'not-yours' | 'too-far-away';
+
+/** `takeLoot` acrescenta a recusa de capacidade — só ela é OMISSA em `openCorpse`, que não move nada. */
+export type TakeLootRefusal = CorpseRefusal | 'not-enough-capacity';
+
+export type OpenCorpseResult =
+  | { readonly ok: true; readonly corpse: CorpseState }
+  | { readonly ok: false; readonly reason: CorpseRefusal };
+
+export type TakeLootResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: TakeLootRefusal };
 
 /**
  * Quem pode carregar uma condição (CMB-07): personagem ou monstro. Os dois têm `conditions`,
@@ -946,6 +1163,12 @@ function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptio
 const EMPTY_AUTO_SELL: ReadonlySet<string> = new Set();
 
 /**
+ * O filtro de Quick Loot de quem nunca configurou nenhum (ADR 0048 decisão 2): `skip` com lista
+ * vazia aceita tudo — o comportamento de sempre, de antes deste ADR.
+ */
+const DEFAULT_LOOT_FILTER: BotLoot = { filter: 'skip', itemIds: [], autoSell: [] };
+
+/**
  * O formato ANTIGO da bolsa no snapshot (`gold: number`, `items: CarriedItem[]`), lido só
  * pelo `restore` para migrar uma sessão em voo para entradas com `eligible: []` — o sentinel
  * de "presentes no settlement" (D5, sem bump de `SNAPSHOT_FORMAT_VERSION`).
@@ -1029,6 +1252,14 @@ export interface HuntRulesetState {
    * snapshot anterior a esta issue. Os eventos de tique e vencimento já vêm na fila serializada.
    */
   readonly fields?: readonly TileFieldState[];
+  /**
+   * O overlay de cenário usável (#728, ADR 0050 d.2): porta, capim, stone pile e alavanca, por
+   * `interactableId` (a posição). Opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`: ausente é
+   * "ninguém mexeu em nada ainda", o estado que `TileOverrides.fromInteractables` já produz a
+   * partir do conteúdo — o mesmo grau de compatibilidade que `fields` (CMB-07) já tem. Os
+   * eventos `TILE_REVERT` pendentes já vêm na fila serializada da sessão.
+   */
+  readonly tileOverrides?: readonly TileOverrideState[];
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -1149,6 +1380,13 @@ interface Runner {
    */
   sameTileStreak: number;
   /**
+   * Já registrou `route-blocked` no extrato para o bloqueio ATUAL (#728, ADR 0050 d.4)? Evita
+   * uma linha por vencimento parado — zera assim que o passo deixa de ser recusado por
+   * interativo. NUNCA persiste no snapshot, como `followPath`: perder a flag numa retomada só
+   * custa uma linha extra no extrato, nunca um comportamento errado.
+   */
+  routeBlockedWarned: boolean;
+  /**
    * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_MARGIN`/
    * `PARTY_REGROUP_FLOOR_CHANGE_RADIUS`, válvula `MAX_REGROUP_WAIT_MS`). `null` fora de uma
    * espera — só o próprio líder escreve este campo.
@@ -1199,6 +1437,30 @@ interface Runner {
    * esta atividade). Um quinto ponto de escrita divergiria do que já é creditado em algum lugar.
    */
   lastCombatActionAtMs: number | null;
+  /**
+   * O caminho de um `walk-to` DISTANTE pedido pelo jogador (#763): quando `to` não é adjacente,
+   * `requestMove` calcula com o BFS limitado (`#planManualWalk`, o mesmo mecanismo do follow) e
+   * guarda aqui — o PRÓPRIO caminho a percorrer, não um cache de desempenho como `followPath`.
+   * Precisa sobreviver a um snapshot (a hunt é idle-first, invariante 3: fechar o navegador no
+   * meio do caminho não pode apagá-lo), então é OPCIONAL no `RunnerState`, ao contrário do cache
+   * do follow. Enquanto existe, `#playerStep` consome um tile por vencimento em vez de andar
+   * pela rota ou perseguir o alvo do bot (RF-02 da spec), com PRIORIDADE ACIMA do combate-stop
+   * (achado de QA ao vivo: um destino distante numa masmorra cheia de monstros nunca terminava
+   * de andar, porque o combate-stop de sempre segurava o personagem no primeiro alvo ao alcance
+   * e nunca soltava) — `destination` é só para comparar com um pedido novo, que substitui em vez
+   * de acumular.
+   */
+  manualWalkTo: { readonly destination: FloorPoint; readonly path: readonly GridPoint[] } | null;
+  /**
+   * Até QUANDO o bot fica pausado — depois de CHEGAR ao destino de um `walk-to` distante, OU
+   * (RE)INICIADA do zero por qualquer intenção manual mesmo sem `walk-to` nenhum antes (#763,
+   * `MANUAL_WALK_HOLD_MS`, `#armManualWalkHold`: `open-corpse`, `take-loot`,
+   * `use-item`/`use-item-on`, `use-on-map`). `null` fora da janela; precisa sobreviver ao
+   * snapshot pela mesma razão de `manualWalkTo` — sem isto, uma hunt retomada bem no meio da
+   * janela perderia a pausa e a rota atropelaria o jogador que acabou de
+   * chegar.
+   */
+  manualWalkHoldUntilMs: number | null;
 }
 
 /**
@@ -1277,6 +1539,13 @@ export interface RunnerState {
   readonly sameTileStreak?: number;
   /** Desde quando o líder espera a party se juntar (#527). Ausente/`null` é fora. */
   readonly regroupSinceMs?: number | null;
+  /**
+   * O caminho de um `walk-to` distante em curso (#763). Ausente é "sem caminho manual" — o
+   * padrão de sempre, e o que todo snapshot anterior a esta issue tem.
+   */
+  readonly manualWalkTo?: { readonly destination: FloorPoint; readonly path: readonly GridPoint[] };
+  /** Até quando o bot fica pausado depois de chegar (#763). Ausente/`null` é fora da janela. */
+  readonly manualWalkHoldUntilMs?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1346,6 +1615,14 @@ export class HuntRuleset implements Ruleset {
    * conteúdo imutável; o campo é estado do ruleset (DT-01).
    */
   #fields = new Fields();
+
+  /**
+   * O overlay de cenário usável desta sessão (#728, ADR 0050 d.2): porta, capim, stone pile e
+   * alavanca. Construído do CONTEÚDO fixado (`Tilemap.interactables`, #727) — nunca do disco —
+   * e mutado só por esta sessão (invariante 9). `TileOccupancy.overrides` referencia a MESMA
+   * instância; `restore()` a atualiza por mutação (`restoreState`), nunca a substitui.
+   */
+  readonly #tileOverrides: TileOverrides;
 
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
@@ -1445,7 +1722,8 @@ export class HuntRuleset implements Ruleset {
       'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length);
-    this.#world = new TileOccupancy(options.map);
+    this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
+    this.#world = new TileOccupancy(options.map, { overrides: this.#tileOverrides });
     // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
     const basics = new Map<AmmoFamily, Ammunition>();
     for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -1493,8 +1771,14 @@ export class HuntRuleset implements Ruleset {
    *
    * Cooldown é conferido ANTES de executar, e a ação que não aconteceu não inicia cooldown
    * nenhum — a ordem da elegibilidade é o ponto caro aqui.
+   *
+   * `target` é a mira (ADR 0049 decisão 2): já traduzido pelo host para o domínio do `sim`.
+   * Sem ele, vale o default de sempre (alvo fixado, senão o candidato do bot).
    */
-  useSlot(session: Session, characterId: string, set: number, slotIndex: number): SlotOutcome {
+  useSlot(
+    session: Session, characterId: string, set: number, slotIndex: number,
+    target?: UseSlotTarget,
+  ): SlotOutcome {
     const character = findById(session.participants, characterId);
     const runner = this.#runners.get(characterId);
     if (character === null || !character.alive || runner === undefined) {
@@ -1510,11 +1794,195 @@ export class HuntRuleset implements Ruleset {
     const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
     if (wait > 0) return refuse('on-cooldown', wait);
 
-    const result = this.#perform(session, character, entry.do);
+    // A mira (ADR 0049 decisão 2): resolve recipiente de aliado OU alvo explícito de
+    // monstro/posição. `null` é "não se aplica" (ação sem alvo mirável — o `target` é ruído e é
+    // ignorado, RF-12 da spec); só uma recusa TIPADA interrompe o disparo.
+    const resolved = this.#resolveManualTarget(session, character, entry.do, target);
+    if (resolved !== null && !resolved.ok) return refuse(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#perform(session, character, entry.do, recipient, explicit);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
     return { ok: true };
+  }
+
+  /**
+   * Usa um item da mochila/bolsa OU uma unidade do estoque de suprimento — comida, carga de
+   * bênção, poção ou runa (#726, ADR 0049 decisão 3). SEM passar pela barra: qualquer
+   * suprimento em estoque é usável direto, e o `target` (opcional aqui) é a mesma mira do
+   * `use-slot` — vale para runa/poção de dano ou cura miráveis; item sem alvo mirável a ignora.
+   *
+   * Exaustão compartilhada (#690, ADR 0049 decisão 6): cooldown de GRUPO continua recusa
+   * IMEDIATA, como sempre; só a exaustão de AÇÃO (`exhaust:action`) é ADIADA — `pendingManualAction`
+   * agenda o reenvio para o vencimento do livro, e o jogador recebe `ok: true` na hora (a
+   * aceitação, não a execução).
+   */
+  useItem(
+    session: Session, characterId: string, ref: ItemRef, seq: number, target?: UseSlotTarget,
+  ): UseItemOutcome {
+    return this.#useItemLike(session, characterId, 'item', ref, seq, target);
+  }
+
+  /**
+   * Usa um item/suprimento COM alvo (#726, ADR 0049 decisão 3) — a diferença entre "usar" e
+   * "usar com…" do menu de contexto da mochila. Mesma resolução de `useItem`, com `target`
+   * OBRIGATÓRIO em vez de opcional.
+   */
+  useItemOn(
+    session: Session, characterId: string, ref: ItemRef, seq: number, target: UseSlotTarget,
+  ): UseItemOutcome {
+    return this.#useItemLike(session, characterId, 'item-on', ref, seq, target);
+  }
+
+  #useItemLike(
+    session: Session, characterId: string, kind: 'item' | 'item-on', ref: ItemRef, seq: number,
+    target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const character = findById(session.participants, characterId);
+    if (character === null || !character.alive) return refuseItem('not-carried', 0);
+    // Intenção manual (#763): (re)inicia a janela de pausa do bot, mesmo sem `walk-to` antes e
+    // mesmo quando a ação em si é ADIADA pela exaustão (abaixo) — o clique já aconteceu.
+    this.#armManualWalkHold(characterId, session.nowMs);
+
+    // A exaustão de ação (#690/ADR 0049 d.6): cooldown de GRUPO/individual continua recusa
+    // imediata (não muda com esta issue); só `exhaust:action` sozinha é ADIADA.
+    const groupWait = this.#groupOrIndividualWaitOf(character, ref, session.nowMs);
+    if (groupWait !== null && groupWait.ms > 0) return refuse(groupWait.reason, groupWait.ms);
+
+    const actionExhaustWait = character.cooldowns.remainingMs(actionExhaustKey(), session.nowMs);
+    if (actionExhaustWait > 0) {
+      // Substitui qualquer pendência anterior — "um segundo disparo antes do vencimento
+      // substitui o primeiro" (decisão 6, o `setNextActionTask` do Canary).
+      session.cancelEvent(PENDING_MANUAL_ACTION, characterId);
+      character.pendingManualAction = { kind, ref, seq, ...(target === undefined ? {} : { target }) };
+      session.scheduleIn(PENDING_MANUAL_ACTION, actionExhaustWait, {
+        priority: EventPriority.Housekeeping, subject: characterId,
+      });
+      return { ok: true };
+    }
+
+    return this.#performItemUse(session, character, ref, target);
+  }
+
+  /**
+   * O vencimento de um `use-item`/`use-item-on` adiado (#726, ADR 0049 decisão 6). Se ninguém o
+   * substituiu no meio do caminho (`pendingManualAction` ainda é ESTE), executa de verdade —
+   * SEM adiar de novo, mesmo que algo tenha reiniciado a exaustão nesse meio-tempo (o Canary
+   * também só tenta uma vez o `nextActionTask`). Falha aqui SÓ ENTÃO vira `use-result`: o
+   * sucesso não precisa de segunda mensagem (decisão 7), e quem pediu já foi avisado com
+   * `ok: true` no ato do clique.
+   */
+  #onPendingManualAction(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    const pending = character?.pendingManualAction;
+    if (character === null || pending === undefined || pending === null) return;
+    character.pendingManualAction = null;
+    const ref: ItemRef = pending.ref;
+    const target: UseSlotTarget | undefined = pending.target;
+    const outcome = this.#performItemUse(session, character, ref, target);
+    if (!outcome.ok) {
+      session.emit({
+        kind: 'manual-action-result', characterId, seq: pending.seq, ok: false, reason: outcome.reason,
+      });
+    }
+  }
+
+  /**
+   * A exaustão de GRUPO/individual de um `ItemRef` (#726) — a parte que continua RECUSA
+   * IMEDIATA da decisão 6. `null`: a referência não resolve para um supply conhecido (o host já
+   * vai recusar `not-carried`/`not-in-catalog` mais adiante) ou é uma instância (comida/bênção
+   * não têm livro de grupo — só `exhaust:action`, comum a todos, se aplica a elas).
+   */
+  #groupOrIndividualWaitOf(
+    character: CharacterRuntime, ref: ItemRef, nowMs: number,
+  ): { readonly ms: number; readonly reason: SlotRefusal } | null {
+    if (!('supplyId' in ref)) return null;
+    const supply = this.#options.supplies.get(ref.supplyId);
+    if (supply === undefined) return null;
+    const groupWait = character.cooldowns.remainingMs(groupCooldownKey(supply.group), nowMs);
+    if (groupWait > 0) return { ms: groupWait, reason: 'group-cooldown' };
+    const individualWait = character.cooldowns.remainingMs(supplyCooldownKey(supply.id), nowMs);
+    if (individualWait > 0) return { ms: individualWait, reason: 'on-cooldown' };
+    return null;
+  }
+
+  /**
+   * A execução DE VERDADE de `use-item`/`use-item-on`, sem checar exaustão (o chamador já
+   * checou, ou é o vencimento do adiamento). Resolve `ref` pelo catálogo — `supply` reaproveita
+   * `#useSupply`/`casting.ts` por inteiro (ADR 0049 decisão 3: "o mesmo caminho do slot, sem
+   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5) ou a carga de
+   * bênção (consome, soma `blessings` — o executor que a TP-03/M22 esperava; ligar a bênção à
+   * redução de perda de item na morte é o ADR 0042, fora do escopo desta issue).
+   */
+  #performItemUse(
+    session: Session, character: CharacterRuntime, ref: ItemRef, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    if ('supplyId' in ref) return this.#performSupplyRef(session, character, ref.supplyId, target);
+    return this.#performInstanceRef(session, character, ref.instanceId, target);
+  }
+
+  #performSupplyRef(
+    session: Session, character: CharacterRuntime, supplyId: string, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const supply = this.#options.supplies.get(supplyId);
+    if (supply === undefined) return refuseItem('not-carried', 0);
+    // Sem estoque e sem gold: `#useSupply`/`useSupply` (`casting.ts`) já recusam
+    // `not-enough-gold` na ordem certa (requisitos antes do gold) — nada a checar aqui antes.
+    const resolved = this.#resolveManualTarget(
+      session, character, { kind: 'supply', supplyId } as BotAction, target,
+    );
+    if (resolved !== null && !resolved.ok) return refuseItem(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#useSupply(session, character, supplyId, recipient, explicit);
+    if (!result.ok) return refuseItem(refusalOf(result), result.retryInMs);
+    character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+    return { ok: true };
+  }
+
+  #performInstanceRef(
+    session: Session, character: CharacterRuntime, instanceId: string, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const carried = [...character.inventory.backpack, ...character.inventory.satchel]
+      .find((item) => item?.instanceId === instanceId);
+    if (carried === undefined || carried === null) return refuseItem('not-carried', 0);
+    const item = this.#options.items.get(carried.itemId);
+    // `Item.effect` é opcional na forma (só `kind: 'consumable'` o declara — `buildContent`
+    // confere isso no boot, não o tipo): o schema não dá o discriminante de graça ao TS.
+    if (item === undefined || item.kind !== 'consumable' || item.effect === undefined) {
+      return refuseItem('not-usable', 0);
+    }
+
+    if (item.effect.kind === 'food') {
+      const fed = feedCharacter(character, item.effect.durationMs);
+      if (!fed.ok) return refuseItem('you-are-full', 0);
+      character.inventory.consumeOne(instanceId);
+      // A confirmação é o `inventory` reenviado (decisão 7: sucesso não vira mensagem própria).
+      // "Munch." etc. do Canary, e o `fedMs` novo em si, ficam fora — nenhum dos dois tem campo
+      // de protocolo hoje (`player-stats`/`session-state` não expõem `fedMs`); ver desvios da
+      // spec desta issue.
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+    if (item.effect.kind === 'blessing') {
+      if (character.blessings >= MAX_BLESSINGS) return refuseItem('not-usable', 0);
+      character.inventory.consumeOne(instanceId);
+      character.blessings += 1;
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+    // `heal`/`mana`/`damage` num item de mochila não têm executor hoje: nenhum item real do
+    // catálogo declara isso (só a runa/poção do ESTOQUE, via `'supplyId' in ref`, executa
+    // dano/cura) — chegar aqui é conteúdo futuro sem mecanismo ainda, e a recusa é a certa.
+    return refuseItem('not-usable', 0);
   }
 
   /**
@@ -1612,6 +2080,308 @@ export class HuntRuleset implements Ruleset {
   /** Os campos de tile ativos agora (CMB-07): leitura para snapshot, host e teste. */
   get fields(): readonly TileFieldState[] {
     return this.#fields.getState();
+  }
+
+  /** O overlay de cenário usável desta sessão (#728): leitura para snapshot, host e teste. */
+  get tileOverrides(): readonly TileOverrideState[] {
+    return this.#tileOverrides.getState();
+  }
+
+  /**
+   * O overlay ATIVO, como mudanças de aparência (#729, ADR 0050 d.7): todo interativo cujo
+   * estado hoje difere do `initialState` do conteúdo — o que quem reanexa precisa aplicar por
+   * cima da pilha estática para ver a porta já aberta, o capim já cortado. PURO: não muta nada,
+   * é a mesma leitura que `#sessionState` do host monta a cada reanexação.
+   */
+  get tileAppearanceChanges(): readonly TileAppearanceChange[] {
+    const changes: TileAppearanceChange[] = [];
+    for (const state of this.#tileOverrides.getState()) {
+      const content = this.#tileOverrides.contentOf(state.interactableId);
+      if (content === null || content.initialState === state.state) continue;
+      changes.push({
+        position: content.at, appearanceKey: content.appearanceKey,
+        fromState: content.initialState, toState: state.state,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * TODO interativo, com o suficiente para resolver aparência — não só quem difere do
+   * `initialState` como `tileAppearanceChanges` (#729). É a leitura do host para o `tile-update`
+   * PASSIVO (#734, ADR 0050 d.6 T3): o walker abrindo uma porta sozinho (#728), uma placa de
+   * pressão reagindo a step-in/step-out, ou um `TILE_REVERT` (capim, stone pile, teleporte
+   * gated) — nenhum desses passa por `useOnMap`, então nenhum tinha `tile-update` até aqui.
+   * `tileAppearanceChanges` continuaria CEGO para "voltou ao estado inicial" (o id some da
+   * lista filtrada); aqui todo interativo aparece sempre, e quem decide se mudou desde a
+   * última entrega é o host, comparando contra o que ele mesmo já mandou (`sentTileOverrides`).
+   * PURO: mesma garantia de `tileAppearanceChanges`.
+   */
+  get tileOverrideAppearances(): readonly {
+    readonly interactableId: string; readonly position: WorldPoint;
+    readonly appearanceKey: string; readonly state: string;
+  }[] {
+    const entries: Array<{
+      interactableId: string; position: WorldPoint; appearanceKey: string; state: string;
+    }> = [];
+    for (const state of this.#tileOverrides.getState()) {
+      const content = this.#tileOverrides.contentOf(state.interactableId);
+      if (content === null) continue;
+      entries.push({
+        interactableId: state.interactableId, position: content.at,
+        appearanceKey: content.appearanceKey, state: state.state,
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * O jogador pediu para usar um tile (#729, ADR 0050 d.7): a porta, a alavanca, o capim, a
+   * stone pile. Confere alcance (`canUse` do Canary — mesmo andar, adjacente, `|dx|<=1` e
+   * `|dy|<=1`) ANTES de tocar em qualquer overlay, e só então delega a `#useInteractable` — a
+   * MESMA função que o walker já usa sozinho (#728), para as duas portas nunca divergirem em
+   * requisito ou ferramenta.
+   */
+  useOnMap(session: Session, characterId: string, position: WorldPoint): UseOnMapResult {
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'nothing-there' };
+    if (
+      position.z !== character.position.z
+      || Math.abs(position.x - character.position.x) > 1
+      || Math.abs(position.y - character.position.y) > 1
+    ) {
+      return { ok: false, reason: 'out-of-range' };
+    }
+    // Intenção manual (#763): (re)inicia a pausa do bot, mesmo sem `walk-to` antes e mesmo
+    // quando o tile não tem nada de usável (abaixo) — o clique em si já é a intenção.
+    this.#armManualWalkHold(characterId, session.nowMs);
+    const current = this.#tileOverrides.at(position);
+    if (current === null) return { ok: false, reason: 'nothing-there' };
+    // Baú (#733, ADR 0050 d.6 T2): NUNCA passa por `isToggleable`/`#useInteractable` — não tem
+    // par de estados, entrega item uma vez. Desviado ANTES da conferência de toggle, que
+    // recusaria com `not-usable` — o mesmo desvio que a porta de level/quest usa a MAIS, não
+    // um caminho concorrente.
+    if (current.kind === 'chest') return this.#useChest(session, character, current.interactableId);
+    if (!isToggleable(current.kind) || NOT_CLICK_USABLE.has(current.kind)) {
+      return { ok: false, reason: 'not-usable' };
+    }
+    const content = this.#tileOverrides.contentOf(current.interactableId);
+    const requires = content?.requires;
+    // Porta de level (#732, ADR 0050 d.6 T2): `player:getLevel() >= item.actionid - 1000` do
+    // Canary (`level_door.lua`) — conferido no MOMENTO de usar, e só quando o estado ainda é
+    // `closed` (a mesma porta reaberta por outro personagem confere de novo, como no Canary; uma
+    // vez ABERTA ela é só um tile livre até fechar sozinha no `vacate`).
+    if (
+      current.kind === 'level-door' && current.state === 'closed'
+      && requires?.level !== undefined && character.level < requires.level
+    ) {
+      return { ok: false, reason: 'level-too-low' };
+    }
+    // Porta de quest (#733, ADR 0050 d.6 T2): `player:getStorageValue(item.actionid) ~= -1` do
+    // Canary (`doors.lua`) virou `getStorageValue(requires.storageKey) >= 1` — o Draconya usa
+    // `>= 1` (não `~= -1`) porque `0` já é um valor guardado ("aceitou mas não concluiu",
+    // `docs/product/quests.md`), e esta porta exige a quest CONCLUÍDA (DT-01 da spec da #733).
+    if (
+      current.kind === 'quest-door' && current.state === 'closed'
+      && requires?.storageKey !== undefined && character.getStorageValue(requires.storageKey) < 1
+    ) {
+      return { ok: false, reason: 'quest-incomplete' };
+    }
+    const tool = toolRequiredNow(current.kind, current.state, requires);
+    if (tool !== undefined && !this.#hasTool(character, tool, requires?.keyId)) {
+      return { ok: false, reason: 'missing-tool' };
+    }
+    const changes = this.#useInteractable(session, character, current.interactableId);
+    if (changes === null) return { ok: false, reason: 'not-usable' };
+    return { ok: true, changes };
+  }
+
+  /**
+   * O jogador olhou uma posição (#729, ADR 0050 d.7): o `text` de uma placa, uma descrição
+   * padrão do `kind` de cenário, ou o texto genérico sem interativo nenhum ali. Sem alcance
+   * (DT-03 da spec da #729) — o AOI do servidor já limita o que a tela mostra.
+   */
+  look(position: WorldPoint): { readonly text: string } {
+    const current = this.#tileOverrides.at(position);
+    if (current === null) return { text: DEFAULT_LOOK_TEXT };
+    const content = this.#tileOverrides.contentOf(current.interactableId);
+    if (content?.text !== undefined) return { text: content.text };
+    return { text: SCENERY_LOOK_TEXT[current.kind] ?? DEFAULT_LOOK_TEXT };
+  }
+
+  /**
+   * Tenta usar UM interativo — abrir a porta (comum, de level, de chave, de quest), cortar o
+   * capim, cavar a pile, puxar a alavanca (ADR 0050 d.4-d.5, T2 completo desde #733),
+   * pressionar/soltar uma placa (#734, ADR 0050 d.6 T3). Devolve as mudanças de aparência (o
+   * próprio + os linkados que também alternaram, #729) quando o estado mudou; `null` sem tocar
+   * em nada — kind sem par de estados (`chest`, fora do escopo — tem caminho próprio em
+   * `#useChest`), level/storage insuficiente para a porta correspondente, ou ferramenta exigida
+   * (inclusive a chave certa) que este personagem não carrega.
+   *
+   * `character` é `null` para um step-in/step-out de MONSTRO (#734, `#onSteppedOnto`/
+   * `#onSteppedOffOf`, abaixo): monstro não carrega ferramenta, então qualquer interativo que
+   * EXIJA uma (`requires.tool`) simplesmente não reage a ele — a mesma regra de `#hasTool`
+   * devolvendo `false`, sem duplicar a checagem. Nenhum conteúdo real declara `requires.tool`
+   * numa placa de pressão hoje; a checagem existe para o dia em que alguém declarar.
+   *
+   * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile, ou uma placa/
+   * teleporte que o autor quis com prazo próprio); lever E pressure-plate ligam a quem está em
+   * `links` (ADR 0050 d.1, #734) e alternam cada um também — sem re-entrar no MESMO id, que
+   * travaria num interativo que se referencia por engano de conteúdo.
+   */
+  #useInteractable(
+    session: Session, character: CharacterRuntime | null, interactableId: string,
+  ): readonly TileAppearanceChange[] | null {
+    const current = this.#tileOverrides.get(interactableId);
+    if (current === null || !isToggleable(current.kind)) return null;
+    const content = this.#tileOverrides.contentOf(interactableId);
+    const requires = content?.requires;
+    // Porta de level/quest (#732/#733): a MESMA conferência de `useOnMap`, para o walker (que
+    // chama esta função direto, sem passar por `useOnMap`) nunca abrir uma porta que o
+    // personagem não cumpre — as duas leem o MESMO `#tileOverrides`/conteúdo, então nunca
+    // divergem. `character` nulo (step-in/step-out de MONSTRO, #734) nunca cumpre um requisito
+    // de level nem de storage — a mesma degradação de "sem ferramenta" que `#hasTool` já devolve
+    // para `tool`, abaixo.
+    if (
+      current.kind === 'level-door' && current.state === 'closed' && requires?.level !== undefined
+      && (character === null || character.level < requires.level)
+    ) return null;
+    if (
+      current.kind === 'quest-door' && current.state === 'closed' && requires?.storageKey !== undefined
+      && (character === null || character.getStorageValue(requires.storageKey) < 1)
+    ) return null;
+    const tool = toolRequiredNow(current.kind, current.state, requires);
+    if (tool !== undefined && (character === null || !this.#hasTool(character, tool, requires?.keyId))) return null;
+
+    const next = this.#tileOverrides.toggle(interactableId, session.nowMs);
+    if (next === null) return null;
+    session.cancelEvent(TILE_REVERT, interactableId);
+    if (next.revertAtMs !== undefined) {
+      session.scheduleIn(TILE_REVERT, next.revertAtMs - session.nowMs, {
+        priority: EventPriority.Housekeeping, subject: interactableId,
+      });
+    }
+    session.record('tile-used', `${current.kind}:${interactableId}`);
+
+    // Sem `content`, não há `appearanceKey`/posição para montar a mudança — não deveria
+    // acontecer (todo id de `#byId` tem uma entrada em `#contentOf`, escritas juntas em
+    // `TileOverrides.fromInteractables`), mas nunca inventar um `tile-update` sem os dois lados
+    // resolvidos (mesma regra de conteúdo em versão divergente, seção 7 da spec da #729).
+    const changes: TileAppearanceChange[] = content === null ? [] : [{
+      position: content.at, appearanceKey: content.appearanceKey,
+      fromState: current.state, toState: next.state,
+    }];
+
+    // Alavanca e placa de pressão (ADR 0050 d.1, #734): ligam a quem está em `links` e
+    // alternam CADA um também — nunca o PRÓPRIO id de novo, o que evitaria um laço se o
+    // conteúdo (por engano) linkar a si mesma.
+    if (current.kind === 'lever' || current.kind === 'pressure-plate') {
+      for (const linkedId of this.#tileOverrides.links(interactableId)) {
+        if (linkedId === interactableId) continue;
+        const before = this.#tileOverrides.get(linkedId);
+        if (before === null) continue;
+        const linked = this.#tileOverrides.toggle(linkedId, session.nowMs);
+        if (linked === null) continue;
+        session.cancelEvent(TILE_REVERT, linkedId);
+        if (linked.revertAtMs !== undefined) {
+          session.scheduleIn(TILE_REVERT, linked.revertAtMs - session.nowMs, {
+            priority: EventPriority.Housekeeping, subject: linkedId,
+          });
+        }
+        const linkedContent = this.#tileOverrides.contentOf(linkedId);
+        if (linkedContent !== null) {
+          changes.push({
+            position: linkedContent.at, appearanceKey: linkedContent.appearanceKey,
+            fromState: before.state, toState: linked.state,
+          });
+        }
+      }
+    }
+    return changes;
+  }
+
+  /**
+   * O baú de quest (#733, ADR 0050 d.6 T2): `uid` + storage do personagem, o mesmo par que o
+   * ADR 0050 já descreve para o Canary. NUNCA passa por `isToggleable`/`toggle` — não tem par de
+   * estados, entrega item uma vez — e por isso não devolve `TileAppearanceChange` nenhum
+   * (`changes: []`): o baú não muda de aparência ao ser usado neste escopo.
+   *
+   * A ordem das conferências é a que MENOS vaza: já coletado recusa antes de saber se o item
+   * existe no catálogo, e o catálogo é conferido antes de gastar capacidade. O item entra pelo
+   * MESMO caminho do loot de cadáver/kit (`inventory.add`, `instanceId` determinístico
+   * `lootSeq`) — é o que faz o prêmio atravessar `SessionReceipt.acquired` → `jobs/ledger.ts`
+   * como qualquer item adquirido em sessão (invariante 10). Sem capacidade, o storage NÃO é
+   * marcado (DT-03 da spec da #733): o baú continua de pé para quando a mochila esvaziar.
+   */
+  #useChest(session: Session, character: CharacterRuntime, interactableId: string): UseOnMapResult {
+    const content = this.#tileOverrides.contentOf(interactableId);
+    const uid = content?.uid;
+    const reward = content?.reward;
+    if (content === null || uid === undefined || reward === undefined) {
+      return { ok: false, reason: 'not-usable' };
+    }
+    const storageKey = chestStorageKeyOf(uid);
+    if (character.getStorageValue(storageKey) >= 1) return { ok: false, reason: 'already-looted' };
+    const definition = this.#options.items.get(reward.itemId);
+    if (definition === undefined) {
+      // Conteúdo com referência solta — o mapa é importado antes do catálogo de itens estar
+      // completo (#573/#754), então isto é esperado até lá, nunca um erro do jogador. Registrado
+      // (não só recusado) para o extrato acusar qual baú aponta item que ainda não existe.
+      session.record('chest-unknown-item', `${interactableId}:${reward.itemId}`);
+      return { ok: false, reason: 'unknown-item' };
+    }
+    // Sem reserva de bolsa de party: o prêmio é PESSOAL, atribuído a quem usou o baú — não é
+    // loot de abate compartilhável, então a capacidade disponível é a do personagem inteira.
+    const wearer = withReservedCapacity(character, 0);
+    const instanceId = this.#party !== undefined
+      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
+      : `${session.id}:${String(character.lootSeq++)}`;
+    const carried: CarriedItem = { instanceId, itemId: reward.itemId, quantity: reward.quantity };
+    if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
+      return { ok: false, reason: 'no-capacity' };
+    }
+    character.setStorageValue(storageKey, 1);
+    session.credit(character.id, 'itemsLooted', carried.quantity);
+    session.record('chest-looted', interactableId);
+    return { ok: true, changes: [] };
+  }
+
+  /**
+   * Este personagem carrega uma ferramenta que serve para `tool` — equipada ou na mochila.
+   *
+   * `keyId` (#732) é só para `tool === 'key'`: a porta de chave exige a chave CERTA
+   * (`key_door.lua` do Canary: `item.actionid == target.actionid`, "The key does not match."
+   * quando diverge) — qualquer chave do inventário NÃO serve, ao contrário da machete, que corta
+   * qualquer capim. Sem `keyId` (chamado de fora de uma porta de chave), a ferramenta serve por
+   * tipo só, como sempre.
+   */
+  #hasTool(character: CharacterRuntime, tool: InteractableTool, keyId?: number): boolean {
+    const matches = (itemId: string): boolean => {
+      const use = this.#options.items.get(itemId)?.use;
+      if (use?.tool !== tool) return false;
+      return keyId === undefined || use?.keyId === keyId;
+    };
+    for (const item of character.inventory.items()) {
+      if (matches(item.itemId)) return true;
+    }
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped !== null && matches(equipped.itemId)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * O prazo de reversão de um interativo venceu (#728, ADR 0050 d.3): capim volta a crescer,
+   * buraco enche de volta. Só reverte se o estado AINDA é o que agendou o prazo — usar de novo
+   * antes de vencer já cancelou este evento (`#useInteractable`), mas um snapshot restaurado de
+   * um formato anterior a esta issue nunca teria este evento, então a defesa nunca é o caminho
+   * comum, só a rede de segurança.
+   */
+  #onTileRevert(session: Session, interactableId: string): void {
+    const current = this.#tileOverrides.get(interactableId);
+    if (current === null || current.revertAtMs === undefined) return;
+    this.#tileOverrides.toggle(interactableId, session.nowMs);
   }
 
   /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
@@ -2109,6 +2879,7 @@ export class HuntRuleset implements Ruleset {
       // de jogo. Uma sessão restaurada recalcula na hora se precisar; nada observa a diferença.
       followPath: null,
       followStuckSinceMs: null,
+      routeBlockedWarned: false,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2117,6 +2888,8 @@ export class HuntRuleset implements Ruleset {
       followTargetId: state?.followTargetId,
       followReason: state?.followReason,
       lastCombatActionAtMs: state?.lastCombatActionAtMs ?? null,
+      manualWalkTo: state?.manualWalkTo ?? null,
+      manualWalkHoldUntilMs: state?.manualWalkHoldUntilMs ?? null,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -2167,9 +2940,11 @@ export class HuntRuleset implements Ruleset {
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN_INITIAL: return this.#onSpawnInitial(session, event.subject);
+      case PENDING_MANUAL_ACTION: return this.#onPendingManualAction(session, event.subject);
       case SPAWN: return this.#onSpawn(session, event.subject);
       case SPAWN_MATERIALIZE: return this.#onSpawnMaterialize(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
+      case TILE_REVERT: return this.#onTileRevert(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
@@ -2207,6 +2982,10 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       if (!character.alive) continue;
       const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
+      // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
+      // calculado aqui evita um segundo acumulador para a mesma grandeza contínua.
+      drainFedMs(character, dtMs);
       const runner = this.#runners.get(character.id);
       if (!exhausted || runner === undefined || runner.warnedExhausted) continue;
       runner.warnedExhausted = true;
@@ -2235,6 +3014,19 @@ export class HuntRuleset implements Ruleset {
 
     const pulse = this.#regenOf(character)[what];
     if (pulse.amount <= 0) return;
+    // A flag de conteúdo (#726, ADR 0049 decisão 5, emenda ao ADR 0043): default `false`
+    // preserva o Huntera ("regenera sempre em hunt"); ligada, exige `fedMs > 0` — a
+    // `CONDITION_REGENERATION` do Tibia, dada por comida. Sem comida, o pulso NÃO aplica nada
+    // desta vez, mas CONTINUA reagendando — a flag pode ligar no meio da hunt sem reconstruir a
+    // fila, e comer no meio do jejum é atendido no PRÓXIMO vencimento, sem precisar de evento
+    // novo (o `amount <= 0` acima é o único caso em que o evento de fato morre).
+    const requiresFood = this.#options.progression.regeneration?.requiresFood ?? false;
+    if (requiresFood && character.fedMs <= 0) {
+      session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, pulse.ticksMs, {
+        priority: EventPriority.Upkeep, subject: characterId,
+      });
+      return;
+    }
     // Só a vocação: o Life Ring regenera pelos PRÓPRIOS eventos (`ITEM_REGEN`, #688), somados
     // a este pulso, e nunca o multiplica.
     const { amount } = pulse;
@@ -2377,6 +3169,7 @@ export class HuntRuleset implements Ruleset {
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
       fields: this.#fields.getState(),
+      tileOverrides: this.#tileOverrides.getState(),
       nextGroundItemId: this.#nextGroundItemId,
       warnedExhausted: state.warnedExhausted,
       warnedFullBackpack: state.warnedFullBackpack,
@@ -2482,11 +3275,23 @@ export class HuntRuleset implements Ruleset {
     }
     this.#nextCreatureId = restored.nextCreatureId;
     // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
-    // da sessão já trouxe de volta (FUN-123).
-    this.#corpses = [...(restored.corpses ?? [])];
+    // da sessão já trouxe de volta (FUN-123). O loot (ADR 0048) é OPCIONAL na leitura: snapshot
+    // de antes deste ADR não tem as quatro chaves, e ausente é cadáver sem loot nenhum.
+    this.#corpses = (restored.corpses ?? []).map((corpse) => ({
+      ...corpse,
+      items: [...(corpse.items ?? [])],
+      gold: corpse.gold ?? 0,
+      ownerId: corpse.ownerId ?? null,
+      eligible: corpse.eligible ?? [],
+    }));
     // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
     // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
     this.#fields = Fields.fromState(restored.fields);
+    // MUTAÇÃO, não substituição (#728): `TileOccupancy.overrides` já referencia esta MESMA
+    // instância desde o construtor — trocar `this.#tileOverrides` deixaria o mundo lendo um
+    // objeto velho, sempre no estado inicial do conteúdo. Ausente é "nenhuma sessão anterior
+    // mexeu em nada", que já é o que `TileOverrides.fromInteractables` produziu na construção.
+    this.#tileOverrides.restoreState(restored.tileOverrides);
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
@@ -2905,12 +3710,25 @@ export class HuntRuleset implements Ruleset {
   /** O corpo do passo do personagem; devolve o passo dado, ou `null` quando ficou parado. */
   #playerStep(session: Session, character: CharacterRuntime): MoveResult | null {
 
+    const runner = this.#runnerOf(character.id);
+
+    // `walk-to` distante em curso (#763, achado de QA ao vivo na Darashia Dragon Lair): PRIORIDADE
+    // MÁXIMA, ACIMA do combate-stop logo abaixo. Um clique para um cadáver longe, com dragões no
+    // alcance o caminho INTEIRO, empacava para sempre no combate-stop de sempre — o alvo nunca
+    // morre e nunca sai de alcance numa masmorra cheia, então o personagem nunca voltava a tentar
+    // o próximo tile. O jogador que clicou um destino distante já expressou a intenção de IR até
+    // lá; `#armPlayerAttack` continua batendo em quem estiver ao alcance NO CAMINHO (a mesma
+    // postura do `#holdFollow` — "atacar de onde está é aceitável" —, só não GRUDA para lutar).
+    if (runner.manualWalkTo !== null) {
+      this.#armPlayerAttack(session, character);
+      return this.#advanceManualWalk(session, character);
+    }
+
     // Para para lutar, e retoma DEPOIS no mesmo índice (FUN-42). Como ele para assim que há
     // monstro ao alcance, nunca pisa no tile de um: o combate começa antes do passo.
     //
     // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
     // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
-    const runner = this.#runnerOf(character.id);
     // **Exceto quando quem seguir está em OUTRO andar (#527).** Monstro ao alcance nunca falta
     // perto de um spawn — é raro um seguidor chegar num andar novo sem NENHUM por perto — e
     // parar para lutar aqui significa NUNCA reavaliar `#holdFollow` de novo, porque esta
@@ -2920,6 +3738,9 @@ export class HuntRuleset implements Ruleset {
     // brigar sempre vencia da tentativa de voltar. Reunir a party pesa mais que uma luta que
     // pode esperar; `#holdFollow` continua deixando `#armPlayerAttack` bater em quem estiver
     // ao alcance da arma NO CAMINHO até a escada (ADR 0035 d.9) — isto só recusa GRUDAR ali.
+    // **Continua valendo cheio durante a janela de espera do `walk-to` (abaixo)**: chegado o
+    // destino, um dragão ao alcance segura o personagem ali para lutar, como o QA relatou aceitar
+    // ("atacar de onde está é aceitável") — só ANDAR é que o caminho manual em curso suprime.
     if (
       this.#attackTarget(character) !== null && !this.#luring(runner, character, session.nowMs)
       && !this.#mustCrossFloorToFollow(session, runner, character)
@@ -2927,6 +3748,18 @@ export class HuntRuleset implements Ruleset {
       runner.walker.stop();
       this.#armPlayerAttack(session, character);
       return null;
+    }
+
+    // A janela de espera depois de CHEGAR a um `walk-to` distante, ou aberta direto por uma
+    // intenção manual sem caminho nenhum (#763, `#armManualWalkHold`): suprime rota E
+    // perseguição enquanto durar, para o jogador ter tempo de agir (abrir o cadáver, pegar o
+    // loot) antes do bot retomar sozinho pelo tile mais próximo.
+    if (runner.manualWalkHoldUntilMs !== null) {
+      if (session.nowMs < runner.manualWalkHoldUntilMs) {
+        this.#armPlayerAttack(session, character);
+        return null;
+      }
+      runner.manualWalkHoldUntilMs = null;
     }
 
     // Follow de membro (ADR 0035 d.9, §D10, #398): substitui a rota E a postura contra monstro
@@ -2951,6 +3784,28 @@ export class HuntRuleset implements Ruleset {
     runner.walker.resume();
     const to = runner.walker.step();
     if (to === null) return null;
+    // O walker usa o tile interativo bloqueante antes de pisar (#728, ADR 0050 d.4): a rota
+    // autorada pode atravessar tile usável (porta comum, no T1 desta issue), e quem a percorre
+    // abre sozinho — é automação legítima (invariante 11), não desvio de caminho (ADR 0009: a
+    // rota continua sendo a mesma lista fixa de tiles, nunca recalculada em volta da porta).
+    const blockingHere = this.#tileOverrides.at(to);
+    if (blockingHere !== null && blockingHere.blocked) {
+      if (this.#useInteractable(session, character, blockingHere.interactableId) !== null) {
+        runner.routeBlockedWarned = false;
+      } else {
+        // Sem ferramenta (a chave certa, incluída, #732) ou level insuficiente (level-door),
+        // ou kind sem par de estados (`quest-door`/T3, fora do escopo): segura como faria com
+        // parede, e registra UMA vez — não uma linha por vencimento parado.
+        runner.walker.hold();
+        if (!runner.routeBlockedWarned) {
+          runner.routeBlockedWarned = true;
+          session.record('route-blocked', character.id);
+        }
+        return null;
+      }
+    } else {
+      runner.routeBlockedWarned = false;
+    }
     if (this.#partyRegroupBlocked(session, runner, character, to)) {
       // O LÍDER esperando a party se juntar (#527) — achado numa QA ao vivo com o bot config
       // real: sem haste igual entre vocações, quem não é o líder cai para trás em combate, e o
@@ -3267,9 +4122,15 @@ export class HuntRuleset implements Ruleset {
     // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
     if (d === want) return null;
 
+    // `keep-distance` só RECUA com visão livre até o alvo (#553): o TFS só deixa um monstro
+    // que mantém distância se afastar quando ele ainda enxerga quem persegue — recuar às cegas
+    // podia levar a se afastar do alvo sem motivo, quando na prática ele já perdeu a linha por
+    // outra razão. Sem visão, mantém a posição — a mesma "decidiu ficar parado" de `d === want`.
     const to = d > want
       ? greedyStep(from, target.position, blocked)
-      : fleeStep(from, target.position, blocked);
+      : (isSightClear(this.#world.map, from, target.position)
+        ? fleeStep(from, target.position, blocked)
+        : null);
     // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
     if (to === null) return null;
@@ -3449,6 +4310,97 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O caminho para um `walk-to` DISTANTE (#763, achado do QA da #730). O MESMO BFS limitado do
+   * follow (`boundedPath`, `route/pathfind.ts`, ADR 0009 emenda) — reaproveita a legalidade de
+   * `canOccupy`/`MovementWorld` (parede, fora do mapa, ocupação, troca de andar), com UMA
+   * exceção: uma porta FECHADA do overlay de sessão (#728) é tratada como PASSÁVEL aqui, porque
+   * quem percorre o caminho a abre sozinha ao chegar (`#advanceManualWalk`, a MESMA automação do
+   * walker de rota em `#playerStep` — `isDoorKind`, nunca grama/stone-pile, que exigem
+   * ferramenta e nunca abrem "de passagem"). Troca de andar fica de fora do caminho: o destino
+   * de um `walk-to` é sempre do MESMO `z` do personagem (`requestMove` já fixa isso), e deixar o
+   * BFS atravessar uma escada faria um clique perto dela levar para outro andar sem o jogador
+   * ter pedido isso.
+   *
+   * `null` é "fora do raio ou sem caminho" — quem chama (`requestMove`) devolve a recusa tipada
+   * `unreachable` (RF-03 da spec): destino genuinamente inalcançável não pode deixar o pedido
+   * pendurado sem resposta.
+   */
+  #planManualWalk(from: FloorPoint, to: GridPoint): readonly GridPoint[] | null {
+    // `from` é sempre `character.position` (#519: personagem carrega `z` de verdade, nunca
+    // ausente) — o `?? this.#world.map.z` é só para o tipo, como em `#followStep`.
+    const z = from.z ?? this.#world.map.z;
+    const pathBlocked: Blocked = (x, y) => {
+      if (this.#world.occupied(x, y, z)) return true;
+      if (this.#world.floorChangeAt(x, y, z) !== null) return true;
+      const override = this.#tileOverrides.at({ x, y, z });
+      if (override !== null && override.blocked) return !isDoorKind(override.kind);
+      return isBlocked(this.#world.map, x, y, z);
+    };
+    return boundedPath(from, isExactly(to), pathBlocked, MANUAL_WALK_PATHFIND_RADIUS);
+  }
+
+  /**
+   * Avança o caminho manual pendente (#763): um tile por vencimento, pela MESMA fila de eventos
+   * do resto do motor (invariante 2) — nunca o caminho inteiro de uma vez. Chamado tanto por
+   * `requestMove` (o primeiro passo, na hora do pedido) quanto por `#playerStep` (os seguintes).
+   *
+   * Uma porta fechada no próprio caminho é aberta aqui, do MESMO jeito que o walker de rota abre
+   * a dela em `#playerStep` — `#planManualWalk` já a tratou como passável, então a única forma
+   * dela continuar bloqueada agora é o personagem não cumprir o requisito (chave, nível, quest):
+   * aí o caminho manual é ABANDONADO (o bot retoma sozinho no vencimento seguinte, pelo tile
+   * mais próximo — o mecanismo que já existe), nunca preso esperando para sempre.
+   */
+  #advanceManualWalk(session: Session, character: CharacterRuntime): MoveResult | null {
+    const runner = this.#runnerOf(character.id);
+    const manual = runner.manualWalkTo;
+    if (manual === null) return null;
+    const next = manual.path[0];
+    if (next === undefined) {
+      // Chegou (RF-02): liga a janela de espera, e o vencimento seguinte já cai no
+      // ramo de `manualWalkHoldUntilMs` de `#playerStep` — nenhuma andança nesta mesma chamada.
+      runner.manualWalkTo = null;
+      runner.manualWalkHoldUntilMs = session.nowMs + MANUAL_WALK_HOLD_MS;
+      return null;
+    }
+    const at = { x: next.x, y: next.y, z: character.position.z };
+    const blockingHere = this.#tileOverrides.at(at);
+    if (blockingHere !== null && blockingHere.blocked) {
+      if (this.#useInteractable(session, character, blockingHere.interactableId) === null) {
+        // Sem ferramenta, level ou storage: o destino era alcançável no instante do pedido e
+        // deixou de ser (alguém trancou a porta de novo). Desiste do caminho manual — não do
+        // passo do personagem, que segue livre para a rota/bot no próprio vencimento.
+        runner.manualWalkTo = null;
+        return null;
+      }
+    }
+    const result = this.#step(session, character, at, character.id);
+    if (result.ok) {
+      runner.manualWalkTo = { destination: manual.destination, path: manual.path.slice(1) };
+    }
+    // Recusado (tile temporariamente ocupado por outra criatura, por exemplo): o caminho
+    // continua de pé, e o vencimento seguinte tenta o MESMO tile de novo — a mesma tolerância a
+    // bloqueio passageiro que a rota autorada já tem, nunca um recálculo a cada tentativa.
+    return result;
+  }
+
+  /**
+   * (Re)inicia a janela de pausa do bot (#763, `MANUAL_WALK_HOLD_MS`) — chamada por toda
+   * intenção manual que a spec lista: `openCorpse`, `takeLoot`, `#useItemLike`
+   * (`useItem`/`useItemOn`) e `useOnMap`. SEMPRE (re)inicia, mesmo sem um caminho manual
+   * anterior — achado de QA ao vivo: um cadáver já adjacente (sem nunca ter passado por
+   * `requestMove`) abria a janela do `open-corpse` normalmente, mas o bot seguia livre para
+   * andar embora ATRÁS do jogador porque nenhuma pausa nunca tinha sido armada; dois segundos
+   * depois o `take-loot` batia em `too-far-away`, porque o bot já tinha levado o personagem para
+   * a rota. A intenção manual em SI — abrir o cadáver, usar o item — já é o que deveria segurar
+   * o bot, com ou sem `walk-to` antes dela.
+   */
+  #armManualWalkHold(characterId: string, nowMs: number): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return;
+    runner.manualWalkHoldUntilMs = nowMs + MANUAL_WALK_HOLD_MS;
+  }
+
+  /**
    * O passo em direção a `goal` para o FOLLOW (#527, emenda ao ADR 0009 —
    * `docs/adr/0009-fixed-hunt-route-without-pathfinding.md`): guloso primeiro — resolve a
    * esmagadora maioria dos casos, O(1), sem estado —, e só quando ele emperra (devolve `null`,
@@ -3484,8 +4436,8 @@ export class HuntRuleset implements Ruleset {
     // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
     const z = from.z ?? this.#world.map.z;
     const pathBlocked: Blocked = (x, y) => {
-      if (isBlocked(this.#world.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
-      if (grounded && floorChangeAt(this.#world.map, x, y, z) !== null) return true;
+      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (grounded && this.#world.floorChangeAt(x, y, z) !== null) return true;
       if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
       return false;
     };
@@ -3814,12 +4766,38 @@ export class HuntRuleset implements Ruleset {
    * (FUN-122): o próximo vencimento do bot conta a partir dele. Sem isto, o `PLAYER_STEP` já
    * agendado — com a cadência do passo anterior — vencia logo depois, e o personagem dava
    * dois passos dentro da duração de um.
+   *
+   * `to` DISTANTE (#763, achado do QA da #730): antes, só o tile ADJACENTE era aceito — um
+   * `walk-to` para um cadáver a seis tiles nunca chegava, e o cliente (que só manda intenção e
+   * espera o servidor decidir, invariante 4) ficava esperando um passo que nunca vinha.
+   * `#planManualWalk` calcula o caminho com o BFS limitado do follow; sem caminho dentro do
+   * raio, a recusa é `unreachable` — TIPADA, para o bot nunca ficar esperando uma resposta que
+   * não vem (RF-03). Um `to` ADJACENTE continua o de sempre (compatível com seta/clique de um
+   * tile) e CANCELA um caminho manual em curso — é intenção nova, sobrepõe a anterior, como o
+   * cliente já cancela o próprio pedido de aproximação por qualquer outra ação.
    */
   requestMove(session: Session, characterId: string, to: GridPoint): MoveResult {
     const character = findById(session.participants, characterId);
     if (character === null) return { ok: false, reason: 'tile-blocked' };
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
-    const result = this.#step(session, character, { ...to, z: character.position.z }, characterId);
+    const runner = this.#runnerOf(characterId);
+    const from = character.position;
+    const adjacent = Math.abs(to.x - from.x) <= 1 && Math.abs(to.y - from.y) <= 1;
+
+    let result: MoveResult;
+    if (adjacent) {
+      runner.manualWalkTo = null;
+      runner.manualWalkHoldUntilMs = null;
+      result = this.#step(session, character, { ...to, z: from.z }, characterId);
+    } else {
+      const path = this.#planManualWalk(from, to);
+      if (path === null) return { ok: false, reason: 'unreachable' };
+      runner.manualWalkTo = { destination: { ...to, z: from.z }, path };
+      // O primeiro tile SAI já neste pedido — o mesmo "responde na hora" do caso adjacente;
+      // os seguintes vêm de `#playerStep`, um por vencimento (invariante 2).
+      result = this.#advanceManualWalk(session, character) ?? { ok: false, reason: 'tile-blocked' };
+    }
+
     if (result.ok) {
       session.cancelEvent(PLAYER_STEP, characterId);
       session.scheduleIn(PLAYER_STEP, result.durationMs, {
@@ -4023,10 +5001,11 @@ const slots = bot.groups.get(group);
   #perform(
     session: Session, character: CharacterRuntime, action: BotAction,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient, explicit);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -4054,6 +5033,51 @@ const slots = bot.groups.get(group);
       return effect.range ?? null;
     }
     return null;
+  }
+
+  /**
+   * Traduz o `target` de um `use-slot` manual (D11, ADR 0049 decisão 2) em recipiente de aliado
+   * OU alvo explícito de monstro/posição, ou recusa tipada.
+   *
+   * `null`: a ação não é mirável — nem `friend` (cura/suporte) nem dano — e `target` é ruído,
+   * ignorado sem recusa nenhuma (RF-12 da spec da #725); inclui a magia/runa de área centrada no
+   * LANÇADOR, porque `#needsTarget` já devolve `false` para ela (RF-13).
+   */
+  #resolveManualTarget(
+    session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
+  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
+    | { ok: false; reason: SlotRefusal } | null {
+    const healRange = this.#healRangeOf(action);
+    if (healRange !== null) {
+      // Ação de ALIADO: sem `target`, cai no default — `#perform` já assume `recipient =
+      // character` (curar A SI MESMO, como hoje, RF-12).
+      if (target === undefined) return null;
+      if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+      if (target.kind !== 'character') return null; // mira de monstro/posição não se aplica
+      const member = findById(session.participants, target.characterId);
+      if (member === null || !member.alive) return { ok: false, reason: 'no-target' };
+      if (!sameFloor(character.position.z, member.position.z)
+        || distance(character.position, member.position) > (healRange || 1)) {
+        return { ok: false, reason: 'out-of-range' };
+      }
+      return { ok: true, recipient: member };
+    }
+
+    const damageEffect = action.kind === 'spell'
+      ? this.#options.spells.get(action.spellId)?.effect
+      : action.kind === 'supply'
+        ? this.#options.supplies.get(action.supplyId)?.effect
+        : undefined;
+    if (damageEffect === undefined || !this.#needsTarget(damageEffect)) return null;
+    if (target === undefined) return null;
+    if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+    if (target.kind === 'character') return null; // não se aplica — ignorado (RF-12)
+    if (target.kind === 'monster') {
+      const monster = this.#monsterBySubject.get(target.subject);
+      if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
+      return { ok: true, explicit: monster };
+    }
+    return { ok: true, explicit: target.position };
   }
 
   /**
@@ -4113,14 +5137,15 @@ const slots = bot.groups.get(group);
   #castSpell(
     session: Session, character: CharacterRuntime, spellId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
     const aim = spell.effect.kind === 'damage'
-      ? this.#aimFor(character, spell.effect.range, spell.effect.area)
+      ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
-        ? this.#aimFor(character, spell.effect.range, undefined)
+        ? this.#aimFor(character, spell.effect.range, undefined, explicit)
         : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
@@ -4324,9 +5349,15 @@ const slots = bot.groups.get(group);
    *
    * Os vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`. A única alocação por
    * lançamento é o `Set` de chaves da forma, do tamanho dela.
+   *
+   * `explicit` é a mira manual (ADR 0049 decisão 2): um `MonsterRuntime` (alvo apontado) ou um
+   * `FloorPoint` (tile apontado, para runa de área sobre chão vazio). Área centrada no
+   * LANÇADOR ignora `explicit` (última frase da decisão 2) — a forma sai do lançador de
+   * qualquer forma, e é por isso que o ramo abaixo nem olha o parâmetro.
    */
   #aimFor(
     character: CharacterRuntime, range: number | undefined, area: SpellArea | undefined,
+    explicit?: MonsterRuntime | FloorPoint,
   ): SpellAim | null {
     this.#spellHits.length = 0;
     this.#spellTargets.length = 0;
@@ -4337,6 +5368,10 @@ const slots = bot.groups.get(group);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        // Cada alvo da forma precisa da PRÓPRIA visão (#553, RF-05) — a onda cobre um cone
+        // inteiro, e alguém atrás de uma parede não é atingido só porque outro, mais à frente,
+        // está.
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
       if (this.#spellHits.length === 0) return null;
@@ -4345,21 +5380,51 @@ const slots = bot.groups.get(group);
       return this.#aim;
     }
 
-    const primary = this.#targetInRange(character, range);
-    if (primary === null) return null;
-    this.#collect(character, primary);
+    let primary: MonsterRuntime | null = null;
+    let primaryPoint: WorldPoint;
+    if (explicit === undefined) {
+      primary = this.#targetInRange(character, range);
+      if (primary === null) return null;
+      primaryPoint = this.#at(primary);
+    } else if ('position' in explicit) {
+      // Mira de MONSTRO (`MonsterRuntime`): precisa estar vivo e no MESMO andar (#519) — mas
+      // NÃO recusamos aqui por alcance: `aim.distance` carrega a distância real, e é
+      // `castSpell`/`useSupply` quem já confere `aim.distance > effect.range` e recusa
+      // `out-of-range` tipado (distinto de `no-target`, ADR 0049 decisão 2/RF-10). Filtrar aqui
+      // devolveria `null` → sempre `no-target`, escondendo a recusa certa.
+      if (!explicit.alive || !sameFloor(character.position.z, explicit.position.z)) return null;
+      primary = explicit;
+      primaryPoint = this.#at(explicit);
+    } else {
+      // Mira de POSIÇÃO (`FloorPoint`): sem monstro no tile, só vale para forma em área — alvo
+      // único mirado num tile vazio não tem o que acertar. Mesmo andar (#519); alcance fica
+      // para o chamador, pela mesma razão do ramo acima.
+      if (!sameFloor(character.position.z, explicit.z)) return null;
+      if (area === undefined) return null;
+      primaryPoint = { x: explicit.x, y: explicit.y, z: explicit.z ?? this.#world.map.z };
+    }
+    // A ESCOLHA do alvo (`#targetInRange`) ignora visão de propósito (DT-05 da spec #553): o
+    // bot continua mirando o mesmo alvo atrás da parede, em vez de trocar para um pior só
+    // porque este está sem linha agora. Só a CAPTURA final é filtrada — o golpe não sai. Vale
+    // igual para a mira manual (#725): alvo ou tile atrás da parede não é atingido.
+    if (!isSightClear(this.#world.map, character.position, primaryPoint)) return null;
+    if (primary !== null) this.#collect(character, primary);
 
     if (area !== undefined) {
-      this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
+      this.#aimTiles = areaTiles(area, character.position, character.direction, primaryPoint);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
     }
+    // Sem alvo primário e sem colheita de área (mira de posição vazia): nenhum alvo, `null`
+    // como sempre.
+    if (this.#spellHits.length === 0) return null;
 
-    this.#aim.distance = distance(character.position, primary.position);
+    this.#aim.distance = distance(character.position, primaryPoint);
     this.#aim.targets = this.#spellTargets;
     return this.#aim;
   }
@@ -4367,12 +5432,15 @@ const slots = bot.groups.get(group);
   /**
    * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
    * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
-   * Mind Control) — o item soma no magic level como soma no dano da runa e na cura da poção.
+   * Mind Control) MAIS o de condição (#576: Mastermind Potion soma 3 — `CONDITION_PARAM_BUFF_SPELL`
+   * do Canary é o que faz a poção valer para runa/magia, não só para o golpe) — as fontes somam
+   * no magic level como somam no dano da runa e na cura da poção.
    */
   #runeScaling(character: CharacterRuntime): SpellScaling {
     const magic = this.#options.skills.get('magic');
     const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
-      + character.inventory.skillBonus(this.#options.items, 'magic');
+      + character.inventory.skillBonus(this.#options.items, 'magic')
+      + character.conditions.skillBonus('magic');
     return {
       skillLevel: magicLevel, powerScale: 1, magicLevel,
       // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
@@ -4383,20 +5451,31 @@ const slots = bot.groups.get(group);
   /**
    * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
    * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
-   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid) — MAIS
+   * o de condição (#576: Mastermind Potion soma 3 em `magic`).
+   *
+   * `SPELL_SKILL_WEAPON` (#567) é a sentinela do Knight: desde a separação de `melee` em
+   * `fist`/`club`/`sword`/`axe`, não há mais uma skill fixa para a magia dele — Berserk,
+   * Groundshaker etc. escalam pela skill da FAMÍLIA da arma que está na mão agora, resolvida
+   * do mesmo jeito que `#weaponPower` resolve o golpe (`Inventory.weapon`, desarmado cai no
+   * perfil `fist` de `content.unarmed`).
    */
   #spellScaling(character: CharacterRuntime): SpellScaling {
-    const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const spellSkill = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const skillId = spellSkill === SPELL_SKILL_WEAPON
+      ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
     const magic = this.#options.skills.get('magic');
     return {
       skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
-        + character.inventory.skillBonus(this.#options.items, skillId),
+        + character.inventory.skillBonus(this.#options.items, skillId)
+        + character.conditions.skillBonus(skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
       magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
-        + character.inventory.skillBonus(this.#options.items, 'magic'),
+        + character.inventory.skillBonus(this.#options.items, 'magic')
+        + character.conditions.skillBonus('magic'),
       // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
@@ -4763,6 +5842,7 @@ const slots = bot.groups.get(group);
   #useSupply(
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -4770,7 +5850,7 @@ const slots = bot.groups.get(group);
     // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
     // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
     const aim = supply.effect.kind === 'damage'
-      ? this.#aimFor(character, supply.effect.range, supply.effect.area)
+      ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
@@ -4799,6 +5879,10 @@ const slots = bot.groups.get(group);
       });
       if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
       else this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
+      // Poção de buff (#576, CMB-07): o `useSupply` devolve a condição já com o USUÁRIO como
+      // alvo e origem (auto-alvo sempre, nunca o `recipient`) — quem agenda o vencimento é quem
+      // tem a fila, a mesma divisão do `#castSpell`.
+      if (result.condition !== undefined) this.#applyConditionTo(session, character, result.condition);
       return result;
     }
 
@@ -5505,6 +6589,7 @@ const slots = bot.groups.get(group);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(
       monster, target, definition, this.#blockedForMonster(monster, definition),
+      (from, to) => isSightClear(this.#world.map, from, to),
     );
     // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
     // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
@@ -5571,6 +6656,7 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
       monster.attackReady = true;
       return;
@@ -5609,9 +6695,11 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
-      // Alvo saiu do alcance (ou o monstro está fugindo e esta ability é corpo a corpo): NÃO
-      // bate, e a ability volta a ficar engatilhada — `#armMonsterAbilities` a re-arma.
+      // Alvo saiu do alcance, ou a visão fechou (#553), ou o monstro está fugindo e esta
+      // ability é corpo a corpo: NÃO bate, e a ability volta a ficar engatilhada —
+      // `#armMonsterAbilities` a re-arma.
       return;
     }
 
@@ -5636,6 +6724,7 @@ const slots = bot.groups.get(group);
     for (const ability of definition.abilities) {
       if (fleeing && isMeleeAbility(ability)) continue;
       if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (!isSightClear(this.#world.map, monster.position, target.position)) continue;
       if (ability.id === BASIC_ABILITY_ID) {
         if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
         continue;
@@ -5659,7 +6748,11 @@ const slots = bot.groups.get(group);
     primary: CharacterRuntime,
   ): void {
     const subject = monster.subject;
-    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
+    // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
+    // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants)
+      .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
     // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
@@ -6032,8 +7125,36 @@ const slots = bot.groups.get(group);
       if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
         this.#enterField(session, mover);
       }
+      // Placa de pressão (#734, ADR 0050 d.6 T3): `#step` é o ÚNICO lugar que escreve posição
+      // (comentário do topo do arquivo), então é o único choke point que cobre bot, monstro E o
+      // `walk` do socket sem duplicar a checagem em cada chamador. Pressiona o destino ANTES de
+      // soltar a origem — a ordem só importa quando `from`/`to` fossem a MESMA placa, que
+      // `canOccupy` já recusa como `same-tile`, então não há ambiguidade real.
+      const character = mover instanceof CharacterRuntime ? mover : null;
+      this.#onSteppedOnto(session, character, result.to);
+      this.#onSteppedOffOf(session, character, result.from);
     }
     return result;
+  }
+
+  /** Pisou numa placa de pressão OCIOSA (`up`): pressiona, com o cascade de `links` de sempre. */
+  #onSteppedOnto(session: Session, character: CharacterRuntime | null, at: WorldPoint): void {
+    const current = this.#tileOverrides.at(at);
+    if (current === null || current.kind !== 'pressure-plate' || current.state !== 'up') return;
+    this.#useInteractable(session, character, current.interactableId);
+  }
+
+  /**
+   * Saiu de uma placa PRESSIONADA (`down`): solta. A ocupação de tile é EXCLUSIVA (invariante 8
+   * na letra do `sim` — `TileOccupancy.#occupied` é um `Set` por tile, `canOccupy` recusa
+   * `tile-occupied`), então a origem de um passo aceito está SEMPRE vazia neste ponto — não há
+   * "ainda tem alguém ali" para conferir, ao contrário da porta (`closeDoorIfVacant`), cujo
+   * `stillOccupied` é defensivo para um caso que nem chega a existir hoje.
+   */
+  #onSteppedOffOf(session: Session, character: CharacterRuntime | null, at: WorldPoint): void {
+    const current = this.#tileOverrides.at(at);
+    if (current === null || current.kind !== 'pressure-plate' || current.state !== 'down') return;
+    this.#useInteractable(session, character, current.interactableId);
   }
 
   /**
@@ -6222,7 +7343,19 @@ const slots = bot.groups.get(group);
     const reflectAttacker = this.#reflectAttackerFor(character, monster);
 
     if (weapon !== null && how?.kind === 'distance') {
-      const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
+      // Sem visão livre até o alvo (#553), o tiro NÃO sai — como sem munição, antes de gastar
+      // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
+      // reavalia, e acerta assim que a linha abrir. Vale para o arremessável (#575) também —
+      // ele só troca a fonte do projétil, nunca a exigência de linha de visão.
+      if (!isSightClear(this.#world.map, character.position, monster.position)) return;
+      // O arremessável (#575): sem `ammoFamily`, o item na mão É o próprio projétil — não há
+      // seleção por família nem lançador (ADR 0026 d.3 não se aplica a ele). `buildContent` já
+      // garante que toda arma `distance` tem exatamente um dos dois campos.
+      if (how.ammoFamily === undefined) {
+        this.#throwWeapon(session, character, monster, weapon, how, damagePercent, defender, reflectAttacker);
+        return;
+      }
+      const ammo = this.#ammoFor(character, how.ammoFamily);
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
@@ -6278,7 +7411,8 @@ const slots = bot.groups.get(group);
       };
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical,
+          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical
+            + this.#perfectShotBonus(character, monster),
           source: 'basic-attack',
           damageType: profile.damageType,
           modifiers: this.#attackerModifiers(character),
@@ -6494,9 +7628,23 @@ const slots = bot.groups.get(group);
   #skillLevelOf(character: CharacterRuntime, family: CompiledWeaponFamily | undefined): number {
     const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
     // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
-    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item.
+    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item — MAIS o de
+    // condição (#576: Berserk Potion soma 5 em `melee`, Bullseye Potion soma 5 em `distance`).
     return (skill === undefined ? 0 : character.skills.levelOf(skill))
-      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId))
+      + (family === undefined ? 0 : character.conditions.skillBonus(family.skillId));
+  }
+
+  /**
+   * A skill que a arma NA MÃO agora aponta (#567, `SPELL_SKILL_WEAPON`): a mesma leitura de
+   * `#strike` (`Inventory.weapon`), caindo no perfil `fist` de `content.unarmed` desarmado —
+   * nunca um nome fixo, porque `fist`/`club`/`sword`/`axe` são skills diferentes desde a
+   * separação de `melee`. Sem a família no catálogo (conteúdo de teste incompleto), `fist`.
+   */
+  #equippedWeaponSkillId(character: CharacterRuntime): string {
+    const item = character.inventory.weapon(this.#options.items, character);
+    const family = item?.weapon?.family ?? this.#options.unarmed.family;
+    return this.#options.weaponFamilies.get(family)?.skillId ?? 'fist';
   }
 
   /**
@@ -6524,6 +7672,83 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O arremessável (#575, ADR 0026 d.3 NÃO se aplica): sem `ammoFamily`, o item na mão É o
+   * próprio projétil — não há seleção por família nem lançador, e não é munição abstrata: é um
+   * item de verdade, `stackable: true` (spear, throwing star — como o `royal-spear.json`
+   * autoral já declarava, à espera desta issue), looteado e empilhado como qualquer item comum.
+   * `weapon !== null` já garante `quantity >= 1` (`equip` nunca deixa pilha vazia no corpo), então
+   * não há "sem estoque" a conferir aqui — só a QUEBRA, que consome uma unidade da PILHA
+   * (`Inventory.consumeStack`), nunca `ammunitionStock` (isso é só da munição arrow/bolt).
+   */
+  #throwWeapon(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, weapon: Item,
+    how: ResolvedWeapon, damagePercent: number, defender: Defender,
+    reflectAttacker: ReflectAttacker | undefined,
+  ): void {
+    session.emit({
+      kind: 'shot', attackerId: character.id, targetId: monster.subject,
+      weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+    });
+    const hit = this.#rollThrowHit(session, character, monster, how);
+    if (!this.#isV3()) this.#practice(session, character, how.family, 1);
+    // A quebra é rolagem SEMPRE consumida (ADR 0031): a sequência de RNG não pode depender do
+    // valor de `breakChance` — a mesma regra do bloqueio e do crítico.
+    if (session.rng.chance((how.breakChance ?? 0) / 100)) {
+      character.inventory.consumeStack('hand');
+    }
+    if (!hit) {
+      if (this.#isV3()) this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+      return;
+    }
+    const power = this.#weaponPower(session, character, how, damagePercent);
+    const result = resolveDamage(
+      {
+        rawDamage: power.physical + this.#perfectShotBonus(character, monster),
+        source: 'basic-attack',
+        damageType: how.damageType,
+        modifiers: this.#attackerModifiers(character),
+        // Como a munição por família (#548): bloqueia por armadura, nunca por escudo.
+        blockable: DISTANCE_BLOCK_FLAGS,
+        ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
+      },
+      defender, 'pve', this.#options.combat, session.rng, session.nowMs,
+    );
+    this.#land(session, character, monster, result, 'melee');
+    if (this.#isV3()) this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+  }
+
+  /**
+   * A chance de acerto do arremessável (#575): o CAMINHO FIXO de `distance-hit.ts` — o próprio
+   * `how.hitChance` da arma (viper star 80%, leaf star 90%) faz o papel do `ammunition.hitChance`
+   * direto do Canary (`it.hitChance != 0` ANTES da tabela/balde), porque não há munição separada
+   * cujo campo pudesse carregar isso. Sem tabela de `combat.distanceHitChance` (v1), sempre acerta.
+   */
+  #rollThrowHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, how: ResolvedWeapon,
+  ): boolean {
+    const table = this.#options.combat.distanceHitChance;
+    if (table === undefined) return true;
+    const family = this.#options.weaponFamilies.get('distance');
+    const skillLevel = this.#skillLevelOf(character, family);
+    const tiles = distance(character.position, monster.position);
+    return rollDistanceHit(tiles, skillLevel, table, session.rng, undefined, how.hitChance ?? 0, undefined);
+  }
+
+  /**
+   * O bônus de perfect shot (#575; `Player::getPerfectShotDamage`, Canary `weapons.cpp:706-718`/
+   * `game.cpp:8500-8509`): soma quando a distância de Chebyshev até o alvo é EXATAMENTE o
+   * `perfectShot.range` da peça no slot de escudo (a aljava) — nem mais perto, nem mais longe.
+   * Vale para os dois caminhos de tiro (munição por família E arremessável), porque o Canary lê a
+   * MESMA peça nos dois. Sem aljava, ou aljava sem `perfectShot`, o bônus é zero.
+   */
+  #perfectShotBonus(character: CharacterRuntime, monster: MonsterRuntime): number {
+    const shield = character.inventory.shield(this.#options.items, character);
+    const perfectShot = shield?.perfectShot;
+    if (perfectShot === undefined) return 0;
+    return distance(character.position, monster.position) === perfectShot.range ? perfectShot.damage : 0;
+  }
+
+  /**
    * Registra que `characterId` atacou ou curou agora (§525, ADR 0027 emenda 2026-09-24): a
    * atividade que `canShareExperience` lê como `Party::isPlayerActive` do TFS/Canary. Sem
    * `Runner` (id que não é participante — `healerId` de uma condição, por exemplo) é no-op, a
@@ -6535,9 +7760,15 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
-   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
-   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   * Pratica UMA vez pelo golpe, na skill que a família aponta — SÓ ELA (CMB-05, #567). A
+   * prática é o `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por
+   * mana gasta — e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * Chama `#gainSkill` DIRETO, na skill resolvida — nunca `#gainSkills` (o grupo inteiro de
+   * `sk.gain.on`): desde a separação de `melee` em `fist`/`club`/`sword`/`axe`, as quatro
+   * compartilham o MESMO gatilho `melee-hit`, e o grupo faria uma espada treinar `axe` junto —
+   * o defeito que o #567 existe para não introduzir. `distance`/`magic` continuam com uma
+   * skill só por grupo, então o comportamento delas não muda.
    *
    * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
    * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
@@ -6549,7 +7780,7 @@ const slots = bot.groups.get(group);
     if (definition === undefined) return;
     const skill = this.#options.skills.get(definition.skillId);
     if (skill === undefined) return;
-    this.#gainSkills(session, character, skill.gain.on, amount);
+    this.#gainSkill(session, character, skill, amount);
   }
 
   /**
@@ -6734,35 +7965,48 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Credita uso a toda skill alimentada por esta fonte.
+   * Credita uso a toda skill alimentada por esta fonte (`spell-cast`, `shield-block`): hoje uma
+   * skill só por grupo, então iterar ou chamar `#gainSkill` uma vez dá no mesmo — mas iterar é
+   * o que continua certo se um dia houver mais de uma nesse mesmo grupo.
    *
    * `amount` é o que a fonte rende: um golpe é um golpe; uma magia rende a MANA que gastou
    * (§9.4, modelo do Tibia). Sem isso, a forma ótima de subir magia seria lançar mil vezes a
    * magia mais barata, e o jogo viraria macro de spam.
-   *
-   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
-   * jogador quer ver ao voltar, ao lado do level up (§16.2).
    */
   #gainSkills(
     session: Session, character: CharacterRuntime, on: Skill['gain']['on'], amount: number,
   ): void {
-    if (amount <= 0) return;
     const definitions = this.#skillsByGain[on];
-    const vocation = this.#vocationOf(character);
     for (let i = 0; i < definitions.length; i += 1) {
-      const definition = definitions[i] as Skill;
-      const gain = definition.gain;
-      const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
-      // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
-      // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
-      // diferente por quem está usando.
-      const factor = skillFactorFor(definition, vocation, this.#options.progression);
-      // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
-      // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
-      const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
-      if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
-        session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
-      }
+      this.#gainSkill(session, character, definitions[i] as Skill, amount);
+    }
+  }
+
+  /**
+   * Credita uso a UMA skill (#567): a que a família de arma aponta, nunca o grupo inteiro de
+   * `gain.on` — é o que separa `fist`/`club`/`sword`/`axe` de verdade, depois de todas
+   * compartilharem o mesmo gatilho `melee-hit`. `#gainSkills`, acima, continua servindo os
+   * gatilhos que SÃO compartilhados de propósito.
+   *
+   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
+   * jogador quer ver ao voltar, ao lado do level up (§16.2).
+   */
+  #gainSkill(
+    session: Session, character: CharacterRuntime, definition: Skill, amount: number,
+  ): void {
+    if (amount <= 0) return;
+    const gain = definition.gain;
+    const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
+    // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
+    // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
+    // diferente por quem está usando.
+    const vocation = this.#vocationOf(character);
+    const factor = skillFactorFor(definition, vocation, this.#options.progression);
+    // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
+    // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
+    const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
+    if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
+      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
     }
   }
 
@@ -6796,6 +8040,10 @@ const slots = bot.groups.get(group);
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
     const recipient = isSummon ? null : this.#lootRecipient(session, killer, eligible);
+    // O que o cadáver nasce carregando (ADR 0048 decisão 1) — vazio no modo bolsa (o loot vai
+    // direto para ela, "como hoje") e quando não há destinatário nenhum.
+    let corpseGold = 0;
+    let corpseItems: CarriedItem[] = [];
     if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
@@ -6816,17 +8064,18 @@ const slots = bot.groups.get(group);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
       }
     } else if (!isSummon && definition !== undefined && recipient !== null) {
-      // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
-      // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
+      // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
+      // destino é o cadáver, não mais direto na mochila (ADR 0048 decisão 1). `corpseGold`/
+      // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
+      // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
+      // isso é o W3/#722.
       const loot = rollLoot(
         this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
       );
-      recipient.goldDelta += loot.gold;
-      session.credit(recipient.id, 'goldGained', loot.gold);
-      // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
-      // (FUN-63), e acrescentar destino não muda sorteio nenhum.
-      this.#deliverLoot(session, recipient, loot.items);
-      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold.
+      corpseGold = loot.gold;
+      corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
+      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold —
+      // são abstratos, sem cadáver (ADR 0048 decisão 1).
       this.#creditSupplies(session, [recipient], loot.supplies);
       this.#creditAmmunition(session, [recipient], loot.ammunition);
     }
@@ -6857,16 +8106,29 @@ const slots = bot.groups.get(group);
     // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
     // ele morre em z11 num mapa cujo andar padrão é z10.
     this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
-    // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
-    // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
-    // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
-    const corpseTtlMs = this.#options.hunt.corpseTtlMs;
+    // O cadáver carrega o loot (FUN-123, ADR 0048 decisão 1): fica no tile por `corpseTtlMs` do
+    // MONSTRO (#585 — era da hunt) e some sozinho, levando o que ninguém coletou junto
+    // (decisão 5) — a arte é da tabela, no hospedeiro (invariante 6).
+    //
+    // A COLETA roda sempre, com `corpseTtlMs` ou sem — é o abate creditando gold e item de
+    // sempre, e gatear por um campo de conteúdo opcional quebraria todo monstro que nunca falou
+    // de cadáver. Só a PERSISTÊNCIA do que sobra (o cadáver visível, com prazo próprio) depende
+    // de `corpseTtlMs`: sem ele, o que o filtro não aceitou ou não coube não tem onde esperar, e
+    // desaparece — o "não deixa nada" de antes deste ADR, agora só para a sobra.
+    const corpseTtlMs = definition?.corpseTtlMs;
+    const corpse: CorpseState = {
+      id: corpseTtlMs === undefined ? 0 : this.#nextGroundItemId++,
+      monsterId: monster.monsterId,
+      position: this.#at(monster),
+      items: corpseItems,
+      gold: corpseGold,
+      ownerId: recipient?.id ?? null,
+      eligible: eligible.map((p) => p.id),
+    };
+    // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
+    // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
+    if (recipient !== null) this.#collectFromCorpse(session, corpse, recipient);
     if (corpseTtlMs !== undefined) {
-      const corpse: CorpseState = {
-        id: this.#nextGroundItemId++,
-        monsterId: monster.monsterId,
-        position: this.#at(monster),
-      };
       this.#corpses.push(corpse);
       session.emit({
         kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
@@ -7279,8 +8541,9 @@ const slots = bot.groups.get(group);
    * — com quem sai incluído —, no fim, e ao desligar `splitLoot`. Cada entrada é dividida só
    * entre `eligible ∩ present`; cada um recebe a cota em `goldDelta` e `goldGained`; o resto vai
    * um gold por membro na ordem de entrada. O que não se vende (`value: 0`) vai para a mochila
-   * do líder, e o que não couber para a caixa dele. Registrado no extrato — "vendeu nada" também
-   * é informação.
+   * do líder — peso ignorado (`forceAdd`, ADR 0048 decisão 7: sem cadáver de monstro à mão para
+   * segurar o excedente, e o item já não pôde virar gold). Registrado no extrato — "vendeu
+   * nada" também é informação.
    */
   #settle(
     session: Session, present: readonly CharacterRuntime[], reason: 'leave' | 'end' | 'toggle',
@@ -7307,10 +8570,8 @@ const slots = bot.groups.get(group);
     this.#bagWeight = 0;
     const leader = this.#leader(session) ?? present[0];
     if (leader !== undefined) {
-      const wearer = withReservedCapacity(leader, 0);
       for (const item of unsold) {
-        if (leader.inventory.add(item, this.#options.items, wearer, this.#containerRules(leader)).ok) continue;
-        leader.lootBox.push(item);
+        leader.inventory.forceAdd(item, this.#options.items, this.#containerRules(leader));
       }
     }
     session.record('party-settlement', `${String(total)}/${String(present.length)}`);
@@ -7350,59 +8611,195 @@ const slots = bot.groups.get(group);
     return definition.loot;
   }
 
-  #deliverLoot(
-    session: Session, character: CharacterRuntime, items: readonly LootItem[],
-  ): void {
-    // O loot PESSOAL entra na mochila com a capacidade já descontada da reserva que a party fez
-    // dele (§11, DT-05). Hoje `#deliverLoot` só roda quando `#bag` é `null` (o modo compartilhado
-    // entrega pela bolsa), então `reserved` é 0; o `Wearer` derivado fica pela consistência e
-    // blinda o código se uma issue futura mudar quando este caminho roda com bolsa ativa.
+  /**
+   * Materializa o loot sorteado em itens do CADÁVER, com `instanceId` DETERMINÍSTICO (ADR 0048
+   * decisão 1/5) — o id é gasto AQUI, mesmo que o item nunca seja coletado e apodreça com o
+   * cadáver: a idempotência do invariante 10 vem da identidade previsível, não da contagem
+   * contígua. Ver a versão anterior a este ADR (`#deliverLoot`) para o mesmo argumento sobre o
+   * catálogo ser conferido antes de gastar o id.
+   */
+  #instantiateCorpseItems(
+    session: Session, recipient: CharacterRuntime, items: readonly LootItem[],
+  ): CarriedItem[] {
+    const carried: CarriedItem[] = [];
+    for (const rolled of items) {
+      if (this.#options.items.get(rolled.itemId) === undefined) continue;
+      // Em party (#191) o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam; em
+      // solo o formato é o de sempre. O critério é o TIPO de sessão (DT-03, #397), não a
+      // contagem de presentes.
+      const instanceId = this.#party !== undefined
+        ? `${session.id}:${recipient.id}:${String(recipient.lootSeq++)}`
+        : `${session.id}:${String(recipient.lootSeq++)}`;
+      carried.push({ instanceId, itemId: rolled.itemId, quantity: rolled.quantity });
+    }
+    return carried;
+  }
+
+  /**
+   * O limite de autovenda INDIVIDUAL (ADR 0048 decisão 2, PRD §22.1): o mesmo
+   * `party.autoSellItemTypes` da autovenda de party, mas lido pelo PRÓPRIO Premium do
+   * personagem — fora de party, `#options.premium` é quem diz (o mesmo fallback de
+   * `#onCharacterDied` para a penalidade de morte, D3).
+   */
+  #individualAutoSellLimit(characterId: string): number {
+    const premium = this.#party?.premiumByCharacter[characterId] ?? this.#options.premium ?? false;
+    return autoSellLimit({ [characterId]: premium }, characterId, this.#options.party.autoSellItemTypes);
+  }
+
+  /**
+   * O dono coleta do cadáver o que o filtro de Quick Loot aceita e cabe (ADR 0048 decisão 3): o
+   * `autoLoot` do Canary, sem trava de Premium (invariante 11) — roda no MESMO evento do abate,
+   * sem plateia (invariante 3). Gold é sempre coletado (o Quick Loot do Tibia sempre leva a
+   * moeda); item vendável em `loot.autoSell` vira gold na hora, cortado pelo limite do PRÓPRIO
+   * Premium; o resto FICA no cadáver — filtrado ou sem capacidade, sem diferença nenhuma: as
+   * duas são "não coletado" (§14 do `#deliverToBag` de antes já tratava OVERWEIGHT assim).
+   *
+   * `itemsLooted` conta só o que ENTROU na mochila ou foi vendido (decisão 5) — o que ficou no
+   * cadáver não é loot "levado" ainda, mesmo já tendo saído do sorteio.
+   */
+  #collectFromCorpse(session: Session, corpse: CorpseState, character: CharacterRuntime): void {
+    if ((corpse.gold ?? 0) > 0) {
+      const gold = corpse.gold ?? 0;
+      character.goldDelta += gold;
+      session.credit(character.id, 'goldGained', gold);
+      corpse.gold = 0;
+    }
+    const items = corpse.items ?? [];
+    if (items.length === 0) return;
+
+    const filter = this.#runnerOf(character.id).botConfig?.loot ?? DEFAULT_LOOT_FILTER;
+    const autoSellIds = new Set(filter.autoSell.slice(0, this.#individualAutoSellLimit(character.id)));
+    // A capacidade já descontada da reserva que a party fez dele (§11, DT-05) — como
+    // `#deliverLoot` fazia antes deste ADR; `reserved` é 0 fora do modo bolsa.
     const reserved = this.#bag === null
       ? 0
       : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
     const wearer = withReservedCapacity(character, reserved);
-    for (const rolled of items) {
-      // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
-      // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
-      // voo — e aí o certo é não entregar nada e não queimar identidade por um item que não
-      // vai existir.
-      if (this.#options.items.get(rolled.itemId) === undefined) continue;
 
-      // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
-      // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
-      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre. O critério é o
-      // TIPO de sessão, não a contagem de presentes (DT-03, #397): uma party pode ficar
-      // momentaneamente com 1 presente e depois crescer de novo por join em curso, e o formato
-      // de solo colidiria com o de quem entrar depois.
-      const instanceId = this.#party !== undefined
-        ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-        : `${session.id}:${String(character.lootSeq++)}`;
-      const carried: CarriedItem = {
-        instanceId,
-        itemId: rolled.itemId,
-        quantity: rolled.quantity,
-      };
-      // Conta no ANALISADOR aconteça o que acontecer com o destino: o item caiu, e é isso que
-      // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
-      session.credit(character.id, 'itemsLooted', carried.quantity);
+    const remaining: CarriedItem[] = [];
+    for (const item of items) {
+      const accepted = filter.filter === 'accept'
+        ? filter.itemIds.includes(item.itemId)
+        : !filter.itemIds.includes(item.itemId);
+      if (!accepted) { remaining.push(item); continue; }
 
-      if (character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) continue;
+      const definition = this.#options.items.get(item.itemId);
+      if (definition !== undefined && autoSellIds.has(item.itemId) && definition.value > 0) {
+        const amount = definition.value * item.quantity;
+        character.goldDelta += amount;
+        session.credit(character.id, 'goldGained', amount);
+        session.credit(character.id, 'itemsLooted', item.quantity);
+        continue;
+      }
 
-      // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
-      // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
-      // significar que ele nunca existiu, não que existe e ninguém consegue ver.
-      character.lootBox.push(carried);
+      if (character.inventory.add(item, this.#options.items, wearer, this.#containerRules(character)).ok) {
+        session.credit(character.id, 'itemsLooted', item.quantity);
+        continue;
+      }
+
+      // Não coube: fica no cadáver — a segunda chance é ELE, não uma caixa da sessão (ADR 0048
+      // decisão 7). O aviso é o mesmo de sempre, uma linha por sessão.
+      remaining.push(item);
       const runner = this.#runnerOf(character.id);
       if (runner.warnedFullBackpack) continue;
       runner.warnedFullBackpack = true;
-      // UMA linha no extrato, como o aviso de stamina. Uma por item encheria a lista curta da
-      // tela de retorno até ela deixar de ser lista — e o que o jogador precisa saber é que a
-      // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+    corpse.items = remaining;
     // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
-    // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
+    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
     this.#rebalanceBag(session);
+  }
+
+  /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */
+  #corpseById(groundItemId: number): CorpseState | undefined {
+    return this.#corpses.find((corpse) => corpse.id === groundItemId);
+  }
+
+  /**
+   * Confere se o personagem pode abrir/pegar deste cadáver (#722, ADR 0048 d.4): dono, ou
+   * presente na elegibilidade do abate — o `Player::canOpenCorpse` da party, espelhado por
+   * `ownerId`/`eligible` (que `#onMonsterDied` já grava, ver `CorpseState`).
+   */
+  #canLootCorpse(corpse: CorpseState, characterId: string): boolean {
+    return corpse.ownerId === characterId || (corpse.eligible ?? []).includes(characterId);
+  }
+
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4): confere dono/elegibilidade e distância
+   * (≤ 1, mesmo andar — o `areInRange<1,1,0>`/`Actions::canUse` do Canary, ver §5 da spec da
+   * issue) e devolve o que ainda está lá. PURA quanto a JOGO — abrir não é coletar (invariante
+   * 3) — mas (RE)INICIA a janela de pausa do bot (#763, `#armManualWalkHold`), COM ou SEM
+   * `walk-to` antes: achado de QA ao vivo — um cadáver já adjacente abria a janela normalmente,
+   * o bot seguia andando embora sem NUNCA ter tido uma pausa armada, e o `take-loot` dois
+   * segundos depois batia em `too-far-away`. Bookkeeping do `Runner`, não estado de jogo, como
+   * `routeBlockedWarned` já é em outro lugar.
+   */
+  openCorpse(session: Session, characterId: string, groundItemId: number): OpenCorpseResult {
+    const corpse = this.#corpseById(groundItemId);
+    if (corpse === undefined) return { ok: false, reason: 'not-found' };
+    if (!this.#canLootCorpse(corpse, characterId)) return { ok: false, reason: 'not-yours' };
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'not-found' };
+    if (
+      !sameFloor(character.position.z, corpse.position.z)
+      || distance(character.position, corpse.position) > 1
+    ) {
+      return { ok: false, reason: 'too-far-away' };
+    }
+    this.#armManualWalkHold(characterId, session.nowMs);
+    return { ok: true, corpse };
+  }
+
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático do abate (#722, ADR 0048 d.4).
+   *
+   * `instanceId: null` é o CLIQUE do Tibia: reaplica o MESMO filtro de Quick Loot do
+   * personagem (`#collectFromCorpse`, que já credita ouro e autovenda) a tudo que ainda está
+   * no cadáver — idempotente quando não sobrou nada. Um `instanceId` é arrastar ESTE item
+   * específico da janela, IGNORANDO o filtro — o "segunda chance" do Canary; ouro não é
+   * tocado nesse ramo, porque ouro não tem `instanceId` para arrastar (o clique já o cobre).
+   */
+  takeLoot(
+    session: Session, characterId: string, groundItemId: number, instanceId: string | null,
+  ): TakeLootResult {
+    const corpse = this.#corpseById(groundItemId);
+    if (corpse === undefined) return { ok: false, reason: 'not-found' };
+    if (!this.#canLootCorpse(corpse, characterId)) return { ok: false, reason: 'not-yours' };
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'not-found' };
+    if (
+      !sameFloor(character.position.z, corpse.position.z)
+      || distance(character.position, corpse.position) > 1
+    ) {
+      return { ok: false, reason: 'too-far-away' };
+    }
+    this.#armManualWalkHold(characterId, session.nowMs);
+
+    if (instanceId === null) {
+      this.#collectFromCorpse(session, corpse, character);
+      return { ok: true };
+    }
+
+    const items = corpse.items ?? [];
+    const index = items.findIndex((item) => item.instanceId === instanceId);
+    if (index === -1) return { ok: false, reason: 'not-found' };
+    const item = items[index];
+    if (item === undefined) return { ok: false, reason: 'not-found' };
+
+    // A mesma reserva de capacidade que `#collectFromCorpse` usa (§11, DT-05) — `reserved` é 0
+    // fora do modo bolsa.
+    const reserved = this.#bag === null
+      ? 0
+      : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
+    const wearer = withReservedCapacity(character, reserved);
+    const result = character.inventory.add(item, this.#options.items, wearer, this.#containerRules(character));
+    if (!result.ok) return { ok: false, reason: 'not-enough-capacity' };
+
+    session.credit(character.id, 'itemsLooted', item.quantity);
+    corpse.items = items.filter((_, i) => i !== index);
+    this.#rebalanceBag(session);
+    return { ok: true };
   }
 
   /**
@@ -7739,9 +9136,13 @@ const slots = bot.groups.get(group);
     if (skillId === undefined) return source;
     const skill = this.#options.skills.get(skillId);
     if (skill === undefined) return source;
+    // O malus de condição (#576: Berserk/Bullseye tiram 10 de `shielding`) entra na MESMA skill
+    // que escala a defesa — `powerMultiplier` já pisa em `Math.max(0, …)`, então o malus nunca
+    // deixa o nível efetivo negativo, só encosta no piso de `startingLevel`.
+    const level = character.skills.levelOf(skill) + character.conditions.skillBonus(skillId);
     return {
       kind: source.kind,
-      defense: Math.round(source.defense * powerMultiplier(skill, character.skills.levelOf(skill))),
+      defense: Math.round(source.defense * powerMultiplier(skill, level)),
     };
   }
 
@@ -7987,7 +9388,7 @@ const slots = bot.groups.get(group);
     const base = this.#blockedFor(mover);
     const z = mover.position.z;
     return (x, y, stepZ, monsterId) => base(x, y, stepZ, monsterId)
-      || floorChangeAt(this.#world.map, x, y, z) !== null;
+      || this.#world.floorChangeAt(x, y, z) !== null;
   }
 
   /** Para o spawn não há quem se mova: só parede e ocupação. */
@@ -8011,7 +9412,7 @@ const slots = bot.groups.get(group);
    */
   #spawnBlockedFor(): Blocked {
     return (x, y, z = this.#world.map.z) =>
-      isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z);
+      this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z);
   }
 
   /**
@@ -8048,7 +9449,7 @@ const slots = bot.groups.get(group);
    */
   #summonBlockedFor(): Blocked {
     return (x, y, z = this.#world.map.z) =>
-      isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z);
+      this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z);
   }
 
   /**

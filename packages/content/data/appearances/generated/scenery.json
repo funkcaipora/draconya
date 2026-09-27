@@ -1,0 +1,254 @@
+{
+  "id": "scenery",
+  "pack": "tibia-1533",
+  "scenery": {
+    "locked-door-6249": {
+      "closed": 6249,
+      "open": 6250,
+      "locked": 6248
+    },
+    "door-1638": {
+      "closed": 1638,
+      "open": 1639
+    },
+    "door-1640": {
+      "closed": 1640,
+      "open": 1641
+    },
+    "quest-door-6258": {
+      "closed": 6258,
+      "open": 6259
+    },
+    "locked-door-6252": {
+      "closed": 6252,
+      "open": 6253,
+      "locked": 6251
+    },
+    "door-5100": {
+      "closed": 5100,
+      "open": 5101
+    },
+    "door-5109": {
+      "closed": 5109,
+      "open": 5110
+    },
+    "quest-door-5113": {
+      "closed": 5113,
+      "open": 5114
+    },
+    "quest-door-5104": {
+      "closed": 5104,
+      "open": 5105
+    },
+    "locked-door-5107": {
+      "closed": 5107,
+      "open": 5108,
+      "locked": 5106
+    },
+    "locked-door-5007": {
+      "closed": 5007,
+      "open": 4911,
+      "locked": 4912
+    },
+    "locked-door-1632": {
+      "closed": 1632,
+      "open": 1633,
+      "locked": 1631
+    },
+    "locked-door-1629": {
+      "closed": 1629,
+      "open": 1630,
+      "locked": 1628
+    },
+    "stone-pile-593": {
+      "pile": 593,
+      "hole": 594
+    },
+    "locked-door-5098": {
+      "closed": 5098,
+      "open": 5099,
+      "locked": 5097
+    },
+    "door-2177": {
+      "closed": 2177,
+      "open": 2178
+    },
+    "lever": {
+      "down": 2772,
+      "up": 2773
+    },
+    "door-2179": {
+      "closed": 2179,
+      "open": 2180
+    },
+    "chest-2433": {
+      "default": 2433
+    },
+    "sign-2602": {
+      "default": 2602
+    },
+    "teleport-1756": {
+      "default": 1756
+    },
+    "sign-2012": {
+      "default": 2012
+    },
+    "teleport-1757": {
+      "default": 1757
+    },
+    "sign-2597": {
+      "default": 2597
+    },
+    "sign-2017": {
+      "default": 2017
+    },
+    "chest-1949": {
+      "default": 1949
+    },
+    "sign-2825": {
+      "default": 2825
+    },
+    "sign-17773": {
+      "default": 17773
+    },
+    "sign-17785": {
+      "default": 17785
+    },
+    "sign-17738": {
+      "default": 17738
+    },
+    "sign-17766": {
+      "default": 17766
+    },
+    "sign-2021": {
+      "default": 2021
+    },
+    "sign-2022": {
+      "default": 2022
+    },
+    "chest-2472": {
+      "default": 2472
+    },
+    "sign-5385": {
+      "default": 5385
+    },
+    "sign-17732": {
+      "default": 17732
+    },
+    "sign-17788": {
+      "default": 17788
+    },
+    "sign-17760": {
+      "default": 17760
+    },
+    "sign-5347": {
+      "default": 5347
+    },
+    "sign-2816": {
+      "default": 2816
+    },
+    "sign-5383": {
+      "default": 5383
+    },
+    "sign-5365": {
+      "default": 5365
+    },
+    "sign-17729": {
+      "default": 17729
+    },
+    "sign-17761": {
+      "default": 17761
+    },
+    "sign-17753": {
+      "default": 17753
+    },
+    "sign-17767": {
+      "default": 17767
+    },
+    "sign-17797": {
+      "default": 17797
+    },
+    "sign-17786": {
+      "default": 17786
+    },
+    "sign-17734": {
+      "default": 17734
+    },
+    "sign-6121": {
+      "default": 6121
+    },
+    "sign-2014": {
+      "default": 2014
+    },
+    "sign-17772": {
+      "default": 17772
+    },
+    "sign-17754": {
+      "default": 17754
+    },
+    "sign-17726": {
+      "default": 17726
+    },
+    "sign-17755": {
+      "default": 17755
+    },
+    "sign-17727": {
+      "default": 17727
+    },
+    "sign-5332": {
+      "default": 5332
+    },
+    "sign-5338": {
+      "default": 5338
+    },
+    "sign-17800": {
+      "default": 17800
+    },
+    "sign-17762": {
+      "default": 17762
+    },
+    "sign-17747": {
+      "default": 17747
+    },
+    "sign-17763": {
+      "default": 17763
+    },
+    "teleport-1959": {
+      "default": 1959
+    },
+    "sign-2016": {
+      "default": 2016
+    },
+    "sign-2826": {
+      "default": 2826
+    },
+    "sign-17733": {
+      "default": 17733
+    },
+    "sign-17787": {
+      "default": 17787
+    },
+    "sign-12276": {
+      "default": 12276
+    },
+    "locked-door-7034": {
+      "closed": 7034,
+      "open": 7035,
+      "locked": 7033
+    },
+    "locked-door-7715": {
+      "closed": 7715,
+      "open": 7716,
+      "locked": 7714
+    },
+    "chest-2473": {
+      "default": 2473
+    },
+    "sign-5372": {
+      "default": 5372
+    },
+    "rope-spot-386": {
+      "default": 386
+    }
+  }
+}

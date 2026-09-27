@@ -1,0 +1,931 @@
+[
+  {
+    "id": "alicorn-ring",
+    "name": "alicorn ring",
+    "kind": "ring",
+    "weight": 0.85,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      },
+      "energy": {
+        "percent": 4
+      },
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "holy": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39182
+  },
+  {
+    "id": "arboreal-ring",
+    "name": "arboreal ring",
+    "kind": "ring",
+    "weight": 0.7,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      },
+      "energy": {
+        "percent": 4
+      },
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "healing": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39188
+  },
+  {
+    "id": "arcanomancer-sigil",
+    "name": "arcanomancer sigil",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      },
+      "energy": {
+        "percent": 4
+      },
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "energy": 1,
+        "fire": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39185
+  },
+  {
+    "id": "axe-ring",
+    "name": "axe ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 100,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3092
+  },
+  {
+    "id": "blister-ring",
+    "name": "blister ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 220
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31621
+  },
+  {
+    "id": "broken-wedding-ring",
+    "name": "broken wedding ring",
+    "kind": "ring",
+    "weight": 0.4,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9593
+  },
+  {
+    "id": "butterfly-ring",
+    "name": "butterfly ring",
+    "kind": "ring",
+    "weight": 1.2,
+    "value": 2000,
+    "slot": "finger",
+    "armor": 2,
+    "requires": {
+      "level": 50
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 25698
+  },
+  {
+    "id": "charged-alicorn-ring",
+    "name": "charged alicorn ring",
+    "kind": "ring",
+    "weight": 0.85,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39180
+  },
+  {
+    "id": "charged-arboreal-ring",
+    "name": "charged arboreal ring",
+    "kind": "ring",
+    "weight": 0.7,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "druid"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39186
+  },
+  {
+    "id": "charged-arcanomancer-sigil",
+    "name": "charged arcanomancer sigil",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "sorcerer"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39183
+  },
+  {
+    "id": "charged-ethereal-ring",
+    "name": "charged ethereal ring",
+    "kind": "ring",
+    "weight": 0.85,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50147
+  },
+  {
+    "id": "charged-spiritthorn-ring",
+    "name": "charged spiritthorn ring",
+    "kind": "ring",
+    "weight": 0.95,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "knight"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39177
+  },
+  {
+    "id": "club-ring",
+    "name": "club ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 100,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3093
+  },
+  {
+    "id": "crystal-ring",
+    "name": "crystal ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 250,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3007
+  },
+  {
+    "id": "death-ring",
+    "name": "death ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 1000,
+    "slot": "finger",
+    "armor": 1,
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 6299
+  },
+  {
+    "id": "dwarven-ring",
+    "name": "dwarven ring",
+    "kind": "ring",
+    "weight": 1.1,
+    "value": 100,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3097
+  },
+  {
+    "id": "enchanted-blister-ring",
+    "name": "enchanted blister ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 220
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 31557
+  },
+  {
+    "id": "enchanted-ring-of-souls",
+    "name": "enchanted ring of souls",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 7200000,
+    "requires": {
+      "level": 200
+    },
+    "absorb": {
+      "lifedrain": {
+        "percent": 10
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 32635
+  },
+  {
+    "id": "energy-ring",
+    "name": "energy ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 100,
+    "slot": "finger",
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3051
+  },
+  {
+    "id": "engraved-wedding-ring",
+    "name": "engraved wedding ring",
+    "kind": "ring",
+    "weight": 0.4,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 9585
+  },
+  {
+    "id": "ethereal-ring",
+    "name": "ethereal ring",
+    "kind": "ring",
+    "weight": 0.85,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      },
+      "energy": {
+        "percent": 4
+      },
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": 4
+      },
+      "physical": {
+        "percent": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50149
+  },
+  {
+    "id": "family-signet-ring",
+    "name": "family signet ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 406
+  },
+  {
+    "id": "gold-ring",
+    "name": "gold ring",
+    "kind": "ring",
+    "weight": 1,
+    "value": 8000,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3063
+  },
+  {
+    "id": "horn",
+    "name": "horn",
+    "kind": "ring",
+    "weight": 1.2,
+    "value": 300,
+    "slot": "finger",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 19359
+  },
+  {
+    "id": "life-ring",
+    "name": "life ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 50,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3052
+  },
+  {
+    "id": "lion-ring",
+    "name": "lion ring",
+    "kind": "ring",
+    "weight": 0.4,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 34080
+  },
+  {
+    "id": "might-ring",
+    "name": "might ring",
+    "kind": "ring",
+    "weight": 1,
+    "value": 250,
+    "slot": "finger",
+    "charges": 20,
+    "absorb": {
+      "death": {
+        "percent": 20
+      },
+      "energy": {
+        "percent": 20
+      },
+      "fire": {
+        "percent": 20
+      },
+      "holy": {
+        "percent": 20
+      },
+      "ice": {
+        "percent": 20
+      },
+      "physical": {
+        "percent": 20
+      },
+      "earth": {
+        "percent": 20
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3048
+  },
+  {
+    "id": "power-ring",
+    "name": "power ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 50,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3050
+  },
+  {
+    "id": "prismatic-ring",
+    "name": "prismatic ring",
+    "kind": "ring",
+    "weight": 1.05,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 120
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 10
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 16114
+  },
+  {
+    "id": "ring-of-blue-plasma",
+    "name": "ring of blue plasma",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 100,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 23530
+  },
+  {
+    "id": "ring-of-green-plasma",
+    "name": "ring of green plasma",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 100,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ],
+      "regeneration": {
+        "healthGain": 1,
+        "healthTicksMs": 6000000,
+        "manaGain": 4,
+        "manaTicksMs": 6000000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 23532
+  },
+  {
+    "id": "ring-of-healing",
+    "name": "ring of healing",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 450000,
+    "bonuses": {
+      "regeneration": {
+        "healthGain": 6,
+        "healthTicksMs": 6000000,
+        "manaGain": 24,
+        "manaTicksMs": 6000000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3100
+  },
+  {
+    "id": "ring-of-orange-plasma",
+    "name": "ring of orange plasma",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 100,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        },
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 50151
+  },
+  {
+    "id": "ring-of-red-plasma",
+    "name": "ring of red plasma",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 100,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 23534
+  },
+  {
+    "id": "ring-of-temptation",
+    "name": "ring of temptation",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "charges": 200,
+    "requires": {
+      "level": 100
+    },
+    "absorb": {
+      "manadrain": {
+        "percent": 30
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 45642
+  },
+  {
+    "id": "shapeshifter-ring",
+    "name": "shapeshifter ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 36000000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 907
+  },
+  {
+    "id": "spiritthorn-ring",
+    "name": "spiritthorn ring",
+    "kind": "ring",
+    "weight": 0.95,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      },
+      "energy": {
+        "percent": 4
+      },
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": 4
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39179
+  },
+  {
+    "id": "star-ring",
+    "name": "star ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 12669
+  },
+  {
+    "id": "stealth-ring",
+    "name": "stealth ring",
+    "kind": "ring",
+    "weight": 1,
+    "value": 200,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3049
+  },
+  {
+    "id": "suspicious-signet-ring",
+    "name": "suspicious signet ring",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 349
+  },
+  {
+    "id": "sweetheart-ring",
+    "name": "sweetheart ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 21955
+  },
+  {
+    "id": "sword-ring",
+    "name": "sword ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 100,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3091
+  },
+  {
+    "id": "time-ring",
+    "name": "time ring",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 100,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3053
+  },
+  {
+    "id": "wedding-ring",
+    "name": "wedding ring",
+    "kind": "ring",
+    "weight": 0.4,
+    "value": 100,
+    "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 3004
+  }
+]

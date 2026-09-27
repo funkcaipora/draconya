@@ -61,6 +61,80 @@ export const CLIENT_TO_SERVER = {
    * 20: o 19 é do `party-settings`.
    */
   'party-end-vote': 20,
+  /**
+   * Vender N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; existir, estar na mochila/bolsa (nunca equipada) e ter `value > 0` é conferido
+   * pelo servidor (invariante 4). Sucesso é `inventory` reenviado; recusa
+   * (`not-carried`/`not-for-sale`) é `system-message`.
+   *
+   * 21: o 20 é do `party-end-vote`.
+   */
+  'sell-items': 21,
+  /**
+   * Descartar um item da mochila/bolsa, destruindo-o sem gold (#724, ADR 0048 d.8). A
+   * confirmação ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   *
+   * 22: o 21 é do `sell-items`.
+   */
+  'discard-item': 22,
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4). INTENÇÃO: o cliente diz QUAL item do chão;
+   * dono, elegibilidade, distância (≤ 1, mesmo andar) e se o cadáver ainda existe são do
+   * servidor (invariante 4). Sucesso é `corpse-contents`; recusa é `system-message`
+   * (`too-far-away`/`not-yours`/o cadáver já apodreceu).
+   *
+   * 23: o 21 e o 22 são do `sell-items`/`discard-item` (#724, PR #741).
+   */
+  'open-corpse': 23,
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático (#722, ADR 0048 d.4). INTENÇÃO:
+   * `instanceId: null` é o clique — aplica o MESMO filtro de Quick Loot do personagem a tudo
+   * que ainda está no cadáver; um `instanceId` é arrastar ESTE item específico, ignorando o
+   * filtro (o "segunda chance" do Canary). Dono/elegibilidade, distância e capacidade são do
+   * servidor. Sucesso é `corpse-contents` (o que sobrou) + `inventory`; recusa é
+   * `system-message`.
+   *
+   * 24: o 23 é do `open-corpse`.
+   */
+  'take-loot': 24,
+  /**
+   * Usar um item da mochila/bolsa/equipado, OU uma unidade do estoque de suprimento — comida,
+   * carga de bênção, poção ou runa (#726, ADR 0049 decisão 3). INTENÇÃO: o cliente diz QUAL
+   * `ref` (`{ instanceId }` ou `{ supplyId }`) e, quando o efeito precisa (runa/poção de dano
+   * ou cura), o MESMO `target` opcional de `use-slot` (decisão 2) — mira de aliado, monstro ou
+   * posição. O catálogo, a exaustão, o estoque e o efeito são do servidor (invariante 4); a
+   * resposta é `use-result`, tipada como `slot-result` (FUN-73).
+   *
+   * 25: o maior opcode reservado até aqui é o 24 (#722, ainda sem código nesta branch).
+   */
+  'use-item': 25,
+  /**
+   * Usar um item/suprimento COM alvo obrigatório — a runa/poção de dano ou cura mirada. A
+   * ferramenta (machete, pá…) sobre um tile fica de fora (ADR 0050, issue própria, ainda não
+   * implementada): recusa `not-usable` até lá. Mesma forma de `use-item`, com `target`
+   * obrigatório em vez de opcional (#726, ADR 0049 decisão 3).
+   *
+   * 26: o 25 é do `use-item`.
+   */
+  'use-item-on': 26,
+  /**
+   * Usar o que está NO TILE (#729, ADR 0050 d.7): porta, alavanca, capim, stone pile. INTENÇÃO:
+   * o cliente diz QUAL posição; alcance (`canUse`, mesmo andar e adjacente), estado, requisito
+   * e ferramenta são do servidor (invariante 4). `seq` é o mesmo padrão de `select-target`: o
+   * cliente descarta resposta obsoleta, quando manda mais de um pedido em sequência. Sucesso é
+   * `tile-update` (broadcast, DT-01); recusa é `system-message`.
+   *
+   * 27: o 26 é do `use-item-on` (#726, PR #752).
+   */
+  'use-on-map': 27,
+  /**
+   * Olhar uma posição (#729, ADR 0050 d.7): o "You see …" do Tibia, para placa e cenário. Sem
+   * `creatureId`/`instanceId` nesta entrega (DT-04, spec da #729) — sem gatilho de UI hoje.
+   *
+   * 28: o 27 é do `use-on-map`.
+   */
+  look: 28,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -209,6 +283,43 @@ export const SERVER_TO_CLIENT = {
    * 35: o 34 é do `target-changed`.
    */
   'target-cancel': 35,
+  /**
+   * O conteúdo do cadáver, para quem o abriu (#722, ADR 0048 d.4): quanto ouro e quais itens
+   * ainda estão lá, depois do Quick Loot automático do abate. Sai ao `open-corpse` bem-sucedido
+   * e a cada `take-loot` bem-sucedido — nunca some sozinho: o cadáver decai pelo
+   * `ground-item-disappear` de sempre, e o cliente fecha a janela quando ele chegar.
+   *
+   * 36: o 35 é do `target-cancel`.
+   */
+  'corpse-contents': 36,
+  /**
+   * A resposta ao `use-item`/`use-item-on` (#726, ADR 0049 decisão 3), tipada como
+   * `slot-result` (FUN-73): `ok: false` carrega o motivo em palavras. `ok: true` também sai
+   * quando a ação foi ACEITA mas ADIADA pela exaustão compartilhada (decisão 6) — o jogador não
+   * vê erro nenhum, e o efeito de verdade chega depois pelo `inventory`/`player-stats`/
+   * `creature-hit` de sempre, quando a ação de fato executa.
+   *
+   * 37: o 36 é do `corpse-contents` (#722, PR #749) — conferido no diff de #741, #742 e #749
+   * antes de escolher o número (as três param em 35, exceto a #749, que usa 36).
+   */
+  'use-result': 37,
+  /**
+   * O tile mudou de aparência (#729, ADR 0050 d.7): a pilha do tile na posição, com os pares
+   * `{ from, to }` de id de aparência que o cliente troca — a mesma indireção de
+   * `ground-item-appear` resolvendo `corpses`, aqui resolvendo `appearances.scenery`
+   * (invariante 6: quem sabe a arte é o servidor, nunca o `content`). Broadcast para todos os
+   * viewers da sessão (DT-01) — cenário é compartilhado, ao contrário de `player-stats`.
+   *
+   * 38: o 37 é do `use-result` (#726, PR #752).
+   */
+  'tile-update': 38,
+  /**
+   * A resposta ao `look` (#729): o texto — placa, ou uma descrição padrão do `kind` de
+   * cenário. Só para quem pediu, nunca broadcast.
+   *
+   * 39: o 38 é do `tile-update`.
+   */
+  'look-result': 39,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

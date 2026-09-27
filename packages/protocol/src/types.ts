@@ -8,6 +8,19 @@ const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number()
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
 /**
+ * A pilha de UM tile mudou (#729, ADR 0050 d.7): cada par `{ from, to }` é uma substituição de
+ * id de aparência que o cliente aplica sobre a pilha estática de `things/`. Compartilhado por
+ * `tile-update` (evento) e `session-state.world.tileUpdates` (catch-up de quem reanexa) — o
+ * mesmo contrato, computado contra o instante do evento ou contra o estado INICIAL do conteúdo.
+ */
+const TileUpdate = z.object({
+  position: Point,
+  replace: z.array(z.object({
+    from: z.number().int().positive(), to: z.number().int().positive(),
+  })),
+});
+
+/**
  * O TIPO de dano elemental (#479; drown/lifedrain/manadrain pelo #547, M29-07). Espelha
  * `DAMAGE_TYPES` do conteúdo, mas vive aqui pela mesma razão que todo contrato de rede: o
  * protocolo é a base da pilha e não importa `content`. A lista é fechada de propósito — um
@@ -130,6 +143,32 @@ const CarriedItem = z.object({
   quantity: z.number().int().positive(),
 });
 
+/**
+ * A mira manual (AB-09, ADR 0049 decisão 2), compartilhada por `use-slot`, `use-item` e
+ * `use-item-on` — os três apontam do mesmo jeito. `creatureId` é o id numérico de QUALQUER
+ * criatura (monstro OU personagem); `position` mira um tile vazio (runa de área). O servidor
+ * resolve qual dos dois é e recusa `no-target` sem adivinhar.
+ */
+const manualTargetSchema = z.union([
+  z.object({ creatureId: z.number().int().positive() }),
+  z.object({
+    position: z.object({
+      x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
+    }),
+  }),
+]);
+
+/**
+ * A referência a UM item/suprimento (#726, ADR 0049 decisão 3), compartilhada por `use-item` e
+ * `use-item-on`: `instanceId` é uma unidade concreta na mochila/bolsa/equipada; `supplyId` é
+ * uma unidade do ESTOQUE abstrato (poção, runa, munição — ADR 0026 d.8/ADR 0044), sem instância
+ * própria. O servidor resolve qual dos dois é; um `ref` que não existe recusa `not-carried`.
+ */
+const itemRefSchema = z.union([
+  z.object({ instanceId: z.string().min(1) }),
+  z.object({ supplyId: z.string().min(1) }),
+]);
+
 export const C2S_SCHEMAS = {
   authenticate: z.object({ ticket: z.string().min(1), clientVersion: z.string() }),
   ping: z.object({ t: z.number() }),
@@ -208,6 +247,15 @@ export const C2S_SCHEMAS = {
   'use-slot': z.object({
     set: z.number().int().min(0).max(3),
     slot: z.number().int().min(0).max(23),
+    /**
+     * A mira (AB-09, ADR 0049 decisão 2). INTENÇÃO: o cliente diz QUEM/ONDE apontou; alcance,
+     * linha de visão (#553 quando pousar) e elegibilidade continuam do servidor (invariante 4).
+     * `creatureId` é o id numérico de QUALQUER criatura (monstro OU personagem) — o host resolve
+     * qual dos dois é. `position` mira um tile vazio (runa de área); sem monstro nem personagem
+     * no id, ou fora do mapa, o servidor recusa (`no-target`), nunca adivinha. Opcional: sem
+     * `target`, vale o alvo default de sempre (alvo fixado, senão o candidato do bot).
+     */
+    target: manualTargetSchema.optional(),
   }),
   /**
    * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
@@ -240,6 +288,67 @@ export const C2S_SCHEMAS = {
    * decide se quem mandou pode propor, e se a sessão encerra, é o servidor.
    */
   'party-end-vote': z.object({ approve: z.boolean() }),
+  /**
+   * Vender N itens da mochila/bolsa (#724, ADR 0048 d.8). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; quem decide se existem, se estão carregadas (nunca equipadas) e se `value` do
+   * catálogo é maior que zero é o servidor (invariante 4). `value: 0` recusa o LOTE inteiro —
+   * "ninguém compra isto" — sem vender parte dele.
+   */
+  'sell-items': z.object({ instanceIds: z.array(z.string().min(1)).min(1) }),
+  /**
+   * Descartar um item da mochila/bolsa (#724, ADR 0048 d.8): destrói, sem gold. A confirmação
+   * ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   */
+  'discard-item': z.object({ instanceId: z.string().min(1) }),
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4). INTENÇÃO: só o id do item do chão; dono,
+   * elegibilidade e distância (≤ 1, mesmo andar) são do servidor (invariante 4). Sucesso é
+   * `corpse-contents`; recusa é `system-message`.
+   */
+  'open-corpse': z.object({ groundItemId: z.number().int() }),
+  /**
+   * Pegar do cadáver (#722, ADR 0048 d.4). `instanceId: null` aplica o filtro de Quick Loot do
+   * PRÓPRIO personagem a tudo que ainda está no cadáver (o clique); um id específico arrasta
+   * ESTE item, ignorando o filtro. Quem confere dono, distância e capacidade é o servidor.
+   */
+  'take-loot': z.object({
+    groundItemId: z.number().int(),
+    instanceId: z.string().min(1).nullable(),
+  }),
+  /**
+   * Usar um item da mochila/bolsa/equipado, ou uma unidade do estoque de suprimento (#726, ADR
+   * 0049 decisão 3). INTENÇÃO: o cliente diz QUAL `ref`; existir, o catálogo saber usá-lo, a
+   * exaustão e o efeito são do servidor (invariante 4). `target` é a mesma mira OPCIONAL de
+   * `use-slot` — vale para runa/poção de dano ou cura que aceita mira; item sem alvo mirável a
+   * ignora, como o `#resolveManualTarget` do `use-slot` já faz. `seq` volta em `use-result`,
+   * para o cliente casar a resposta com o clique (como `select-target`).
+   */
+  'use-item': z.object({
+    ref: itemRefSchema,
+    target: manualTargetSchema.optional(),
+    seq: z.number().int().nonnegative(),
+  }),
+  /**
+   * Usar um item/suprimento COM alvo (#726, ADR 0049 decisão 3) — a runa/poção de dano ou cura
+   * mirada no clique, em vez do alvo default. Mesma forma de `use-item`, com `target`
+   * OBRIGATÓRIO: é a diferença entre "usar" e "usar com…" do menu de contexto da mochila.
+   */
+  'use-item-on': z.object({
+    ref: itemRefSchema,
+    target: manualTargetSchema,
+    seq: z.number().int().nonnegative(),
+  }),
+  /**
+   * Usar o que está no tile (#729, ADR 0050 d.7): porta, alavanca, capim, stone pile. INTENÇÃO:
+   * o cliente diz QUAL posição; alcance, estado, requisito e ferramenta são do servidor
+   * (invariante 4). `seq` é opcional, como em `select-target` — um cliente anterior não o manda.
+   */
+  'use-on-map': z.object({ position: Point, seq: z.number().int().nonnegative().optional() }),
+  /**
+   * Olhar uma posição (#729, ADR 0050 d.7): o "You see …" do Tibia. Sem `creatureId`/
+   * `instanceId` nesta entrega — sem gatilho de UI hoje (spec da #729, DT-04).
+   */
+  look: z.object({ position: Point }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -512,7 +621,16 @@ export const S2C_SCHEMAS = {
         id: z.number().int(),
         position: Point,
         appearanceId: z.number().int().positive(),
+        /** Ver `ground-item-appear.lootable` (#722) — mesmo campo, para quem reanexa. */
+        lootable: z.boolean().optional(),
       })).default([]),
+      /**
+       * O overlay de cenário usável ATIVO (#729, ADR 0050 d.7): todo interativo cujo estado
+       * hoje difere do estado inicial do conteúdo, no MESMO contrato de `tile-update` — quem
+       * reanexa aplica cada entrada sobre a pilha estática, como se cada uma tivesse acabado
+       * de chegar. `default([])`: nó `game` anterior a esta issue, ou nada foi usado ainda.
+       */
+      tileUpdates: z.array(TileUpdate).default([]),
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
@@ -570,6 +688,13 @@ export const S2C_SCHEMAS = {
     id: z.number().int(),
     position: Point,
     appearanceId: z.number().int().positive(),
+    /**
+     * Tem loot pendente AGORA (#722, ADR 0048 d.4) — o destaque de loot do cliente. Calculado
+     * no instante do evento (depois do Quick Loot automático do abate já ter rodado), nunca
+     * recalculado depois: `corpse-contents`/`take-loot` são quem atualiza a janela aberta.
+     * Ausente: nó anterior a esta issue, ou item do chão sem noção de loot nenhuma.
+     */
+    lootable: z.boolean().optional(),
   }),
   /** O item do chão sumiu — o cadáver apodreceu. */
   'ground-item-disappear': z.object({ id: z.number().int() }),
@@ -642,6 +767,20 @@ export const S2C_SCHEMAS = {
     equipped: z.record(z.string(), CarriedItem),
     /** Peso carregado e o teto. O teto sobe com o level (§9.3). */
     capacity: z.object({ used: z.number(), total: z.number() }),
+    /**
+     * O estoque ABSTRATO de suprimento que o loot creditou (#520, ADR 0049 decisão 4): poção e
+     * runa não são item físico (ADR 0026 d.8), mas o jogador precisa VER o que tem antes de
+     * gastar gold pela mesma — é a seção "Suprimentos" sob a mochila. `id` é o `supplyId` do
+     * catálogo (não um `instanceId`: não há instância). Opcional e `default([])`: um nó `game`
+     * anterior manda sem, e a seção não aparece.
+     */
+    supplies: z.array(z.object({
+      id: z.string().min(1), quantity: z.number().int().positive(),
+    })).default([]),
+    /** O estoque de munição FÍSICA do loot (#520), na mesma forma e pela mesma razão acima. */
+    ammunition: z.array(z.object({
+      id: z.string().min(1), quantity: z.number().int().positive(),
+    })).default([]),
   }),
   'bot-config-result': z.object({
     ok: z.boolean(),
@@ -1079,6 +1218,41 @@ export const S2C_SCHEMAS = {
   'target-cancel': z.object({
     seq: z.number().int().nonnegative().optional(),
   }),
+  /**
+   * O conteúdo do cadáver (#722, ADR 0048 d.4): o que ainda está lá depois do Quick Loot
+   * automático do abate. Sai ao `open-corpse` bem-sucedido e a cada `take-loot` bem-sucedido —
+   * é o mesmo `CarriedItem` do inventário, porque um item do cadáver é o MESMO objeto antes de
+   * entrar na mochila (§4.1 da spec da issue).
+   */
+  'corpse-contents': z.object({
+    groundItemId: z.number().int(),
+    gold: z.number().int().nonnegative(),
+    items: z.array(CarriedItem),
+  }),
+  /**
+   * A resposta ao `use-item`/`use-item-on` (#726, ADR 0049 decisão 3), como `slot-result`:
+   * `ok: false` carrega o motivo em palavras (FUN-73). `ok: true` sai tanto quando a ação
+   * executou quanto quando foi ACEITA e ADIADA pela exaustão compartilhada (decisão 6) — o
+   * cliente não distingue os dois casos por aqui; o efeito de verdade (ou uma segunda recusa,
+   * se a ação adiada não coube mais na hora de executar) chega depois pelo `inventory`/
+   * `player-stats`/`creature-hit` de sempre, ou por um segundo `use-result` com o MESMO `seq`.
+   */
+  'use-result': z.object({
+    seq: z.number().int().nonnegative(),
+    ok: z.boolean(),
+    reason: z.string().optional(),
+  }),
+  /**
+   * A pilha do tile mudou (#729, ADR 0050 d.7): porta abriu, capim foi cortado, alavanca virou.
+   * Broadcast para todos os viewers da sessão (DT-01) — cenário é compartilhado, ao contrário
+   * de `player-stats`. O cliente troca cada `from` por `to` na pilha do tile e redesenha.
+   */
+  'tile-update': TileUpdate,
+  /**
+   * A resposta ao `look` (#729): o texto — `text` de uma placa, ou uma descrição padrão do
+   * `kind` de cenário. Só para quem pediu.
+   */
+  'look-result': z.object({ text: z.string() }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

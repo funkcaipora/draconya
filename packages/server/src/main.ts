@@ -31,7 +31,6 @@ import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
-import { LootBoxStore } from './loot-box.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -107,8 +106,6 @@ async function main(): Promise<void> {
     'Content loaded',
   );
 
-  const lootBoxes = new LootBoxStore(redis);
-
   // A cópia da Cidade deste nó (FUN-71, ADR 0023). Uma por processo `game`, e é assim que
   // "Cidade 2" nasce: dois nós já são duas praças, sem nada a mais.
   const nowMs = (): number => Date.now();
@@ -151,6 +148,10 @@ async function main(): Promise<void> {
               // `game`, que não fala com o Postgres.
               listItemInstances: (characterId: string) =>
                 repository.listItemInstances(characterId),
+              // Os storages do personagem (#731, ADR 0050 d.6 T2): a semente do motor de
+              // quest, pela mesma razão e o mesmo caminho de `listItemInstances`.
+              listCharacterStorages: (characterId: string) =>
+                repository.listCharacterStorages(characterId),
               // A party antes da hunt (#195): formulário em Redis, limites do conteúdo.
               party: new PartyStore(redis),
               matchmakingLevelRange: content.party.matchmakingLevelRange,
@@ -216,15 +217,12 @@ async function main(): Promise<void> {
       // tabela inteira, e não os ids soltos, porque o host resolve por `spellId` e `supplyId`
       // na hora em que o `sim` emite — e a tabela é do conteúdo fixado no boot (invariante 7).
       ...(content.appearances === undefined ? {} : { appearances: content.appearances }),
-      // A Caixa de Loot da Sessão (FUN-88). Redis, e não Postgres, porque ela EXPIRA — e
-      // expirar precisa significar que o item nunca existiu.
-      lootBoxes,
       // Mesmo caminho no modo solo e separado; a escrita durável pertence a jobs/api.
       saveBotConfig: (characterId, config) => botConfigs.save(characterId, config),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
-      lootBoxes, botConfigs,
+      botConfigs,
       metrics: new JobsMetrics(configuration.NODE_ID),
       // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`
       // no mesmo host compartilham o `NODE_ID`, renovariam o lock um do outro, e os dois se

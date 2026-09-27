@@ -17,6 +17,7 @@
 import type { Tilemap } from '@draconya/content';
 import { floorChangeAt, groundSpeed, isBlocked } from '@draconya/content';
 import type { GridPoint } from './monster/step.js';
+import type { TileOverrides } from './tile-overrides.js';
 
 /**
  * Por que um passo foi recusado. A MESMA razão para bot, jogador e monstro (§17 da referência):
@@ -28,7 +29,14 @@ export type MoveRejection =
   | 'tile-blocked'
   | 'tile-occupied'
   | 'not-adjacent'
-  | 'same-tile';
+  | 'same-tile'
+  /**
+   * Só de `HuntRuleset.requestMove` (#763): um `walk-to` para um destino DISTANTE cujo BFS
+   * limitado (`boundedPath`, o mesmo do follow) não achou caminho dentro do raio — parede
+   * genuína, fora do raio, ou um interativo bloqueante que não é porta. NUNCA de `canOccupy`:
+   * ele só compara tile ADJACENTE, e não sabe o que é "inalcançável" — só "não é vizinho".
+   */
+  | 'unreachable';
 
 /** Ponto de mundo, com o andar. O `z` vem do MAPA — é a única fonte de verdade sobre ele. */
 export interface WorldPoint {
@@ -63,6 +71,21 @@ export interface MovementWorld {
   occupied(x: number, y: number, z?: number): boolean;
   vacate(x: number, y: number, z?: number): void;
   occupy(x: number, y: number, z?: number): void;
+  /**
+   * Bloqueado por geometria OU por overlay de sessão (#728, ADR 0050 d.2)? Combina o `Tilemap`
+   * (parede, fora do mapa) com `TileOverrides` (porta fechada, capim, stone pile) — UMA
+   * pergunta para `canOccupy`/`move`, o passo guloso e o BFS do follow, em vez de cada um saber
+   * que existem dois lugares para conferir.
+   */
+  blockedAt(x: number, y: number, z: number): boolean;
+  /** Pisar aqui muda de andar — escada do mapa OU overlay (stone pile virada buraco, #728)? */
+  floorChangeAt(x: number, y: number, z: number): WorldPoint | null;
+  /**
+   * Pisar aqui teleporta (#734, ADR 0050 d.6 T3)? `null` sem teleporte ativo aqui — inclusive um
+   * `closed` (gated por alavanca que ainda não abriu) ou cujo `target` cai fora do mapa (o
+   * `move()` que confere isso, não aqui: esta pergunta só resolve o CONTEÚDO, nunca geometria).
+   */
+  teleportAt(x: number, y: number, z: number): WorldPoint | null;
 }
 
 /**
@@ -163,7 +186,7 @@ export function canOccupy(
   if (Math.abs(to.x - from.x) > 1 || Math.abs(to.y - from.y) > 1) return 'not-adjacent';
   // O andar é o de ONDE se está: trocar de andar é pisar numa escada, nunca pedir um `z`.
   const z = zOf(from, world.map);
-  const change = floorChangeAt(world.map, to.x, to.y, z);
+  const change = world.floorChangeAt(to.x, to.y, z);
   if (change !== null) {
     // Quem não carrega `z` continua vendo o degrau como parede (o monstro de andar único de
     // sempre, como no Tibia); quem carrega mas foi marcado `crossesFloors: false` também — é o
@@ -186,7 +209,7 @@ export function canOccupy(
 function tileAdmits(world: MovementWorld, to: WorldPoint): MoveRejection | null {
   const { map } = world;
   if (to.x < 0 || to.y < 0 || to.x >= map.width || to.y >= map.height) return 'out-of-bounds';
-  if (isBlocked(map, to.x, to.y, to.z)) return 'tile-blocked';
+  if (world.blockedAt(to.x, to.y, to.z)) return 'tile-blocked';
   if (world.occupied(to.x, to.y, to.z)) return 'tile-occupied';
   return null;
 }
@@ -209,8 +232,20 @@ export function move<P extends GridPoint>(
   const fromZ = zOf(from, world.map);
   // Pisar na escada leva ao destino dela (FUN-119): é o passo com `z` diferente que o
   // cliente já sabe interpolar — e o tile de chegada pode não ser adjacente, como no Tibia.
-  const change = floorChangeAt(world.map, to.x, to.y, fromZ);
-  const dest: WorldPoint = change ?? { x: to.x, y: to.y, z: fromZ };
+  const change = world.floorChangeAt(to.x, to.y, fromZ);
+  let dest: WorldPoint = change ?? { x: to.x, y: to.y, z: fromZ };
+
+  // Teleporte (#734, ADR 0050 d.6 T3): DIFERENTE de escada — o passo para `to` já é legal por
+  // si só (o tile do teleporte nunca bloqueia), então um destino inválido não pode recusar o
+  // passo inteiro (como faria com uma escada). Sem destino alcançável — fora do mapa, parede,
+  // ocupado —, a criatura simplesmente FICA no tile do teleporte, sem redirecionar: a mesma
+  // degradação de `Teleport::addThing` do Canary para `destPos` inválido ou `destTile` ausente
+  // (não teleporta; nunca um erro). Escada continua tendo prioridade — os dois nunca coexistem
+  // no mesmo tile de conteúdo real, mas a ordem é a mais segura das duas.
+  if (change === null) {
+    const teleportTarget = world.teleportAt(to.x, to.y, fromZ);
+    if (teleportTarget !== null && tileAdmits(world, teleportTarget) === null) dest = teleportTarget;
+  }
 
   world.vacate(from.x, from.y, fromZ);
   mover.position = ('z' in from ? { ...to, x: dest.x, y: dest.y, z: dest.z } : { ...to, x: dest.x, y: dest.y }) as P;
@@ -335,7 +370,7 @@ export function placeReachable<P extends GridPoint>(
       const k = tileKey(x, y, z);
       if (seen.has(k)) continue;
       seen.add(k);
-      if (isBlocked(world.map, x, y, z) || floorChangeAt(world.map, x, y, z) !== null) continue;
+      if (world.blockedAt(x, y, z) || world.floorChangeAt(x, y, z) !== null) continue;
       queue.push({ ...tile, x, y });
     }
   }
@@ -362,11 +397,17 @@ const tileKey = (x: number, y: number, z: number): number =>
 export class TileOccupancy implements MovementWorld {
   readonly map: Tilemap;
   readonly fixedStepMs?: number;
+  /** O overlay de cenário usável desta sessão (#728). Ausente é "mapa sem interativo". */
+  readonly overrides?: TileOverrides;
   readonly #occupied = new Set<number>();
 
-  constructor(map: Tilemap, options: { readonly fixedStepMs?: number } = {}) {
+  constructor(
+    map: Tilemap,
+    options: { readonly fixedStepMs?: number; readonly overrides?: TileOverrides } = {},
+  ) {
     this.map = map;
     if (options.fixedStepMs !== undefined) this.fixedStepMs = options.fixedStepMs;
+    if (options.overrides !== undefined) this.overrides = options.overrides;
   }
 
   occupied(x: number, y: number, z: number = this.map.z): boolean {
@@ -379,6 +420,21 @@ export class TileOccupancy implements MovementWorld {
 
   vacate(x: number, y: number, z: number = this.map.z): void {
     this.#occupied.delete(tileKey(x, y, z));
+    // A porta comum fecha quando o tile esvazia e ninguém está nele (ADR 0050 d.3) — no MESMO
+    // `vacate` que a libera, nunca por um evento próprio.
+    this.overrides?.closeDoorIfVacant(x, y, z, this.occupied(x, y, z));
+  }
+
+  blockedAt(x: number, y: number, z: number = this.map.z): boolean {
+    return isBlocked(this.map, x, y, z) || (this.overrides?.blockedAt(x, y, z) ?? false);
+  }
+
+  floorChangeAt(x: number, y: number, z: number = this.map.z): WorldPoint | null {
+    return this.overrides?.floorChangeAt(x, y, z) ?? floorChangeAt(this.map, x, y, z);
+  }
+
+  teleportAt(x: number, y: number, z: number = this.map.z): WorldPoint | null {
+    return this.overrides?.teleportTargetAt(x, y, z) ?? null;
   }
 
   /**

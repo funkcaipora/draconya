@@ -84,9 +84,12 @@ describe('a Rotworm Caves real (#511)', () => {
       expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
     }
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.goldGained).toBeGreaterThan(0);
-    // Só 2 abates até morrer (#522 reduziu o rendimento do desarmado) — loot por abate é
-    // probabilístico, e a amostra é pequena demais para garantir item algum.
+    // Fim do pull por dificuldade (#583, ADR 0039, mesclado depois deste teste): os 13 pontos
+    // da rota nascem TODOS de uma vez, não mais os 2 do antigo `difficulties.cautious` — o
+    // herói desarmado morre bem mais rápido, com poucos abates antes disso. Gold (71,76% por
+    // abate) e item deixam de ser garantidos com uma amostra tão pequena; a asserção relaxa
+    // para a mesma tolerância que `itemsLooted` já tinha.
+    expect(session.aggregates.goldGained).toBeGreaterThanOrEqual(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThanOrEqual(0);
     // A rota é um laço de 444 tiles: o walker andou nele antes de morrer.
     expect(ruleset.routeIndex).toBeGreaterThanOrEqual(0);
@@ -128,7 +131,7 @@ describe('a Rotworm Caves real (#511)', () => {
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
 
-  it('um personagem level 8 sem arma aguenta o pull cautious com cura automática e poção', () => {
+  it('um personagem level 8 sem arma, com cura automática e poção, mata ao menos um rotworm antes do fim', () => {
     // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % (magia `heal`) e poção com
     // HP ≤ 40 % (`health-potion`, `packages/content/data/bot/baseline.json`) são o que segura o
     // herói, como o Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36).
@@ -138,8 +141,15 @@ describe('a Rotworm Caves real (#511)', () => {
     // automática SOZINHA (sem poção) já não garante os dez minutos inteiros — ver o teste
     // acima, sem gold. Um jogador de Tibia de verdade carrega poção; este herói também passa a
     // carregar (2.000 gold, o bastante para dezenas de poções de 45 — medido: a caverna real
-    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena volta a valer, como
-    // valia antes da #521 — só que agora sustentada do jeito certo.
+    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena valia — para o pull
+    // de 2 rotworms do antigo `difficulties.cautious`.
+    //
+    // Fim do pull por dificuldade (#583, ADR 0039, mesclado depois deste teste): os 13 pontos
+    // da rota nascem TODOS de uma vez — o herói desarmado apanha de muito mais rotworm ao mesmo
+    // tempo do que a poção e a cura automática foram dimensionadas para segurar, e morre. A
+    // asserção passa a aceitar os dois desfechos (como o teste acima), preservando o que ainda é
+    // contrato: o herói mata pelo menos um antes de morrer, e a fórmula de XP fecha enquanto ele
+    // sobrevive.
     const { session } = enter(real(), 'cautious', { gold: 2_000 });
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
@@ -148,9 +158,11 @@ describe('a Rotworm Caves real (#511)', () => {
       minHp = Math.min(minHp, hero.health);
     }
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
-    expect(session.ended).toBeNull();
+    expect(['death', null]).toContain(session.ended);
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
+    if (session.ended === null) {
+      expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
+    }
     const hoursFraction = 600_000 / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);

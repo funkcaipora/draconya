@@ -26,6 +26,8 @@ import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
+import { useCorpseApproach } from './useCorpseApproach.js';
+import { useTileApproach } from './useTileApproach.js';
 import { Viewport } from './Viewport.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
@@ -44,6 +46,7 @@ import { AutomationsPanel } from './AutomationsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
+import { CorpseWindow } from './CorpseWindow.js';
 import { FriendsModal } from './FriendsModal.js';
 import { PartyInviteDialog } from './PartyInviteDialog.js';
 import { VocationChoice } from './VocationChoice.js';
@@ -108,6 +111,11 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
+  // O laço que reavalia um pedido de abrir cadáver pendente (#722, ADR 0048 d.4).
+  useCorpseApproach();
+  // O pedido de usar um tile sozinho (#729, ADR 0050 d.7): reavalia a cada 150 ms se o
+  // personagem já chegou perto do tile clicado, e manda `use-on-map` sozinho quando chegar.
+  useTileApproach();
   // A store do bot não importa `net/` (ADR 0007): a casca instala o remetente UMA vez. Antes a
   // `ActionBar` e o `AutomationsPanel` instalavam cada um o mesmo singleton, e o unmount de um
   // zerava o remetente do outro; um painel condicional bastaria para quebrar todo Salvar.
@@ -201,6 +209,10 @@ export function Shell() {
         {hunting && partyLootOpen && (
           <PartyLootWindow onClose={() => { setPartyLootOpen(false); }} />
         )}
+        {/* A janela do cadáver (#722, ADR 0048 d.4): SEMPRE montada, como o Analisador — é ela
+            quem decide, por dentro, se há cadáver aberto (`hud.corpse`). Abre pelo clique no
+            cadáver no mundo (`Viewport.tsx`), não por um botão da barra. */}
+        <CorpseWindow />
         {/* "Gerenciar party" (#503): UMA instância, aberta por pill, engrenagem e "Encontrar
             Party". A chave recria o modal quando o ponto de entrada muda com ele aberto — a
             navegação interna nasce dos props a cada montagem. */}
