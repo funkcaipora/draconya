@@ -1,0 +1,16 @@
+{
+  "id": "small-health-potion",
+  "name": "Small Health Potion",
+  "description": "Cura de 60 a 90 pontos de vida.",
+  "price": 20,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "amountRange": { "min": 60, "max": 90 },
+    "target": "friend",
+    "range": 1
+  },
+  "_open": "Canary `potions.lua:61`, item id 7876: `health = {60, 90}`, sem level nem vocação (#690). `price` 20: o `buy = 20` dos NPCs de `data-otservbr-global/npc`. `range: 1` segue as outras poções (PROVISÓRIO, §26)."
+}

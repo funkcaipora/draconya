@@ -457,11 +457,35 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const content = loadContent(DATA);
     expect(content.supplies.get('health-potion')).toMatchObject({
       id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
-      effect: { kind: 'heal', amount: 80 }, requires: {},
+      effect: { kind: 'heal', amountRange: { min: 125, max: 175 } }, requires: {},
     });
     expect(content.supplies.get('avalanche-rune')?.group).toBe('attack');
+    expect(content.supplies.get('mana-potion')?.effect).toMatchObject({
+      kind: 'mana', amountRange: { min: 75, max: 125 },
+    });
+    // O Canary cura FAIXA, não número fixo (#690): o `amount` de antes não pode sobreviver.
+    expect(content.supplies.get('health-potion')?.effect).not.toHaveProperty('amount');
+    expect(content.supplies.get('mana-potion')?.effect).not.toHaveProperty('amount');
     // A bênção não é supply: é o único consumível que ainda é item.
     expect(content.supplies.has('blessing-charge')).toBe(false);
+  });
+
+  it('carrega a Small Health Potion do Canary, com efeito de aparência (#690)', () => {
+    const content = loadContent(DATA);
+    expect(content.supplies.get('small-health-potion')).toMatchObject({
+      id: 'small-health-potion', price: 20, group: 'potion', groupCooldownMs: 1000,
+      actionExhaustMs: 1000, requires: {},
+      effect: { kind: 'heal', amountRange: { min: 60, max: 90 } },
+    });
+    expect(content.appearances?.supplies['small-health-potion']).toEqual({ effect: 14 });
+  });
+
+  it('toda poção e toda runa travam a exaustão de ação compartilhada de 1000 ms (#690)', () => {
+    // `timeBetweenExActions` do Canary: poção e runa dividem o MESMO relógio.
+    const content = loadContent(DATA);
+    for (const [id, supply] of content.supplies) {
+      expect(supply.actionExhaustMs, id).toBe(1000);
+    }
   });
 
   it('appearances.supplies É conferido contra o catálogo abstrato, de um lado só (FUN-109)', () => {

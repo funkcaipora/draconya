@@ -163,6 +163,15 @@ export function supplyCooldownKey(supplyId: string): string {
   return `supply:${supplyId}`;
 }
 
+/**
+ * O livro da exaustão de AÇÃO compartilhada (#690): o `nextPotionAction` do Canary, que poção e
+ * runa travam JUNTAS (`Actions::useItem`, `timeBetweenExActions`). Atravessa os grupos — por
+ * isso não é `group:<g>` — e só o supply que declara `actionExhaustMs` o trava ou o lê.
+ */
+export function actionExhaustKey(): string {
+  return 'exhaust:action';
+}
+
 export function secondaryCooldownKey(name: string): string {
   return `secondary:${name}`;
 }
@@ -659,7 +668,8 @@ export function useSupply(
     startSupplyCooldown(user, supply, nowMs);
     // Poção: `amount` fixo OU `amountRange` sorteado (#524; pela normal truncada no `combat-v3`,
     // #681), sem passar por `executeHealing` — a runa de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
-    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava.
+    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava. A vida
+    // sorteia ANTES da mana (a ordem das propriedades), a de `potions.lua` — a ordem do sorteio é contrato (#690).
     return {
       ok: true,
       healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng, combat)),
@@ -706,6 +716,13 @@ export function useSupply(
 function startSupplyCooldown(user: CharacterRuntime, supply: Supply, nowMs: number | undefined): void {
   if (nowMs === undefined) return;
   user.cooldowns.start(groupCooldownKey(supply.group), nowMs, supply.groupCooldownMs);
+  // A exaustão de ação compartilhada (#690) só AVANÇA, como o `setNextPotionAction` do Canary:
+  // `Cooldowns.start` sobrescreve o prazo, então só se grava quando o novo é MAIOR que o que
+  // falta — um supply de exaustão curta nunca encurta a de outro.
+  if (supply.actionExhaustMs !== undefined
+    && user.cooldowns.remainingMs(actionExhaustKey(), nowMs) < supply.actionExhaustMs) {
+    user.cooldowns.start(actionExhaustKey(), nowMs, supply.actionExhaustMs);
+  }
 }
 
 /**
