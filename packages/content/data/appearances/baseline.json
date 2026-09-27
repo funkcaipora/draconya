@@ -10,6 +10,10 @@
   "characters": {
     "default": 128
   },
+  "equippedItems": {
+    "energy-ring": 3088,
+    "life-ring": 3089
+  },
   "items": {
     "machete": 3308,
     "leather-helmet": 3355,

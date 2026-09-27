@@ -9,10 +9,11 @@
 // mecânica, e "ausente" sempre significa "o valor da definição". Uma mecânica nova acrescenta um
 // campo aqui e o seu leitor em `readItemOverlay`; nada mais muda — nem o snapshot (campo
 // opcional, sem bump), nem o banco (`item_instance.overlay` é `jsonb` e guarda o objeto inteiro),
-// nem o extrato (leva o objeto inteiro). Os próximos, já previstos:
+// nem o extrato (leva o objeto inteiro). Os campos:
+//   - `imbuements` (#604): os imbuements aplicados, um por slot.
 //   - `durationRemainingMs` (#689): o prazo RESTANTE de um anel com `durationMs`, gravado ao
 //     sair do corpo, "ausente é cheio" — a mesma regra de `CarriedItem.charges`.
-//   - `tier` (#617): o tier 0–10 da Forja da Exaltação.
+//   - `tier` (#617, previsto): o tier 0–10 da Forja da Exaltação.
 //
 // **Item com overlay não empilha** (ADR 0046 d.3): o estado de instância o torna não fungível
 // com outro exemplar do mesmo id. `Inventory` confere isso em todo caminho que junta pilha.
@@ -38,7 +39,13 @@ export interface ImbuementState {
 export interface ItemInstanceOverlay {
   /** Os imbuements aplicados, um por slot ocupado, em ordem de slot (#604). */
   readonly imbuements?: readonly ImbuementState[];
-  // Próximos campos (ver o cabeçalho): `durationRemainingMs?: number` (#689), `tier?: number` (#617).
+  /**
+   * O prazo RESTANTE (ms) de um item com `durationMs` (#689), gravado quando ele SAI do corpo:
+   * fora do dedo o prazo pausa, e vestir de novo retoma daqui. Ausente é "cheio" — a mesma regra
+   * de `CarriedItem.charges` —, e é o caso de todo anel que nunca foi vestido.
+   */
+  readonly durationRemainingMs?: number;
+  // Próximo campo (ver o cabeçalho): `tier?: number` (#617).
 }
 
 /**
@@ -66,7 +73,7 @@ export function hasItemOverlay(item: { readonly overlay?: ItemInstanceOverlay })
  *
  * A coluna não tem CHECK, então a leitura é defensiva, na régua do Bestiário no ticket: campo
  * torto cai (vira "o da definição") em vez de trancar o login. Campo DESCONHECIDO é preservado
- * como veio: é o campo de uma mecânica que um nó mais novo já escreve (#689, #617), e descartá-lo
+ * como veio: é o campo de uma mecânica que um nó mais novo já escreve (#617), e descartá-lo
  * na leitura faria o próximo extrato apagá-lo do banco (ADR 0014: dado persistido não se
  * descarta às cegas).
  */
@@ -77,6 +84,13 @@ export function readItemOverlay(stored: unknown): ItemInstanceOverlay | undefine
     const imbuements = readImbuements(overlay.imbuements);
     if (imbuements === undefined) delete overlay.imbuements;
     else overlay.imbuements = imbuements;
+  }
+  if ('durationRemainingMs' in overlay) {
+    const remaining = overlay.durationRemainingMs;
+    // Zero não é prazo guardado: o anel esgotado é destruído, nunca volta à mochila.
+    if (typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining <= 0) {
+      delete overlay.durationRemainingMs;
+    }
   }
   return normalizeItemOverlay(overlay as ItemInstanceOverlay);
 }

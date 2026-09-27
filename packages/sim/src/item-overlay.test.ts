@@ -31,7 +31,17 @@ describe('overlay por instância (#604, ADR 0046)', () => {
     expect(readItemOverlay({ imbuements: [imbuement, imbuement] })).toBeUndefined();
   });
 
-  it('preserva o campo de uma mecânica que um nó mais novo já grava (#689, #617)', () => {
+  it('lê o prazo restante do anel (#689); torto, zero ou negativo vira "cheio"', () => {
+    expect(readItemOverlay({ durationRemainingMs: 400_000 })).toEqual({ durationRemainingMs: 400_000 });
+    expect(hasItemOverlay({ overlay: { durationRemainingMs: 1 } })).toBe(true);
+    expect(readItemOverlay({ durationRemainingMs: 0 })).toBeUndefined();
+    expect(readItemOverlay({ durationRemainingMs: -5 })).toBeUndefined();
+    expect(readItemOverlay({ durationRemainingMs: '400000' })).toBeUndefined();
+    expect(readItemOverlay({ imbuements: [imbuement], durationRemainingMs: Number.NaN }))
+      .toEqual({ imbuements: [imbuement] });
+  });
+
+  it('preserva o campo de uma mecânica que um nó mais novo já grava (#617)', () => {
     // Mutação que mata: descartar chave desconhecida na leitura — o extrato seguinte a
     // apagaria do banco (ADR 0014).
     expect(readItemOverlay({ imbuements: [imbuement], durationRemainingMs: 5000 }))

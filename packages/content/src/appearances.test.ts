@@ -131,6 +131,17 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
     expect(missing).toEqual([]);
   });
 
+  it('a forma ativa dos anéis (#689) é o objeto do Canary e existe no pacote', () => {
+    // Energy Ring 3051 → 3088 e Life Ring 3052 → 3089 (`transformequipto`, items.xml). O boot já
+    // recusa linha órfã ou fora do pacote; isto prende os NÚMEROS, que o boot não conhece.
+    expect(appearances?.equippedItems).toEqual({ 'energy-ring': 3088, 'life-ring': 3089 });
+    if (pack === undefined) return;
+    expect(packHas(pack, 'object', 3088)).toBe(true);
+    expect(packHas(pack, 'object', 3089)).toBe(true);
+    expect(content.items.get('energy-ring')?.equippedAppearanceId).toBe(3088);
+    expect(content.items.get('life-ring')?.appearanceId).toBe(3052);
+  });
+
   it('cobre as cinco famílias com arte nesta versão, e a chave semântica nomeia a origem', () => {
     // Não é exaustão de forma: é o mapa do que a auditoria precisa ter olhado. Se uma seção
     // nova nascer em `appearances`, este teste avisa que ela ficou fora da conferência. A sexta
