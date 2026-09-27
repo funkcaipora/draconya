@@ -1693,6 +1693,16 @@ describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
   const pushableRat = { ...rat, id: 'pushable-rat', name: 'Pushable Rat' };
   const stuckRat = { ...rat, id: 'stuck-rat', name: 'Stuck Rat', pushable: false };
 
+  // Empurrar/esmagar só roda sob `combat-v3` (ADR 0031/0040, DT-04 do #544): o empurrão consome
+  // `session.rng` e move outra criatura, e as duas coisas mudariam o que uma hunt `combat-v1`/
+  // `v2` congelada rende. Os testes de MECANISMO (RF-02 a RF-06) usam este perfil de propósito,
+  // para exercitar o caminho de código real — não porque `combat-v1`/`v2` sejam o alvo da issue.
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+
   // Corredor SEM saída: x=1 (Dragon) e x=2 (rato) são as únicas colunas do corredor — a parede
   // em x=3 fecha o beco. Norte/sul (y=0/y=2) também são parede: os quatro cardinais do rato
   // (norte, sul, oeste-Dragon, leste-parede) ficam bloqueados. Além da parede, uma bolsa (x=4..8)
@@ -1721,11 +1731,17 @@ describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
     spawnPoints: [],
   };
 
-  /** Sobe uma hunt com monstros em pontos de spawn fixos (#519) e o herói na própria bolsa. */
+  /**
+   * Sobe uma hunt com monstros em pontos de spawn fixos (#519) e o herói na própria bolsa.
+   * `combatProfile` é `combatV3` por default — os testes de mecanismo precisam do perfil que
+   * liga o empurrão; o teste do GATE (RF-07, abaixo) passa `combat` (v1, o default do conteúdo)
+   * de propósito, para provar que o mecanismo sai inteiro sem efeito fora de `combat-v3`.
+   */
   const startCorridor = (
     map: typeof narrowMap, route: typeof narrowRoute,
     monsters: readonly { readonly id: string }[],
     positions: readonly { readonly x: number; readonly y: number; readonly z: number }[],
+    combatProfile: typeof combat = combatV3,
   ) => {
     const corridorHunt = {
       ...hunt, id: map.id, mapId: map.id, routeId: route.id,
@@ -1745,6 +1761,7 @@ describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
     };
     const loaded = buildContent(raw({
       monsters: [...monsters], maps: [map], routes: [routeWithSpawns], hunts: [corridorHunt],
+      combat: [combatProfile],
     }));
     const session = createHuntSession({
       content: loaded, id: `push-${map.id}`, huntId: map.id, difficulty: 'cautious', createdAtMs: 0,
@@ -1859,6 +1876,49 @@ describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
     expect(hero.health).toBe(hero.maxHealth);
     expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
     expect(dragon?.alive).toBe(true);
+  });
+
+  it('RF-07 (ADR 0031/0040): sob combat-v1 o tile ocupado continua parede — nenhum sorteio novo, mesmo com canPushCreatures: true', () => {
+    // O MESMO cenário do RF-03 (o rato seria esmagado sob combat-v3), rodado sob `combat-v1` —
+    // o default do conteúdo de teste, e o perfil de toda hunt congelada antes desta issue — com
+    // a flag `canPushCreatures` LIGADA e DESLIGADA no Dragon. Sem o gate `#isV3()`, a rodada
+    // "ligada" mataria o rato e divergiria da "desligada"; com o gate, `#pushablePathThrough`/
+    // `#clearPushableOccupant` saem no primeiro `if` sem SEQUER ler `canPushCreatures` — as duas
+    // rodadas precisam ser bit a bit a MESMA sequência de sorteio (a mesma prova que #555 fez
+    // para o hit chance de distância em `weapons.test.ts`), e o rato tem que sobreviver nas duas.
+    const runUnderV1 = (canPushCreatures: boolean) => {
+      const dragon = { ...pusherDragon, canPushCreatures };
+      const spy = vi.spyOn(Rng.prototype, 'integer');
+      try {
+        const { session, hero, ruleset } = startCorridor(
+          narrowMap, narrowRoute, [dragon, pushableRat],
+          [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+          combat,
+        );
+        run(session, 5_000, 100);
+        return {
+          rngCalls: spy.mock.calls.map((call) => [...call]),
+          dragonPosition: ruleset.monsters.find((m) => m.monsterId === dragon.id)?.position,
+          ratAlive: ruleset.monsters.find((m) => m.monsterId === 'pushable-rat')?.alive,
+          xp: hero.xp,
+        };
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    const withFlag = runUnderV1(true);
+    const withoutFlag = runUnderV1(false);
+
+    // Sem o gate, o rato desta rodada estaria esmagado (RF-03) — aqui ele sobrevive, intocado,
+    // exatamente como no cenário sem a flag.
+    expect(withFlag.ratAlive).toBe(true);
+    expect(withFlag.dragonPosition).toEqual({ x: 1, y: 1, z: 7 });
+    expect(withFlag.dragonPosition).toEqual(withoutFlag.dragonPosition);
+    expect(withFlag.xp).toBe(withoutFlag.xp);
+    // A prova mais forte: a MESMA sequência de `session.rng.integer(...)`, chamada a chamada —
+    // nenhum sorteio do empurrão entrou na sequência de uma hunt combat-v1.
+    expect(withFlag.rngCalls).toEqual(withoutFlag.rngCalls);
   });
 });
 

@@ -7009,8 +7009,19 @@ const slots = bot.groups.get(group);
    * `#step`, revalidado no destino FINAL —, nunca na decisão: `decideMonsterAction`
    * (`monster/monster.ts`) é PURA e não pode mover ninguém (invariante 9); só `#step` tem
    * autoridade de escrita.
+   *
+   * **Só em `combat-v3`** (ADR 0031/0040): o empurrão consome `session.rng` (`#pushAside`, o
+   * Fisher-Yates dos 4 cardeais) e move OUTRA criatura, e as duas coisas mudam o que uma hunt
+   * `combat-v1`/`v2` congelada rende — a MESMA razão pela qual `#practice`/o crítico de item
+   * (CMB-08, #551) e o hit chance de distância (#555) só entram sob `combat-v3`. Hoje nenhum
+   * monstro do catálogo declara `canPushCreatures` (Dragon e Dragon Lord AINDA não — ver a nota
+   * de `pushable`/`canPushCreatures`/`canPushItems` no schema), mas o predicado de decisão
+   * (`#pushablePathThrough`) já teria mudado o CAMINHO escolhido bem antes de chegar aqui: a
+   * dupla checagem (lá e aqui) é a mesma redundância que `#monsterFieldBlocked` já faz para o
+   * campo — nunca confiar que só o outro lado da linha barrou.
    */
   #clearPushableOccupant(session: Session, pusher: MonsterRuntime, to: GridPoint): void {
+    if (!this.#isV3()) return;
     const definition = this.#options.monsters.get(pusher.monsterId);
     if (definition === undefined || !definition.canPushCreatures) return;
     const z = this.#floorOf(pusher);
@@ -9296,8 +9307,15 @@ const slots = bot.groups.get(group);
     return this.#fieldBlocksMonster(this.#fieldMonster as MonsterRuntime, this.#fieldDefinition as Monster, x, y);
   };
 
-  /** Só a metade de LEITURA de `#clearPushableOccupant` (M29-08) — ver o comentário lá. */
+  /**
+   * Só a metade de LEITURA de `#clearPushableOccupant` (M29-08) — ver o comentário lá, inclusive
+   * o porquê de `#isV3()` gatear os dois lados: sem ele, um monstro `combat-v1`/`v2` já
+   * ESCOLHERIA um caminho diferente aqui (achando o tile passável), mesmo que o commit acabasse
+   * recusando por falta do gate lá — e "o caminho escolhido muda" já é o suficiente para uma
+   * hunt congelada divergir (o guloso tenta os DOIS vizinhos só quando o primário falha).
+   */
   #pushablePathThrough(x: number, y: number): boolean {
+    if (!this.#isV3()) return false;
     const pusher = this.#fieldMonster;
     const definition = this.#fieldDefinition;
     if (pusher === null || definition === null || !definition.canPushCreatures) return false;

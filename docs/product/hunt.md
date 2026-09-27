@@ -149,18 +149,27 @@ alvo"), então essa metade da condição do Canary nunca fica satisfeita, não p
 porque a situação que ela descreve não ocorre neste motor.
 
 **Ele empurra quem bloqueia o passo, em vez de tratar todo tile ocupado como parede (M29-08,
-TFS/Canary `Monster::pushCreatures`).** `canPushCreatures`, `pushable` e `canPushItems` são
-booleanos por monstro; ausentes são, respectivamente, `false`, `true` e `false` — os defaults do
-Canary, que preservam rato, rotworm, Dragon e Dragon Lord idênticos a antes desta issue (nenhum
-dos quatro declara `canPushCreatures`). Um monstro `canPushCreatures` que encontra o próprio
-caminho ocupado por outro monstro `pushable` o empurra para um tile CARDINAL livre (nunca
+TFS/Canary `Monster::pushCreatures`) — mas só sob `combat-v3`.** `canPushCreatures`, `pushable` e
+`canPushItems` são booleanos por monstro; ausentes são, respectivamente, `false`, `true` e
+`false` — os defaults do Canary. Rato e rotworm não declaram nenhum dos três. **Dragon e Dragon
+Lord declaram os três** no Canary (`dragon.lua`/`dragon_lord.lua`: `pushable = false,
+canPushItems = true, canPushCreatures = true`), mas o conteúdo autoral de hoje
+(`data/monsters/generated/dragons.json`, regenerado pelo #581) ainda não carrega o campo — os
+dois continuam nos defaults do schema até o valor real chegar (fora do escopo desta issue, o
+mesmo trabalho do leitor de bestiário, #578). Um monstro `canPushCreatures` que encontra o
+próprio caminho ocupado por outro monstro `pushable` o empurra para um tile CARDINAL livre (nunca
 diagonal), sorteado sem reposição pelo `Rng` da sessão — a mesma ordem embaralhada do Canary
 (`{norte, oeste, leste, sul}`). Sem nenhum cardinal livre, o empurrado morre no lugar, sem
 atacante: não paga XP a ninguém, e o loot segue a regra de "sem dono" que já vale para um abate
 cujo matador sumiu. `canPushItems` está no schema, validado, mas SEM EFEITO — não existe item
 móvel no chão (o cadáver é só visual, ADR 0048), então não há o que empurrar. **O jogador nunca é
 empurrado nem esmagado** — a checagem só considera outros monstros; um monstro parado no tile de
-um jogador continua bloqueando exatamente como antes.
+um jogador continua bloqueando exatamente como antes. **Sob `combat-v1`/`v2` o tile ocupado
+continua parede, incondicionalmente** (ADR 0031/0040, a mesma regra que já governa o crítico de
+item e o hit chance de distância, #551/#555): o empurrão consome `session.rng` e move outra
+criatura, e as duas coisas mudariam o que uma hunt congelada nesses perfis rende — então o
+mecanismo inteiro (decisão e commit) sai sem efeito algum fora de `combat-v3`, mesmo que um
+monstro futuro declare `canPushCreatures: true`.
 
 ### Custo medido
 
