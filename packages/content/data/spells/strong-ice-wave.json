@@ -12,8 +12,8 @@
     "kind": "damage",
     "basePower": 150,
     "area": {
-      "shape": "wave",
-      "length": 2
+      "shape": "rows",
+      "widths": [1, 3, 3]
     },
     "damageType": "ice",
     "formula": {
@@ -21,8 +21,9 @@
       "skillMin": 4.5,
       "skillMax": 7.6,
       "baseMin": 20,
-      "baseMax": 48
+      "baseMax": 48,
+      "scaling": "magic"
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula, área e cooldown do Canary (`data/scripts/spells/attack/strong_ice_wave.lua`, main, 2026-09-24): AREA_SHORTWAVE3 tem 2 fileiras (não 5), e o cooldown é 8s, não 4s."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula, área e cooldown do Canary (`data/scripts/spells/attack/strong_ice_wave.lua`, main, 2026-09-24): AREA_SHORTWAVE3 tem 3 fileiras, larguras 1,3,3 contando a do `3` (#679), e o cooldown é 8s, não 4s."
 }

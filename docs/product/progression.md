@@ -159,6 +159,56 @@ conta inteira por uma falha de ledger — o valor ali só é exibido, nada é cr
 Na lista, liquida-se depois de listar (os ids só se conhecem listando) e relê-se só quando algo
 foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma consulta a mais.
 
+## Rates do servidor (#691, M44-G15)
+
+Todo servidor do Tibia tem rates, e o Draconya também: o bloco `progression.rates` em
+`packages/content/data/progression/baseline.json` (`ratesSchema`, `packages/content/src/schemas.ts`)
+é o `rateExp`/`rateSkill`/`rateMagic`/`rateLoot`, os stages de `data/stages.lua` e os
+`rateMonster*`/`rateBoss*` do `config.lua` do Canary. O rate mora no **conteúdo versionado**, e
+não em variável de ambiente do servidor (invariante 7): entra no `computeVersion`, uma sessão
+termina no rate da versão em que começou, e mudar o rate é deploy de conteúdo.
+
+```jsonc
+"rates": {
+  "experience": 1, "skill": 1, "magic": 1,
+  "loot": 1,                 // inteiro; 0 desliga o loot
+  "useStages": false,        // o `rateUseStages` do Canary
+  "experienceStages": [],    // [{ "minLevel": 1, "maxLevel": 8, "multiplier": 7 }, …]
+  "skillStages": [], "magicLevelStages": [],
+  "monster": { "health": 1, "attack": 1, "defense": 1 },
+  "boss":    { "health": 1, "attack": 1, "defense": 1 }
+}
+```
+
+**O default é neutro, e o conteúdo real não declara o bloco:** o Tibia com rate 1. Com tudo em 1,
+cada aplicação curto-circuita e nenhum número muda — nem um arredondamento a mais.
+
+| Rate | Onde se aplica | Como |
+|---|---|---|
+| `experience` / `experienceStages` | abate (`#grantPartyXp`) | `floor(xp × rate)`, **depois** do bônus do Bestiário, por membro e pelo level de cada um (o `baseRate` do Canary) |
+| `skill` / `skillStages` | prática (`#gainSkills`) | pontos × rate, sem arredondar; o stage é o do nível **base** da skill |
+| `magic` / `magicLevelStages` | prática da skill `magic` | igual, pelo ML base (o `getBaseMagicLevel()` do Canary ignora bônus de item) |
+| `loot` | sorteio (`rollLoot`) | chance de cada linha × `max(1, loot)`, teto 1; `0` devolve loot vazio **sem consumir sorteio** |
+| `monster` / `boss` `.health` | compilação do monstro (`compileMonster`) | `trunc(vida × mult)`, piso 1 |
+| `monster` / `boss` `.defense` | compilação do monstro | `defense` e `armor` × mult truncados; `defenseMitigation` × mult em ponto flutuante |
+| `monster` / `boss` `.attack` | golpe do monstro | `trunc(dano sorteado × mult)` — o sorteio é o mesmo, e a sequência do `Rng` não muda |
+
+`monster.boss: true` (o `MonsterType::isBoss` do Canary) escolhe o bloco `boss`; ausente é
+`false`. Só a flag: raridade e pontos do Bosstiary são o #629.
+
+Com `useStages`, a primeira faixa que contém o level vence (`getRateFromTable`), e sem faixa
+vale o rate simples. `buildContent` recusa faixa sem `maxLevel` que não seja a última, faixa com
+`minLevel > maxLevel` e faixas sobrepostas — no Canary a segunda seria letra morta.
+
+**Fronteira com o bônus de level baixo:** o `lowLevelBonusExp` do Canary **não** é um rate aqui.
+O ADR 0043 (emenda de 2026-09-25) escolheu a forma por faixa do Huntera, que é o
+`progression.experienceBonusByLevel` do #563 (na `main`; ainda não nesta linha). Quando os dois
+se encontrarem, o rate de XP multiplica **depois** da soma de percentuais de bônus — a ordem do
+Canary (`exp × (1 + bônus%) × stamina × baseRate`).
+
+Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspondente), os
+`SCHEDULE_*_RATE` de evento, VIP e boosted creature, e a exibição dos rates ao jogador.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -193,6 +243,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Penalidade de morte — limiar da fórmula cúbica | level 24 (o Tibia) | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
 | Penalidade de morte — redução de quem está abençoado (`premium`) | 56 % (sete bênçãos × 8 % do Tibia — mapeia o `premium` que o repo já tinha) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
 | Penalidade de morte — piso de level | 8 — **sem equivalente no Tibia** (decisão de produto do Draconya, ver "Divergências do PRD") | `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor` |
+| Rates do servidor (XP, skill, magia, loot, stages, monstro, boss) | todos 1, stages desligados — o Tibia com rate 1 (#691; ver "Rates do servidor") | `packages/content/data/progression/baseline.json`, `rates` (ausente = neutro) |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Corpo a Corpo — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do club/sword/axe no Canary, #521, ADR 0037; `factor` por vocação, ver acima) | `packages/content/data/skills/melee.json` |
 | Magia (ML) — início, curva (base), dano por nível | 0 / 1600 / +3% `[ABERTO — dano por nível provisório]` (base = `getReqMana` do Canary — o custo do ML1 é sempre a base cheia, o expoente zera; `factor` = `manamultiplier`, por vocação, ver acima; #521, ADR 0037) | `packages/content/data/skills/magic.json` |
@@ -284,7 +335,7 @@ todos **conteúdo**, em `packages/content/data/skills/`.
 | Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
 | Distância | cada tiro de arma de distância (#152) | multiplica o poder do tiro |
 | Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
-| Escudo | cada ataque físico elegível recebido (CMB-04) | multiplica a defesa do escudo ou da arma de uma mão |
+| Escudo | cada ataque físico elegível recebido (CMB-04); no `combat-v3`, só o bloqueado com escudo (#686) | multiplica a defesa do escudo ou da arma de uma mão |
 
 **Shielding sobe por bloqueio, não por ser atacado.** A prática é do evento elegível — o
 defensor tem escudo ou arma de uma mão e o ataque é de um tipo aprovado —, e não depende de o
@@ -292,6 +343,35 @@ bloqueio ter acontecido nem de quanto HP foi perdido: um bloqueio total ainda tr
 ataque elemental não treina. O rato parado, sem atacar, também não move a skill (não é por
 tick). A fórmula e a posição do sorteio estão em
 [`combat.md`](./combat.md) e na emenda do ADR 0031.
+
+### No `combat-v3`, o try depende do tipo de bloqueio (#686)
+
+Com o perfil `combat-v3` (ADR 0040), as três práticas acima seguem a regra do Canary
+(`combat/attack-practice.ts`). O alvo devolve o **tipo de bloqueio** do golpe
+(`resolveBlockHit`, antes da mitigação percentual): `none` (tirou sangue), `defense` (a defesa
+zerou), `armor` (a armadura zerou) ou `immunity`. O personagem guarda quatro campos em
+`CharacterRuntime.attackPractice`, zerados a cada sessão e nunca salvos no banco (só no snapshot
+quente, omitidos quando iniciais):
+
+| Evento | Efeito |
+|---|---|
+| golpe `none` | treina; `bloodHitCount` e `shieldBlockCount` voltam a 30 |
+| golpe `defense`/`armor` | treina só se `bloodHitCount > 0`, e gasta um — 30 bloqueados seguidos no máximo |
+| golpe `immunity` | não treina; contadores intactos |
+
+| Skill | Tries por golpe no `combat-v3` |
+|---|---|
+| Corpo a Corpo (e punho) | 1 se o golpe treina e não foi imune, senão 0 |
+| Distância | 2 no tiro limpo, 1 no bloqueado, 0 no imune ou sem sangue; o tiro **errado** usa o estado do tiro anterior |
+| Escudo | 1 quando o golpe RECEBIDO foi bloqueado (`defense`/`armor`) com carga de `blockCount`, `shieldBlockCount > 0` e **escudo** na mão — arma de uma mão não treina; o contador cai mesmo sem escudo |
+
+Magia, runa e wand também passam pelo tipo do alvo: um acerto limpo recarrega os contadores, mas
+não rende try de arma (a wand continua praticando magia por mana). Com secundário, a última
+chamada vence (o secundário). O primeiro golpe da sessão que for bloqueado, e o primeiro tiro
+errado, rendem 0 — nada nasce carregado. `30` e `2/1/0` são constantes do `sim`
+(`BLOOD_HIT_RECHARGE`, `distanceTries`), não conteúdo. `combat-v1`/`v2` seguem a regra de
+cima, bit a bit. O tique de condição do próprio personagem ainda não recarrega os contadores
+(no Canary ele passa pelo `blockHit`): fica para issue própria.
 
 ### O ritmo de cada skill é por VOCAÇÃO (#521, ADR 0037)
 

@@ -5,8 +5,11 @@
 // nova ser um JSON, não um `if`. PURO: entra geometria, sai lista de tiles, em ordem
 // determinística (fileira a fileira, da esquerda para a direita olhando para a frente).
 //
-// O cone é `2·⌊k/2⌋+1` por fileira — 1, 3, 3, 5, 5 —, que reproduz a forma da onda do Tibia
-// como fato observável, sem copiar matriz nenhuma do TFS (GPL, ADR 0019).
+// A onda é `rows` (#679): uma largura por fileira, transcrita da CONTAGEM de tiles de cada
+// fileira da `AREA_*` do Canary — nunca a matriz (GPL, ADR 0019). A fileira 0 é a do `3`, que o
+// motor ancora UM passo à frente do lançador (`Spells::getCasterPosition`) e conta como atingida
+// (`AreaCombat::getList`). O cone `2·⌊k/2⌋+1` da `wave` (#523) contava sem essa fileira e fica só
+// como legado de fixture.
 //
 // O círculo tem DOIS mecanismos, e a magia e a ability de monstro usam mecanismos DIFERENTES do
 // Canary para o "mesmo" raio (#523, revisão pós-review):
@@ -65,7 +68,7 @@ const SIDE: Readonly<Record<Direction, WorldPoint>> = {
 };
 
 /**
- * A forma sai do LANÇADOR — sem alvo, sem alcance? `wave`, `cleave`, `beam` e o círculo
+ * A forma sai do LANÇADOR — sem alvo, sem alcance? `wave`, `rows`, `cleave`, `beam` e o círculo
  * centrado no lançador. Alvo único (sem área), o círculo no alvo e a cruz no alvo são o outro
  * caso.
  */
@@ -76,6 +79,7 @@ export function isSelfOrigin(area: SpellArea | undefined): boolean {
     // A cruz é centrada no alvo (Explosion) — como o círculo no alvo, exige mira e alcance.
     case 'cross': return false;
     case 'wave':
+    case 'rows':
     case 'cleave':
     case 'beam': return true;
   }
@@ -173,6 +177,16 @@ export function areaTiles(
       const tiles: WorldPoint[] = [];
       for (let k = 1; k <= shape.length; k += 1) {
         tiles.push(...row(origin, f, s, k, 2 * Math.floor(k / 2) + 1));
+      }
+      return tiles;
+    }
+    case 'rows': {
+      // Fileira i a i + 1 tiles: o `3` da matriz do Canary é ancorado UM passo à frente
+      // (`Spells::getCasterPosition`) e conta como atingido (`AreaCombat::getList`), igual ao
+      // `cleave`. Ordem: fileira a fileira, da esquerda para a direita (contrato do arquivo).
+      const tiles: WorldPoint[] = [];
+      for (let i = 0; i < shape.widths.length; i += 1) {
+        tiles.push(...row(origin, f, s, i + 1, shape.widths[i] as number));
       }
       return tiles;
     }

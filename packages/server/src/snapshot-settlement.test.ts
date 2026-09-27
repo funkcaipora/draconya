@@ -61,6 +61,7 @@ describe('settleSnapshotAsReceipt (#527)', () => {
   });
 
   it('carries stamina, skills, bestiary, ammo, stock, vocation, equipment and the loot box of the OWNER', async () => {
+    const imbued = { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] };
     const { receipts, saved } = fakeReceipts();
     const snapshot: SessionSnapshot = {
       ...baseSnapshot,
@@ -75,7 +76,7 @@ describe('settleSnapshotAsReceipt (#527)', () => {
         vocationId: 'knight',
         inventory: {
           backpack: [{ instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 }],
-          equipped: { hand: { instanceId: 's-old:2', itemId: 'sword', quantity: 1 } },
+          equipped: { hand: { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued } },
         },
         lootBox: [{ instanceId: 's-old:3', itemId: 'dragon-hide', quantity: 1 }],
       }],
@@ -92,10 +93,12 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     expect(receipt?.vocation).toBe('knight');
     expect(receipt?.equipment).toEqual({ hand: 's-old:2' });
     expect(receipt?.layout).toEqual({ 's-old:1': { container: 'backpack', index: 0 } });
+    // O overlay por instância (#604): containers E corpo; `null` é a instância sem overlay.
+    expect(receipt?.overlays).toEqual({ 's-old:1': null, 's-old:2': imbued });
     // Nasceu NESTA sessão (prefixo `s-old:`) — vira item a inserir, não só posição.
     expect(receipt?.acquired).toEqual([
       { instanceId: 's-old:1', itemId: 'gold-coin', quantity: 50 },
-      { instanceId: 's-old:2', itemId: 'sword', quantity: 1 },
+      { instanceId: 's-old:2', itemId: 'sword', quantity: 1, overlay: imbued },
     ]);
     expect(receipt?.lootBox).toEqual([{ instanceId: 's-old:3', itemId: 'dragon-hide', quantity: 1 }]);
   });

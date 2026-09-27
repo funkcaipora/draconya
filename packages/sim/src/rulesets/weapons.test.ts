@@ -8,6 +8,7 @@ import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import { INITIAL_ATTACK_PRACTICE, afterAttackBlock } from '../combat/attack-practice.js';
 import type { InventoryState } from '../inventory.js';
 import { statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -534,5 +535,87 @@ describe('combat-v2: chance de acerto à distância (#522)', () => {
     run(slow.session, 20_000, 1_000);
     expect(fast.ruleset.monsters[0]?.health).toBe(slow.ruleset.monsters[0]?.health);
     expect(fast.hero.goldDelta).toBe(slow.hero.goldDelta);
+  });
+});
+
+// --- combat-v3: quantos tries cada tiro rende (#686) ------------------------------------------
+//
+// O balde default (90) sem nenhuma distância declarada: todo tiro da `arrow` ERRA (a distância
+// fora de `tiers` é 0 %). A `sure-arrow` declara `hitChance` 100 direto e acerta sempre. A curva
+// da skill de distância é enorme para o nível nunca mudar: os pontos contam os tries, um a um.
+
+const sureArrow = { id: 'sure-arrow', name: 'Sure Arrow', family: 'arrow', attack: 20, price: 1, hitChance: 100 };
+const flatDistanceSkill = skills.map((skill) => (skill.id === 'distance'
+  ? { ...skill, curve: { base: 1_000_000, factor: 1 } }
+  : skill));
+
+function startProfile(
+  profile: 'combat-v2' | 'combat-v3', options: Parameters<typeof start>[0] = {},
+) {
+  const combatProfile = {
+    ...combatV2, compatibilityProfile: profile,
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [{ maxHitChance: 90, tiers: [] }] },
+  };
+  const loaded = buildContent(raw({
+    combat: [combatProfile], ammunition: [...ammunition, sureArrow], skills: flatDistanceSkill,
+  }));
+  const session = createHuntSession({
+    id: 'session-1', content: loaded, huntId: 'range', difficulty: 'cautious', createdAtMs: 0,
+  });
+  const stats = statsForLevel(1, null, progression as Progression);
+  const hero = new CharacterRuntime({
+    id: 'hero', position: { x: 0, y: 0, z: 7 },
+    health: stats.maxHealth, maxHealth: stats.maxHealth,
+    mana: stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
+    ...(options.ammo === undefined ? {} : { ammo: options.ammo }),
+  });
+  session.enter(hero);
+  return { session, hero, ruleset: session.ruleset as HuntRuleset };
+}
+
+/** Os tries de distância acumulados e os tiros pagos (1 gold cada). */
+function distanceTally(started: ReturnType<typeof startProfile>) {
+  started.session.advanceBy(50);
+  ratAt(started.ruleset, 3);
+  run(started.session, 10_000, 100);
+  return {
+    tries: started.hero.skills.getState()['distance']?.points ?? 0,
+    shots: -started.hero.goldDelta,
+  };
+}
+
+describe('combat-v3: tries de distância pelo tipo de bloqueio (#686)', () => {
+  it('acerto limpo rende 2 tries por tiro — o dobro do v2', () => {
+    const v3 = distanceTally(startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'sure-arrow' },
+    }));
+    expect(v3.shots).toBeGreaterThan(5);
+    expect(v3.tries).toBe(2 * v3.shots);
+
+    const v2 = distanceTally(startProfile('combat-v2', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'sure-arrow' },
+    }));
+    expect(v2.tries).toBe(v2.shots);
+  });
+
+  it('tiro errado desde o primeiro: 0 tries — tudo nasce zerado', () => {
+    const v3 = distanceTally(startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    }));
+    expect(v3.shots).toBeGreaterThan(5);
+    expect(v3.tries).toBe(0);
+  });
+
+  it('tiro errado depois de um acerto limpo: vale o estado anterior, 2 tries', () => {
+    const started = startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    started.hero.attackPractice = afterAttackBlock(INITIAL_ATTACK_PRACTICE, 'none');
+    const v3 = distanceTally(started);
+    expect(v3.shots).toBeGreaterThan(5);
+    expect(v3.tries).toBe(2 * v3.shots);
   });
 });
