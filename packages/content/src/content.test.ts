@@ -6,7 +6,6 @@ import {
 } from './content.js';
 import type { RawContent } from './content.js';
 import { monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf } from './schemas.js';
-import { wallSetOf } from './schemas.js';
 import { loadContent } from './load.js';
 
 const rat = {

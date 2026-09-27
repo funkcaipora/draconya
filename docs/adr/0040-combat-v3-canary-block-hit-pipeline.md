@@ -282,6 +282,7 @@ magia, e a armadura não tirava nada.
 - **Nota sobre a carga de bloqueio.** Como `Creature::blockHit` do Canary, a carga
   (`blockCount`) é gasta sempre que UMA das flags vale — um `combat` físico gasta carga pela
   armadura mesmo sem o escudo rolar nada (`resolveBlockHit`, inalterado).
+
 ## Emenda — 2026-09-26: magia, runa, poção e ataque/cura de monstro pela normal truncada (#681)
 
 O `combat-v3` ainda não chegou na `main`, então esta é uma emenda dele pela decisão 3 — não um
