@@ -172,6 +172,50 @@
     }
   },
   {
+    "id": "biscuit-barrier",
+    "name": "biscuit barrier",
+    "kind": "shield",
+    "weight": 52,
+    "value": 0,
+    "slot": "shield",
+    "defense": 36,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "combatModifiers": {
+      "lifeLeech": 200
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "shielding",
+          "amount": 2
+        }
+      ],
+      "regeneration": {
+        "healthGain": 4,
+        "healthTicksMs": 5000000,
+        "manaGain": 16,
+        "manaTicksMs": 5000000
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "black-shield",
     "name": "black shield",
     "kind": "shield",
@@ -352,6 +396,36 @@
     }
   },
   {
+    "id": "cocoa-grimoire",
+    "name": "cocoa grimoire",
+    "kind": "shield",
+    "weight": 15,
+    "value": 0,
+    "slot": "shield",
+    "defense": 19,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": "sorcerer"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "copper-shield",
     "name": "copper shield",
     "kind": "shield",
@@ -359,6 +433,45 @@
     "value": 50,
     "slot": "shield",
     "defense": 19,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "creamy-grimoire",
+    "name": "creamy grimoire",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "defense": 19,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 200,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "healing": 1
+      }
+    },
+    "spellbook": true,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

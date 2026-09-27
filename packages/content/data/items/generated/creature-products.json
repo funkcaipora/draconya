@@ -396,6 +396,18 @@
     }
   },
   {
+    "id": "bloodstained-scythe",
+    "name": "bloodstained scythe",
+    "kind": "other",
+    "weight": 8.1,
+    "value": 4200,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "bloody-dwarven-beard",
     "name": "bloody dwarven beard",
     "kind": "other",
@@ -600,6 +612,18 @@
     }
   },
   {
+    "id": "brinebrute-claw",
+    "name": "brinebrute claw",
+    "kind": "other",
+    "weight": 2.4,
+    "value": 2600,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "broken-crossbow",
     "name": "broken crossbow",
     "kind": "other",
@@ -739,6 +763,18 @@
     "kind": "other",
     "weight": 11,
     "value": 230,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broodrider-saddle",
+    "name": "broodrider saddle",
+    "kind": "other",
+    "weight": 3.9,
+    "value": 2800,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2367,6 +2403,18 @@
     }
   },
   {
+    "id": "fish-eye",
+    "name": "fish eye",
+    "kind": "other",
+    "weight": 1,
+    "value": 500000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "fish-fin",
     "name": "fish fin",
     "kind": "other",
@@ -2956,6 +3004,18 @@
     }
   },
   {
+    "id": "gorger-antlers",
+    "name": "gorger antlers",
+    "kind": "other",
+    "weight": 6.3,
+    "value": 2250,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "grappling-hook",
     "name": "grappling hook",
     "kind": "other",
@@ -3165,6 +3225,18 @@
     "kind": "other",
     "weight": 0.75,
     "value": 500,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hellhunter-eye",
+    "name": "hellhunter eye",
+    "kind": "other",
+    "weight": 1.9,
+    "value": 2950,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4900,6 +4972,90 @@
     }
   },
   {
+    "id": "preserved-dark-seed",
+    "name": "preserved dark seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-light-blue-seed",
+    "name": "preserved light blue seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-pink-seed",
+    "name": "preserved pink seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-purple-seed",
+    "name": "preserved purple seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-red-seed",
+    "name": "preserved red seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-violet-seed",
+    "name": "preserved violet seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "preserved-yellow-seed",
+    "name": "preserved yellow seed",
+    "kind": "other",
+    "weight": 0.3,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "pristine-worm-head",
     "name": "pristine worm head",
     "kind": "other",
@@ -5036,6 +5192,18 @@
     "name": "raw meat",
     "kind": "other",
     "weight": 28,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "reality-splinter",
+    "name": "reality splinter",
+    "kind": "other",
+    "weight": 2.5,
     "value": 0,
     "source": {
       "engine": "canary",
@@ -5632,6 +5800,18 @@
     }
   },
   {
+    "id": "sineater-wing",
+    "name": "sineater wing",
+    "kind": "other",
+    "weight": 4.7,
+    "value": 2100,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "single-human-eye",
     "name": "single human eye",
     "kind": "other",
@@ -5968,6 +6148,18 @@
     }
   },
   {
+    "id": "spellreaper-staff-totem",
+    "name": "spellreaper staff totem",
+    "kind": "other",
+    "weight": 6.5,
+    "value": 3100,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "sphinx-feather",
     "name": "sphinx feather",
     "kind": "other",
@@ -6046,6 +6238,18 @@
     "kind": "other",
     "weight": 1.25,
     "value": 100,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spirited-soil",
+    "name": "spirited soil",
+    "kind": "other",
+    "weight": 2.5,
+    "value": 0,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

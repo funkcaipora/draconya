@@ -22,13 +22,16 @@ afterEach(() => {
 });
 
 describe('SkillsPanel', () => {
-  it('shows the ten permitted server values in the fixed panel order', async () => {
+  it('shows the thirteen permitted server values in the fixed panel order', async () => {
     hud.set(() => ({
       ...INITIAL_HUD,
       xp: 125_430, level: 42, health: 380, mana: 210, capacity: 4_150, staminaMs: 151_200_000,
       speed: 118,
       skills: {
-        melee: { level: 25, percent: 50 },
+        fist: { level: 22, percent: 10 },
+        club: { level: 19, percent: 90 },
+        sword: { level: 25, percent: 50 },
+        axe: { level: 21, percent: 5 },
         distance: { level: 18, percent: 70 },
         magic: { level: 15, percent: 35 },
       },
@@ -41,15 +44,15 @@ describe('SkillsPanel', () => {
     expect(html).toContain('4.150 oz');
     const order = [
       'Experiência total', 'Level', 'Hit Points', 'Mana', 'Capacidade', 'Speed', 'Stamina',
-      'Magic Level', 'Corpo a Corpo', 'Distância',
+      'Magic Level', 'Punho', 'Maça', 'Espada', 'Machado', 'Distância',
     ].map((label) => html.indexOf(label));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
   it('uses vital tones for current HP and mana without maximums or progress bars', async () => {
-    // Isola HP/mana: com as dez linhas visíveis, magic/melee/distance sempre desenham a barra
-    // (mesmo em 0%), e essa asserção é especificamente sobre HP/mana não terem uma.
+    // Isola HP/mana: com as treze linhas visíveis, magic/fist/club/sword/axe/distance sempre
+    // desenham a barra (mesmo em 0%), e essa asserção é especificamente sobre HP/mana não terem uma.
     vi.stubGlobal('localStorage', {
       getItem: vi.fn((key: string) => key === STORAGE_KEY ? '["hp","mana"]' : null),
       setItem: vi.fn(),
@@ -95,26 +98,38 @@ describe('SkillsPanel', () => {
     expect(html).toMatch(/width:\s*35%/);
   });
 
-  it('shows melee and distance with level and a percent bar, without a vital tone', async () => {
+  it('shows fist/club/sword/axe and distance with level and a percent bar, without a vital tone', async () => {
     vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === STORAGE_KEY ? '["melee","distance"]' : null),
+      getItem: vi.fn((key: string) => key === STORAGE_KEY ? '["fist","club","sword","axe","distance"]' : null),
       setItem: vi.fn(),
     });
     hud.set(() => ({
       ...INITIAL_HUD,
       skills: {
         ...INITIAL_HUD.skills,
-        melee: { level: 25, percent: 50 },
+        fist: { level: 22, percent: 10 },
+        club: { level: 19, percent: 90 },
+        sword: { level: 25, percent: 50 },
+        axe: { level: 21, percent: 5 },
         distance: { level: 18, percent: 70 },
       },
     }));
 
     const html = await render();
-    expect(html).toContain('Corpo a Corpo');
+    expect(html).toContain('Punho');
+    expect(html).toContain('22');
+    expect(html).toContain('Maça');
+    expect(html).toContain('19');
+    expect(html).toContain('Espada');
     expect(html).toContain('25');
+    expect(html).toContain('Machado');
+    expect(html).toContain('21');
     expect(html).toContain('Distância');
     expect(html).toContain('18');
+    expect(html).toMatch(/width:\s*10%/);
+    expect(html).toMatch(/width:\s*90%/);
     expect(html).toMatch(/width:\s*50%/);
+    expect(html).toMatch(/width:\s*5%/);
     expect(html).toMatch(/width:\s*70%/);
     expect(html).not.toContain('--stat-tone');
   });
@@ -131,7 +146,10 @@ describe('SkillsPanel', () => {
     expect(html).not.toContain('Experiência total');
     expect(html).not.toContain('Speed');
     expect(html).not.toContain('Magic Level');
-    expect(html).not.toContain('Corpo a Corpo');
+    expect(html).not.toContain('Punho');
+    expect(html).not.toContain('Maça');
+    expect(html).not.toContain('Espada');
+    expect(html).not.toContain('Machado');
     expect(html).not.toContain('Distância');
     // Skills clássicas do Tibia que este jogo nunca teve (ADR 0026 decisão 4): nenhuma
     // preferência salva pode fazê-las aparecer, porque elas não existem em `SKILL_ORDER`.
@@ -140,9 +158,9 @@ describe('SkillsPanel', () => {
     expect(html).not.toContain('Shielding');
   });
 
-  it('defaults to all ten skills, including the newly added ones, when storage is empty', async () => {
+  it('defaults to all thirteen skills, including the newly added ones, when storage is empty', async () => {
     const html = await render();
-    for (const label of ['Speed', 'Magic Level', 'Corpo a Corpo', 'Distância']) {
+    for (const label of ['Speed', 'Magic Level', 'Punho', 'Maça', 'Espada', 'Machado', 'Distância']) {
       expect(html).toContain(label);
     }
   });

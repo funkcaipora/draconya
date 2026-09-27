@@ -155,6 +155,8 @@ export interface GroundItem {
   readonly id: number;
   readonly position: Point;
   readonly appearanceId: number;
+  /** Tem loot pendente (#722, ADR 0048 d.4) — o destaque de loot no mundo. Ausente: sem loot. */
+  readonly lootable?: boolean;
 }
 
 export const world: World = {

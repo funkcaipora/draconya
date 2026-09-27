@@ -26,6 +26,356 @@
     }
   },
   {
+    "id": "amber-axe",
+    "name": "amber axe",
+    "kind": "weapon",
+    "weight": 53,
+    "value": 0,
+    "slot": "hand",
+    "defense": 32,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "ice",
+        "attack": 46
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-bludgeon",
+    "name": "amber bludgeon",
+    "kind": "weapon",
+    "weight": 73,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "defense": 34,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "death",
+        "attack": 50
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-bow",
+    "name": "amber bow",
+    "kind": "weapon",
+    "weight": 37,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 7,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 330,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "arrow",
+      "hitChance": 6,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-crossbow",
+    "name": "amber crossbow",
+    "kind": "weapon",
+    "weight": 39,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 330,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "bolt",
+      "hitChance": 7,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-cudgel",
+    "name": "amber cudgel",
+    "kind": "weapon",
+    "weight": 58,
+    "value": 0,
+    "slot": "hand",
+    "defense": 32,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 46
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-greataxe",
+    "name": "amber greataxe",
+    "kind": "weapon",
+    "weight": 59,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "defense": 34,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "earth",
+        "attack": 50
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-rod",
+    "name": "amber rod",
+    "kind": "weapon",
+    "weight": 18,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "ice": 2
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "rod",
+      "range": 5,
+      "damageType": "ice",
+      "manaPerHit": 20,
+      "damage": {
+        "min": 80,
+        "max": 95
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-sabre",
+    "name": "amber sabre",
+    "kind": "weapon",
+    "weight": 50,
+    "value": 0,
+    "slot": "hand",
+    "defense": 32,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "energy",
+        "attack": 46
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-slayer",
+    "name": "amber slayer",
+    "kind": "weapon",
+    "weight": 72,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "defense": 34,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "death",
+        "attack": 50
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "amber-staff",
     "name": "amber staff",
     "kind": "weapon",
@@ -42,6 +392,52 @@
     "weapon": {
       "kind": "melee",
       "family": "club",
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "amber-wand",
+    "name": "amber wand",
+    "kind": "weapon",
+    "weight": 20,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 330,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "energy": 2
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "wand",
+      "range": 5,
+      "damageType": "energy",
+      "manaPerHit": 20,
+      "damage": {
+        "min": 82,
+        "max": 95
+      },
       "wieldUnproperly": true
     },
     "source": {
@@ -1959,6 +2355,439 @@
       "kind": "melee",
       "family": "axe",
       "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-arbalest",
+    "name": "draining inferniarch arbalest",
+    "kind": "weapon",
+    "weight": 59,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "bolt",
+      "hitChance": 6
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-battleaxe",
+    "name": "draining inferniarch battleaxe",
+    "kind": "weapon",
+    "weight": 67,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-blade",
+    "name": "draining inferniarch blade",
+    "kind": "weapon",
+    "weight": 64,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-bow",
+    "name": "draining inferniarch bow",
+    "kind": "weapon",
+    "weight": 56,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 7,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "arrow",
+      "hitChance": 5
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-flail",
+    "name": "draining inferniarch flail",
+    "kind": "weapon",
+    "weight": 65,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "death",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-greataxe",
+    "name": "draining inferniarch greataxe",
+    "kind": "weapon",
+    "weight": 85,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-rod",
+    "name": "draining inferniarch rod",
+    "kind": "weapon",
+    "weight": 22,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "earth": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "rod",
+      "range": 5,
+      "damageType": "earth",
+      "manaPerHit": 20,
+      "damage": {
+        "min": 90,
+        "max": 110
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-slayer",
+    "name": "draining inferniarch slayer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "energy",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-wand",
+    "name": "draining inferniarch wand",
+    "kind": "weapon",
+    "weight": 24,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "wand",
+      "range": 5,
+      "damageType": "death",
+      "manaPerHit": 21,
+      "damage": {
+        "min": 95,
+        "max": 115
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "draining-inferniarch-warhammer",
+    "name": "draining inferniarch warhammer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "lifeLeech": 2900
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "ice",
+        "attack": 48
+      }
     },
     "source": {
       "engine": "canary",
@@ -5659,6 +6488,410 @@
     }
   },
   {
+    "id": "inferniarch-arbalest",
+    "name": "inferniarch arbalest",
+    "kind": "weapon",
+    "weight": 40,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 8,
+      "ammoFamily": "bolt",
+      "hitChance": 6
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-battleaxe",
+    "name": "inferniarch battleaxe",
+    "kind": "weapon",
+    "weight": 67,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-blade",
+    "name": "inferniarch blade",
+    "kind": "weapon",
+    "weight": 64,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-bow",
+    "name": "inferniarch bow",
+    "kind": "weapon",
+    "weight": 56,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 7,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "arrow",
+      "hitChance": 5,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-flail",
+    "name": "inferniarch flail",
+    "kind": "weapon",
+    "weight": 65,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "death",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-greataxe",
+    "name": "inferniarch greataxe",
+    "kind": "weapon",
+    "weight": 85,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 3,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-rod",
+    "name": "inferniarch rod",
+    "kind": "weapon",
+    "weight": 22,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "earth": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "rod",
+      "range": 5,
+      "damageType": "earth",
+      "manaPerHit": 20,
+      "damage": {
+        "min": 90,
+        "max": 110
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-slayer",
+    "name": "inferniarch slayer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "energy",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-wand",
+    "name": "inferniarch wand",
+    "kind": "weapon",
+    "weight": 24,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "wand",
+      "range": 5,
+      "damageType": "death",
+      "manaPerHit": 21,
+      "damage": {
+        "min": 95,
+        "max": 115
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "inferniarch-warhammer",
+    "name": "inferniarch warhammer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "ice",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "iron-hammer",
     "name": "iron hammer",
     "kind": "weapon",
@@ -7855,6 +9088,450 @@
     }
   },
   {
+    "id": "rending-inferniarch-arbalest",
+    "name": "rending inferniarch arbalest",
+    "kind": "weapon",
+    "weight": 59,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "bolt",
+      "hitChance": 6
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-battleaxe",
+    "name": "rending inferniarch battleaxe",
+    "kind": "weapon",
+    "weight": 67,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-blade",
+    "name": "rending inferniarch blade",
+    "kind": "weapon",
+    "weight": 64,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-bow",
+    "name": "rending inferniarch bow",
+    "kind": "weapon",
+    "weight": 56,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "arrow",
+      "hitChance": 5,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-flail",
+    "name": "rending inferniarch flail",
+    "kind": "weapon",
+    "weight": 65,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "death",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-greataxe",
+    "name": "rending inferniarch greataxe",
+    "kind": "weapon",
+    "weight": 85,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-rod",
+    "name": "rending inferniarch rod",
+    "kind": "weapon",
+    "weight": 22,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "earth": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "rod",
+      "range": 5,
+      "damageType": "earth",
+      "manaPerHit": 20,
+      "damage": {
+        "min": 90,
+        "max": 110
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-slayer",
+    "name": "rending inferniarch slayer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "energy",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-wand",
+    "name": "rending inferniarch wand",
+    "kind": "weapon",
+    "weight": 24,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "wand",
+      "range": 5,
+      "damageType": "death",
+      "manaPerHit": 21,
+      "damage": {
+        "min": 95,
+        "max": 115
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "rending-inferniarch-warhammer",
+    "name": "rending inferniarch warhammer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "criticalChance": 1000,
+      "criticalDamage": 5800
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "ice",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "resizer",
     "name": "resizer",
     "kind": "weapon",
@@ -9021,6 +10698,440 @@
       "kind": "melee",
       "family": "club",
       "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-arbalest",
+    "name": "siphoning inferniarch arbalest",
+    "kind": "weapon",
+    "weight": 59,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "imbuementSlots": 3,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "bolt",
+      "hitChance": 6
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-battleaxe",
+    "name": "siphoning inferniarch battleaxe",
+    "kind": "weapon",
+    "weight": 67,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-blade",
+    "name": "siphoning inferniarch blade",
+    "kind": "weapon",
+    "weight": 64,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-bow",
+    "name": "siphoning inferniarch bow",
+    "kind": "weapon",
+    "weight": 56,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 7,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 6,
+      "ammoFamily": "arrow",
+      "hitChance": 5,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-flail",
+    "name": "siphoning inferniarch flail",
+    "kind": "weapon",
+    "weight": 65,
+    "value": 0,
+    "slot": "hand",
+    "attack": 8,
+    "defense": 31,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "death",
+        "attack": 44
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-greataxe",
+    "name": "siphoning inferniarch greataxe",
+    "kind": "weapon",
+    "weight": 85,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "axe",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "fire",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-rod",
+    "name": "siphoning inferniarch rod",
+    "kind": "weapon",
+    "weight": 22,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "earth": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "rod",
+      "range": 5,
+      "damageType": "earth",
+      "manaPerHit": 20,
+      "damage": {
+        "min": 90,
+        "max": 110
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-slayer",
+    "name": "siphoning inferniarch slayer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "sword",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "energy",
+        "attack": 48
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-wand",
+    "name": "siphoning inferniarch wand",
+    "kind": "weapon",
+    "weight": 24,
+    "value": 0,
+    "slot": "hand",
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      }
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ],
+      "specializedMagicLevel": {
+        "fire": 1
+      }
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "wand",
+      "range": 5,
+      "damageType": "death",
+      "manaPerHit": 21,
+      "damage": {
+        "min": 95,
+        "max": 115
+      },
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "siphoning-inferniarch-warhammer",
+    "name": "siphoning inferniarch warhammer",
+    "kind": "weapon",
+    "weight": 86,
+    "value": 0,
+    "slot": "hand",
+    "twoHanded": true,
+    "attack": 8,
+    "defense": 33,
+    "extraDefense": 4,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "knight"
+    },
+    "combatModifiers": {
+      "manaLeech": 1000
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "weapon": {
+      "kind": "melee",
+      "family": "club",
+      "wieldUnproperly": true,
+      "element": {
+        "type": "ice",
+        "attack": 48
+      }
     },
     "source": {
       "engine": "canary",

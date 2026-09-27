@@ -454,6 +454,38 @@
     }
   },
   {
+    "id": "death-oyoroi",
+    "name": "death oyoroi",
+    "kind": "armor",
+    "weight": 105,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 230,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "demon-armor",
     "name": "demon armor",
     "kind": "armor",
@@ -918,6 +950,40 @@
         {
           "skillId": "distance",
           "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "energy-robe",
+    "name": "energy robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": -8
+      },
+      "energy": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
         }
       ]
     },
@@ -1466,6 +1532,75 @@
     }
   },
   {
+    "id": "genesis-serenity-armor",
+    "name": "genesis serenity armor",
+    "kind": "armor",
+    "weight": 107,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 800,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ghazbaran-oyoroi",
+    "name": "ghazbaran oyoroi",
+    "kind": "armor",
+    "weight": 135,
+    "value": 0,
+    "slot": "chest",
+    "armor": 8,
+    "requires": {
+      "level": 75,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 7
+      },
+      "ice": {
+        "percent": -7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "ghost-chestplate",
     "name": "ghost chestplate",
     "kind": "armor",
@@ -1631,6 +1766,30 @@
     }
   },
   {
+    "id": "gnomish-cuirass",
+    "name": "gnomish cuirass",
+    "kind": "armor",
+    "weight": 100,
+    "value": 0,
+    "slot": "chest",
+    "armor": 8,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "golden-armor",
     "name": "golden armor",
     "kind": "armor",
@@ -1772,6 +1931,32 @@
     }
   },
   {
+    "id": "ice-robe",
+    "name": "ice robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": -8
+      },
+      "ice": {
+        "percent": 8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "jacket",
     "name": "jacket",
     "kind": "armor",
@@ -1827,6 +2012,32 @@
       },
       "ice": {
         "percent": -3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "leaf-robe",
+    "name": "leaf robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 8
+      },
+      "fire": {
+        "percent": -8
       }
     },
     "source": {
@@ -2013,6 +2224,32 @@
     }
   },
   {
+    "id": "magma-robe",
+    "name": "magma robe",
+    "kind": "armor",
+    "weight": 75,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 8
+      },
+      "ice": {
+        "percent": -8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "mammoth-fur-cape",
     "name": "mammoth fur cape",
     "kind": "armor",
@@ -2047,6 +2284,83 @@
           "amount": 3
         }
       ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "merudri-battle-mail",
+    "name": "merudri battle mail",
+    "kind": "armor",
+    "weight": 29,
+    "value": 0,
+    "slot": "chest",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 10
+      },
+      "energy": {
+        "percent": -5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "merudri-nanbando",
+    "name": "merudri nanbando",
+    "kind": "armor",
+    "weight": 106,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 125,
+      "vocationId": "monk"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "merudri-scale-mail",
+    "name": "merudri scale mail",
+    "kind": "armor",
+    "weight": 29,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "level": 100,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      }
     },
     "source": {
       "engine": "canary",
@@ -2105,6 +2419,23 @@
       "ice": {
         "percent": -7
       }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "monk-robe",
+    "name": "monk robe",
+    "kind": "armor",
+    "weight": 70,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "vocationId": "monk"
     },
     "source": {
       "engine": "canary",
@@ -2207,6 +2538,41 @@
     }
   },
   {
+    "id": "naga-tanko",
+    "name": "naga tanko",
+    "kind": "armor",
+    "weight": 90,
+    "value": 0,
+    "slot": "chest",
+    "armor": 10,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 270,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "native-armor",
     "name": "native armor",
     "kind": "armor",
@@ -2229,6 +2595,97 @@
     "slot": "chest",
     "armor": 11,
     "imbuementSlots": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-bloodhide",
+    "name": "norcferatu bloodhide",
+    "kind": "armor",
+    "weight": 39,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "energy": 6,
+        "fire": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-bonecloak",
+    "name": "norcferatu bonecloak",
+    "kind": "armor",
+    "weight": 42,
+    "value": 0,
+    "slot": "chest",
+    "armor": 16,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "specializedMagicLevel": {
+        "earth": 6,
+        "healing": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-tuskplate",
+    "name": "norcferatu tuskplate",
+    "kind": "armor",
+    "weight": 148,
+    "value": 0,
+    "slot": "chest",
+    "armor": 22,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2357,6 +2814,23 @@
     }
   },
   {
+    "id": "plain-monk-robe",
+    "name": "plain monk robe",
+    "kind": "armor",
+    "weight": 65,
+    "value": 0,
+    "slot": "chest",
+    "armor": 6,
+    "requires": {
+      "vocationId": "monk"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "plate-armor",
     "name": "plate armor",
     "kind": "armor",
@@ -2453,6 +2927,38 @@
     "value": 0,
     "slot": "chest",
     "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "robe-of-enlightenment",
+    "name": "robe of enlightenment",
+    "kind": "armor",
+    "weight": 24,
+    "value": 150,
+    "slot": "chest",
+    "armor": 8,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2630,6 +3136,41 @@
     }
   },
   {
+    "id": "soulgarb",
+    "name": "soulgarb",
+    "kind": "armor",
+    "weight": 107,
+    "value": 0,
+    "slot": "chest",
+    "armor": 11,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "soulmantle",
     "name": "soulmantle",
     "kind": "armor",
@@ -2771,6 +3312,32 @@
     }
   },
   {
+    "id": "spirit-bind",
+    "name": "spirit bind",
+    "kind": "armor",
+    "weight": 135,
+    "value": 0,
+    "slot": "chest",
+    "armor": 8,
+    "requires": {
+      "level": 75,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "ice": {
+        "percent": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "spirit-cloak",
     "name": "spirit cloak",
     "kind": "armor",
@@ -2892,6 +3459,33 @@
           "amount": 4
         }
       ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stoic-iks-robe",
+    "name": "stoic iks robe",
+    "kind": "armor",
+    "weight": 1280,
+    "value": 0,
+    "slot": "chest",
+    "armor": 9,
+    "imbuementSlots": 2,
+    "requires": {
+      "level": 250,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
     },
     "source": {
       "engine": "canary",
@@ -3453,6 +4047,24 @@
     },
     "bonuses": {
       "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "zaoan-monk-robe",
+    "name": "zaoan monk robe",
+    "kind": "armor",
+    "weight": 1100,
+    "value": 0,
+    "slot": "chest",
+    "armor": 7,
+    "requires": {
+      "level": 50,
+      "vocationId": "monk"
     },
     "source": {
       "engine": "canary",

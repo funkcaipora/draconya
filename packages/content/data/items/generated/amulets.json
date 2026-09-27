@@ -139,6 +139,34 @@
     }
   },
   {
+    "id": "candy-necklace",
+    "name": "candy necklace",
+    "kind": "amulet",
+    "weight": 5.1,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "requires": {
+      "level": 220
+    },
+    "absorb": {
+      "earth": {
+        "percent": -5
+      },
+      "energy": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "cobra-amulet",
     "name": "cobra amulet",
     "kind": "amulet",
@@ -218,6 +246,32 @@
         "manaGain": 8,
         "manaTicksMs": 6000000
       }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "collar-of-orange-plasma",
+    "name": "collar of orange plasma",
+    "kind": "amulet",
+    "weight": 5,
+    "value": 0,
+    "slot": "neck",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
     },
     "source": {
       "engine": "canary",
@@ -339,6 +393,23 @@
     "weight": 4.5,
     "value": 0,
     "slot": "neck",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "enchanted-merudri-brooch",
+    "name": "enchanted merudri brooch",
+    "kind": "amulet",
+    "weight": 4.5,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 220,
+      "vocationId": "monk"
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -707,6 +778,24 @@
     }
   },
   {
+    "id": "harmony-amulet",
+    "name": "harmony amulet",
+    "kind": "amulet",
+    "weight": 5.1,
+    "value": 0,
+    "slot": "neck",
+    "armor": 2,
+    "requires": {
+      "level": 8,
+      "vocationId": "monk"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "jade-amulet",
     "name": "jade amulet",
     "kind": "amulet",
@@ -846,6 +935,23 @@
       "ice": {
         "percent": -10
       }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "merudri-brooch",
+    "name": "merudri brooch",
+    "kind": "amulet",
+    "weight": 4.5,
+    "value": 0,
+    "slot": "neck",
+    "requires": {
+      "level": 220,
+      "vocationId": "monk"
     },
     "source": {
       "engine": "canary",

@@ -969,7 +969,7 @@ export function loadReaderDeps(ctx: CatalogImportContext, repoRoot: string): Mon
   return {
     itemNames: readItemNames(join(ctx.canaryDir, CANARY_ITEMS_XML)),
     tfsSpeeds: ctx.forgottenServerCommit === '' ? new Map() : readTfsSpeeds(ctx.forgottenServerDir),
-    outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1332.json')),
+    outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1533.json')),
     ...readPresentationEnums(ctx.canaryDir),
   };
 }

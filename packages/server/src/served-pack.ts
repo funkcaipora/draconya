@@ -3,7 +3,7 @@
 //
 // A tabela de aparências é validada contra `packs/<pack>.json`, a sombra de UM pacote. O
 // cliente carrega o pacote de `VITE_THINGS_URL`, que é configuração de deploy — e nada
-// ligava os dois. Um deploy que aponta `/things/1400` com o conteúdo conferido contra o 1332
+// ligava os dois. Um deploy que aponta `/things/1400` com o conteúdo conferido contra o 1533
 // passaria em tudo e desenharia o quadrado invisível que a conferência existe para impedir,
 // sem erro nenhum para alguém ignorar.
 //

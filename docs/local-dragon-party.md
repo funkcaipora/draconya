@@ -73,7 +73,7 @@ ln -s /caminho/para/things things
 
 `THINGS_DIR` é só de ferramenta (importador de mapa, inventário de pacote); o servidor em si só
 recusa subir se `THINGS_VERSION` não bater com a versão contra a qual o conteúdo foi conferido
-(`packages/content/data/packs/`) — o `.env.example` já traz `THINGS_VERSION=1332` certo.
+(`packages/content/data/packs/`) — o `.env.example` já traz `THINGS_VERSION=1533` certo.
 
 ## 4. Instalar, migrar, compilar
 

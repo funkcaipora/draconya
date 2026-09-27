@@ -5678,6 +5678,10 @@
           "chance": 0.0018
         },
         {
+          "itemId": "eldritch-monk-boots",
+          "chance": 0.0018
+        },
+        {
           "itemId": "eldritch-cowl",
           "chance": 0.0024
         },

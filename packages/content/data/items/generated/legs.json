@@ -391,6 +391,40 @@
     }
   },
   {
+    "id": "genesis-serenity-legs",
+    "name": "genesis serenity legs",
+    "kind": "armor",
+    "weight": 41,
+    "value": 0,
+    "slot": "legs",
+    "armor": 7,
+    "requires": {
+      "level": 800,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "gill-legs",
     "name": "gill legs",
     "kind": "armor",
@@ -573,6 +607,61 @@
     }
   },
   {
+    "id": "jade-legs",
+    "name": "jade legs",
+    "kind": "armor",
+    "weight": 37,
+    "value": 0,
+    "slot": "legs",
+    "armor": 5,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 210,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jungle-survivor-legs",
+    "name": "jungle survivor legs",
+    "kind": "armor",
+    "weight": 51,
+    "value": 0,
+    "slot": "legs",
+    "armor": 5,
+    "requires": {
+      "level": 130,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "leaf-legs",
     "name": "leaf legs",
     "kind": "armor",
@@ -592,6 +681,52 @@
     "weight": 8,
     "value": 0,
     "slot": "legs",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "legs-of-enlightenment",
+    "name": "legs of enlightenment",
+    "kind": "armor",
+    "weight": 21,
+    "value": 400,
+    "slot": "legs",
+    "armor": 4,
+    "requires": {
+      "level": 40,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "legs-of-wisdom",
+    "name": "legs of wisdom",
+    "kind": "armor",
+    "weight": 26,
+    "value": 0,
+    "slot": "legs",
+    "armor": 4,
+    "requires": {
+      "level": 80,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 3
+      }
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -732,6 +867,40 @@
     }
   },
   {
+    "id": "mutant-hide-trousers",
+    "name": "mutant hide trousers",
+    "kind": "armor",
+    "weight": 33,
+    "value": 0,
+    "slot": "legs",
+    "armor": 6,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "mutated-skin-legs",
     "name": "mutated skin legs",
     "kind": "armor",
@@ -748,6 +917,94 @@
         "percent": 4
       },
       "earth": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-bloodstrider",
+    "name": "norcferatu bloodstrider",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 270,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-fleshguards",
+    "name": "norcferatu fleshguards",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "legs",
+    "armor": 5,
+    "requires": {
+      "level": 230,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-thornwraps",
+    "name": "norcferatu thornwraps",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 270,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 4
+      },
+      "physical": {
         "percent": 4
       }
     },
@@ -912,6 +1169,40 @@
         {
           "skillId": "melee",
           "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sanguine-trousers",
+    "name": "sanguine trousers",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "legs",
+    "armor": 6,
+    "requires": {
+      "level": 500,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
         }
       ]
     },

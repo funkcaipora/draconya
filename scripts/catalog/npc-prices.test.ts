@@ -244,31 +244,50 @@ const REAL_CANARY_DIR = process.env['CANARY_DIR'];
 const HAS_REAL_CANARY = REAL_CANARY_DIR !== undefined && REAL_CANARY_DIR !== ''
   && existsSync(join(REAL_CANARY_DIR, CANARY_NPC_DIR));
 
+// Contra a suíte inteira, tanto o parse de `items.xml` (~30 MB) quanto os 1036 `.lua` de NPC
+// disputam CPU com o resto dos workers — a leitura isolada é rápida (bem abaixo de 5s), mas o
+// mesmo teste sob `vitest run` (todos os arquivos) pode passar de 5s. `readNpcShopPrices` já é
+// custosa por si só (avalia 1036 arquivos); chamá-la uma vez por `it` (three vezes ao todo)
+// mais reparsear `items.xml` a cada `itemNameOf` (19 vezes, uma por clientId) multiplicava os
+// dois custos por nada — as duas leituras são computadas UMA VEZ aqui embaixo (módulo-level
+// dentro do describe, não em `beforeAll`: os testes só leem, nunca mutam o resultado) e cada
+// `it` que toca o Canary real ganha um timeout explícito como rede de segurança.
+const REAL_CANARY_TIMEOUT_MS = 20_000;
+
 describe.skipIf(!HAS_REAL_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
   const dir = HAS_REAL_CANARY ? (REAL_CANARY_DIR as string) : '';
   const commit = HAS_REAL_CANARY ? readSourceCommit(dir) : '';
   const ctx: CatalogImportContext = { canaryDir: dir, forgottenServerDir: '/nao/existe', canaryCommit: commit, forgottenServerCommit: '' };
 
-  function itemNameOf(clientId: number): string | undefined {
-    const root = readXmlFile(join(dir, 'data/items/items.xml'));
-    const item = childrenOf(root, 'item').find((el) => el.attributes['id'] === String(clientId));
-    return item?.attributes['name'];
-  }
+  // `items.xml` inteiro, parseado UMA VEZ — nunca dentro do loop de `itemNameOf`.
+  const itemNameByClientId: ReadonlyMap<string, string> = HAS_REAL_CANARY
+    ? new Map(
+      childrenOf(readXmlFile(join(dir, 'data/items/items.xml')), 'item')
+        .filter((el) => el.attributes['id'] !== undefined && el.attributes['name'] !== undefined)
+        .map((el) => [el.attributes['id'] as string, el.attributes['name'] as string]),
+    )
+    : new Map();
 
-  it('os clientId de SUPPLY_CANARY_IDS/AMMO_CANARY_IDS batem o itemName esperado em items.xml', () => {
-    for (const [slug, clientId] of Object.entries({ ...SUPPLY_CANARY_IDS, ...AMMO_CANARY_IDS })) {
-      const expected = slug.replace(/-/g, ' ');
-      expect(itemNameOf(clientId), `${slug} → clientId ${clientId}`).toBe(expected);
-    }
-  });
+  // `readNpcShopPrices` avalia os 1036 `.lua` de NPC — computada UMA VEZ, reaproveitada pelos
+  // dois `it` que a consultam abaixo.
+  const aggregate = HAS_REAL_CANARY ? readNpcShopPrices(ctx) : undefined;
+
+  it(
+    'os clientId de SUPPLY_CANARY_IDS/AMMO_CANARY_IDS batem o itemName esperado em items.xml',
+    () => {
+      for (const [slug, clientId] of Object.entries({ ...SUPPLY_CANARY_IDS, ...AMMO_CANARY_IDS })) {
+        const expected = slug.replace(/-/g, ' ');
+        expect(itemNameByClientId.get(String(clientId)), `${slug} → clientId ${clientId}`).toBe(expected);
+      }
+    },
+    REAL_CANARY_TIMEOUT_MS,
+  );
 
   it('sword (3264): maior sell é 25, igual ao sword.json autoral', () => {
-    const aggregate = readNpcShopPrices(ctx);
-    expect(aggregate.sellMaxByClientId.get(3264)?.amount).toBe(25);
-  });
+    expect(aggregate?.sellMaxByClientId.get(3264)?.amount).toBe(25);
+  }, REAL_CANARY_TIMEOUT_MS);
 
   it('health potion (266): menor buy é 50', () => {
-    const aggregate = readNpcShopPrices(ctx);
-    expect(aggregate.buyMinByClientId.get(266)?.amount).toBe(50);
-  });
+    expect(aggregate?.buyMinByClientId.get(266)?.amount).toBe(50);
+  }, REAL_CANARY_TIMEOUT_MS);
 });

@@ -27,6 +27,7 @@ import type { DefenderReflect, ReflectAttacker } from './combat/reflect.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
+import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
 
@@ -202,9 +203,11 @@ export function secondaryCooldownKey(name: string): string {
 
 /**
  * O que escala uma magia (#155). `skillLevel` é o level da skill que a vocação usa para magia
- * (`spellSkill`, `magic` por padrão) — o que a fórmula de dano SEM `scaling: 'magic'` lê (#677); `powerScale` é o multiplicador das skills por uso
- * (`#scaledPower`) e só vale para `power`/`amount` FIXOS — o `basePower` já entra pela
- * conversão, e multiplicar de novo contaria a mesma skill duas vezes.
+ * (`spellSkill`, `magic` por padrão — ou `SPELL_SKILL_WEAPON` no Knight desde o #567: a skill da
+ * ARMA equipada agora, não uma fixa) — o que a fórmula de dano SEM `scaling: 'magic'` lê (#677);
+ * `powerScale` é o multiplicador das skills por uso (`#scaledPower`) e só vale para
+ * `power`/`amount` FIXOS — o `basePower` já entra pela conversão, e multiplicar de novo contaria
+ * a mesma skill duas vezes.
  */
 export interface SpellScaling {
   readonly skillLevel: number;
@@ -742,6 +745,35 @@ export function useSupply(
         ? 0
         : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng, combat)),
       damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
+    };
+  }
+
+  // Poção de BUFF (#576: Berserk, Mastermind, Bullseye, Magic Shield). Auto-alvo SEMPRE — nunca
+  // o `recipient` (as quatro do Tibia não têm alcance nem alvo, ao contrário da runa de cura) —,
+  // e a mesma ordem de sempre: level, vocação, e só então o gold. Sem estoque (#520): nenhuma
+  // delas cai de monstro no recorte de hoje, e o caminho existe pronto para quando cair.
+  if (supply.effect.kind === 'condition') {
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    const hasStockBuff = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockBuff && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockBuff = hasStockBuff && spendStock(user, supply.id);
+    if (!paidFromStockBuff) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    // `conditionFromSpec` pede um relógio lógico; sem `nowMs` (caminho de fixture) o prazo conta
+    // a partir de 0, como `startSupplyCooldown` também degrada sem iniciar cooldown nenhum. O
+    // efeito das quatro poções (buff/mana-shield) nunca lê `speed`/`rng`, então os dois ficam de
+    // fora — `conditionFromSpec` só os pede para o efeito `speed`, que nenhuma delas declara.
+    const condition = conditionFromSpec(supply.effect.condition, user.id, user.id, nowMs ?? 0, 'rune');
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockBuff ? 0 : supply.price, condition,
     };
   }
 

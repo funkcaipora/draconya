@@ -1,6 +1,7 @@
 # Quests
 
-**Status:** não implementado
+**Status:** parcial — a semente do motor (storages por personagem, #731, ADR 0050 d.6 T2)
+implementada; quest de verdade (objetivo, mapa instanciado, checkpoints) ainda não
 **PRD:** §28
 **Épico:** E11
 
@@ -19,6 +20,49 @@ A promoção de vocação (`progression.md`, §9.2) é o caso mais importante de
 - Repetibilidade definida por quest: algumas únicas, outras repetíveis.
 - A quest de promoção de vocação é única e permanente.
 
+## Storages por personagem (#731, ADR 0050 d.6 T2)
+
+A semente do motor: **antes de existir qualquer quest**, o personagem precisa de um lugar para
+guardar "isto já aconteceu" que atravesse sessão — a mesma pergunta que o Canary responde com
+`player:getStorageValue(key)`/`setStorageValue(key, value)`, e é o mecanismo que a porta de
+quest, o baú com dono e o NPC que lembra do jogador (T2/T3 do ADR 0050) vão consumir.
+
+**Ausência é SEMPRE "nunca setado" — o valor de ausência é `-1`, a convenção do Tibia.** Zero é
+um valor guardado como outro qualquer ("aceitou mas não concluiu"), não "sem storage". Gravar
+`-1` explicitamente nunca acontece: setar um storage para `-1` APAGA a linha
+(`CharacterRuntime.setStorageValue`, `packages/sim/src/character.ts`), porque um `-1` gravado
+seria indistinguível de "nunca setado" e só infla a tabela à toa.
+
+**Persistência é uma linha por chave** (`character_storage`: `character_id`, `storage_key`,
+`value`), e não uma coluna `jsonb` em `character` como `bestiary`/`ammo`/`supply_stock` — decisão
+deliberada (DT-01 abaixo): só a Cidade de Thais tem ~110 interativos gated por storage (51
+portas de chave + 59 baús, ADR 0050 contexto), e o motor de quest que este sistema semeia só
+cresce daqui. Uma linha por chave é o que permite ler/escrever POR CHAVE mais tarde, sem
+reescrever um blob inteiro a cada storage tocado.
+
+**O caminho é o mesmo do overlay de item por instância** (#604, ADR 0046 — `item-overlay.ts` e
+o caminho dele no server são o modelo): o extrato (`SessionReceipt.storages`) leva o mapa da
+sessão para o `jobs`, que grava na mesma transação da progressão (`applyStorages`,
+`jobs/ledger.ts`); o ticket (`InitialCharacter.storages`) carrega os storages de volta na
+próxima entrada. Diferença de forma, não de espírito: o overlay é um PATCH por instância
+(`instanceId → overlay | null`, só toca o que está listado); o storage é o ESTADO INTEIRO do
+personagem por sessão — a mesma ideia de `supplyStock`, que também é absoluto e nunca gateado
+por vazio (um storage apagado NESTA sessão é resultado real, e omitir a chave deixaria o valor
+antigo do Postgres ressuscitar no próximo login — a lição do #536). Como o estado é por LINHA
+(não por coluna), "estado inteiro" no extrato vira duas metades em `applyStorages`: upsert de
+toda chave presente, e DELETE de toda chave que o banco tem e o extrato não lista mais.
+
+Invariantes 9 e 10: o `CharacterRuntime.storages` é escrito só pela sessão dona (invariante 9,
+como qualquer estado quente); a travessia entre sessões passa pelo extrato/ledger, na mesma
+transação da progressão — não por um ledger próprio, porque storage não é valor monetário e não
+precisa de `(session_id, seq)` dedicado; a idempotência que ele herda é a do `writeReceipts` que
+já envolve toda a transação (invariante 10).
+
+**O que este sistema NÃO faz ainda:** nenhum interativo do mundo lê ou escreve um storage —
+`use-on-map` de porta/baú (T2 do ADR 0050) e o motor de objetivo de quest de verdade (mapa
+instanciado, checkpoints) ficam para issues seguintes, que consomem `getStorageValue`/
+`setStorageValue` sem precisar tocar este mecanismo de novo.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -26,6 +70,7 @@ A promoção de vocação (`progression.md`, §9.2) é o caso mais importante de
 | Tamanho máximo de party | definido individualmente por quest (sem valor global) | caminho previsto: `packages/content/quests` |
 | Checkpoints | inexistentes no modelo inicial | caminho previsto: `packages/content/quests` |
 | Repetibilidade | por quest (única ou repetível) | caminho previsto: `packages/content/quests` |
+| Valor de ausência de storage | `-1` (convenção do Tibia, sem `[ABERTO]`: é mecanismo, não número de balanceamento) | `packages/sim/src/character-storage.ts` (`UNSET_STORAGE_VALUE`) |
 
 ## Em aberto
 

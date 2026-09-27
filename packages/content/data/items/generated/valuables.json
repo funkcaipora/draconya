@@ -24,6 +24,18 @@
     }
   },
   {
+    "id": "arbaziloth-shoulder-piece",
+    "name": "Arbaziloth shoulder piece",
+    "kind": "other",
+    "weight": 0.25,
+    "value": 450000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "arena-badge",
     "name": "arena badge",
     "kind": "other",
@@ -281,6 +293,42 @@
     "kind": "other",
     "weight": 0.15,
     "value": 800,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dark-chocolate-coin",
+    "name": "dark chocolate coin",
+    "kind": "other",
+    "weight": 0.01,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demon-claws",
+    "name": "demon claws",
+    "kind": "other",
+    "weight": 0.25,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demon-skull",
+    "name": "demon skull",
+    "kind": "other",
+    "weight": 3.2,
+    "value": 0,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -720,6 +768,18 @@
     }
   },
   {
+    "id": "greater-spiritualist-gem",
+    "name": "greater spiritualist gem",
+    "kind": "other",
+    "weight": 1.2,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "green-crystal-fragment",
     "name": "green crystal fragment",
     "kind": "other",
@@ -961,6 +1021,18 @@
     }
   },
   {
+    "id": "lesser-spiritualist-gem",
+    "name": "lesser spiritualist gem",
+    "kind": "other",
+    "weight": 0.2,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "lion-figurine",
     "name": "lion figurine",
     "kind": "other",
@@ -990,6 +1062,18 @@
     "kind": "other",
     "weight": 0.2,
     "value": 5000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "milk-chocolate-coin",
+    "name": "milk chocolate coin",
+    "kind": "other",
+    "weight": 0.1,
+    "value": 0,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1603,6 +1687,18 @@
     "name": "spectral saddle",
     "kind": "other",
     "weight": 2.7,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spiritualist-gem",
+    "name": "spiritualist gem",
+    "kind": "other",
+    "weight": 0.2,
     "value": 0,
     "source": {
       "engine": "canary",

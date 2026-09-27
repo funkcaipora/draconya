@@ -11,6 +11,7 @@ import {
   COMBAT_PROFILES,
   DAMAGE_TYPES,
   NEUTRAL_RATES,
+  SPELL_SKILL_WEAPON,
   abilityPower,
   ammunitionSchema,
   appearancesSchema,
@@ -753,6 +754,16 @@ export function buildContent(raw: RawContent): Content {
         }
       }
     }
+    // A poção de buff (#576) aponta skill pelo id do catálogo em `skillDeltas` — como o bônus de
+    // equipamento (linha ~890) e a família de arma (abaixo), pela MESMA razão: um id errado
+    // bonificaria uma skill que ninguém lê, e a poção pareceria funcionar sem fazer nada.
+    if (effect.kind === 'condition' && effect.condition.effect.kind === 'buff' && skills.size > 0) {
+      for (const skillId of Object.keys(effect.condition.effect.skillDeltas ?? {})) {
+        if (!skills.has(skillId)) {
+          problems.push(`${where}: condition.effect.skillDeltas "${skillId}" não existe`);
+        }
+      }
+    }
   }
   // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa
   // existir, e a combinatória de `kind`/`resource`/`formula` é regra de domínio, não de forma.
@@ -957,10 +968,12 @@ export function buildContent(raw: RawContent): Content {
   }
   // A skill que escala a magia de cada vocação (#155) precisa existir — quando há skills. O
   // conteúdo de teste sem skills não tem como conferir, e não precisa: `levelOf` de skill
-  // desconhecida é zero.
+  // desconhecida é zero. `SPELL_SKILL_WEAPON` (#567) é a única exceção: é a sentinela "skill da
+  // arma equipada", nunca o id de uma skill do catálogo — não há `skills/weapon.json` para
+  // conferir contra.
   if (skills.size > 0) {
     for (const vocation of vocations.values()) {
-      if (!skills.has(vocation.spellSkill)) {
+      if (vocation.spellSkill !== SPELL_SKILL_WEAPON && !skills.has(vocation.spellSkill)) {
         problems.push(`vocation/${vocation.id}: spellSkill "${vocation.spellSkill}" não existe`);
       }
     }
@@ -1032,7 +1045,20 @@ export function buildContent(raw: RawContent): Content {
   // de mapa, e exigir dele um arquivo vazio seria burocracia sem nada do outro lado.
   const appearanceTables = parseAll('appearances', raw.appearances ?? [], appearancesSchema,
     problems);
-  const appearances = appearanceTables.get('baseline');
+  let appearances = appearanceTables.get('baseline');
+  // `appearances/generated/scenery.json` (#727, ADR 0050 d.1) é uma tabela SEPARADA — `pnpm
+  // map:import` a escreve por mapa, e nunca toca `baseline.json`. O que o `sim`/`server` leem é
+  // um `appearances` só, então toda tabela que NÃO é `baseline` contribui sua seção `scenery`
+  // por cima dela — mesma chave em duas tabelas é o último arquivo (ordem alfabética) vencendo,
+  // como o resto do conteúdo.
+  if (appearances !== undefined) {
+    let scenery = appearances.scenery;
+    for (const [id, table] of appearanceTables) {
+      if (id === 'baseline' || Object.keys(table.scenery).length === 0) continue;
+      scenery = { ...scenery, ...table.scenery };
+    }
+    if (scenery !== appearances.scenery) appearances = { ...appearances, scenery };
+  }
   if (appearances === undefined
     && (monsterDefinitions.size > 0 || itemDefinitions.size > 0
       || ammunitionDefinitions.size > 0)) {
@@ -1475,6 +1501,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
+    // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
+    scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [
       typeof entry === 'object' && entry !== null && 'id' in entry
         ? String((entry as { id: unknown }).id)

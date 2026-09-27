@@ -53,6 +53,24 @@
     }
   },
   {
+    "id": "boots-of-enlightenment",
+    "name": "boots of enlightenment",
+    "kind": "armor",
+    "weight": 9,
+    "value": 80,
+    "slot": "feet",
+    "armor": 1,
+    "requires": {
+      "level": 8,
+      "vocationId": "monk"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "boots-of-homecoming",
     "name": "boots of homecoming",
     "kind": "armor",
@@ -263,6 +281,38 @@
     }
   },
   {
+    "id": "eldritch-monk-boots",
+    "name": "eldritch monk boots",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "feverbloom-boots",
     "name": "feverbloom boots",
     "kind": "armor",
@@ -412,6 +462,33 @@
     }
   },
   {
+    "id": "gnomish-footwraps",
+    "name": "gnomish footwraps",
+    "kind": "armor",
+    "weight": 11,
+    "value": 0,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 150,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 3
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "golden-boots",
     "name": "golden boots",
     "kind": "armor",
@@ -462,6 +539,30 @@
       },
       "physical": {
         "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "iks-footwraps",
+    "name": "iks footwraps",
+    "kind": "armor",
+    "weight": 8,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 250,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
       }
     },
     "source": {
@@ -646,6 +747,69 @@
           "amount": 1
         }
       ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-fangstompers",
+    "name": "norcferatu fangstompers",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ],
+      "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-goretrampers",
+    "name": "norcferatu goretrampers",
+    "kind": "armor",
+    "weight": 12.5,
+    "value": 0,
+    "slot": "feet",
+    "armor": 3,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 3
+      },
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "speed": 15
     },
     "source": {
       "engine": "canary",
@@ -989,6 +1153,33 @@
     }
   },
   {
+    "id": "soulsoles",
+    "name": "soulsoles",
+    "kind": "armor",
+    "weight": 13,
+    "value": 0,
+    "slot": "feet",
+    "armor": 2,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "steel-boots",
     "name": "steel boots",
     "kind": "armor",
@@ -1193,6 +1384,33 @@
         }
       ],
       "speed": 15
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "yalahari-footwraps",
+    "name": "yalahari footwraps",
+    "kind": "armor",
+    "weight": 7,
+    "value": 0,
+    "slot": "feet",
+    "armor": 1,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 80,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 3
+      }
     },
     "source": {
       "engine": "canary",

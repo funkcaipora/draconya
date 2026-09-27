@@ -167,7 +167,9 @@ describe('migrateBotConfigV1 (AB-03, ADR 0032 d.1)', () => {
     const heal = Array.from({ length: 24 }, (_, index) => spell(`heal-${String(index)}`));
     const migrated = migrateBotConfigV1(v1({ heal }));
     const slots = migrated.sets[0]?.slots ?? [];
-    BOT_HOTKEYS.forEach((key, index) => {
+    // A v1 nunca teve Shift (ADR 0049 decisão 1 só ampliou o enum para 32): a migração indexa
+    // só as 22 primeiras de `BOT_HOTKEYS`, nunca `shift+…`.
+    BOT_HOTKEYS.slice(0, 22).forEach((key, index) => {
       expect(slots[index]?.hotkey, `slot ${index}`).toBe(key);
     });
     expect(slots[22]?.hotkey).toBeUndefined();

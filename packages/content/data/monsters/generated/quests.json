@@ -21325,6 +21325,10 @@
         {
           "itemId": "toga-mortis",
           "chance": 0.005
+        },
+        {
+          "itemId": "death-oyoroi",
+          "chance": 0.005
         }
       ]
     },
@@ -29990,6 +29994,10 @@
         },
         {
           "itemId": "exotic-legs",
+          "chance": 0.0089
+        },
+        {
+          "itemId": "jungle-survivor-legs",
           "chance": 0.0089
         },
         {
@@ -38921,6 +38929,10 @@
         {
           "itemId": "gnome-legs",
           "chance": 0.0339
+        },
+        {
+          "itemId": "gnomish-cuirass",
+          "chance": 0.0339
         }
       ]
     },
@@ -41651,6 +41663,10 @@
         },
         {
           "itemId": "soulful-legs",
+          "chance": 0.0015
+        },
+        {
+          "itemId": "jade-legs",
           "chance": 0.0015
         }
       ]

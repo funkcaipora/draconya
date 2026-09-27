@@ -224,6 +224,23 @@
     }
   },
   {
+    "id": "charged-ethereal-ring",
+    "name": "charged ethereal ring",
+    "kind": "ring",
+    "weight": 0.85,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "charged-spiritthorn-ring",
     "name": "charged spiritthorn ring",
     "kind": "ring",
@@ -346,6 +363,40 @@
     "weight": 0.4,
     "value": 0,
     "slot": "finger",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ethereal-ring",
+    "name": "ethereal ring",
+    "kind": "ring",
+    "weight": 0.85,
+    "value": 0,
+    "slot": "finger",
+    "requires": {
+      "level": 400,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 4
+      },
+      "energy": {
+        "percent": 4
+      },
+      "fire": {
+        "percent": 4
+      },
+      "ice": {
+        "percent": 4
+      },
+      "physical": {
+        "percent": 1
+      }
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -530,6 +581,37 @@
     }
   },
   {
+    "id": "ring-of-orange-plasma",
+    "name": "ring of orange plasma",
+    "kind": "ring",
+    "weight": 0.9,
+    "value": 0,
+    "slot": "finger",
+    "durationMs": 1800000,
+    "requires": {
+      "level": 100,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "ring-of-red-plasma",
     "name": "ring of red plasma",
     "kind": "ring",
@@ -553,6 +635,28 @@
           "amount": 3
         }
       ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ring-of-temptation",
+    "name": "ring of temptation",
+    "kind": "ring",
+    "weight": 0.8,
+    "value": 0,
+    "slot": "finger",
+    "charges": 200,
+    "requires": {
+      "level": 100
+    },
+    "absorb": {
+      "manadrain": {
+        "percent": 30
+      }
     },
     "source": {
       "engine": "canary",
