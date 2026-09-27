@@ -128,12 +128,14 @@ describe('loadContent', () => {
     expect(Object.keys(hunt?.difficulties ?? {})).toEqual(['cautious', 'bold', 'reckless']);
     expect(Object.values(hunt?.difficulties ?? {}).map((d) => d.monsterCount)).toEqual([2, 5, 8]);
     expect(hunt?.ambience).toBe('cavern');
-    expect(hunt?.corpseTtlMs).toBe(30000);
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
     // packages/content/data/monsters/rat.json — números do Huntera (docs/reference/
     // huntera-observed.md Parte V §32, 2026-09-22), não mais o provisório da FUN-123.
     expect(rat?.attack).toEqual({ min: 3, max: 4 });
+    // corpseTtlMs mora no MONSTRO (#585), não mais na hunt — a soma da cadeia de decaimento
+    // real do Canary `items.xml` a partir de `monster.corpse`, igual nos quatro autorais.
+    expect(rat?.corpseTtlMs).toBe(670000);
     expect(rat?.mitigation.resistances).toEqual({
       physical: 0, energy: 0, earth: -0.2, fire: 0, ice: 0.1, holy: -0.2, death: 0.1,
       drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
@@ -163,6 +165,7 @@ describe('loadContent', () => {
     expect(rotworm?.attack).toEqual({ min: 24, max: 30 });
     expect(rotworm?.speed).toBe(180);
     expect(rotworm?.corpseAppearanceId).toBe(5967);
+    expect(rotworm?.corpseTtlMs).toBe(670000);
     expect(rotworm?.loot.items.map((i) => i.itemId).sort()).toEqual(
       ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
     );
@@ -1089,6 +1092,12 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
       const effect = content.spells.get(id)?.effect;
       expect(effect?.kind, id).toBe('damage');
       if (effect?.kind === 'damage') expect(effect.area, id).toEqual(area);
+    }
+  });
+
+  it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
+    for (const id of ['dragon', 'dragon-lord']) {
+      expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
     }
   });
 

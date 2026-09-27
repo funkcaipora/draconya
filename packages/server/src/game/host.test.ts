@@ -2710,7 +2710,8 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const raw = rawTestContent();
     const withCorpses = (base: RawContent): RawContent => ({
       ...base,
-      hunts: (base.hunts as Array<Record<string, unknown>>).map((h) => ({ ...h, corpseTtlMs: 500 })),
+      // `corpseTtlMs` mora no MONSTRO (#585, era da hunt).
+      monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => ({ ...m, corpseTtlMs: 500 })),
       appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({ ...a, corpses: { rat: 7 } })),
     });
     const content = over.corpses === true

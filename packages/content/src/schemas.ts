@@ -2141,6 +2141,18 @@ export const monsterSchema = z.strictObject({
   boss: z.boolean().default(false),
   loot: lootTableSchema.default({ items: [] }),
   /**
+   * Quanto tempo o cadáver deste monstro fica no chão, em milissegundos (#585; ADR 0037 d.6):
+   * a soma, em ms, da cadeia `duration`/`decayTo` do Canary `items.xml` a partir do item que
+   * `monster.corpse` aponta — `duration` é lido em SEGUNDOS e multiplicado por 1000
+   * (`item.cpp`, `newDuration = it.decayTime * 1000`), somado estágio a estágio até o último
+   * `decayTo="0"`. Era um valor por HUNT (`huntSchema.corpseTtlMs`, calculado à mão); moveu para
+   * cá porque o prazo é do MONSTRO no Canary, não de onde ele aparece — o rato tem o mesmo
+   * cadáver em Rat Cellars ou em qualquer outra hunt. Ausente é monstro sem cadáver: a coleta de
+   * loot roda igual (ADR 0048 decisão 1), só o que sobra do filtro de Quick Loot não tem onde
+   * esperar e desaparece — o mesmo "hunt sem o campo" de antes desta issue, só que por monstro.
+   */
+  corpseTtlMs: z.number().int().positive().optional(),
+  /**
    * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
    * ability básica montada do `attack`/`attackIntervalMs`/`attackRange`/`damageType` — é o que
    * preserva o monstro legado bit a bit, e é o caminho do rato. Quando declaradas, o
@@ -2239,12 +2251,6 @@ export const huntSchema = z.object({
     z.enum(HUNT_DIFFICULTY_NAMES),
     huntDifficultySchema,
   ).refine((d) => Object.keys(d).length > 0, 'a hunt precisa de ao menos uma dificuldade'),
-  /**
-   * Quanto tempo o cadáver de um monstro fica no chão, em milissegundos (FUN-123). Só visual:
-   * o loot vai direto à caixa da sessão, e o cadáver some sozinho. Ausente é hunt sem
-   * cadáver — o conteúdo de teste que não fala de arte.
-   */
-  corpseTtlMs: z.number().int().positive().optional(),
   /**
    * Contagem regressiva de saída da hunt em milissegundos (#360).
    * Ausente é saída imediata.

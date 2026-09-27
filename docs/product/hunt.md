@@ -512,7 +512,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary; Rat e Rotworm declaram `true` para preservar o `spawnClearRadius` observado no Huntera (#519) | `data/monsters/*.json`, campo `blockable` |
 | Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Ausente é o de sempre (sorteio da composição, `respawnDelayMs` da dificuldade) — Rat Cellars e Rotworm Caves não declaram; a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
-| Prazo do cadáver no chão (só visual) | 30 s em Rat Cellars e em Rotworm Caves (RESOLVIDO, Huntera Parte VI §36) | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Prazo do cadáver no chão | 670 s (670000 ms) nos quatro monstros do catálogo (rat, rotworm, dragon, dragon-lord) — a soma da cadeia real `duration`/`decayTo` do Canary `items.xml`, campo do MONSTRO desde o #585 (era 30 s em Rat Cellars/Rotworm Caves, cópia do Huntera que só olhava o primeiro estágio da cadeia) | `data/monsters/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
@@ -532,7 +532,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot do Dragon (21 linhas, chances do TFS `dragon.xml`) | gold 90,082 %, 1–105; dragon ham 65,143 % (1–2); steel shield 14,893 %; crossbow 10,085 %; dragon's tail 9,883 %; burst arrow (`ammunitionId`) 7,976 % (1–10); longsword 4,027 %; steel helmet 3,005 %; broadsword 1,995 %; plate legs 1,909 %; strong health potion (`supplyId`) 1,055 %; wand of inferno 1,053 %; green dragon scale 1,038 %; green dragon leather 1,018 %; double axe 1,008 %; dragon hammer 0,517 %; serpent sword 0,504 %; small diamond 0,384 %; dragon shield 0,301 %; life crystal 0,113 %; dragonbone staff 0,102 % | `data/monsters/dragon.json`, bloco `loot` |
 | Loot do Dragon Lord (20 linhas, chances do TFS `dragon_lord.xml`) | gold 95,258 %, 1–246; dragon ham 79,757 % (1–2); green mushroom 12,12 %; royal spear 9,139 % (1–3); gemmed book 9,09 %; power bolt (`ammunitionId`) 6,565 % (1–7); energy ring 5,072 %; small sapphire 4,968 %; golden mug 3,072 %; red dragon scale 1,963 %; red dragon leather 1,022 %; strong health potion (`supplyId`) 0,971 %; life crystal 0,629 %; strange helmet 0,382 %; fire sword 0,286 %; tower shield 0,268 %; royal helmet 0,233 %; dragon scale mail 0,142 %; dragon slayer 0,109 %; dragon lord trophy 0,093 % | `data/monsters/dragon-lord.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
-| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` 670 000 ms — soma da cadeia de decaimento do Canary `items.xml` (dead dragon/dead dragon lord: 10 s → 300 s → 300 s → 60 s, `decayTo` até sumir, não os 30 000 ms do Huntera); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
+| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` saiu daqui e mora em `dragon`/`dragon-lord` desde o #585 (670000 ms cada, a mesma soma da cadeia de decaimento do Canary `items.xml`: dead dragon/dead dragon lord, 10 s → 300 s → 300 s → 60 s até `decayTo` sumir); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
 | Rate de loot e escala de monstro/boss (#691) | neutros (1); o conteúdo real não declara | `data/progression/baseline.json`, `rates.loot` / `rates.monster` / `rates.boss`; `data/monsters/*.json`, `boss` |
 | Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
 
@@ -575,8 +575,9 @@ coletou. **O cadáver CARREGA o loot e tem dono**: no mesmo abate, o dono coleta
 Quick Loot dele aceita e cabe; o resto fica esperando até o cadáver decair — é a fidelidade ao
 `quickLootFilter`/`autoLoot` do Canary que a decisão original de 2026-09-11 tinha rejeitado. Quem
 reanexa vê os cadáveres que ainda estão lá (`session-state.world.groundItems`), com o que sobrou
-dentro. Monstro sem linha na tabela não deixa nada; hunt sem `corpseTtlMs` também não — o loot
-sorteado para um destinatário sem cadáver simplesmente não é entregue.
+dentro. Monstro sem linha na tabela não deixa nada; monstro sem `corpseTtlMs` (o campo é do
+MONSTRO desde o #585, era da hunt) também não — o loot sorteado para um destinatário sem cadáver
+simplesmente não é entregue.
 
 **A Rat Cellars é o bueiro de ratos de Rookgaard** (FUN-123), como no Huntera: o recorte real
 importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota traçada por
@@ -619,11 +620,13 @@ dragon"/"dead dragon lord", `duration="10"`) e confundido isso com o tempo total
 na verdade o item decai (`decayTo`) para o próximo estágio em vez de sumir. A cadeia completa —
 idêntica em forma para os dois monstros — é 10 s → 300 s → 300 s → 60 s até o último `decayTo="0"`
 (aí some de fato): 10+300+300+60 = 670 s = 670 000 ms (segundos × 1000). NÃO os 30 000 ms que Rat
-Cellars/Rotworm Caves copiam do Huntera: ADR 0037 d.6 pede a caçada idêntica ao Tibia real em toda
-hunt, e o fato real é a soma da cadeia, não o primeiro estágio dela. O motor não modela decaimento
-em múltiplos estágios (só um `corpseTtlMs` por hunt) nem TTL por monstro; como Dragon e Dragon
-Lord chegam à MESMA soma no Canary, o único número da hunt já serve para os dois — a simplificação
-é "um TTL só", não o valor do TTL. Testado contra o
+Cellars/Rotworm Caves copiavam do Huntera (também corrigidas pelo #585 — ver abaixo): ADR 0037
+d.6 pede a caçada idêntica ao Tibia real em toda hunt, e o fato real é a soma da cadeia, não o
+primeiro estágio dela. **Desde o #585, o campo é do MONSTRO, não da hunt** — o importador de
+catálogo (`scripts/catalog/monsters.ts`) soma a cadeia a partir de `monster.corpse` e grava
+`corpseTtlMs` em `dragon.json`/`dragon-lord.json` (e nos outros dois autorais, `rat.json`/
+`rotworm.json`, todos com a mesma soma de 670000 ms); a hunt não declara mais o campo. O motor
+não modela decaimento em múltiplos estágios, só a soma total. Testado contra o
 CONTEÚDO REAL (`packages/server/src/game/darashia-dragon-lair.test.ts`): uma party de quatro
 level 200 (Knight/Paladin/Sorcerer/Druid) que entra vê os 47 nascerem — 19 Dragon em z10, 24
 Dragon Lord em z11, 4 em z12 —, cada um na coordenada exata do próprio ponto, e o respawn de um

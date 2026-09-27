@@ -55,6 +55,7 @@
     },
     "runOnHealth": 10,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -123,6 +124,7 @@
     },
     "runOnHealth": 3,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -209,6 +211,7 @@
     },
     "runOnHealth": 15,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -281,6 +284,7 @@
     "runOnHealth": 20,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -354,6 +358,7 @@
     },
     "runOnHealth": 30,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -474,6 +479,7 @@
     },
     "runOnHealth": 8,
     "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -557,6 +563,7 @@
     },
     "runOnHealth": 3,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -687,6 +694,7 @@
     },
     "runOnHealth": 300,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -765,6 +773,7 @@
     },
     "runOnHealth": 25,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -860,6 +869,7 @@
     "runOnHealth": 55,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -908,6 +918,7 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -975,6 +986,7 @@
     },
     "runOnHealth": 25,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1096,6 +1108,7 @@
     },
     "runOnHealth": 25,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1200,6 +1213,7 @@
     },
     "runOnHealth": 45,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1287,6 +1301,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1352,6 +1367,7 @@
     },
     "runOnHealth": 2,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1429,6 +1445,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1522,6 +1539,7 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1603,6 +1621,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1784,6 +1803,7 @@
     },
     "runOnHealth": 10,
     "staticAttack": 0.9,
+    "corpseTtlMs": 910000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1857,6 +1877,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1928,6 +1949,7 @@
       "random": 0
     },
     "staticAttack": 0.8,
+    "corpseTtlMs": 660000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2080,6 +2102,7 @@
     },
     "runOnHealth": 8,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2162,6 +2185,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2338,6 +2362,7 @@
     },
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2412,6 +2437,7 @@
     },
     "runOnHealth": 30,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2539,6 +2565,7 @@
     },
     "runOnHealth": 10,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2622,6 +2649,7 @@
     },
     "runOnHealth": 10,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2725,6 +2753,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 370000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2937,6 +2966,7 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3005,6 +3035,7 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3077,6 +3108,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3144,6 +3176,7 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 660000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3248,6 +3281,7 @@
       "random": 10
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3330,6 +3364,7 @@
     },
     "runOnHealth": 15,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3492,6 +3527,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3562,6 +3598,7 @@
     "runOnHealth": 25,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3645,6 +3682,7 @@
     },
     "runOnHealth": 5,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3703,6 +3741,7 @@
     "runOnHealth": 8,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3764,6 +3803,7 @@
     "runOnHealth": 15,
     "staticAttack": 0.9,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3840,6 +3880,7 @@
     },
     "runOnHealth": 5,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -3951,6 +3992,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4025,6 +4067,7 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4184,6 +4227,7 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4258,6 +4302,7 @@
     "runOnHealth": 15,
     "staticAttack": 0.7,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4357,6 +4402,7 @@
     },
     "runOnHealth": 8,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4429,6 +4475,7 @@
     "runOnHealth": 20,
     "staticAttack": 0.95,
     "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4509,6 +4556,7 @@
     },
     "runOnHealth": 8,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4606,6 +4654,7 @@
     },
     "runOnHealth": 15,
     "staticAttack": 0.9,
+    "corpseTtlMs": 1260000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4801,6 +4850,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -4895,6 +4945,7 @@
       "random": 0
     },
     "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5015,6 +5066,7 @@
     },
     "runOnHealth": 30,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5095,6 +5147,7 @@
       "random": 0
     },
     "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5175,6 +5228,7 @@
       "random": 0
     },
     "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5438,6 +5492,7 @@
     },
     "runOnHealth": 5,
     "staticAttack": 0.9,
+    "corpseTtlMs": 2100000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5594,6 +5649,7 @@
     },
     "runOnHealth": 20,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5719,6 +5775,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5795,6 +5852,7 @@
     },
     "runOnHealth": 8,
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -5944,6 +6002,7 @@
       "random": 0
     },
     "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
