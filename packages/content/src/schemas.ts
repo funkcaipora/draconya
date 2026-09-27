@@ -382,8 +382,7 @@ const lootRollSchema = z.object({
  * catálogo de item — sem isso, um Burst Arrow ou uma Strong Health Potion no loot de monstro
  * não tinham como ser declarados. `supplyId`/`ammunitionId` creditam o ESTOQUE
  * (`CharacterRuntime.supplyStock`/`ammunitionStock`, `character.ts`) de quem recebe o drop, e
- * NÃO passam pela mochila: sem peso, sem instância, sem a Caixa de Loot — o mesmo motivo de
- * gold não ser item. O `.refine` recusa a linha ambígua (duas ou mais chaves) ou vazia
+ * NÃO passam pela mochila: sem peso, sem instância — o mesmo motivo de gold não ser item. O `.refine` recusa a linha ambígua (duas ou mais chaves) ou vazia
  * (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo existente que só declara
  * `itemId` continua válido sem mudar uma vírgula.
  */

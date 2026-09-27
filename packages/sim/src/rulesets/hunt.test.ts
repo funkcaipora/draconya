@@ -539,7 +539,7 @@ describe('a sessão em si', () => {
       return {
         kills: session.aggregates.kills,
         gold: session.aggregates.goldGained,
-        items: [...hero.inventory.items(), ...hero.lootBox].map((i) => `${i.instanceId}/${i.itemId}`),
+        items: [...hero.inventory.items()].map((i) => `${i.instanceId}/${i.itemId}`),
       };
     };
     const fast = at(100);
@@ -4304,7 +4304,6 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
 
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect([...hero.inventory.items()].length).toBe(session.aggregates.kills);
-    expect(hero.lootBox).toEqual([]);
   });
 
   it('o id da instância é DETERMINÍSTICO, e é o que torna a inserção idempotente', () => {
@@ -4349,7 +4348,6 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
 
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(hero.inventory.backpack).toEqual([]);
-    expect(hero.lootBox).toEqual([]);
   });
 
   it('item que sumiu do catálogo não vira instância fantasma', () => {
@@ -4362,7 +4360,6 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
 
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(hero.inventory.backpack).toEqual([]);
-    expect(hero.lootBox).toEqual([]);
     // E não queimou identidade: o contador não avança por um item que não vai existir.
     expect(hero.lootSeq).toBe(0);
   });
@@ -4411,7 +4408,6 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
       return {
         kills: session.aggregates.kills,
         mochila: [...hero.inventory.items()].map((i) => `${i.instanceId}/${i.itemId}`),
-        caixa: hero.lootBox.length,
       };
     };
     const rapido = at(100);
@@ -4449,7 +4445,7 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
     return { session, hero, ruleset: session.ruleset as HuntRuleset };
   };
 
-  it('nasce com 20 lugares, e o 21º drop abre uma linha — a Caixa fica vazia enquanto o PESO cabe', () => {
+  it('nasce com 20 lugares, e o 21º drop abre uma linha, enquanto o PESO cabe', () => {
     // Mutação que mata: `#deliverLoot` recusar por lugar, ou `ensureContainers` não rodar na entrada.
     const { session, hero } = withBackpack(100_000);
     expect(hero.inventory.backpack).toHaveLength(20);
@@ -4458,7 +4454,6 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
     const looted = [...hero.inventory.items()].length;
     expect(looted).toBeGreaterThan(20);
     expect(hero.inventory.backpack.length).toBe(20 + 5 * Math.ceil((looted - 20) / 5));
-    expect(hero.lootBox).toEqual([]);
     // Tudo na mochila, nada na bolsa: o loot cai na mochila enquanto ela está nas costas.
     expect(hero.inventory.satchel.every((p) => p === null)).toBe(true);
   });
@@ -6344,8 +6339,7 @@ const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect
     const swordsInBag = bag?.items.filter((i) => i.item.itemId === 'loot-sword').length ?? 0;
     expect(swordsInBag).toBe(2);
     const lead = session.participants.find((p) => p.id === 'lead');
-    // A caixa do líder NÃO recebe o excedente: "coletar com outro destinatário" é coletar (DT-01).
-    expect(lead?.lootBox).toEqual([]);
+    // O líder NÃO recebe o excedente: "coletar com outro destinatário" é coletar (DT-01).
     expect([...(lead?.inventory.items() ?? [])]).toHaveLength(0);
     // `itemsLooted` conta só o que de fato foi coletado (2 espadas), não o recusado.
     expect(session.aggregatesOf('b').itemsLooted).toBe(2);
@@ -6413,7 +6407,34 @@ const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect
     if (leader === undefined) throw new Error('sem lead');
     restored.leave('b', 'manual-exit');
     expect([...leader.inventory.items()].map((i) => i.itemId)).toContain('relic');
-    expect(leader.lootBox.map((i) => i.itemId)).not.toContain('relic');
+  });
+
+  it('#settle FORÇA a entrada do item que não vende mesmo sem capacidade nenhuma (ADR 0048 d.7)', () => {
+    // Sem a Caixa de Loot da Sessão, o item que não se vende (`value: 0`) e não cabe nem com a
+    // reserva liberada não tem mais para onde ir: `forceAdd` o põe na mochila do líder de
+    // qualquer jeito — nunca se perde, e a escolha de vender/descartar depois é do jogador.
+    const relic = { id: 'relic', name: 'Relic', kind: 'other', weight: 31, value: 0 };
+    const withRelic = loaded({ items: [...items, sword, cheese, relic] });
+    const { session } = shared([member('lead', 0, 1), member('b', 0, 1_000)], { content: withRelic });
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    // Capacidade 1: o queijo (peso 4) já estourava sozinho, e o relic (peso 31) mais ainda.
+    const leadState = snapshot.participants.find((p) => p.id === 'lead');
+    if (leadState === undefined) throw new Error('sem lead');
+    (leadState as { inventory: InventoryState }).inventory = {
+      backpack: [{ instanceId: 'inv-cheese', itemId: 'loot-cheese', quantity: 1 }],
+      equipped: {},
+    };
+    (snapshot.ruleset as { partyBag?: unknown }).partyBag = {
+      gold: [], capacity: 0, overweight: false,
+      items: [{ item: { instanceId: 'bag-relic', itemId: 'relic', quantity: 1 }, eligible: ['lead', 'b'] }],
+    };
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, withRelic) as HuntRuleset, Rng.fromSeed('force-add'),
+    );
+    const leader = restored.participants.find((p) => p.id === 'lead');
+    if (leader === undefined) throw new Error('sem lead');
+    restored.leave('b', 'manual-exit');
+    expect([...leader.inventory.items()].map((i) => i.itemId)).toContain('relic');
   });
 
   it('1 Hz == 10 Hz atravessando OVERWEIGHT (#396, RF-04)', () => {
@@ -6614,7 +6635,6 @@ const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect
     expect(bag?.items.every((e) => e.item.itemId === 'loot-sword')).toBe(true);
     expect(bag?.items).toHaveLength(kills);
     const lead = session.participants.find((p) => p.id === 'lead');
-    expect(lead?.lootBox.some((i) => i.itemId === 'loot-cheese')).toBe(false);
     expect([...(lead?.inventory.items() ?? [])].some((i) => i.itemId === 'loot-cheese')).toBe(false);
     expect(session.aggregatesOf('lead').itemsLooted).toBe(kills);
     expect(session.aggregatesOf('b').itemsLooted).toBe(kills);

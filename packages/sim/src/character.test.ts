@@ -73,15 +73,14 @@ describe('chooseVocation', () => {
     expect([...hero.inventory.items()].map((item) => item.itemId)).toEqual(['machete']);
   });
 
-  it('keeps the choice when the weapon does not fit the capacity: it goes to the loot box', () => {
+  it('keeps the choice when the weapon does not fit the capacity: it equips anyway (ADR 0048 d.7, forceAdd ignores weight)', () => {
     // A vocação não pode ser punida pela mochila. Mutação que mata: devolver `ok: false`
-    // quando `add` recusa por peso.
+    // quando o peso estoura, ou deixar de vestir por causa dele.
     const heavy = new CharacterRuntime(state({ capacity: 20 }));
     const result = heavy.chooseVocation(knight, catalog.get('steel-axe') ?? null, options());
-    expect(result).toEqual({ ok: true, weapon: 'in-loot-box' });
+    expect(result).toEqual({ ok: true, weapon: 'equipped' });
     expect(heavy.vocationId).toBe('knight');
-    expect(heavy.lootBox.map((item) => item.itemId)).toEqual(['steel-axe']);
-    expect(heavy.inventory.equippedAt('hand')?.itemId).toBe('machete');
+    expect(heavy.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
   });
 
   it('leaves the bow in the backpack when a shield is worn (hands-full), and the choice still holds', () => {
@@ -168,18 +167,18 @@ describe('chooseVocation com o kit completo da vocação (#496)', () => {
       .toBe('vocation-choice');
   });
 
-  it('sends the piece that does not fit the capacity to the loot box, and equips what fits', () => {
-    // A vocação não pode ser punida pela mochila — nem pela metade: o que coube veste, o que
-    // não coube vai para a Caixa, e a escolha vale inteira.
-    const hero = new CharacterRuntime(state({ capacity: 60 }));
+  it('equips every piece even when none of them fits the capacity (ADR 0048 d.7, forceAdd ignores weight)', () => {
+    // A vocação não pode ser punida pela mochila — nem pela metade: a escolha vale inteira,
+    // peso nenhum.
+    const hero = new CharacterRuntime(state({ capacity: 0 }));
     const result = hero.chooseVocation(knight, null, kitOptions());
     expect(result).toEqual({
       ok: true, weapon: 'none',
-      kit: [{ itemId: 'steel-axe', status: 'equipped' }, { itemId: 'shield', status: 'in-loot-box' }],
+      kit: [{ itemId: 'steel-axe', status: 'equipped' }, { itemId: 'shield', status: 'equipped' }],
     });
     expect(hero.vocationId).toBe('knight');
-    expect(hero.lootBox.map((item) => item.itemId)).toEqual(['shield']);
     expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
+    expect(hero.inventory.equippedAt('shield')?.itemId).toBe('shield');
   });
 
   it('keeps the legacy single-weapon path when there is no kit (test content and old calls)', () => {

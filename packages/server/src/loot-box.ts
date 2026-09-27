@@ -1,12 +1,14 @@
-// A forma compartilhada de um item de EXTRATO (`SessionReceipt.acquired`/`lootBox`).
+// A forma compartilhada de um item de EXTRATO (`SessionReceipt.acquired`).
 //
 // Até o ADR 0048, este arquivo também hospedava a Caixa de Loot da Sessão (`LootBoxStore`,
 // `lootbox:{sessionId}` no Redis, TTL de 30 min) — o transbordo por capacidade do loot de
 // monstro. O ADR a retirou (decisão 7): o caso que ela cobria — loot que não coube — passa a
-// ser "fica no cadáver" (`packages/sim`), como o Canary faz. `BoxedItem` continua aqui porque
-// `acquiredBy`/`acquiredByState` (`game/host.ts`, `snapshot-settlement.ts`) e o campo `lootBox`
-// do extrato (ainda escrito por `chooseVocation`/`#grantKitPiece`/`#settle` — grants e
-// liquidação de bolsa que não têm cadáver de monstro para usar) continuam precisando da forma.
+// ser "fica no cadáver" (`packages/sim`), como o Canary faz. A #723 fechou o resto: o campo
+// `lootBox` do extrato (escrito por `chooseVocation`/`#grantKitPiece`/`#settle` para os dois
+// casos sem cadáver de monstro à mão) nunca era lido de volta — `jobs/ledger.ts` só processa
+// `acquired` — então virou `Inventory.forceAdd` (`packages/sim/src/inventory.ts`, peso
+// ignorado) em vez de outro depósito morto. `BoxedItem` segue aqui só para
+// `acquiredBy`/`acquiredByState` (`game/host.ts`, `snapshot-settlement.ts`).
 
 /** Um item no extrato. Mesma forma do `CarriedItem` do `sim`, sem depender dele. */
 export interface BoxedItem {

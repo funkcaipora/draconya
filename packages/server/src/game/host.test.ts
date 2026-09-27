@@ -4253,7 +4253,8 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     host.flush();
     const before = socket.received().length;
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
-    // O personagem de `buildHost` nasce sem capacidade; sem ela a arma iria para a Caixa.
+    // O personagem de `buildHost` nasce sem capacidade; a arma equipa igual (`forceAdd` ignora
+    // peso, ADR 0048 decisão 7), mas 400 mantém o cenário simples para quem só quer a vocação.
     hero.capacity = 400;
     return { host, viewer, socket, hero, before };
   };
@@ -4448,18 +4449,16 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
       expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
     });
 
-    it('a piece that does not fit goes to the loot box, with a message naming it', () => {
-      // A vocação não pode ser punida pela mochila: o que coube veste, o que não coube vai
-      // para a Caixa, e a escolha vale inteira. Mutação que mata: devolver `ok: false`.
+    it('equips every piece even without capacity for both, and warns nothing (ADR 0048 d.7, forceAdd ignores weight)', () => {
+      // A vocação não pode ser punida pela mochila: a escolha vale inteira, peso nenhum.
+      // Mutação que mata: devolver `ok: false`, ou deixar de vestir por causa do peso.
       const { hero, socket, before } = atLevel(8, 'knight', 70);
 
       expect(hero.vocationId).toBe('knight');
       expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
-      expect(hero.lootBox.map((item) => item.itemId)).toEqual(['wooden-shield']);
+      expect(hero.inventory.equippedAt('shield')?.itemId).toBe('wooden-shield');
       const after = socket.received().slice(before);
-      const infos = after.filter((m) => m.type === 'system-message' && m.level === 'info');
-      expect(infos).toHaveLength(1);
-      expect(infos[0]?.type === 'system-message' && infos[0]?.text).toContain('Wooden Shield');
+      expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
     });
 
     it('the kit travels in the receipt with both pieces and the provenance', async () => {

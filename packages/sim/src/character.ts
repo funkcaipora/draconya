@@ -105,14 +105,6 @@ export interface CharacterState {
    */
   readonly inventory?: InventoryState;
   /**
-   * O que caiu e NÃO coube na mochila (§21.6, FUN-88).
-   *
-   * Fica aqui, e não fora da sessão, porque o `sim` não faz I/O (invariante 1): a caixa de
-   * verdade é escrita quando a sessão encerra. Entra no snapshot para uma queda de nó não
-   * apagar o que o jogador ganhou — e o custo é uma lista quase sempre vazia.
-   */
-  readonly lootBox?: readonly CarriedItem[];
-  /**
    * Quantos itens esta sessão já criou. Vira parte do id da instância.
    *
    * Precisa do snapshot: sem ele, uma sessão retomada recomeçaria a contagem e geraria o mesmo
@@ -185,10 +177,11 @@ export type VocationRefusal = 'level-too-low' | 'already-chosen';
 
 /**
  * Como uma peça do kit inicial acabou (#496). `equipped` vestiu; `in-backpack` coube no
- * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos; `in-loot-box`
- * não coube nem em peso.
+ * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos. Peso nunca
+ * recusa (ADR 0048 decisão 7, `Inventory.forceAdd`): a escolha de vocação não é punida pela
+ * mochila.
  */
-export type VocationPieceStatus = 'equipped' | 'in-backpack' | 'in-loot-box';
+export type VocationPieceStatus = 'equipped' | 'in-backpack';
 
 export interface VocationPieceResult {
   readonly itemId: string;
@@ -198,7 +191,7 @@ export interface VocationPieceResult {
 export type VocationResult =
   | {
       readonly ok: true;
-      readonly weapon: 'equipped' | 'in-backpack' | 'in-loot-box' | 'none';
+      readonly weapon: 'equipped' | 'in-backpack' | 'none';
       /**
        * O destino de cada peça do kit, na ordem do conteúdo (#496). Ausente é a arma legada da
        * #154 — o caminho de `weapon`; o kit completo não o usa.
@@ -250,8 +243,6 @@ export class CharacterRuntime {
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
-  /** O que caiu e não coube. Ver `CharacterState.lootBox`. */
-  lootBox: CarriedItem[];
   lootSeq: number;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
@@ -302,7 +293,6 @@ export class CharacterRuntime {
     this.bestiary = Bestiary.fromState(state.bestiary);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
-    this.lootBox = [...(state.lootBox ?? [])];
     this.lootSeq = state.lootSeq ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
@@ -353,11 +343,12 @@ export class CharacterRuntime {
   /**
    * Escolhe a vocação (#154, ADR 0026 decisão 1) — uma vez, no level da escolha ou depois.
    *
-   * Os itens entram pelos caminhos que já existem: `add` (peso) e `equip` (vocação, level, duas
-   * mãos). A escolha vale MESMO que um item não vista: sem capacidade ele vai para a Caixa de
-   * Loot, com escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso
-   * seria punir a decisão pela mochila. `retarget` NÃO é chamado: a tabela da vocação vale do
-   * próximo level em diante (`progression.ts`), e o ruleset já lê `vocationId` a cada level up.
+   * Os itens entram pelos caminhos que já existem: `forceAdd` (ignora peso — ADR 0048 decisão
+   * 7) e `equip` (vocação, level, duas mãos). A escolha vale MESMO que um item não vista: com
+   * escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso seria punir
+   * a decisão pela mochila, e é por isso que o peso nunca recusa aqui. `retarget` NÃO é
+   * chamado: a tabela da vocação vale do próximo level em diante (`progression.ts`), e o
+   * ruleset já lê `vocationId` a cada level up.
    *
    * Com `kitItems` (#496) é o kit completo que entra: cada peça ganha identidade própria
    * (`${instanceId}:${itemId}` — numa cópia da Cidade o id da sessão é compartilhado, e o id do
@@ -387,19 +378,19 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
-      this.lootBox.push(carried);
-      return { ok: true, weapon: 'in-loot-box' };
-    }
+    // `forceAdd` ignora peso (ADR 0048 decisão 7): sem capacidade nunca é motivo para recusar
+    // a arma da vocação. Só falta catálogo ou pilha grande demais — nenhum dos dois acontece
+    // aqui, porque quem monta `weapon` já leu do mesmo catálogo.
+    this.inventory.forceAdd(carried, options.catalog, options.rules);
     // `equip` troca com o que está na mão: a machete volta para a mochila sozinha.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
     return { ok: true, weapon: equipped.ok ? 'equipped' : 'in-backpack' };
   }
 
   /**
-   * Uma peça do kit (#496): entra pelo peso (`add`), veste pelo slot do item (`equip`), e o que
-   * não veste fica em segurança onde já está. O lugar da mochila NUNCA recusa kit — só o peso
-   * recusa, e a Caixa segura.
+   * Uma peça do kit (#496): entra pelo peso ignorado (`forceAdd`, ADR 0048 decisão 7), veste
+   * pelo slot do item (`equip`), e o que não veste fica em segurança onde já está. Nem o lugar
+   * nem o peso recusam kit — só o slot (duas mãos) decide entre vestir e ficar na mochila.
    */
   #grantKitPiece(item: Item, options: VocationChoiceOptions): VocationPieceStatus {
     const carried: CarriedItem = {
@@ -408,10 +399,7 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
-      this.lootBox.push(carried);
-      return 'in-loot-box';
-    }
+    this.inventory.forceAdd(carried, options.catalog, options.rules);
     // `equip` troca com o que está no slot: a machete volta para a mochila sozinha. A peça
     // impedida pelas duas mãos (o escudo com o bow vestido) fica na mochila, onde já está.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
@@ -439,7 +427,6 @@ export class CharacterRuntime {
       bestiary: this.bestiary.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
-      lootBox: this.lootBox,
       lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
