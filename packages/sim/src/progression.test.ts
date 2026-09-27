@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression, Vocation } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
 import {
@@ -16,6 +17,7 @@ const baseline: Progression = {
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+  rates: NEUTRAL_RATES,
 };
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25, spellSkill: 'magic',

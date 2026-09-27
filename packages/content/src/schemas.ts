@@ -1851,6 +1851,12 @@ export const monsterSchema = z.strictObject({
    * padrão passa a ser o do Tibia, monstro por monstro.
    */
   blockable: z.boolean().default(false),
+  /**
+   * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
+   * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
+   * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.
+   */
+  boss: z.boolean().default(false),
   loot: lootTableSchema.default({ items: [] }),
   /**
    * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
@@ -2073,6 +2079,94 @@ export const vocationSchema = z.object({
 });
 
 /**
+ * Uma faixa de rate por level (#691), o `{ minlevel, maxlevel, multiplier }` de `data/stages.lua`
+ * do Canary. `maxLevel` é INCLUSIVO; ausente é infinito, e só a ÚLTIMA faixa pode omiti-lo.
+ */
+const rateStageSchema = z.strictObject({
+  minLevel: z.number().int().nonnegative(),
+  maxLevel: z.number().int().positive().optional(),
+  multiplier: z.number().positive(),
+}).refine(
+  (stage) => stage.maxLevel === undefined || stage.minLevel <= stage.maxLevel,
+  'faixa de rate com minLevel acima de maxLevel',
+);
+
+/**
+ * Recusa faixa aberta que não seja a última e faixas sobrepostas (#691), a mesma forma da
+ * checagem do `experienceBonusByLevel` (#563). Sobreposição não seria erro no Canary — a
+ * primeira faixa vence (`getRateFromTable`) —, mas aqui a segunda faixa seria letra morta, e
+ * número que não vale nada é erro de digitação à espera de virar bug de balanceamento.
+ */
+const rateStagesSchema = z.array(rateStageSchema).superRefine((stages, context) => {
+  for (let index = 0; index < stages.length; index += 1) {
+    const stage = stages[index];
+    if (stage === undefined) continue;
+    if (stage.maxLevel === undefined && index !== stages.length - 1) {
+      context.addIssue({ code: 'custom', message: `faixa de rate sem maxLevel em ${index} não é a última` });
+      return;
+    }
+    for (let other = 0; other < index; other += 1) {
+      const previous = stages[other];
+      if (previous === undefined) continue;
+      const previousMax = previous.maxLevel ?? Number.POSITIVE_INFINITY;
+      const stageMax = stage.maxLevel ?? Number.POSITIVE_INFINITY;
+      if (stage.minLevel <= previousMax && previous.minLevel <= stageMax) {
+        context.addIssue({ code: 'custom', message: `faixas de rate sobrepostas em ${other} e ${index}` });
+        return;
+      }
+    }
+  }
+});
+
+/**
+ * O escalonamento de monstro ou de boss (#691): `rateMonsterHealth/Attack/Defense` e
+ * `rateBossHealth/Attack/Defense` do `config.lua` do Canary.
+ */
+const creatureRatesSchema = z.strictObject({
+  health: z.number().positive().default(1),
+  attack: z.number().positive().default(1),
+  defense: z.number().positive().default(1),
+});
+
+/**
+ * Os rates do servidor (#691, M44-G15): o `rateExp`/`rateSkill`/`rateMagic`/`rateLoot`, os
+ * stages de `data/stages.lua` e os multiplicadores de monstro e boss do Canary. Moram no
+ * conteúdo versionado, e não em variável de ambiente, pelo invariante 7: um rate fora do
+ * conteúdo mudaria o resultado no meio de uma sessão. Mudar o rate é deploy de conteúdo.
+ *
+ * O default é NEUTRO (tudo 1, stages desligados), o Tibia com rate 1 — e com ele nenhum
+ * número muda: o `sim` curto-circuita cada aplicação em 1. O `lowLevelBonusExp` do Canary NÃO
+ * mora aqui (ADR 0043, emenda): é o `experienceBonusByLevel` do #563, e o rate de XP multiplica
+ * DEPOIS da soma de bônus, na ordem do Canary.
+ */
+export const ratesSchema = z.strictObject({
+  experience: z.number().positive().default(1),
+  skill: z.number().positive().default(1),
+  magic: z.number().positive().default(1),
+  /**
+   * Inteiro, como o `rateLoot` do Canary. `0` desliga o loot (sem sorteio nenhum); a chance de
+   * cada linha é multiplicada por `max(1, loot)`, com teto 1.
+   */
+  loot: z.number().int().nonnegative().default(1),
+  /** O `rateUseStages` do Canary: desligado, as tabelas abaixo são ignoradas. */
+  useStages: z.boolean().default(false),
+  experienceStages: rateStagesSchema.default([]),
+  skillStages: rateStagesSchema.default([]),
+  magicLevelStages: rateStagesSchema.default([]),
+  /** Para monstro sem `boss`. Vida e defesa na compilação; ataque no golpe (`sim`). */
+  monster: creatureRatesSchema.default(() => ({ health: 1, attack: 1, defense: 1 })),
+  /** Para monstro com `boss: true` (`MonsterType::isBoss` do Canary). */
+  boss: creatureRatesSchema.default(() => ({ health: 1, attack: 1, defense: 1 })),
+});
+
+export type Rates = z.infer<typeof ratesSchema>;
+export type RateStage = Rates['experienceStages'][number];
+export type CreatureRates = Rates['monster'];
+
+/** Os rates neutros (#691): o que o conteúdo sem `progression.rates` recebe. */
+export const NEUTRAL_RATES: Rates = ratesSchema.parse({});
+
+/**
  * A tabela base de progressão: onde o personagem começa, e como cresce ENQUANTO NÃO TEM
  * vocação (§7.4 — ela é escolhida no level 8).
  *
@@ -2202,6 +2296,11 @@ export const progressionSchema = z.object({
    * próprio conteúdo da skill.
    */
   skillMultipliers: z.record(z.string(), z.number().min(1)).default({}),
+  /**
+   * Os rates do servidor (#691): ver `ratesSchema`. Ausente é o neutro — o conteúdo real
+   * (`baseline.json`) não declara, porque o default É o Tibia com rate 1.
+   */
+  rates: ratesSchema.default(() => ratesSchema.parse({})),
   _open: z.string().optional(),
 });
 

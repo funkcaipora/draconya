@@ -13,6 +13,7 @@ export * from './automation.js';
 export * from './character.js';
 export * from './death.js';
 export * from './loot.js';
+export * from './rates.js';
 export * from './session.js';
 export * from './progression.js';
 export * from './stamina.js';

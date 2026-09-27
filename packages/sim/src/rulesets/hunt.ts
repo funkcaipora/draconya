@@ -64,6 +64,9 @@ import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
+  applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
+} from '../rates.js';
+import {
   autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
   settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
   xpByDamage, xpShare,
@@ -5324,15 +5327,21 @@ const slots = bot.groups.get(group);
     // crítico UMA vez, ANTES do laço por alvo, e `rollSharedCriticalOutcome` faz cada
     // `resolveDamage` por alvo herdar o MESMO resultado — nunca um jogador critica e outro não
     // no mesmo golpe do monstro.
-    const monsterModifiers = monsterCriticalModifiers(this.#options.monsters.get(monster.monsterId));
+    const monsterDefinition = this.#options.monsters.get(monster.monsterId);
+    const monsterModifiers = monsterCriticalModifiers(monsterDefinition);
     const resolvedMonsterModifiers = rollSharedCriticalOutcome(monsterModifiers, session.rng);
+    // O rate de ataque de monstro/boss (#691): multiplica o dano SORTEADO, não a faixa — o
+    // sorteio é o mesmo, e a sequência do `Rng` não muda. Neutro (1) devolve o sorteio intacto.
+    const attackRate = creatureRatesFor(
+      this.#options.progression.rates, monsterDefinition?.boss ?? false,
+    ).attack;
     for (const character of targets) {
       const defender = this.#playerDefender(character);
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
       // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`).
       const result = resolveDamage(
         {
-          rawDamage: session.rng.integer(ability.power.min, ability.power.max),
+          rawDamage: applyAttackRate(session.rng.integer(ability.power.min, ability.power.max), attackRate),
           source: 'monster-attack',
           damageType: ability.damageType,
           // A ORIGEM decide o bloqueio no `combat-v3` (#548): a ability CORPO A CORPO (a
@@ -6132,7 +6141,10 @@ const slots = bot.groups.get(group);
       // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
       // diferente por quem está usando.
       const factor = skillFactorFor(definition, vocation, this.#options.progression);
-      if (character.skills.gain(definition, points, factor) > 0) {
+      // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
+      // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
+      const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
+      if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
         session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
       }
     }
@@ -6173,7 +6185,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = rollLoot(definition.loot, session.rng);
+        const loot = rollLoot(definition.loot, session.rng, this.#options.progression.rates.loot);
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -6190,7 +6202,9 @@ const slots = bot.groups.get(group);
     } else if (!isSummon && definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
-      const loot = rollLoot(this.#lootTableFor(definition, recipient), session.rng);
+      const loot = rollLoot(
+        this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
+      );
       recipient.goldDelta += loot.gold;
       session.credit(recipient.id, 'goldGained', loot.gold);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
@@ -6408,7 +6422,12 @@ const slots = bot.groups.get(group);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
-      const experience = member.bestiary.applyXpBonus(share, this.#options.bestiary);
+      // O rate de XP (#691) multiplica DEPOIS do bônus (o `baseRate` do Canary), pelo level de
+      // CADA membro: é no `onGainExperience` de cada um que o Canary o aplica.
+      const experience = applyRate(
+        member.bestiary.applyXpBonus(share, this.#options.bestiary),
+        experienceRateFor(this.#options.progression.rates, member.level),
+      );
       const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
       session.credit(member.id, 'xpGained', experience);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
