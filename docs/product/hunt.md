@@ -361,9 +361,12 @@ conferido contra o catálogo de itens e o item cai de verdade (ver [`economy.md`
 O sorteio usa o `Rng` da sessão — a mesma semente rende o
 mesmo loot, antes e depois de uma retomada — e uma linha com `chance: 0` não consome sorteio, para
 desabilitar uma linha não mudar o que as outras rendem. O gold vira `goldDelta` no personagem e
-`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem item de
-loot no chão e sem caixa de loot: o produto rejeita isso de propósito (§26 da referência); o
-cadáver que fica é só visual (FUN-123, ver "Divergências").
+`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Desde o ADR
+0048 o loot cai no **cadáver** do monstro, não mais direto na mochila: no mesmo abate, sem
+plateia (invariante 3), o dono coleta o que o próprio filtro de Quick Loot aceita e cabe; o resto
+fica no cadáver até ele decair — a decisão que o §26 da referência rejeitava ("cadáver como
+container") foi revertida por este ADR, com fidelidade ao `quickLootFilter`/`autoLoot` do Canary
+(ver "Divergências").
 
 A tabela escolhe **como** é sorteada, pelo campo `loot.rollModel` (#685):
 
@@ -551,11 +554,11 @@ Druid observado mediu (Parte VI §36).
 
 ## Divergências do PRD
 
-~~**Loot é só gold, por enquanto.**~~ → **Resolvido (FUN-76, FUN-88):** o loot de item
-existe — a tabela do monstro confere `items` contra o catálogo, e o item cai de verdade, na
-mochila se couber ou na Caixa de Loot da Sessão se não. Detalhe em
-[`economy.md`](./economy.md#divergências-do-prd). A moeda continua creditada como campo, não
-como item: gold nunca vira uma linha de `loot.items`.
+~~**Loot é só gold, por enquanto.**~~ → **Resolvido (FUN-76, FUN-88, ADR 0048):** o loot de item
+existe — a tabela do monstro confere `items` contra o catálogo, o item cai no cadáver e o dono
+coleta o que o filtro de Quick Loot dele aceita e cabe; o resto fica no cadáver, sem Caixa de
+Loot da Sessão. Detalhe em [`economy.md`](./economy.md#divergências-do-prd). A moeda continua
+creditada como campo, não como item: gold nunca vira uma linha de `loot.items`.
 
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
@@ -565,11 +568,15 @@ O §14.5 prevê Iniciante/Profissional/Herói/Lendário; a decisão é copiar o 
 Cauteloso/Ousado/Agressivo (`cautious`/`bold`/`reckless`), com um `monsterCount` total (2/5/8 na
 Rat Cellars) como o número que o jogador vê.
 
-**Cadáver no chão, só visual** (decisão do usuário, 2026-09-11; FUN-123). O abate deixa o
-cadáver do monstro no tile — `ground-item-appear`, com a arte de `appearances.corpses` — por
-`corpseTtlMs`, e ele some sozinho (`ground-item-disappear`); não carrega loot — o loot continua
-indo direto à caixa da sessão. Quem reanexa vê os cadáveres que ainda estão lá
-(`session-state.world.groundItems`). Monstro sem linha na tabela não deixa nada.
+~~**Cadáver no chão, só visual.**~~ → **Revertido (ADR 0048, 2026-09-26; FUN-123).** O abate
+deixa o cadáver do monstro no tile — `ground-item-appear`, com a arte de `appearances.corpses` —
+por `corpseTtlMs`, e ele some sozinho (`ground-item-disappear`), levando junto o que ninguém
+coletou. **O cadáver CARREGA o loot e tem dono**: no mesmo abate, o dono coleta o que o filtro de
+Quick Loot dele aceita e cabe; o resto fica esperando até o cadáver decair — é a fidelidade ao
+`quickLootFilter`/`autoLoot` do Canary que a decisão original de 2026-09-11 tinha rejeitado. Quem
+reanexa vê os cadáveres que ainda estão lá (`session-state.world.groundItems`), com o que sobrou
+dentro. Monstro sem linha na tabela não deixa nada; hunt sem `corpseTtlMs` também não — o loot
+sorteado para um destinatário sem cadáver simplesmente não é entregue.
 
 **A Rat Cellars é o bueiro de ratos de Rookgaard** (FUN-123), como no Huntera: o recorte real
 importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota traçada por

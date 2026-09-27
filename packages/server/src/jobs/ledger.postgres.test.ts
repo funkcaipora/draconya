@@ -5,7 +5,9 @@ import type { InventoryState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
+import {
+  accounts, characterStorages, characters, itemInstances, ledger,
+} from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore, type SessionReceipt } from '../receipts.js';
 import { DrizzleGameRepository } from '../db/repository.js';
@@ -1147,6 +1149,77 @@ describe.runIf(ready)('o overlay por instância atravessa o banco (#604, ADR 004
   });
 });
 
+describe.runIf(ready)('storages por personagem atravessam o banco (#731, ADR 0050 d.6)', () => {
+  const storagesOf = async (database: NonNullable<typeof db>, characterId: string) => {
+    const rows = await database.database.db
+      .select({ storageKey: characterStorages.storageKey, value: characterStorages.value })
+      .from(characterStorages)
+      .where(eq(characterStorages.characterId, characterId));
+    return new Map(rows.map((row) => [row.storageKey, row.value]));
+  };
+
+  it('extrato → character_storage → ticket → CharacterRuntime: o mesmo valor volta', async () => {
+    // Mutação que mata: tirar `applyStorages` do `applyProgression`, esquecer `storages` na
+    // lista de permissão do `ReceiptStore`, ou o ticket não ler a tabela.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const other = await seedCharacter(database);
+    const repository = new DrizzleGameRepository(database.database.db);
+    const sessionId = randomUUID();
+
+    // Ninguém setou nada ainda: nenhuma linha.
+    expect((await storagesOf(database, characterId)).size).toBe(0);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      storages: { 'quest:rat-cellars': 1, 'quest:progress': 0 },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect(await storagesOf(database, characterId)).toEqual(new Map([
+      ['quest:rat-cellars', 1], ['quest:progress', 0],
+    ]));
+    // Escopado por dono: o personagem alheio não ganha linha nenhuma.
+    expect((await storagesOf(database, other)).size).toBe(0);
+
+    // E volta pelo ticket até o `CharacterRuntime` do `sim`, igual.
+    const character = await repository.getCharacterById(characterId);
+    if (character === null) throw new Error('the seeded character is missing');
+    const initial = initialCharacterOf(
+      character, await repository.listItemInstances(characterId),
+      await repository.listCharacterStorages(characterId),
+    );
+    expect(initial.storages).toEqual({ 'quest:rat-cellars': 1, 'quest:progress': 0 });
+
+    // Extrato SEM `storages` (nó anterior, Cidade sem interativo tocado): nada muda.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await storagesOf(database, characterId)).get('quest:rat-cellars')).toBe(1);
+
+    // O extrato manda o mapa INTEIRO (não um patch): a chave que sai dele some do banco — é
+    // como um storage voltar a -1 (nunca setado) se torna real fora da sessão.
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), seq: 3, storages: { 'quest:progress': 0 },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    const afterDrop = await storagesOf(database, characterId);
+    expect(afterDrop.has('quest:rat-cellars')).toBe(false);
+    expect(afterDrop.get('quest:progress')).toBe(0);
+
+    // Retry do MESMO extrato (mesmos `sessionId`/`seq`) não duplica linha nem escreve de novo —
+    // a `UNIQUE (session_id, seq)` do ledger (invariante 10) faz `writeReceipts` recusar o
+    // segundo antes de chegar em `applyStorages`.
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      storages: { 'quest:rat-cellars': 1, 'quest:progress': 0 },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    expect(await storagesOf(database, characterId)).toEqual(new Map([['quest:progress', 0]]));
+  });
+});
+
 describe.runIf(ready)('o item que caiu vira instância pelo extrato (FUN-88)', () => {
   const rowsOf = async (database: NonNullable<typeof db>, characterId: string) =>
     database.database.db
@@ -1245,5 +1318,110 @@ describe.runIf(ready)('o item que caiu vira instância pelo extrato (FUN-88)', (
     });
 
     expect(await rowsOf(database, characterId)).toHaveLength(0);
+  });
+});
+
+describe.runIf(ready)('sell-items/discard-item apagam a instância no ledger (#724, ADR 0048 d.8)', () => {
+  it('apaga a instância vendida/descartada na MESMA transação da linha de ledger', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      removedInstances: [instanceId],
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const [row] = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row).toBeUndefined();
+  });
+
+  it('reprocessar o mesmo extrato apaga zero linhas na segunda vez — retry não é erro', async () => {
+    // A chave única do ledger (`session_id`, `seq`) já barra o extrato repetido antes de chegar
+    // aqui; o `DELETE` escopado por id É idempotente por conta própria, para o caso de uma
+    // reconciliação futura reprocessar o mesmo extrato por outro caminho.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+
+    await receipts.save({ ...receiptOf(sessionId, characterId), removedInstances: [instanceId] });
+    const primeira = await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    // O mesmo extrato de novo, com outra chave — a chave única do ledger não é o que este
+    // teste prova; o `DELETE` sozinho, contra uma linha que já não existe, não pode falhar.
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), seq: 2, removedInstances: [instanceId],
+    });
+    const segunda = await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect(primeira).toEqual({ written: 1, failed: 0 });
+    expect(segunda).toEqual({ written: 1, failed: 0 });
+  });
+
+  it('não apaga instância de outro personagem, mesmo que o extrato cite o id dela', async () => {
+    // Escopado por DONO, como `applyLayout`/`applyEquipment`: um extrato não apaga item de
+    // outra conta.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const outroId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: outroId, origin: 'loot',
+    });
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      removedInstances: [instanceId],
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const [row] = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row?.id).toBe(instanceId);
+  });
+
+  it('extrato SEM `removedInstances` não toca a tabela', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+
+    await receipts.save(receiptOf(sessionId, characterId));
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const [row] = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row?.id).toBe(instanceId);
   });
 });

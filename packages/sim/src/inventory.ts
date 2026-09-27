@@ -9,17 +9,19 @@
 // decisão 6, o modelo do Huntera) o item tem LUGAR — a mochila é um vetor posicional de 20
 // lugares (o item nas costas), a bolsa é um vetor fixo do personagem de 10, e os dois crescem
 // por linhas, sem limite, enquanto houver capacidade. O lugar nunca recusa loot — o bot não
-// pode parar de caçar por mochila cheia (invariante 11) —, só o peso recusa, e aí a Caixa de
-// Loot segura.
+// pode parar de caçar por mochila cheia (invariante 11) —, só o peso recusa. `add` recusa por
+// peso; `forceAdd` (ADR 0048 decisão 7, retirada da Caixa de Loot da Sessão) ignora — é o que
+// usam os dois casos que não têm cadáver de monstro para segurar o excedente: o grant de
+// vocação/kit e a liquidação da bolsa de party (ver `character.ts`/`rulesets/hunt.ts`).
 //
 // **`Inventory` não conhece conteúdo.** Os tamanhos iniciais e a linha chegam como números
 // (`ContainerRules`) de quem tem a tabela — o ruleset em `onEnter`, o host no `move` —, porque
 // `CharacterRuntime` constrói o inventário sem conteúdo nenhum.
 //
-// **Item no chão não existe** (§21.5). O que existe é o que está nos containers, o que está
-// equipado, e o que está na Caixa de Loot da Sessão. Sem `stackpos`, sem cadáver como
-// container, sem item largado — o §26 do documento de referência lista isso como rejeição
-// deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
+// **Item no chão não existe, à parte do cadáver** (§21.5, emendado pelo ADR 0048). O que existe
+// é o que está nos containers, o que está equipado, e o que caiu de monstro e ainda não foi
+// coletado (`CorpseState.items`, `rulesets/hunt.ts`). Sem `stackpos`, sem item largado pelo
+// jogador — o §26 do documento de referência foi emendado pelo mesmo ADR.
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
@@ -141,9 +143,24 @@ export type InventoryRefusal =
   /** Um lugar que não existe — índice fora do vetor (#160). */
   | 'no-such-place'
   /** Mover a partir de um lugar vazio (#160). */
-  | 'empty-place';
+  | 'empty-place'
+  /** `sell-items` contra um `value: 0` do catálogo (#724, ADR 0048 d.8): "ninguém compra isto". */
+  | 'not-for-sale';
 
 export type InventoryResult = { readonly ok: true } | {
+  readonly ok: false; readonly reason: InventoryRefusal;
+};
+
+/**
+ * O resultado de `sellItems` (#724, ADR 0048 d.8): as instâncias removidas e o gold que renderam,
+ * `value × quantity` somado. Recusa não muta nada — é transação, como `move`.
+ */
+export type SellResult = { readonly ok: true; readonly removed: readonly CarriedItem[]; readonly gold: number } | {
+  readonly ok: false; readonly reason: InventoryRefusal;
+};
+
+/** O resultado de `discardItem` (#724, ADR 0048 d.8): a instância destruída, sem gold. */
+export type DiscardResult = { readonly ok: true; readonly removed: CarriedItem } | {
   readonly ok: false; readonly reason: InventoryRefusal;
 };
 
@@ -318,9 +335,9 @@ export class Inventory {
    * Põe num container, se o PESO couber: pilha → primeiro lugar livre → uma linha a mais.
    *
    * Sem mochila nas costas o loot vai para a bolsa (ADR 0026 d.6): a bolsa é do personagem.
-   * Recusa só por peso: o item que não cabe vai para a Caixa de Loot da Sessão (§21.5), e
-   * quem chama decide o que fazer com `over-capacity`. O lugar nunca recusa — o bot não pode
-   * parar de caçar por mochila cheia.
+   * Recusa só por peso — `over-capacity` —, e quem chama decide o que fazer (hoje: o item fica
+   * no cadáver do monstro, ADR 0048 decisão 7). O lugar nunca recusa — o bot não pode parar de
+   * caçar por mochila cheia.
    */
   add(
     item: CarriedItem, catalog: ReadonlyMap<string, Item>, wearer: Wearer, rules: ContainerRules,
@@ -333,7 +350,27 @@ export class Inventory {
     if (this.weight(catalog) + added > wearer.capacity) {
       return { ok: false, reason: 'over-capacity' };
     }
+    return this.#place(item, definition, rules);
+  }
 
+  /**
+   * Como `add`, mas ignora o peso (ADR 0048 decisão 7): usado só onde recusar destruiria o
+   * item e não sobra cadáver de monstro para segurar o excedente — o grant de vocação/kit
+   * (`chooseVocation`/`#grantKitPiece` em `character.ts`) e o que a bolsa de party não vendeu
+   * (`#settle` em `rulesets/hunt.ts`). Os dois já preferiam nunca recusar por peso antes da
+   * Caixa de Loot da Sessão sair; sem ela, ignorar é o que resta.
+   */
+  forceAdd(
+    item: CarriedItem, catalog: ReadonlyMap<string, Item>, rules: ContainerRules,
+  ): InventoryResult {
+    const definition = catalog.get(item.itemId);
+    if (definition === undefined) return { ok: false, reason: 'not-carried' };
+    if (item.quantity > MAX_STACK) return { ok: false, reason: 'stack-too-large' };
+    return this.#place(item, definition, rules);
+  }
+
+  /** Pilha → primeiro lugar livre → uma linha a mais. Peso já foi decidido por quem chamou. */
+  #place(item: CarriedItem, definition: Item, rules: ContainerRules): InventoryResult {
     const target = this.#equipped.has('back') ? this.#backpack : this.#satchel;
     // Empilhável junta na pilha existente, até o teto. Não empilhável vira lugar novo, sempre:
     // duas espadas são duas identidades, e é essa identidade que carrega a proveniência.
@@ -388,6 +425,46 @@ export class Inventory {
   findStack(itemId: string): CarriedItem | null {
     for (const item of this.items()) if (item.itemId === itemId) return item;
     return null;
+  }
+
+  /** A instância nos containers (mochila/bolsa), sem remover — não olha o equipado. */
+  #findCarried(instanceId: string): CarriedItem | null {
+    for (const item of this.items()) if (item.instanceId === instanceId) return item;
+    return null;
+  }
+
+  /**
+   * Vende N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). TRANSAÇÃO: confere TODAS as
+   * instâncias antes de remover qualquer uma — uma faltando, equipada, ou com `value: 0`
+   * ("ninguém compra isto") recusa o lote inteiro, sem mutar nada.
+   */
+  sellItems(instanceIds: readonly string[], catalog: ReadonlyMap<string, Item>): SellResult {
+    const found: CarriedItem[] = [];
+    for (const instanceId of instanceIds) {
+      const carried = this.#findCarried(instanceId);
+      if (carried === null) return { ok: false, reason: 'not-carried' };
+      const value = catalog.get(carried.itemId)?.value ?? 0;
+      if (value <= 0) return { ok: false, reason: 'not-for-sale' };
+      found.push(carried);
+    }
+    let gold = 0;
+    for (const carried of found) {
+      gold += (catalog.get(carried.itemId)?.value ?? 0) * carried.quantity;
+      this.remove(carried.instanceId);
+    }
+    return { ok: true, removed: found, gold };
+  }
+
+  /**
+   * Descarta um item da mochila/bolsa: destrói, sem gold (#724, ADR 0048 d.8). A confirmação
+   * é do cliente — o servidor não pergunta de novo.
+   */
+  discardItem(instanceId: string): DiscardResult {
+    const carried = this.#findCarried(instanceId);
+    if (carried === null) return { ok: false, reason: 'not-carried' };
+    this.remove(instanceId);
+    return { ok: true, removed: carried };
   }
 
   /**

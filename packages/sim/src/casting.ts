@@ -203,9 +203,11 @@ export function secondaryCooldownKey(name: string): string {
 
 /**
  * O que escala uma magia (#155). `skillLevel` é o level da skill que a vocação usa para magia
- * (`spellSkill`, `magic` por padrão) — o que a fórmula de dano SEM `scaling: 'magic'` lê (#677); `powerScale` é o multiplicador das skills por uso
- * (`#scaledPower`) e só vale para `power`/`amount` FIXOS — o `basePower` já entra pela
- * conversão, e multiplicar de novo contaria a mesma skill duas vezes.
+ * (`spellSkill`, `magic` por padrão — ou `SPELL_SKILL_WEAPON` no Knight desde o #567: a skill da
+ * ARMA equipada agora, não uma fixa) — o que a fórmula de dano SEM `scaling: 'magic'` lê (#677);
+ * `powerScale` é o multiplicador das skills por uso (`#scaledPower`) e só vale para
+ * `power`/`amount` FIXOS — o `basePower` já entra pela conversão, e multiplicar de novo contaria
+ * a mesma skill duas vezes.
  */
 export interface SpellScaling {
   readonly skillLevel: number;

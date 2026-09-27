@@ -61,6 +61,43 @@ export const CLIENT_TO_SERVER = {
    * 20: o 19 é do `party-settings`.
    */
   'party-end-vote': 20,
+  /**
+   * Vender N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; existir, estar na mochila/bolsa (nunca equipada) e ter `value > 0` é conferido
+   * pelo servidor (invariante 4). Sucesso é `inventory` reenviado; recusa
+   * (`not-carried`/`not-for-sale`) é `system-message`.
+   *
+   * 21: o 20 é do `party-end-vote`.
+   */
+  'sell-items': 21,
+  /**
+   * Descartar um item da mochila/bolsa, destruindo-o sem gold (#724, ADR 0048 d.8). A
+   * confirmação ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   *
+   * 22: o 21 é do `sell-items`.
+   */
+  'discard-item': 22,
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4). INTENÇÃO: o cliente diz QUAL item do chão;
+   * dono, elegibilidade, distância (≤ 1, mesmo andar) e se o cadáver ainda existe são do
+   * servidor (invariante 4). Sucesso é `corpse-contents`; recusa é `system-message`
+   * (`too-far-away`/`not-yours`/o cadáver já apodreceu).
+   *
+   * 23: o 21 e o 22 são do `sell-items`/`discard-item` (#724, PR #741).
+   */
+  'open-corpse': 23,
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático (#722, ADR 0048 d.4). INTENÇÃO:
+   * `instanceId: null` é o clique — aplica o MESMO filtro de Quick Loot do personagem a tudo
+   * que ainda está no cadáver; um `instanceId` é arrastar ESTE item específico, ignorando o
+   * filtro (o "segunda chance" do Canary). Dono/elegibilidade, distância e capacidade são do
+   * servidor. Sucesso é `corpse-contents` (o que sobrou) + `inventory`; recusa é
+   * `system-message`.
+   *
+   * 24: o 23 é do `open-corpse`.
+   */
+  'take-loot': 24,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -209,6 +246,15 @@ export const SERVER_TO_CLIENT = {
    * 35: o 34 é do `target-changed`.
    */
   'target-cancel': 35,
+  /**
+   * O conteúdo do cadáver, para quem o abriu (#722, ADR 0048 d.4): quanto ouro e quais itens
+   * ainda estão lá, depois do Quick Loot automático do abate. Sai ao `open-corpse` bem-sucedido
+   * e a cada `take-loot` bem-sucedido — nunca some sozinho: o cadáver decai pelo
+   * `ground-item-disappear` de sempre, e o cliente fecha a janela quando ele chegar.
+   *
+   * 36: o 35 é do `target-cancel`.
+   */
+  'corpse-contents': 36,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

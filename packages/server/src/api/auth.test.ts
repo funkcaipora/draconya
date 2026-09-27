@@ -6,6 +6,7 @@ import type { ExternalIdentity, IdentityProvider } from '../auth/workos.js';
 import type {
   AccountRecord,
   CharacterRecord,
+  CharacterStorageRecord,
   GameRepository,
   ItemInstanceRecord,
 } from '../db/repository.js';
@@ -53,6 +54,9 @@ class MemoryRepository implements GameRepository {
     };
   }
   async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
+    return [];
+  }
+  async listCharacterStorages(): Promise<readonly CharacterStorageRecord[]> {
     return [];
   }
   async saveBotConfig(): Promise<void> {

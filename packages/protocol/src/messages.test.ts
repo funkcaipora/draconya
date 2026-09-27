@@ -537,7 +537,35 @@ describe('vocation choice (#154)', () => {
     // Nada além do id: a arma, o slot e os stats são do servidor (invariante 4).
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight', weapon: 'steel-axe' }).success).toBe(true);
   });
+});
 
+describe('sell-items and discard-item (#724, ADR 0048 d.8)', () => {
+  it('are intention only: which instances, and the opcodes are 21 and 22', () => {
+    // O 20 é do `party-end-vote`. Mutação que mata: trocar por 20 (duplicado) ou apagar a
+    // linha (o schema fica órfão e o teste estrutural reprova).
+    expect(CLIENT_TO_SERVER['party-end-vote']).toBe(20);
+    expect(CLIENT_TO_SERVER['sell-items']).toBe(21);
+    expect(CLIENT_TO_SERVER['discard-item']).toBe(22);
+  });
+
+  it('sell-items carries a non-empty list of instance ids, never value or gold', () => {
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: ['i1'] }).success).toBe(true);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: ['i1', 'i2'] }).success).toBe(true);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: [] }).success).toBe(false);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: [''] }).success).toBe(false);
+    expect(C2S_SCHEMAS['sell-items'].safeParse({}).success).toBe(false);
+    // Nada além dos ids: quem decide se vendem e por quanto é o servidor (invariante 4).
+    expect(C2S_SCHEMAS['sell-items'].safeParse({ instanceIds: ['i1'], gold: 100 }).success).toBe(true);
+  });
+
+  it('discard-item carries exactly one instance id', () => {
+    expect(C2S_SCHEMAS['discard-item'].safeParse({ instanceId: 'i1' }).success).toBe(true);
+    expect(C2S_SCHEMAS['discard-item'].safeParse({ instanceId: '' }).success).toBe(false);
+    expect(C2S_SCHEMAS['discard-item'].safeParse({}).success).toBe(false);
+  });
+});
+
+describe('vocation choice extras (#154)', () => {
   it('carries the vocation in player-stats and session-state, null until chosen', () => {
     // `default(null)`: um nó `game` anterior manda sem, e o cliente não abre o diálogo por
     // isso — `vocationLevel` também vem `0` do catálogo antigo.

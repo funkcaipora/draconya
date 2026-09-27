@@ -60,8 +60,6 @@ export interface GameDependencies {
   readonly playerOutfitId?: SessionHostOptions['playerOutfitId'];
   /** A tabela de aparências, para o que o combate desenha (FUN-109). */
   readonly appearances?: SessionHostOptions['appearances'];
-  /** Onde a Caixa de Loot da Sessão é guardada (FUN-88). */
-  readonly lootBoxes?: SessionHostOptions['lootBoxes'];
   /** O catálogo do que existe: hunts e vocabulário do bot (FUN-79, FUN-89). */
   readonly catalogue?: SessionHostOptions['catalogue'];
   /** O catálogo de skills (#340, SV-04). */
@@ -158,9 +156,6 @@ export function createGame(
       ...(dependencies.catalogue === undefined
         ? {}
         : { catalogue: dependencies.catalogue }),
-      ...(dependencies.lootBoxes === undefined
-        ? {}
-        : { lootBoxes: dependencies.lootBoxes }),
       ...(dependencies.skillCatalog === undefined
         ? {}
         : { skillCatalog: dependencies.skillCatalog }),

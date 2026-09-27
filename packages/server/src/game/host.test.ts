@@ -3083,6 +3083,135 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
   });
 });
 
+describe('open-corpse / take-loot pelo socket (#722, ADR 0048 decisão 4)', () => {
+  /**
+   * Uma hunt de verdade cujo rato SEMPRE larga uma `gem` (peso 50), com cadáver persistente
+   * (`corpseTtlMs`) e capacidade controlada — o mesmo desenho de `comDrop` em
+   * `packages/sim/src/rulesets/hunt.test.ts`, só que ponta a ponta pelo `SessionHost`.
+   */
+  function corpseHunt(over: { capacity?: number } = {}) {
+    const base = rawTestContent();
+    const gem = itemSchema.parse({ id: 'gem', name: 'Gem', kind: 'other', weight: 50, value: 10 });
+    const raw: RawContent = {
+      ...base,
+      items: [gem],
+      monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => (m['id'] === 'rat'
+        ? { ...m, loot: { gold: { chance: 1, min: 2, max: 2 }, items: [{ itemId: 'gem', chance: 1, min: 1, max: 1 }] } }
+        : m)),
+      hunts: (base.hunts as Array<Record<string, unknown>>).map((h) => ({ ...h, corpseTtlMs: 60_000 })),
+      appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({
+        ...a, corpses: { rat: 7 }, items: { gem: 5 },
+      })),
+      progression: [{ ...TEST_PROGRESSION, startingCapacity: over.capacity ?? 1, capacityPerLevel: 0 }],
+    };
+    const content = buildContent(raw);
+    let now = 0;
+    let hero: CharacterRuntime | undefined;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      monsterCatalog: content.monsters,
+      itemCatalog: content.items,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        hero = new CharacterRuntime({
+          id: characterId, position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          capacity: over.capacity ?? 1,
+        });
+        session.enter(hero);
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    const runFor = (ms: number, step = 100) => { for (let t = 0; t < ms; t += step) { now += step; host.cycle(); } host.flush(); };
+    return { host, socket, viewer, runFor, received: () => socket.received(), hero: hero! };
+  }
+
+  it('open-corpse devolve o conteúdo do cadáver perto do personagem', () => {
+    // Capacidade 1: a gem (peso 50) nunca entra na mochila no abate — fica toda no cadáver. O
+    // ouro é sempre coletado no MESMO instante por `#collectFromCorpse` (ADR 0048 decisão 3),
+    // então o cadáver já chega com `gold: 0` quando o jogador o abre.
+    const { host, viewer, runFor, received } = corpseHunt();
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    expect(appeared.lootable).toBe(true);
+
+    host.handle(viewer, { type: 'open-corpse', groundItemId: appeared.id });
+    host.flush();
+
+    const contents = received().find((m) => m.type === 'corpse-contents');
+    expect(contents).toMatchObject({
+      groundItemId: appeared.id, gold: 0, items: [{ itemId: 'gem', quantity: 1 }],
+    });
+  });
+
+  it('open-corpse recusa too-far-away em palavras', () => {
+    const { host, viewer, runFor, received, socket, hero } = corpseHunt();
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    socket.frames.length = 0;
+    // Afasta o personagem do cadáver — o `sim` confere distância pela posição ATUAL, e o
+    // teste manipula direto o runtime, como os testes de recusa de inventário com o catálogo vazio.
+    hero.position = { x: hero.position.x + 10, y: hero.position.y, z: hero.position.z };
+
+    host.handle(viewer, { type: 'open-corpse', groundItemId: appeared.id });
+    host.flush();
+    const refusal = socket.received().find((m) => m.type === 'system-message');
+    expect(refusal).toMatchObject({ level: 'warning', text: 'Você está longe demais.' });
+    expect(socket.received().some((m) => m.type === 'corpse-contents')).toBe(false);
+  });
+
+  it('take-loot(instanceId: null) aplica o filtro do personagem e reenvia inventory', () => {
+    // Capacidade curta no abate deixa a gem no cadáver (o mesmo cenário do teste acima); o
+    // personagem então "abre espaço" (level up, por exemplo) e o clique reaplica o filtro.
+    const { host, viewer, runFor, received, hero } = corpseHunt();
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    hero.capacity = 1_000;
+
+    host.handle(viewer, { type: 'take-loot', groundItemId: appeared.id, instanceId: null });
+    host.flush();
+
+    // Sem mochila equipada, o item entra na BOLSA (`satchel`), que tem slots por padrão do
+    // conteúdo — a mesma razão de `containerRulesFor` devolver `backpackSlots: 0` sem `back`.
+    // O ÚLTIMO `inventory` (não o do attach inicial) é o que reflete a coleta.
+    const inventory = received().findLast((m) => m.type === 'inventory');
+    expect(inventory?.type === 'inventory' && inventory.satchel.some(
+      (slot) => slot !== null && slot.itemId === 'gem',
+    )).toBe(true);
+    const contents = received().findLast((m) => m.type === 'corpse-contents');
+    expect(contents).toMatchObject({ groundItemId: appeared.id, items: [] });
+  });
+
+  it('take-loot recusa not-enough-capacity sem mover nada', () => {
+    const { host, viewer, runFor, received, socket } = corpseHunt({ capacity: 1 });
+    runFor(3_000, 100);
+    const appeared = received().find((m) => m.type === 'ground-item-appear');
+    if (appeared?.type !== 'ground-item-appear') throw new Error('sem cadáver');
+    host.handle(viewer, { type: 'open-corpse', groundItemId: appeared.id });
+    host.flush();
+    const contents = received().find((m) => m.type === 'corpse-contents');
+    const instanceId = contents?.type === 'corpse-contents' ? contents.items[0]?.instanceId : undefined;
+    expect(instanceId).toBeDefined();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'take-loot', groundItemId: appeared.id, instanceId: instanceId ?? '' });
+    host.flush();
+
+    expect(socket.received().some((m) => m.type === 'inventory')).toBe(false);
+    expect(socket.received().find((m) => m.type === 'system-message')).toMatchObject({
+      level: 'warning', text: 'Você não aguenta carregar mais isso.',
+    });
+  });
+});
+
 describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
   const COLORS: OutfitColors = { head: 78, body: 69, legs: 58, feet: 76 };
   const PAINTED: OutfitColors = { head: 114, body: 20, legs: 3, feet: 132 };
@@ -4253,7 +4382,8 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     host.flush();
     const before = socket.received().length;
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
-    // O personagem de `buildHost` nasce sem capacidade; sem ela a arma iria para a Caixa.
+    // O personagem de `buildHost` nasce sem capacidade; a arma equipa igual (`forceAdd` ignora
+    // peso, ADR 0048 decisão 7), mas 400 mantém o cenário simples para quem só quer a vocação.
     hero.capacity = 400;
     return { host, viewer, socket, hero, before };
   };
@@ -4376,6 +4506,116 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     });
   });
 
+  describe('vender e descartar pelo socket (#724, ADR 0048 d.8)', () => {
+    const gem = {
+      ...compileItem(itemSchema.parse({ id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 30 })),
+      appearanceId: 3,
+    };
+    const rock = {
+      ...compileItem(itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5, value: 0 })),
+      appearanceId: 4,
+    };
+    const sellCatalog = new Map([[gem.id, gem], [rock.id, rock]]);
+    const mensagens = (socket: FakeSocket) =>
+      socket.received().filter((m) => m.type === 'system-message');
+
+    it('vende: credita goldDelta E o agregado da hunt, some da mochila, e o extrato leva removedInstances', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 2 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(60);
+      expect(hero.inventory.findStack('gem')).toBeNull();
+
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ removedInstances: ['g1'] });
+      expect((saved[0] as { aggregates: { goldGained: number } }).aggregates.goldGained).toBe(60);
+    });
+
+    it('`value: 0` recusa o lote inteiro com "Ninguém compra isto.", sem mexer no gold nem na mochila', () => {
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog });
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'r1', itemId: 'rock', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['r1'] });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(0);
+      expect(hero.inventory.findStack('rock')).not.toBeNull();
+      expect(mensagens(socket).map((m) => m.type === 'system-message' && m.text))
+        .toEqual(['Ninguém compra isto.']);
+    });
+
+    it('descarta: destrói sem gold, e a instância entra em `removedInstances`', () => {
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog });
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'discard-item', instanceId: 'g1' });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(0);
+      expect(hero.inventory.findStack('gem')).toBeNull();
+      expect(hero.removedInstances).toEqual(['g1']);
+    });
+
+    it('na Cidade: vender credita goldDelta e o extrato durável leva goldGained e removedInstances', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const shard: Ruleset = {
+        type: 'city', shared: true, hz: () => 0,
+        onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+      };
+      const { host, sessions } = buildHost(shard, { itemCatalog: sellCatalog, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+      host.flush();
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ removedInstances: ['g1'] });
+      expect((saved[0] as { aggregates: { goldGained: number } }).aggregates.goldGained).toBe(30);
+      // Liquidado: a próxima sessão do mesmo shard começa do saldo já incorporado, como o
+      // `#persistReceipt` da hunt já faz — nunca reencontra um `goldDelta` pendente duas vezes.
+      expect(hero.goldDelta).toBe(0);
+    });
+  });
+
   describe('o kit completo da vocação (#496)', () => {
     const shield = {
       ...compileItem(itemSchema.parse({
@@ -4448,18 +4688,16 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
       expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
     });
 
-    it('a piece that does not fit goes to the loot box, with a message naming it', () => {
-      // A vocação não pode ser punida pela mochila: o que coube veste, o que não coube vai
-      // para a Caixa, e a escolha vale inteira. Mutação que mata: devolver `ok: false`.
+    it('equips every piece even without capacity for both, and warns nothing (ADR 0048 d.7, forceAdd ignores weight)', () => {
+      // A vocação não pode ser punida pela mochila: a escolha vale inteira, peso nenhum.
+      // Mutação que mata: devolver `ok: false`, ou deixar de vestir por causa do peso.
       const { hero, socket, before } = atLevel(8, 'knight', 70);
 
       expect(hero.vocationId).toBe('knight');
       expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
-      expect(hero.lootBox.map((item) => item.itemId)).toEqual(['wooden-shield']);
+      expect(hero.inventory.equippedAt('shield')?.itemId).toBe('wooden-shield');
       const after = socket.received().slice(before);
-      const infos = after.filter((m) => m.type === 'system-message' && m.level === 'info');
-      expect(infos).toHaveLength(1);
-      expect(infos[0]?.type === 'system-message' && infos[0]?.text).toContain('Wooden Shield');
+      expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
     });
 
     it('the kit travels in the receipt with both pieces and the provenance', async () => {

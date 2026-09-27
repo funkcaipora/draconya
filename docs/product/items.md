@@ -1,10 +1,11 @@
 # Itens, equipamento e inventário
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
-capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; resgate da caixa e autovenda ainda não existem
+capacidade (FUN-82), o **cadáver com loot e o filtro de Quick Loot por personagem** (FUN-88,
+FUN-123, ADR 0048 — substitui a Caixa de Loot da Sessão) e a **tela de
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; a autovenda individual e de party existem, a janela do cadáver para quem está olhando é W3/#722
 **PRD:** §21, §22, §23, §25, §43.6
-**Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário); E2 (kit level 200, M28)
+**Épico:** E5 (inventário, autovenda, cadáver e Quick Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário); E2 (kit level 200, M28); E18 · Jogável (ADR 0048)
 
 ## Comportamento
 
@@ -12,11 +13,22 @@ Equipamentos completos só são obtidos por drop de monstro ou por recompensa/dr
 
 A maioria dos equipamentos não tem durabilidade. As exceções são anéis, consumíveis por tempo, e colares, consumíveis por carga (um colar defensivo com N cargas consome uma carga cada vez que a condição de uso ocorre). Ao esgotar, o item é destruído permanentemente. Se houver mais unidades do mesmo item na mochila/stack, o sistema repõe automaticamente o item consumido; quando a pilha acabar, não há mais reposição.
 
-O inventário segue o paradigma de capacidade do Tibia, com stack máximo de 100 por item, e não existem itens físicos largados no chão do mundo. Quando um item é obtido e o personagem não tem espaço ou capacidade para ele, o item vai para a Caixa de Loot da Sessão — consultável e resgatável assim que houver espaço, disponível por 30 minutos após o encerramento da sessão, expirando depois disso.
+O inventário segue o paradigma de capacidade do Tibia, com stack máximo de 100 por item. O único
+container físico no chão do mundo é o **cadáver do monstro morto** (ADR 0048) — nunca um item
+solto por si. Quando o abate rende loot, o cadáver o carrega e o dono coleta na hora o que o seu
+filtro de Quick Loot aceita e cabe pela capacidade; o que sobra fica no cadáver até ele decair
+(ver "O cadáver carrega o loot", abaixo) — não existe mais Caixa de Loot da Sessão.
 
-O jogador pode configurar tipos de item para autovenda: ao dropar, o item é vendido automaticamente e o gold é creditado direto, sem passar pela mochila. O limite é 5 tipos configuráveis para contas Free e 20 para Premium. Itens que caem sem estar configurados para autovenda tentam entrar no inventário normalmente e, faltando espaço, seguem para a Caixa de Loot da Sessão.
+O jogador pode configurar tipos de item para autovenda: ao coletar, o item é vendido
+automaticamente e o gold é creditado direto, sem passar pela mochila. O limite é 5 tipos
+configuráveis para contas Free e 20 para Premium. Itens que caem sem estar configurados para
+autovenda tentam entrar no inventário normalmente e, faltando espaço, ficam no cadáver.
 
-A autovenda **individual** (fora de party) do §22.1 segue **não implementada**. O M20 implementou a versão **de party** — coleta e venda automática configuradas pelo **líder**, com o limite (5/20) vindo do Premium do **personagem líder** —, que mora em `party.md`; não confundir as duas. O campo `value` é o mesmo que a autovenda individual vai usar.
+A autovenda **individual** (fora de party) do §22.1 **existe desde o ADR 0048** — o filtro de
+Quick Loot de cada personagem tem sua própria lista `autoSell`, com o limite (5/20) vindo do
+Premium do **próprio personagem**. O M20 já tinha a versão **de party** — coleta e venda
+automática configuradas pelo **líder**, com o limite vindo do Premium do **líder** —, que
+continua em `party.md`; não confundir as duas.
 
 O sistema de imbuement usa o Tibia como referência funcional: slots fixos por tipo de equipamento, efeito temporário com duração de 24 horas de tempo efetivo de hunt (o relógio não corre fora de hunt), aplicação exigindo materiais e uma taxa em gold, com suporte a múltiplos tiers de efeito. Os materiais devem cair de monstros de diferentes faixas de level, com o objetivo de que personagens de level baixo produzam materiais relevantes para personagens avançados — mantendo demanda por conteúdo antigo e girando o mercado.
 
@@ -32,10 +44,12 @@ Itens lendários vêm de monstros ou de recompensa individual de boss, nunca sã
 - Item esgotado é destruído permanentemente.
 - Reposição automática a partir da mesma pilha, enquanto houver unidades disponíveis.
 - Stack máximo por item: 100.
-- Sem itens físicos no chão.
-- Item sem espaço/capacidade vai para a Caixa de Loot da Sessão.
-- Caixa de Loot da Sessão expira 30 minutos após o fim da sessão.
-- Autovenda: até 5 tipos configuráveis (Free) ou 20 (Premium); fluxo drop → venda automática → gold, sem passar pela mochila. **Individual (fora de party) ainda não implementada**; a versão **de party** (líder) entrou no M20 e vive em `party.md`.
+- Sem item físico solto no chão — a única exceção é o cadáver do monstro (ADR 0048).
+- O cadáver carrega o loot; o dono coleta na hora pelo filtro de Quick Loot dele. O que o
+  filtro recusa ou não cabe fica no cadáver, e apodrece com ele (sem Caixa de Loot da Sessão).
+- Autovenda: até 5 tipos configuráveis (Free) ou 20 (Premium); fluxo coleta → venda automática →
+  gold, sem passar pela mochila. **Individual** (filtro do próprio personagem, fora de party) e
+  **de party** (líder, em `party.md`) existem as duas, desde o ADR 0048.
 - Imbuement: slots fixos por tipo de item; duração de 24h de tempo efetivo de hunt; relógio parado fora de hunt; exige materiais + taxa em gold.
 - Lendários: nunca soulbound, sempre negociáveis, sem limite semanal de negociação; proveniência (personagem original, data, horário, origem) registrada permanentemente desde o drop.
 
@@ -192,7 +206,7 @@ dobro, e a capacidade deixa de significar o que diz.
 |---|---|
 | stack máximo | 100, e pilha cheia começa outra |
 | empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item |
-| item que não cabe | **recusado**, e vai para a Caixa de Loot da Sessão (issue própria) |
+| item que não cabe | **recusado**, e fica no cadáver do monstro até ele decair (ADR 0048) |
 
 Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a
 identidade que carrega a proveniência (FUN-76). Juntá-las num contador apagaria de onde cada uma
@@ -205,9 +219,9 @@ Desde #160 o item tem **lugar**, no modelo do Huntera: a **mochila** é o item v
 é item (`progression.satchelInitialSlots: 10`). As duas são vetores posicionais — `null` é lugar
 vazio — e **crescem por linhas de `progression.containerRow` (5), sem limite, enquanto houver
 capacidade**: o lugar nunca recusa loot (o bot não pode parar de caçar por mochila cheia —
-invariante 11); só o peso recusa, e aí a Caixa de Loot segura. Remover apara as linhas vazias do
-fim até o tamanho inicial. O loot cai na mochila (empilha antes de ocupar lugar; sem mochila nas
-costas, cai na bolsa); a bolsa é onde o jogador organiza.
+invariante 11); só o peso recusa, e aí o cadáver segura o que sobrou (ADR 0048). Remover apara as
+linhas vazias do fim até o tamanho inicial. O loot cai na mochila (empilha antes de ocupar lugar;
+sem mochila nas costas, cai na bolsa); a bolsa é onde o jogador organiza.
 
 `move-item` (opcode 16) é a intenção de mover entre dois lugares — `{ container, index }` ou
 `{ slot }`: troca, empilha até o teto (o resto fica na origem), veste (`to` é slot; o desequipado
@@ -276,6 +290,18 @@ limpar por omissão desequiparia o personagem sem ninguém ter pedido.
 Item **não muda de dono** dentro da sessão: não há troca nem venda na hunt. O que muda é onde ele
 está, e é só isso que atravessa.
 
+**Exceção nomeada (#724, ADR 0048 d.8): vender e descartar mudam a EXISTÊNCIA do item, não o
+dono.** `sell-items { instanceIds[] }` vende N instâncias da mochila/bolsa (nunca equipadas) ao
+`value` do catálogo — `value: 0` recusa o LOTE inteiro, "ninguém compra isto"; o gold entra pelo
+mesmo par `character.goldDelta` + `session.credit(id, 'goldGained', …)` do loot. `discard-item {
+instanceId }` destrói sem gold, com a confirmação já dada pelo cliente. As duas rodam dentro da
+sessão dona (hunt ou Cidade; invariante 9) e o extrato ganha `removedInstances: string[]`: o
+`jobs` apaga as linhas de `item_instance` correspondentes NA MESMA transação do ledger — a
+primeira vez que uma sessão faz uma linha de item deixar de existir. Na Cidade, o mecanismo do
+#154 (extrato de ESTADO por `dirty`, gravado só no `release`/drenagem) passou a também refletir
+`goldDelta` em `aggregates` — antes sempre zerado, porque equipar e escolher vocação nunca
+mexiam em gold.
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no
@@ -300,22 +326,73 @@ desvestindo — é o caminho do celular, que não arrasta. A decisão de qual in
 4). No celular a coluna vira blocos na ordem set → mochila → bolsa → bot → hunts → analisador →
 bestiário.
 
-## Loot de item e a Caixa de Loot da Sessão (FUN-88)
+## O cadáver carrega o loot, e o filtro de Quick Loot decide o resto (FUN-88, FUN-123, ADR 0048)
 
 O item cai pelo mesmo sorteio de sempre — gold antes, itens na ordem da tabela, com o `Rng` da
 sessão. **A ordem dos sorteios é contrato** (FUN-63), e acrescentar destino não muda sorteio.
 
-Onde ele vai (§22.2):
+Desde o ADR 0048 o destino é o **cadáver do monstro**, não mais direto na mochila: é fidelidade
+ao próprio Tibia 13 (`quickLootFilter`/`autoLoot` do Canary), não invenção. No MESMO abate, sem
+plateia (a hunt desanexada rende igual à anexada — invariante 3), o dono coleta o que o **filtro
+de Quick Loot** dele aceita e cabe pela capacidade:
 
-1. **mochila**, se couber pela capacidade;
-2. **Caixa de Loot da Sessão**, se não couber.
+1. **mochila**, quando o filtro aceita e cabe pelo peso;
+2. **venda automática** (autovenda individual, ver abaixo), quando o item está na lista `autoSell`
+   do filtro — vira gold na hora, sem passar pela mochila;
+3. **fica no cadáver**, quando o filtro recusa OU não cabe — as duas são "não coletado". É a
+   segunda chance: enquanto o cadáver não decai (o mesmo prazo `corpseTtlMs` da hunt, sem fila
+   separada), quem está olhando pode abrir e pegar o resto (janela do cadáver, W3/#722, abaixo).
+
+O que ninguém pegou **apodrece com o cadáver** — nunca vira `item_instance` no banco, pela mesma
+razão que a Caixa de Loot nunca foi: expirar precisa significar que o item nunca existiu. A Caixa
+de Loot da Sessão **saiu** (decisão 7 do ADR 0048): o `LootBoxStore`/Redis que ninguém lia,
+resgatava ou mostrava foi retirado, e o caso que ela cobria (item que não coube) passou a ser
+"fica no cadáver".
 
 Com **stamina zero não cai nada** (§10.2) — nem gold, nem XP, nem item. O abate continua
 contando: o jogador matou, e o extrato mentiria se dissesse que não.
 
+### A janela do cadáver e a aba Loot da barra (W3, #722, ADR 0048 d.4)
+
+Quem está olhando pode abrir o cadáver e pegar o que o Quick Loot automático deixou para trás.
+Clicar no cadáver no mundo manda `walk-to` na hora e GUARDA o pedido: um laço de 150 ms olha o
+`world` (ninguém avisa, quem quer saber olha — ADR 0007, o mesmo padrão de andar por teclado) e
+manda `open-corpse` sozinho quando a posição confirmada do personagem fica a ≤ 1 tile do
+cadáver, no mesmo andar — já adjacente, manda na hora. O pedido é abandonado em silêncio (nunca
+`system-message`, porque nada foi de fato recusado) se o cadáver decair antes, se o jogador andar
+pelo teclado, clicar noutra criatura ou noutro cadáver, ou depois de 10 s sem chegar. O servidor
+ainda confere dono/elegibilidade (a party inteira, quando presente no abate) e distância — a
+recusa (quando chega a acontecer, por exemplo um obstáculo que o cliente não previu) é
+`system-message` em palavras ("Você está longe demais.", "Isto não é seu."). Sucesso abre a
+janela (`corpse-contents`: ouro e itens restantes), reaproveitando o mesmo desenho da mochila —
+sem arrastar: o clique num item pega ELE, ignorando o filtro (a segunda chance manual); "Pegar
+tudo" reaplica o MESMO filtro de Quick Loot do personagem, como o clique do Tibia. A janela fecha
+sozinha quando o cadáver decai, e não persiste entre sessões — reanexar não a reabre.
+
+O filtro em si (`accept`/`skip`, a lista de itens e a autovenda) é editado na aba **Loot** do
+painel de Automações da barra de ações: um seletor para o modo e uma linha por item do catálogo,
+com um checkbox para entrar na lista e outro (só em itens vendáveis, `value > 0`) para a
+autovenda individual. É a MESMA configuração (`botConfig.loot`) que `#collectFromCorpse` já lê
+no abate (#721) — a aba não inventa um segundo lugar para o filtro morar.
+
 Mochila cheia vira **uma** linha no extrato (`backpack-full`), não uma por item. Uma por item
 encheria a lista curta da tela de retorno até ela deixar de ser lista, e o que o jogador precisa
 saber é que ela encheu.
+
+### O filtro de Quick Loot é por PERSONAGEM
+
+Cada personagem tem um filtro (`botConfig.loot`, vocabulário v2 do bot — ver `bot.md`):
+`filter` (`'accept'` ou `'skip'`) mais `itemIds`. Default: `skip` com lista vazia — pega tudo, o
+comportamento de antes deste ADR. Em party com `splitLoot` ligado, o filtro continua sendo o
+`collect` do líder e o destino a bolsa, **como sempre foi** (`party.md`); o filtro individual só
+vale com `splitLoot` desligado (ou fora de party).
+
+### A autovenda individual (§22.1) agora existe
+
+O que o `docs/product/items.md` anterior a este ADR marcava como "ainda não implementada": o
+item na lista `autoSell` do filtro vende ao `value` do catálogo assim que é coletado, cortado
+pelo mesmo limite (5 tipos Free, 20 Premium) — mas lido do Premium do **próprio personagem**,
+não do líder da party (a versão de party continua igual, em `party.md`). Ver `economy.md`.
 
 ### O id da instância é determinístico, e é isso que dá idempotência
 
@@ -596,26 +673,78 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | amuleto | Dragon Necklace | Dragon Necklace | Dragon Necklace | Dragon Necklace |
 | anel | Might Ring | Might Ring | Might Ring | Might Ring |
 
+## O importador de itens do Canary (M34-02, #573)
+
+`scripts/catalog/items.ts` lê `data/items/items.xml` do checkout do Canary (o mesmo padrão de
+`monsters.ts`, #578) e converte cada `<item>` das categorias de caça — arma (corpo a corpo,
+distância com lançador de verdade, wand e rod), escudo e spellbook, capacete, armadura, pernas,
+bota, anel, amuleto, valuables e produto de criatura — para a forma do `itemSchema`.
+
+```
+pnpm catalog:import items          # escreve packages/content/staging/items/generated/*.json
+pnpm catalog:import items --check  # regenera em memória e compara
+```
+
+**Staging, não `data/`, por ora.** A auditoria de 2026-09-26 (`docs/tibia-math-plan.md`) contou
+1439 `itemId` citados pelo loot de monstro gerado (#578), dos quais só 82 existiam no catálogo
+antes desta issue; gerar 1300+ itens direto em `data/` sem reconciliar cada um arriscaria o boot.
+Com o importador, **989 dos 1439** resolvem — a promoção do que sobrar (loot de monstro
+apontando item de verdade) é issue à parte. O registro do tipo `items` aponta
+`packages/content/staging/items` até lá, como `staging/monsters` já faz.
+
+**Reconciliação dos 73 itens autorais (ADR 0014: o id nunca muda).** Quando o slug gerado bate com
+um arquivo de `data/items/*.json`, o importador compara os campos numéricos simples, `requires.level`
+e `weapon.manaPerHit` contra o Canary e grava a diferença em `data/items/overrides/<id>.json` —
+nunca editando o autoral. Rodar contra `47dfd51f4528` (o commit desta entrega) corrigiu:
+
+| Item | Divergência | Override |
+|---|---|---|
+| Sword, Fire Sword, Serpent Sword | `extraDefense` ausente → 1 (o `extradef` do Canary) | `sword.json`, `fire-sword.json`, `serpent-sword.json` |
+| Spike Sword | `defense` 10 → 21, `extraDefense` ausente → 2, `imbuementSlots` ausente → 2 | `spike-sword.json` |
+| Wand of Vortex / Snakebite Rod | `manaPerHit` estava TROCADO entre as duas (1↔2) e faltava `requires.level: 6` nas duas | `wand-of-vortex.json`, `snakebite-rod.json` |
+| Glacier Amulet | `charges` 20 → 200, `weight` 5,5 → 5 oz, faltava `requires.level: 60` | `glacier-amulet.json` |
+| Energy Ring / Life Ring | `weight` 2 → 0,8 oz | `energy-ring.json`, `life-ring.json` |
+| + 19 outros (kit level 200, loot do Dragon/Dragon Lord) | `imbuementSlots` (17) e `extraDefense` — nenhum dos dois existia no schema quando #524/#520 foram escritos | ver `packages/content/data/items/overrides/` |
+
+**Um divergência conhecida que o importador NÃO reconcilia**: o Glacier Amulet real (Canary id 815)
+também declara `absorbpercentenergy -10` (uma FRAQUEZA a energia) — o autoral só tem
+`mitigation.resistances.ice`, e a reconciliação só compara campo numérico simples/`requires`/
+`weapon.manaPerHit`, não mistura `mitigation` (autoral) com `absorb` (formato do importador) sem
+risco de dessincronizar os dois. Fica registrado aqui para quando alguém tratar `absorb` no
+Glacier Amulet manualmente.
+
+**O que fica de fora, e por quê** (`docs/reference/catalog/items-report.md`):
+
+- **Preço (`value`, M34-03)** — `items.xml` não carrega preço nenhum (é dado de NPC, noutra parte
+  do Canary); todo item gerado sai `value: 0`.
+- **`stackable`** — é um flag de `items.otb`, binário, que este leitor não abre; nunca declarado
+  (fica no default `false`).
+- **Munição e arremessável (M34-04)** — "distance weapons" sem `ammotype` (spear, throwing star,
+  royal spear…) é o próprio projétil, não um lançador; fica fora, junto com o catálogo de munição.
+- **Quiver** — contêiner *e* escudo ao mesmo tempo; o `itemSchema` não tem essa combinação.
+- **Arma `fist`** — a família não é declarável (o motor a usa só como fallback desarmado, DT-01).
+- **`skillfist`** — sem skill correspondente no Draconya (só `melee`/`distance`/`shielding`/`magic`).
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Stack máximo por item | 100 | caminho previsto: `packages/content/items` |
 | Defesa (blocking físico) da arma de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` (CMB-04) | `packages/content/data/items/*.json`, `defense` |
-| Expiração da Caixa de Loot da Sessão | 30 minutos após o fim da sessão | caminho previsto: `packages/content/items` |
-| Autovenda — tipos configuráveis (Free) | 5 | caminho previsto: `packages/content/economia` (premium) |
-| Autovenda — tipos configuráveis (Premium) | 20 | caminho previsto: `packages/content/economia` (premium) |
+| Prazo do cadáver com loot à espera | `corpseTtlMs` da hunt (ADR 0048 — a Caixa de Loot da Sessão saiu) | `packages/content/data/hunts/*.json`, `corpseTtlMs` |
+| Autovenda — tipos configuráveis (Free) | 5 | `party.autoSellItemTypes.free` (`packages/content/data/party/baseline.json`) |
+| Autovenda — tipos configuráveis (Premium) | 20 | `party.autoSellItemTypes.premium` (`packages/content/data/party/baseline.json`) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
-| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); nenhum item autorado declara ainda — o importador (M34-02) preenche | `packages/content/data/items/*.json`, campo `imbuementSlots` |
+| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); o importador de itens (#573) preenche em todo item gerado e reconciliou 19 dos 73 autorais (sword 2, spike sword 2, magic plate armor 2, entre outros) | `packages/content/data/items/*.json`, `overrides/*.json`, campo `imbuementSlots` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
-| Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
-| Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Peso do Energy Ring / Life Ring | 0,8 oz cada (Canary `items.xml` id 3051/3052, weight 80 — reconciliado pelo importador de itens, `overrides/{energy-ring,life-ring}.json`, #573) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
+| Preço de venda do Energy Ring / Life Ring | 100 / 50 gold — maior `sell` de NPC do Canary (M34-03/#574, não mais provisório; Life Ring reconciliado em `overrides/life-ring.json`) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
 | Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |
-| Suprimentos — `price` / `group` | poção de vida 45 / `potion` `[ABERTO — preço provisório]`; poção de mana 50 / `potion` `[ABERTO — idem]`; avalanche rune 14 / `attack` `[ABERTO — idem]` | `packages/content/data/supplies/*.json` |
-| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/blessing-charge.json` |
-| Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
-| Colar — `charges` / resistência / peso / `value` | glacier amulet 20 cargas / gelo 0,2 / 5,5 oz / 0 `[ABERTO — cargas, resistência, peso e valor provisórios]` | `packages/content/data/items/glacier-amulet.json` |
-| Escudo — `defense` / peso / `value` | wooden shield 14 / 40 oz / 0 `[ABERTO — defense, peso e valor provisórios]` | `packages/content/data/items/wooden-shield.json` |
+| Suprimentos — `price` / `group` | poção de vida 50 / `potion`; poção de mana 56 / `potion`; avalanche rune 64 / `attack` — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/*.json` |
+| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` (não é item do Canary `items.xml`, fora do corte de #574) | `packages/content/data/items/blessing-charge.json` |
+| Munição — `attack` / `price` / `requires.level` | arrow 25 / 2 / —; burst arrow 27 / 15 / —; sniper arrow 28 / 5 / 20; onyx arrow 38 / 7 / 40 — `price` é o menor `buy` de NPC do Canary (M34-03/#574, não mais provisório; `attack`/`requires.level` continuam do TibiaWiki) | `packages/content/data/ammunition/*.json` |
+| Colar — `charges` / resistência / peso / `value` / level | glacier amulet 200 cargas / gelo 0,2 / 5 oz / 1500 / level 60 — cargas, peso, `value` (M34-03/#574, maior `sell` do NPC Rashid) e level reconciliados contra o Canary `items.xml` id 815 pelo importador de itens (`overrides/glacier-amulet.json`) | `packages/content/data/items/glacier-amulet.json`, `overrides/` |
+| Escudo — `defense` / peso / `value` | wooden shield 14 `[ABERTO — defense e peso provisórios]` / 40 oz `[ABERTO — idem]` / 5 (M34-03/#574, maior `sell` de NPC do Canary, `overrides/wooden-shield.json`, não mais provisório) | `packages/content/data/items/wooden-shield.json`, `overrides/` |
 | Kit level 200 — atributos e preço de NPC | os 19 itens da tabela do kit, acima (armor/attack/defense/weight/`value`/`bonuses`/`requires`) — números do Canary `items.xml` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/items/*.json` (as 16 peças novas), `packages/content/data/ammunition/power-bolt.json` |
 | Poções do Tibia — `amountRange` / `requires` / `price` | as nove poções da tabela, acima — números do Canary `potions.lua` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/supplies/{strong,great,ultimate,supreme}-*.json` |
 | Loot do Dragon (#520) — 21 linhas | atributos e `value` do Canary `items.xml`; preço de NPC do Tibia real via TibiaWiki quando o Canary só tinha oferta custom (ADR 0037 d.4) — 18 itens novos + `supplyId: strong-health-potion` + `ammunitionId: burst-arrow` (já existia) | `packages/content/data/items/{dragon-ham,steel-shield,crossbow,dragons-tail,longsword,steel-helmet,broadsword,plate-legs,wand-of-inferno,green-dragon-scale,green-dragon-leather,double-axe,dragon-hammer,serpent-sword,small-diamond,dragon-shield,life-crystal,dragonbone-staff}.json` |
@@ -666,8 +795,8 @@ concordam em peso, `hitChance`, alcance e `attack`.
   #152, #161, #417, #420.
 - **Mochila e bolsa elásticas** (decisão 6): a mochila é o item no slot `back`, a bolsa é fixa
   do personagem; 20 e 10 lugares iniciais que crescem por linhas sem limite — o único teto é o
-  peso. Loot cai na mochila; a bolsa é onde o jogador organiza; a Caixa de Loot fica só para o
-  que não cabe no peso. Sem bolsa dentro de mochila. Issues #160, #161.
+  peso. Loot coletado cai na mochila; a bolsa é onde o jogador organiza; o que não cabe no peso
+  fica no cadáver do monstro (ADR 0048). Sem bolsa dentro de mochila. Issues #160, #161.
 - **Runa é suprimento de ataque** (decisão 8): a Avalanche é a primeira, com
   `requires { level, magicLevel }` e `price` no uso; o bot a lança por um slot de ação `supply`.
   Desde a restauração do suprimento abstrato ela vive em `data/supplies/avalanche-rune.json`, e o
@@ -723,5 +852,5 @@ substitui o que a FUN-90 chamava de "magia manual" — o opcode `cast` não exis
 continua sendo o servidor. Ver `bot.md` §"A tela".
 - **§21.5 fala em slots fixos; aqui o lugar é elástico** (#160, ADR 0026 decisão 6). Mochila de
   20 e bolsa de 10 são o tamanho INICIAL, e crescem por linha enquanto houver capacidade — decisão
-  do usuário: "o lugar não é limite, o peso é". A Caixa de Loot fica só para o que não cabe no
-  peso.
+  do usuário: "o lugar não é limite, o peso é". O que não cabe no peso fica no cadáver do monstro
+  (ADR 0048).

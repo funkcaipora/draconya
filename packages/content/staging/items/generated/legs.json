@@ -1,0 +1,1613 @@
+[
+  {
+    "id": "alloy-legs",
+    "name": "alloy legs",
+    "kind": "armor",
+    "weight": 45,
+    "value": 11000,
+    "slot": "legs",
+    "armor": 6,
+    "requires": {
+      "level": 60
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bast-legs",
+    "name": "bast legs",
+    "kind": "armor",
+    "weight": 64,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "bast-skirt",
+    "name": "bast skirt",
+    "kind": "armor",
+    "weight": 3.5,
+    "value": 750,
+    "slot": "legs",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "blue-legs",
+    "name": "blue legs",
+    "kind": "armor",
+    "weight": 18,
+    "value": 15000,
+    "slot": "legs",
+    "armor": 8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "brass-legs",
+    "name": "brass legs",
+    "kind": "armor",
+    "weight": 38,
+    "value": 49,
+    "slot": "legs",
+    "armor": 5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "broken-iks-faulds",
+    "name": "broken Iks faulds",
+    "kind": "armor",
+    "weight": 15,
+    "value": 530,
+    "slot": "legs",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "chain-legs",
+    "name": "chain legs",
+    "kind": "armor",
+    "weight": 35,
+    "value": 25,
+    "slot": "legs",
+    "armor": 3,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "chocolatey-dragon-scale-legs",
+    "name": "chocolatey dragon scale legs",
+    "kind": "armor",
+    "weight": 18,
+    "value": 0,
+    "slot": "legs",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crown-legs",
+    "name": "crown legs",
+    "kind": "armor",
+    "weight": 65,
+    "value": 60,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dawnfire-pantaloons",
+    "name": "dawnfire pantaloons",
+    "kind": "armor",
+    "weight": 30,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 300,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "demon-legs",
+    "name": "demon legs",
+    "kind": "armor",
+    "weight": 70,
+    "value": 84,
+    "slot": "legs",
+    "armor": 9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "depth-ocrea",
+    "name": "depth ocrea",
+    "kind": "armor",
+    "weight": 48,
+    "value": 16000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 130,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "manadrain": {
+        "percent": 15
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dragon-scale-legs",
+    "name": "dragon scale legs",
+    "kind": "armor",
+    "weight": 48,
+    "value": 180,
+    "slot": "legs",
+    "armor": 10,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "dwarven-legs",
+    "name": "dwarven legs",
+    "kind": "armor",
+    "weight": 49,
+    "value": 40000,
+    "slot": "legs",
+    "armor": 7,
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "eldritch-breeches",
+    "name": "eldritch breeches",
+    "kind": "armor",
+    "weight": 69,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "holy": {
+        "percent": 7
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "elven-legs",
+    "name": "elven legs",
+    "kind": "armor",
+    "weight": 33,
+    "value": 0,
+    "slot": "legs",
+    "armor": 4,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "exotic-legs",
+    "name": "exotic legs",
+    "kind": "armor",
+    "weight": 72,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 130,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "fabulous-legs",
+    "name": "fabulous legs",
+    "kind": "armor",
+    "weight": 55,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 225,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 2
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 2
+        },
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "falcon-greaves",
+    "name": "falcon greaves",
+    "kind": "armor",
+    "weight": 36,
+    "value": 0,
+    "slot": "legs",
+    "armor": 10,
+    "requires": {
+      "level": 300,
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      },
+      "physical": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 3
+        },
+        {
+          "skillId": "distance",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "genesis-serenity-legs",
+    "name": "genesis serenity legs",
+    "kind": "armor",
+    "weight": 41,
+    "value": 0,
+    "slot": "legs",
+    "armor": 7,
+    "requires": {
+      "level": 800,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gill-legs",
+    "name": "gill legs",
+    "kind": "armor",
+    "weight": 28,
+    "value": 0,
+    "slot": "legs",
+    "armor": 7,
+    "requires": {
+      "level": 150,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -8
+      },
+      "earth": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "glacier-kilt",
+    "name": "glacier kilt",
+    "kind": "armor",
+    "weight": 19,
+    "value": 11000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 40,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": -6
+      },
+      "ice": {
+        "percent": 6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "gnome-legs",
+    "name": "gnome legs",
+    "kind": "armor",
+    "weight": 25,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 200,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 7
+      },
+      "ice": {
+        "percent": -2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "golden-legs",
+    "name": "golden legs",
+    "kind": "armor",
+    "weight": 56,
+    "value": 30000,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "grasshopper-legs",
+    "name": "grasshopper legs",
+    "kind": "armor",
+    "weight": 32,
+    "value": 15000,
+    "slot": "legs",
+    "armor": 7,
+    "requires": {
+      "level": 75
+    },
+    "bonuses": {
+      "speed": 10
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "green-demon-legs",
+    "name": "green demon legs",
+    "kind": "armor",
+    "weight": 70,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "icy-culottes",
+    "name": "icy culottes",
+    "kind": "armor",
+    "weight": 15,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "ice": {
+        "percent": 8
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jade-legs",
+    "name": "jade legs",
+    "kind": "armor",
+    "weight": 37,
+    "value": 0,
+    "slot": "legs",
+    "armor": 5,
+    "imbuementSlots": 1,
+    "requires": {
+      "level": 210,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "jungle-survivor-legs",
+    "name": "jungle survivor legs",
+    "kind": "armor",
+    "weight": 51,
+    "value": 0,
+    "slot": "legs",
+    "armor": 5,
+    "requires": {
+      "level": 130,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "knight-legs",
+    "name": "knight legs",
+    "kind": "armor",
+    "weight": 70,
+    "value": 5000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "vocationId": [
+        "knight",
+        "paladin"
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "leaf-legs",
+    "name": "leaf legs",
+    "kind": "armor",
+    "weight": 12,
+    "value": 500,
+    "slot": "legs",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "leather-legs",
+    "name": "leather legs",
+    "kind": "armor",
+    "weight": 18,
+    "value": 9,
+    "slot": "legs",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lederhosen",
+    "name": "lederhosen",
+    "kind": "armor",
+    "weight": 8,
+    "value": 0,
+    "slot": "legs",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "legs-of-enlightenment",
+    "name": "legs of enlightenment",
+    "kind": "armor",
+    "weight": 21,
+    "value": 400,
+    "slot": "legs",
+    "armor": 4,
+    "requires": {
+      "level": 40,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "legs-of-wisdom",
+    "name": "legs of wisdom",
+    "kind": "armor",
+    "weight": 26,
+    "value": 0,
+    "slot": "legs",
+    "armor": 4,
+    "requires": {
+      "level": 80,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 3
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "lightning-legs",
+    "name": "lightning legs",
+    "kind": "armor",
+    "weight": 19,
+    "value": 11000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 40,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "energy": {
+        "percent": 6
+      },
+      "earth": {
+        "percent": -6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "magma-legs",
+    "name": "magma legs",
+    "kind": "armor",
+    "weight": 19,
+    "value": 11000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 40,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      },
+      "ice": {
+        "percent": -6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mammoth-fur-shorts",
+    "name": "mammoth fur shorts",
+    "kind": "armor",
+    "weight": 1.5,
+    "value": 850,
+    "slot": "legs",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "midnight-sarong",
+    "name": "midnight sarong",
+    "kind": "armor",
+    "weight": 31,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 250,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mutant-bone-kilt",
+    "name": "mutant bone kilt",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 300,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mutant-hide-trousers",
+    "name": "mutant hide trousers",
+    "kind": "armor",
+    "weight": 33,
+    "value": 0,
+    "slot": "legs",
+    "armor": 6,
+    "requires": {
+      "level": 300,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "earth": {
+        "percent": 5
+      },
+      "physical": {
+        "percent": 2
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mutated-skin-legs",
+    "name": "mutated skin legs",
+    "kind": "armor",
+    "weight": 52,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 270,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 4
+      },
+      "earth": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-bloodstrider",
+    "name": "norcferatu bloodstrider",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 270,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "death": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-fleshguards",
+    "name": "norcferatu fleshguards",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "legs",
+    "armor": 5,
+    "requires": {
+      "level": 230,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "death": {
+        "percent": 4
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "norcferatu-thornwraps",
+    "name": "norcferatu thornwraps",
+    "kind": "armor",
+    "weight": 11.5,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 270,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 4
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ornate-legs",
+    "name": "ornate legs",
+    "kind": "armor",
+    "weight": 77,
+    "value": 40000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 185,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "pirate-knee-breeches",
+    "name": "pirate knee breeches",
+    "kind": "armor",
+    "weight": 12,
+    "value": 200,
+    "slot": "legs",
+    "armor": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "plate-legs",
+    "name": "plate legs",
+    "kind": "armor",
+    "weight": 50,
+    "value": 115,
+    "slot": "legs",
+    "armor": 7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "prismatic-legs",
+    "name": "prismatic legs",
+    "kind": "armor",
+    "weight": 71,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 3
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "ranger-legs",
+    "name": "ranger legs",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "legs",
+    "armor": 4,
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sanguine-greaves",
+    "name": "sanguine greaves",
+    "kind": "armor",
+    "weight": 32,
+    "value": 0,
+    "slot": "legs",
+    "armor": 11,
+    "requires": {
+      "level": 500,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 9
+      },
+      "physical": {
+        "percent": 7
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 4
+        }
+      ],
+      "specializedMagicLevel": {
+        "holy": 1
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sanguine-legs",
+    "name": "sanguine legs",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "legs",
+    "armor": 12,
+    "requires": {
+      "level": 500,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "death": {
+        "percent": 6
+      },
+      "physical": {
+        "percent": 9
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 4
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "sanguine-trousers",
+    "name": "sanguine trousers",
+    "kind": "armor",
+    "weight": 35,
+    "value": 0,
+    "slot": "legs",
+    "armor": 6,
+    "requires": {
+      "level": 500,
+      "vocationId": "monk"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 8
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "soulful-legs",
+    "name": "soulful legs",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 180,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "holy": {
+        "percent": 8
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "soulshanks",
+    "name": "soulshanks",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "legs",
+    "armor": 10,
+    "requires": {
+      "level": 400,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "death": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "soulstrider",
+    "name": "soulstrider",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "legs",
+    "armor": 10,
+    "requires": {
+      "level": 400,
+      "vocationId": "druid"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 10
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stitched-mutant-hide-legs",
+    "name": "stitched mutant hide legs",
+    "kind": "armor",
+    "weight": 34,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 270,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "physical": {
+        "percent": 5
+      },
+      "earth": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stoic-iks-culet",
+    "name": "stoic iks culet",
+    "kind": "armor",
+    "weight": 51,
+    "value": 0,
+    "slot": "legs",
+    "armor": 9,
+    "requires": {
+      "level": 250,
+      "vocationId": "knight"
+    },
+    "absorb": {
+      "energy": {
+        "percent": 2
+      },
+      "physical": {
+        "percent": 4
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "melee",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "stoic-iks-faulds",
+    "name": "stoic iks faulds",
+    "kind": "armor",
+    "weight": 34,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 250,
+      "vocationId": "sorcerer"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 6
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "studded-legs",
+    "name": "studded legs",
+    "kind": "armor",
+    "weight": 26,
+    "value": 15,
+    "slot": "legs",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tatty-dragon-scale-legs",
+    "name": "tatty dragon scale legs",
+    "kind": "armor",
+    "weight": 38,
+    "value": 0,
+    "slot": "legs",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "terra-legs",
+    "name": "terra legs",
+    "kind": "armor",
+    "weight": 19,
+    "value": 11000,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 40,
+      "vocationId": [
+        "druid",
+        "sorcerer"
+      ]
+    },
+    "absorb": {
+      "fire": {
+        "percent": -6
+      },
+      "earth": {
+        "percent": 6
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "trousers-of-the-ancients",
+    "name": "trousers of the ancients",
+    "kind": "armor",
+    "weight": 0.3,
+    "value": 0,
+    "slot": "legs",
+    "armor": 2,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "wereboar-loincloth",
+    "name": "wereboar loincloth",
+    "kind": "armor",
+    "weight": 13,
+    "value": 1500,
+    "slot": "legs",
+    "armor": 6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "yalahari-leg-piece",
+    "name": "yalahari leg piece",
+    "kind": "armor",
+    "weight": 65,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "requires": {
+      "level": 80,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "death": {
+        "percent": 5
+      }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "distance",
+          "amount": 2
+        }
+      ]
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "zaoan-legs",
+    "name": "Zaoan legs",
+    "kind": "armor",
+    "weight": 66,
+    "value": 0,
+    "slot": "legs",
+    "armor": 8,
+    "absorb": {
+      "physical": {
+        "percent": 2
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  }
+]

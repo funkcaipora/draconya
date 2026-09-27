@@ -157,5 +157,6 @@
       ]
     }
   },
+  "interactables": [{"at":{"x":40,"y":7,"z":8},"kind":"rope-spot","initialState":"default","appearanceKey":"rope-spot-386","requires":{"tool":"rope"}},{"at":{"x":35,"y":31,"z":8},"kind":"rope-spot","initialState":"default","appearanceKey":"rope-spot-386","requires":{"tool":"rope"}},{"at":{"x":16,"y":53,"z":8},"kind":"rope-spot","initialState":"default","appearanceKey":"rope-spot-386","requires":{"tool":"rope"}}],
   "source": {"file":"otservbr.otbm","sha256":"a80de1dda6a9aca3956a9d5b7fb2e0caebb451570d26853fc21beb40d5f31da2","region":{"x":[33098,33185],"y":[32401,32473],"z":[8,8]}}
 }

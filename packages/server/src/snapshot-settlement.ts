@@ -122,6 +122,10 @@ export async function settleSnapshotAsReceipt(
     // só cobre snapshot anterior à correção, sem a chave gravada.
     ...(owner === undefined ? {} : { supplyStock: owner.supplyStock ?? {} }),
     ...(owner === undefined ? {} : { ammunitionStock: owner.ammunitionStock ?? {} }),
+    // Storages (#731), pela MESMA razão do supplyStock: NÃO gatear por vazio — `{}` é "todo
+    // storage voltou a nunca-setado nesta sessão", e omitir a chave deixaria o valor antigo
+    // ressuscitar no próximo login. `?? {}` cobre snapshot anterior a esta issue.
+    ...(owner === undefined ? {} : { storages: owner.storages ?? {} }),
     // Vocação e o que a sessão criou (#154): sem isto, um item equipado numa sessão liquidada
     // por fora se perdia, e a arma de vocação com ele.
     ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
@@ -131,6 +135,5 @@ export async function settleSnapshotAsReceipt(
       overlays: overlaysOfState(owner.inventory),
       acquired: acquiredByState(owner.inventory, snapshot.id),
     }),
-    ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
   });
 }

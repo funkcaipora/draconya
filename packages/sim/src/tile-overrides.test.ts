@@ -1,0 +1,167 @@
+import { describe, expect, it } from 'vitest';
+import type { TilemapInteractable } from '@draconya/content';
+import {
+  interactableIdOf, isToggleable, otherState, overrideFromInteractable, TileOverrides,
+} from './tile-overrides.js';
+
+// Um punhado de interativos, um por `kind` do T1 (#728, ADR 0050 d.6): porta comum, capim,
+// stone pile, alavanca — e um baú, que não alterna nada, para provar que `isToggleable` recusa
+// o resto sem precisar de um teste por `kind` fora do escopo.
+const door: TilemapInteractable = {
+  at: { x: 3, y: 2, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1',
+};
+const grass: TilemapInteractable = {
+  at: { x: 5, y: 2, z: 7 }, kind: 'grass', initialState: 'uncut', appearanceKey: 'grass-1',
+  requires: { tool: 'machete' }, revertMs: 60_000,
+};
+const stonePile: TilemapInteractable = {
+  at: { x: 7, y: 2, z: 7 }, kind: 'stone-pile', initialState: 'pile', appearanceKey: 'pile-1',
+  requires: { tool: 'shovel' }, revertMs: 30_000,
+};
+const lever: TilemapInteractable = {
+  at: { x: 9, y: 2, z: 7 }, kind: 'lever', initialState: 'down', appearanceKey: 'lever', aid: 2772,
+  links: ['9001'],
+};
+const linkedDoor: TilemapInteractable = {
+  at: { x: 9, y: 4, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-2', aid: 9001,
+};
+const chest: TilemapInteractable = {
+  at: { x: 11, y: 2, z: 7 }, kind: 'chest', initialState: 'default', appearanceKey: 'chest-1', uid: 5,
+};
+
+describe('overrideFromInteractable — o estado inicial vem do conteúdo', () => {
+  it('porta comum fechada bloqueia', () => {
+    expect(overrideFromInteractable(door)).toEqual({
+      interactableId: '3,2,7', kind: 'door', state: 'closed', blocked: true, floorChange: null,
+    });
+  });
+
+  it('capim intacto bloqueia', () => {
+    expect(overrideFromInteractable(grass).blocked).toBe(true);
+  });
+
+  it('stone pile intacta bloqueia, e ainda não muda de andar', () => {
+    const state = overrideFromInteractable(stonePile);
+    expect(state.blocked).toBe(true);
+    expect(state.floorChange).toBeNull();
+  });
+
+  it('alavanca nunca bloqueia, em nenhum dos dois estados', () => {
+    expect(overrideFromInteractable(lever).blocked).toBe(false);
+    expect(overrideFromInteractable({ ...lever, initialState: 'up' }).blocked).toBe(false);
+  });
+
+  it('baú não bloqueia e não tem par de estados', () => {
+    expect(overrideFromInteractable(chest).blocked).toBe(false);
+    expect(isToggleable('chest')).toBe(false);
+    expect(otherState('chest', 'default')).toBeNull();
+  });
+});
+
+describe('TileOverrides — o índice por tile (ADR 0050 d.1: no máximo um por tile)', () => {
+  it('blockedAt/floorChangeAt refletem o estado inicial, e nenhum outro tile é afetado', () => {
+    const overrides = TileOverrides.fromInteractables([door, grass, stonePile, lever]);
+    expect(overrides.blockedAt(3, 2, 7)).toBe(true);
+    expect(overrides.blockedAt(5, 2, 7)).toBe(true);
+    expect(overrides.blockedAt(7, 2, 7)).toBe(true);
+    expect(overrides.blockedAt(9, 2, 7)).toBe(false);
+    // Tile vizinho, sem interativo: nunca bloqueado por overlay.
+    expect(overrides.blockedAt(4, 2, 7)).toBe(false);
+    expect(overrides.floorChangeAt(7, 2, 7)).toBeNull();
+  });
+
+  it('toggle abre a porta: deixa de bloquear, e não decai (sem revertMs)', () => {
+    const overrides = TileOverrides.fromInteractables([door]);
+    const id = interactableIdOf(door.at);
+    const opened = overrides.toggle(id, 1000);
+    expect(opened).toEqual({
+      interactableId: id, kind: 'door', state: 'open', blocked: false, floorChange: null,
+    });
+    expect(overrides.blockedAt(3, 2, 7)).toBe(false);
+  });
+
+  it('toggle corta o capim: para de bloquear e agenda a volta em revertMs', () => {
+    const overrides = TileOverrides.fromInteractables([grass]);
+    const id = interactableIdOf(grass.at);
+    const cut = overrides.toggle(id, 1000);
+    expect(cut?.state).toBe('cut');
+    expect(cut?.blocked).toBe(false);
+    expect(cut?.revertAtMs).toBe(1000 + 60_000);
+    // Cortar de novo (o outro lado do par) NÃO decai — só o lado não-bloqueante decai.
+    const regrown = overrides.toggle(id, 2000);
+    expect(regrown?.state).toBe('uncut');
+    expect(regrown?.blocked).toBe(true);
+    expect(regrown?.revertAtMs).toBeUndefined();
+  });
+
+  it('toggle cava a stone pile: buraco desce um andar, e também decai', () => {
+    const overrides = TileOverrides.fromInteractables([stonePile]);
+    const id = interactableIdOf(stonePile.at);
+    const dug = overrides.toggle(id, 0);
+    expect(dug).toMatchObject({
+      state: 'hole', blocked: false, floorChange: { x: 7, y: 2, z: 8 }, revertAtMs: 30_000,
+    });
+    expect(overrides.floorChangeAt(7, 2, 7)).toEqual({ x: 7, y: 2, z: 8 });
+  });
+
+  it('toggle num kind sem par (baú) devolve null e não muda nada', () => {
+    const overrides = TileOverrides.fromInteractables([chest]);
+    const id = interactableIdOf(chest.at);
+    expect(overrides.toggle(id, 0)).toBeNull();
+    expect(overrides.get(id)?.state).toBe('default');
+  });
+
+  it('links resolve por `aid`, nunca pela posição', () => {
+    const overrides = TileOverrides.fromInteractables([lever, linkedDoor]);
+    const leverId = interactableIdOf(lever.at);
+    const resolved = overrides.links(leverId);
+    expect(resolved).toEqual([interactableIdOf(linkedDoor.at)]);
+  });
+
+  it('closeDoorIfVacant fecha só uma porta ABERTA e VAZIA — nunca outro kind, nunca ocupada', () => {
+    const overrides = TileOverrides.fromInteractables([door, lever]);
+    const doorId = interactableIdOf(door.at);
+    overrides.toggle(doorId, 0);
+    expect(overrides.get(doorId)?.state).toBe('open');
+
+    // Ainda ocupada: não fecha.
+    overrides.closeDoorIfVacant(3, 2, 7, true);
+    expect(overrides.get(doorId)?.state).toBe('open');
+
+    // Vazia agora: fecha, e passa a bloquear de novo.
+    overrides.closeDoorIfVacant(3, 2, 7, false);
+    expect(overrides.get(doorId)).toEqual({
+      interactableId: doorId, kind: 'door', state: 'closed', blocked: true, floorChange: null,
+    });
+
+    // A alavanca (outro tile, outro kind) nunca é afetada por um `vacate` em (3,2,7).
+    expect(overrides.get(interactableIdOf(lever.at))?.state).toBe('down');
+  });
+
+  it('getState/fromState faz o mesmo round-trip que Fields — só o que mudou aparece', () => {
+    const overrides = TileOverrides.fromInteractables([door, grass]);
+    overrides.toggle(interactableIdOf(door.at), 500);
+    const snapshot = overrides.getState();
+    const restored = TileOverrides.fromState([door, grass], snapshot);
+    expect(restored.blockedAt(3, 2, 7)).toBe(false); // porta restaurada aberta
+    expect(restored.blockedAt(5, 2, 7)).toBe(true); // capim nunca foi usado
+  });
+
+  it('restoreState MUTA a instância (não substitui) — o mesmo objeto que TileOccupancy referencia', () => {
+    const overrides = TileOverrides.fromInteractables([door]);
+    const before = overrides;
+    overrides.restoreState([{
+      interactableId: interactableIdOf(door.at), kind: 'door', state: 'open', blocked: false, floorChange: null,
+    }]);
+    expect(overrides).toBe(before);
+    expect(overrides.blockedAt(3, 2, 7)).toBe(false);
+  });
+
+  it('fromState ignora entrada de um interactableId que este mapa não tem (versão de conteúdo diferente)', () => {
+    const overrides = TileOverrides.fromState([door], [
+      { interactableId: 'nunca-existiu', kind: 'door', state: 'open', blocked: false, floorChange: null },
+    ]);
+    expect(overrides.get('nunca-existiu')).toBeNull();
+    expect(overrides.blockedAt(3, 2, 7)).toBe(true);
+  });
+});

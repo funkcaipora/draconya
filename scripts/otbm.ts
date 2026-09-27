@@ -68,8 +68,12 @@ const ATTRIBUTE_SIZE: Readonly<Record<number, number | 'string'>> = {
 };
 
 const ATTR_TILE_FLAGS = 0x03;
+const ATTR_ACTION_ID = 0x04;
+const ATTR_UNIQUE_ID = 0x05;
+const ATTR_TEXT = 0x06;
 const ATTR_ITEM = 0x09;
 const ATTR_COUNT = 0x0f;
+const ATTR_TELEPORT_DEST = 0x08;
 
 export interface OtbmHeader {
   readonly version: number;
@@ -79,10 +83,25 @@ export interface OtbmHeader {
   readonly itemsMinorVersion: number;
 }
 
+/** O destino de um teleporte (`ATTR_TELE_DEST`), em coordenadas do MAPA REAL. */
+export interface OtbmTeleportDestination {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export interface OtbmItem {
   readonly id: number;
   /** Só quando o item é empilhável e o arquivo gravou a contagem. */
   readonly count?: number;
+  /** `ATTR_ACTION_ID` (#727, ADR 0050 d.1) — o `aid` de porta, alavanca e gatilho de script. */
+  readonly actionId?: number;
+  /** `ATTR_UNIQUE_ID` (#727) — o `uid` de baú e item com storage por personagem. */
+  readonly uniqueId?: number;
+  /** `ATTR_TEXT` (#727) — o texto de uma placa ou livro, lido no Look. */
+  readonly text?: string;
+  /** `ATTR_TELE_DEST` (#727) — para onde um teleporte leva. */
+  readonly teleportDestination?: OtbmTeleportDestination;
 }
 
 export interface OtbmTile {
@@ -114,10 +133,12 @@ export class OtbmError extends Error {
 /** Um cursor sobre bytes já DESESCAPADOS de um payload. */
 class Payload {
   #at = 0;
-  constructor(private readonly bytes: Uint8Array, private readonly offset: number) {}
-  get done(): boolean { return this.#at >= this.bytes.length; }
+  // O campo é `data`, não `bytes`: uma propriedade de instância `bytes` esconderia o MÉTODO
+  // `bytes()` abaixo no protótipo — `this.bytes` resolveria sempre para o array, nunca a função.
+  constructor(private readonly data: Uint8Array, private readonly offset: number) {}
+  get done(): boolean { return this.#at >= this.data.length; }
   u8(): number {
-    const value = this.bytes[this.#at];
+    const value = this.data[this.#at];
     if (value === undefined) throw new OtbmError('payload truncado', this.offset);
     this.#at += 1;
     return value;
@@ -125,10 +146,19 @@ class Payload {
   u16(): number { return this.u8() | (this.u8() << 8); }
   u32(): number { return (this.u16() | (this.u16() << 16)) >>> 0; }
   skip(count: number): void {
-    if (this.#at + count > this.bytes.length) throw new OtbmError('payload truncado', this.offset);
+    if (this.#at + count > this.data.length) throw new OtbmError('payload truncado', this.offset);
     this.#at += count;
   }
+  /** Os próximos `count` bytes crus — para decodificar string (`ATTR_TEXT`), não para pular. */
+  bytes(count: number): Uint8Array {
+    if (this.#at + count > this.data.length) throw new OtbmError('payload truncado', this.offset);
+    const slice = this.data.subarray(this.#at, this.#at + count);
+    this.#at += count;
+    return slice;
+  }
 }
+
+const textDecoder = new TextDecoder();
 
 /**
  * Lê o payload de um nó a partir de `at` (logo depois do byte de tipo): os bytes até o primeiro
@@ -153,24 +183,51 @@ function readPayload(bytes: Uint8Array, at: number): { payload: Payload; end: nu
   return { payload: new Payload(Uint8Array.from(out), at), end: i };
 }
 
+interface Attributes {
+  flags: number;
+  ground: number | null;
+  count?: number;
+  actionId?: number;
+  uniqueId?: number;
+  text?: string;
+  teleportDestination?: OtbmTeleportDestination;
+}
+
 /** Consome os atributos de um tile ou item; devolve o que interessa e para no fim do payload. */
-function readAttributes(payload: Payload, offset: number): { flags: number; ground: number | null; count?: number } {
+function readAttributes(payload: Payload, offset: number): Attributes {
   let flags = 0;
   let ground: number | null = null;
   let count: number | undefined;
+  let actionId: number | undefined;
+  let uniqueId: number | undefined;
+  let text: string | undefined;
+  let teleportDestination: OtbmTeleportDestination | undefined;
   while (!payload.done) {
     const type = payload.u8();
     const size = ATTRIBUTE_SIZE[type];
     if (size === undefined) {
       throw new OtbmError(`atributo desconhecido 0x${type.toString(16)} em tile/item — sem tamanho, não dá para pular`, offset);
     }
+    if (type === ATTR_TEXT) { text = textDecoder.decode(payload.bytes(payload.u16())); continue; }
     if (size === 'string') { payload.skip(payload.u16()); continue; }
     if (type === ATTR_TILE_FLAGS) { flags = payload.u32(); continue; }
     if (type === ATTR_ITEM) { ground = payload.u16(); continue; }
     if (type === ATTR_COUNT) { count = payload.u8(); continue; }
+    if (type === ATTR_ACTION_ID) { actionId = payload.u16(); continue; }
+    if (type === ATTR_UNIQUE_ID) { uniqueId = payload.u16(); continue; }
+    if (type === ATTR_TELEPORT_DEST) {
+      teleportDestination = { x: payload.u16(), y: payload.u16(), z: payload.u8() };
+      continue;
+    }
     payload.skip(size);
   }
-  return count === undefined ? { flags, ground } : { flags, ground, count };
+  const result: Attributes = { flags, ground };
+  if (count !== undefined) result.count = count;
+  if (actionId !== undefined) result.actionId = actionId;
+  if (uniqueId !== undefined) result.uniqueId = uniqueId;
+  if (text !== undefined) result.text = text;
+  if (teleportDestination !== undefined) result.teleportDestination = teleportDestination;
+  return result;
 }
 
 /** O cabeçalho do arquivo — o nó raiz. */
@@ -289,7 +346,13 @@ export function* readOtbmTiles(bytes: Uint8Array, region: Region): Generator<Otb
       // que importa é o item de fora; o de dentro não existe no mapa. Guardamos só o de fora.
       const parent = stack[stack.length - 1];
       if (owner !== null && parent !== undefined && parent.tile !== null) {
-        owner.items.push(attributes.count === undefined ? { id } : { id, count: attributes.count });
+        const otbmItem: { -readonly [K in keyof OtbmItem]: OtbmItem[K] } = { id };
+        if (attributes.count !== undefined) otbmItem.count = attributes.count;
+        if (attributes.actionId !== undefined) otbmItem.actionId = attributes.actionId;
+        if (attributes.uniqueId !== undefined) otbmItem.uniqueId = attributes.uniqueId;
+        if (attributes.text !== undefined) otbmItem.text = attributes.text;
+        if (attributes.teleportDestination !== undefined) otbmItem.teleportDestination = attributes.teleportDestination;
+        owner.items.push(otbmItem);
       }
       stack.push({ type, tile: null });
       i = end;

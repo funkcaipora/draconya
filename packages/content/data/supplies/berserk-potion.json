@@ -1,7 +1,7 @@
 {
   "id": "berserk-potion",
   "name": "Berserk Potion",
-  "description": "Aumenta a skill de corpo a corpo em 5 e reduz a de shielding em 10 por 10 minutos. Somente Knight.",
+  "description": "Aumenta as skills de corpo a corpo (punho, maça, espada e machado) em 5 e reduz a de shielding em 10 por 10 minutos. Somente Knight.",
   "price": 0,
   "group": "potion",
   "groupCooldownMs": 1000,
@@ -13,7 +13,7 @@
       "durationMs": 600000,
       "effect": {
         "kind": "buff",
-        "skillDeltas": { "melee": 5, "shielding": -10 }
+        "skillDeltas": { "fist": 5, "club": 5, "sword": 5, "axe": 5, "shielding": -10 }
       }
     }
   },

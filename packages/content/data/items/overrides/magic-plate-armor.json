@@ -1,0 +1,8 @@
+{
+  "id": "magic-plate-armor",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 2; value: 720 → 90000.",
+  "patch": {
+    "imbuementSlots": 2,
+    "value": 90000
+  }
+}

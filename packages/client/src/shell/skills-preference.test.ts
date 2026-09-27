@@ -18,16 +18,20 @@ afterEach(() => {
 });
 
 describe('skills preference', () => {
-  it('has the ten kit rows, in the fixed order SV-10 specifies', () => {
+  it('has the thirteen kit rows, in the fixed order SV-10/#568 specifies', () => {
     expect(SKILL_ORDER).toEqual([
-      'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
+      'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic',
+      'fist', 'club', 'sword', 'axe', 'distance',
     ]);
   });
 
-  it('labels the four rows SV-10 adds with the kit\'s classic terms', () => {
+  it('labels the rows SV-10/#568 add with the kit\'s classic terms', () => {
     expect(SKILL_LABELS.speed).toBe('Speed');
     expect(SKILL_LABELS.magic).toBe('Magic Level');
-    expect(SKILL_LABELS.melee).toBe('Corpo a Corpo');
+    expect(SKILL_LABELS.fist).toBe('Punho');
+    expect(SKILL_LABELS.club).toBe('Maça');
+    expect(SKILL_LABELS.sword).toBe('Espada');
+    expect(SKILL_LABELS.axe).toBe('Machado');
     expect(SKILL_LABELS.distance).toBe('Distância');
   });
 
@@ -49,14 +53,16 @@ describe('skills preference', () => {
     expect(loadVisibleSkills()).toEqual(['mana', 'exp']);
   });
 
-  it('round-trips the four ids SV-10 adds, same as any other id', () => {
+  it('round-trips the ids SV-10/#568 add, same as any other id', () => {
     const storage = storageOf();
     vi.stubGlobal('localStorage', storage);
 
-    saveVisibleSkills(['speed', 'magic', 'melee', 'distance']);
+    saveVisibleSkills(['speed', 'magic', 'fist', 'club', 'sword', 'axe', 'distance']);
 
-    expect(storage.setItem).toHaveBeenCalledWith(STORAGE_KEY, '["speed","magic","melee","distance"]');
-    expect(loadVisibleSkills()).toEqual(['speed', 'magic', 'melee', 'distance']);
+    expect(storage.setItem).toHaveBeenCalledWith(
+      STORAGE_KEY, '["speed","magic","fist","club","sword","axe","distance"]',
+    );
+    expect(loadVisibleSkills()).toEqual(['speed', 'magic', 'fist', 'club', 'sword', 'axe', 'distance']);
   });
 
   it('keeps an explicit empty selection but removes unknown stored values', () => {
@@ -67,12 +73,21 @@ describe('skills preference', () => {
     expect(loadVisibleSkills()).toEqual(['hp', 'mana']);
   });
 
-  it('loads a pre-SV-10 six-id selection as-is, without injecting the four new rows', () => {
+  it('loads a pre-SV-10 six-id selection as-is, without injecting the new rows', () => {
     // Quem salvou a preferência antes desta issue tinha só as seis linhas antigas; o filtro por
-    // id conhecido não pode inventar "speed"/"magic"/"melee"/"distance" que a pessoa não marcou.
+    // id conhecido não pode inventar "speed"/"magic"/"fist"/"club"/"sword"/"axe"/"distance" que a
+    // pessoa não marcou.
     const legacySelection = ['exp', 'level', 'hp', 'mana', 'capacity', 'stamina'];
     vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: JSON.stringify(legacySelection) }));
     expect(loadVisibleSkills()).toEqual(legacySelection);
+  });
+
+  it('drops a pre-#568 "melee" id as unknown, without crashing or reviving the old row', () => {
+    // #568: quem salvou a preferência ANTES desta issue podia ter "melee" marcado — a skill não
+    // existe mais em SKILL_ORDER, e o filtro por id conhecido a descarta como qualquer id
+    // desconhecido (RF-06), sem lançar exceção.
+    vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '["hp","melee","distance"]' }));
+    expect(loadVisibleSkills()).toEqual(['hp', 'distance']);
   });
 
   it('falls back to every skill when storage is malformed, non-list, or throws', () => {
