@@ -43,7 +43,21 @@ export interface SpawnRequest extends Waypoint {
   readonly radius: number;
   /** O monstro deste ponto (#519) — ausente é a composição sorteada, como sempre. */
   readonly monsterId?: string;
+  /**
+   * Vários monstros no MESMO ponto, com peso (#582) — o caso do Canary em que dois `<monster>`
+   * do mesmo `<spawn>` caem exatamente na mesma posição. Exclusivo com `monsterId`.
+   */
+  readonly monsters?: ReadonlyArray<{ readonly monsterId: string; readonly weight: number }>;
   /** O `spawntime` DESTE ponto, em ms (#519) — ausente cai no `respawnDelayMs` da dificuldade. */
+  readonly respawnDelayMs?: number;
+}
+
+export interface TracedSpawnPoint {
+  readonly routeIndex: number;
+  readonly radius: number;
+  readonly at?: { readonly x: number; readonly y: number; readonly z: number };
+  readonly monsterId?: string;
+  readonly monsters?: ReadonlyArray<{ readonly monsterId: string; readonly weight: number }>;
   readonly respawnDelayMs?: number;
 }
 
@@ -51,13 +65,7 @@ export interface TracedRoute {
   readonly id: string;
   readonly mapId: string;
   readonly tiles: ReadonlyArray<{ readonly x: number; readonly y: number; readonly z: number }>;
-  readonly spawnPoints: ReadonlyArray<{
-    readonly routeIndex: number;
-    readonly radius: number;
-    readonly at?: { readonly x: number; readonly y: number; readonly z: number };
-    readonly monsterId?: string;
-    readonly respawnDelayMs?: number;
-  }>;
+  readonly spawnPoints: readonly TracedSpawnPoint[];
 }
 
 const CARDINALS: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -123,6 +131,46 @@ export function shortestPath(
 }
 
 /**
+ * Ancora cada `spawn` no ÍNDICE do tile da rota mais próximo dele (rota e spawn ficam juntos,
+ * como `routeSchema` quer) — a mesma conta que `traceRoute` sempre fez, extraída para o
+ * importador de spawns do Canary reusar sem retraçar a rota inteira (#582): a rota de um mapa
+ * já existente não muda, só os pontos de spawn são regenerados a partir do XML.
+ */
+export function anchorSpawnPoints(
+  tiles: ReadonlyArray<{ readonly x: number; readonly y: number; readonly z: number }>,
+  z: number,
+  spawns: readonly SpawnRequest[],
+): readonly TracedSpawnPoint[] {
+  return spawns.map((spawn) => {
+    const spawnZ = spawn.z ?? z;
+    // Prefere o tile da rota no MESMO andar (#519): sem isso, um ponto de z11 ancoraria no
+    // tile mais próximo por (x, y) de OUTRO andar sempre que a caixa se sobrepuser — os três
+    // andares da Darashia Dragon Lair compartilham a mesma caixa x/y.
+    const sameFloorTiles = tiles.some((t) => t.z === spawnZ);
+    let best = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const [index, tile] of tiles.entries()) {
+      if (sameFloorTiles && tile.z !== spawnZ) continue;
+      const distance = Math.abs(tile.x - spawn.x) + Math.abs(tile.y - spawn.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    return {
+      routeIndex: best,
+      radius: spawn.radius,
+      // A posição EXATA (#519) é a do Canary, não a do tile ancorado — os dois raramente
+      // coincidem.
+      at: { x: spawn.x, y: spawn.y, z: spawnZ },
+      ...(spawn.monsterId === undefined ? {} : { monsterId: spawn.monsterId }),
+      ...(spawn.monsters === undefined ? {} : { monsters: spawn.monsters }),
+      ...(spawn.respawnDelayMs === undefined ? {} : { respawnDelayMs: spawn.respawnDelayMs }),
+    };
+  }).sort((a, b) => a.routeIndex - b.routeIndex);
+}
+
+/**
  * O laço pelos pontos de passagem, na ordem, fechado de volta ao primeiro. Cada ponto precisa
  * ser andável e alcançável do anterior — um ponto numa parede, ou numa sala sem porta, é erro
  * com o nome do ponto, não uma rota silenciosamente mais curta. Um ponto de passagem NUNCA é o
@@ -152,32 +200,7 @@ export function traceRoute(
   tiles.pop();
   if (tiles.length < 2) throw new Error('a rota ficou com menos de dois tiles');
 
-  const spawnPoints = spawns.map((spawn) => {
-    const spawnZ = spawn.z ?? z;
-    // Prefere o tile da rota no MESMO andar (#519): sem isso, um ponto de z11 ancoraria no
-    // tile mais próximo por (x, y) de OUTRO andar sempre que a caixa se sobrepuser — os três
-    // andares da Darashia Dragon Lair compartilham a mesma caixa x/y.
-    const sameFloorTiles = tiles.some((t) => t.z === spawnZ);
-    let best = 0;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const [index, tile] of tiles.entries()) {
-      if (sameFloorTiles && tile.z !== spawnZ) continue;
-      const distance = Math.abs(tile.x - spawn.x) + Math.abs(tile.y - spawn.y);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = index;
-      }
-    }
-    return {
-      routeIndex: best,
-      radius: spawn.radius,
-      // A posição EXATA (#519) é a do Canary, não a do tile ancorado — os dois raramente
-      // coincidem.
-      at: { x: spawn.x, y: spawn.y, z: spawnZ },
-      ...(spawn.monsterId === undefined ? {} : { monsterId: spawn.monsterId }),
-      ...(spawn.respawnDelayMs === undefined ? {} : { respawnDelayMs: spawn.respawnDelayMs }),
-    };
-  }).sort((a, b) => a.routeIndex - b.routeIndex);
+  const spawnPoints = anchorSpawnPoints(tiles, z, spawns);
 
   return { id, mapId: map.id, tiles, spawnPoints };
 }
@@ -192,6 +215,10 @@ export function formatRoute(route: TracedRoute): string {
     const fields = [`"routeIndex": ${s.routeIndex}`, `"radius": ${s.radius}`];
     if (s.at !== undefined) fields.push(`"at": { "x": ${s.at.x}, "y": ${s.at.y}, "z": ${s.at.z} }`);
     if (s.monsterId !== undefined) fields.push(`"monsterId": ${JSON.stringify(s.monsterId)}`);
+    if (s.monsters !== undefined) {
+      const monsters = s.monsters.map((m) => `{ "monsterId": ${JSON.stringify(m.monsterId)}, "weight": ${m.weight} }`).join(', ');
+      fields.push(`"monsters": [${monsters}]`);
+    }
     if (s.respawnDelayMs !== undefined) fields.push(`"respawnDelayMs": ${s.respawnDelayMs}`);
     return `    { ${fields.join(', ')} }`;
   }).join(',\n');

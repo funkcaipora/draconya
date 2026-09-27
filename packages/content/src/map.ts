@@ -61,6 +61,8 @@ export interface SpawnPoint {
   readonly at: Point;
   /** O monstro deste ponto (#519). Ausente é o sorteio de composição de sempre. */
   readonly monsterId?: string;
+  /** Vários monstros no MESMO ponto, com peso (#582). Exclusivo com `monsterId`. */
+  readonly monsters?: ReadonlyArray<{ readonly monsterId: string; readonly weight: number }>;
   /** O `spawntime` deste ponto, em ms (#519). Ausente cai no `respawnDelayMs` da dificuldade. */
   readonly respawnDelayMs?: number;
 }
@@ -224,6 +226,7 @@ export function buildRoute(data: RouteData, map: Tilemap): Route {
       // como sempre foi.
       at: s.at ?? (data.tiles[s.routeIndex] as Point),
       ...(s.monsterId === undefined ? {} : { monsterId: s.monsterId }),
+      ...(s.monsters === undefined ? {} : { monsters: s.monsters }),
       ...(s.respawnDelayMs === undefined ? {} : { respawnDelayMs: s.respawnDelayMs }),
     })),
   };

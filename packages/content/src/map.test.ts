@@ -116,6 +116,21 @@ describe('rota', () => {
     });
   });
 
+  it('leva `monsters` (vários candidatos com peso na mesma posição, #582) junto ao ponto', () => {
+    const comMonstrosPesados: RouteData = {
+      ...loop,
+      spawnPoints: [{
+        routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 },
+        monsters: [{ monsterId: 'dragon', weight: 3 }, { monsterId: 'dragon-lord', weight: 1 }],
+      }],
+    };
+    const route = buildRoute(comMonstrosPesados, map);
+    expect(route.spawnPoints[0]).toEqual({
+      routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 },
+      monsters: [{ monsterId: 'dragon', weight: 3 }, { monsterId: 'dragon-lord', weight: 1 }],
+    });
+  });
+
   it('leva o `respawnDelayMs` do ponto, o `spawntime` por posição do Canary (#519)', () => {
     // O Canary declara `spawntime` por `<monster>`, dentro do `<spawn>` — não por zona nem por
     // dificuldade. Sem o campo, `buildRoute` não inventa nada: quem lê decide o fallback

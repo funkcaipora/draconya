@@ -2516,6 +2516,7 @@ export class HuntRuleset implements Ruleset {
         return {
           at: point.at, radius: point.radius,
           ...(point.monsterId === undefined ? {} : { monsterId: point.monsterId }),
+          ...(point.monsters === undefined ? {} : { monsters: point.monsters }),
         };
       },
       this.#spawnBlockedFor(session),
