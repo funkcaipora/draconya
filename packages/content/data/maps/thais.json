@@ -1089,7 +1089,7 @@
         "..###......#.#.#.####...##.....##.#######.#..###################.................#.#.##.........................#...........#.....##........#..##..........##..............#############",
         "..###.....##########.#........................###################..................#.##.............#.##.......#..#.....#..#.#.............###....#.....#.##.......###......############",
         ".#####...##..##.####......#....................#######..........#........#..#.....##.##.......#.#...............#....#.#.#..................##.#.#..#..............###......############",
-        "..#####.###..#.....#........................#..##..#.........#.#..........#...#.##..#.........##.#....#..........#...........###.......#.##..##..#....#.#.#.#....#..#......##########.##",
+        "..#####.###..#.....#........................#..##..#.........#.#..........#...#.##..#.........##.#....#..........#...........###.......#.##..##..#....#.#.#.#....#..#......#############",
         "..#####.#....#.....#........................###.#.#.#......................###..#.#.......#..#...#.##.##............##.....##.#...............##...............#..##.......########....."
       ],
       "speed": [
@@ -1230,7 +1230,7 @@
         "gg   gggggg g g g    ggg  ggggg  g       g gg                   ggddddggggggggggg g g  ggggggggggggggggggggggggg ggggggggggg ggggg  eeeeeegg gg  gggggggggg  eeeeeeeggggggg             ",
         "gg   ggggg          g gggggggggggggggggggggggg                   gddddggggggggggggg g  ggggggggggggg g  ggggggg gg ggggg gg g ggggggggggggg   gggg ggggg g  geeeeee   gggggg            ",
         "g     ggg  cc  c    gggggg gggggggggggggggggggg       eeeeeegggg gddddggg gg ggggg  g  ggggggg g ggggggggggggggg gggg g g gggggggggggggggggg  g g gg gggggggggggggg   gggggg            ",
-        "gg     g   cc ccccc gggggggggggggggggggggggg gg  gg geeeeeeee g ggddddgggg ggg g  gg ggggggggg  g gggg gggggggggg ggggggggggg   ggeeggg g  gg  gg gggg g g g gggg gg gggggg          g  ",
+        "gg     g   cc ccccc gggggggggggggggggggggggg gg  gg geeeeeeee g ggddddgggg ggg g  gg ggggggggg  g gggg gggggggggg ggggggggggg   ggeeggg g  gg  gg gggg g g g gggg gg gggggg             ",
         "gg     g cccc ccccc dggggggggggggggggggggggg   g g g eeeeeeeeggggdddddggggg   gg g ggggggg gg ggg g  g  gggggggggggg  ggggg  g ggeeeeggggggggg  ggggggggggggggg gg  ggggggg        ggggg"
       ]
     }
