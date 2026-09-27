@@ -349,6 +349,10 @@
           "chance": 0.0199
         },
         {
+          "itemId": "giant-sword",
+          "chance": 0.0198
+        },
+        {
           "itemId": "ice-rapier",
           "chance": 0.0155
         },
@@ -383,6 +387,10 @@
         {
           "itemId": "demon-horn",
           "chance": 0.1492
+        },
+        {
+          "itemId": "demonrage-sword",
+          "chance": 0.0007
         }
       ]
     },
@@ -659,6 +667,10 @@
         {
           "itemId": "crystal-necklace",
           "chance": 0.005
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.0125
         },
         {
           "itemId": "crowbar",
@@ -1711,6 +1723,10 @@
       },
       "items": [
         {
+          "itemId": "amber-staff",
+          "chance": 0.02
+        },
+        {
           "itemId": "blazing-bone",
           "chance": 0.125
         },
@@ -1725,6 +1741,10 @@
         {
           "itemId": "fire-sword",
           "chance": 0.07
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.01
         },
         {
           "itemId": "gold-ingot",
@@ -1779,6 +1799,10 @@
         {
           "itemId": "red-gem",
           "chance": 0.045
+        },
+        {
+          "itemId": "ruthless-axe",
+          "chance": 0.01
         },
         {
           "itemId": "wand-of-inferno",
@@ -2077,6 +2101,14 @@
           "chance": 0.09
         },
         {
+          "itemId": "heavy-mace",
+          "chance": 0.004
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.004
+        },
+        {
           "itemId": "golden-armor",
           "chance": 0.0055
         },
@@ -2105,6 +2137,10 @@
         {
           "itemId": "titan-axe",
           "chance": 0.0443
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.07761
         },
         {
           "itemId": "skullcracker-armor",

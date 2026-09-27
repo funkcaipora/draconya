@@ -916,6 +916,10 @@
       },
       "items": [
         {
+          "itemId": "war-hammer",
+          "chance": 0.00148
+        },
+        {
           "itemId": "mace",
           "chance": 0.02854
         },

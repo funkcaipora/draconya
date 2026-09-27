@@ -390,6 +390,10 @@
           "chance": 0.1284
         },
         {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0893
+        },
+        {
           "itemId": "zaoan-shoes",
           "chance": 0.0261
         },
@@ -403,6 +407,10 @@
         },
         {
           "itemId": "zaoan-armor",
+          "chance": 0.006
+        },
+        {
+          "itemId": "drakinata",
           "chance": 0.006
         }
       ]

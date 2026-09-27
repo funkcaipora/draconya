@@ -1762,12 +1762,20 @@
           "chance": 0.03
         },
         {
+          "itemId": "spiked-squelcher",
+          "chance": 0.022
+        },
+        {
           "itemId": "knight-armor",
           "chance": 0.0198
         },
         {
           "itemId": "falcon-crest",
           "chance": 0.0125
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0123
         },
         {
           "itemId": "violet-gem",
@@ -1788,6 +1796,10 @@
         {
           "itemId": "mastermind-shield",
           "chance": 0.0062
+        },
+        {
+          "itemId": "heavy-mace",
+          "chance": 0.0046
         },
         {
           "itemId": "demonbone-amulet",
@@ -3547,6 +3559,10 @@
           "chance": 0.0682
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.0562
+        },
+        {
           "itemId": "rotten-feather",
           "chance": 0.0217
         },
@@ -4232,6 +4248,10 @@
           "chance": 0.075
         },
         {
+          "itemId": "haunted-blade",
+          "chance": 0.0074
+        },
+        {
           "itemId": "titan-axe",
           "chance": 0.01
         },
@@ -4394,8 +4414,16 @@
           "chance": 0.0105
         },
         {
+          "itemId": "haunted-blade",
+          "chance": 0.0096
+        },
+        {
           "itemId": "warriors-axe",
           "chance": 0.0073
+        },
+        {
+          "itemId": "twiceslicer",
+          "chance": 0.0031
         }
       ]
     },
@@ -5111,6 +5139,10 @@
           "chance": 0.1474
         },
         {
+          "itemId": "twin-hooks",
+          "chance": 0.0117
+        },
+        {
           "itemId": "springsprout-rod",
           "chance": 0.0121
         },
@@ -5417,6 +5449,10 @@
         {
           "itemId": "skull-helmet",
           "chance": 0.0035
+        },
+        {
+          "itemId": "ruthless-axe",
+          "chance": 0.0015
         }
       ]
     },

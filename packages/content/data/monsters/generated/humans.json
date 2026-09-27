@@ -2200,6 +2200,10 @@
           "chance": 0.01
         },
         {
+          "itemId": "war-axe",
+          "chance": 0.01
+        },
+        {
           "itemId": "terra-mantle",
           "chance": 0.01
         },
@@ -2622,6 +2626,10 @@
           "chance": 0.015
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.0087
+        },
+        {
           "itemId": "fire-sword",
           "chance": 0.0055
         },
@@ -2800,6 +2808,10 @@
         {
           "itemId": "epee",
           "chance": 0.0259
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0375
         },
         {
           "itemId": "human-teeth",
@@ -5896,6 +5908,10 @@
         {
           "itemId": "wood-cape",
           "chance": 0.00405
+        },
+        {
+          "itemId": "elvish-bow",
+          "chance": 0.0027
         }
       ]
     },
@@ -6179,6 +6195,10 @@
         {
           "itemId": "small-diamond",
           "chance": 0.0083
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0013
         },
         {
           "itemId": "halberd",

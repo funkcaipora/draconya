@@ -684,6 +684,20 @@
     }
   },
   {
+    "id": "broken-macuahuitl",
+    "name": "broken macuahuitl",
+    "kind": "other",
+    "weight": 24,
+    "value": 1000,
+    "slot": "hand",
+    "attack": 1,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "broken-mitmah-necklace",
     "name": "broken mitmah necklace",
     "kind": "other",

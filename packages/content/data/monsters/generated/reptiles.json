@@ -501,6 +501,10 @@
           "chance": 0.0301
         },
         {
+          "itemId": "guardian-halberd",
+          "chance": 0.024
+        },
+        {
           "itemId": "lightning-legs",
           "chance": 0.009
         },
@@ -515,6 +519,10 @@
         {
           "itemId": "noble-axe",
           "chance": 0.007
+        },
+        {
+          "itemId": "hammer-of-wrath",
+          "chance": 0.004
         }
       ]
     },
@@ -1159,6 +1167,14 @@
         {
           "itemId": "zaoan-shoes",
           "chance": 0.0046
+        },
+        {
+          "itemId": "drakinata",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0096
         },
         {
           "itemId": "legionnaire-flags",
@@ -2142,6 +2158,10 @@
         {
           "itemId": "black-pearl",
           "chance": 0.008
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0026
         },
         {
           "itemId": "turtle-shell",

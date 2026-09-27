@@ -520,6 +520,10 @@
         {
           "itemId": "boots-of-haste",
           "chance": 0.004
+        },
+        {
+          "itemId": "dragon-lance",
+          "chance": 0.0029
         }
       ]
     },
@@ -1034,6 +1038,10 @@
         },
         {
           "itemId": "orc-tooth",
+          "chance": 0.0242
+        },
+        {
+          "itemId": "silkweaver-bow",
           "chance": 0.0242
         },
         {
@@ -2623,6 +2631,10 @@
         {
           "itemId": "cobra-hood",
           "chance": 0.0012
+        },
+        {
+          "itemId": "cobra-crossbow",
+          "chance": 0.0005
         }
       ]
     },
@@ -5674,6 +5686,22 @@
           "chance": 0.00225
         },
         {
+          "itemId": "eldritch-bow",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "eldritch-claymore",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "eldritch-greataxe",
+          "chance": 0.0011
+        },
+        {
+          "itemId": "eldritch-warmace",
+          "chance": 0.0032
+        },
+        {
           "itemId": "eldritch-shield",
           "chance": 0.0018
         },
@@ -5698,6 +5726,14 @@
           "chance": 0.0018
         },
         {
+          "itemId": "gilded-eldritch-claymore",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "gilded-eldritch-greataxe",
+          "chance": 0.0012
+        },
+        {
           "itemId": "gilded-eldritch-warmace",
           "chance": 0.001
         },
@@ -5708,6 +5744,10 @@
         {
           "itemId": "gilded-eldritch-rod",
           "chance": 0.0006
+        },
+        {
+          "itemId": "gilded-eldritch-bow",
+          "chance": 0.0005
         },
         {
           "itemId": "eldritch-crystal",
@@ -7050,6 +7090,10 @@
         {
           "itemId": "boots-of-haste",
           "chance": 0.16033
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.6
         },
         {
           "itemId": "bright-sword",

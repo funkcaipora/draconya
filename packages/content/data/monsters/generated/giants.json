@@ -146,8 +146,16 @@
           "chance": 0.1051
         },
         {
+          "itemId": "giant-sword",
+          "chance": 0.01006
+        },
+        {
           "itemId": "crowbar",
           "chance": 0.001
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0005
         },
         {
           "itemId": "plate-armor",
@@ -551,6 +559,10 @@
         {
           "itemId": "meat",
           "chance": 0.4995
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0015
         },
         {
           "itemId": "cyclops-toe",
@@ -969,6 +981,14 @@
         {
           "itemId": "furry-club",
           "chance": 0.0705
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0466
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0304
         },
         {
           "itemId": "doublet",
@@ -1463,6 +1483,10 @@
           "chance": 0.0576
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.0216
+        },
+        {
           "itemId": "metal-spats",
           "chance": 0.0144
         },
@@ -1828,6 +1852,10 @@
           "chance": 0.012
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.006
+        },
+        {
           "itemId": "shamanic-mask",
           "chance": 0.003
         }
@@ -2169,6 +2197,10 @@
         {
           "itemId": "beetle-carapace",
           "chance": 0.018
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.01
         },
         {
           "itemId": "small-topaz",

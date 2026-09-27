@@ -311,6 +311,10 @@
           "chance": 0.002
         },
         {
+          "itemId": "spiked-squelcher",
+          "chance": 0.003
+        },
+        {
           "itemId": "time-ring",
           "chance": 0.004
         },

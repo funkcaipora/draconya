@@ -238,6 +238,10 @@
       },
       "items": [
         {
+          "itemId": "guardian-halberd",
+          "chance": 0.0916
+        },
+        {
           "itemId": "bashmu-feather",
           "chance": 0.0532
         },
@@ -282,6 +286,10 @@
         {
           "itemId": "collar-of-red-plasma",
           "chance": 0.0066
+        },
+        {
+          "itemId": "haunted-blade",
+          "chance": 0.0059
         },
         {
           "itemId": "magma-amulet",
@@ -1073,8 +1081,16 @@
           "chance": 0.0197
         },
         {
+          "itemId": "haunted-blade",
+          "chance": 0.0144
+        },
+        {
           "itemId": "spellbook",
           "chance": 0.0093
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0018
         },
         {
           "itemId": "bonelord-shield",
@@ -2097,6 +2113,10 @@
         {
           "itemId": "wand-of-defiance",
           "chance": 0.0035
+        },
+        {
+          "itemId": "haunted-blade",
+          "chance": 0.0055
         },
         {
           "itemId": "lightning-legs",
@@ -3423,12 +3443,20 @@
           "chance": 0.0207
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.0154
+        },
+        {
           "itemId": "violet-crystal-shard",
           "chance": 0.0149
         },
         {
           "itemId": "dragonbone-staff",
           "chance": 0.0143
+        },
+        {
+          "itemId": "amber-staff",
+          "chance": 0.0127
         },
         {
           "itemId": "lightning-boots",
@@ -4592,6 +4620,10 @@
           "chance": 0.00337
         },
         {
+          "itemId": "war-axe",
+          "chance": 0.00095
+        },
+        {
           "itemId": "knight-legs",
           "chance": 0.00961
         },
@@ -4956,6 +4988,14 @@
         {
           "itemId": "devil-helmet",
           "chance": 0.0699
+        },
+        {
+          "itemId": "demonrage-sword",
+          "chance": 0.004
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.0025
         },
         {
           "itemId": "demon-shield",

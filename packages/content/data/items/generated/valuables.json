@@ -841,6 +841,18 @@
     }
   },
   {
+    "id": "heavily-rusted-shield",
+    "name": "heavily rusted shield",
+    "kind": "other",
+    "weight": 65,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "heralds-insignia",
     "name": "herald's insignia",
     "kind": "other",
@@ -1286,6 +1298,18 @@
     }
   },
   {
+    "id": "rusted-shield",
+    "name": "rusted shield",
+    "kind": "other",
+    "weight": 65,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "sage-gem",
     "name": "sage gem",
     "kind": "other",
@@ -1399,6 +1423,18 @@
     "name": "slightly rusted legs",
     "kind": "other",
     "weight": 70,
+    "value": 0,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "slightly-rusted-shield",
+    "name": "slightly rusted shield",
+    "kind": "other",
+    "weight": 65,
     "value": 0,
     "source": {
       "engine": "canary",

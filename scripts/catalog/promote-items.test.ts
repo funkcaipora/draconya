@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readGeneratedSlice } from './generated-writer.js';
 import {
-  checkItemPromotion, computeItemPromotion, readAuthoredItemIds, violatesContentRules, writeItemPromotion,
+  checkItemPromotion, computeItemPromotion, readAuthoredItemIds, readPackObjectRanges, violatesContentRules,
+  writeItemPromotion,
 } from './promote-items.js';
 
 const SOURCE = { engine: 'canary' as const, commit: 'a'.repeat(40), path: 'data/items/items.xml' };
@@ -166,6 +167,24 @@ describe('computeItemPromotion', () => {
     const result = computeItemPromotion(workdir);
     expect(result.slices.get('rings')).toHaveLength(1);
     expect(result.skippedByAppearance).toEqual([]);
+  });
+
+  it('readPackObjectRanges lê o pacote que appearances.pack DECLARA, nunca um nome fixo (#748: a troca para 15.33 na #738 não pede mudança de código aqui)', () => {
+    workdir = mkdtempSync(join(tmpdir(), 'draconya-promote-items-'));
+    const appearancesDir = join(workdir, 'packages/content/data/appearances');
+    mkdirSync(appearancesDir, { recursive: true });
+    writeFileSync(join(appearancesDir, 'baseline.json'), JSON.stringify({
+      id: 'baseline', pack: 'tibia-1533', monsters: {}, items: {},
+    }));
+    const packsDir = join(workdir, 'packages/content/data/packs');
+    mkdirSync(packsDir, { recursive: true });
+    writeFileSync(join(packsDir, 'tibia-1533.json'), JSON.stringify({
+      id: 'tibia-1533', version: 1533, object: [[40000, 60000]],
+    }));
+    // Não existe tibia-1332.json neste checkout sintético — se a função lesse um nome fixo em
+    // vez do campo `pack`, ela falharia ou devolveria `undefined` (pacote ausente) em vez das
+    // faixas do 15.33.
+    expect(readPackObjectRanges(workdir)).toEqual([[40000, 60000]]);
   });
 });
 

@@ -2228,6 +2228,10 @@
           "chance": 0.0113
         },
         {
+          "itemId": "elvish-bow",
+          "chance": 0.0014
+        },
+        {
           "itemId": "elvish-talisman",
           "chance": 0.052
         },
@@ -2619,6 +2623,10 @@
         {
           "itemId": "heaven-blossom",
           "chance": 0.0093
+        },
+        {
+          "itemId": "elvish-bow",
+          "chance": 0.001
         },
         {
           "itemId": "elvish-talisman",
@@ -3547,6 +3555,10 @@
           "chance": 0.0031
         },
         {
+          "itemId": "war-axe",
+          "chance": 0.0012
+        },
+        {
           "itemId": "knight-legs",
           "chance": 0.0031
         },
@@ -3561,6 +3573,10 @@
         {
           "itemId": "chaos-mace",
           "chance": 0.0016
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0042
         },
         {
           "itemId": "terra-boots",
@@ -3805,6 +3821,10 @@
         {
           "itemId": "chaos-mace",
           "chance": 0.0055
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0081
         },
         {
           "itemId": "terra-boots",
@@ -5219,6 +5239,10 @@
           "chance": 0.0071
         },
         {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0043
+        },
+        {
           "itemId": "chaos-mace",
           "chance": 0.0028
         },
@@ -5769,6 +5793,10 @@
         {
           "itemId": "meat",
           "chance": 0.246
+        },
+        {
+          "itemId": "silkweaver-bow",
+          "chance": 0.0007
         },
         {
           "itemId": "orc-tooth",

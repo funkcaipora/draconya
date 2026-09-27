@@ -2,7 +2,7 @@
 
 Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 
-1947 entidade(s) geradas em 10 fatia(s):
+1946 entidade(s) geradas em 10 fatia(s):
 
 - `amulets.json`: 87
 - `armors.json`: 164
@@ -13,17 +13,17 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 - `rings.json`: 44
 - `shields.json`: 109
 - `valuables.json`: 164
-- `weapons.json`: 490
+- `weapons.json`: 489
 
 ## Notas
 
-- 7420 `<item>` lidos das categorias de caça; 5473 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
+- 7420 `<item>` lidos das categorias de caça; 5474 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
 - Reconciliação (ADR 0014): 37 item(ns) autoral(is) com override gravado em `packages/content/data/items/overrides/` — o id nunca muda, só a correção.
 - Preço (`value`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary (exceto o Nah'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.
 - `stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.
 - Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), augments (75), showduration (73), shootType (67), decayTo (64), loottype (47), skillfist (47), mantra (38), transformdeequipto (28), stopduration (27), showCharges (22), showattributes (20), transformequipto (18), lifeleechchance (16), manaleechchance (16), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), magicshieldCapacityflat (4), magicshieldCapacitypercent (4), containersize (2), decayto (2), fluidsource (2), perfectshotrange (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectshotdamage (1), perfectShotDamage (1), wrapableto (1).
 
-## Fora do corte (5473)
+## Fora do corte (5474)
 
 O pacote de arte 13.32 não desenha, ou o `sim` ainda não executa a mecânica (ADR 0038 decisão 5).
 Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
@@ -641,6 +641,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | broken-flask | broken flask | sem categoria de caça (primarytype "rubbish") | `data/items/items.xml` |
 | broken-flask | broken flask | sem categoria de caça (primarytype "rubbish") | `data/items/items.xml` |
 | broken-green-glass | broken green glass | sem categoria de caça (primarytype "rubbish") | `data/items/items.xml` |
+| broken-iks-spear | broken Iks spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | broken-machine | broken machine | sem categoria de caça (primarytype "refuse") | `data/items/items.xml` |
 | broken-machine | broken machine | sem categoria de caça (primarytype "refuse") | `data/items/items.xml` |
 | broken-machine | broken machine | sem categoria de caça (primarytype "refuse") | `data/items/items.xml` |

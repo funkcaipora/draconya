@@ -2,18 +2,18 @@
 
 Separa `packages/content/staging/items/generated/*.json` (a transcrição pura do Canary, #573/#574) em `data/items/generated/` + `data/appearances/baseline.json.items` — o mesmo movimento que `promote-monsters.ts` (#580) já fez para monstro. Duas exclusões, cada uma contada: id que colide com item AUTORAL (o autoral vence, ADR 0014) e `appearanceId` fora do inventário do pacote de assets conferido (FUN-21).
 
-1644 item(ns) promovido(s) em 10 fatia(s):
+1748 item(ns) promovido(s) em 10 fatia(s):
 
 - `amulets.json`: 80
 - `armors.json`: 137
 - `boots.json`: 51
-- `creature-products.json`: 608
+- `creature-products.json`: 609
 - `helmets.json`: 112
 - `legs.json`: 51
 - `rings.json`: 37
 - `shields.json`: 100
-- `valuables.json`: 151
-- `weapons.json`: 317
+- `valuables.json`: 154
+- `weapons.json`: 417
 
 ## Excluídos por colisão com item autoral (59)
 
@@ -223,114 +223,8 @@ Separa `packages/content/staging/items/generated/*.json` (a transcrição pura d
 | yalahari-footwraps | 50289 | appearanceId 50289 não existe no inventário do pacote (data/packs/) — o Canary é mais novo que o pacote conferido |
 | zaoan-monk-robe | 50259 | appearanceId 50259 não existe no inventário do pacote (data/packs/) — o Canary é mais novo que o pacote conferido |
 
-## Excluídos por regra de conteúdo (105)
+## Excluídos por regra de conteúdo (0)
 
 A mesma conferência que `buildContent` (`content.ts`) faria no boot — item de decoração/quest com `defense` residual do Canary fora de `kind: shield`, arma sem `slot` (a maioria das armas do Canary não declara `<attribute key="slot" value="hand">`) que também carrega `imbuementslot`, e arma de distância sem `ammoFamily` reconhecida. A linha inteira é excluída — nunca escrita quebrada, e nunca corrigida em silêncio.
 
-| id | motivo |
-|---|---|
-| abyss-hammer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| amber-staff | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| avenger | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| berserker | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| blacksteel-sword | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| bow-of-cataclysm | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| bow-of-destruction | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| broken-iks-spear | defense só vale em escudo ou arma corpo a corpo (content.ts) |
-| broken-macuahuitl | defense só vale em escudo ou arma corpo a corpo (content.ts) |
-| chain-bolter | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| chopper-of-destruction | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| cobra-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| composite-hornbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| crossbow-of-destruction | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| demonrage-sword | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| demonwing-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| devileye | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| dragon-lance | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| drakinata | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| eldritch-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| eldritch-claymore | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| eldritch-greataxe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| eldritch-warmace | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| elvish-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| executioner | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| falcon-battleaxe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| falcon-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| falcon-longsword | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| giant-sword | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| gilded-eldritch-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| gilded-eldritch-claymore | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| gilded-eldritch-greataxe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| grand-sanguine-battleaxe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| grand-sanguine-bludgeon | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| grand-sanguine-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| grand-sanguine-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| grand-sanguine-razor | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| great-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| guardian-halberd | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| hammer-of-destruction | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| hammer-of-wrath | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| haunted-blade | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| havoc-blade | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| headchopper | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| heavily-rusted-shield | defense só vale em escudo ou arma corpo a corpo (content.ts) |
-| heavy-mace | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| hive-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| icicle-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| ironworker | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| jungle-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| jungle-flail | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| lion-longbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| living-vine-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| lunar-staff | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| modified-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| musicians-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| mycological-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| naga-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| orcish-maul | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| phantasmal-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| ravagers-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| resizer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| rift-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| rift-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| rift-lance | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| rusted-shield | defense só vale em escudo ou arma corpo a corpo (content.ts) |
-| ruthless-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| sanguine-battleaxe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| sanguine-bludgeon | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| sanguine-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| sanguine-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| sanguine-razor | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| silkweaver-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| skullcrusher | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| slayer-of-destruction | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| slightly-rusted-shield | defense só vale em escudo ou arma corpo a corpo (content.ts) |
-| soulbleeder | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| souleater | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| soulmaimer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| soulpiercer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| soulshredder | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| spiked-squelcher | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| stomper | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| stonecutter-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| tagralt-blade | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| thaian-sword | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| thorn-spitter | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| triple-bolt-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| twiceslicer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| twin-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| twin-hooks | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-chopper | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-hammer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-master-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-master-chopper | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-master-crossbow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-master-hammer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-master-slayer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| umbral-slayer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| war-axe | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| war-hammer | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| warsinger-bow | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
-| zaoan-halberd | imbuementSlots só vale em item que se veste e não empilha (content.ts) |
+Nenhum.

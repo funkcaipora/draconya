@@ -40,6 +40,10 @@
       },
       "items": [
         {
+          "itemId": "guardian-halberd",
+          "chance": 0.0941
+        },
+        {
           "itemId": "crystal-sword",
           "chance": 0.0894
         },
@@ -102,6 +106,10 @@
         {
           "itemId": "titan-axe",
           "chance": 0.0188
+        },
+        {
+          "itemId": "haunted-blade",
+          "chance": 0.0141
         },
         {
           "itemId": "mercenary-sword",
@@ -688,6 +696,14 @@
         {
           "itemId": "crystal-crossbow",
           "chance": 0.0018
+        },
+        {
+          "itemId": "composite-hornbow",
+          "chance": 0.001
+        },
+        {
+          "itemId": "elvish-bow",
+          "chance": 0.0008
         }
       ]
     },
@@ -986,6 +1002,10 @@
         {
           "itemId": "yellow-gem",
           "chance": 0.0053
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0207
         },
         {
           "itemId": "springsprout-rod",
@@ -1537,6 +1557,10 @@
           "chance": 0.0175
         },
         {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0054
+        },
+        {
           "itemId": "terra-amulet",
           "chance": 0.0236
         },
@@ -2085,8 +2109,16 @@
           "chance": 0.0088
         },
         {
+          "itemId": "giant-sword",
+          "chance": 0.0088
+        },
+        {
           "itemId": "mercenary-sword",
           "chance": 0.0064
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0136
         },
         {
           "itemId": "execowtioner-axe",
@@ -5238,6 +5270,10 @@
           "chance": 0.0265
         },
         {
+          "itemId": "haunted-blade",
+          "chance": 0.0137
+        },
+        {
           "itemId": "glacier-kilt",
           "chance": 0.0088
         },
@@ -5393,6 +5429,10 @@
         {
           "itemId": "green-mushroom",
           "chance": 0.03208
+        },
+        {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0221
         }
       ]
     },

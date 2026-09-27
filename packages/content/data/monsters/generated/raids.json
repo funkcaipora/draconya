@@ -2012,6 +2012,10 @@
           "chance": 0.1
         },
         {
+          "itemId": "haunted-blade",
+          "chance": 0.1
+        },
+        {
           "itemId": "nightmare-blade",
           "chance": 0.1
         }
@@ -2640,6 +2644,10 @@
         {
           "itemId": "two-handed-sword",
           "chance": 0.125
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.25
         },
         {
           "itemId": "silver-dagger",

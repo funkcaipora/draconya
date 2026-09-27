@@ -523,6 +523,10 @@
           "chance": 0.1
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.05
+        },
+        {
           "itemId": "ham",
           "chance": 0.5
         }
@@ -1226,6 +1230,10 @@
         {
           "itemId": "two-handed-sword",
           "chance": 0.015
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0087
         },
         {
           "itemId": "fire-sword",

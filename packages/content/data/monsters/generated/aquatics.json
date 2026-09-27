@@ -3500,6 +3500,10 @@
         {
           "itemId": "glacier-robe",
           "chance": 0.002
+        },
+        {
+          "itemId": "twiceslicer",
+          "chance": 0.001
         }
       ]
     },
@@ -3638,6 +3642,10 @@
         {
           "itemId": "glacier-robe",
           "chance": 0.004
+        },
+        {
+          "itemId": "abyss-hammer",
+          "chance": 0.0032
         },
         {
           "itemId": "frozen-plate",

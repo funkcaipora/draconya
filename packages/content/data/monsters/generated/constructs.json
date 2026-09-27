@@ -865,6 +865,10 @@
       },
       "items": [
         {
+          "itemId": "guardian-halberd",
+          "chance": 0.0056
+        },
+        {
           "itemId": "tower-shield",
           "chance": 0.0082
         },
@@ -883,6 +887,10 @@
         {
           "itemId": "zaoan-sword",
           "chance": 0.001
+        },
+        {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0186
         },
         {
           "itemId": "spiked-iron-ball",
@@ -1689,11 +1697,23 @@
           "chance": 0.0284
         },
         {
+          "itemId": "giant-sword",
+          "chance": 0.0057
+        },
+        {
           "itemId": "crystal-mace",
           "chance": 0.0085
         },
         {
+          "itemId": "war-axe",
+          "chance": 0.0092
+        },
+        {
           "itemId": "sapphire-hammer",
+          "chance": 0.0149
+        },
+        {
+          "itemId": "spiked-squelcher",
           "chance": 0.0149
         },
         {
@@ -1977,12 +1997,20 @@
           "chance": 0.0089
         },
         {
+          "itemId": "war-hammer",
+          "chance": 0.0092
+        },
+        {
           "itemId": "iron-ore",
           "chance": 0.01001
         },
         {
           "itemId": "bonebreaker",
           "chance": 0.0013
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.01003
         },
         {
           "itemId": "gear-wheel",

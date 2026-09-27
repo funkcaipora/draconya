@@ -774,7 +774,6 @@
     "value": 1000,
     "slot": "hand",
     "attack": 1,
-    "defense": 1,
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",

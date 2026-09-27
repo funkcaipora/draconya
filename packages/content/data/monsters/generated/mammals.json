@@ -4429,6 +4429,14 @@
           "chance": 0.05
         },
         {
+          "itemId": "twin-hooks",
+          "chance": 0.05
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.015
+        },
+        {
           "itemId": "combat-knife",
           "chance": 0.015
         }
