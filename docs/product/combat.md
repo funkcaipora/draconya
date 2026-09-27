@@ -1282,6 +1282,12 @@ interface MonsterAbility {
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
 
+**O catálogo (#580) trouxe 933 monstros gerados** para `packages/content/data/monsters/generated/`,
+ao lado de Rat, Rotworm, Dragon e Dragon Lord (hand-authored, só o #581 os regenera). O que ficou
+de fora do corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado
+(#573/#574) — está em `docs/reference/catalog/monsters-promotion-report.md`;
+`scripts/catalog/promote-monsters.ts` é quem separa `bestiary`/`outfitId` do monstro ao promover.
+
 ## IA de monstro do TFS: chance, onda direcional, defesa, troca de alvo e fuga (#518)
 
 O CMB-06 deu ao monstro uma lista de abilities, mas cada uma disparava **sempre** que o
