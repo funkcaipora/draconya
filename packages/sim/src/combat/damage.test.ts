@@ -1,4 +1,4 @@
-import { compileMitigation } from '@draconya/content';
+import { compileMitigation, compileReflect } from '@draconya/content';
 import type { Combat, DamageType } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
@@ -776,6 +776,27 @@ describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () =
     expect(availableBlockCharges(result.blockCharge as BlockChargeState, nowMs)).toBe(0);
   });
 
+  it('#687: o secundário com MAGIC_BLOCK_FLAGS passa pela armadura intacto; sem o campo, herda o do intent', () => {
+    // O elemento da arma (Fire Sword) é `blockHit(…, false, false)` no Canary: nem escudo nem
+    // armadura. O primário corpo a corpo continua bloqueável; o secundário declara as flags.
+    const armored = { armor: 20, dodgeChance: 0 };
+    const elemental: DamageIntent = {
+      ...swing, blockable: MELEE_BLOCK_FLAGS,
+      secondary: { rawDamage: 22, damageType: 'fire', blockable: MAGIC_BLOCK_FLAGS },
+    };
+    const result = resolveDamage(elemental, armored, 'pve', v3, riggedDodge(false, 'v3-element'), 0);
+    expect(result.secondaryOutcome?.afterArmor).toBe(22);
+    expect(result.secondaryOutcome?.armorReduction).toBe(0);
+    expect(result.secondaryOutcome?.resolvedDamage).toBe(22);
+
+    // Sem `blockable` no secundário, o comportamento do #473: herda o MELEE do intent.
+    const inherited: DamageIntent = {
+      ...elemental, secondary: { rawDamage: 22, damageType: 'fire' },
+    };
+    const before = resolveDamage(inherited, armored, 'pve', v3, riggedDodge(false, 'v3-element'), 0);
+    expect(before.secondaryOutcome?.afterArmor).toBeLessThan(22);
+  });
+
   it('combat-v1/v2 continuam bit a bit — o combat-v3 não toca `resolveMitigation`', () => {
     const v1Result = resolveDamage(swing, plate, 'pve', combat, rigged(false), 0);
     expect(v1Result.resolvedDamage).toBe(80);
@@ -784,6 +805,185 @@ describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () =
     const v2Result = resolveDamage(swing, plate, 'pve', v2, rigged(false), 0);
     expect(v2Result.resolvedDamage).toBe(80);
     expect(v2Result.blockCharge).toBeUndefined();
+  });
+});
+
+describe('combat-v3 (#552, M30-05): absorção, aumento e reflexo', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  // Sem armadura, defesa nem mitigação: o que sobra é só o estágio que o teste mede.
+  const bare = { armor: 0, dodgeChance: 0 };
+  const iceHit: DamageIntent = { ...hit(100, 'ice'), blockable: MAGIC_BLOCK_FLAGS };
+  const noDodge = (): Rng => rigged(false);
+  const reflectTable = (type: DamageType, percent: number, flat: number) => {
+    const table = compileReflect({ [type]: { ...(percent > 0 ? { percent } : {}), ...(flat > 0 ? { flat } : {}) } });
+    if (table === undefined) throw new Error('reflexo vazio');
+    return table;
+  };
+
+  it('absorção de 20 % de ice num hit de 100 → 80', () => {
+    const defender = { ...bare, absorb: { items: [{ ice: 20 }], flat: {} } };
+    expect(resolveDamage(iceHit, defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(80);
+  });
+
+  it('dois itens absorvem em SEQUÊNCIA, arredondando a cada um: 20 % + 20 % = 64, não 60', () => {
+    const defender = { ...bare, absorb: { items: [{ ice: 20 }, { ice: 20 }], flat: {} } };
+    expect(resolveDamage(iceHit, defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(64);
+  });
+
+  it('absorção de item vem DEPOIS da armadura; a flat vem ANTES (Creature × Player::blockHit)', () => {
+    // Armadura 2 tira exatamente 1 (`armor <= 3` → `--damage`), sem sorteio. Com 50 % do item
+    // depois dela: (100 − 1) − round(99 × 0,5) = 49. A flat de 10 vem antes: 100 − 10 − 1 = 89.
+    const physical: DamageIntent = { ...hit(100), blockable: { armor: true, shield: false } };
+    const armored = { armor: 2, dodgeChance: 0 };
+    const afterArmor = { ...armored, absorb: { items: [{ physical: 50 }], flat: {} } };
+    expect(resolveDamage(physical, afterArmor, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(49);
+    const flat = { ...armored, absorb: { items: [], flat: { physical: 10 } } };
+    expect(resolveDamage(physical, flat, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(89);
+  });
+
+  it('o aumento do ATACANTE por tipo soma no estágio de absorção', () => {
+    const intent: DamageIntent = { ...iceHit, modifiers: { increase: { ice: 10 } } };
+    expect(resolveDamage(intent, bare, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(110);
+    // Outro tipo não leva o aumento.
+    const fire: DamageIntent = { ...intent, damageType: 'fire' };
+    expect(resolveDamage(fire, bare, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(100);
+  });
+
+  it('combat-v1 ignora absorção, aumento e reflexo', () => {
+    const defender = {
+      ...bare, absorb: { items: [{ ice: 20 }], flat: { ice: 5 } },
+      reflect: { reflector: 'player' as const, table: reflectTable('ice', 50, 0) },
+    };
+    const intent: DamageIntent = {
+      ...iceHit, modifiers: { increase: { ice: 10 } }, attacker: { maxHealth: 10_000, distance: 1 },
+    };
+    const result = resolveDamage(intent, defender, 'pve', combat, noDodge(), 0);
+    expect(result.resolvedDamage).toBe(100);
+    expect(result.reflected).toBeUndefined();
+  });
+
+  it('o reflexo nunca passa de 1 % da vida máxima do atacante', () => {
+    const defender = { ...bare, reflect: { reflector: 'player' as const, table: reflectTable('ice', 50, 0) } };
+    const weak = resolveDamage(
+      { ...iceHit, attacker: { maxHealth: 500, distance: 1 } }, defender, 'pve', v3, noDodge(), 0,
+    );
+    // 50 % de 100 seria 50; o teto é ceil(500 × 1 %) = 5.
+    expect(weak.reflected).toEqual({ amount: 5, damageType: 'ice', neutral: true });
+    const strong = resolveDamage(
+      { ...iceHit, attacker: { maxHealth: 100_000, distance: 1 } }, defender, 'pve', v3, noDodge(), 0,
+    );
+    expect(strong.reflected?.amount).toBe(50);
+  });
+
+  it('reflexo não gera reflexo: um intent de extensão não reflete', () => {
+    const defender = { ...bare, reflect: { reflector: 'monster' as const, table: reflectTable('ice', 50, 0) } };
+    const intent: DamageIntent = { ...iceHit, attacker: { maxHealth: 100_000, distance: 1 }, extension: true };
+    expect(resolveDamage(intent, defender, 'pve', v3, noDodge(), 0).reflected).toBeUndefined();
+  });
+
+  it('sem atacante criatura, não há contra quem refletir', () => {
+    const defender = { ...bare, reflect: { reflector: 'player' as const, table: reflectTable('ice', 50, 0) } };
+    expect(resolveDamage(iceHit, defender, 'pve', v3, noDodge(), 0).reflected).toBeUndefined();
+  });
+
+  it('o dano NEUTRO (reflexo de jogador) ignora imunidade, absorção e resistência', () => {
+    const defender = {
+      ...bare,
+      mitigation: compileMitigation({ resistances: { fire: 0.5 }, immunities: ['ice'] }),
+      absorb: { items: [{ ice: 50, fire: 50 }], flat: { ice: 10, fire: 10 } },
+    };
+    const neutral = (damageType: DamageType): DamageIntent => ({
+      rawDamage: 20, source: 'reflect', damageType, blockable: MAGIC_BLOCK_FLAGS,
+      extension: true, neutral: true,
+    });
+    expect(resolveDamage(neutral('ice'), defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(20);
+    expect(resolveDamage(neutral('fire'), defender, 'pve', v3, noDodge(), 0).resolvedDamage).toBe(20);
+  });
+});
+
+describe('combat-v3 (#683, M30-G6): vulnerabilidade até -200 % e cura por elemento do monstro', () => {
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const bare = { armor: 0, dodgeChance: 0 };
+  const fireHit = (rawDamage: number): DamageIntent => ({ ...hit(rawDamage, 'fire'), blockable: MAGIC_BLOCK_FLAGS });
+  // Tabela completa por tipo, como `compileElementHealing` a entrega: zero onde não cura.
+  const healing = (fire: number): Record<DamageType, number> => ({
+    physical: 0, energy: 0, earth: 0, fire, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  });
+  const rolls = (chances: readonly boolean[]): Rng => {
+    const real = Rng.fromSeed('v3-heal');
+    let index = 0;
+    return {
+      chance: () => chances[index++] ?? false,
+      integer: (min: number, max: number) => real.integer(min, max),
+    } as unknown as Rng;
+  };
+
+  it('resistência -2 triplica o dano: 100 de fogo → 300', () => {
+    const defender = { ...bare, mitigation: compileMitigation({ resistances: { fire: -2 }, immunities: [] }) };
+    expect(resolveDamage(fireHit(100), defender, 'pve', v3, rigged(false), 0).resolvedDamage).toBe(300);
+  });
+
+  it('cura 50 % do dano BRUTO: 101 → ceil(50,5) = 51, com ou sem imunidade', () => {
+    const plain = { ...bare, elementHealing: healing(50) };
+    const hitPlain = resolveDamage(fireHit(101), plain, 'pve', v3, rigged(false), 0);
+    expect(hitPlain.elementHealing).toBe(51);
+    expect(hitPlain.resolvedDamage).toBe(101);
+    const immune = { ...plain, mitigation: compileMitigation({ resistances: {}, immunities: ['fire'] }) };
+    const hitImmune = resolveDamage(fireHit(101), immune, 'pve', v3, rigged(false), 0);
+    expect(hitImmune.resolvedDamage).toBe(0);
+    expect(hitImmune.elementHealing).toBe(51);
+    // Resistência não reduz a cura: ela sai ANTES do bloqueio.
+    const resistant = { ...plain, mitigation: compileMitigation({ resistances: { fire: 0.9 }, immunities: [] }) };
+    expect(resolveDamage(fireHit(101), resistant, 'pve', v3, rigged(false), 0).elementHealing).toBe(51);
+  });
+
+  it('a cura usa o dano JÁ crítico: 101 × 1,5 = 151,5 → ceil(75,75) = 76', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const intent: DamageIntent = { ...fireHit(101), modifiers: { critical: { chance: 1, multiplier: 1.5 } } };
+    const result = resolveDamage(intent, defender, 'pve', v3, rolls([false, true]), 0);
+    expect(result.critical).toBe(true);
+    expect(result.elementHealing).toBe(76);
+  });
+
+  it('outro tipo não cura, e o outcome não ganha a chave', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const result = resolveDamage({ ...hit(100, 'ice'), blockable: MAGIC_BLOCK_FLAGS }, defender, 'pve', v3, rigged(false), 0);
+    expect('elementHealing' in result).toBe(false);
+  });
+
+  it('o secundário cura pelo próprio tipo, no outcome dele', () => {
+    const defender = { ...bare, elementHealing: healing(100) };
+    const intent: DamageIntent = {
+      ...hit(100, 'physical'), blockable: MAGIC_BLOCK_FLAGS,
+      secondary: { rawDamage: 40, damageType: 'fire' },
+    };
+    const result = resolveDamage(intent, defender, 'pve', v3, rigged(false), 0);
+    expect(result.elementHealing).toBeUndefined();
+    expect(result.secondaryOutcome?.elementHealing).toBe(40);
+  });
+
+  it('combat-v1 ignora a cura: o outcome não tem a chave', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const result = resolveDamage(fireHit(100), defender, 'pve', combat, rigged(false), 0);
+    expect('elementHealing' in result).toBe(false);
+  });
+
+  it('o dano NEUTRO (reflexo de jogador) não cura', () => {
+    const defender = { ...bare, elementHealing: healing(50) };
+    const neutral: DamageIntent = { ...fireHit(100), source: 'reflect', extension: true, neutral: true };
+    expect(resolveDamage(neutral, defender, 'pve', v3, rigged(false), 0).elementHealing).toBeUndefined();
+  });
+
+  it('o reflexo de MONSTRO volta com o tipo original, não neutro, com o teto de 1 %', () => {
+    const table = compileReflect({ physical: { percent: 50 } });
+    if (table === undefined) throw new Error('reflexo vazio');
+    const defender = { ...bare, reflect: { reflector: 'monster' as const, table } };
+    const result = resolveDamage(
+      { ...hit(100), blockable: MAGIC_BLOCK_FLAGS, attacker: { maxHealth: 500, distance: 5 } },
+      defender, 'pve', v3, rigged(false), 0,
+    );
+    expect(result.reflected).toEqual({ amount: 5, damageType: 'physical', neutral: false });
   });
 });
 

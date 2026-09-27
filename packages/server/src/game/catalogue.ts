@@ -147,6 +147,8 @@ export function buildCatalogue(content: Content): Catalogue {
       id: item.id,
       name: item.name,
       appearanceId: item.appearanceId,
+      // A forma ativa no slot vestido (#689): o Energy Ring ligado. Só quando a tabela a tem.
+      ...(item.equippedAppearanceId === undefined ? {} : { equippedAppearanceId: item.equippedAppearanceId }),
       weight: item.weight,
       // `null` e não ausente: "não veste em lugar nenhum" é uma informação, e campo opcional
       // a confundiria com "o servidor não disse".
@@ -215,7 +217,13 @@ export function buildCatalogue(content: Content): Catalogue {
     progression: {
       startingSpeed: content.progression.startingSpeed,
       speedPerLevel: content.progression.speedPerLevel,
-      regen: { ...content.progression.regen },
+      // O conteúdo guarda PULSOS (#678, `amount` a cada `ticksMs`); o contrato de protocolo segue
+      // em pontos por segundo, derivado aqui — o cliente não lê o campo, e mudá-lo seria mudança
+      // sem consumidor.
+      regen: {
+        healthPerSecond: (content.progression.regen.health.amount * 1000) / content.progression.regen.health.ticksMs,
+        manaPerSecond: (content.progression.regen.mana.amount * 1000) / content.progression.regen.mana.ticksMs,
+      },
     },
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a

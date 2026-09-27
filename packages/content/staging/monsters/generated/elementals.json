@@ -47,7 +47,8 @@
           "min": 0,
           "max": 100
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "fireball",
@@ -66,6 +67,7 @@
           "max": 160
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire",
           "impactKey": "firearea"
@@ -229,7 +231,8 @@
           "min": 0,
           "max": 266
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "energyball",
@@ -248,6 +251,7 @@
           "max": 497
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energy",
           "impactKey": "energyhit"
@@ -265,6 +269,7 @@
           "max": 277
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energyball",
           "impactKey": "energyhit"
@@ -351,7 +356,8 @@
           "min": 0,
           "max": 200
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "firebeam",
@@ -360,8 +366,12 @@
         "target": {
           "range": 7,
           "area": {
-            "shape": "beam",
-            "length": 3
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -369,6 +379,7 @@
           "max": 300
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbyfire"
         }
@@ -380,8 +391,15 @@
         "target": {
           "range": 7,
           "area": {
-            "shape": "beam",
-            "length": 6
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -389,6 +407,7 @@
           "max": 100
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbyfire"
         }

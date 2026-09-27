@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
+import { evaluateSpellPower } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
-import { balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
+import { actionExhaustKey, balanceOf, castSpell, executeHealing, spellCooldownKey, useSupply } from './casting.js';
+import type { SpellScaling } from './casting.js';
+import { normalRandomInt } from './combat/weapon-power.js';
 import { Rng } from './rng.js';
 
 // Esquiva zero e armadura que conta inteira: aqui o assunto é o PORTÃO — level, cooldown,
@@ -600,6 +603,164 @@ describe('a fórmula canônica do Canary (#474)', () => {
   });
 });
 
+describe('a skill da fórmula: LEVELMAGIC lê o magic level, SKILLVALUE a da vocação (#677)', () => {
+  // Paladin level 100, distance 100 e ML 20. Divine Caldera no Canary registra
+  // `CALLBACK_PARAM_LEVELMAGICVALUE`: min = level/5 + ML×4, max = level/5 + ML×6.
+  const divineCaldera: Spell = {
+    id: 'divine-caldera', name: 'Divine Caldera', manaCost: 160, cooldownMs: 4_000, minLevel: 50,
+    vocationId: 'paladin',
+    effect: {
+      kind: 'damage', basePower: 150, damageType: 'holy',
+      area: { shape: 'circle', radius: 3, centered: 'caster' },
+      formula: { levelFactor: 0.2, skillMin: 4, skillMax: 6, baseMin: 0, baseMax: 0, scaling: 'magic' },
+    },
+  };
+  // Ethereal Spear registra `CALLBACK_PARAM_SKILLVALUE`: o termo é a distance, e a fórmula não
+  // declara `scaling` (= `vocation`).
+  const etherealSpear: Spell = {
+    id: 'ethereal-spear', name: 'Ethereal Spear', manaCost: 25, cooldownMs: 2_000, minLevel: 23,
+    vocationId: 'paladin',
+    effect: {
+      kind: 'damage', basePower: 25, range: 7, damageType: 'physical',
+      formula: { levelFactor: 0.2, skillMin: 0.333333, skillMax: 1, baseMin: 8.333333, baseMax: 25 },
+    },
+  };
+  const paladin = (): CharacterRuntime => {
+    const caster = hero({ level: 100, mana: 1_000 });
+    caster.vocationId = 'paladin';
+    return caster;
+  };
+  const scaling = { skillLevel: 100, powerScale: 1, magicLevel: 20 };
+
+  it('Divine Caldera com `scaling: magic` rende 100~140 pelo ML 20, não 420~620 pela distance', () => {
+    const result = castSpell(paladin(), divineCaldera, near(), 0, combat, rng(), scaling);
+    if (!result.ok) throw new Error('lançamento recusado');
+    // min = 20 + 20×4 = 100; max = 20 + 20×6 = 140. Lendo a distance seria 420~620.
+    expect(result.hits[0]).toBeGreaterThanOrEqual(100);
+    expect(result.hits[0]).toBeLessThanOrEqual(140);
+  });
+
+  it('Ethereal Spear sem `scaling` continua lendo a skill da vocação (distance 100)', () => {
+    const result = castSpell(paladin(), etherealSpear, near({ distance: 3 }), 0, combat, rng(), scaling);
+    if (!result.ok) throw new Error('lançamento recusado');
+    // min = 20 + 100×0.333333 + 8.33 ≈ 61.67; max = 20 + 100 + 25 = 145. A prova de que o ML
+    // não entra: o mesmo lançamento com ML 500 sai idêntico (lendo o ML, o teto iria a 545).
+    const outroMl = castSpell(paladin(), etherealSpear, near({ distance: 3 }), 0, combat, rng(),
+      { ...scaling, magicLevel: 500 });
+    if (!outroMl.ok) throw new Error('lançamento recusado');
+    expect(result.hits).toEqual(outroMl.hits);
+    expect(result.hits[0]).toBeGreaterThanOrEqual(61);
+    expect(result.hits[0]).toBeLessThanOrEqual(145);
+  });
+
+  it('`scaling: magic` sem `magicLevel` na escala cai em `skillLevel` (o fallback das fixtures)', () => {
+    const result = castSpell(paladin(), divineCaldera, near(), 0, combat, rng(), { skillLevel: 20, powerScale: 1 });
+    if (!result.ok) throw new Error('lançamento recusado');
+    expect(result.hits[0]).toBeGreaterThanOrEqual(100);
+    expect(result.hits[0]).toBeLessThanOrEqual(140);
+  });
+});
+
+describe('o ML especializado do elemento soma no termo de ML da fórmula (#680)', () => {
+  // Level 100, ML 20. O que se mede é a FAIXA sorteada: `rng.integer(min, max)` é a primeira
+  // rolagem do efeito (sem crítico declarado, nada sorteia antes).
+  const firstRoll = (act: (random: Rng) => void): [number, number] => {
+    const random = rng();
+    const spy = vi.spyOn(random, 'integer');
+    act(random);
+    const call = spy.mock.calls[0];
+    if (call === undefined) throw new Error('nenhum sorteio');
+    return [call[0], call[1]];
+  };
+  const sorcerer = (): CharacterRuntime => hero({ level: 100, mana: 1_000 });
+  const base: SpellScaling = { skillLevel: 20, powerScale: 1, magicLevel: 20 };
+  // Fire Wave (`fire-wave.json`): LEVELMAGIC, min = level/5 + ML×1.25 + 4, max = level/5 + ML×2 + 12.
+  const fireWave: Spell = {
+    id: 'fire-wave', name: 'Fire Wave', manaCost: 25, cooldownMs: 4_000, minLevel: 18,
+    effect: {
+      kind: 'damage', basePower: 40, damageType: 'fire', area: { shape: 'wave', length: 3 },
+      formula: { levelFactor: 0.2, skillMin: 1.25, skillMax: 2, baseMin: 4, baseMax: 12, scaling: 'magic' },
+    },
+  };
+  // Ethereal Spear: SKILLVALUE (sem `scaling`), `physical`.
+  const etherealSpear: Spell = {
+    id: 'ethereal-spear', name: 'Ethereal Spear', manaCost: 25, cooldownMs: 2_000, minLevel: 23,
+    effect: {
+      kind: 'damage', basePower: 25, range: 7, damageType: 'physical',
+      formula: { levelFactor: 0.2, skillMin: 0.333333, skillMax: 1, baseMin: 8.333333, baseMax: 25 },
+    },
+  };
+  // Ultimate Healing (`ultimate-healing-*.json`) e Mass Healing (`mass-healing.json`, que lê o ML cru).
+  const ultimateHealing = {
+    kind: 'heal' as const,
+    formula: { levelFactor: 0.2, skillMin: 6.8, skillMax: 12.9, baseMin: 42, baseMax: 90 },
+  };
+  const massHealing = {
+    kind: 'heal' as const,
+    formula: {
+      levelFactor: 0.2, skillMin: 5.7, skillMax: 10.43, baseMin: 26, baseMax: 62,
+      includeSpecializedMagicLevel: false,
+    },
+  };
+
+  it('Fire Wave com fire +2 sorteia em [51, 76]; sem o item, [49, 72]', () => {
+    const cast = (scaling: SpellScaling) => firstRoll((random) => {
+      castSpell(sorcerer(), fireWave, near(), 0, combat, random, scaling);
+    });
+    expect(cast(base)).toEqual([49, 72]);
+    expect(cast({ ...base, specializedMagicLevel: { fire: 2 } })).toEqual([51, 76]);
+  });
+
+  it('o especializado de OUTRO elemento não soma, e a SKILLVALUE nunca soma', () => {
+    const fire = firstRoll((random) => {
+      castSpell(sorcerer(), fireWave, near(), 0, combat, random, { ...base, specializedMagicLevel: { energy: 2 } });
+    });
+    expect(fire).toEqual([49, 72]);
+    const spear = (scaling: SpellScaling) => firstRoll((random) => {
+      castSpell(sorcerer(), etherealSpear, near({ distance: 3 }), 0, combat, random, scaling);
+    });
+    expect(spear({ ...base, specializedMagicLevel: { physical: 5 } })).toEqual(spear(base));
+  });
+
+  it('Ultimate Healing soma o `healing`: [211, 393] com +2, [198, 368] sem', () => {
+    const healRoll = (scaling: SpellScaling) => firstRoll((random) => {
+      executeHealing(sorcerer(), sorcerer(), ultimateHealing, scaling, combat, random);
+    });
+    expect(healRoll(base)).toEqual([198, 368]);
+    expect(healRoll({ ...base, specializedMagicLevel: { healing: 2 } })).toEqual([211, 393]);
+  });
+
+  it('Mass Healing (`includeSpecializedMagicLevel: false`) lê o ML cru', () => {
+    const healRoll = (scaling: SpellScaling) => firstRoll((random) => {
+      executeHealing(sorcerer(), sorcerer(), massHealing, scaling, combat, random);
+    });
+    expect(healRoll({ ...base, specializedMagicLevel: { healing: 5 } })).toEqual(healRoll(base));
+  });
+
+  it('a runa soma o do elemento DELA na fórmula, mas o requisito de ML lê o ML cru', () => {
+    const rune: Supply = {
+      id: 'great-fireball-rune', name: 'Great Fireball Rune', price: 10, group: 'attack', groupCooldownMs: 2_000,
+      requires: { level: 30, magicLevel: 20 },
+      effect: {
+        kind: 'damage', basePower: 60, range: 4, damageType: 'fire',
+        area: { shape: 'circle', radius: 3, centered: 'target' },
+        formula: { levelFactor: 0.2, skillMin: 1.2, skillMax: 2.4, baseMin: 7, baseMax: 16 },
+      },
+    };
+    const user = () => hero({ level: 100, gold: 1_000 });
+    // ML 19 + fire 5: o Canary confere `getMagicLevel()` cru — recusa.
+    expect(useSupply(user(), rune, near({ distance: 2 }), combat, rng(), {
+      skillLevel: 19, powerScale: 1, magicLevel: 19, specializedMagicLevel: { fire: 5 },
+    })).toEqual({ ok: false, reason: 'magic-level-too-low', retryInMs: 0 });
+    // ML 20 + fire 1: a faixa é a do ML 21 — min = 20 + 21×1.2 + 7, max = 20 + 21×2.4 + 16.
+    const roll = (scaling: SpellScaling) => firstRoll((random) => {
+      useSupply(user(), rune, near({ distance: 2 }), combat, random, scaling);
+    });
+    expect(roll(base)).toEqual([51, 84]);
+    expect(roll({ ...base, specializedMagicLevel: { fire: 1 } })).toEqual([52, 86]);
+  });
+});
+
 describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisão 8)', () => {
   const rune: Supply = {
     id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack', groupCooldownMs: 2_000,
@@ -836,6 +997,79 @@ describe('a poção do Tibia — faixa fixa, espírito e requisito de vocação 
     expect(recusa.ok).toBe(false);
     if (!recusa.ok) expect(recusa.retryInMs).toBe(0);
   });
+
+  // #690: o `doTargetCombatHealth`/`doTargetCombatMana` do Canary sorteia pela normal truncada;
+  // só o `combat-v3` troca, `combat-v1`/`v2` seguem uniformes bit a bit (ADR 0031).
+  const combatV2: Combat = { ...combat, compatibilityProfile: 'combat-v2' };
+  const combatV3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const paladin = (): CharacterRuntime => {
+    const runtime = bigHero({ level: 90, health: 10, mana: 0, gold: 1_000 });
+    runtime.vocationId = 'paladin';
+    return runtime;
+  };
+
+  it('`combat-v3` sorteia a faixa pela normal truncada: mesma semente = `normalRandomInt`', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const expected = Rng.fromSeed(`n${seed}`);
+      const heal = normalRandomInt(expected, 250, 350);
+      const result = useSupply(paladin(), strongHeal, null, combatV3, Rng.fromSeed(`n${seed}`));
+      expect(result).toMatchObject({ ok: true, healed: heal });
+    }
+  });
+
+  it('`combat-v2` continua no `rng.integer` uniforme — a normal não vaza para v1/v2', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const heal = Rng.fromSeed(`u${seed}`).integer(250, 350);
+      const result = useSupply(paladin(), strongHeal, null, combatV2, Rng.fromSeed(`u${seed}`));
+      expect(result).toMatchObject({ ok: true, healed: heal });
+    }
+  });
+
+  it('`combat-v3` na poção de mana e na de espírito: vida sorteia ANTES da mana', () => {
+    const expectedMana = normalRandomInt(Rng.fromSeed('m'), 115, 185);
+    expect(useSupply(paladin(), strongMana, null, combatV3, Rng.fromSeed('m')))
+      .toMatchObject({ ok: true, manaRestored: expectedMana });
+
+    const sequence = Rng.fromSeed('spirit-v3');
+    const heal = normalRandomInt(sequence, 250, 350);
+    const mana = normalRandomInt(sequence, 100, 200);
+    expect(useSupply(paladin(), spirit, null, combatV3, Rng.fromSeed('spirit-v3')))
+      .toMatchObject({ ok: true, healed: heal, manaRestored: mana });
+  });
+});
+
+describe('a exaustão de ação compartilhada entre poção e runa (#690)', () => {
+  const exhaustingPotion: Supply = { ...potion, actionExhaustMs: 1_000 };
+
+  it('o uso trava `exhaust:action` pelo `actionExhaustMs` do supply', () => {
+    const user = hero({ health: 10, gold: 1_000 });
+    expect(useSupply(user, exhaustingPotion, null, undefined, undefined, undefined, undefined, user, 5_000).ok)
+      .toBe(true);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 5_000)).toBe(1_000);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 5_600)).toBe(400);
+  });
+
+  it('supply SEM `actionExhaustMs` não entra no livro (fixture, Magic Shield Potion)', () => {
+    const user = hero({ health: 10, gold: 1_000 });
+    expect(useSupply(user, potion, null, undefined, undefined, undefined, undefined, user, 0).ok).toBe(true);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 0)).toBe(0);
+  });
+
+  it('o livro só AVANÇA: uma exaustão curta nunca encurta a que já corre', () => {
+    const user = hero({ health: 10, gold: 1_000 });
+    const long: Supply = { ...potion, id: 'long', actionExhaustMs: 3_000 };
+    const short: Supply = { ...potion, id: 'short', group: 'healing', actionExhaustMs: 1_000 };
+    useSupply(user, long, null, undefined, undefined, undefined, undefined, user, 0);
+    useSupply(user, short, null, undefined, undefined, undefined, undefined, user, 500);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 500)).toBe(2_500);
+  });
+
+  it('uso recusado (sem gold) não trava nada', () => {
+    const user = hero({ health: 10, gold: 0 });
+    expect(useSupply(user, exhaustingPotion, null, undefined, undefined, undefined, undefined, user, 0).ok)
+      .toBe(false);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 0)).toBe(0);
+  });
 });
 
 describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
@@ -1061,6 +1295,153 @@ describe('as runas de ataque com a fórmula canônica do Canary (#476)', () => {
         at(supply, supply.requires.magicLevel ?? 0),
       );
       expect(result.ok).toBe(true);
+    }
+  });
+});
+
+describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
+  // O Canary sorteia magia, runa e poção por `normal_random` (`combat.cpp:2046`,
+  // `global_functions.cpp:372`/`:455`). Cada caso compara com `normalRandomInt` sobre um CLONE
+  // do `Rng` no estado de antes — o valor é o primeiro sorteio da ação.
+  const v3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  /** Pools grandes: a cura não pode ser clampada pelo teto, o assunto é o sorteio. */
+  const bigPools = (level: number, over: Partial<{ health: number; mana: number }> = {}): CharacterRuntime =>
+    new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: over.health ?? 1, maxHealth: 10_000,
+      mana: over.mana ?? 1_000, maxMana: 10_000,
+      level, xp: 0, vocationId: null,
+      staminaMs: null, staminaUpdatedAtMs: 0,
+      gold: 10_000, goldDelta: 0, alive: true, cooldowns: {},
+    });
+
+  it('poção `amountRange` 250–350 sorteia `normalRandomInt` — e o v1 continua `rng.integer`', () => {
+    const strongHeal: Supply = {
+      id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+      groupCooldownMs: 1_000, requires: {}, effect: { kind: 'heal', amountRange: { min: 250, max: 350 } },
+    };
+    for (let seed = 0; seed < 20; seed += 1) {
+      const source = Rng.fromSeed(`potion-v3-${seed}`);
+      const clone = new Rng(source.getState());
+      const user = bigPools(60);
+      expect(useSupply(user, strongHeal, null, v3, source, undefined, undefined, user, 0))
+        .toMatchObject({ ok: true, healed: normalRandomInt(clone, 250, 350) });
+
+      const v1Source = Rng.fromSeed(`potion-v3-${seed}`);
+      const v1Clone = new Rng(v1Source.getState());
+      const v1User = bigPools(60);
+      expect(useSupply(v1User, strongHeal, null, combat, v1Source, undefined, undefined, v1User, 0))
+        .toMatchObject({ ok: true, healed: v1Clone.integer(250, 350) });
+    }
+  });
+
+  it('poção de mana e a de espírito (`alsoMana`) também saem da normal', () => {
+    const spirit: Supply = {
+      id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+      groupCooldownMs: 1_000, requires: {},
+      effect: {
+        kind: 'heal', amountRange: { min: 250, max: 350 },
+        alsoMana: { amountRange: { min: 100, max: 200 } },
+      },
+    };
+    const strongMana: Supply = {
+      id: 'strong-mana-potion', name: 'Strong Mana Potion', price: 150, group: 'potion',
+      groupCooldownMs: 1_000, requires: {}, effect: { kind: 'mana', amountRange: { min: 115, max: 185 } },
+    };
+    const source = Rng.fromSeed('spirit-v3');
+    const clone = new Rng(source.getState());
+    const user = bigPools(90, { mana: 0 });
+    const result = useSupply(user, spirit, null, v3, source, undefined, undefined, user, 0);
+    const healed = normalRandomInt(clone, 250, 350);
+    expect(result).toMatchObject({ ok: true, healed, manaRestored: normalRandomInt(clone, 100, 200) });
+
+    const manaSource = Rng.fromSeed('mana-v3');
+    const manaClone = new Rng(manaSource.getState());
+    const manaUser = bigPools(60, { mana: 0 });
+    expect(useSupply(manaUser, strongMana, null, v3, manaSource, undefined, undefined, manaUser, 0))
+      .toMatchObject({ ok: true, manaRestored: normalRandomInt(manaClone, 115, 185) });
+  });
+
+  it('magia de cura com `formula` e com `basePower` provisório sorteiam pela normal', () => {
+    const magic = { skillLevel: 40, powerScale: 1, magicLevel: 40 };
+    const withFormula: Spell = {
+      ...heal, id: 'light-healing',
+      effect: {
+        kind: 'heal', basePower: 40,
+        formula: { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 8, baseMax: 11 },
+      },
+    };
+    const onlyBase: Spell = { ...heal, id: 'base-healing', effect: { kind: 'heal', basePower: 40 } };
+    // Fórmula: min = 10 + 40×1.4 + 8 = 74, max = 10 + 40×2.0 + 11 = 101. BP: a conversão provisória.
+    const base = evaluateSpellPower(undefined, 40, 50, 40, v3.spellPower);
+    const cases = [
+      { spell: withFormula, min: 74, max: 101 },
+      { spell: onlyBase, min: base.min, max: base.max },
+    ];
+    for (const { spell, min, max } of cases) {
+      const source = Rng.fromSeed(`heal-v3-${spell.id}`);
+      const clone = new Rng(source.getState());
+      expect(castSpell(bigPools(50), spell, null, 0, v3, source, magic))
+        .toMatchObject({ ok: true, healed: normalRandomInt(clone, min, max) });
+    }
+  });
+
+  it('runa de cura (UH) sorteia pela normal', () => {
+    const uhRune: Supply = {
+      id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 35,
+      group: 'healing', groupCooldownMs: 1_000, requires: { level: 24, magicLevel: 4 },
+      effect: {
+        kind: 'heal', range: 4,
+        formula: { levelFactor: 0.2, skillMin: 5.7, skillMax: 10.3, baseMin: 36, baseMax: 65 },
+      },
+    };
+    const source = Rng.fromSeed('uh-v3');
+    const clone = new Rng(source.getState());
+    const user = bigPools(50);
+    const result = useSupply(user, uhRune, null, v3, source, { skillLevel: 0, powerScale: 1, magicLevel: 40 }, undefined, user, 0);
+    // min = 10 + 40×5.7 + 36 = 274; max = 10 + 40×10.3 + 65 = 487.
+    expect(result).toMatchObject({ ok: true, healed: normalRandomInt(clone, 274, 487) });
+  });
+
+  it('runa de ataque (SD) sorteia pela normal', () => {
+    const suddenDeath: Supply = {
+      id: 'sudden-death-rune', name: 'Sudden Death Rune', price: 108,
+      group: 'attack', groupCooldownMs: 2_000, requires: { level: 45, magicLevel: 15 },
+      effect: {
+        kind: 'damage', range: 8, damageType: 'death',
+        formula: { levelFactor: 0.2, skillMin: 4.6, skillMax: 7.4, baseMin: 32, baseMax: 48 },
+      },
+    };
+    for (let seed = 0; seed < 10; seed += 1) {
+      const source = Rng.fromSeed(`sd-v3-${seed}`);
+      const clone = new Rng(source.getState());
+      const result = useSupply(
+        bigPools(45), suddenDeath, near({ distance: 5 }), v3, source,
+        { skillLevel: 15, powerScale: 1, magicLevel: 15 },
+      );
+      if (!result.ok) throw new Error('esperava usar a runa');
+      // Sem armadura, esquiva nem defesa, o golpe é o poder sorteado: min 110, max 168.
+      expect(result.hits[0]).toBe(normalRandomInt(clone, 110, 168));
+    }
+  });
+
+  it('magia de ataque com `formula` sorteia pela normal', () => {
+    const iceStrike: Spell = {
+      ...strike, id: 'ice-strike', manaCost: 12, minLevel: 8,
+      effect: {
+        kind: 'damage', basePower: 45, range: 3, damageType: 'ice',
+        formula: { levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 8, baseMax: 13 },
+      },
+    };
+    for (let seed = 0; seed < 10; seed += 1) {
+      const source = Rng.fromSeed(`ice-v3-${seed}`);
+      const clone = new Rng(source.getState());
+      const result = castSpell(
+        bigPools(50), iceStrike, near({ distance: 3 }), 0, v3, source, { skillLevel: 40, powerScale: 1 },
+      );
+      if (!result.ok) throw new Error('esperava lançar');
+      // min = 10 + 40×1.403 + 8 = 74; max = 10 + 40×2.203 + 13 = 111.
+      expect(result.hits[0]).toBe(normalRandomInt(clone, 74, 111));
     }
   });
 });

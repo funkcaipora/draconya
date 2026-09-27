@@ -103,6 +103,9 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
             const item = inventory.equipped[slot];
             const definition = item === undefined ? undefined : byId.get(item.itemId);
             const name = definition?.name ?? item?.itemId ?? 'item';
+            // Vestido, o item mostra a forma ativa (#689): o anel ligado no dedo. Na mochila
+            // continua a aparência de sempre — o slot vestido é o único que troca.
+            const wornAppearanceId = definition?.equippedAppearanceId ?? definition?.appearanceId;
             const countProps = item !== undefined && item.quantity > 1 ? { count: item.quantity } : {};
             return (
               <li
@@ -135,7 +138,7 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
                         const intent = clickIntent({ slot }, inventory);
                         if (intent !== null) sendIntent(intent);
                       }}
-                      icon={<ItemSprite appearanceId={definition?.appearanceId} name={name} />}
+                      icon={<ItemSprite appearanceId={wornAppearanceId} name={name} />}
                       {...countProps}
                     />
                   )}

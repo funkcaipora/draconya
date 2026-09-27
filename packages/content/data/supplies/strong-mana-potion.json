@@ -5,6 +5,7 @@
   "price": 150,
   "group": "potion",
   "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
   "effect": {
     "kind": "mana",
     "amountRange": { "min": 115, "max": 185 },

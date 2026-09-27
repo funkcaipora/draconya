@@ -214,6 +214,28 @@ no boot porque seria imunidade disfarçada, e imunidade é **explícita** (DT-02
 resistência e imunidade para o mesmo tipo também é recusado. O perfil é compilado no boot para
 uma tabela completa por tipo (lookup O(1)) e um `Set` de imunidade.
 
+**O MONSTRO vai até -200 % (#683, M30-G6).** `monsterMitigationSchema` aceita resistência em
+`[-2, 1)` — o `minElementalResistance` do Canary: `-2` TRIPLICA o dano (`(100 − (−200)) / 100`),
+o que o estágio de resistência já fazia; só o schema barrava. O ITEM continua em `[-1, 1)`. O
+teto `< 1` vale para os dois: `elements ≥ 100` do Canary vira IMUNIDADE no importador (#578),
+nunca resistência de 100 % (DT-02).
+
+**Cura por elemento e reflexo do monstro (#683, só `combat-v3`).** O monstro declara, além da
+mitigação, dois campos por tipo, em PERCENTUAL INTEIRO (a escala do Canary, como o reflexo de
+item do #552):
+
+- `elementHealing.<tipo>` (`monster.heals`, teto 500): o golpe daquele tipo CURA o monstro em
+  `ceil(dano já crítico × p / 100)`, calculado ANTES de qualquer bloqueio — então cura mesmo com
+  o monstro IMUNE ao tipo (`DamageOutcome.elementHealing`). A cura soma primário e secundário e é
+  aplicada DEPOIS do dano e do reflexo (`creature-healed`, `source: 'monster'`); golpe que mata
+  não cura, e de vida cheia nada é emitido. Só com atacante criatura: golpe, magia, runa e tique
+  de condição com dono personagem — o tique de campo não cura;
+- `reflect.<tipo>` (`monster.reflects`, teto 200 — `MAX_DAMAGE_REFLECTION`): o reflexo do #552
+  com refletor `monster` — `floor(dano bloqueado × p / 100)` volta ao personagem com o TIPO
+  original (o equipamento dele absorve, resiste e é imune normalmente), a qualquer distância, com
+  o teto `ceil(1 % da vida máxima do personagem)`, como EXTENSÃO (nunca reflete de volta). Vale
+  para golpe, magia e runa; sai depois do dano no monstro, mesmo no golpe que o mata.
+
 A ordem de mitigação, congelada na emenda do ADR 0031:
 
 1. **uma rolagem de Dodge, sempre consumida, primeiro ato** (posição do RNG é contrato);
@@ -303,7 +325,8 @@ O terceiro não ganhou mecanismo próprio, e isso foi uma correção: uma taxa d
 **é** uma ação periódica de `1000 / r` milissegundos. O caminho que parecia natural — somar
 `r × dtMs / 1000` num acumulador fracionário — é pior: somar `0,1` dez vezes em ponto flutuante
 dá `0,9999…`, e some uma unidade a cada dez. Numa hunt de oito horas isso é regeneração faltando
-sem nada explicando. Em milissegundos a conta é exata.
+sem nada explicando. Em milissegundos a conta é exata. (A regeneração nem chega a ser taxa desde
+#678: o conteúdo guarda o pulso do Canary, `amount` a cada `ticksMs` — ver adiante.)
 
 ## Regeneração
 
@@ -314,13 +337,23 @@ personagem continua podendo morrer, não que ele passa a morrer mais rápido.
 Morto não regenera — sem essa linha, quem caiu voltaria sozinho na hunt em que morreu, e a morte
 deixaria de encerrar coisa nenhuma.
 
-**A taxa é do Tibia, e é por VOCAÇÃO (#521, ADR 0037).** Antes da #521 era 1 HP/s e 1 mana/s
-para todo mundo, provisório; agora é `gainhpticks`/`gainmanaticks` do Canary `vocations.xml`
-por vocação (Knight regenera vida mais rápido que Mago, Mago regenera mana mais rápido que
-Knight), e quem ainda não escolheu vocação (levels 1–7) usa a taxa da vocação `None` — cerca de
-12× mais lenta em vida que o 1 HP/s de antes. É o balanceamento que as poções (e a cura
-automática do bot) vão reequilibrar — no Tibia real, sustentar uma hunt sem poção não é a
-expectativa.
+**O ritmo é do Tibia, e é por VOCAÇÃO (#521, ADR 0037).** Antes da #521 era 1 HP/s e 1 mana/s
+para todo mundo, provisório; agora é `gainhpticks`/`gainhpamount` e `gainmanaticks`/
+`gainmanaamount` do Canary `vocations.xml` por vocação (Knight regenera vida mais rápido que
+Mago, Mago regenera mana mais rápido que Knight), e quem ainda não escolheu vocação (levels 1–7)
+usa a vocação `None` — cerca de 12× mais lenta em vida que o 1 HP/s de antes. É o balanceamento
+que as poções (e a cura automática do bot) vão reequilibrar — no Tibia real, sustentar uma hunt
+sem poção não é a expectativa.
+
+**Em PULSOS, não em taxa (#678).** O conteúdo guarda `amount` a cada `ticksMs`, como o Canary
+(`ConditionRegeneration` soma o intervalo num contador e, ao passar de `ticks`, aplica o
+`amount` de uma vez). Cada pulso é um evento da fila (`health-regen`/`mana-regen`) que vence no
+instante exato: Knight ganha 1 de vida e 2 de mana a cada 6 s — até #678 eram 1 ponto a cada
+`1000 / taxa` ms (a mana do Knight, 1 a cada 3 s): mesma média, outro ritmo, e divisão em ponto
+flutuante. O primeiro pulso vence `ticksMs` DEPOIS da entrada na hunt (o contador do Canary
+começa em 0; entrar na hunt não é poção), e `amount: 0` não agenda evento nenhum. Um pulso com
+o recurso cheio se perde, e o próximo segue agendado. O `catalogue.progression.regen` do
+protocolo continua em pontos por segundo, derivado no `server` (`amount × 1000 / ticksMs`).
 
 ## Regras
 
@@ -344,8 +377,10 @@ expectativa.
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
 | Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `drown`, `lifedrain`, `manadrain`, `arcane`) | 0 `[ABERTO — valor provisório: 0]`; inerte sob `combat-v3` (ver "combat.armorEffectiveness fica INERTE" acima) | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
-| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
-| Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary, #521, ADR 0037) | `packages/content/data/progression/baseline.json`, `regen` |
+| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` no item e `[-2, 1)` no monstro (#683). No ITEM, sob `combat-v3`, é a absorção item a item (×100) | `mitigation.resistances` de monstro e item |
+| Cura por elemento / reflexo do MONSTRO (#683) | percentual INTEIRO; tetos 500 e 200; nenhum monstro do catálogo atual declara ainda (no Canary: `heals` em 20 monstros, `reflects` em 18) — quem os preenche é o importador (#578) | `packages/content/src/schemas.ts`, `monster.elementHealing`/`reflect` |
+| Absorção / aumento / reflexo / cleave de ITEM (M30-05, #552) | percentual INTEIRO, a escala do `items.xml` do Canary; nenhum item do catálogo atual declara ainda (os do Canary: `absorbpercent*` ~630 linhas, `reflectdamage` 5 itens, `cleavepercent` 6 itens) | `packages/content/src/schemas.ts`, `item.absorb`/`increase`/`reflect`/`cleavePercent` |
+| Regeneração de vida/mana — sem vocação (levels 1–7) | 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary, #521, ADR 0037; pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
 | Chance de bloqueio (`blockChance`) | 0,6 `[ABERTO — valor provisório: 0,6]` | `packages/content/data/combat/baseline.json`, `defense.blockChance` |
@@ -426,13 +461,21 @@ não mais a exceção. O que o motor ganhou:
   mas a distinção já está testada (`area.test.ts`, raio 1-7 dos dois mecanismos) para quando a
   primeira ability em área chegar,
   `cross` (cruz de `radius` tiles nos quatro eixos cardeais mais o centro, centrada no alvo —
-  a Explosion), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
-  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os **três tiles
+  a Explosion), `rows` (a onda, #679: uma largura ímpar por fileira à frente, transcrita da
+  CONTAGEM de tiles de cada fileira da `AREA_*` do Canary — nunca a matriz, ADR 0019. A fileira
+  0 é a do `3`, que o motor ancora um passo à frente do lançador, `Spells::getCasterPosition`
+  (`spells.cpp:337`), e atinge como qualquer valor não-zero, `AreaCombat::getList`
+  (`combat.cpp:2309`): `AREA_WAVE4` é `[1,3,3,5]`, `AREA_WAVE7` é `[1,3,3,5,5]`,
+  `AREA_SHORTWAVE3` é `[1,3,3]`, `AREA_SQUAREWAVE5` é `[1,1,3,3,3]`), `wave` (legado de fixture:
+  o cone `2⌊k/2⌋+1` — 1, 3, 3, 5, 5 — do #155/#523, que contava sem a fileira do `3`;
+  `load.test.ts` proíbe `wave` em `data/`), `cleave` (os **três tiles
   imediatamente à frente** — Front Sweep e Lesser Front Sweep; o Canary ancora `AREA_WAVE6` um
   passo à frente do lançador antes de aplicar a matriz — `getNextPosition`/`needDirection`,
   `Spells::getCasterPosition` — então em coordenadas do mundo os três tiles da matriz caem
   juntos, a um passo de distância: uma revisão do #523 tinha lido só a matriz local e "corrigido"
-  isto para o lado errado, revertido depois de conferir o motor) e `beam` (linha reta). Onda,
+  isto para o lado errado, revertido depois de conferir o motor) e `beam` (linha reta; `beam n`
+  é exatamente a `AREA_BEAMn`, contando o `3` — até o #679 o conteúdo tinha um tile a menos em
+  todo feixe). Onda,
   cleave, feixe e o círculo no
   lançador são **self-origin**: não exigem alvo nem alcance (o boot recusa `range` nelas), e
   recusam `no-target` só quando nenhum monstro cai nos tiles — sem gastar mana. Saem na
@@ -441,9 +484,22 @@ não mais a exceção. O que o motor ganhou:
   efeito aparece em todos — inclusive onde não há monstro, como no Tibia.
 - **Fórmula canônica** (`effect.formula`, #474/#523): `min = level × levelFactor + skill ×
   skillMin + baseMin` (idem `max`), os mesmos coeficientes que o `onGetFormulaValues` do Canary
-  devolve. `levelFactor` default 0,2 é o `level / 5` da referência; a skill é a da vocação
-  (`vocation.spellSkill`: `magic`, `distance` no Paladin, `melee` no Knight) na magia de DANO, e
-  o MAGIC LEVEL em toda vocação na magia e na runa de CURA (#475). Desde o #523, TODA magia de
+  devolve. `levelFactor` default 0,2 é o `level / 5` da referência. Na magia de DANO a skill é a
+  que `formula.scaling` declara (#677), transcrevendo o callback do Canary: `magic` é o
+  `CALLBACK_PARAM_LEVELMAGICVALUE` (o MAGIC LEVEL, com o bônus de item `magic`, em qualquer
+  vocação: as 37 magias LEVELMAGIC do catálogo, inclusive Divine Caldera e Divine Missile do
+  Paladin); ausente (= `vocation`) é a skill da vocação (`vocation.spellSkill`: `magic`,
+  `distance` no Paladin, `melee` no Knight), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
+  Knight e as Ethereal Spear). `scaling: 'magic'` com termo de ataque de arma é recusado no boot.
+  Na magia e na runa de CURA é sempre o MAGIC LEVEL (#475). Onde o termo é o MAGIC LEVEL (cura,
+  `scaling: 'magic'` e a runa com `formula`), ele ganha o **ML especializado** do elemento do
+  efeito (#680): `healing` na cura, o `damageType` no dano — o `getMagicLevelSkill` do Canary
+  (`combat.cpp:1979`), soma dos itens vestidos em `bonuses.specializedMagicLevel`
+  (`Inventory.specializedMagicLevel`, lido na conjuração por `formulaSkill` em `casting.ts`). A
+  SKILLVALUE, o `basePower` provisório e o `requires.magicLevel` da runa não somam; Mass Healing
+  declara `includeSpecializedMagicLevel: false` porque o script dela lê `getMagicLevel()` cru.
+  Nenhum item do catálogo declara o campo ainda (a importação é o #573): o resultado de hoje é
+  bit a bit o mesmo, sem perfil novo. Desde o #523, TODA magia de
   dano/cura com correspondente real no Canary declara `formula` — só ficam de fora as três
   genéricas pré-vocação (`heal`/`strike`/`blast`, que o Tibia não tem) e três magias inventadas
   antes da auditoria sem nome correspondente no Canary (`divine-barrage`, `ethereal-barrage`,
@@ -549,8 +605,8 @@ genérica com level 8 (o real é 15), e Ultimate Healing Rune tinha coeficientes
 
 O que difere da magia de ataque, e por quê:
 
-- **Escala sempre pelo magic level**, em toda vocação. Magia escala pela skill que a vocação
-  declara (`spellSkill`, §"Magias do catálogo"); runa é do magic level no Tibia, e knight de
+- **Escala sempre pelo magic level**, em toda vocação. Magia de dano escala pela skill que a
+  fórmula declara (`formula.scaling`, #677, §"Magias do catálogo"); runa é do magic level no Tibia, e knight de
   magic level 2 usando Avalanche é a cena real — bate fraco, mas bate.
 - **Cooldown por grupo do conteúdo.** A runa declara `group: attack`; a cadência é a do motor v2,
   e a runa não tranca nem é trancada pelo cooldown individual de uma magia.
@@ -659,14 +715,50 @@ damage    = normalRandomInt(minDamage, maxDamage)
   rejeição — Box-Muller com duas frações do `Rng` da sessão por tentativa —, escalada para
   `[min, max]` e arredondada. Roda SEMPRE, mesmo com `min === max`: a sequência de sorteios não
   pode depender do VALOR do intervalo, a mesma regra do `blockChance` (ADR 0031).
-- **Simplificação deliberada**: o Canary soma `physicalAttack + elementalAttack +
-  weaponProficiency` num único termo antes de multiplicar pela skill
-  (`WeaponMelee::getWeaponDamage`/`WeaponDistance::getWeaponDamage`). O Draconya não tem ataque
-  elemental nem proficiência de arma como sub-atributos separados no catálogo — um elemento vira
-  um ITEM diferente com seu próprio `damageType` (CMB-03), nunca um bônus somado ao físico da
-  mesma arma —, então `attack` (`formula.base`) é o único termo de poder que entra na fórmula.
-  Fica para o dia em que o catálogo precisar de arma com dano misto físico+elemental na mesma
-  peça; até lá, uma espada com bônus de fogo simplesmente não existe como conceito.
+- O Canary soma `physicalAttack + elementalAttack + weaponProficiency` num único termo antes de
+  multiplicar pela skill (`WeaponMelee::getWeaponDamage`/`WeaponDistance::getWeaponDamage`).
+  No `combat-v2`, `attack` (`formula.base`) é o único termo: o elemento da arma é ignorado. No
+  `combat-v3` o elemento entra (#687, abaixo). Proficiência de arma não existe no catálogo.
+
+### Elemento da arma e arma vestida abaixo do level (#687, só `combat-v3`)
+
+A arma corpo a corpo pode declarar `weapon.element: { type, attack }` — o `element<tipo>` do
+Canary (Fire Sword: `attack` 24 físico + `element` fogo 11; Serpent Sword: 18 + terra 8). O
+`attack` do item continua só o FÍSICO. `resolveWeaponHit` (`combat/weapon-power.ts`) reproduz o
+`internalUseWeapon` do Canary:
+
+```text
+total     = trunc(normalRandomInt(min, max com attack + element) × damagePercent / 100)
+physical  = trunc(total × attack / (attack + element))
+elemental = trunc(total × element / (attack + element))
+```
+
+- O mínimo continua `⌊level/5⌋` só com `attack` físico > 0. O truncamento é POR PARTE, como o
+  `static_cast<int32_t>` do Canary, então a soma pode perder 1 ponto (total 70 na Fire Sword →
+  48 + 22).
+- O elemental é o componente `secondary` do golpe (#473), com `MAGIC_BLOCK_FLAGS`: como o
+  `blockHit(…, false, false)` do Canary, não perde para escudo nem armadura, só para resistência
+  e imunidade. Sem elemento, ou com total 0, não há secundário nem sorteio extra.
+- A postura do Draconya (`damageDealtScale('melee')`) vale para as duas partes, cada uma
+  arredondada.
+- O crítico ainda não multiplica o secundário (o Canary multiplica os dois): fica para a revisão
+  do crítico do M30-04.
+- `buildContent` recusa `element` fora de `weapon.kind === 'melee'` (munição elemental é a #575)
+  e `type: physical`.
+
+**Arma vestida abaixo do level** (`playerWeaponCheck` do Canary). `Inventory.equip` recusa
+equipar abaixo do level, como o `MoveEvent::EquipItem` do Canary; o caso que sobra é a arma que
+já estava na mão quando o level caiu (penalidade de morte). `Inventory.heldWeapon` devolve
+`damagePercent`: `100` no level, `50` abaixo dele com `weapon.wieldUnproperly` (o `unproperly`
+do Canary: Fire Sword, Double Axe, Dragon Slayer, Dragon Hammer, Dragonbone Staff, Mystic
+Blade), `0` sem. Com `0` o golpe NÃO sai — nem de punho, nem prática —, como o `useWeapon` do
+Canary que devolve `false`; o ataque segue agendado. Vocação errada continua mão vazia. v1/v2
+leem `weapon()` e a arma abaixo do level segue virando punho (ADR 0031).
+
+**Defesa de arma de duas mãos.** `buildContent` aceita `defense` em arma corpo a corpo de duas
+mãos (Broadsword 23, Double Axe 12, Dragon Slayer 28), como o `Player::getDefense` do Canary.
+Só o `combat-v3` a lê (`#playerDefenseV3`); o `defenseSource` do v1/v2 continua ignorando arma
+de duas mãos. A defesa da arma abaixo do level segue fora da conta no v3 (o Canary conta).
 
 Wand/rod **mudam a distribuição, não a faixa**: continuam com o `min`/`max` fixo do item, sem
 coeficiente nem `attackFactor` — isso já era o modelo do Canary (DT-02 do CMB-05). O que muda sob
@@ -675,6 +767,34 @@ pela normal truncada (`normal_random(minChange, maxChange)`), não uniformemente
 distribuição que a #522 introduziu para corpo a corpo e distância. `resolveWeaponPower` passa a
 usar `normalRandomInt` para `fixedDamage` sob `combat-v2`; `combat-v1` continua com `rng.integer`
 (uniforme), como sempre — preservando o v1 bit a bit.
+
+### Magia, runa, poção e ataque/cura de monstro: a normal truncada no `combat-v3` (#681)
+
+O Canary sorteia TODO valor de dano e cura que não é de arma pela mesma `normal_random(min, max)`
+— `Combat::getCombatDamage` (`combat.cpp:154-229`) em todos os ramos, o callback
+`onGetFormulaValues` (`combat.cpp:2046`), e `doTargetCombatHealth`/`doTargetCombatMana`
+(`global_functions.cpp:372`/`:455`) que a poção chama. Sob `combat-v3` o Draconya segue isso: os
+seis pontos abaixo passam por `rollCombatValue` (`packages/sim/src/combat/combat-value.ts`), que
+devolve `normalRandomInt` no `combat-v3` e o `rng.integer` uniforme de sempre no `combat-v1`/`v2`
+(e para o chamador sem contexto de combate) — v1/v2 bit a bit, ADR 0031. A faixa (`min`/`max`)
+não muda em nenhum ponto; muda só a distribuição: em `[0, 100]`, a uniforme põe ~10,9 % dos
+sorteios em `[0, 10]`, a normal truncada ~3,4 %. A normal consome o sorteio mesmo com
+`min === max` (a ability de poder fixo, o `firefield` 0..0 do Dragon Lord).
+
+| Ponto (`packages/sim/src`) | O que sorteia | Canary | Distribuição no `combat-v3` |
+|---|---|---|---|
+| `casting.ts` `powerOf` (fórmula) | magia/runa com `formula` (dano e cura) | `combat.cpp:2046` | **normal** |
+| `casting.ts` `powerOf` (`basePower`) | magia com `basePower` provisório | `combat.cpp:195` | **normal** |
+| `casting.ts` `fixedAmount` | poção de vida/mana/espírito (`amountRange`) | `global_functions.cpp:372`/`:455` | **normal** (sem `rng`, o mínimo, como sempre) |
+| `casting.ts` runa de ataque | runa de dano | `combat.cpp:2046` | **normal** |
+| `rulesets/hunt.ts` ability de monstro | `ability.power` (a básica sintetizada inclusive) | `combat.cpp:189` | **normal** |
+| `rulesets/hunt.ts` defesa de cura | `defense.heal` | `monster.cpp:2218` + `combat.cpp:189` | **normal** |
+| `combat/weapon-power.ts` | arma | — | já por perfil (#522) |
+| `combat/blockhit.ts` | defesa/armadura | `Creature::blockHit` `uniform_random` | uniforme |
+| `conditions.ts` | dano de condição, velocidade | `condition.cpp:1908`/`:2547` `uniform_random` | uniforme |
+
+Drunk, loot e escolha de alvo (`conditions.ts`, `loot.ts`, `monster/target-strategy.ts`) não são
+valor de combate e continuam uniformes.
 
 ### Chance de acerto à distância (`WeaponDistance::useWeapon`)
 
@@ -749,6 +869,10 @@ CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁT
    o ATACANTE). Esta é a posição FINAL, decidida no M30-04: a versão do #548 (M30-01) a colocava
    depois de toda a mitigação como placeholder documentado — nenhum teste a travava, e nenhum
    conteúdo real declarava `combat.modifiers` ainda;
+   - **absorção do `Creature`** (M30-05, #552; `applyAbsorbDamageModifications`): a absorção
+     FLAT do defensor (`absorb.<tipo>.flat` do item, sem descer de zero) e o AUMENTO do atacante
+     (`increase.<tipo>` do item, `d += round(d × p / 100)`), sem sorteio. O `manadrain` já chega
+     aqui capado à mana atual do alvo;
 3. imunidade explícita ao tipo (`mitigation.immunities`) — zera e para tudo, sem defesa, sem
    armadura, sem mitigação percentual;
 4. **defesa**: só enquanto o defensor tem CARGA de bloqueio (`blockCount`, no máximo duas,
@@ -762,13 +886,19 @@ CMB-04 (`combat.defense.blockChance`) é substituído pela ORDEM e pela MATEMÁT
    `mitigation`, que é resistência/imunidade por TIPO): `dano −= dano × defenseMitigation ÷ 100`,
    sobre o que sobrou da armadura, para QUALQUER tipo de dano EXCETO lifedrain e manadrain (#547,
    M29-07: a mesma exceção do `Creature::mitigateDamage` do Canary — `drown` não é isento);
-7. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — o MESMO mecanismo de
-   antes, intocado por esta issue, só reposicionado depois do estágio novo;
+   - **absorção percentual ITEM A ITEM do jogador** (M30-05, #552; `Player::blockHit`): cada item
+     vestido, na ordem de slot do Canary, tira `round(d × p / 100)` do que sobrou —
+     `absorb.<tipo>.percent` e a resistência legada do item (`mitigation.resistances` × 100);
+7. resistência/vulnerabilidade por tipo (`mitigation.resistances`, CMB-03) — os `elements` do
+   MONSTRO (`Monster::blockHit`, depois do `Creature::blockHit`; eles NÃO passam por
+   `getAbsorbPercent`). O jogador do `combat-v3` chega aqui só com as imunidades: a resistência
+   do item é a absorção acima;
 8. piso (`minimumDamageFraction`), sobre o poder BRUTO ORIGINAL — SEM o bônus do crítico —
    mantido como salvaguarda de PRODUTO do Draconya (o Canary não tem: lá um bloqueio pode
    legitimamente zerar um golpe, e não existe "piso" nenhum para o crítico reforçar). Pulado
    quando imune — o piso nunca revoga imunidade explícita;
-9. corte do Dodge, arredondamento só no fim.
+9. corte do Dodge, arredondamento só no fim;
+10. **reflexo** (M30-05, #552) — ver "Reflexo e cleave" abaixo.
 
 O LEECH (M30-04) não é um estágio deste pipeline: ele opera sobre o HP EFETIVAMENTE removido, não
 sobre o `DamageOutcome`, e é aplicado depois — ver a seção do CMB-08 mais abaixo.
@@ -779,9 +909,23 @@ Diferente do CMB-04 (que aprovava por `damageType`), o `combat-v3` decide se def
 valem pela ORIGEM do golpe — `checkDefense`/`checkArmor` do Canary: corpo a corpo (e o punho
 desarmado) bloqueiam os dois; distância só armadura (`WeaponDistance` do Canary não seta
 `blockedByShield`); magia, runa, wand/rod e DOT não bloqueiam nenhum dos dois — o default de
-`CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ability de monstro segue o mesmo critério
-pela FORMA dela (`isMeleeAbility`): corpo a corpo bloqueia os dois, a de alcance/área é magia
-para este estágio. A mitigação percentual (passo 5) é a ÚNICA que se aplica sempre, mesmo à
+`CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ability de monstro segue o TIPO DE
+ATAQUE dela (#682, `abilityBlockFlags` em `packages/sim/src/monster/ability.ts`), a regra de
+`Monsters::deserializeSpell` do Canary — alcance e área não entram:
+
+| Ability (`kind` × `damageType`) | Escudo | Armadura | Flags |
+|---|---|---|---|
+| `melee` (sempre físico; o boot recusa `melee` de outro tipo) | sim | sim | `MELEE_BLOCK_FLAGS` |
+| `combat` físico — qualquer alcance, com ou sem área | não | sim | `DISTANCE_BLOCK_FLAGS` |
+| `combat` de qualquer outro tipo | não | não | `MAGIC_BLOCK_FLAGS` |
+| sem `kind`, forma corpo a corpo (alcance 1, sem área — a básica do boot inclusive) | sim | sim | `MELEE_BLOCK_FLAGS` |
+| sem `kind`, outra forma | pelo tipo, como `combat` | | |
+
+`kind` é opcional em `monsterAbilitySchema` (`packages/content/src/schemas.ts`) e existe porque a
+forma sozinha confunde os 30 `combat` físicos do Canary de alcance 1 sem área com o `melee`; o
+importador de ataques (#579) o preenche. A apresentação (`source: 'melee' | 'spell'`) continua
+pela FORMA — não muda número. Nenhum monstro do catálogo atual muda: só têm físico em `melee`
+de alcance 1. A mitigação percentual (passo 5) é a ÚNICA que se aplica sempre, mesmo à
 magia — é assim no Canary (`if (damage != 0) mitigateDamage(...)`, fora do bloco de
 `checkDefense`/`checkArmor`).
 
@@ -797,10 +941,13 @@ manaLoss)` com só três argumentos (`game.cpp:9176`), e `checkDefense`/`checkAr
 verdade. Nenhuma carga de `blockCount` é gasta nesse caso — o Canary só decrementa o contador
 dentro do `checkDefense || checkArmor`, e os dois são falsos para manadrain.
 
-O treino de shielding (`#applyMonsterHit`, `hunt.ts`) segue a MESMA origem sob `combat-v3` —
-`blockable.shield`, não `combat.defense.blockTypes` — para não destreinar (ou treinar por
-engano) o dia em que o catálogo tiver uma ability corpo a corpo elemental (achado da revisão do
-PR #642; hoje nenhuma tem, então as duas regras ainda concordam por coincidência do catálogo).
+O treino de shielding (`#applyMonsterHit`, `hunt.ts`) sob `combat-v3` não olha
+`combat.defense.blockTypes`: desde o #686 ele segue o TIPO de bloqueio que este estágio devolve
+(`blockType`/`hadBlockCharge`) — só treina quando o golpe recebido foi bloqueado por defesa ou
+armadura, com carga, e com escudo na mão (`Player::onBlockHit`). O #548 tinha posto aqui a
+elegibilidade por origem (`blockable.shield`, achado da revisão do PR #642); o tipo de bloqueio a
+substitui e já herda a origem, porque só há `defense`/`armor` onde a origem permite. Ver
+[`progression.md`](./progression.md#no-combat-v3-o-try-depende-do-tipo-de-bloqueio-686).
 
 **`combat.armorEffectiveness` fica INERTE sob `combat-v3`.** O passo 4 (armadura) não olha mais
 `armorEffectiveness[damageType]` — a coluna que o `combat-v1`/`v2` usa para decidir SE a
@@ -934,10 +1081,44 @@ são o Dragon e o Dragon Lord, conferidos contra `dragon.lua`/`dragon_lord.lua` 
 `defenseMitigation` é o valor DIRETO que o Canary usa — `0,99` tira 0,99 % do dano, não 99 %; o
 Canary o capa em 30.
 
+### Reflexo e cleave (M30-05, #552)
+
+**Reflexo** (`combat/reflect.ts`; Canary `game.cpp:7957-7981`). O item declara
+`reflect.<tipo>: { percent, flat }` (inteiros); `equipmentReflect` soma os vestidos. Sobre o dano
+JÁ bloqueado do golpe, volta ao ATACANTE `flat + floor(dano × percent / 100)`, com o teto
+`ceil(1 % da vida máxima do atacante)`. Reflexo SÓ flat de `physical` (o `reflectdamage` dos cinco
+itens do Canary) exige o atacante adjacente; com percentual, ou em tipo elemental, a distância
+não importa. A segunda resolução é uma EXTENSÃO contra o atacante: nunca reflete de volta, não
+critica, não faz leech, não bloqueia por defesa/armadura, e — refletida por jogador — é dano
+NEUTRO (não passa por absorção, imunidade nem resistência do monstro; a mitigação percentual e o
+piso continuam). Sai ANTES do dano no alvo, credita o dano e o DPS a quem refletiu, e a morte do
+monstro refletido é resolvida no fim da ability. Hoje só o golpe de ability de monstro contra o
+jogador reflete; o reflexo de MONSTRO é o #683, pelo mesmo `resolveReflect`
+(`reflector: 'monster'`: tipo original, sem a exceção de distância).
+
+**Cleave** (Canary `WeaponMelee::useWeapon`, `weapons.cpp:531-589`). `cleavePercent` (inteiro,
+somado entre os vestidos) faz o golpe corpo a corpo COM arma acertar os dois tiles que
+flanqueiam o alvo (`combat/cleave.ts`): alvo na mesma coluna → leste e oeste do alvo; mesma linha
+→ sul e norte; diagonal → os dois vizinhos comuns ao atacante e ao alvo. Cada monstro vivo nesses
+tiles leva uma rolagem PRÓPRIA do poder da arma × `cleavePercent / 100` (truncado), ANTES do
+golpe principal, como extensão (sem crítico, leech nem reflexo; o aumento por tipo vale), e
+pratica a skill uma vez. O punho não tem cleave.
+
+**Reflexo do MONSTRO (#683).** O espelho do de cima: `monster.reflect.<tipo>` (percentual
+inteiro) e o mesmo `resolveReflect` com `reflector: 'monster'` — tipo original, sem a exceção de
+distância. O golpe, a magia e a runa do personagem levam o `attacker` (vida máxima e distância)
+só quando o monstro reflete; a segunda resolução (`#reflectOntoCharacter`) passa pelo
+`#playerDefender` e pelo mana shield, e sai depois do dano no monstro. Ver "Resistência,
+vulnerabilidade e imunidade" acima para a cura por elemento, que mora ao lado.
+
+**Fora, por enquanto:** reflexo de tique de condição, reflexo do componente secundário (o #683
+também o deixou de fora: a conta do Canary usa o valor do PRIMÁRIO com o tipo do secundário, e
+nenhum conteúdo tem secundário contra monstro que reflete), e consumo de carga por
+reflexo/cleave.
+
 ### O que fica para depois
 
-Absorção/aumento por tipo (`applyAbsorbDamageModifications`, o PRIMEIRO estágio do `Creature::
-blockHit`) e reflexo são o **M30-05**. Postura de luta de VERDADE (um seletor por personagem, em
+Absorção/aumento por tipo e reflexo fecharam com o **M30-05 (#552)** — seção seguinte. Postura de luta de VERDADE (um seletor por personagem, em
 vez do `'attack'` fixo que `playerDefense`/`playerMitigation` recebem desde o #549) é o
 **M30-03**. A exceção de lifedrain/manadrain na mitigação percentual (passo 6 acima) fechou com
 o **#547 (M29-07)**: `combat/damage.ts` calcula `mitigationExempt` do `intent.damageType`, e não
@@ -1045,6 +1226,12 @@ Quatro coisas que a estrutura garante, e não a inspeção:
 - **A prática é uma só por golpe, e não depende do dano final.** Imunidade, resistência alta,
   bloqueio (CMB-04) ou alvo que morre no impacto não impedem a prática — ela sai do gatilho da
   skill da família (`melee-hit`, `distance-hit`, `spell-cast`), nunca de um `if` por nome.
+  **No `combat-v3` (#686) isto mudou:** quantos tries o golpe rende vem do tipo de bloqueio que
+  `resolveBlockHit` devolve (`blockType`/`hadBlockCharge` no `DamageOutcome`) — corpo a corpo 1
+  ou 0 (imune, ou bloqueado depois de 30 seguidos sem tirar sangue), distância 2/1/0 e o tiro
+  errado herdando o estado do anterior, e shielding só quando o golpe recebido foi bloqueado com
+  escudo na mão. A regra está em `combat/attack-practice.ts` e a tabela em
+  [`progression.md`](./progression.md#no-combat-v3-o-try-depende-do-tipo-de-bloqueio-686).
 
 O perfil é indexado no boot, junto das famílias e das skills: nenhuma varredura de catálogo por
 golpe. O `Item.weapon` compilado carrega família, tipo, alcance e fórmula, e é o que o ruleset lê.
@@ -1130,12 +1317,14 @@ interface MonsterTargetStrategy {
   número. `#onMonsterAttack`/`#onMonsterAbility` sempre REAGENDAM a próxima tentativa antes de
   rolar a chance: o intervalo continua correndo mesmo quando a rolagem falha.
 - **Onda e feixe direcionais**: `monsterAbilityTargetSchema.area` aceita `circle` (de sempre),
-  `wave` e `beam` — as duas últimas saem do MONSTRO na direção do alvo, recalculada a cada golpe
+  `wave`, `rows` (#679) e `beam` — as três últimas saem do MONSTRO na direção do alvo, recalculada a cada golpe
   por `facingDirection` (`packages/sim/src/area.ts`), o mesmo cálculo do TFS
   `updateLookDirection`: o eixo de MAIOR deslocamento decide (`|dx| > |dy|` → leste/oeste), e o
-  empate (inclusive `dx = dy = 0`) decide horizontal pelo sinal de `dx`. A geometria da onda
-  continua a do #155 (`area.ts`, cone `1, 3, 3, 5, 5…`) — fato observado do Tibia, não a matriz
-  `length`/`spread` do TFS (GPL, ADR 0019). `cross`/`cleave` continuam fora; `buildContent`
+  empate (inclusive `dx = dy = 0`) decide horizontal pelo sinal de `dx`. Desde o #679 a onda de
+  monstro é `rows`, com as larguras que `AreaCombat::setupArea(length, spread)` (`combat.cpp`)
+  gera, transcritas já calculadas (números, não a fórmula nem a matriz — ADR 0019): a `firewave`
+  do Dragon e do Dragon Lord (`length = 8, spread = 3`) é `[1,1,3,3,3,5,5,5]`, 26 tiles — o cone
+  `wave 8` de antes dava 40. `cross`/`cleave` continuam fora; `buildContent`
   recusa.
 - **Defesa (`monster.defenses`)**: cura própria, o mecanismo que o Dragon usa (`interval 2000,
   chance 15%, +40..+70`). Cada defesa é um evento NA FILA com a própria cadência — o mesmo
@@ -1672,7 +1861,8 @@ diferente de `basic` — abilities declaradas substituem a básica do boot, não
 `MONSTER_CIRCLE_HALF_WIDTHS[3] = [5,5,3]`, não os 69 que a fórmula de MAGIA daria para o mesmo
 raio; achado da revisão do #536, que também corrigiu `applyField` — o campo de fogo do Dragon
 Lord usava a tabela errada por padrão e cobria 69 tiles em vez de 21, ver "Condições
-generalizadas..." acima), `firewave` (onda comprimento 8, sem alvo — sai do
+generalizadas..." acima), `firewave` (onda `rows [1,1,3,3,3,5,5,5]` — o `setupArea(8, 3)` do Canary, 26 tiles desde o
+#679 —, sem alvo — sai do
 monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
 — desde o CMB-11 (#556) existe MECANISMO de `paralyze` (a condição `speed`, ver abaixo), mas
 nenhum monstro do recorte o declara em `mitigation.immunities`: a IMUNIDADE por condição é a
@@ -1924,7 +2114,7 @@ com a migração de `botConfig` de quem já as configurou, é issue separada.
 |---|---|---|---|---|---|---|
 | 1 | Buzz | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
-| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
+| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 4 | 10 |
 | 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
@@ -1933,19 +2123,19 @@ com a migração de `botConfig` de quem já as configurou, é issue separada.
 | 14 | Magic Shield | 50 | support (2 s) | 14 s | magic shield 180 s | — |
 | 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Death Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
-| 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 40 |
-| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 4 | 60 |
-| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 7 | 155 |
+| 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 4 | 40 |
+| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 5 | 60 |
+| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 8 | 155 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
-| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 4 | 150 |
-| 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 4 | 100 |
+| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 5 | 150 |
+| 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 5 | 100 |
 | 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 4 | 110 |
 | 55 | Rage of the Skies | 600 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 200 |
 | 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 250 |
 | 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 100 | **Ultimate Energy Strike** (`exori max vis`, novo #523) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
-| 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 5 | 155 |
+| 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 6 | 155 |
 
 Os `X Strike` fortes (Strong Energy/Flame Strike) e Lightning tinham alcance 7 (o real é 3/4).
 Ice Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. † Great Death
@@ -1959,7 +2149,7 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 
 | level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
 |---|---|---|---|---|---|---|
-| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
+| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 4 | 10 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
 | 1 | Mud Attack | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
@@ -1971,12 +2161,12 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 | 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Physical Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 50 |
 | 18 | Heal Friend (`exura sio`) | 120 | healing (1 s) | 1 s | cura, alvo em terceiro alcance 5 | 60 |
-| 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 35 |
+| 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 4 | 35 |
 | 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
 | 36 | Mass Healing | 150 | healing (1 s) | 2 s | cura · círculo raio 3 no lançador | 200 |
-| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 4 | 120 |
-| 40 | Strong Ice Wave | 170 | attack (2 s) | 8 s | dano · onda 2 | 150 |
+| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 120 |
+| 40 | Strong Ice Wave | 170 | attack (2 s) | 8 s | dano · onda 3 | 150 |
 | 55 | Wrath of Nature | 700 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 175 |
 | 60 | Eternal Winter | 1050 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 200 |
 | 70 | Strong Terra Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 115 |
@@ -1986,7 +2176,7 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 Mass Healing tinha raio 1 (9 tiles) — o Canary real é `AREA_CIRCLE3X3`, raio 3 (37 tiles). Heal
 Friend saiu da lista de excluídas desde o §26 (ADR 0035 d.10); o `_open` dizia "não auditado
 nesta task" e o #523 confirmou os números reais (level 14→18, mana 30→120). Strong Ice Wave
-tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (2 fileiras) e cooldown 8 s. Ice
+tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (3 fileiras contando a do `3`, #679) e cooldown 8 s. Ice
 Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. \* Forked Thorns não
 tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/` e
 `src/` também) — conteúdo próprio, remoção planejada (ADR 0037), ver `_open`.
@@ -2019,12 +2209,6 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
   (`COMBAT_PROFILES`, o `switch` de `resolveDamage`) e as duas issues inventarem o mesmo id em
   paralelo colidiria. Quem mesclar as duas decide o id (`combat-v2`, o próximo livre) e a
   migração de sessão em voo (invariante 7).
-- `[ABERTO]` A onda das magias em cone (`wave`) continua a aproximação de `2⌊k/2⌋+1` por
-  fileira, calibrada só contra `AREA_CIRCLE3X3`/`AREA_WAVEn` na direção geral — não reproduz
-  `AREA_SQUAREWAVEn` (Terra Wave, Energy Wave: retangular, não cone) nem o número exato de tiles
-  por fileira das outras `AREA_WAVEn`. O #523 ajustou só o `length` (a contagem de FILEIRAS) para
-  bater com a real, sem reescrever a forma — a largura de cada fileira ainda diverge em alguns
-  casos. Reescrever o `wave` para reproduzir a matriz exata é escopo de outra issue.
 - `[ABERTO]` Os percentuais de postura de Blood Rage (+25 % dano) e Sharpshooter (+32 % dano) são
   uma aproximação anterior ao #523: o Canary real dá +35 %/+40 % de SKILL (`SKILL_MELEEPERCENT`/
   `SKILL_DISTANCEPERCENT`), não de dano, e o schema (`damageDealtPercent`) só expressa dano. Só

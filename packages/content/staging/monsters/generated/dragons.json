@@ -137,7 +137,8 @@
           "min": 0,
           "max": 120
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "fireball",
@@ -156,6 +157,7 @@
           "max": 140
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire",
           "impactKey": "firearea"
@@ -168,8 +170,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -177,6 +188,7 @@
           "max": 170
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "firearea"
         }
@@ -292,7 +304,8 @@
           "min": 0,
           "max": 55
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "firewave",
@@ -301,8 +314,14 @@
         "target": {
           "range": 5,
           "area": {
-            "shape": "wave",
-            "length": 5
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -310,6 +329,7 @@
           "max": 90
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "firearea"
         }
@@ -331,6 +351,7 @@
           "max": 55
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire",
           "impactKey": "firearea"
@@ -517,7 +538,8 @@
           "min": 0,
           "max": 230
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "fireball",
@@ -536,6 +558,7 @@
           "max": 220
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire",
           "impactKey": "firearea"
@@ -587,8 +610,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -596,6 +628,7 @@
           "max": 270
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "firearea"
         }
@@ -715,7 +748,8 @@
           "min": 0,
           "max": 90
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "firewave",
@@ -724,8 +758,14 @@
         "target": {
           "range": 5,
           "area": {
-            "shape": "wave",
-            "length": 5
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -733,6 +773,7 @@
           "max": 125
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "firearea"
         }
@@ -754,6 +795,7 @@
           "max": 105
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire",
           "impactKey": "firearea"
@@ -955,7 +997,8 @@
           "min": 0,
           "max": 300
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "firewave",
@@ -964,8 +1007,13 @@
         "target": {
           "range": 4,
           "area": {
-            "shape": "wave",
-            "length": 4
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3
+            ]
           }
         },
         "power": {
@@ -973,6 +1021,7 @@
           "max": 520
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "explosionhit"
         }
@@ -1145,7 +1194,8 @@
           "min": 0,
           "max": 225
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "lifedrainwave",
@@ -1154,8 +1204,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -1163,6 +1222,7 @@
           "max": 380
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poff"
         }
@@ -1202,8 +1262,16 @@
         "target": {
           "range": 7,
           "area": {
-            "shape": "wave",
-            "length": 7
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": 0,
@@ -1239,6 +1307,7 @@
           "max": 120
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "icetornado"
         }
@@ -1260,19 +1329,22 @@
           "max": 240
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "icearea"
         }
       },
       {
-        "id": "physicalwave",
+        "id": "physicalbeam",
         "cadenceMs": 2000,
         "chance": 0.05,
         "target": {
           "range": 1,
           "area": {
-            "shape": "wave",
-            "length": 1
+            "shape": "rows",
+            "widths": [
+              1
+            ]
           }
         },
         "power": {
@@ -1280,6 +1352,7 @@
           "max": 220
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poff"
         }
@@ -1446,7 +1519,8 @@
           "min": 0,
           "max": 160
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "icewave",
@@ -1455,8 +1529,14 @@
         "target": {
           "range": 5,
           "area": {
-            "shape": "wave",
-            "length": 5
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -1464,6 +1544,7 @@
           "max": 110
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "iceattack"
         }
@@ -1485,6 +1566,7 @@
           "max": 110
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "icearea"
         }
@@ -1677,7 +1759,8 @@
           "min": 0,
           "max": 270
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "paralyze",
@@ -1715,8 +1798,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -1724,6 +1816,7 @@
           "max": 250
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "loseenergy"
         }
@@ -1740,6 +1833,7 @@
           "max": 155
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "missileKey": "smallice"
         }
@@ -1751,8 +1845,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -1760,6 +1863,7 @@
           "max": 320
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "carniphila"
         }
@@ -1900,7 +2004,8 @@
           "min": 0,
           "max": 450
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "deathball",
@@ -1919,6 +2024,7 @@
           "max": 400
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "impactKey": "mortarea"
         }
@@ -1930,8 +2036,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "wave",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -1939,6 +2054,7 @@
           "max": 400
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "explosionhit"
         }
@@ -1960,6 +2076,7 @@
           "max": 400
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poff"
         }
@@ -1976,6 +2093,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "big-scratch"
         }

@@ -422,6 +422,8 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   }),
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /** Fileiras à frente, uma largura ímpar cada (#679). */
+  z.object({ shape: z.literal('rows'), widths: z.array(z.number().int().positive()).min(1) }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
 ]);
@@ -843,6 +845,11 @@ export const S2C_SCHEMAS = {
       id: z.string().min(1),
       name: z.string().min(1),
       appearanceId: z.number().int().positive(),
+      /**
+       * A forma ATIVA do item enquanto vestido — o anel ligado no dedo (#689). Ausente: a mesma
+       * aparência. Opcional sem default: um nó anterior manda sem, e o cliente cai no `appearanceId`.
+       */
+      equippedAppearanceId: z.number().int().positive().optional(),
       weight: z.number().nonnegative(),
       /** Onde ele veste, ou `null` quando não veste em lugar nenhum. */
       slot: z.string().nullable(),

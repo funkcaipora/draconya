@@ -177,6 +177,7 @@
           "max": 110
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -348,6 +349,7 @@
           "max": 20
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -459,6 +461,7 @@
           "max": 600
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -621,6 +624,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -637,6 +641,7 @@
           "max": 400
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "huntingspear"
         }
@@ -653,6 +658,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "largerock"
         }
@@ -674,6 +680,7 @@
           "max": 550
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "impactKey": "poff"
         }
@@ -840,6 +847,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -856,6 +864,7 @@
           "max": 400
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "huntingspear"
         }
@@ -872,6 +881,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "largerock"
         }
@@ -883,8 +893,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "beam",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -892,6 +911,7 @@
           "max": 700
         },
         "damageType": "holy",
+        "kind": "combat",
         "presentation": {
           "impactKey": "holyarea"
         }
@@ -1004,6 +1024,7 @@
           "max": 100
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -1020,6 +1041,7 @@
           "max": 120
         },
         "damageType": "drown",
+        "kind": "combat",
         "presentation": {
           "missileKey": "spear",
           "impactKey": "loseenergy"
@@ -1172,6 +1194,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -1188,6 +1211,7 @@
           "max": 290
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "largerock"
         }
@@ -1352,6 +1376,7 @@
           "max": 400
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -1368,6 +1393,7 @@
           "max": 200
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "whirlwindsword"
         }
@@ -1384,6 +1410,7 @@
           "max": 150
         },
         "damageType": "drown",
+        "kind": "combat",
         "presentation": {
           "missileKey": "spear",
           "impactKey": "loseenergy"
@@ -1524,6 +1551,7 @@
           "max": 105
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -1540,6 +1568,7 @@
           "max": 110
         },
         "damageType": "drown",
+        "kind": "combat",
         "presentation": {
           "missileKey": "spear",
           "impactKey": "loseenergy"
@@ -1690,6 +1719,7 @@
           "max": 501
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -1706,6 +1736,7 @@
           "max": 375
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "whirlwindsword"
         }
@@ -1722,6 +1753,7 @@
           "max": 215
         },
         "damageType": "drown",
+        "kind": "combat",
         "presentation": {
           "missileKey": "spear",
           "impactKey": "loseenergy"
@@ -1887,6 +1919,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -1903,6 +1936,7 @@
           "max": 290
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "whirlwindaxe"
         }
@@ -2034,6 +2068,7 @@
           "max": 80
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -2146,6 +2181,7 @@
           "max": 115
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -2302,6 +2338,7 @@
           "max": 110
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -2330,6 +2367,7 @@
           "max": 90
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energy",
           "impactKey": "energyhit"
@@ -2342,8 +2380,13 @@
         "target": {
           "range": 4,
           "area": {
-            "shape": "beam",
-            "length": 4
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -2351,6 +2394,7 @@
           "max": 110
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "impactKey": "energyhit"
         }
@@ -2534,6 +2578,7 @@
           "max": 135
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -2555,6 +2600,7 @@
           "max": 80
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitarea"
         }
@@ -2691,6 +2737,7 @@
           "max": 80
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -2714,8 +2761,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "beam",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -2723,6 +2779,7 @@
           "max": 180
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "bubbles"
         }
@@ -2744,6 +2801,7 @@
           "max": 150
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "bubbles"
         }
@@ -2755,8 +2813,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "beam",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -2764,6 +2831,7 @@
           "max": 240
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbypoison"
         }
@@ -2780,6 +2848,7 @@
           "max": 170
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -2958,6 +3027,7 @@
           "max": 80
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -2981,8 +3051,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "beam",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -2990,6 +3069,7 @@
           "max": 180
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "hitbypoison"
         }
@@ -3011,6 +3091,7 @@
           "max": 150
         },
         "damageType": "ice",
+        "kind": "combat",
         "presentation": {
           "impactKey": "bubbles"
         }
@@ -3022,8 +3103,17 @@
         "target": {
           "range": 8,
           "area": {
-            "shape": "beam",
-            "length": 8
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -3031,6 +3121,7 @@
           "max": 240
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "bubbles"
         }
@@ -3047,6 +3138,7 @@
           "max": 170
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -3203,6 +3295,7 @@
           "max": 110
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -3338,6 +3431,7 @@
           "max": 342
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -3476,6 +3570,7 @@
           "max": 240
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -3644,6 +3739,7 @@
           "max": 473
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -3803,6 +3899,7 @@
           "max": 193
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -3971,6 +4068,7 @@
           "max": 540
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         },
@@ -4194,6 +4292,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -4377,6 +4476,7 @@
           "max": 452
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }
@@ -4526,6 +4626,7 @@
           "max": 175
         },
         "damageType": "physical",
+        "kind": "melee",
         "presentation": {
           "impactKey": "drawblood"
         }

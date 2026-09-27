@@ -79,7 +79,7 @@ const PROGRESSION = {
   id: 'baseline', startingHealth: 500_000, startingMana: 2_000, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
 };
