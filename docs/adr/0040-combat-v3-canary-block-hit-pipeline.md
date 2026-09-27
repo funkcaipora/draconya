@@ -348,3 +348,31 @@ Nenhum campo novo é lido por `combat-v1`/`v2` (`resolveMitigation` intocado).
   olha quando o alvo é monstro — é do #683), cargas gastas pelo reflexo/cleave (`useCharges`), e
   o sinal do `absorbFlat` do Canary, que nenhum código escreve no `47dfd51` — aqui "absorver"
   subtrai.
+
+## Emenda — 2026-09-26: elemento no monstro — cura, reflexo e -200 % (M30-G6, #683)
+
+Mais uma emenda do perfil (d.3): `combat-v3` ainda não está na `main`. `combat-v1`/`v2` não leem
+nenhum dos campos, e o `DamageOutcome` deles não ganha chave nenhuma (`elementHealing` é
+OPCIONAL, ausente quando zero) — os traces do `combat-v1` passam sem edição.
+
+- **Vulnerabilidade até -200 % só no MONSTRO.** `monsterMitigationSchema` (`[-2, 1)`) é o
+  `mitigationSchema` com outro piso; o item continua `[-1, 1)`. O estágio de resistência já
+  fazia `dano × (1 − r)`, então `-2` triplica sem mudança no resolver. `elements ≥ 100` do Canary
+  é IMUNIDADE (regra do importador, #578), não resistência — o piso de dano do Draconya daria
+  dano > 0 onde o Canary dá 0.
+- **Cura por elemento (`monster.heals`).** `ceil(dano já crítico × p / 100)`, calculada no resolver
+  ANTES do `blockHit` (`Game::combatBlockHit`) — a imunidade não a impede — e aplicada pelo
+  ruleset depois do dano e do reflexo, somando o componente secundário. Só com atacante criatura
+  (o `if (attacker)` do Canary): o tique de campo não cura. **Diferença residual:** o Canary cura
+  dentro do `combatBlockHit`, ANTES de o dano mudar a vida; aqui a cura vem DEPOIS e o golpe que
+  mata não cura — a ordem que a spec do #683 fixou. Só é observável quando o golpe é letal e a
+  cura o compensaria.
+- **Reflexo do monstro (`monster.reflects`)** pelo mecanismo do #552, sem código novo de cálculo:
+  `Defender.reflect = { reflector: 'monster', table }`. **Unidade:** percentual INTEIRO, a do
+  `reflectSchema` do item — a spec previa fração ÷100, mas o #552 fixou a escala do Canary, e a
+  cura por elemento seguiu a mesma escala pelo mesmo motivo (conta inteira dentro do `ceil`). A
+  segunda resolução contra o personagem é do ruleset, depois do dano no monstro.
+- **Fora desta emenda:** reflexo do componente secundário (a conta do Canary usa o valor do
+  PRIMÁRIO com o tipo do secundário, `game.cpp:8016-8039`, e nenhum conteúdo o exercita), reflexo
+  de tique de condição, reflexo `flat` de monstro, `addReflectElement` em jogo, Wheel e
+  `BUFF_DAMAGERECEIVED`.

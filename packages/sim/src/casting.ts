@@ -22,7 +22,8 @@ import type {
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
-import type { DamageOutcome } from './combat/damage.js';
+import type { DamageOutcome, Defender } from './combat/damage.js';
+import type { DefenderReflect, ReflectAttacker } from './combat/reflect.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
@@ -122,6 +123,28 @@ export interface SpellTarget {
    * precisam. Ausente é `0`. Ignorado em `combat-v1`/`v2`.
    */
   readonly defenseMitigation?: number | undefined;
+  /** A cura por elemento do monstro alvo (#683) — ver `Defender.elementHealing`. Só v3 lê. */
+  readonly elementHealing?: Readonly<Record<DamageType, number>> | undefined;
+  /** O reflexo do monstro alvo (#683, mecanismo do #552) — ver `Defender.reflect`. Só v3 lê. */
+  readonly reflect?: DefenderReflect | undefined;
+  /**
+   * O LANÇADOR visto deste alvo (#683): a vida máxima dele e a distância até este alvo — o que o
+   * reflexo precisa (`ReflectAttacker`). Ausente, nada reflete.
+   */
+  readonly attacker?: ReflectAttacker | undefined;
+}
+
+/**
+ * O `Defender` de um alvo de magia/runa. Campos opcionais ausentes ficam ausentes — o `Defender`
+ * de sempre para todo alvo que não cura nem reflete (#683).
+ */
+function spellTargetDefender(target: SpellTarget): Defender {
+  return {
+    armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
+    defenseMitigation: target.defenseMitigation,
+    ...(target.elementHealing === undefined ? {} : { elementHealing: target.elementHealing }),
+    ...(target.reflect === undefined ? {} : { reflect: target.reflect }),
+  };
 }
 
 /**
@@ -461,11 +484,9 @@ export function castSpell(
             // o Canary rola para qualquer combate do jogador, magia inclusive — já com o
             // resultado da AÇÃO fixado acima, não um sorteio novo por alvo.
             ...(actionModifiers === undefined ? {} : { modifiers: actionModifiers }),
+            ...(target.attacker === undefined ? {} : { attacker: target.attacker }),
           },
-          {
-            armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
-            defenseMitigation: target.defenseMitigation,
-          },
+          spellTargetDefender(target),
           'pve',
           combat,
           rng,
@@ -653,11 +674,9 @@ export function useSupply(
           rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
           blockable: MAGIC_BLOCK_FLAGS,
           ...(actionModifiers === undefined ? {} : { modifiers: actionModifiers }),
+          ...(target.attacker === undefined ? {} : { attacker: target.attacker }),
         },
-        {
-          armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation,
-          defenseMitigation: target.defenseMitigation,
-        },
+        spellTargetDefender(target),
         // `nowMs` é opcional aqui (fixture sem relógio, ver o comentário do parâmetro); o
         // `combat-v3` só o lê para o `blockCharge`, e `0` é o instante de quem nunca bloqueou.
         'pve', combat, rng, nowMs ?? 0,

@@ -9555,6 +9555,105 @@ describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
     expect(hitRats).toEqual(new Set([a.subject, b.subject]));
   });
 });
+describe('cura por elemento e reflexo do monstro (#683, M30-G6)', () => {
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+  // O herói não bate de mão: o único golpe no rato é a magia de fogo, a cada 1,5 s.
+  const passiveHeroV3 = { ...combatV3, player: { ...combatV3.player, attackPower: 0 } };
+  const fireBolt = {
+    id: 'fire-bolt', name: 'Fire Bolt', manaCost: 15, cooldownMs: 1_500,
+    effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
+  };
+  const castFireBolt = () => botConfig({
+    attack: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'fire-bolt' } }],
+  });
+  // Rato inofensivo e parado: o que acontece com a vida dele é só a magia e a cura.
+  const healingRat = (over: Record<string, unknown>) => ({
+    ...rat, attack: 0, speed: 1, health: 1_000, elementHealing: { fire: 100 }, ...over,
+  });
+
+  const castOn = (combatProfile: unknown, monster: unknown, health: number) => {
+    const { session, ruleset } = withSpells(castFireBolt(), {
+      spells: [fireBolt], combat: [combatProfile], monstersRaw: [monster],
+    });
+    // O primeiro lançamento sai já na entrada; a vida é escrita depois dele, e só o que vem
+    // depois conta.
+    session.advanceBy(50);
+    for (const spawned of ruleset.monsters) spawned.health = health;
+    session.drainEvents();
+    vi.mocked(resolveDamage).mockClear();
+    run(session, 2_000, 100);
+    return { session, ruleset, events: session.drainEvents() };
+  };
+
+  it('imune a fogo, o monstro não perde vida e CURA ceil(dano bruto) — depois do creature-hit', () => {
+    const { events } = castOn(
+      passiveHeroV3, healingRat({ mitigation: { immunities: ['fire'] } }), 500,
+    );
+    const spellHits = ofKind(events, 'creature-hit')
+      .filter((e) => e.attackerId === 'hero' && e.damageType === 'fire');
+    expect(spellHits.length).toBeGreaterThan(0);
+    expect(spellHits.every((e) => e.amount === 0)).toBe(true);
+    const outcomes = vi.mocked(resolveDamage).mock.results
+      .map((r) => r.value as DamageOutcome)
+      .filter((o) => o.damageType === 'fire' && o.intent.source === 'spell');
+    const first = outcomes[0];
+    if (first === undefined) throw new Error('a magia não foi resolvida');
+    expect(first.elementHealing).toBe(Math.ceil(first.intent.rawDamage));
+    const healed = ofKind(events, 'creature-healed').filter((e) => e.source === 'monster');
+    expect(healed[0]?.amount).toBe(first.elementHealing);
+    // A ordem: o golpe (0) sai antes da cura que ele provocou.
+    const hitIndex = events.indexOf(spellHits[0] as DomainEvent);
+    const healIndex = events.indexOf(healed[0] as DomainEvent);
+    expect(healIndex).toBeGreaterThan(hitIndex);
+  });
+
+  it('o golpe que mata não cura: nenhum creature-healed', () => {
+    const { events, session } = castOn(passiveHeroV3, healingRat({}), 1);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const killed = new Set(ofKind(events, 'creature-hit')
+      .filter((e) => e.attackerId === 'hero' && e.amount > 0).map((e) => e.creatureId));
+    expect(killed.size).toBeGreaterThan(0);
+    expect(ofKind(events, 'creature-healed').filter((e) => killed.has(e.creatureId))).toHaveLength(0);
+  });
+
+  it('sem o combat-v3 o mesmo monstro não cura', () => {
+    const passiveV1 = { ...combat, player: { ...combat.player, attackPower: 0 } };
+    const { events } = castOn(passiveV1, healingRat({}), 500);
+    expect(ofKind(events, 'creature-hit').some((e) => e.attackerId === 'hero' && e.amount > 0)).toBe(true);
+    expect(ofKind(events, 'creature-healed').filter((e) => e.source === 'monster')).toHaveLength(0);
+    const outcomes = vi.mocked(resolveDamage).mock.results.map((r) => r.value as DamageOutcome);
+    expect(outcomes.every((o) => !('elementHealing' in o) && o.reflected === undefined)).toBe(true);
+  });
+
+  it('o reflexo físico do monstro volta ao herói com o teto de 1 % da vida máxima dele', () => {
+    const { session, hero } = withSpells(botConfig(), {
+      health: 10_000, combat: [combatV3],
+      monstersRaw: [{ ...rat, attack: 0, health: 1_000_000, reflect: { physical: 50 } }],
+    });
+    run(session, 10_000, 100);
+    const events = session.drainEvents();
+    const heroHits = ofKind(events, 'creature-hit')
+      .filter((e) => e.attackerId === 'hero' && e.amount > 0);
+    const reflected = ofKind(events, 'creature-hit')
+      .filter((e) => e.creatureId === 'hero' && e.attackerId !== 'hero' && e.amount > 0);
+    expect(heroHits.length).toBeGreaterThan(0);
+    // Um reflexo por golpe do herói, cada um no máximo ceil(1 % da vida máxima) e no máximo
+    // metade do golpe — o rato não bate (attack 0), então todo dano no herói é reflexo.
+    const cap = Math.ceil(hero.maxHealth / 100);
+    expect(reflected.length).toBe(heroHits.length);
+    expect(reflected.every((e) => e.amount > 0 && e.amount <= cap && e.damageType === 'physical')).toBe(true);
+    // Reflexo sobre reflexo nunca: nenhuma resolução de extensão contra o monstro.
+    const extensionsOnMonster = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.extension === true && intent.source === 'reflect'
+        && intent.neutral === true);
+    expect(extensionsOnMonster).toHaveLength(0);
+  });
+});
+
 describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {
   it('huntId e difficulty refletem a hunt e a dificuldade da instância', () => {
     const { ruleset } = start({ difficulty: 'bold' });

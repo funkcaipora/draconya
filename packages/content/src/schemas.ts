@@ -69,10 +69,13 @@ export const catalogSourceSchema = z.object({
  * Imutável e compilado no boot: o caminho quente faz `resistances[tipo]` (lookup) e
  * `immunities.has(tipo)` (Set), nunca uma varredura por golpe.
  */
-export const mitigationSchema = z.object({
-  resistances: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().gte(-1).lt(1)).default({}),
-  immunities: z.array(z.enum(DAMAGE_TYPES)).default([]),
-}).superRefine((mitigation, context) => {
+function refineMitigation(
+  mitigation: {
+    readonly resistances: Partial<Record<DamageType, number>>;
+    readonly immunities: readonly DamageType[];
+  },
+  context: z.RefinementCtx,
+): void {
   const seen = new Set<DamageType>();
   for (const type of mitigation.immunities) {
     // Duplicata é dado ambíguo: não se sabe se é engano ou ênfase, e o boot é o lugar de
@@ -90,7 +93,27 @@ export const mitigationSchema = z.object({
       });
     }
   }
-});
+}
+
+/** O mesmo perfil com o piso de resistência parametrizado: item e monstro diferem só nele (#683). */
+function mitigationSchemaWith(minResistance: number) {
+  return z.object({
+    resistances: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().gte(minResistance).lt(1)).default({}),
+    immunities: z.array(z.enum(DAMAGE_TYPES)).default([]),
+  }).superRefine(refineMitigation);
+}
+
+export const mitigationSchema = mitigationSchemaWith(-1);
+
+/**
+ * O perfil de mitigação do MONSTRO (#683, M30-G6): o mesmo de `mitigationSchema`, mas a
+ * vulnerabilidade vai até `-2` (-200 %, o `minElementalResistance` do Canary,
+ * `config.lua.dist`) — `-2` triplica o dano, o `(100 − (−200)) / 100` de `Monster::blockHit`.
+ * O teto continua `< 1`: `elements ≥ 100` do Canary é IMUNIDADE explícita (DT-02 do ADR 0031),
+ * nunca resistência de 100 %. O item continua em `[-1, 1)` — o Canary não dá esse recorte ao
+ * item, e alargar o schema compartilhado mudaria o item sem pedido (DT-03 do #683).
+ */
+export const monsterMitigationSchema = mitigationSchemaWith(-2);
 
 export type MitigationProfile = z.infer<typeof mitigationSchema>;
 
@@ -1946,7 +1969,25 @@ export const monsterSchema = z.strictObject({
    * O que o monstro RESISTE e ao que é IMUNE (CMB-03). Ausente é o monstro neutro, e o default
    * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
    */
-  mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  mitigation: monsterMitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * A cura por elemento (#683, M30-G6; `monster.heals` do Canary): por tipo, o PERCENTUAL
+   * INTEIRO do dano que o atinge — já crítico, ANTES de qualquer bloqueio, resistência ou
+   * imunidade — que CURA o monstro (`ceil(dano × p / 100)`, `Game::combatBlockHit`). Sai mesmo
+   * com o monstro imune ao tipo. Só com atacante (golpe, magia, runa, tique com dono) e só no
+   * `combat-v3`. Inteiro, e não fração, pela mesma razão do reflexo abaixo: a escala do Canary e
+   * uma conta sem erro de ponto flutuante dentro do `ceil`. Teto 500 (Maxxenius, o maior do
+   * Canary local).
+   */
+  elementHealing: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().int().positive().max(500)).optional(),
+  /**
+   * O reflexo do monstro (#683, M30-G6; `monster.reflects` do Canary): por tipo, o PERCENTUAL
+   * INTEIRO do dano bloqueado devolvido ao atacante, com o TIPO original e o teto
+   * `ceil(1 % da vida máxima do atacante)` — o mecanismo do #552 (`combat/reflect.ts`, refletor
+   * `monster`), na mesma escala do `reflectSchema` do item. Teto 200 (`MAX_DAMAGE_REFLECTION`).
+   * Sem reflexo `flat`: o monstro do Canary não declara. Só o `combat-v3` lê.
+   */
+  reflect: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().int().positive().max(200)).optional(),
   /**
    * A mitigação PERCENTUAL do `combat-v3` (#548, `Monster::getMitigation`/`monster.defenses.
    * mitigation` do Canary — nome DISTINTO de `mitigation` acima de propósito: aquele é
@@ -3802,12 +3843,21 @@ export type Spell = z.infer<typeof spellSchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities' | 'defenses'> & {
+export type Monster = Omit<
+  MonsterDefinition, 'mitigation' | 'abilities' | 'defenses' | 'elementHealing' | 'reflect'
+> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
   /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
   readonly mitigation: CompiledMitigation;
+  /**
+   * A cura por elemento compilada (#683): a tabela COMPLETA por tipo, em percentual inteiro,
+   * zero onde não cura. Ausente no monstro que não cura com tipo nenhum — o caso comum.
+   */
+  readonly elementHealing?: Readonly<Record<DamageType, number>>;
+  /** O reflexo compilado (#683), na forma do item (#552). Ausente no monstro que não reflete. */
+  readonly reflect?: CompiledReflect;
   /**
    * As abilities JÁ NORMALIZADAS (CMB-06): nunca vazio — ausência vira a básica do boot. É o
    * que o `sim` lê, e é por isso que ele não conhece o par `attack`/`attackIntervalMs`.

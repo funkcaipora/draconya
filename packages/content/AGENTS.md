@@ -471,6 +471,12 @@ entre arquivos resolvem.
   e a conta inteira é a do Canary. `mitigation.resistances` de ITEM e `absorb.<tipo>.percent` são
   o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
   (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
-  reflexo de monstro (#683) vai reusar.
+  reflexo de monstro (#683) reusa.
+- **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
+  resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
+  continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
+  item sem pedido. `monster.elementHealing` (teto 500) e `monster.reflect` (teto 200) são
+  PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
+  `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 
 Issue: FUN-8.
