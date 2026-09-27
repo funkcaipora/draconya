@@ -753,6 +753,16 @@ export function buildContent(raw: RawContent): Content {
         }
       }
     }
+    // A poção de buff (#576) aponta skill pelo id do catálogo em `skillDeltas` — como o bônus de
+    // equipamento (linha ~890) e a família de arma (abaixo), pela MESMA razão: um id errado
+    // bonificaria uma skill que ninguém lê, e a poção pareceria funcionar sem fazer nada.
+    if (effect.kind === 'condition' && effect.condition.effect.kind === 'buff' && skills.size > 0) {
+      for (const skillId of Object.keys(effect.condition.effect.skillDeltas ?? {})) {
+        if (!skills.has(skillId)) {
+          problems.push(`${where}: condition.effect.skillDeltas "${skillId}" não existe`);
+        }
+      }
+    }
   }
   // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa
   // existir, e a combinatória de `kind`/`resource`/`formula` é regra de domínio, não de forma.

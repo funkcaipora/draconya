@@ -480,10 +480,18 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     expect(content.appearances?.supplies['small-health-potion']).toEqual({ effect: 14 });
   });
 
-  it('toda poção e toda runa travam a exaustão de ação compartilhada de 1000 ms (#690)', () => {
-    // `timeBetweenExActions` do Canary: poção e runa dividem o MESMO relógio.
+  it('toda poção e toda runa travam a exaustão de ação compartilhada de 1000 ms, exceto a exceção documentada (#690, #576)', () => {
+    // `timeBetweenExActions` do Canary: poção e runa dividem o MESMO relógio. A ÚNICA exceção é
+    // a Magic Shield Potion (#576): o `func = magicshield` do `potions.lua` só chama
+    // `player:addCondition` da mana shield — nenhuma chamada do arquivo aplica a `exhaust` de
+    // módulo (`CONDITION_PARAM_TICKS = 500`) a um jogador —, e é o que
+    // `supplySchema.actionExhaustMs` já documentava ANTES desta issue chegar aqui.
     const content = loadContent(DATA);
     for (const [id, supply] of content.supplies) {
+      if (id === 'magic-shield-potion') {
+        expect(supply.actionExhaustMs, id).toBeUndefined();
+        continue;
+      }
       expect(supply.actionExhaustMs, id).toBe(1000);
     }
   });

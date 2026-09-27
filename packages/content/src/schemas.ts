@@ -1236,6 +1236,22 @@ export const supplySchema = z.object({
        */
       damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
+    /**
+     * Poção de BUFF (#576: Berserk, Mastermind, Bullseye, Magic Shield) — bebe e aplica uma
+     * `ConditionSpec` no próprio usuário, SEMPRE — nunca no `recipient` de `useSupply`: as quatro
+     * poções do Tibia são auto-alvo (`CONDITION_ATTRIBUTES` do Canary não tem alcance nem alvo),
+     * ao contrário da runa de cura (`heal`/`target: 'friend'`). Reaproveita `conditionSpecSchema`
+     * inteiro, a MESMA forma que `fieldSpecSchema`/`monsterAbilitySchema.condition` já usam
+     * (CMB-07): a poção não inventa um segundo jeito de declarar prazo e efeito. `z.lazy` porque
+     * `conditionSpecSchema` só é definido MAIS ABAIXO neste arquivo (a mesma técnica de
+     * `botConfigSchema.defaultConfig`) — mover ~300 linhas de `conditionEffectSchema`/`speed`/
+     * `drunk`/dano-ao-longo-do-tempo para antes de `supplySchema` só para içar a `const` custaria
+     * um diff bem maior sem mudar nenhum comportamento.
+     */
+    z.object({
+      kind: z.literal('condition'),
+      condition: z.lazy(() => conditionSpecSchema),
+    }),
   ]),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
   requires: z.object({
@@ -1432,6 +1448,17 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('buff'),
     damageDealtPercent: damagePercentBySource.optional(),
     damageTakenPercent: z.number().int().optional(),
+    /**
+     * Bônus/malus FLAT numa skill pelo id do catálogo (#576: Berserk soma 5 em `melee` e tira 10
+     * de `shielding`; Bullseye soma 5 em `distance` e tira 10 de `shielding`; Mastermind soma 3
+     * em `magic`, que É o magic level, FUN-92). Ao lado de `damageDealtPercent`/
+     * `damageTakenPercent`, e não um `kind` novo: as três poções do Tibia usam o MESMO
+     * `CONDITION_ATTRIBUTES` do Canary, só com parâmetros diferentes — um `kind` por poção
+     * duplicaria o `switch` de `conditions.ts` sem nenhum comportamento novo. Chave livre (não
+     * fechada a `melee`/`distance`/`magic`/`shielding`): o vocabulário de skill já é aberto no
+     * catálogo (`skills/*.json`), e fechar aqui duplicaria essa lista em outro lugar.
+     */
+    skillDeltas: z.record(z.string(), z.number().int()).optional(),
   }),
   z.object({ kind: z.literal('mana-shield') }),
   /**

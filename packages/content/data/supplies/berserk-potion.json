@@ -1,0 +1,24 @@
+{
+  "id": "berserk-potion",
+  "name": "Berserk Potion",
+  "description": "Aumenta a skill de corpo a corpo em 5 e reduz a de shielding em 10 por 10 minutos. Somente Knight.",
+  "price": 0,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
+  "effect": {
+    "kind": "condition",
+    "condition": {
+      "key": "berserk-potion",
+      "durationMs": 600000,
+      "effect": {
+        "kind": "buff",
+        "skillDeltas": { "melee": 5, "shielding": -10 }
+      }
+    }
+  },
+  "requires": {
+    "vocationId": "knight"
+  },
+  "_open": "#576, M34-05. Canary `data/scripts/actions/items/potions.lua` (checkout local `things/sources/canary`, commit 47dfd51), item id 7439: `Condition(CONDITION_ATTRIBUTES)` com `CONDITION_PARAM_TICKS = 10*60*1000`, `CONDITION_PARAM_SKILL_MELEE = 5`, `CONDITION_PARAM_SKILL_SHIELD = -10`, `vocations = { KNIGHT }` — sem restrição de level. `key` do estado é `berserk-potion`, e não o `buff` genérico que as magias de postura (Blood Rage etc.) já usam via `spellEffectSchema`: o Canary dá à poção um `CONDITION_PARAM_SUBID` PRÓPRIO (`JeanPierreMelee`), independente do buff de magia — as duas condições SOMAM no jogo real, e uma chave própria preserva isso aqui (`Conditions.skillBonus`/`damageDealtScale` somam por CHAVE, nunca por `kind`). `actionExhaustMs` 1000 (#690): a poção passa pelo dispatcher genérico de `flaskPotion.onUse` como as demais — só a Magic Shield Potion (`func`, não `condition`) tira o comentário de #690 da exaustão de ação. `price` 0: PENDENTE de #574 (M34-03) — a poção não é vendida por NPC nenhum no Canary (`fiona.lua` só tem `sell = 500`, o preço que Fiona PAGA por ela, nunca um `buy`); só #574 decide o preço de supply, e este arquivo não antecipa isso. `appearances.supplies.effect` 14 é `CONST_ME_MAGIC_RED` (o `effect = CONST_ME_MAGIC_RED` do `potions.lua`), verificado contra a legenda auditada do pacote 13.32 em `docs/reference/catalog/monsters-report.md` (\"magic-red effect 14\", CMB-09) — a mesma conferência que já sustenta `blood-rage`/`sharpshooter` (magias de postura, também effect 14)."
+}
