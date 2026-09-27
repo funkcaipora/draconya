@@ -20,7 +20,7 @@ import { resolveDefense } from './defense.js';
 import type { DefenseSource } from './defense.js';
 import { FULL_BLOCK_CHARGE, type BlockChargeState } from './block-charge.js';
 import { MELEE_BLOCK_FLAGS, resolveBlockHit } from './blockhit.js';
-import type { BlockFlags } from './blockhit.js';
+import type { BlockFlags, BlockType } from './blockhit.js';
 import type { Rng } from '../rng.js';
 import { resolveReflect } from './reflect.js';
 import type { DefenderReflect, ReflectAttacker, ReflectedDamage } from './reflect.js';
@@ -147,6 +147,12 @@ export type { DamageType };
 export interface SecondaryDamage {
   readonly rawDamage: number;
   readonly damageType: DamageType;
+  /**
+   * Ausente herda o `blockable` do intent (comportamento do #473). O elemento de uma arma
+   * (#687) passa `MAGIC_BLOCK_FLAGS`: como o `blockHit(…, false, false)` do Canary, o secundário
+   * não perde para escudo nem armadura — só para resistência.
+   */
+  readonly blockable?: BlockFlags | undefined;
 }
 
 /** O que o atacante entrega ao resolver. A entrada fica preservada no outcome. */
@@ -248,6 +254,14 @@ export interface DamageOutcome {
    * de entrada, e a escrita de volta é um no-op). Ausente em `combat-v1`/`v2`.
    */
   readonly blockCharge?: BlockChargeState;
+  /**
+   * O tipo de bloqueio do golpe (#686), o que o ATACANTE vê — ver `BlockType`. Só no
+   * `combat-v3`; ausente em `combat-v1`/`v2`, que não mudam a prática por causa dele. O Dodge e
+   * o piso do Draconya ficam FORA: o tipo é o do `blockHit`, antes deles.
+   */
+  readonly blockType?: BlockType;
+  /** Se havia carga de bloqueio para consumir (#686, o `hasDefense` do Canary). Só no `combat-v3`. */
+  readonly hadBlockCharge?: boolean;
   /**
    * O dano que volta ao ATACANTE (#552): o reflexo do defensor sobre este golpe, já com o teto de
    * 1 % da vida máxima do atacante. Quem aplica o outcome é quem faz a segunda resolução contra o
@@ -547,6 +561,7 @@ function resolveBlockHitProfile(
   // nunca tivesse consumido nada, e uma carga extra seria descontada em memória sem nunca voltar
   // ao dono — `applyDamageOutcome` só lê o `blockCharge` de NÍVEL SUPERIOR do outcome (ver
   // abaixo), então o consumo do secundário tem que terminar ali.
+  const secondaryBlockable = intent.secondary?.blockable ?? intent.blockable;
   const secondaryOutcome = intent.secondary === undefined
     ? undefined
     : resolveDamage(
@@ -554,7 +569,7 @@ function resolveBlockHitProfile(
         rawDamage: intent.secondary.rawDamage,
         source: intent.source,
         damageType: intent.secondary.damageType,
-        ...(intent.blockable === undefined ? {} : { blockable: intent.blockable }),
+        ...(secondaryBlockable === undefined ? {} : { blockable: secondaryBlockable }),
         // O aumento do atacante vale para o secundário também (#552, o `blockHit` do secundário
         // chama o mesmo `applyAbsorbDamageModifications`); crítico e leech continuam do primário.
         ...(intent.modifiers?.increase === undefined
@@ -595,6 +610,8 @@ function resolveBlockHitProfile(
     // O estado que `applyDamageOutcome` grava de volta (invariante 9) tem que refletir o QUE O
     // SECUNDÁRIO ainda gastou por cima do primário — sem isto, o consumo dele nunca persistiria.
     blockCharge: secondaryOutcome?.blockCharge ?? blockHit.blockCharge,
+    blockType: blockHit.blockType,
+    hadBlockCharge: blockHit.hadBlockCharge,
     ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
     ...(reflected === undefined ? {} : { reflected }),
     ...(elementHealing > 0 ? { elementHealing } : {}),

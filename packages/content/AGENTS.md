@@ -195,8 +195,8 @@ faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
 `monsterAbilitySchema.chance` é OPCIONAL e sem default preenchido de propósito — não
 `z.number().default(1)` — porque a diferença entre "ausente" e "declarado como 1" é observável
 no `sim` (ausente não rola sorteio, declarado rola sempre). `monsterAbilityTargetSchema.area`
-aceita `circle`, `wave` e `beam` (`buildContent` recusa o resto); `wave`/`beam` saem do monstro
-na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
+aceita `circle`, `wave`, `rows` e `beam` (`buildContent` recusa o resto; o catálogo usa `rows`,
+#679); `wave`/`rows`/`beam` saem do monstro na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
 (cura própria) é normalizado no boot como `abilities` (`normalizeMonsterDefenses`, ausente vira
 lista VAZIA — nunca `undefined` — para o `sim` iterar sem `?? []`), mas sem básica a sintetizar:
 nenhum monstro cura sozinho por padrão. `monster.targetChange`/`runOnHealth`/`staticAttack` são
