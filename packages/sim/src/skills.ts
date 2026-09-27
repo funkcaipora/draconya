@@ -27,6 +27,17 @@ export interface SkillProgress {
 export type SkillsState = Readonly<Record<string, SkillState>>;
 
 /**
+ * Mudança de nível de UMA skill — a mesma forma de `LevelChange` (`progression.ts`), duplicada
+ * aqui de propósito: `progression.ts` já importa deste arquivo (`pointsForLevel`,
+ * `skillFactorFor`), e importar `LevelChange` de volta criaria um ciclo só para reusar um
+ * `{ from, to }`. `applyDeathPenalty` (#569) devolve esta forma para cada skill que perdeu nível.
+ */
+export interface SkillLevelChange {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
  * Quantos pontos faltam para sair de `level`.
  *
  * Fórmula e não tabela: tabela precisa ter fim, e o fim vira teto acidental que ninguém
@@ -105,6 +116,17 @@ export class Skills {
    * Skill que nunca foi usada não tem entrada no mapa, e é assim de propósito: gravar o nível
    * inicial de toda skill em todo personagem é encher o snapshot com o valor padrão.
    */
+  /**
+   * Os pontos CRUS já acumulados rumo ao próximo nível — diferente de `progressOf`, que devolve
+   * um PERCENTUAL inteiro tetado em 99 (feito para HUD). A penalidade de morte (#569) precisa do
+   * valor exato para somar ao custo dos níveis já ultrapassados (`applyDeathPenalty`,
+   * `progression.ts`); arredondar por um percentual erraria a soma total em até 1% do custo do
+   * nível corrente.
+   */
+  pointsOf(definition: Skill): number {
+    return this.#points.get(definition.id) ?? 0;
+  }
+
   levelOf(definition: Skill): number {
     return this.#levels.get(definition.id) ?? definition.startingLevel;
   }
@@ -140,6 +162,46 @@ export class Skills {
     this.#levels.set(definition.id, level);
     this.#points.set(definition.id, total);
     return gained;
+  }
+
+  /**
+   * Perde `amount` pontos acumulados, descendo de nível quando faltar — o oposto de `gain`
+   * (#569, `Player::death` do Canary/TFS). O piso é `definition.startingLevel`: para as skills
+   * corpo a corpo isso é 10 (o `skills[i].level <= 10` do Canary), e para `magic` é 0 (o
+   * `while (magLevel > 0)` do mesmo trecho) — o MESMO piso, generalizado pelo campo que já
+   * distingue as duas, sem precisar de um caso especial para magia.
+   *
+   * O laço espelha o C++ ponto a ponto: enquanto a perda que falta aplicar for MAIOR que os
+   * pontos que a skill tem, desconta os pontos inteiros, desce um nível e RECARREGA os pontos
+   * com o custo cheio do nível novo (`pointsForLevel`, o `vocation->getReqSkillTries` de lá) —
+   * é o que faz "cair um nível" custar exatamente o que ele custou para subir, nunca deixar um
+   * resto negativo escondido. No piso, a perda que sobra é descartada: não existe nível abaixo
+   * dele para "emprestar" pontos.
+   *
+   * **Nunca merge chama isto.** `Skills.merge` continua assumindo que skill só sobe — é o que
+   * a resolve de extrato fora de ordem depende —, e a morte quebra essa monotonicidade de
+   * propósito. Um extrato de ANTES da morte, mesclado DEPOIS, reergueria a skill que a morte
+   * baixou; é a mesma janela que já existe para XP (`character.xp` também pode cair na morte
+   * e não passa por merge nenhum) — skill morava do lado "nunca desce" só porque nada a
+   * derrubava ainda.
+   */
+  lose(definition: Skill, amount: number, factor?: number): SkillLevelChange | null {
+    if (amount <= 0) return null;
+    const from = this.levelOf(definition);
+    let level = from;
+    let points = this.#points.get(definition.id) ?? 0;
+    let remaining = amount;
+
+    while (remaining > points && level > definition.startingLevel) {
+      remaining -= points;
+      level -= 1;
+      points = pointsForLevel(definition, level, factor);
+    }
+    points = Math.max(0, points - remaining);
+
+    this.#levels.set(definition.id, level);
+    this.#points.set(definition.id, points);
+    return level === from ? null : { from, to: level };
   }
 
   /**

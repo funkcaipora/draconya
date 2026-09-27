@@ -3012,11 +3012,14 @@ export class HuntRuleset implements Ruleset {
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
     // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
     const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
+    // `promoted` ainda não existe como estado do personagem (#566/ADR 0042) — o parâmetro é o
+    // ponto de extensão que a promoção vai acionar quando o estado existir (#569).
     const penalty = applyDeathPenalty(
       character,
       { premium },
       this.#vocationOf(character),
       this.#options.progression,
+      this.#options.skills,
     );
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
@@ -3031,6 +3034,14 @@ export class HuntRuleset implements Ruleset {
       // mudou, e o cliente que só recebeu o golpe fatal ficaria com um "0 / máximo do level
       // antigo" até a reanexação.
       this.#emitCharacterHealth(session, character);
+    }
+    // Skill (magic inclusive — é ela quem carrega a perda de mana gasta, ver `DeathPenalty` em
+    // `progression.ts`) que perdeu tries: um registro por skill afetada (#569).
+    for (const loss of penalty.skillLosses) {
+      session.record('skill-penalty', `${loss.skillId}/${String(loss.triesLost)}`);
+      if (loss.levelChange !== null) {
+        session.record('skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`);
+      }
     }
 
     // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
