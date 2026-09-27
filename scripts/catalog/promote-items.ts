@@ -56,6 +56,7 @@ export interface SkippedByContentRule {
 interface StagingWeapon {
   readonly kind?: string;
   readonly ammoFamily?: string;
+  readonly breakChance?: number;
 }
 
 interface StagingItem {
@@ -72,10 +73,10 @@ interface StagingItem {
  * que o importador de itens (`items.ts`) já demonstrou poder violar — quest/decoração classificada
  * fora de `kind: 'shield'` mas com `defense` residual do Canary ("rusted shield"), arma sem
  * `slot` (a maioria das armas do Canary não declara `<attribute key="slot" value="hand">`) que
- * também carrega `imbuementslot`, e arma de distância sem lançador reconhecido. A mesma disciplina
- * de `resolveLoot`/`hasDuplicateSummonTarget` em `promote-monsters.ts`: a entidade INTEIRA é
- * excluída e contada, nunca escrita quebrada — nunca falha o boot em silêncio, e nunca corrige o
- * dado calando o motivo.
+ * também carrega `imbuementslot`, e arma de distância sem lançador NEM arremesso reconhecidos. A
+ * mesma disciplina de `resolveLoot`/`hasDuplicateSummonTarget` em `promote-monsters.ts`: a
+ * entidade INTEIRA é excluída e contada, nunca escrita quebrada — nunca falha o boot em silêncio,
+ * e nunca corrige o dado calando o motivo.
  */
 export function violatesContentRules(item: StagingItem): string | undefined {
   if (item.imbuementSlots !== undefined && (item.slot === undefined || item.stackable === true)) {
@@ -85,8 +86,11 @@ export function violatesContentRules(item: StagingItem): string | undefined {
   if ((item.defense ?? 0) > 0 && item.kind !== 'shield' && !melee) {
     return 'defense só vale em escudo ou arma corpo a corpo (content.ts)';
   }
-  if (item.weapon?.kind === 'distance' && item.weapon.ammoFamily === undefined) {
-    return 'arma de distância precisa de "ammoFamily" (content.ts)';
+  // Toda arma `distance` é OU lançador (`ammoFamily`, munição por família) OU arremessável
+  // (`breakChance`, #575, sem lançador) — a MESMA regra de `content.ts` (`buildContent`).
+  if (item.weapon?.kind === 'distance'
+    && item.weapon.ammoFamily === undefined && item.weapon.breakChance === undefined) {
+    return 'arma de distância precisa de "ammoFamily" ou "breakChance" (content.ts)';
   }
   return undefined;
 }

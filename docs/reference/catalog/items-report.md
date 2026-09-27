@@ -2,7 +2,7 @@
 
 Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 
-1954 entidade(s) geradas em 10 fatia(s):
+1965 entidade(s) geradas em 10 fatia(s):
 
 - `amulets.json`: 87
 - `armors.json`: 164
@@ -13,17 +13,17 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 - `rings.json`: 44
 - `shields.json`: 117
 - `valuables.json`: 164
-- `weapons.json`: 489
+- `weapons.json`: 500
 
 ## Notas
 
-- 7420 `<item>` lidos das categorias de caça; 5466 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
+- 7420 `<item>` lidos das categorias de caça; 5455 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
 - Reconciliação (ADR 0014): 37 item(ns) autoral(is) com override gravado em `packages/content/data/items/overrides/` — o id nunca muda, só a correção.
 - Preço (`value`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary (exceto o Nah'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.
 - `stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.
 - Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), shootType (79), augments (75), showduration (73), decayTo (64), loottype (47), skillfist (47), mantra (38), transformdeequipto (28), stopduration (27), showattributes (24), showCharges (22), transformequipto (18), lifeleechchance (16), manaleechchance (16), maxhitchance (11), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), magicshieldCapacityflat (4), magicshieldCapacitypercent (4), decayto (2), fluidsource (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectShotDamage (1), wrapableto (1).
 
-## Fora do corte (5466)
+## Fora do corte (5455)
 
 O pacote de arte 13.32 não desenha, ou o `sim` ainda não executa a mecânica (ADR 0038 decisão 5).
 Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
@@ -156,7 +156,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | assassin-doll | assassin doll | sem categoria de caça (primarytype "dolls and bears") | `data/items/items.xml` |
 | assassin-doll | assassin doll | sem categoria de caça (primarytype "dolls and bears") | `data/items/items.xml` |
 | assassin-soul-core | assassin soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
-| assassin-star | assassin star | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | astral-glyph | astral glyph | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | astral-shaper-rune | astral shaper rune | sem categoria de caça (primarytype "taming items") | `data/items/items.xml` |
 | astral-source | astral source | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
@@ -1494,7 +1493,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | enchanted-merudri-brooch | enchanted merudri brooch | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | enchanted-pendulet | enchanted pendulet | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | enchanted-sleep-shawl | enchanted sleep shawl | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
-| enchanted-spear | enchanted spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | enchanted-theurgic-amulet | enchanted theurgic amulet | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | enchanted-turtle-amulet | enchanted turtle amulet | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | enchanted-werewolf-amulet | enchanted werewolf amulet | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
@@ -1961,7 +1959,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | glooth-plasma | glooth plasma | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | glooth-potion | glooth potion | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | glooth-sandwich | glooth sandwich | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
-| glooth-spear | glooth spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | glooth-steak | glooth steak | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
 | glooth-vinegar | glooth vinegar | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | glow-wine | glow wine | sem categoria de caça (primarytype "taming items") | `data/items/items.xml` |
@@ -2351,7 +2348,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | humongous-fungus-soul-core | humongous fungus soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | hunter-soul-core | hunter soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | hunting-horn | hunting horn | sem categoria de caça (primarytype "taming items") | `data/items/items.xml` |
-| hunting-spear | hunting spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | husky-soul-core | husky soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | hyaena-soul-core | hyaena soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | hyaena-trap | hyaena trap | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
@@ -2739,7 +2735,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | leaf-chair | leaf chair | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | leaf-golem-santa | leaf golem santa | sem categoria de caça (primarytype "dolls and bears") | `data/items/items.xml` |
 | leaf-golem-soul-core | leaf golem soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
-| leaf-star | leaf star | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | leather-whip | leather whip | sem categoria de caça (primarytype "taming items") | `data/items/items.xml` |
 | leaves | leaves | sem categoria de caça (primarytype "fields") | `data/items/items.xml` |
 | leberkassemmel | leberkassemmel | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
@@ -2980,7 +2975,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | mead-horn | mead horn | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | mean-knight-sword | mean knight sword | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | mean-lost-soul-soul-core | mean lost soul soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
-| mean-paladin-spear | mean paladin spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | meandering-mushroom-soul-core | meandering mushroom soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | meandi | Meandi | sem categoria de caça (primarytype "dolls and bears") | `data/items/items.xml` |
 | meandi | Meandi | sem categoria de caça (primarytype "dolls and bears") | `data/items/items.xml` |
@@ -4005,7 +3999,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | royal-emblems | royal emblems | sem categoria de caça (primarytype "portals") | `data/items/items.xml` |
 | royal-fanfare | royal fanfare | sem categoria de caça (primarytype "musical instruments") | `data/items/items.xml` |
 | royal-medal | royal medal | sem categoria de caça (primarytype "contest prizes") | `data/items/items.xml` |
-| royal-spear | royal spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | royal-star | royal star | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | royal-tapestry | royal tapestry | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | rubble | rubble | sem categoria de caça (primarytype "rocks") | `data/items/items.xml` |
@@ -4380,7 +4373,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | small-snake-head | small snake head | sem categoria de caça (primarytype "wall hangings") | `data/items/items.xml` |
 | small-snake-head | small snake head | sem categoria de caça (primarytype "wall hangings") | `data/items/items.xml` |
 | small-snake-head | small snake head | sem categoria de caça (primarytype "wall hangings") | `data/items/items.xml` |
-| small-stone | small stone | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | small-table | small table | sem categoria de caça (primarytype "furniture") | `data/items/items.xml` |
 | small-table-kit | small table kit | sem categoria de caça (primarytype "furniture") | `data/items/items.xml` |
 | small-tortoise | small tortoise | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
@@ -4482,7 +4474,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | soup-kettle | soup kettle | sem categoria de caça (primarytype "tools (objects)") | `data/items/items.xml` |
 | spare-part | spare part | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | sparkion-soul-core | sparkion soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
-| spear | spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | special-balloon-box | special balloon box | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | special-carpet-box | special carpet box | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | special-fx-box | special fx box | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
@@ -4900,8 +4891,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | three-cans | three cans | sem categoria de caça (primarytype "tools (objects)") | `data/items/items.xml` |
 | throatslitter | throatslitter | sem categoria de caça (primarytype "trees") | `data/items/items.xml` |
 | throwing-cake | throwing cake | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
-| throwing-knife | throwing knife | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
-| throwing-star | throwing star | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | throwing-star-of-sula | throwing star of Sula | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | thunderstorm-rune | thunderstorm rune | sem categoria de caça (primarytype "attack runes") | `data/items/items.xml` |
 | tibiacity-encyclopedia | Tibiacity Encyclopedia | sem categoria de caça (primarytype "books") | `data/items/items.xml` |

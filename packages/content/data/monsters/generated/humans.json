@@ -2202,6 +2202,10 @@
           "chance": 0.02
         },
         {
+          "itemId": "glooth-spear",
+          "chance": 0.01492
+        },
+        {
           "itemId": "skull-staff",
           "chance": 0.01
         },
@@ -2392,6 +2396,10 @@
         },
         {
           "itemId": "heat-core",
+          "chance": 0.00502
+        },
+        {
+          "itemId": "glooth-spear",
           "chance": 0.00502
         },
         {
@@ -6105,6 +6113,10 @@
         {
           "itemId": "girlish-hair-decoration",
           "chance": 0.059
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.05155
         },
         {
           "itemId": "protective-charm",

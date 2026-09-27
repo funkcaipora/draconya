@@ -8,6 +8,19 @@ const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number()
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
 /**
+ * A pilha de UM tile mudou (#729, ADR 0050 d.7): cada par `{ from, to }` é uma substituição de
+ * id de aparência que o cliente aplica sobre a pilha estática de `things/`. Compartilhado por
+ * `tile-update` (evento) e `session-state.world.tileUpdates` (catch-up de quem reanexa) — o
+ * mesmo contrato, computado contra o instante do evento ou contra o estado INICIAL do conteúdo.
+ */
+const TileUpdate = z.object({
+  position: Point,
+  replace: z.array(z.object({
+    from: z.number().int().positive(), to: z.number().int().positive(),
+  })),
+});
+
+/**
  * O TIPO de dano elemental (#479; drown/lifedrain/manadrain pelo #547, M29-07). Espelha
  * `DAMAGE_TYPES` do conteúdo, mas vive aqui pela mesma razão que todo contrato de rede: o
  * protocolo é a base da pilha e não importa `content`. A lista é fechada de propósito — um
@@ -325,6 +338,17 @@ export const C2S_SCHEMAS = {
     target: manualTargetSchema,
     seq: z.number().int().nonnegative(),
   }),
+  /**
+   * Usar o que está no tile (#729, ADR 0050 d.7): porta, alavanca, capim, stone pile. INTENÇÃO:
+   * o cliente diz QUAL posição; alcance, estado, requisito e ferramenta são do servidor
+   * (invariante 4). `seq` é opcional, como em `select-target` — um cliente anterior não o manda.
+   */
+  'use-on-map': z.object({ position: Point, seq: z.number().int().nonnegative().optional() }),
+  /**
+   * Olhar uma posição (#729, ADR 0050 d.7): o "You see …" do Tibia. Sem `creatureId`/
+   * `instanceId` nesta entrega — sem gatilho de UI hoje (spec da #729, DT-04).
+   */
+  look: z.object({ position: Point }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -600,6 +624,13 @@ export const S2C_SCHEMAS = {
         /** Ver `ground-item-appear.lootable` (#722) — mesmo campo, para quem reanexa. */
         lootable: z.boolean().optional(),
       })).default([]),
+      /**
+       * O overlay de cenário usável ATIVO (#729, ADR 0050 d.7): todo interativo cujo estado
+       * hoje difere do estado inicial do conteúdo, no MESMO contrato de `tile-update` — quem
+       * reanexa aplica cada entrada sobre a pilha estática, como se cada uma tivesse acabado
+       * de chegar. `default([])`: nó `game` anterior a esta issue, ou nada foi usado ainda.
+       */
+      tileUpdates: z.array(TileUpdate).default([]),
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
@@ -1211,6 +1242,17 @@ export const S2C_SCHEMAS = {
     ok: z.boolean(),
     reason: z.string().optional(),
   }),
+  /**
+   * A pilha do tile mudou (#729, ADR 0050 d.7): porta abriu, capim foi cortado, alavanca virou.
+   * Broadcast para todos os viewers da sessão (DT-01) — cenário é compartilhado, ao contrário
+   * de `player-stats`. O cliente troca cada `from` por `to` na pilha do tile e redesenha.
+   */
+  'tile-update': TileUpdate,
+  /**
+   * A resposta ao `look` (#729): o texto — `text` de uma placa, ou uma descrição padrão do
+   * `kind` de cenário. Só para quem pediu.
+   */
+  'look-result': z.object({ text: z.string() }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

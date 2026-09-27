@@ -51,7 +51,8 @@ const REASON = {
 } as const;
 import { missileDuration } from '../world/effects.js';
 import {
-  addEffect, addFloatingText, addMissile, clearTransients, enterInstance, world, type Creature,
+  addEffect, addFloatingText, addMissile, applyTileUpdate, clearTransients, enterInstance,
+  replaceTileOverrides, world, type Creature,
 } from './world.js';
 
 /**
@@ -103,6 +104,24 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           ? { ...state, corpse: null }
           : state
       ));
+      return;
+
+    // O tile mudou de aparência (#729, ADR 0050 d.7): a porta abriu, o capim foi cortado. O
+    // viewport aplica o `replace` por cima da pilha estática no próprio pintor de tile — nada
+    // aqui redesenha nada (ADR 0007).
+    case 'tile-update':
+      applyTileUpdate(message.position, message.replace);
+      return;
+
+    // A resposta ao `look` (#729): o texto do "You see …" entra no mesmo canal do
+    // `system-message`, nível info — não é recusa, é o que a placa/o cenário dizem.
+    case 'look-result':
+      hud.set((state) => ({
+        ...state,
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'info', text: message.text, atMs: nowMs,
+        }),
+      }));
       return;
 
     case 'creature-appear':
@@ -374,6 +393,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         });
       }
       world.groundItemsVersion += 1;
+      // O overlay de cenário também é substituído (#729): o mesmo argumento do cadáver — uma
+      // porta que fechou enquanto ninguém olhava não pode continuar desenhada aberta.
+      // `?? []`: nó `game` anterior a esta issue manda sem o campo (default do protocolo).
+      replaceTileOverrides(message.world.tileUpdates ?? []);
       // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
       // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que
       // nunca some — por menos de um segundo, mas no primeiro quadro que o jogador vê.

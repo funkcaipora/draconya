@@ -293,13 +293,13 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="weight" value="100"/>
 	</item>
 	<item id="90041" article="an" name="test water"/>
-	<item id="90042" article="a" name="test rusted shield">
+	<item id="90045" article="a" name="test rusted shield">
 		<attribute key="primarytype" value="valuables"/>
 		<attribute key="weaponType" value="shield"/>
 		<attribute key="defense" value="1"/>
 		<attribute key="weight" value="6500"/>
 	</item>
-	<item id="90043" name="test broken iks spear">
+	<item id="90046" name="test broken iks spear">
 		<attribute key="primarytype" value="axe weapons"/>
 		<attribute key="weight" value="1300"/>
 		<attribute key="attack" value="1"/>
@@ -415,7 +415,7 @@ describe('convertItem', () => {
     expect(star?.blockers).toEqual([]);
     expect(star?.entity).toMatchObject({ attack: 10, weapon: { family: 'distance', breakChance: 10 } });
     expect(star?.entity['weapon']).not.toHaveProperty('ammoFamily');
-    expect(itemSchema.parse(star?.entity)).toBeTruthy();
+    expect(itemSchema.parse(asItem(star?.entity))).toBeTruthy();
   });
 
   it('wand sem primarytype ainda entra pelo weaponType (a Wand of Vortex real, id 3074)', () => {
@@ -444,7 +444,7 @@ describe('convertItem', () => {
     expect(quiver?.blockers).toEqual([]);
     expect(quiver?.entity).toMatchObject({ kind: 'shield', slot: 'shield', quiver: true });
     expect(quiver?.entity).not.toHaveProperty('perfectShot');
-    expect(itemSchema.parse(quiver?.entity)).toBeTruthy();
+    expect(itemSchema.parse(asItem(quiver?.entity))).toBeTruthy();
   });
 
   it('eldritch quiver (#575): perfectShot { range, damage } dos atributos perfectshotrange/perfectshotdamage', () => {
@@ -453,7 +453,7 @@ describe('convertItem', () => {
     expect(eldritch?.entity).toMatchObject({
       kind: 'shield', slot: 'shield', quiver: true, perfectShot: { range: 4, damage: 20 },
     });
-    expect(itemSchema.parse(eldritch?.entity)).toBeTruthy();
+    expect(itemSchema.parse(asItem(eldritch?.entity))).toBeTruthy();
   });
 
   it('arma sem <script>/slot declarado recebe slot "hand" por default (a maioria das armas do Canary)', () => {
@@ -464,7 +464,7 @@ describe('convertItem', () => {
   });
 
   it('defense de item classificado "valuables"/"creature products" (curiosidade de quest) não entra na entidade', () => {
-    const rustedShield = convert('90042');
+    const rustedShield = convert('90045');
     expect(rustedShield?.blockers).toEqual([]);
     expect(rustedShield?.entity).toMatchObject({ kind: 'other' });
     expect(rustedShield?.entity['defense']).toBeUndefined();
@@ -472,7 +472,7 @@ describe('convertItem', () => {
   });
 
   it('arma de distância cujo primarytype MENTE (diz "axe weapons", weaponType é "distance") ainda cai fora do corte por falta de ammoFamily', () => {
-    const brokenSpear = convert('90043');
+    const brokenSpear = convert('90046');
     expect(brokenSpear?.blockers[0]).toMatch(/M34-04/);
   });
 

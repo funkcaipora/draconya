@@ -100,6 +100,11 @@ describe('violatesContentRules', () => {
   it('arma de distância com ammoFamily passa', () => {
     expect(violatesContentRules({ kind: 'weapon', weapon: { kind: 'distance', ammoFamily: 'arrow' } })).toBeUndefined();
   });
+
+  it('arma de distância arremessável, sem ammoFamily mas com breakChance, passa (#575)', () => {
+    expect(violatesContentRules({ kind: 'weapon', weapon: { kind: 'distance', breakChance: 3 } }))
+      .toBeUndefined();
+  });
 });
 
 describe('computeItemPromotion', () => {

@@ -389,6 +389,10 @@
         {
           "itemId": "studded-club",
           "chance": 0.0545
+        },
+        {
+          "itemId": "spear",
+          "chance": 1
         }
       ]
     },
@@ -2613,6 +2617,10 @@
         "max": 2000
       },
       "items": [
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.62
+        },
         {
           "itemId": "gold-ingot",
           "chance": 0.48
@@ -6936,6 +6944,10 @@
         },
         {
           "itemId": "orcish-axe",
+          "chance": 0.057
+        },
+        {
+          "itemId": "hunting-spear",
           "chance": 0.057
         },
         {

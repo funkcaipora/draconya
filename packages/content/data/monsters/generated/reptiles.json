@@ -1438,6 +1438,10 @@
           "chance": 0.0773
         },
         {
+          "itemId": "hunting-spear",
+          "chance": 0.047
+        },
+        {
           "itemId": "sentinel-shield",
           "chance": 0.0032
         },

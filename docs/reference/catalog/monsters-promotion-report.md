@@ -42,11 +42,11 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2482)
+## Linhas de loot removidas (2460)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
-544 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
+543 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
 
 | item | ocorrências | motivo (da primeira ocorrência) |
 |---|---|---|
@@ -62,7 +62,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | ankh | 5 | item ausente do catálogo (packages/content/data/items) |
 | anniversary-cake | 1 | item ausente do catálogo (packages/content/data/items) |
 | arrow | 11 | item ausente do catálogo (packages/content/data/items) |
-| assassin-star | 20 | item ausente do catálogo (packages/content/data/items) |
+| assassin-star | 19 | max 10 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | bag-of-apple-slices | 2 | item ausente do catálogo (packages/content/data/items) |
 | bag-with-stolen-gold | 4 | item ausente do catálogo (packages/content/data/items) |
 | banana | 4 | item ausente do catálogo (packages/content/data/items) |
@@ -242,7 +242,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | glooth-glider-gear-wheel | 1 | item ausente do catálogo (packages/content/data/items) |
 | glooth-glider-tubes-and-wires | 1 | item ausente do catálogo (packages/content/data/items) |
 | glooth-sandwich | 2 | item ausente do catálogo (packages/content/data/items) |
-| glooth-spear | 2 | item ausente do catálogo (packages/content/data/items) |
 | glooth-steak | 2 | item ausente do catálogo (packages/content/data/items) |
 | glowing-rune | 8 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | gnomevils-hat | 1 | item ausente do catálogo (packages/content/data/items) |
@@ -286,7 +285,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | horn-of-kalyassa | 1 | item ausente do catálogo (packages/content/data/items) |
 | huge-chunk-of-crude-iron | 9 | item ausente do catálogo (packages/content/data/items) |
 | hunters-quiver | 1 | item ausente do catálogo (packages/content/data/items) |
-| hunting-spear | 9 | item ausente do catálogo (packages/content/data/items) |
+| hunting-spear | 2 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | ice-cube | 13 | item ausente do catálogo (packages/content/data/items) |
 | ice-flower | 2 | item ausente do catálogo (packages/content/data/items) |
 | incantation-fragment | 1 | item ausente do catálogo (packages/content/data/items) |
@@ -307,7 +306,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | lamassu-horn | 1 | max 5 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | lamp | 6 | item ausente do catálogo (packages/content/data/items) |
 | lavaworm-spike-roots | 1 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
-| leaf-star | 7 | item ausente do catálogo (packages/content/data/items) |
+| leaf-star | 7 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | leather-whip | 1 | item ausente do catálogo (packages/content/data/items) |
 | lethal-lissys-shirt | 1 | item ausente do catálogo (packages/content/data/items) |
 | letter | 2 | item ausente do catálogo (packages/content/data/items) |
@@ -488,7 +487,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | small-enchanted-sapphire | 10 | max 8 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | small-flask-of-eyedrops | 3 | item ausente do catálogo (packages/content/data/items) |
 | small-ruby | 47 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
-| small-stone | 19 | item ausente do catálogo (packages/content/data/items) |
+| small-stone | 18 | max 10 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | small-topaz | 37 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | small-tortoise | 2 | item ausente do catálogo (packages/content/data/items) |
 | sniper-arrow | 6 | item ausente do catálogo (packages/content/data/items) |
@@ -497,7 +496,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | soul-orb | 23 | item ausente do catálogo (packages/content/data/items) |
 | soulforged-lantern | 3 | item ausente do catálogo (packages/content/data/items) |
 | spatial-warp-almanac | 1 | item ausente do catálogo (packages/content/data/items) |
-| spear | 16 | item ausente do catálogo (packages/content/data/items) |
+| spear | 5 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | special-fx-box | 3 | item ausente do catálogo (packages/content/data/items) |
 | spectral-scrap-of-cloth | 1 | item ausente do catálogo (packages/content/data/items) |
 | spectral-silver-nugget | 1 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
@@ -520,8 +519,8 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | tattered-piece-of-robe | 1 | item ausente do catálogo (packages/content/data/items) |
 | terramite-eggs | 1 | item ausente do catálogo (packages/content/data/items) |
 | the-skull-of-a-beast | 1 | item ausente do catálogo (packages/content/data/items) |
-| throwing-knife | 4 | item ausente do catálogo (packages/content/data/items) |
-| throwing-star | 4 | item ausente do catálogo (packages/content/data/items) |
+| throwing-knife | 4 | max 4 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
+| throwing-star | 4 | max 6 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | tinged-pot | 1 | item ausente do catálogo (packages/content/data/items) |
 | tomato | 1 | item ausente do catálogo (packages/content/data/items) |
 | tooth-of-tazhadur | 1 | item ausente do catálogo (packages/content/data/items) |

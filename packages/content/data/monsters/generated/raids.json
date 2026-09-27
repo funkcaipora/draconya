@@ -36,6 +36,10 @@
         {
           "itemId": "chain-armor",
           "chance": 0.11
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.125
         }
       ]
     },

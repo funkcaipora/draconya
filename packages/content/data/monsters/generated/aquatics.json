@@ -3101,6 +3101,10 @@
           "chance": 0.0067
         },
         {
+          "itemId": "assassin-star",
+          "chance": 0.0053
+        },
+        {
           "itemId": "glacier-robe",
           "chance": 0.0044
         },

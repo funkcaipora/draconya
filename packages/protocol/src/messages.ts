@@ -118,6 +118,23 @@ export const CLIENT_TO_SERVER = {
    * 26: o 25 é do `use-item`.
    */
   'use-item-on': 26,
+  /**
+   * Usar o que está NO TILE (#729, ADR 0050 d.7): porta, alavanca, capim, stone pile. INTENÇÃO:
+   * o cliente diz QUAL posição; alcance (`canUse`, mesmo andar e adjacente), estado, requisito
+   * e ferramenta são do servidor (invariante 4). `seq` é o mesmo padrão de `select-target`: o
+   * cliente descarta resposta obsoleta, quando manda mais de um pedido em sequência. Sucesso é
+   * `tile-update` (broadcast, DT-01); recusa é `system-message`.
+   *
+   * 27: o 26 é do `use-item-on` (#726, PR #752).
+   */
+  'use-on-map': 27,
+  /**
+   * Olhar uma posição (#729, ADR 0050 d.7): o "You see …" do Tibia, para placa e cenário. Sem
+   * `creatureId`/`instanceId` nesta entrega (DT-04, spec da #729) — sem gatilho de UI hoje.
+   *
+   * 28: o 27 é do `use-on-map`.
+   */
+  look: 28,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -286,6 +303,23 @@ export const SERVER_TO_CLIENT = {
    * antes de escolher o número (as três param em 35, exceto a #749, que usa 36).
    */
   'use-result': 37,
+  /**
+   * O tile mudou de aparência (#729, ADR 0050 d.7): a pilha do tile na posição, com os pares
+   * `{ from, to }` de id de aparência que o cliente troca — a mesma indireção de
+   * `ground-item-appear` resolvendo `corpses`, aqui resolvendo `appearances.scenery`
+   * (invariante 6: quem sabe a arte é o servidor, nunca o `content`). Broadcast para todos os
+   * viewers da sessão (DT-01) — cenário é compartilhado, ao contrário de `player-stats`.
+   *
+   * 38: o 37 é do `use-result` (#726, PR #752).
+   */
+  'tile-update': 38,
+  /**
+   * A resposta ao `look` (#729): o texto — placa, ou uma descrição padrão do `kind` de
+   * cenário. Só para quem pediu, nunca broadcast.
+   *
+   * 39: o 38 é do `tile-update`.
+   */
+  'look-result': 39,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

@@ -492,12 +492,15 @@ export function convertItem(
     }
     // Rede de segurança contra o `primarytype` MENTIROSO do Canary: "broken Iks spear" (id
     // 40535) é `primarytype="axe weapons"` (por isso `classify()` já devolveu `kind: 'weapon'`
-    // antes de olhar `weaponType`), mas `weaponType="distance"` sem `ammotype` — um arremessável
-    // sem lançador, exatamente o caso que `classify()` já pula quando o `primarytype` É
-    // "distance weapons" (M34-04). Sem esta segunda checagem, a mesma arma escaparia pela
-    // classificação por `primarytype` e reprovaria no boot ("arma de distância precisa de
-    // ammoFamily", `content.ts`) em vez de ser contada no relatório como fora do escopo.
-    if (family === 'distance' && weapon['ammoFamily'] === undefined) {
+    // antes de olhar `weaponType`), mas `weaponType="distance"` sem `ammotype` NEM `breakChance`
+    // — um arremessável sem lançador e sem quebra própria, exatamente o caso que `classify()` já
+    // pula quando o `primarytype` É "distance weapons" (M34-04). Sem esta segunda checagem, a
+    // mesma arma escaparia pela classificação por `primarytype` e reprovaria no boot ("arma de
+    // distância precisa de ammoFamily", `content.ts`) em vez de ser contada no relatório como
+    // fora do escopo. `weapon['breakChance']` (#575) é a mesma exceção que `classify()` já
+    // concede: um arremessável de verdade (spear, throwing star) não tem `ammotype`, mas tem
+    // `breakChance`, e não pode cair aqui.
+    if (family === 'distance' && weapon['ammoFamily'] === undefined && weapon['breakChance'] === undefined) {
       blockers.push('arremessável/munição sem lançador (M34-04, fora do escopo)');
     }
     entity['weapon'] = weapon;

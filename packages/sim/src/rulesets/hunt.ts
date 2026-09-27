@@ -43,7 +43,7 @@ import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
 import { isToggleable, TileOverrides } from '../tile-overrides.js';
-import type { InteractableTool, TileOverrideState } from '../tile-overrides.js';
+import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
@@ -361,6 +361,56 @@ export type SlotRefusal =
 export type SlotOutcome =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: SlotRefusal; readonly retryInMs: number };
+
+/**
+ * Por que `useOnMap` recusou (#729, ADR 0050 d.7). `not-usable` cobre tanto "nada usável aqui"
+ * quanto um `kind` fora do T1 (`locked-door`, `chest`, `sign`…) — o mesmo motivo que
+ * `isToggleable` já unifica, para não inventar comportamento de requisito que o T2/T3 ainda não
+ * tem (spec da #729, "não invente").
+ */
+export type UseOnMapRejection = 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool';
+
+/**
+ * UM tile cujo id de aparência muda (#729, ADR 0050 d.7): o par `{ fromState, toState }` do
+ * `TileOverrideState`, mais o `appearanceKey`/posição do conteúdo — o que o `server` precisa
+ * para resolver os dois lados em `appearances.scenery` e montar o `tile-update` (invariante 6:
+ * quem resolve para id é o hospedeiro, nunca este pacote).
+ */
+export interface TileAppearanceChange {
+  readonly position: WorldPoint;
+  readonly appearanceKey: string;
+  readonly fromState: string;
+  readonly toState: string;
+}
+
+/** O resultado de `useOnMap`: as mudanças de aparência (self + linkados), ou recusa tipada. */
+export type UseOnMapResult =
+  | { readonly ok: true; readonly changes: readonly TileAppearanceChange[] }
+  | { readonly ok: false; readonly reason: UseOnMapRejection };
+
+/** O texto de `look` sem interativo, ou sem `text` próprio (#729). */
+const DEFAULT_LOOK_TEXT = 'Você não vê nada de especial.';
+
+/**
+ * Descrição padrão por `kind` de cenário, quando o conteúdo não tem `text` próprio (placa é a
+ * única que normalmente tem — as demais caem aqui). T2/T3 entram também: `look` não tem alcance
+ * nem exige requisito (DT-03/DT-04 da spec da #729), só descreve o que está lá.
+ */
+const SCENERY_LOOK_TEXT: Partial<Record<InteractableKind, string>> = {
+  door: 'Uma porta.',
+  'locked-door': 'Uma porta trancada.',
+  'level-door': 'Uma porta reforçada.',
+  'quest-door': 'Uma porta trancada.',
+  grass: 'Um capim alto.',
+  'stone-pile': 'Uma pilha de pedras.',
+  hole: 'Um buraco no chão.',
+  'rope-spot': 'Um lugar para prender uma corda.',
+  ladder: 'Uma escada.',
+  lever: 'Uma alavanca.',
+  chest: 'Um baú.',
+  sign: 'Uma placa.',
+  teleport: 'Algo estranho.',
+};
 
 /**
  * O estado de UM slot do conjunto ativo (AB-09, UC-BAR-003). É APRESENTAÇÃO: espelha a mesma
@@ -1893,23 +1943,85 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O overlay ATIVO, como mudanças de aparência (#729, ADR 0050 d.7): todo interativo cujo
+   * estado hoje difere do `initialState` do conteúdo — o que quem reanexa precisa aplicar por
+   * cima da pilha estática para ver a porta já aberta, o capim já cortado. PURO: não muta nada,
+   * é a mesma leitura que `#sessionState` do host monta a cada reanexação.
+   */
+  get tileAppearanceChanges(): readonly TileAppearanceChange[] {
+    const changes: TileAppearanceChange[] = [];
+    for (const state of this.#tileOverrides.getState()) {
+      const content = this.#tileOverrides.contentOf(state.interactableId);
+      if (content === null || content.initialState === state.state) continue;
+      changes.push({
+        position: content.at, appearanceKey: content.appearanceKey,
+        fromState: content.initialState, toState: state.state,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * O jogador pediu para usar um tile (#729, ADR 0050 d.7): a porta, a alavanca, o capim, a
+   * stone pile. Confere alcance (`canUse` do Canary — mesmo andar, adjacente, `|dx|<=1` e
+   * `|dy|<=1`) ANTES de tocar em qualquer overlay, e só então delega a `#useInteractable` — a
+   * MESMA função que o walker já usa sozinho (#728), para as duas portas nunca divergirem em
+   * requisito ou ferramenta.
+   */
+  useOnMap(session: Session, characterId: string, position: WorldPoint): UseOnMapResult {
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'nothing-there' };
+    if (
+      position.z !== character.position.z
+      || Math.abs(position.x - character.position.x) > 1
+      || Math.abs(position.y - character.position.y) > 1
+    ) {
+      return { ok: false, reason: 'out-of-range' };
+    }
+    const current = this.#tileOverrides.at(position);
+    if (current === null) return { ok: false, reason: 'nothing-there' };
+    if (!isToggleable(current.kind)) return { ok: false, reason: 'not-usable' };
+    const tool = this.#tileOverrides.contentOf(current.interactableId)?.requires?.tool;
+    if (tool !== undefined && !this.#hasTool(character, tool)) return { ok: false, reason: 'missing-tool' };
+    const changes = this.#useInteractable(session, character, current.interactableId);
+    if (changes === null) return { ok: false, reason: 'not-usable' };
+    return { ok: true, changes };
+  }
+
+  /**
+   * O jogador olhou uma posição (#729, ADR 0050 d.7): o `text` de uma placa, uma descrição
+   * padrão do `kind` de cenário, ou o texto genérico sem interativo nenhum ali. Sem alcance
+   * (DT-03 da spec da #729) — o AOI do servidor já limita o que a tela mostra.
+   */
+  look(position: WorldPoint): { readonly text: string } {
+    const current = this.#tileOverrides.at(position);
+    if (current === null) return { text: DEFAULT_LOOK_TEXT };
+    const content = this.#tileOverrides.contentOf(current.interactableId);
+    if (content?.text !== undefined) return { text: content.text };
+    return { text: SCENERY_LOOK_TEXT[current.kind] ?? DEFAULT_LOOK_TEXT };
+  }
+
+  /**
    * Tenta usar UM interativo — abrir a porta, cortar o capim, cavar a pile, puxar a alavanca
-   * (ADR 0050 d.4-d.5). Devolve `true` quando o estado mudou (e portanto o tile deixou de
-   * bloquear, se era esse o caso); `false` sem tocar em nada — kind sem par de estados (T2/T3,
-   * fora do escopo desta issue), ou ferramenta exigida que este personagem não carrega.
+   * (ADR 0050 d.4-d.5). Devolve as mudanças de aparência (o próprio + os linkados que também
+   * alternaram, #729) quando o estado mudou; `null` sem tocar em nada — kind sem par de estados
+   * (T2/T3, fora do escopo desta issue), ou ferramenta exigida que este personagem não carrega.
    *
    * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile); alavanca liga a
    * quem está em `links` (ADR 0050 d.1) e alterna cada um também — sem re-entrar no MESMO id,
    * que travaria numa alavanca que se referencia por engano de conteúdo.
    */
-  #useInteractable(session: Session, character: CharacterRuntime, interactableId: string): boolean {
+  #useInteractable(
+    session: Session, character: CharacterRuntime, interactableId: string,
+  ): readonly TileAppearanceChange[] | null {
     const current = this.#tileOverrides.get(interactableId);
-    if (current === null || !isToggleable(current.kind)) return false;
-    const tool = this.#tileOverrides.contentOf(interactableId)?.requires?.tool;
-    if (tool !== undefined && !this.#hasTool(character, tool)) return false;
+    if (current === null || !isToggleable(current.kind)) return null;
+    const content = this.#tileOverrides.contentOf(interactableId);
+    const tool = content?.requires?.tool;
+    if (tool !== undefined && !this.#hasTool(character, tool)) return null;
 
     const next = this.#tileOverrides.toggle(interactableId, session.nowMs);
-    if (next === null) return false;
+    if (next === null) return null;
     session.cancelEvent(TILE_REVERT, interactableId);
     if (next.revertAtMs !== undefined) {
       session.scheduleIn(TILE_REVERT, next.revertAtMs - session.nowMs, {
@@ -1918,11 +2030,22 @@ export class HuntRuleset implements Ruleset {
     }
     session.record('tile-used', `${current.kind}:${interactableId}`);
 
+    // Sem `content`, não há `appearanceKey`/posição para montar a mudança — não deveria
+    // acontecer (todo id de `#byId` tem uma entrada em `#contentOf`, escritas juntas em
+    // `TileOverrides.fromInteractables`), mas nunca inventar um `tile-update` sem os dois lados
+    // resolvidos (mesma regra de conteúdo em versão divergente, seção 7 da spec da #729).
+    const changes: TileAppearanceChange[] = content === null ? [] : [{
+      position: content.at, appearanceKey: content.appearanceKey,
+      fromState: current.state, toState: next.state,
+    }];
+
     // Alavanca (ADR 0050 d.1): liga a quem está em `links` e alterna CADA um também — nunca o
     // PRÓPRIO id de novo, o que evitaria um laço se o conteúdo (por engano) linkar a si mesma.
     if (current.kind === 'lever') {
       for (const linkedId of this.#tileOverrides.links(interactableId)) {
         if (linkedId === interactableId) continue;
+        const before = this.#tileOverrides.get(linkedId);
+        if (before === null) continue;
         const linked = this.#tileOverrides.toggle(linkedId, session.nowMs);
         if (linked === null) continue;
         session.cancelEvent(TILE_REVERT, linkedId);
@@ -1931,9 +2054,16 @@ export class HuntRuleset implements Ruleset {
             priority: EventPriority.Housekeeping, subject: linkedId,
           });
         }
+        const linkedContent = this.#tileOverrides.contentOf(linkedId);
+        if (linkedContent !== null) {
+          changes.push({
+            position: linkedContent.at, appearanceKey: linkedContent.appearanceKey,
+            fromState: before.state, toState: linked.state,
+          });
+        }
       }
     }
-    return true;
+    return changes;
   }
 
   /** Este personagem carrega uma ferramenta que serve para `tool` — equipada ou na mochila. */
@@ -3248,7 +3378,7 @@ export class HuntRuleset implements Ruleset {
     // rota continua sendo a mesma lista fixa de tiles, nunca recalculada em volta da porta).
     const blockingHere = this.#tileOverrides.at(to);
     if (blockingHere !== null && blockingHere.blocked) {
-      if (this.#useInteractable(session, character, blockingHere.interactableId)) {
+      if (this.#useInteractable(session, character, blockingHere.interactableId) !== null) {
         runner.routeBlockedWarned = false;
       } else {
         // Sem ferramenta (T2/T3, fora do escopo desta issue) ou kind sem par de estados: segura

@@ -548,6 +548,30 @@
     }
   },
   {
+    "id": "assassin-star",
+    "name": "assassin star",
+    "kind": "weapon",
+    "weight": 2,
+    "value": 0,
+    "slot": "hand",
+    "attack": 65,
+    "requires": {
+      "level": 80
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 4,
+      "breakChance": 33,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "avenger",
     "name": "avenger",
     "kind": "weapon",
@@ -3511,6 +3535,30 @@
     }
   },
   {
+    "id": "enchanted-spear",
+    "name": "enchanted spear",
+    "kind": "weapon",
+    "weight": 20,
+    "value": 0,
+    "slot": "hand",
+    "attack": 38,
+    "requires": {
+      "level": 42
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 4,
+      "breakChance": 1,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "enchanted-staff",
     "name": "enchanted staff",
     "kind": "weapon",
@@ -5005,6 +5053,30 @@
     }
   },
   {
+    "id": "glooth-spear",
+    "name": "glooth spear",
+    "kind": "weapon",
+    "weight": 26,
+    "value": 0,
+    "slot": "hand",
+    "attack": 55,
+    "requires": {
+      "level": 60
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 3,
+      "breakChance": 2,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "glooth-whip",
     "name": "glooth whip",
     "kind": "weapon",
@@ -6075,6 +6147,30 @@
     "weapon": {
       "kind": "melee",
       "family": "axe",
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "hunting-spear",
+    "name": "hunting spear",
+    "kind": "weapon",
+    "weight": 22,
+    "value": 25,
+    "slot": "hand",
+    "attack": 32,
+    "requires": {
+      "level": 20
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 3,
+      "breakChance": 6,
       "wieldUnproperly": true
     },
     "source": {
@@ -7221,6 +7317,31 @@
     }
   },
   {
+    "id": "leaf-star",
+    "name": "leaf star",
+    "kind": "weapon",
+    "weight": 2,
+    "value": 50,
+    "slot": "hand",
+    "attack": 48,
+    "requires": {
+      "level": 60
+    },
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 5,
+      "breakChance": 40,
+      "hitChance": 90,
+      "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "lich-staff",
     "name": "lich staff",
     "kind": "weapon",
@@ -7724,6 +7845,26 @@
       "kind": "melee",
       "family": "club",
       "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "mean-paladin-spear",
+    "name": "mean paladin spear",
+    "kind": "weapon",
+    "weight": 10,
+    "value": 0,
+    "slot": "hand",
+    "attack": 15,
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 3,
+      "breakChance": 3
     },
     "source": {
       "engine": "canary",
@@ -11217,6 +11358,26 @@
     }
   },
   {
+    "id": "small-stone",
+    "name": "small stone",
+    "kind": "weapon",
+    "weight": 3.6,
+    "value": 0,
+    "slot": "hand",
+    "attack": 5,
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 4,
+      "breakChance": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "snake-gods-sceptre",
     "name": "snake god's sceptre",
     "kind": "weapon",
@@ -11726,6 +11887,26 @@
     }
   },
   {
+    "id": "spear",
+    "name": "spear",
+    "kind": "weapon",
+    "weight": 20,
+    "value": 3,
+    "slot": "hand",
+    "attack": 25,
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 3,
+      "breakChance": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
     "id": "spiked-squelcher",
     "name": "spiked squelcher",
     "kind": "weapon",
@@ -12178,6 +12359,46 @@
       "kind": "melee",
       "family": "axe",
       "wieldUnproperly": true
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "throwing-knife",
+    "name": "throwing knife",
+    "kind": "weapon",
+    "weight": 5,
+    "value": 2,
+    "slot": "hand",
+    "attack": 25,
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 4,
+      "breakChance": 7
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "throwing-star",
+    "name": "throwing star",
+    "kind": "weapon",
+    "weight": 2,
+    "value": 2,
+    "slot": "hand",
+    "attack": 30,
+    "weapon": {
+      "kind": "distance",
+      "family": "distance",
+      "range": 4,
+      "breakChance": 10
     },
     "source": {
       "engine": "canary",

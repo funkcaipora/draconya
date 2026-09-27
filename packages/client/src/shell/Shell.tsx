@@ -27,6 +27,7 @@ import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
 import { useCorpseApproach } from './useCorpseApproach.js';
+import { useTileApproach } from './useTileApproach.js';
 import { Viewport } from './Viewport.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
@@ -112,6 +113,9 @@ export function Shell() {
   useWalkKeys();
   // O laço que reavalia um pedido de abrir cadáver pendente (#722, ADR 0048 d.4).
   useCorpseApproach();
+  // O pedido de usar um tile sozinho (#729, ADR 0050 d.7): reavalia a cada 150 ms se o
+  // personagem já chegou perto do tile clicado, e manda `use-on-map` sozinho quando chegar.
+  useTileApproach();
   // A store do bot não importa `net/` (ADR 0007): a casca instala o remetente UMA vez. Antes a
   // `ActionBar` e o `AutomationsPanel` instalavam cada um o mesmo singleton, e o unmount de um
   // zerava o remetente do outro; um painel condicional bastaria para quebrar todo Salvar.

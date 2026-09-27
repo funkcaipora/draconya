@@ -929,6 +929,10 @@
           "chance": 0.0347
         },
         {
+          "itemId": "spear",
+          "chance": 0.068
+        },
+        {
           "itemId": "studded-club",
           "chance": 0.0351
         }
@@ -1009,6 +1013,10 @@
         {
           "itemId": "short-sword",
           "chance": 0.0972
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.1521
         }
       ]
     },
@@ -1347,6 +1355,10 @@
           "chance": 0.037
         },
         {
+          "itemId": "spear",
+          "chance": 0.5556
+        },
+        {
           "itemId": "studded-armor",
           "chance": 0.037
         },
@@ -1634,6 +1646,10 @@
         {
           "itemId": "silver-amulet",
           "chance": 0.013
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.2597
         },
         {
           "itemId": "studded-club",

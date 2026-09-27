@@ -2,7 +2,7 @@
 
 Separa `packages/content/staging/items/generated/*.json` (a transcrição pura do Canary, #573/#574) em `data/items/generated/` + `data/appearances/baseline.json.items` — o mesmo movimento que `promote-monsters.ts` (#580) já fez para monstro. Duas exclusões, cada uma contada: id que colide com item AUTORAL (o autoral vence, ADR 0014) e `appearanceId` fora do inventário do pacote de assets conferido (FUN-21).
 
-1895 item(ns) promovido(s) em 10 fatia(s):
+1905 item(ns) promovido(s) em 10 fatia(s):
 
 - `amulets.json`: 85
 - `armors.json`: 159
@@ -13,9 +13,9 @@ Separa `packages/content/staging/items/generated/*.json` (a transcrição pura d
 - `rings.json`: 41
 - `shields.json`: 111
 - `valuables.json`: 162
-- `weapons.json`: 467
+- `weapons.json`: 477
 
-## Excluídos por colisão com item autoral (59)
+## Excluídos por colisão com item autoral (60)
 
 | id | motivo |
 |---|---|
@@ -60,6 +60,7 @@ Separa `packages/content/staging/items/generated/*.json` (a transcrição pura d
 | red-dragon-scale | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |
 | royal-crossbow | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |
 | royal-helmet | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |
+| royal-spear | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |
 | serpent-sword | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |
 | small-diamond | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |
 | small-sapphire | id já existe como item autoral (data/items/*.json) — o autoral vence (ADR 0014) |

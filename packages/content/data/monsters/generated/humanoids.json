@@ -1653,6 +1653,10 @@
           "chance": 0.0009
         },
         {
+          "itemId": "hunting-spear",
+          "chance": 0.02
+        },
+        {
           "itemId": "tribal-mask",
           "chance": 0.005
         }
@@ -2804,6 +2808,10 @@
           "chance": 0.155
         },
         {
+          "itemId": "spear",
+          "chance": 0.215
+        },
+        {
           "itemId": "wooden-shield",
           "chance": 0.1585
         },
@@ -3448,6 +3456,10 @@
         {
           "itemId": "hand-axe",
           "chance": 0.18
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.2
         },
         {
           "itemId": "studded-club",
@@ -5583,6 +5595,10 @@
           "chance": 0.104
         },
         {
+          "itemId": "hunting-spear",
+          "chance": 0.05
+        },
+        {
           "itemId": "orc-tooth",
           "chance": 0.03
         },
@@ -6095,6 +6111,10 @@
           "chance": 0.01
         },
         {
+          "itemId": "spear",
+          "chance": 0.0485
+        },
+        {
           "itemId": "chain-armor",
           "chance": 0.0875
         },
@@ -6254,6 +6274,10 @@
         "max": 11
       },
       "items": [
+        {
+          "itemId": "spear",
+          "chance": 0.1744
+        },
         {
           "itemId": "machete",
           "chance": 0.03
@@ -7249,6 +7273,10 @@
       },
       "items": [
         {
+          "itemId": "spear",
+          "chance": 0.13
+        },
+        {
           "itemId": "leather-boots",
           "chance": 0.095
         },
@@ -7357,6 +7385,10 @@
           "chance": 0.18
         },
         {
+          "itemId": "spear",
+          "chance": 0.13
+        },
+        {
           "itemId": "studded-club",
           "chance": 0.05
         },
@@ -7440,6 +7472,10 @@
         {
           "itemId": "silver-amulet",
           "chance": 0.0023
+        },
+        {
+          "itemId": "spear",
+          "chance": 0.25
         },
         {
           "itemId": "studded-club",

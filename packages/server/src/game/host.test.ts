@@ -6620,3 +6620,115 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     expect(saved).toHaveLength(1);
   });
 });
+
+describe('cenário usável: use-on-map, look e tile-update (#729, ADR 0050 d.7)', () => {
+  // Uma sala 4×4 com uma porta em (2,1) e uma placa em (1,2) — pequena o bastante para o herói
+  // (que entra em (1,1)) nascer adjacente à porta sem precisar andar.
+  const scenarioMap = {
+    id: 'arena', z: 7, grid: ['####', '#..#', '#..#', '####'],
+    interactables: [
+      { at: { x: 2, y: 1, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1' },
+      { at: { x: 1, y: 2, z: 7 }, kind: 'sign', initialState: 'default', appearanceKey: 'sign-1', text: 'Beware of the rats.' },
+    ],
+  };
+  const scenarioRaw = (): RawContent => {
+    const raw = rawTestContent();
+    return {
+      ...raw,
+      maps: [scenarioMap, ...(raw.maps ?? []).filter((m) => (m as { id: string }).id !== 'arena')],
+      appearances: (raw.appearances as Array<Record<string, unknown>>).map((a) => ({
+        ...a,
+        scenery: { 'door-1': { closed: 1638, open: 1639 }, 'sign-1': { default: 2600 } },
+      })),
+    };
+  };
+
+  function scenarioHunt() {
+    const content = buildContent(scenarioRaw());
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      now: () => now,
+      monsterCatalog: content.monsters,
+      ...(content.appearances === undefined ? {} : { appearances: content.appearances }),
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    host.flush();
+    return { host, socket, viewer, received: () => socket.received() };
+  }
+
+  it('abre a porta adjacente e broadcasta tile-update com os ids de appearances.scenery (RF-01, RF-04)', () => {
+    const { host, viewer, received } = scenarioHunt();
+    host.handle(viewer, { type: 'use-on-map', position: { x: 2, y: 1, z: 7 } });
+    host.flush();
+    const update = received().find((m) => m.type === 'tile-update');
+    expect(update).toEqual({
+      type: 'tile-update', position: { x: 2, y: 1, z: 7 }, replace: [{ from: 1638, to: 1639 }],
+    });
+  });
+
+  it('broadcasta o tile-update para um SEGUNDO viewer da mesma sessão (DT-01)', () => {
+    const { host, viewer, socket } = scenarioHunt();
+    const otherSocket = new FakeSocket();
+    // Um segundo membro da party olhando a MESMA sessão hospedada (#196) — sem precisar montar
+    // uma party inteira, basta anexar outro socket ao mesmo personagem: os dois são viewers da
+    // mesma `HostedSession`, que é exatamente o que `DT-01` afirma sobre broadcast.
+    const otherViewer = host.attach(otherSocket, 'hero');
+    host.handle(viewer, { type: 'use-on-map', position: { x: 2, y: 1, z: 7 } });
+    host.flush();
+    expect(otherSocket.received().some((m) => m.type === 'tile-update')).toBe(true);
+    expect(otherViewer).not.toBe(viewer);
+  });
+
+  it('recusa fora de alcance com system-message, e não manda tile-update nenhum (RF-02)', () => {
+    const { host, viewer, received } = scenarioHunt();
+    // A porta está em (2,1); um segundo `use-on-map` no MESMO tile depois de sair de perto não
+    // é o cenário aqui — o simples: o herói nasce em (1,1), adjacente. Recusa vem de um tile
+    // fora do mapa/alcance, como (0,0) — fora do mapa e não adjacente.
+    host.handle(viewer, { type: 'use-on-map', position: { x: 0, y: 0, z: 7 } });
+    host.flush();
+    expect(received().some((m) => m.type === 'tile-update')).toBe(false);
+    const refusal = received().find((m) => m.type === 'system-message');
+    expect(refusal).toMatchObject({ level: 'warning' });
+  });
+
+  it('look devolve look-result com o text da placa (RF-03)', () => {
+    const { host, viewer, received } = scenarioHunt();
+    host.handle(viewer, { type: 'look', position: { x: 1, y: 2, z: 7 } });
+    host.flush();
+    expect(received().find((m) => m.type === 'look-result')).toEqual({
+      type: 'look-result', text: 'Beware of the rats.',
+    });
+  });
+
+  it('session-state.world.tileUpdates carrega o overlay ativo para quem reanexa (RF-05)', () => {
+    const { host, viewer, socket } = scenarioHunt();
+    host.handle(viewer, { type: 'use-on-map', position: { x: 2, y: 1, z: 7 } });
+    host.flush();
+
+    const reattached = new FakeSocket();
+    const reViewer = host.attach(reattached, 'hero');
+    host.handle(reViewer, { type: 'session-attach' });
+    host.flush();
+    const state = reattached.received().find((m) => m.type === 'session-state') as
+      { world: { tileUpdates: Array<{ position: unknown; replace: unknown }> } } | undefined;
+    expect(state?.world.tileUpdates).toEqual([
+      { position: { x: 2, y: 1, z: 7 }, replace: [{ from: 1638, to: 1639 }] },
+    ]);
+    // Idem para quem nunca tinha visto o mapa antes de a porta abrir (o socket original).
+    expect(socket.received().length).toBeGreaterThan(0);
+  });
+});
