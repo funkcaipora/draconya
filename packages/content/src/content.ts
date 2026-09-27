@@ -249,6 +249,8 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
       },
       power: abilityPower(ability.power),
       damageType: ability.damageType,
+      // O tipo de ataque (#682) passa direto; ausente continua ausente — a forma decide.
+      ...(ability.kind === undefined ? {} : { kind: ability.kind }),
       ...(ability.presentation === undefined ? {} : {
         presentation: {
           ...(ability.presentation.missileKey === undefined
@@ -620,6 +622,14 @@ export function buildContent(raw: RawContent): Content {
       if (fixed === scaled) {
         problems.push(`${where}: dano precisa de power OU basePower/formula, um dos dois`);
       }
+      const formula = effect.formula;
+      if (formula?.scaling === 'magic' && (
+        formula.attackMin !== undefined || formula.attackMax !== undefined
+        || formula.skillAttackMin !== undefined || formula.skillAttackMax !== undefined)) {
+        // LEVELMAGIC não recebe `attack` no Canary (#677): os dois juntos são uma transcrição
+        // que misturou o callback de magic level com o de skill da arma.
+        problems.push(`${where}: fórmula de magic level não tem termo de ataque de arma`);
+      }
       const selfOrigin = effect.area !== undefined
         && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
       if (selfOrigin && effect.range !== undefined) {
@@ -833,6 +843,12 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.kind !== 'container' && item.initialSlots !== undefined) {
       problems.push(`item "${item.id}": initialSlots só vale em kind "container"`);
+    }
+    // Slot de imbuement (#604, ADR 0046) só em peça que se VESTE e não empilha: o imbuement é
+    // estado da instância, e instância com overlay não empilha (d.3) — num item empilhável o
+    // slot seria um número que nenhuma pilha poderia usar.
+    if (item.imbuementSlots !== undefined && (item.slot === undefined || item.stackable)) {
+      problems.push(`item "${item.id}": imbuementSlots só vale em item que se veste e não empilha`);
     }
   }
   for (const piece of progression?.startingKit ?? []) {
@@ -1166,11 +1182,11 @@ export function buildContent(raw: RawContent): Content {
 
   // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
   // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
-  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave` e
-  // `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
+  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave`, `rows`
+  // (#679) e `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
   // — o monstro não guarda direção entre golpes); `cross`/`cleave` continuam fora porque nenhum
   // monstro do recorte precisa deles ainda.
-  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'beam']);
+  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'rows', 'beam']);
   for (const monster of rawMonsterDefinitions.values()) {
     const seenAbilities = new Set<string>();
     for (const ability of monster.abilities ?? []) {
@@ -1185,7 +1201,7 @@ export function buildContent(raw: RawContent): Content {
       if (area !== undefined && !MONSTER_ABILITY_AREA_SHAPES.has(area.shape)) {
         problems.push(
           `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
-            'monstro só lança `circle`, `wave` ou `beam`',
+            'monstro só lança `circle`, `wave`, `rows` ou `beam`',
         );
       }
       // O campo (CMB-07) segue a regra ANTERIOR da área: só `circle`. `wave`/`beam` são da

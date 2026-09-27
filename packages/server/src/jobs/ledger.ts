@@ -8,8 +8,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { Bestiary, Skills, levelForXp } from '@draconya/sim';
-import type { BestiaryState, SkillsState } from '@draconya/sim';
+import { Bestiary, Skills, levelForXp, readItemOverlay } from '@draconya/sim';
+import type { BestiaryState, ItemInstanceOverlay, SkillsState } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
 import { characters, itemInstances, ledger } from '../db/schema.js';
@@ -256,6 +256,12 @@ async function applyProgression(
   if (receipt.layout !== undefined) {
     await applyLayout(tx, receipt.characterId, receipt.layout);
   }
+  // E o estado por instância (#604, ADR 0046): último-escrito-vence, como o layout. Depois do
+  // `acquired`, pela mesma razão do equipamento: a peça que caiu e foi imbuída nesta sessão
+  // precisa já ser linha.
+  if (receipt.overlays !== undefined) {
+    await applyOverlays(tx, receipt.characterId, receipt.overlays);
+  }
 
   await tx
     .update(characters)
@@ -301,6 +307,30 @@ async function applyLayout(
       : { container: place.container, slotIndex: place.index };
     if (row.container === next.container && row.slotIndex === next.slotIndex) continue;
     await tx.update(itemInstances).set(next).where(eq(itemInstances.id, row.id));
+  }
+}
+
+/**
+ * O overlay de cada instância que o extrato lista (#604, ADR 0046). Escopado por dono, como o
+ * layout: um extrato com o id de um item alheio não escreve nada nele. ABSOLUTO só para as
+ * instâncias LISTADAS — o `null` apaga o overlay (o imbuement venceu) —; a que não aparece no
+ * extrato não é tocada. Cada overlay passa pela mesma leitura defensiva do ticket
+ * (`readItemOverlay`), então o banco nunca guarda um overlay que o ticket recusaria.
+ */
+async function applyOverlays(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  characterId: string,
+  overlays: Readonly<Record<string, ItemInstanceOverlay | null>>,
+): Promise<void> {
+  const owned = await tx
+    .select({ id: itemInstances.id, overlay: itemInstances.overlay })
+    .from(itemInstances)
+    .where(eq(itemInstances.ownerCharacterId, characterId));
+  for (const row of owned) {
+    if (!Object.hasOwn(overlays, row.id)) continue;
+    const next = readItemOverlay(overlays[row.id]) ?? null;
+    if (JSON.stringify(readItemOverlay(row.overlay) ?? null) === JSON.stringify(next)) continue;
+    await tx.update(itemInstances).set({ overlay: next }).where(eq(itemInstances.id, row.id));
   }
 }
 

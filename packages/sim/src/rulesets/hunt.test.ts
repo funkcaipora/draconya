@@ -3,6 +3,10 @@ import type { Content, FieldSpec, Item, Progression, RawContent } from '@dracony
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
+import type { DamageOutcome } from '../combat/damage.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS } from '../combat/blockhit.js';
+import { rollCombatValue } from '../combat/combat-value.js';
+import { normalRandomInt } from '../combat/weapon-power.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
@@ -26,6 +30,13 @@ import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 vi.mock('../combat/damage.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../combat/damage.js')>();
   return { ...actual, resolveDamage: vi.fn(actual.resolveDamage) };
+});
+
+// O sorteio de valor (#681) é ENVOLVIDO pelo mesmo motivo: delega para o real, e o bloco do
+// Dragon sob `combat-v3` prova que a ability e a cura do monstro passam por ele.
+vi.mock('../combat/combat-value.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../combat/combat-value.js')>();
+  return { ...actual, rollCombatValue: vi.fn(actual.rollCombatValue) };
 });
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
@@ -3454,6 +3465,77 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     });
     run(session, 30_000, 100);
     expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
+  describe('#682: a ability física que não é corpo a corpo passa pela armadura, não pelo escudo', () => {
+    // O Stone Golem/Hunter do Canary: um `combat` FÍSICO de alcance 7. Antes do #682 ia ao
+    // `blockHit` como magia (`MAGIC_BLOCK_FLAGS`) e a armadura não tirava nada.
+    const stoneRat = {
+      ...rat,
+      abilities: [{
+        id: 'stone', cadenceMs: 2_000, power: { min: 40, max: 60 }, damageType: 'physical',
+        target: { range: 7 },
+      }],
+    };
+    const comEscudoEArmadura: InventoryState = {
+      backpack: [],
+      equipped: {
+        shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        chest: { instanceId: 'p1', itemId: 'plate', quantity: 1 },
+      },
+    };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const abilityHits = () => vi.mocked(resolveDamage).mock.calls
+      .map((args, i) => ({ args, outcome: vi.mocked(resolveDamage).mock.results[i]?.value as DamageOutcome }))
+      .filter(({ args: [intent] }) => intent.source === 'monster-attack');
+
+    it('sob combat-v3: armadura em faixa, escudo não bloqueia e shielding não treina', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session, hero } = start({
+        loaded: defenseContent({ monsters: [stoneRat], combat: [combatV3] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender], outcome } of hits) {
+        expect(intent.blockable).toEqual(DISTANCE_BLOCK_FLAGS);
+        // O escudo não tira nada: a defesa é a identidade.
+        expect(outcome.afterDefense).toBe(intent.rawDamage);
+        // Armadura > 3 é faixa `[armor/2, armor - (armor%2 + 1)]`, nunca 0.
+        expect(defender.armor).toBeGreaterThan(3);
+        expect(outcome.armorReduction).toBeGreaterThan(0);
+      }
+      // O `hunt.ts` treina shielding por `blockable.shield` sob v3 — a pedra não é bloqueio.
+      expect(shieldingOf(hero)?.level ?? 10).toBe(10);
+    });
+
+    it('sob combat-v1: `blockable` é ignorado — o resultado é o mesmo com as flags de antes', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({
+        loaded: defenseContent({ monsters: [stoneRat] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender, context, combatDef, , nowMs] } of hits) {
+        // Reexecuta o golpe com as flags de ANTES do #682 e as de agora, na mesma semente.
+        const before = resolveDamage(
+          { ...intent, blockable: MAGIC_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        const after = resolveDamage(
+          { ...intent, blockable: DISTANCE_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        expect({ ...after, intent: null }).toEqual({ ...before, intent: null });
+      }
+    });
   });
 
   it('#549 (achado de revisão): wand/rod sem escudo usa skill ZERO na defesa — o piso do Canary (1), não a fórmula com defenseValue zerado (0)', () => {
@@ -7908,6 +7990,50 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     // qualitativa de que `chance` reduz a frequência de verdade, não é só um número decorativo.
     expect(meleeHits).toBeGreaterThan(casts('fireball') * 3);
     expect(meleeHits).toBeGreaterThan(casts('firewave') * 3);
+  });
+
+  it('#681: sob combat-v3, a ability e a cura do Dragon sorteiam pela normal truncada do Canary', async () => {
+    // `combat.cpp:189` (`getCombatValues` → `normal_random`) e `monster.cpp:2218`: o valor da
+    // ability e da cura própria do monstro saem da normal, não do `rng.integer` uniforme. Cada
+    // sorteio é conferido contra `normalRandomInt` sobre um CLONE do `Rng` no estado de antes.
+    const actual = await vi.importActual<typeof import('../combat/combat-value.js')>('../combat/combat-value.js');
+    const v3 = {
+      ...pacifist, compatibilityProfile: 'combat-v3',
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], combat: [v3] }));
+    const draws: { min: number; max: number; profile: string | undefined; value: number; expected: number }[] = [];
+    vi.mocked(rollCombatValue).mockImplementation((rng, min, max, profile) => {
+      const expected = normalRandomInt(new Rng(rng.getState()), min, max);
+      const value = actual.rollCombatValue(rng, min, max, profile);
+      draws.push({ min, max, profile: profile?.compatibilityProfile, value, expected });
+      return value;
+    });
+    try {
+      const session = createHuntSession({
+        id: 'dragon-v3', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      session.enter(heroLevel200());
+      session.advanceBy(100);
+      const target = (session.ruleset as HuntRuleset).monsters[0];
+      if (target === undefined) throw new Error('sem monstro nesta cena');
+      target.receiveDamage(50_000); // ferido: a cura tem o que repor.
+      for (let t = 0; t < 400_000 && session.ended === null; t += 100) session.advanceBy(100);
+    } finally {
+      vi.mocked(rollCombatValue).mockImplementation(actual.rollCombatValue);
+    }
+
+    const melee = draws.filter((d) => d.min === 0 && d.max === 120);
+    const heals = draws.filter((d) => d.min === 40 && d.max === 70);
+    expect(melee.length).toBeGreaterThan(100);
+    expect(heals.length).toBeGreaterThan(10);
+    for (const draw of [...melee, ...heals]) {
+      expect(draw.profile).toBe('combat-v3');
+      expect(draw.value).toBe(draw.expected);
+    }
+    // A cauda: a uniforme poria ~10,7 % dos golpes em [0,12]; a normal truncada, ~3,4 %.
+    expect(melee.filter((d) => d.value <= 12).length / melee.length).toBeLessThan(0.07);
   });
 
   it('fogo não causa dano (imune) e gelo causa +10 % (vulnerável) — a mitigação do Dragon', () => {

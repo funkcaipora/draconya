@@ -764,6 +764,15 @@ export const itemSchema = z.strictObject({
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
   }).optional(),
+  /**
+   * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
+   * (`ItemAttribute_t::IMBUEMENT_SLOT`, `src/enums/item_attribute.hpp:36`), de 1 a 3 no
+   * `items.xml`. É o TETO da definição; os imbuements aplicados são estado da INSTÂNCIA e
+   * moram no overlay da entrada de inventário (`sim`, `item-overlay.ts`), nunca aqui — o item
+   * de catálogo continua fixo pelo id. Ausente é a peça que não aceita imbuement. Quem o
+   * preenche no catálogo importado é o importador (M34-02).
+   */
+  imbuementSlots: z.number().int().min(1).max(3).optional(),
   /** Crítico e leech do item, enquanto vestido (M30-04, #551) — ver `itemCombatModifiersSchema`. */
   combatModifiers: itemCombatModifiersSchema.optional(),
   /**
@@ -793,8 +802,8 @@ export const itemSchema = z.strictObject({
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
 /**
- * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
- * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `rows`, `wave`, `cleave` e `beam`
+ * saem do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
  * exige alvo nem alcance; `cross` (Explosion) é centrado no alvo, sem direção.
  *
  * Mora aqui, antes de supply, porque o efeito de CURA do supply a referencia (#475) e porque a
@@ -815,8 +824,25 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
   }),
   /** Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles. */
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
-  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  /**
+   * LEGADO DE FIXTURE (#679): cone à frente com a fileira k (1..length) de largura 2·⌊k/2⌋+1 →
+   * 1, 3, 3, 5, 5. É a aproximação do #523, que contou as `AREA_WAVEn` sem a fileira do `3` e
+   * errou uma fileira em toda onda — e `AREA_SQUAREWAVE5` e a onda de monstro nem cabem nesta
+   * fórmula. O catálogo usa `rows`, e `load.test.ts` proíbe `wave` em `data/`; fica no schema só
+   * porque fixtures de teste o usam, bit a bit iguais.
+   */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /**
+   * Fileiras à frente, uma largura cada (#679). A fileira i está a i + 1 tiles: a 0 é o `3`
+   * do Canary, ancorado um passo à frente (`getCasterPosition`). Transcreve a CONTAGEM por
+   * fileira da `AREA_*`, nunca a matriz (ADR 0019).
+   */
+  z.object({
+    shape: z.literal('rows'),
+    widths: z.array(z.number().int().positive().refine((w) => w % 2 === 1, {
+      message: 'largura de fileira é ímpar (centrada na linha da frente)',
+    })).min(1),
+  }),
   /**
    * Os três tiles imediatamente à frente (Front Sweep, Lesser Front Sweep). O Canary
    * (`AREA_WAVE6`, `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
@@ -827,7 +853,11 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
    * lançador lendo só a matriz local, sem a âncora do motor — revertido numa revisão.
    */
   z.object({ shape: z.literal('cleave') }),
-  /** Linha reta de `length` tiles à frente, largura 1. */
+  /**
+   * Linha reta de `length` tiles à frente, largura 1: `beam n` é exatamente a `AREA_BEAMn` do
+   * Canary, contando o `3` — ancorado um passo à frente (`spells.cpp` `getCasterPosition`) e
+   * atingido como qualquer valor não-zero (`AreaCombat::getList`, #679).
+   */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
 ]);
 
@@ -845,9 +875,11 @@ export type SpellArea = z.infer<typeof spellAreaSchema>;
  * ```
  *
  * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência). Na magia de DANO o `skill` é
- * a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no Paladin, `melee` no
- * Knight); na magia e na runa de CURA é sempre o MAGIC LEVEL. Sem `formula`, o efeito continua no
- * caminho provisório de `basePower` × `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ * o que `scaling` declara (#677): o MAGIC LEVEL em `magic` (o `CALLBACK_PARAM_LEVELMAGICVALUE` do
+ * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no
+ * Paladin, `melee` no Knight — o que a `SKILLVALUE` lê); na magia e na runa de CURA é sempre o
+ * MAGIC LEVEL. Sem `formula`, o efeito continua no caminho provisório de `basePower` ×
+ * `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
  */
 export const spellFormulaSchema = z.object({
   /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
@@ -875,6 +907,14 @@ export const spellFormulaSchema = z.object({
   attackMax: z.number().optional(),
   skillAttackMin: z.number().optional(),
   skillAttackMax: z.number().optional(),
+  /**
+   * QUAL skill entra no termo `skill` (#677). `magic` = `CALLBACK_PARAM_LEVELMAGICVALUE` do
+   * Canary (magic level em qualquer vocação); `vocation` = `spellSkill`, o que a SKILLVALUE lê.
+   * AUSENTE = `vocation`, bit a bit (ADR 0031). Sem efeito em cura e runa (sempre ML).
+   * `optional()` e não `default()`: as fixtures de `sim` montam `SpellFormula` (tipo de SAÍDA)
+   * à mão (`casting.test.ts`), e um default tornaria o campo obrigatório nelas.
+   */
+  scaling: z.enum(['vocation', 'magic']).optional(),
 });
 
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;
@@ -1481,6 +1521,14 @@ export const monsterAbilitySchema = z.strictObject({
   /** O tipo de dano da ability (CMB-03). Ausente é `physical`, o default que preserva o v1. */
   damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /**
+   * Se a ability é o ataque `melee` ou um `combat` do Canary (#682) — é o que decide o
+   * bloqueio no `combat-v3` (`Monsters::deserializeSpell`, `monsters.cpp:105-120`): `melee`
+   * bloqueia defesa e armadura; `combat` FÍSICO só armadura, em qualquer alcance ou área;
+   * `combat` de outro tipo, nada. Ausente: decide a forma (`isMeleeAbility`), o comportamento
+   * de antes — o conteúdo escrito à mão e a ability básica do boot não mudam.
+   */
+  kind: z.enum(['melee', 'combat']).optional(),
+  /**
    * As chaves SEMÂNTICAS de apresentação (CMB-06): o host as resolve em ids de aparência na
    * tabela versionada (`appearances.abilities`). Chave sem linha é MUDA, nunca erro.
    */
@@ -1500,7 +1548,12 @@ export const monsterAbilitySchema = z.strictObject({
    */
   field: fieldSpecSchema.optional(),
   _open: z.string().optional(),
-});
+}).refine(
+  // O Canary fixa `COMBAT_PHYSICALDAMAGE` no `melee` (#682): um `melee` de fogo é conteúdo
+  // que o motor de referência não tem como produzir.
+  (ability) => ability.kind !== 'melee' || ability.damageType === 'physical',
+  { message: "kind 'melee' exige damageType 'physical'", path: ['kind'] },
+);
 
 export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
 
@@ -1516,6 +1569,11 @@ export interface MonsterAbility {
   readonly target: { readonly range: number; readonly area?: SpellArea };
   readonly power: MonsterAbilityPower;
   readonly damageType: DamageType;
+  /**
+   * `melee` ou `combat` do Canary (#682): decide as flags de bloqueio no `combat-v3`
+   * (`abilityBlockFlags`, `sim`). Ausente: a forma decide o corpo a corpo.
+   */
+  readonly kind?: 'melee' | 'combat';
   readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
   /** A condição que a ability aplica a quem acerta (CMB-07). Ausente: só o golpe. */
   readonly condition?: ConditionSpec;

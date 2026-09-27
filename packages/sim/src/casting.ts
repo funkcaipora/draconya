@@ -23,6 +23,7 @@ import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { DamageOutcome } from './combat/damage.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
+import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
@@ -168,7 +169,7 @@ export function secondaryCooldownKey(name: string): string {
 
 /**
  * O que escala uma magia (#155). `skillLevel` é o level da skill que a vocação usa para magia
- * (`spellSkill`, `magic` por padrão); `powerScale` é o multiplicador das skills por uso
+ * (`spellSkill`, `magic` por padrão) — o que a fórmula de dano SEM `scaling: 'magic'` lê (#677); `powerScale` é o multiplicador das skills por uso
  * (`#scaledPower`) e só vale para `power`/`amount` FIXOS — o `basePower` já entra pela
  * conversão, e multiplicar de novo contaria a mesma skill duas vezes.
  */
@@ -205,15 +206,26 @@ export interface HealEffect {
 }
 
 /**
+ * A skill da fórmula (#677): cura e `scaling: 'magic'` leem o ML; ausente (= `vocation`) é a skill
+ * da vocação, bit a bit o caminho de antes. `?? skillLevel` é o fallback de fixture sem ML.
+ */
+function formulaSkill(kind: string, formula: SpellFormula, scaling: SpellScaling): number {
+  if (kind === 'heal' || formula.scaling === 'magic') return scaling.magicLevel ?? scaling.skillLevel;
+  return scaling.skillLevel;
+}
+
+/**
  * O poder de um efeito: o BP convertido e sorteado (UMA rolagem por chamada — ordem é
  * contrato), ou o fixo escalado pelas skills por uso.
  *
  * A magia que declara `formula` (#474) entra pela fórmula canônica; a que não declara continua
  * exatamente no caminho do `basePower` × `combat.spellPower`, bit a bit (ADR 0031). Os dois
- * caminhos consomem UM `rng.integer`, então a ordem de sorteio não muda para ninguém.
+ * caminhos consomem UM sorteio de valor (`rollCombatValue`), então a ordem de sorteio não muda
+ * para ninguém — uniforme até o `combat-v2`, a normal truncada do Canary no `combat-v3` (#681).
  *
- * O `skill` da fórmula é o da vocação na magia de DANO e o MAGIC LEVEL na CURA (#475): a mesma
- * fórmula, dois vocabulários, e é o `kind` do efeito que escolhe.
+ * O `skill` da fórmula é o MAGIC LEVEL na CURA (#475) e na magia de DANO que declara
+ * `scaling: 'magic'` (#677, o `LEVELMAGICVALUE` do Canary); na de dano sem `scaling`, é a skill
+ * da vocação (`SKILLVALUE`). Ver `formulaSkill`.
  */
 function powerOf(
   effect: {
@@ -226,12 +238,12 @@ function powerOf(
   caster: CharacterRuntime, scaling: SpellScaling, combat: Combat, rng: Rng,
 ): number {
   if (effect.formula !== undefined) {
-    const skill = effect.kind === 'heal' ? scaling.magicLevel ?? scaling.skillLevel : scaling.skillLevel;
+    const skill = formulaSkill(effect.kind, effect.formula, scaling);
     const { min, max } = evaluateSpellPower(
       effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
       scaling.weaponAttack ?? 0,
     );
-    return rng.integer(min, max);
+    return rollCombatValue(rng, min, max, combat);
   }
   if (effect.basePower !== undefined) {
     // O caminho provisório do `basePower` (ADR 0026 d.5) NÃO muda (#475): a skill é a da
@@ -240,7 +252,7 @@ function powerOf(
     const { min, max } = evaluateSpellPower(
       undefined, effect.basePower, caster.level, scaling.skillLevel, combat.spellPower,
     );
-    return rng.integer(min, max);
+    return rollCombatValue(rng, min, max, combat);
   }
   return Math.round((effect.power ?? effect.amount ?? 0) * scaling.powerScale);
 }
@@ -485,8 +497,10 @@ function fixedAmount(
   amount: number | undefined,
   range: { readonly min: number; readonly max: number } | undefined,
   rng: Rng | undefined,
+  /** O perfil escolhe a distribuição (#681): normal truncada no `combat-v3`, uniforme antes. */
+  combat: Pick<Combat, 'compatibilityProfile'> | undefined,
 ): number {
-  if (range !== undefined) return rng === undefined ? range.min : rng.integer(range.min, range.max);
+  if (range !== undefined) return rng === undefined ? range.min : rollCombatValue(rng, range.min, range.max, combat);
   return amount ?? 0;
 }
 
@@ -572,12 +586,13 @@ export function useSupply(
       const target = aim.targets[i] as SpellTarget;
       // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia. A fórmula
       // canônica (#476) VENCE o `basePower`; sem ela, o caminho do BP provisório continua bit a
-      // bit (ADR 0031), porque os dois consomem exatamente UM `rng.integer`.
+      // bit (ADR 0031), porque os dois consomem exatamente UM sorteio de valor (`rollCombatValue`
+      // — uniforme até o `combat-v2`, a normal truncada no `combat-v3`, #681).
       const { min, max } = evaluateSpellPower(
         supply.effect.formula, supply.effect.basePower ?? 0, user.level, scaling.skillLevel,
         combat.spellPower,
       );
-      const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
+      const power = Math.round(rollCombatValue(rng, min, max, combat) * user.conditions.damageDealtScale('spell'));
       const result = resolveDamage(
         {
           rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
@@ -642,15 +657,15 @@ export function useSupply(
     const paidFromStockPotion = hasStockHeal && spendStock(user, supply.id);
     if (!paidFromStockPotion) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
-    // Poção: `amount` fixo OU `amountRange` sorteado (#524), sem contexto de combate — a runa
-    // de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
+    // Poção: `amount` fixo OU `amountRange` sorteado (#524; pela normal truncada no `combat-v3`,
+    // #681), sem passar por `executeHealing` — a runa de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
     // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava.
     return {
       ok: true,
-      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng)),
+      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng, combat)),
       manaRestored: effect.alsoMana === undefined
         ? 0
-        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng)),
+        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng, combat)),
       damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
     };
   }
@@ -676,7 +691,7 @@ export function useSupply(
   return {
     ok: true,
     healed: 0,
-    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng)),
+    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng, combat)),
     damage: 0,
     hits: NO_HITS,
     goldSpent: paidFromStockMana ? 0 : supply.price,
