@@ -458,9 +458,9 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
-| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) — Rat Cellars e Rotworm Caves usam o mesmo molde de três pulls | `data/hunts/*.json`, campo `monsterCount` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | Rat Cellars: 2 / 5 / 8; Rotworm Caves: 13 / 26 / 52 (1 / 2 / 4 monstros por ponto de spawn nos 13 pontos da caverna) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Prazo de respawn | 30 s em Rat Cellars e em Rotworm Caves (após abate); 90 s na Darashia Dragon Lair | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary; Rat e Rotworm declaram `true` para preservar o `spawnClearRadius` observado no Huntera (#519) | `data/monsters/*.json`, campo `blockable` |
 | Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Ausente é o de sempre (sorteio da composição, `respawnDelayMs` da dificuldade) — Rat Cellars e Rotworm Caves não declaram; a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |

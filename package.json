@@ -32,7 +32,8 @@
     "bench:combat": "tsc -b && pnpm --filter @draconya/tools bench:combat",
     "bench:city": "tsc -b && pnpm --filter @draconya/tools bench:city",
     "load": "tsc -b && pnpm --filter @draconya/tools load",
-    "dev:dragon-party": "tsc -b && pnpm --filter @draconya/tools dev:dragon-party"
+    "dev:dragon-party": "tsc -b && pnpm --filter @draconya/tools dev:dragon-party",
+    "setup:caiporinha": "tsx --env-file-if-exists=.env scripts/setup-character-caiporinha.ts"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",
