@@ -347,6 +347,35 @@ describe('carga e destruição do equipado (#421)', () => {
     ]);
   });
 
+  it('na troca direta, `onEquip` recebe o item que saiu, já de volta no container (#689)', () => {
+    const inventory = new Inventory();
+    const comLugar: ContainerRules = { backpackSlots: 0, satchelSlots: 2, row: 2 };
+    inventory.ensureContainers(comLugar);
+    inventory.add(carried('ring', 'r1'), amuletCatalog, wearer(), comLugar);
+    inventory.add(carried('ring', 'r2'), amuletCatalog, wearer(), comLugar);
+    inventory.equip('r1', wearer(), amuletCatalog);
+    const weight = inventory.weight(amuletCatalog);
+    const events: string[] = [];
+    inventory.setEquipmentObserver({
+      onEquip: (slot, item, previous) => {
+        events.push(`equip:${slot}:${item.instanceId}:${previous?.instanceId ?? '-'}`);
+        // O observer guarda o prazo do que saiu no próprio `onEquip`: a instância já está no
+        // container, e `setOverlay` a acha lá.
+        if (previous !== null) {
+          inventory.setOverlay(previous.instanceId, { ...previous.overlay, durationRemainingMs: 1234 });
+        }
+      },
+      onUnequip: (slot, item) => events.push(`unequip:${slot}:${item.instanceId}`),
+    });
+
+    inventory.equip('r2', wearer(), amuletCatalog);
+    // Mutação que mata: `onEquip` sem o `previous` — o anel que saiu perderia o prazo.
+    expect(events).toEqual(['equip:finger:r2:r1']);
+    const r1 = inventory.satchel.find((item) => item?.instanceId === 'r1');
+    expect(r1?.overlay).toEqual({ durationRemainingMs: 1234 });
+    expect(inventory.weight(amuletCatalog)).toBe(weight);
+  });
+
   it('`charges` sobrevive ao snapshot (RF-08)', () => {
     const inventory = comCarga(1);
     const state = JSON.parse(JSON.stringify(inventory.getState())) as ReturnType<Inventory['getState']>;

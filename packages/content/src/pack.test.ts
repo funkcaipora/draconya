@@ -15,7 +15,7 @@ const pack: Pack = packSchema.parse({
 
 const table = (over: Partial<Appearances> = {}): Appearances => ({
   id: 'baseline', pack: 'tibia-test',
-  monsters: {}, items: {}, ammunition: {}, weapons: {}, corpses: {}, maps: {}, spells: {},
+  monsters: {}, items: {}, equippedItems: {}, ammunition: {}, weapons: {}, corpses: {}, maps: {}, spells: {},
   supplies: {}, hits: {}, abilities: {},
   ...over,
 });
@@ -61,6 +61,14 @@ describe('packProblems', () => {
     // O projétil é conferido no registro de MISSILES: 43 é o buraco entre as faixas.
     expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 43 } } }), pack))
       .toEqual(['appearances.ammunition.arrow.missile: missile 43 não existe no pacote tibia-test']);
+  });
+
+  it('confere a forma ativa do item vestido no registro de objetos (#689)', () => {
+    // Mutação que mata: esquecer o laço de `equippedItems` — o anel ligado com id fora do pacote
+    // viraria o quadrado invisível justamente no slot do dedo.
+    expect(packProblems(table({ equippedItems: { 'energy-ring': 1200 } }), pack)).toEqual([]);
+    expect(packProblems(table({ equippedItems: { 'energy-ring': 168 } }), pack))
+      .toEqual(['appearances.equippedItems.energy-ring: object 168 não existe no pacote tibia-test']);
   });
 
   it('confere o projétil da wand e do rod no registro de missiles (#152)', () => {

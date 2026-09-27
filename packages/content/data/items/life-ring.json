@@ -5,6 +5,7 @@
   "slot": "finger",
   "weight": 2,
   "value": 100,
+  "durationMs": 1200000,
   "ringEffect": { "kind": "regen-boost", "percent": 300 },
-  "_open": "Peso e preço provisórios — o PRD (§21) não fixa número de anel, e docs/reference/huntera-observed.md não observa nenhum. O BÔNUS (SV-16, +300% da regeneração base) é definitivo. appearanceId resolvido via /assets, conferido de olho a 32 px."
+  "_open": "Peso e preço provisórios — o PRD (§21) não fixa número de anel, e docs/reference/huntera-observed.md não observa nenhum. O BÔNUS (SV-16, +300% da regeneração base) é definitivo. appearanceId resolvido via /assets, conferido de olho a 32 px. DURAÇÃO (#689): 20 min VESTIDO, do Canary (items.xml, 3052 → 3089: `duration 1200`, `stopduration` na forma inativa) — pausa fora do dedo e retoma do restante; a forma ativa é `appearances.equippedItems` (o objeto 3089), não outro item."
 }

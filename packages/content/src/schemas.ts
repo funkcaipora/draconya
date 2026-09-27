@@ -173,6 +173,14 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de item → appearanceId` da forma ATIVA, enquanto vestido (#689): o Energy Ring ligado
+   * no dedo. No Tibia é outro id de item (3051 → 3088, `transformequipto`); aqui é só outra
+   * aparência do MESMO item (invariante 6) — o id de conteúdo, o inventário e o ledger não
+   * mudam. De um lado só, como `weapons`: item sem linha veste com a aparência de sempre, e a
+   * linha órfã é recusada.
+   */
+  equippedItems: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * `id de munição → { icon, missile }` (#152, ADR 0026 decisão 3). A munição é ABSTRATA, não
    * item: o seletor do slot do escudo lista a família do bow, e o tiro é o projétil. O ícone é
    * `icon` (não há mais `appearances.items[id]` para a munição) e `missile` é o projétil — a
@@ -736,11 +744,12 @@ export const itemSchema = z.strictObject({
     magicLevel: z.number().int().nonnegative().optional(),
   }).default(() => ({})),
   /**
-   * Cargas e duração (§21.3). **Declarados, e ainda não consumidos por ninguém.**
+   * Cargas e duração (§21.3, ADR 0032 d.8). Equipamento comum não tem durabilidade; anel gasta
+   * por TEMPO e colar por CARGA — os dois consumidos pela hunt (`EQUIP_EXPIRE`, cargas por golpe).
    *
-   * Equipamento comum não tem durabilidade; anel gasta por TEMPO e colar por CARGA. A forma
-   * entra agora para o catálogo não mudar quando a mecânica existir — e o dia em que ela
-   * existir, quem a implementar acha os campos onde eles já estavam.
+   * `durationMs` é tempo VESTIDO (#689): fora do corpo o prazo pausa, e vestir de novo retoma o
+   * restante guardado na instância (`overlay.durationRemainingMs`, ADR 0046) — o `stopduration`
+   * do Canary. Na Cidade, que não simula, o anel no dedo também fica pausado.
    */
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
@@ -1085,6 +1094,8 @@ export type Ammunition = AmmunitionDefinition & {
  */
 export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
   readonly appearanceId: number;
+  /** A forma ativa enquanto vestido (`appearances.equippedItems`, #689). Ausente: `appearanceId`. */
+  readonly equippedAppearanceId?: number;
   /** A arma com o tipo de dano já resolvido (CMB-03). Ausente em item que não é arma. */
   readonly weapon?: ResolvedWeapon;
   /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */

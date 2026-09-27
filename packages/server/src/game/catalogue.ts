@@ -147,6 +147,8 @@ export function buildCatalogue(content: Content): Catalogue {
       id: item.id,
       name: item.name,
       appearanceId: item.appearanceId,
+      // A forma ativa no slot vestido (#689): o Energy Ring ligado. Só quando a tabela a tem.
+      ...(item.equippedAppearanceId === undefined ? {} : { equippedAppearanceId: item.equippedAppearanceId }),
       weight: item.weight,
       // `null` e não ausente: "não veste em lugar nenhum" é uma informação, e campo opcional
       // a confundiria com "o servidor não disse".

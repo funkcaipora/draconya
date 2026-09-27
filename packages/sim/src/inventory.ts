@@ -54,8 +54,8 @@ export interface CarriedItem {
    */
   readonly charges?: number;
   /**
-   * O estado por INSTÂNCIA (ADR 0046, #604): imbuements hoje; o prazo restante do anel (#689) e
-   * o tier da Forja (#617) entram como campos nomeados do mesmo objeto — ver `item-overlay.ts`.
+   * O estado por INSTÂNCIA (ADR 0046, #604): os imbuements e o prazo restante do anel (#689);
+   * o tier da Forja (#617) entra como mais um campo nomeado do mesmo objeto — ver `item-overlay.ts`.
    * Ausente é "igual à definição", e é o caso de quase todo item. Opcional, então nenhum
    * snapshot antigo precisa de bump. Item com overlay NÃO empilha (ADR 0046 d.3).
    */
@@ -68,7 +68,12 @@ export interface CarriedItem {
  * mantém o vencimento FORA do tick (invariante 2, ADR 0020).
  */
 export interface EquipmentObserver {
-  onEquip(slot: ItemSlot, item: CarriedItem): void;
+  /**
+   * `previous` é o que o slot tinha antes da troca direta (já de volta no lugar de onde `item`
+   * saiu), ou `null`. A troca é uma transação só (ADR 0032 d.8), então o item que sai não recebe
+   * um `onUnequip` à parte: é por aqui que o observer guarda o prazo restante dele (#689).
+   */
+  onEquip(slot: ItemSlot, item: CarriedItem, previous: CarriedItem | null): void;
   onUnequip(slot: ItemSlot, item: CarriedItem): void;
 }
 
@@ -423,8 +428,9 @@ export class Inventory {
     this.#set(from, previous);
     if (previous === null) this.#trim(this.#containerOf(from.container), this.#initialOf(from.container));
     // Depois da transação concluída (ADR 0032 d.8): o observer cancela o prazo antigo do slot e
-    // agenda o do item que entrou. Um item que saiu para outro do mesmo slot perde o prazo.
-    this.#observer?.onEquip(definition.slot, carried);
+    // agenda o do item que entrou. O que saiu vai junto (`previous`) para o observer guardar o
+    // prazo restante dele na instância antes do cancelamento (#689).
+    this.#observer?.onEquip(definition.slot, carried, previous);
     return OK;
   }
 

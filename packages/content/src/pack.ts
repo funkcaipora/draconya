@@ -57,6 +57,10 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   }
   // A munição é abstrata (ADR 0026 d.3): a tabela guarda o ícone e o projétil, e os dois são
   // conferidos contra o pacote.
+  // A forma ativa do item vestido (#689): o Energy Ring ligado é o objeto 3088 do pacote.
+  for (const [id, object] of Object.entries(appearances.equippedItems)) {
+    check(`equippedItems.${id}`, 'object', object);
+  }
   for (const [id, ammo] of Object.entries(appearances.ammunition)) {
     check(`ammunition.${id}.icon`, 'object', ammo.icon);
     check(`ammunition.${id}.missile`, 'missile', ammo.missile);

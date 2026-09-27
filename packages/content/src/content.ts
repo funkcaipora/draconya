@@ -966,6 +966,13 @@ export function buildContent(raw: RawContent): Content {
       if (item?.kind === 'weapon') continue;
       problems.push(`appearances.weapons mapeia "${id}", que não é arma do conteúdo`);
     }
+    // A forma ativa do item vestido (#689): de um lado só — item sem linha veste com a aparência
+    // de sempre —, mas a linha órfã, e a de item que não se veste, é recusada.
+    for (const id of Object.keys(appearances.equippedItems)) {
+      const item = itemDefinitions.get(id);
+      if (item?.slot !== undefined) continue;
+      problems.push(`appearances.equippedItems mapeia "${id}", que não é item vestível do conteúdo`);
+    }
   }
 
   // O inventário do pacote (FUN-21). É a única conferência de que os NÚMEROS da tabela existem:
@@ -990,8 +997,9 @@ export function buildContent(raw: RawContent): Content {
   const monsters: ReadonlyMap<string, Monster> = withCorpses(resolveAppearance(
     'monstro', 'monsters', monsterDefinitions, appearances?.monsters, 'outfitId', problems),
   appearances?.corpses, problems);
-  const items: ReadonlyMap<string, Item> = resolveAppearance(
-    'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems);
+  const items: ReadonlyMap<string, Item> = withEquippedAppearance(resolveAppearance(
+    'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems),
+  appearances?.equippedItems);
   // A tabela `appearances.ammunition` guarda o ÍCONE e o PROJÉTIL de cada munição (#152, ADR
   // 0026 d.3); `resolveAmmunition` confere os dois lados — a munição sem linha e a linha órfã.
   const ammunition: ReadonlyMap<string, Ammunition> = resolveAmmunition(
@@ -1336,6 +1344,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     pack: 'placeholder',
     monsters: sequential(raw.monsters),
     items,
+    // Sem forma ativa (#689): item sem linha veste com a aparência de sempre.
+    equippedItems: {},
     ammunition,
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
@@ -1354,6 +1364,22 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     hits: {},
     abilities: {},
   };
+}
+
+/**
+ * Acrescenta a forma ativa (`appearances.equippedItems`, #689) ao item que tem linha. A linha
+ * órfã já foi recusada por quem chamou; aqui só se lê.
+ */
+function withEquippedAppearance<D extends { id: string }>(
+  items: Map<string, D>,
+  table: Readonly<Record<string, number>> | undefined,
+): Map<string, D & { equippedAppearanceId?: number }> {
+  if (table === undefined) return items;
+  for (const [id, item] of items) {
+    const equippedAppearanceId = table[id];
+    if (equippedAppearanceId !== undefined) items.set(id, { ...item, equippedAppearanceId });
+  }
+  return items;
 }
 
 /**

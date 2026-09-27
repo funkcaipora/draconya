@@ -381,9 +381,10 @@ imbuement, e depois do tier da Forja; não é o lugar de rolagem aleatória, que
   entre os `imbuementSlots` do item. O catálogo de imbuements (#605), o decaimento sob demanda
   (#606, ADR 0046 d.4) e a aplicação (#607) ainda não existem: esta entrega é só o contrato de
   dado e a persistência.
+- **`durationRemainingMs` (#689):** o prazo restante do anel com `durationMs`, gravado quando
+  ele sai do corpo; "ausente é cheio". Ver "Duração e carga do equipamento".
 - **Ponto de extensão:** a próxima mecânica acrescenta um campo nomeado ao mesmo objeto —
-  `durationRemainingMs` (#689, o prazo restante do anel, "ausente é cheio") e `tier` (#617, 0–10) —,
-  e o escreve com `Inventory.setOverlay(instanceId, { ...item.overlay, campo })`, sem apagar o
+  `tier` (#617, 0–10) —, e o escreve com `Inventory.setOverlay(instanceId, { ...item.overlay, campo })`, sem apagar o
   dos outros. Banco, extrato e snapshot não mudam: a coluna guarda o objeto inteiro, e a leitura
   (`readItemOverlay`) **preserva** campo que ela ainda não conhece, para um nó antigo num deploy
   em rolagem não apagar o que um nó novo gravou (ADR 0014).
@@ -404,9 +405,11 @@ imbuement, e depois do tier da Forja; não é o lugar de rolagem aleatória, que
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
-está equipado no dedo (`slot: 'finger'`), sem carga e sem duração. Anéis que gastam por TEMPO
-usam `durationMs`, consumido pelo `sim` desde a AB-06 (#421) — ver "Duração e carga do
-equipamento".
+está equipado no dedo (`slot: 'finger'`), sem carga. Desde a #689 os dois gastam por TEMPO
+vestido, como no Tibia: **Energy Ring 10 min** (`durationMs: 600000`) e **Life Ring 20 min**
+(`durationMs: 1200000`) — ver "Duração e carga do equipamento". Vestidos, mostram a forma ATIVA
+(`appearances.equippedItems`: 3088 e 3089, o `transformequipto` do Canary); na mochila, a de
+sempre (3051 e 3052).
 
 **Energy Ring** — o dano sofrido debita da MANA antes da vida, e só o excedente vai para a vida.
 É a MESMA leitura que a condição `mana-shield` do utamo vita (Magic Shield) já faz — as duas
@@ -427,11 +430,32 @@ descrito aqui, lido do catálogo no momento do dano/regeneração, que dá senti
 decisão 8).
 
 **Duração é TEMPO EQUIPADO, e o vencimento é um evento.** Ao equipar um item com `durationMs`, o
-`sim` agenda `EQUIP_EXPIRE` para `agora + durationMs` na fila; ao desequipar, mover do slot ou
-destruir, cancela. O item que vence sai do corpo e **não volta para a mochila** — é destruído.
-Duração reinicia cheia ao reequipar: não há `remainingMs` guardado (DT-04), então tirar e vestir
-de novo devolve o prazo inteiro. Como o prazo é um evento no relógio LÓGICO, a hunt desanexada a
-1 Hz vence no MESMO instante que a anexada a 10 Hz (invariante 2, ADR 0020).
+`sim` agenda `EQUIP_EXPIRE` na fila; ao desequipar, mover do slot ou destruir, cancela. O item
+que vence sai do corpo e **não volta para a mochila** — é destruído. Como o prazo é um evento no
+relógio LÓGICO, a hunt desanexada a 1 Hz vence no MESMO instante que a anexada a 10 Hz
+(invariante 2, ADR 0020).
+
+**Tirar do dedo PAUSA o prazo, e vestir de novo retoma (#689).** É o `stopduration` do Canary: a
+primeira vestida agenda o prazo cheio, e cada saída do corpo — desequipar, mover para um
+container, ou a troca direta anel → anel, em que o que sai chega ao observer como `previous` do
+`onEquip` — guarda o que sobrou na INSTÂNCIA, em `overlay.durationRemainingMs` (ADR 0046). O
+restante é lido do próprio `EQUIP_EXPIRE` agendado (`Session.dueAtOf`) antes do cancelamento: a
+fila é a verdade única do prazo, e a instância nunca guarda `dueAtMs` (DT-03 da #689). A conta
+roda só no desequip, nunca por tick. Sair no mesmo instante do vencimento guarda 1 ms, e não
+ressuscita o prazo cheio. A regra antiga — "reinicia cheia ao reequipar" (DT-04 da AB-06) — está
+revogada.
+
+**Fim de hunt também guarda.** Na saída (`onLeave`) e no encerramento (`onEnd`), o anel que
+continua no dedo tem o restante gravado antes do extrato, e o `EQUIP_EXPIRE` dele é cancelado.
+A Cidade não simula nada (§37), então **na Cidade o anel vestido fica pausado** — divergência
+declarada do Tibia, onde ele continua gastando no dedo fora da hunt; a próxima hunt o reagenda
+pelo restante. Decaimento fora do corpo (itens sem `stopduration`, soft boots) exige tempo fora
+da sessão e fica fora de escopo.
+
+**Forma ativa é aparência, não item.** No Canary o anel vestido vira OUTRO id (3051 → 3088). Aqui
+o id de conteúdo continua o mesmo — inventário e ledger não mudam — e a forma ativa mora em
+`appearances.equippedItems` (invariante 6). O catálogo manda `equippedAppearanceId` no item, e o
+cliente o usa só no slot vestido (`EquipmentPanel`); ausente, cai no `appearanceId`.
 
 **Carga é por GOLPE PROTEGIDO.** O colar (`neck`) e, desde o #524, o anel (`finger`) gastam uma
 carga CADA um a cada golpe de monstro cujo tipo eles protegem — imunidade explícita ou
@@ -444,9 +468,10 @@ em zero o item sai do corpo e não vai para a mochila. O golpe é gasto mesmo qu
 **A destruição avisa a apresentação.** O `sim` emite `equipment-changed`, e o `server` o mapeia
 para a mensagem `inventory` já existente (opcode 16, sem campo novo — invariante 5): o slot
 destruído aparece vazio. `CarriedItem.charges` é opcional, então snapshot antigo não precisa de
-bump; o `EQUIP_EXPIRE` viaja na fila. **Carga e tempo restante não sobrevivem ao logout** — a
-linha de `item_instance` não tinha coluna. Desde a #604 existe `item_instance.overlay`, e o prazo
-restante do anel entra nele como `durationRemainingMs` na #689; `charges` continua fora dele.
+bump; o `EQUIP_EXPIRE` viaja na fila. **O tempo restante sobrevive ao logout** desde a #689: ele
+mora em `overlay.durationRemainingMs`, e o overlay da #604 já atravessa extrato, ledger
+(`item_instance.overlay`) e ticket sem mudança nenhuma. **A carga (`charges`) ainda não** — ela
+continua fora do overlay, e morre no fim da sessão.
 
 ## O kit level 200 por vocação e o bônus de equipamento (#524, M28)
 
