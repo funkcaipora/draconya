@@ -343,14 +343,19 @@ contando: o jogador matou, e o extrato mentiria se dissesse que não.
 ### A janela do cadáver e a aba Loot da barra (W3, #722, ADR 0048 d.4)
 
 Quem está olhando pode abrir o cadáver e pegar o que o Quick Loot automático deixou para trás.
-Clicar no cadáver no mundo manda `walk-to` (o personagem se aproxima) e `open-corpse` — o
-servidor confere dono/elegibilidade (a party inteira, quando presente no abate) e distância (≤ 1
-tile, mesmo andar); a recusa é `system-message` em palavras ("Você está longe demais.", "Isto
-não é seu."). Sucesso abre a janela (`corpse-contents`: ouro e itens restantes), reaproveitando o
-mesmo desenho da mochila — sem arrastar: o clique num item pega ELE, ignorando o filtro (a
-segunda chance manual); "Pegar tudo" reaplica o MESMO filtro de Quick Loot do personagem, como o
-clique do Tibia. A janela fecha sozinha quando o cadáver decai, e não persiste entre sessões —
-reanexar não a reabre.
+Clicar no cadáver no mundo manda `walk-to` na hora e GUARDA o pedido: um laço de 150 ms olha o
+`world` (ninguém avisa, quem quer saber olha — ADR 0007, o mesmo padrão de andar por teclado) e
+manda `open-corpse` sozinho quando a posição confirmada do personagem fica a ≤ 1 tile do
+cadáver, no mesmo andar — já adjacente, manda na hora. O pedido é abandonado em silêncio (nunca
+`system-message`, porque nada foi de fato recusado) se o cadáver decair antes, se o jogador andar
+pelo teclado, clicar noutra criatura ou noutro cadáver, ou depois de 10 s sem chegar. O servidor
+ainda confere dono/elegibilidade (a party inteira, quando presente no abate) e distância — a
+recusa (quando chega a acontecer, por exemplo um obstáculo que o cliente não previu) é
+`system-message` em palavras ("Você está longe demais.", "Isto não é seu."). Sucesso abre a
+janela (`corpse-contents`: ouro e itens restantes), reaproveitando o mesmo desenho da mochila —
+sem arrastar: o clique num item pega ELE, ignorando o filtro (a segunda chance manual); "Pegar
+tudo" reaplica o MESMO filtro de Quick Loot do personagem, como o clique do Tibia. A janela fecha
+sozinha quando o cadáver decai, e não persiste entre sessões — reanexar não a reabre.
 
 O filtro em si (`accept`/`skip`, a lista de itens e a autovenda) é editado na aba **Loot** do
 painel de Automações da barra de ações: um seletor para o modo e uma linha por item do catálogo,
