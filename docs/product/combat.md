@@ -669,7 +669,7 @@ resistência e imunidade do monstro.
 | Bow — alcance | 6 | `packages/content/data/items/bow.json`, `weapon.range` |
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
-| Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
+| Munição — attack e preço | arrow 25 `[ABERTO — attack provisório]` / 2; burst arrow 27 `[ABERTO — idem]` / 15; sniper arrow 28 `[ABERTO — idem]` / 5; onyx arrow 38 `[ABERTO — idem]` / 7 — `attack` continua do TibiaWiki (provisório); `price` é o menor `buy` de NPC do Canary (M34-03/#574, NÃO mais provisório) | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
 | Distância — início, curva (base), dano por nível | 10 / 30 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` da distância no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/distance.json` |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (só vale para wand/rod e para o `combat-v1`; ver abaixo) | `packages/content/data/skills/distance.json` |
 
@@ -1283,6 +1283,12 @@ interface MonsterAbility {
 
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
+
+**O catálogo (#580) trouxe 933 monstros gerados** para `packages/content/data/monsters/generated/`,
+ao lado de Rat, Rotworm, Dragon e Dragon Lord (hand-authored, só o #581 os regenera). O que ficou
+de fora do corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado
+(#573/#574) — está em `docs/reference/catalog/monsters-promotion-report.md`;
+`scripts/catalog/promote-monsters.ts` é quem separa `bestiary`/`outfitId` do monstro ao promover.
 
 ## IA de monstro do TFS: chance, onda direcional, defesa, troca de alvo e fuga (#518)
 
@@ -2196,8 +2202,9 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
 - `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
   zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
   muda o consumo de RNG e exige perfil novo (ADR 0031).
-- `[ABERTO]` Os números da Avalanche Rune (preço por uso, Base Power, raio, requisitos) são
-  provisórios até a leitura da infobox do TibiaWiki. O elemento é `ice` desde o CMB-03.
+- `[ABERTO]` Base Power, raio e requisitos da Avalanche Rune são provisórios até a leitura da
+  infobox do TibiaWiki (o preço por uso é `[RESOLVIDO]` — 64, menor `buy` de NPC do Canary,
+  M34-03/#574). O elemento é `ice` desde o CMB-03.
 - `[ABERTO]` `physical-strike` é dano físico no Tibia, mas fica em `arcane` nesta versão para
   não mudar o dano entregue (a armadura passaria a contar). Trocar para `physical` exige perfil
   novo (ADR 0031).

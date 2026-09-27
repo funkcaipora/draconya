@@ -1,0 +1,1372 @@
+[
+  {
+    "id": "dragon-hatchling",
+    "name": "Dragon Hatchling",
+    "class": "dragon",
+    "health": 380,
+    "experience": 185,
+    "attack": {
+      "min": 0,
+      "max": 55
+    },
+    "armor": 15,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.75,
+        "ice": -0.1
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.78,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 146,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9554,
+        "min": 1,
+        "max": 50
+      },
+      "items": [
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.8304
+        },
+        {
+          "itemId": "dragons-tail",
+          "chance": 0.0357
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 55
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 90
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 30,
+          "max": 55
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 8,
+          "max": 33
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/dragon_hatchling.lua"
+    }
+  },
+  {
+    "id": "dragon-lord-hatchling",
+    "name": "Dragon Lord Hatchling",
+    "class": "dragon",
+    "health": 750,
+    "experience": 645,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.75,
+        "ice": -0.1
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 168,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7269,
+        "min": 1,
+        "max": 121
+      },
+      "items": [
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.7791
+        },
+        {
+          "itemId": "green-mushroom",
+          "chance": 0.0049
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 90,
+          "max": 125
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 55,
+          "max": 105
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "firefield",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "fire"
+        },
+        "field": {
+          "id": "dragon-lord-hatchling-firefield",
+          "durationMs": 200000,
+          "shape": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          },
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 26,
+          "max": 48
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/dragon_lord_hatchling.lua"
+    }
+  },
+  {
+    "id": "draken-warmaster",
+    "name": "Draken Warmaster",
+    "class": "dragon",
+    "health": 4150,
+    "experience": 2400,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 55,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "ice": -0.05,
+        "holy": 0.05,
+        "death": 0.5
+      },
+      "immunities": [
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 324,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9749,
+        "min": 1,
+        "max": 197
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.3039
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0231
+        },
+        {
+          "itemId": "zaoan-legs",
+          "chance": 0.013
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 240,
+          "max": 520
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 510,
+          "max": 600
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/draken_warmaster.lua"
+    }
+  },
+  {
+    "id": "frost-dragon",
+    "name": "Frost Dragon",
+    "class": "dragon",
+    "health": 1800,
+    "experience": 2100,
+    "attack": {
+      "min": 0,
+      "max": 225
+    },
+    "armor": 38,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.07,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 212,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9911,
+        "min": 1,
+        "max": 207
+      },
+      "items": [
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.8304,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "green-mushroom",
+          "chance": 0.1071
+        },
+        {
+          "itemId": "golden-mug",
+          "chance": 0.0536
+        },
+        {
+          "itemId": "energy-ring",
+          "chance": 0.0268
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0179
+        },
+        {
+          "itemId": "strange-helmet",
+          "chance": 0.0089
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.0089
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0029
+        },
+        {
+          "itemId": "royal-helmet",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "dragon-scale-mail",
+          "chance": 0.001
+        },
+        {
+          "itemId": "dragon-slayer",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 225
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 175,
+          "max": 380
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "poff"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -700
+          }
+        }
+      },
+      {
+        "id": "paralyze-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "iceattack"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 18000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -850
+          }
+        }
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 120
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "icetornado"
+        }
+      },
+      {
+        "id": "iceball",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 240
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "icearea"
+        }
+      },
+      {
+        "id": "physicalbeam",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 220
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "paralyze-3",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "icearea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 150,
+          "max": 200
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 290
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 250,
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/frost_dragon.lua"
+    }
+  },
+  {
+    "id": "frost-dragon-hatchling",
+    "name": "Frost Dragon Hatchling",
+    "class": "dragon",
+    "health": 800,
+    "experience": 745,
+    "attack": {
+      "min": 0,
+      "max": 160
+    },
+    "armor": 32,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05
+      },
+      "immunities": [
+        "earth",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 172,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9143,
+        "min": 1,
+        "max": 47
+      },
+      "items": [
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.8286
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 160
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "icewave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 110
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "iceattack"
+        }
+      },
+      {
+        "id": "iceball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 110
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "icearea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "ice",
+          "impactKey": "icearea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 45,
+          "max": 50
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 80,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/frost_dragon_hatchling.lua"
+    }
+  },
+  {
+    "id": "hydra",
+    "name": "Hydra",
+    "class": "dragon",
+    "health": 2350,
+    "experience": 2100,
+    "attack": {
+      "min": 0,
+      "max": 270
+    },
+    "armor": 27,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.1,
+        "ice": 0.5,
+        "holy": 0.3
+      },
+      "immunities": [
+        "earth",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 360,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8797,
+        "min": 1,
+        "max": 212
+      },
+      "items": [
+        {
+          "itemId": "ham",
+          "chance": 0.5951,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0392
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "royal-helmet",
+          "chance": 0.0009
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 270
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "green-rings"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -700
+          }
+        }
+      },
+      {
+        "id": "icewave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 250
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "loseenergy"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 80,
+          "max": 155
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallice"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 66,
+          "max": 320
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "carniphila"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 260,
+          "max": 407
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 300,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/hydra.lua"
+    }
+  },
+  {
+    "id": "wardragon",
+    "name": "Wardragon",
+    "class": "dragon",
+    "health": 6960,
+    "experience": 5810,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 80,
+    "defense": 80,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": -0.1,
+        "ice": -0.1,
+        "holy": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.19,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 330,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5256,
+        "min": 100,
+        "max": 4500
+      },
+      "items": [
+        {
+          "itemId": "dragonbone-staff",
+          "chance": 0.0074
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 2500,
+        "chance": 0.2,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 400
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 400
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 3000,
+        "chance": 0.2,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 275,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 3000,
+        "chance": 0.15,
+        "target": {
+          "range": 2
+        },
+        "power": {
+          "min": 250,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "big-scratch"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/war_dragon.lua"
+    }
+  }
+]

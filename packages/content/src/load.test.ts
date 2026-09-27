@@ -1,5 +1,5 @@
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -10,6 +10,21 @@ import { floorChangeAt, isBlocked } from './map.js';
 import { BOT_CATEGORIES, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
+
+/**
+ * Todo arquivo dentro de `dir`, recursivo — `data/items/generated/` e `data/items/overrides/`
+ * (ADR 0038, o importador de catálogo) são subpastas de verdade desde o #573, e uma varredura que
+ * só lê `readdirSync` raso lançaria `EISDIR` ao tentar ler uma delas como arquivo.
+ */
+function filesRecursively(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) out.push(...filesRecursively(path));
+    else out.push(path);
+  }
+  return out;
+}
 
 describe('loadContent', () => {
   it('carrega o conteúdo real do repositório', () => {
@@ -54,7 +69,7 @@ describe('loadContent', () => {
     for (const item of content.items.values()) {
       expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
     }
-    expect(content.items.get('bow')?.value).toBe(130);
+    expect(content.items.get('bow')?.value).toBe(400);
     expect(content.items.get('cheese')?.value).toBe(0);
   });
 
@@ -285,12 +300,16 @@ describe('loadContent', () => {
       kind: 'distance', family: 'distance', range: 6, ammoFamily: 'arrow', damageType: 'physical',
       power: scaled(0),
     });
+    // manaPerHit reconciliado contra o Canary `items.xml` pelo importador de itens (#573): as
+    // duas wands iniciais tinham `manaPerHit` TROCADO (vortex 2/snakebite 1) — o real é vortex 1
+    // (id 3074, `mana` 1) e snakebite 2 (id 3066, `mana` 2), ver `overrides/{wand-of-vortex,
+    // snakebite-rod}.json` e `docs/product/items.md`.
     expect(weapon('wand-of-vortex')).toEqual({
-      kind: 'wand', family: 'wand', range: 3, manaPerHit: 2, damageType: 'energy',
+      kind: 'wand', family: 'wand', range: 3, manaPerHit: 1, damageType: 'energy',
       fixedDamage: { min: 8, max: 18 },
     });
     expect(weapon('snakebite-rod')).toEqual({
-      kind: 'wand', family: 'rod', range: 3, manaPerHit: 1, damageType: 'earth',
+      kind: 'wand', family: 'rod', range: 3, manaPerHit: 2, damageType: 'earth',
       fixedDamage: { min: 8, max: 18 },
     });
     // O desarmado é a família `fist` com o bloco `player` (CMB-05), preservando o v1.
@@ -375,7 +394,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const content = loadContent(DATA);
     const rune = content.supplies.get('avalanche-rune');
     expect(rune).toMatchObject({
-      price: 14,
+      price: 64,
       requires: { level: 30, magicLevel: 4 },
       effect: { kind: 'damage', basePower: 45, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
     });
@@ -457,7 +476,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
   it('content.supplies é o catálogo ABSTRATO, com price e group de cooldown (ADR 0026 d.3)', () => {
     const content = loadContent(DATA);
     expect(content.supplies.get('health-potion')).toMatchObject({
-      id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+      id: 'health-potion', name: 'Poção de Vida', price: 50, group: 'potion',
       effect: { kind: 'heal', amountRange: { min: 125, max: 175 } }, requires: {},
     });
     expect(content.supplies.get('avalanche-rune')?.group).toBe('attack');
@@ -555,9 +574,9 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const ofensores: string[] = [];
     for (const pasta of readdirSync(DATA)) {
       if (pasta === 'appearances') continue;
-      for (const arquivo of readdirSync(join(DATA, pasta))) {
-        const texto = readFileSync(join(DATA, pasta, arquivo), 'utf8');
-        if (/"(appearanceId|outfitId)"\s*:/.test(texto)) ofensores.push(`${pasta}/${arquivo}`);
+      for (const arquivo of filesRecursively(join(DATA, pasta))) {
+        const texto = readFileSync(arquivo, 'utf8');
+        if (/"(appearanceId|outfitId)"\s*:/.test(texto)) ofensores.push(arquivo);
       }
     }
     // Se este teste reprovou: o id saiu do arquivo da entidade na FUN-94 e vive em
@@ -574,10 +593,9 @@ describe('content/ nunca contém arte (invariante 6)', () => {
     const extensoes = /\.(png|jpe?g|gif|webp|bmp|spr|dat)\b/i;
     const ofensores: string[] = [];
     for (const pasta of readdirSync(DATA)) {
-      const caminhoPasta = join(DATA, pasta);
-      for (const arquivo of readdirSync(caminhoPasta)) {
-        const texto = readFileSync(join(caminhoPasta, arquivo), 'utf8');
-        if (extensoes.test(texto)) ofensores.push(`${pasta}/${arquivo}`);
+      for (const arquivo of filesRecursively(join(DATA, pasta))) {
+        const texto = readFileSync(arquivo, 'utf8');
+        if (extensoes.test(texto)) ofensores.push(arquivo);
       }
     }
     expect(ofensores).toEqual([]);

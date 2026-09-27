@@ -27,21 +27,28 @@ estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 ## O catálogo importado (ADR 0038, #572)
 
-**`staging/monsters/` não é conteúdo carregado** (#578): é onde `pnpm catalog:import monsters`
-escreve enquanto o monstro gerado não passa no boot — o loot aponta item por slug de nome, e o
-catálogo de itens (#573) e as linhas de aparência ainda não existem. Cada entidade de lá é a forma
-do `monsterSchema` mais dois campos que o #580 separa ao mover para `data/`: `bestiary` (vai para
-`bestiary/baseline.json`, `entries`) e `outfitId` (vai para `appearances/baseline.json`). `load.ts`
+**`staging/monsters/` não é conteúdo carregado** (#578/#579): é onde `pnpm catalog:import monsters`
+escreve — a transcrição PURA do Canary, item ainda por slug de nome, sem passar pelo catálogo de
+itens (#573/#574) nem pela tabela de aparências. `pnpm catalog:promote-monsters` (#580) é o passo
+SEGUINTE, e não depende de `CANARY_DIR`: lê o que já está commitado em `staging/` e separa cada
+entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três destinos —
+`data/monsters/generated/<fatia>.json` (o monstro, sem os dois campos), `bestiary/baseline.json`
+(`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
+catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
+item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord (#581)
+nunca são promovidos por aqui — continuam hand-authored, e é a #581 quem os regenera. `load.ts`
 não lê `staging/`, e nada do jogo deve ler.
 
-Qualquer `data/<tipo>/` (hoje `items/`, mais tarde `monsters/`) aceita, além do arquivo autoral
-direto na pasta, duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em
-`content.ts`:
+Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
+duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
 ```
-data/items/backpack.json          # autoral, uma entidade por arquivo (de sempre)
-data/items/generated/weapons.json # gerado por `pnpm catalog:import items` — um ARRAY por fatia
-data/items/overrides/*.json       # correção nossa: { id, reason, patch }
+data/items/backpack.json             # autoral, uma entidade por arquivo (de sempre)
+data/items/generated/weapons.json    # gerado por `pnpm catalog:import items` — um ARRAY por fatia
+data/items/overrides/*.json          # correção nossa: { id, reason, patch }
+data/monsters/rat.json               # autoral, hand-authored (#581 é quem regenera os quatro)
+data/monsters/generated/mammals.json # promovido por `pnpm catalog:promote-monsters` — um ARRAY
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
