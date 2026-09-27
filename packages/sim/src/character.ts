@@ -19,6 +19,8 @@ import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
+import { UNSET_STORAGE_VALUE, readCharacterStorage } from './character-storage.js';
+import type { CharacterStorageMap } from './character-storage.js';
 
 export interface Point {
   readonly x: number;
@@ -149,6 +151,14 @@ export interface CharacterState {
    * `character.ammunition_stock` (jsonb).
    */
   readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
+   * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value` — a semente do motor
+   * de quest, a mesma pergunta do Canary (`player:getStorageValue`). Ausente é NENHUM storage
+   * setado, sem bump de `SNAPSHOT_FORMAT_VERSION` — a mesma degradação de `bestiary`/`ammo`.
+   * Persistido em `character_storage` (uma linha por chave, não uma coluna `jsonb`): ver
+   * `packages/server/src/db/schema.ts`.
+   */
+  readonly storages?: CharacterStorageMap;
   readonly cooldowns: Partial<CooldownState>;
   /**
    * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
@@ -264,6 +274,11 @@ export class CharacterRuntime {
   readonly supplyStock: Map<string, number>;
   /** O estoque de munição do loot (#520). Ver `CharacterState.ammunitionStock`. */
   readonly ammunitionStock: Map<string, number>;
+  /**
+   * Storages por personagem (#731). Só a sessão dona escreve (`setStorageValue`) — a mesma
+   * régua de `ammo`/`supplyStock`. Ver `CharacterState.storages`.
+   */
+  readonly storages: Map<string, number>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
@@ -308,6 +323,9 @@ export class CharacterRuntime {
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
     this.ammunitionStock = new Map(Object.entries(state.ammunitionStock ?? {}));
+    // Defensivo, como `readItemOverlay`: uma chave torta (valor não inteiro, ou o `-1` de
+    // ausência gravado por engano) some da leitura em vez de travar a sessão inteira.
+    this.storages = new Map(Object.entries(readCharacterStorage(state.storages) ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
@@ -348,6 +366,25 @@ export class CharacterRuntime {
     }
     this.ammo.set(ammo.family, ammo.id);
     return { ok: true };
+  }
+
+  /**
+   * O valor deste storage, ou `-1` (convenção do Tibia) para quem nunca setou (#731). Nunca
+   * lança: uma quest que ainda não existe consultando uma chave nova só lê "nunca setado".
+   */
+  getStorageValue(key: string): number {
+    return this.storages.get(key) ?? UNSET_STORAGE_VALUE;
+  }
+
+  /**
+   * Seta o storage (#731). `-1` APAGA a chave — é o valor de ausência, guardá-lo seria
+   * indistinguível de "nunca setado" e só infla o extrato e a tabela à toa. Só a sessão dona
+   * chama isto (invariante 9); a `-1` não vencer para pelo teto/piso de `value` cabe a quem
+   * chama (conteúdo de quest), não a este método.
+   */
+  setStorageValue(key: string, value: number): void {
+    if (value === UNSET_STORAGE_VALUE) this.storages.delete(key);
+    else this.storages.set(key, value);
   }
 
   /**
@@ -452,6 +489,11 @@ export class CharacterRuntime {
       // deixar quem grava o extrato decidir se um objeto vazio é "drenado" ou "nunca tocado".
       supplyStock: Object.fromEntries(this.supplyStock),
       ammunitionStock: Object.fromEntries(this.ammunitionStock),
+      // Como `supplyStock`: NÃO gatear por `size === 0`. Um storage setado e depois apagado
+      // NESTA sessão (`setStorageValue(key, -1)`) é um resultado real — "voltou a não estar
+      // setado" —, e omitir a chave faria o extrato não tocar a linha e o valor antigo
+      // ressuscitar no próximo login (a mesma lição da revisão do #536).
+      storages: Object.fromEntries(this.storages),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
