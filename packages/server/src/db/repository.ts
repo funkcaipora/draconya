@@ -54,6 +54,8 @@ export interface CharacterRecord {
   readonly supplyStock: unknown;
   /** O estoque de munição do loot (#520), pela mesma razão do `supplyStock`. */
   readonly ammunitionStock: unknown;
+  /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
+  readonly fedMs: number;
   readonly createdAt: Date;
 }
 
@@ -540,7 +542,7 @@ function toAccount(row: typeof accounts.$inferSelect): AccountRecord {
 function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
   // O domínio usa number. Um bigint fora do intervalo seguro não pode virar progresso
   // arredondado silenciosamente ao atravessar a fronteira Postgres → TypeScript.
-  for (const value of [row.xp, row.gold, row.staminaMs]) {
+  for (const value of [row.xp, row.gold, row.staminaMs, row.fedMs]) {
     if (!Number.isSafeInteger(value)) throw new Error('character value exceeds safe integer range');
   }
   return {
@@ -564,6 +566,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     ammo: row.ammo,
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
+    fedMs: row.fedMs,
     createdAt: row.createdAt,
   };
 }

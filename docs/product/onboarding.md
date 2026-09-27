@@ -45,9 +45,10 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
   `sim` grava `vocationId` e concede o **kit completo da vocação** (`startingKit` — arma +
   escudo, desde #496) como `CarriedItem` com `origin: 'vocation-choice'`, vestindo o que
   couber; a machete volta para a mochila. A ordem do kit é contrato — a arma veste antes do
-  escudo —, e é por isso que o bow de duas mãos deixa o `wooden-shield` na mochila. Sem
-  capacidade para uma peça ela vai para a Caixa de Loot, com mensagem nomeando o item — a
-  escolha vale mesmo assim. Os stats NÃO mudam
+  escudo —, e é por isso que o bow de duas mãos deixa o `wooden-shield` na mochila. Peso NUNCA
+  recusa aqui (`Inventory.forceAdd`, ADR 0048 decisão 7 — desde a #723, sem a Caixa de Loot da
+  Sessão para segurar o excedente): a peça sem capacidade entra na mochila do mesmo jeito, e a
+  escolha vale inteira, sem aviso nenhum. Os stats NÃO mudam
   na hora: a tabela da vocação vale do próximo level em diante (`progression.md`).
 - **Como persiste:** `characters.vocation` é escrita UMA vez pelo `jobs`
   (`coalesce(vocation, $1)`), a partir do extrato — o da hunt, ou o **extrato de estado

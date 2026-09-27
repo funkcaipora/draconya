@@ -43,6 +43,23 @@ const questDoor: TilemapInteractable = {
   at: { x: 17, y: 2, z: 7 }, kind: 'quest-door', initialState: 'closed', appearanceKey: 'quest-door-1',
   requires: { storageKey: 'quest:example' },
 };
+// Teleporte e placa de pressão (T3, #734, ADR 0050 d.6).
+const teleport: TilemapInteractable = {
+  at: { x: 19, y: 2, z: 7 }, kind: 'teleport', initialState: 'default', appearanceKey: 'teleport-1',
+  target: { x: 40, y: 2, z: 7 },
+};
+const gatedTeleport: TilemapInteractable = {
+  at: { x: 21, y: 2, z: 7 }, kind: 'teleport', initialState: 'closed', appearanceKey: 'teleport-2',
+  target: { x: 41, y: 2, z: 7 }, revertMs: 10_000,
+};
+const leverForTeleport: TilemapInteractable = {
+  at: { x: 21, y: 4, z: 7 }, kind: 'lever', initialState: 'down', appearanceKey: 'lever', aid: 3001,
+  links: ['3002'],
+};
+const gatedTeleportWithAid: TilemapInteractable = { ...gatedTeleport, aid: 3002 };
+const plate: TilemapInteractable = {
+  at: { x: 23, y: 2, z: 7 }, kind: 'pressure-plate', initialState: 'up', appearanceKey: 'plate-1',
+};
 
 describe('overrideFromInteractable — o estado inicial vem do conteúdo', () => {
   it('porta comum fechada bloqueia', () => {
@@ -254,5 +271,53 @@ describe('TileOverrides — o índice por tile (ADR 0050 d.1: no máximo um por 
     expect(overrides.get(id)).toEqual({
       interactableId: id, kind: 'quest-door', state: 'closed', blocked: true, floorChange: null,
     });
+  });
+});
+
+describe('teleportTargetAt — teleporte por pisar (#734, ADR 0050 d.6 T3)', () => {
+  it('teleporte "sempre ligado" (initialState default) devolve o target', () => {
+    const overrides = TileOverrides.fromInteractables([teleport]);
+    expect(overrides.teleportTargetAt(19, 2, 7)).toEqual({ x: 40, y: 2, z: 7 });
+  });
+
+  it('teleporte GATED por alavanca (initialState closed) não devolve nada antes de ser aberto', () => {
+    const overrides = TileOverrides.fromInteractables([gatedTeleportWithAid, leverForTeleport]);
+    expect(overrides.teleportTargetAt(21, 2, 7)).toBeNull();
+  });
+
+  it('a alavanca abre o teleporte por N s: toggle+links já fazem o resto (mesmo mecanismo do lever→door)', () => {
+    const overrides = TileOverrides.fromInteractables([gatedTeleportWithAid, leverForTeleport]);
+    const leverId = interactableIdOf(leverForTeleport.at);
+    const opened = overrides.toggle(leverId, 0);
+    expect(opened?.state).toBe('up');
+    const linkedId = interactableIdOf(gatedTeleportWithAid.at);
+    const teleportOpened = overrides.toggle(linkedId, 0);
+    expect(teleportOpened).toMatchObject({ state: 'open', revertAtMs: 10_000 });
+    expect(overrides.teleportTargetAt(21, 2, 7)).toEqual({ x: 41, y: 2, z: 7 });
+    // Reverte (TILE_REVERT, no vencimento): fecha de novo e para de teleportar.
+    overrides.toggle(linkedId, 10_000);
+    expect(overrides.teleportTargetAt(21, 2, 7)).toBeNull();
+  });
+
+  it('nada no tile, ou um kind diferente de teleport: null', () => {
+    const overrides = TileOverrides.fromInteractables([door]);
+    expect(overrides.teleportTargetAt(3, 2, 7)).toBeNull();
+    expect(overrides.teleportTargetAt(0, 0, 7)).toBeNull();
+  });
+});
+
+describe('pressure-plate — o par up/down (#734, ADR 0050 d.6 T3)', () => {
+  it('nunca bloqueia, em nenhum dos dois estados', () => {
+    expect(overrideFromInteractable(plate).blocked).toBe(false);
+    expect(overrideFromInteractable({ ...plate, initialState: 'down' }).blocked).toBe(false);
+  });
+
+  it('toggle pressiona (up→down) e solta (down→up), sem revertMs quando o conteúdo não declara', () => {
+    const overrides = TileOverrides.fromInteractables([plate]);
+    const id = interactableIdOf(plate.at);
+    const pressed = overrides.toggle(id, 0);
+    expect(pressed).toEqual({ interactableId: id, kind: 'pressure-plate', state: 'down', blocked: false, floorChange: null });
+    const released = overrides.toggle(id, 0);
+    expect(released?.state).toBe('up');
   });
 });

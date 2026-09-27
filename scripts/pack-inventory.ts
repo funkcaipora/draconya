@@ -185,7 +185,7 @@ if (import.meta.main) {
     },
     strict: true,
   });
-  // Os mesmos nomes do `.env.example`; o `.env` não é lido aqui, e `things/1332` é o padrão
+  // Os mesmos nomes do `.env.example`; o `.env` não é lido aqui, e `things/1533` é o padrão
   // documentado nele.
   const thingsDir = resolve(ROOT, values.things ?? process.env.THINGS_DIR ?? 'things');
   if (values.check) {
@@ -208,7 +208,7 @@ if (import.meta.main) {
     }
     process.exit(stale ? 1 : 0);
   }
-  const version = values.version ?? process.env.THINGS_VERSION ?? '1332';
+  const version = values.version ?? process.env.THINGS_VERSION ?? '1533';
   const pack = readPackInventory(thingsDir, version);
   if (pack === null) {
     console.error(`pacote ${version} não encontrado em ${thingsDir}\n${usage()}`);

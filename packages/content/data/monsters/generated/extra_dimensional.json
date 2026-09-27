@@ -1,0 +1,408 @@
+[
+  {
+    "id": "mitmah-scout",
+    "name": "Mitmah Scout",
+    "class": "extra-dimensional",
+    "health": 3940,
+    "experience": 3230,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 45,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "earth": -0.15,
+        "fire": 0.1,
+        "ice": 0.15,
+        "holy": -0.1,
+        "death": 0.15
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.02,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 1000
+      },
+      "items": [
+        {
+          "itemId": "broken-mitmah-necklace",
+          "chance": 0.1718
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.0762
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.0689
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.0408
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.0367
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0288
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0245
+        },
+        {
+          "itemId": "prismatic-quartz",
+          "chance": 0.0241
+        },
+        {
+          "itemId": "ruby-necklace",
+          "chance": 0.0181
+        },
+        {
+          "itemId": "gold-brocaded-cloth",
+          "chance": 0.0134
+        },
+        {
+          "itemId": "gold-nugget",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "ornate-crossbow",
+          "chance": 0.0014
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 200,
+          "max": 400
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "powerbolt",
+          "impactKey": "energyarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "heal": {
+          "min": 50,
+          "max": 180
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.15
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/extra_dimensional/mitmah_scout.lua"
+    }
+  },
+  {
+    "id": "yielothax",
+    "name": "Yielothax",
+    "class": "extra-dimensional",
+    "health": 1500,
+    "experience": 1250,
+    "attack": {
+      "min": 0,
+      "max": 203
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "energy": -0.05,
+        "fire": 0.25,
+        "ice": -0.05,
+        "death": 0.5
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1000,
+    "speed": 300,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-diamond",
+          "chance": 0.04761,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "might-ring",
+          "chance": 0.03846
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.00523
+        },
+        {
+          "itemId": "epee",
+          "chance": 0.00564
+        },
+        {
+          "itemId": "lightning-pendant",
+          "chance": 0.00862
+        },
+        {
+          "itemId": "lightning-legs",
+          "chance": 0.0048
+        },
+        {
+          "itemId": "shockwave-amulet",
+          "chance": 0.00571
+        },
+        {
+          "itemId": "yielowax",
+          "chance": 0.003
+        },
+        {
+          "itemId": "yielocks",
+          "chance": 0.0032
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 203
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 130
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyarea"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 250
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 70,
+          "max": 120
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "manadrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 50,
+          "max": 150
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 100,
+          "max": 150
+        },
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.75,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/extra_dimensional/yielothax.lua"
+    }
+  }
+]

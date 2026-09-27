@@ -13,11 +13,11 @@ ele e as folhas `sprites-<hash>.bmp.lzma`:
 ```bash
 pnpm assets:library -- \
   --source /caminho/para/assets \
-  --version 1332 \
+  --version 1533 \
   --resources /caminho/para/graphics_resources.rcc.lzma
 ```
 
-O resultado padrão fica em `things/1332/library/`. É sempre local e ignorado pelo Git.
+O resultado padrão fica em `things/1533/library/`. É sempre local e ignorado pelo Git.
 
 Clientes Open Tibia no formato DatSpr também são reconhecidos automaticamente quando a pasta
 contém `Tibia.spr`, `Tibia.dat` e, de preferência, `Tibia.otfi`:
@@ -52,7 +52,7 @@ existem em cada registro, como faixas inclusivas — em `packages/content/data/p
 e é contra esse arquivo que `buildContent` recusa um id que não existe (FUN-21):
 
 ```bash
-pnpm assets:inventory                 # lê things/1332 e escreve packs/tibia-1332.json
+pnpm assets:inventory                 # lê things/1533 e escreve packs/tibia-1533.json
 pnpm assets:inventory --version 1400  # outro pacote: THINGS_VERSION ou --version
 pnpm assets:inventory --check         # confere cada packs/*.json com o pacote local
 ```
@@ -95,7 +95,7 @@ carregar um arquivo JSON gigante. `manifest.json` informa quantas folhas e sprit
 presentes. O gerador nunca chama um pacote incompleto de completo: quando uma folha citada no
 catálogo não existe, o índice preserva o id e grava `png: null`.
 
-**A biblioteca de `things/1332` desta máquina é parcial** (`complete: false`, 47 de 4171 folhas,
+**(Registro de 2026-09, pacote 13.32.) A biblioteca de `things/1332` daquela máquina era parcial** (`complete: false`, 47 de 4171 folhas,
 5508 de 184443 sprites, gerada em 2026-09-18). O `.dat` de aparências está inteiro — todos os ids
 existem no índice —, mas a maioria das folhas de sprite não está no pacote-fonte. A consequência
 prática é que ids de **efeito e projétil de combate não têm PNG para abrir** nesta máquina; a
@@ -110,9 +110,9 @@ esse formato não expõe as aparências em JSONL.
 Exemplos:
 
 ```bash
-rg '"id":21,' things/1332/library/appearances/outfit.jsonl
-rg '"id":3043,' things/1332/library/appearances/object.jsonl
-rg 'icon-battlelist' things/1332/library/ui-index.jsonl
+rg '"id":21,' things/1533/library/appearances/outfit.jsonl
+rg '"id":3043,' things/1533/library/appearances/object.jsonl
+rg 'icon-battlelist' things/1533/library/ui-index.jsonl
 ```
 
 A origem e a autorização de uso do pacote são resolvidas antes desta etapa. O gerador não baixa

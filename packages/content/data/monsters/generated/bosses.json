@@ -1,0 +1,7617 @@
+[
+  {
+    "id": "apprentice-sheng",
+    "name": "Apprentice Sheng",
+    "health": 95,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 12,
+    "defense": 13,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "energy"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.38,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "minotaur-leather",
+          "chance": 1
+        },
+        {
+          "itemId": "leather-legs",
+          "chance": 0.23
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "knife",
+          "chance": 0.0769
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energyfield",
+        "cadenceMs": 1000,
+        "chance": 0.08,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "energy",
+        "presentation": {
+          "missileKey": "energy"
+        },
+        "field": {
+          "id": "apprentice-sheng-energyfield",
+          "durationMs": 98000,
+          "shape": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          },
+          "condition": {
+            "key": "electrified",
+            "merge": "strongest",
+            "durationMs": 10000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 1,
+                  "intervalMs": 10000,
+                  "damage": 25
+                }
+              ],
+              "damageType": "energy"
+            }
+          }
+        }
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 1000,
+        "chance": 0.14,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 25
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energyball",
+          "impactKey": "energyarea"
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 45
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "heal": {
+          "min": 10,
+          "max": 20
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/apprentice_sheng.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "hyaena",
+          "intervalMs": 5000,
+          "chance": 0.3,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "armenius-creature",
+    "name": "Armenius (Creature)",
+    "health": 550,
+    "experience": 500,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.5
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "vampire-shield",
+          "chance": 0.0523
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 150
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 50,
+          "max": 200
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallclouds"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 60000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -400
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 15,
+          "max": 25
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/armenius.lua"
+    }
+  },
+  {
+    "id": "big-boss-trolliver",
+    "name": "Big Boss Trolliver",
+    "health": 150,
+    "experience": 105,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 64
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.25
+        },
+        {
+          "itemId": "hand-axe",
+          "chance": 0.0965
+        },
+        {
+          "itemId": "leather-boots",
+          "chance": 0.09
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0545
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.0545
+        },
+        {
+          "itemId": "spear",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/big_boss_trolliver.lua"
+    },
+    "summons": {
+      "max": 5,
+      "entries": [
+        {
+          "monsterId": "troll-champion",
+          "intervalMs": 2000,
+          "chance": 0.3,
+          "count": 5
+        }
+      ]
+    }
+  },
+  {
+    "id": "black-knight",
+    "name": "Black Knight",
+    "health": 1800,
+    "experience": 1600,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 42,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.8,
+        "fire": 0.95,
+        "holy": -0.08,
+        "death": 0.2
+      },
+      "immunities": [
+        "earth",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.23,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "brass-legs",
+          "chance": 0.122
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.1185
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.1037
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.1122
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0847
+        },
+        {
+          "itemId": "battle-hammer",
+          "chance": 0.0691
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0471
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0263
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0243
+        },
+        {
+          "itemId": "dark-armor",
+          "chance": 0.0202
+        },
+        {
+          "itemId": "knight-legs",
+          "chance": 0.0105
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "ruby-necklace",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "lightning-legs",
+          "chance": 0.0058
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.004
+        },
+        {
+          "itemId": "dragon-lance",
+          "chance": 0.0029
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 80,
+      "health": 10,
+      "damage": 10,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/black_knight.lua"
+    }
+  },
+  {
+    "id": "brain-parasite",
+    "name": "Brain Parasite",
+    "health": 7500,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 500
+    },
+    "armor": 78,
+    "defense": 78,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": -0.1,
+        "ice": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 3.27,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 450,
+          "max": 550
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/brain_parasite.lua"
+    }
+  },
+  {
+    "id": "chagorz",
+    "name": "Chagorz",
+    "health": 350000,
+    "experience": 3250000,
+    "attack": {
+      "min": 1300,
+      "max": 2250
+    },
+    "armor": 105,
+    "defense": 105,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.15,
+        "energy": 0.15,
+        "earth": 0.15,
+        "fire": 0.15,
+        "ice": 0.15,
+        "holy": 0.15,
+        "death": 0.15
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 500,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.05441,
+        "min": 10000,
+        "max": 1080000
+      },
+      "items": [
+        {
+          "itemId": "giant-sapphire",
+          "chance": 0.10546
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.13465
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.14071
+        },
+        {
+          "itemId": "giant-amethyst",
+          "chance": 0.11603
+        },
+        {
+          "itemId": "giant-topaz",
+          "chance": 0.1228
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.08348
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 1300,
+          "max": 2250
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 900
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 900
+        },
+        "damageType": "death",
+        "kind": "combat"
+      },
+      {
+        "id": "earthbeam",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 10,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 1000,
+          "max": 1200
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 10,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 1500,
+          "max": 1900
+        },
+        "damageType": "lifedrain",
+        "kind": "combat"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-green"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 3000,
+        "chance": 0.1,
+        "heal": {
+          "min": 700,
+          "max": 1500
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 10000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.98,
+    "corpseTtlMs": 180000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/chagorz.lua"
+    }
+  },
+  {
+    "id": "chikhaton",
+    "name": "Chikhaton",
+    "health": 20000,
+    "experience": 20000,
+    "attack": {
+      "min": 0,
+      "max": 1130
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": 0.3
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1130
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 500
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "heal": {
+          "min": 550,
+          "max": 850
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.3
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/chikhaton.lua"
+    }
+  },
+  {
+    "id": "clubarc-the-plunderer",
+    "name": "Clubarc The Plunderer",
+    "health": 400,
+    "experience": 400,
+    "attack": {
+      "min": 0,
+      "max": 130
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.3,
+        "energy": 0.05,
+        "earth": -0.05,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.535,
+        "min": 1,
+        "max": 78
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.2339
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.1935
+        },
+        {
+          "itemId": "shaggy-tail",
+          "chance": 0.137
+        },
+        {
+          "itemId": "bow",
+          "chance": 0.0323
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0242
+        },
+        {
+          "itemId": "silkweaver-bow",
+          "chance": 0.0242
+        },
+        {
+          "itemId": "crossbow",
+          "chance": 0.0161
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 130
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 85
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "onyxarrow"
+        }
+      },
+      {
+        "id": "poisoned",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 16000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 8,
+            "intervalMs": 2000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 350
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/clubarc_the_plunderer.lua"
+    }
+  },
+  {
+    "id": "dharalion",
+    "name": "Dharalion",
+    "health": 380,
+    "experience": 570,
+    "attack": {
+      "min": 0,
+      "max": 57
+    },
+    "armor": 15,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "holy-orchid",
+          "chance": 1
+        },
+        {
+          "itemId": "elvish-talisman",
+          "chance": 0.88
+        },
+        {
+          "itemId": "elven-astral-observer",
+          "chance": 0.82
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.4179
+        },
+        {
+          "itemId": "elven-amulet",
+          "chance": 0.1493
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.1343
+        },
+        {
+          "itemId": "green-tunic",
+          "chance": 0.0448
+        },
+        {
+          "itemId": "royal-spear",
+          "chance": 0.0149,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 57
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 30,
+          "max": 60
+        },
+        "damageType": "manadrain",
+        "kind": "combat"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 70,
+          "max": 90
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 80,
+          "max": 151
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.2,
+        "heal": {
+          "min": 90,
+          "max": 120
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 10,
+      "health": 10,
+      "damage": 20,
+      "random": 60
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/dharalion.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "demon-skeleton",
+          "intervalMs": 1000,
+          "chance": 0.06,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "diseased-bill",
+    "name": "Diseased Bill",
+    "health": 1000,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 207
+    },
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.25,
+        "fire": 0.25,
+        "ice": 0.25,
+        "holy": 0.25,
+        "death": 0.75
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.28,
+        "min": 1,
+        "max": 20
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 207
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 16000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 4,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 1,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 90,
+          "max": 140
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 1000,
+        "chance": 0.4,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 175
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 3000,
+        "chance": 0.4,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -900
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 10000,
+        "chance": 0.4,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 310
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 5000,
+        "chance": 0.6,
+        "heal": {
+          "min": 50,
+          "max": 80
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 1,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/diseased_bill.lua"
+    }
+  },
+  {
+    "id": "diseased-dan",
+    "name": "Diseased Dan",
+    "health": 800,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 207
+    },
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": 0.35,
+        "ice": -0.05,
+        "holy": -0.05,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.28,
+        "min": 1,
+        "max": 21
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 207
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 16000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 4,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 1,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 90,
+          "max": 140
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 1000,
+        "chance": 0.4,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 175
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 3000,
+        "chance": 0.4,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -900
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 10000,
+        "chance": 0.4,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 310
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 5000,
+        "chance": 0.6,
+        "heal": {
+          "min": 50,
+          "max": 80
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 1,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/diseased_dan.lua"
+    }
+  },
+  {
+    "id": "diseased-fred",
+    "name": "Diseased Fred",
+    "health": 1100,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 207
+    },
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.15,
+        "energy": 0.15,
+        "fire": 0.15,
+        "ice": 0.15,
+        "holy": 0.15,
+        "death": 0.55
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.28,
+        "min": 1,
+        "max": 17
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 207
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 16000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 4,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 1,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 90,
+          "max": 140
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 1000,
+        "chance": 0.4,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 175
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 3000,
+        "chance": 0.4,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -900
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 10000,
+        "chance": 0.4,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 310
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 5000,
+        "chance": 0.6,
+        "heal": {
+          "min": 50,
+          "max": 80
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 1,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/diseased_fred.lua"
+    }
+  },
+  {
+    "id": "ekatrix",
+    "name": "Ekatrix",
+    "health": 500,
+    "experience": 200,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2
+      },
+      "immunities": [
+        "energy"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 102,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "witch-broom",
+          "chance": 1
+        },
+        {
+          "itemId": "cape",
+          "chance": 0.645
+        },
+        {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.4167
+        },
+        {
+          "itemId": "coat",
+          "chance": 0.375
+        },
+        {
+          "itemId": "star-herb",
+          "chance": 0.11333
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.0294
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 20
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 30,
+          "max": 60
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "hitbyfire"
+        }
+      },
+      {
+        "id": "firefield",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5
+        },
+        "power": 0,
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "fire"
+        },
+        "field": {
+          "id": "ekatrix-firefield",
+          "durationMs": 200000,
+          "shape": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          },
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/ekatrix.lua"
+    }
+  },
+  {
+    "id": "elvira-hammerthrust",
+    "name": "Elvira Hammerthrust",
+    "health": 245,
+    "experience": 165,
+    "attack": {
+      "min": 0,
+      "max": 140
+    },
+    "armor": 15,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.2,
+        "fire": -0.05,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.02,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 206,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 100,
+        "max": 10000
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 20,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/elvira_hammerthrust.lua"
+    }
+  },
+  {
+    "id": "fleshslicer",
+    "name": "Fleshslicer",
+    "health": 5700,
+    "experience": 5500,
+    "attack": {
+      "min": 0,
+      "max": 99
+    },
+    "armor": 12,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 560,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.5
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/fleshslicer.lua"
+    }
+  },
+  {
+    "id": "general-murius",
+    "name": "General Murius",
+    "health": 550,
+    "experience": 450,
+    "attack": {
+      "min": 0,
+      "max": 170
+    },
+    "armor": 16,
+    "defense": 22,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9231,
+        "min": 1,
+        "max": 97
+      },
+      "items": [
+        {
+          "itemId": "minotaur-leather",
+          "chance": 1
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.7692
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.7692
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.3077
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.2308
+        },
+        {
+          "itemId": "chain-legs",
+          "chance": 0.2308
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 170
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "bolt"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 275
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 20,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/general_murius.lua"
+    },
+    "summons": {
+      "max": 4,
+      "entries": [
+        {
+          "monsterId": "minotaur-archer",
+          "intervalMs": 1000,
+          "chance": 0.15,
+          "count": 2
+        },
+        {
+          "monsterId": "minotaur-guard",
+          "intervalMs": 1000,
+          "chance": 0.12,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "glitterscale",
+    "name": "Glitterscale",
+    "health": 1000,
+    "experience": 700,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 25,
+    "defense": 18,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": 0.8,
+        "ice": -0.1
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 90,
+          "max": 180
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.12,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 70,
+          "max": 120
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 300,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 500000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/glitterscale.lua"
+    }
+  },
+  {
+    "id": "groam",
+    "name": "Groam",
+    "health": 400,
+    "experience": 180,
+    "attack": {
+      "min": 0,
+      "max": 99
+    },
+    "armor": 12,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 560,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 50
+      },
+      "items": [
+        {
+          "itemId": "life-ring",
+          "chance": 0.25
+        },
+        {
+          "itemId": "rusted-armor",
+          "chance": 0.0625
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.015
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 99
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "drownstrike",
+        "cadenceMs": 1000,
+        "chance": 0.11,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 15,
+          "max": 100
+        },
+        "damageType": "drown",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear",
+          "impactKey": "loseenergy"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.5
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 60,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/groam.lua"
+    }
+  },
+  {
+    "id": "guard-captain-quaid",
+    "name": "Guard Captain Quaid",
+    "health": 55000,
+    "experience": 28000,
+    "attack": {
+      "min": 0,
+      "max": 580
+    },
+    "armor": 86,
+    "defense": 86,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.15,
+        "earth": 0.4,
+        "holy": -0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 184,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 2000
+      },
+      "items": [
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.62
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.48
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.31
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.31
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.086
+        },
+        {
+          "itemId": "skull-helmet",
+          "chance": 0.075
+        },
+        {
+          "itemId": "collar-of-blue-plasma",
+          "chance": 0.072
+        },
+        {
+          "itemId": "cobra-crest",
+          "chance": 0.11
+        },
+        {
+          "itemId": "cobra-boots",
+          "chance": 0.00115
+        },
+        {
+          "itemId": "cobra-hood",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "cobra-crossbow",
+          "chance": 0.0005
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 580
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 620
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "earth",
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.22,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 450,
+          "max": 700
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      },
+      {
+        "id": "physicalbeam",
+        "cadenceMs": 2000,
+        "chance": 0.14,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 350,
+          "max": 550
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 550
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "burstarrow",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "earthbeam",
+        "cadenceMs": 2000,
+        "chance": 0.12,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 480
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 450
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/guard_captain_quaid.lua"
+    }
+  },
+  {
+    "id": "hairman-the-huge",
+    "name": "Hairman the Huge",
+    "health": 600,
+    "experience": 335,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 20,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.01,
+        "energy": 0.2,
+        "earth": 0.2,
+        "fire": 0.25,
+        "ice": -0.01,
+        "death": -0.01
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "club-ring",
+          "chance": 0.25
+        }
+      ]
+    },
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 260
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.14
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/hairman_the_huge.lua"
+    }
+  },
+  {
+    "id": "incredibly-old-witch",
+    "name": "Incredibly Old Witch",
+    "health": 620,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 100,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 3610000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/incredibly_old_witch.lua"
+    }
+  },
+  {
+    "id": "izcandar-champion-of-summer",
+    "name": "Izcandar Champion of Summer",
+    "health": 130000,
+    "experience": 6900,
+    "attack": {
+      "min": 320,
+      "max": 750
+    },
+    "armor": 76,
+    "defense": 76,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 500
+      },
+      "items": [
+        {
+          "itemId": "mysterious-remains",
+          "chance": 1
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.4615
+        },
+        {
+          "itemId": "ring-of-blue-plasma",
+          "chance": 0.3846
+        },
+        {
+          "itemId": "chaos-mace",
+          "chance": 0.2308
+        },
+        {
+          "itemId": "summerblade",
+          "chance": 0.001
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.1538
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.1538
+        },
+        {
+          "itemId": "collar-of-green-plasma",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "collar-of-red-plasma",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "ornate-locket",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "incandescent-crown",
+          "chance": 0.0769
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 320,
+          "max": 750
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 850
+        },
+        "damageType": "ice",
+        "kind": "combat"
+      },
+      {
+        "id": "drownwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 850
+        },
+        "damageType": "drown",
+        "kind": "combat"
+      },
+      {
+        "id": "manadrainball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 444,
+          "max": 850
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      },
+      {
+        "id": "deathbeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "death",
+        "kind": "combat"
+      },
+      {
+        "id": "firebeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "fire",
+        "kind": "combat"
+      },
+      {
+        "id": "icebeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "ice",
+        "kind": "combat"
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "earth"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 310,
+          "max": 640
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_summer.lua"
+    }
+  },
+  {
+    "id": "izcandar-champion-of-winter",
+    "name": "Izcandar Champion of Winter",
+    "health": 130000,
+    "experience": 6900,
+    "attack": {
+      "min": 320,
+      "max": 750
+    },
+    "armor": 76,
+    "defense": 76,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 500
+      },
+      "items": [
+        {
+          "itemId": "mysterious-remains",
+          "chance": 1
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.4615
+        },
+        {
+          "itemId": "ring-of-blue-plasma",
+          "chance": 0.3846
+        },
+        {
+          "itemId": "chaos-mace",
+          "chance": 0.2308
+        },
+        {
+          "itemId": "winterblade",
+          "chance": 0.001
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.1538
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.1538
+        },
+        {
+          "itemId": "collar-of-green-plasma",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "collar-of-red-plasma",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "ornate-locket",
+          "chance": 0.0769
+        },
+        {
+          "itemId": "ring-of-red-plasma",
+          "chance": 0.0769
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 320,
+          "max": 750
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 850
+        },
+        "damageType": "ice",
+        "kind": "combat"
+      },
+      {
+        "id": "drownwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 850
+        },
+        "damageType": "drown",
+        "kind": "combat"
+      },
+      {
+        "id": "manadrainball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 444,
+          "max": 850
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      },
+      {
+        "id": "deathbeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "death",
+        "kind": "combat"
+      },
+      {
+        "id": "firebeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "fire",
+        "kind": "combat"
+      },
+      {
+        "id": "icebeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "ice",
+        "kind": "combat"
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 850
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "earth"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 310,
+          "max": 640
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/izcandar_champion_of_winter.lua"
+    }
+  },
+  {
+    "id": "jesse-the-wicked",
+    "name": "Jesse the Wicked",
+    "health": 280,
+    "experience": 180,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 9900
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/jesse_the_wicked.lua"
+    }
+  },
+  {
+    "id": "kraknaknorks-demon",
+    "name": "Kraknaknork's Demon",
+    "health": 120,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 499
+    },
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "manadrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 499
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 3000,
+        "chance": 0.2,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 10,
+          "max": 40
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.15
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "corpseTtlMs": 370000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/kraknaknork's_demon.lua"
+    }
+  },
+  {
+    "id": "mad-mage",
+    "name": "Mad Mage",
+    "health": 2500,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.2
+      },
+      "immunities": [
+        "energy",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 340
+      },
+      "items": [
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.06
+        },
+        {
+          "itemId": "mages-cap",
+          "chance": 0.0168
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.0237
+        },
+        {
+          "itemId": "luminous-orb",
+          "chance": 0.0037
+        },
+        {
+          "itemId": "spellbook-of-warding",
+          "chance": 0.0237
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 1400,
+        "chance": 0.24,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "ice"
+        }
+      },
+      {
+        "id": "firefield",
+        "cadenceMs": 1600,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "fire"
+        },
+        "field": {
+          "id": "mad-mage-firefield",
+          "durationMs": 200000,
+          "shape": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          },
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        }
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 200
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bigclouds"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 35,
+          "max": 80
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.3
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/mad_mage.lua"
+    },
+    "summons": {
+      "max": 1,
+      "entries": [
+        {
+          "monsterId": "golden-servant",
+          "intervalMs": 1000,
+          "chance": 0.1,
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "mad-technomancer",
+    "name": "Mad Technomancer",
+    "health": 1800,
+    "experience": 55,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "ice": -0.01
+      },
+      "immunities": [
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "technomancer-beard",
+          "chance": 1
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 50,
+          "max": 120
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.34,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 55,
+          "max": 105
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 50,
+          "max": 80
+        },
+        "damageType": "manadrain",
+        "kind": "combat"
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.5,
+        "heal": {
+          "min": 75,
+          "max": 325
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 500,
+      "chance": 0.25
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 150,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/mad_technomancer.lua"
+    }
+  },
+  {
+    "id": "morik-the-gladiator",
+    "name": "Morik the Gladiator",
+    "health": 1235,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 20,
+    "defense": 22,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "earth": 0.1,
+        "fire": 0.1,
+        "ice": 0.1,
+        "holy": 0.1,
+        "death": -0.01
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitarea"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 3000,
+        "chance": 0.34,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/morik_the_gladiator.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "gladiator",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "mornenion",
+    "name": "Mornenion",
+    "health": 190,
+    "experience": 115,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 100,
+        "max": 10000
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "arrow"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 5000,
+        "chance": 0.07,
+        "heal": {
+          "min": 25,
+          "max": 35
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/mornenion.lua"
+    }
+  },
+  {
+    "id": "munster",
+    "name": "Munster",
+    "health": 58,
+    "experience": 35,
+    "attack": {
+      "min": 0,
+      "max": 15
+    },
+    "armor": 2,
+    "defense": 4,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.71,
+        "min": 1,
+        "max": 22
+      },
+      "items": [
+        {
+          "itemId": "bone-club",
+          "chance": 0.87
+        },
+        {
+          "itemId": "cheese",
+          "chance": 0.56
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.51,
+          "min": 1,
+          "max": 4
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 10000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.8,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/munster.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "rat",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "mutated-visco",
+    "name": "Mutated Visco",
+    "health": 28000,
+    "experience": 9800,
+    "attack": {
+      "min": 0,
+      "max": 2100
+    },
+    "armor": 96,
+    "defense": 119,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.7,
+        "ice": 0.2,
+        "holy": 0.2,
+        "death": 0.3
+      },
+      "immunities": [
+        "energy"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.4965,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "heavily-rusted-armor",
+          "chance": 0.505
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.305
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.205
+        },
+        {
+          "itemId": "dragon-scale-boots",
+          "chance": 0.055
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.155
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.155
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.105
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.255
+        },
+        {
+          "itemId": "earthborn-titan-armor",
+          "chance": 0.055
+        },
+        {
+          "itemId": "mastermind-shield",
+          "chance": 0.055
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.105
+        },
+        {
+          "itemId": "paladin-armor",
+          "chance": 0.055
+        },
+        {
+          "itemId": "guardian-shield",
+          "chance": 0.055
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 2100
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalbeam",
+        "cadenceMs": 2000,
+        "chance": 0.4,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 1500
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 1300
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 50,
+          "max": 130
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -500
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 2000,
+          "max": 3000
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 1500,
+    "staticAttack": 0.8,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/visco.lua"
+    }
+  },
+  {
+    "id": "raxias",
+    "name": "Raxias",
+    "health": 1100,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 28,
+    "defense": 33,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.01
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 50,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 60
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 180
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "snowball",
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "energywave",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 175
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/raxias.lua"
+    }
+  },
+  {
+    "id": "renegade-orc",
+    "name": "Renegade Orc",
+    "health": 450,
+    "experience": 270,
+    "attack": {
+      "min": 0,
+      "max": 130
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "holy": 0.2,
+        "death": -0.02
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.28,
+        "min": 1,
+        "max": 35
+      },
+      "items": [
+        {
+          "itemId": "orc-leather",
+          "chance": 0.19
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.1
+        },
+        {
+          "itemId": "sword-ring",
+          "chance": 0.0392
+        },
+        {
+          "itemId": "longsword",
+          "chance": 0.028
+        },
+        {
+          "itemId": "royal-spear",
+          "chance": 0.026
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.021
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.0089
+        },
+        {
+          "itemId": "broadsword",
+          "chance": 0.0083
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.0042
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0016
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 130
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 50
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/renegade_orc.lua"
+    }
+  },
+  {
+    "id": "robby-the-reckless",
+    "name": "Robby the Reckless",
+    "health": 155,
+    "experience": 110,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 8500
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/robby_the_reckless.lua"
+    }
+  },
+  {
+    "id": "smuggler-baron-silvertoe",
+    "name": "Smuggler Baron Silvertoe",
+    "health": 280,
+    "experience": 170,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "short-sword",
+          "chance": 0.1
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 50
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 40
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 10,
+          "max": 50
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/smuggler_baron_silvertoe.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "wild-warrior",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 3
+        }
+      ]
+    }
+  },
+  {
+    "id": "splasher",
+    "name": "Splasher",
+    "health": 1700,
+    "experience": 1500,
+    "attack": {
+      "min": 0,
+      "max": 109
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.15
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 520,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 109
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 5,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 106,
+          "max": 169
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.07,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 162,
+          "max": 228
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "icebeam",
+        "cadenceMs": 2000,
+        "chance": 0.09,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 134,
+          "max": 148
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bubbles"
+        }
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.12,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 101,
+          "max": 149
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bubbles"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -300
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 100,
+          "max": 120
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/splasher.lua"
+    }
+  },
+  {
+    "id": "teleskor",
+    "name": "Teleskor",
+    "health": 80,
+    "experience": 70,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.81,
+        "min": 1,
+        "max": 79
+      },
+      "items": [
+        {
+          "itemId": "pelvis-bone",
+          "chance": 1
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.72
+        },
+        {
+          "itemId": "viking-helmet",
+          "chance": 0.72
+        },
+        {
+          "itemId": "brass-shield",
+          "chance": 0.45
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.27
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.27
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/teleskor.lua"
+    }
+  },
+  {
+    "id": "the-abomination",
+    "name": "The Abomination",
+    "health": 750000,
+    "experience": 1500000,
+    "attack": {
+      "min": 0,
+      "max": 600
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": 0.5,
+        "earth": 0.5,
+        "fire": 0.5,
+        "ice": 0.5,
+        "holy": 0.5,
+        "death": 0.5
+      },
+      "immunities": [
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7423,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "violet-gem",
+          "chance": 0.07
+        },
+        {
+          "itemId": "gruesome-fan",
+          "chance": 0.07
+        },
+        {
+          "itemId": "giant-amethyst",
+          "chance": 0.07
+        },
+        {
+          "itemId": "giant-topaz",
+          "chance": 0.07
+        },
+        {
+          "itemId": "raw-watermelon-tourmaline",
+          "chance": 0.07
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 600
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -800
+          }
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 1000,
+        "chance": 0.09,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 650
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "lifedrainball",
+        "cadenceMs": 1000,
+        "chance": 0.11,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 900
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "sound-green"
+        }
+      },
+      {
+        "id": "physicalbeam",
+        "cadenceMs": 2000,
+        "chance": 0.19,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 350,
+          "max": 850
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "hitbypoison"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.75,
+        "heal": {
+          "min": 505,
+          "max": 605
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_abomination.lua"
+    }
+  },
+  {
+    "id": "the-book-of-death",
+    "name": "The Book of Death",
+    "health": 7800,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 28,
+    "defense": 33,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": 0.5,
+        "earth": 0.5,
+        "ice": 0.5,
+        "holy": 0.5
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 78,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 180
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "snowball",
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "energybeam",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 175
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_book_of_death.lua"
+    }
+  },
+  {
+    "id": "the-brainstealer",
+    "name": "The Brainstealer",
+    "health": 300000,
+    "experience": 72000,
+    "attack": {
+      "min": 0,
+      "max": 900
+    },
+    "armor": 78,
+    "defense": 78,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.03,
+        "fire": 0.05
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 3.27,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 850,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "violet-gem",
+          "chance": 0.5
+        },
+        {
+          "itemId": "moonstone",
+          "chance": 0.5
+        },
+        {
+          "itemId": "white-gem",
+          "chance": 0.5
+        },
+        {
+          "itemId": "eldritch-breeches",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "eldritch-cowl",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "eldritch-hood",
+          "chance": 0.00225
+        },
+        {
+          "itemId": "eldritch-bow",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "eldritch-quiver",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "eldritch-claymore",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "eldritch-greataxe",
+          "chance": 0.0011
+        },
+        {
+          "itemId": "eldritch-warmace",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "eldritch-shield",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "eldritch-cuirass",
+          "chance": 0.0016
+        },
+        {
+          "itemId": "eldritch-folio",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "eldritch-tome",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "eldritch-rod",
+          "chance": 0.002
+        },
+        {
+          "itemId": "eldritch-wand",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "gilded-eldritch-claymore",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "gilded-eldritch-greataxe",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "gilded-eldritch-warmace",
+          "chance": 0.001
+        },
+        {
+          "itemId": "gilded-eldritch-wand",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "gilded-eldritch-rod",
+          "chance": 0.0006
+        },
+        {
+          "itemId": "gilded-eldritch-bow",
+          "chance": 0.0005
+        },
+        {
+          "itemId": "eldritch-crystal",
+          "chance": 0.0003
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 900
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 1200,
+          "max": 1900
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 700,
+          "max": 1000
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 1200,
+          "max": 1600
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "electricalspark"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 1450,
+          "max": 5350
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_brainstealer.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "brain-parasite",
+          "intervalMs": 4000,
+          "chance": 0.2,
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "the-collector",
+    "name": "The Collector",
+    "health": 340,
+    "experience": 100,
+    "attack": {
+      "min": 0,
+      "max": 220
+    },
+    "armor": 25,
+    "defense": 26,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.2
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 194,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 220
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "energyhit"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -800
+          }
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 85
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      },
+      {
+        "id": "melee-2",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 10,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_collector.lua"
+    }
+  },
+  {
+    "id": "the-evil-eye",
+    "name": "The Evil Eye",
+    "health": 1200,
+    "experience": 750,
+    "attack": {
+      "min": 0,
+      "max": 91
+    },
+    "armor": 19,
+    "defense": 23,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.01
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 350,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 3,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "bonelord-eye",
+          "chance": 1
+        },
+        {
+          "itemId": "bonelord-shield",
+          "chance": 0.1364
+        },
+        {
+          "itemId": "bonelord-helmet",
+          "chance": 0.005
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 91
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 60,
+          "max": 130
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy"
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 85,
+          "max": 115
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.17,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 135,
+          "max": 175
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 40,
+          "max": 120
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 110,
+          "max": 130
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -850
+          }
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 1000,
+        "chance": 0.08,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 35,
+          "max": 85
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "lifedrainwave",
+        "cadenceMs": 1000,
+        "chance": 0.06,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 75,
+          "max": 85
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "manadrainwave",
+        "cadenceMs": 1000,
+        "chance": 0.09,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 250
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "loseenergy"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.09,
+        "heal": {
+          "min": 1,
+          "max": 219
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_evil_eye.lua"
+    },
+    "summons": {
+      "max": 5,
+      "entries": [
+        {
+          "monsterId": "demon-skeleton",
+          "intervalMs": 1000,
+          "chance": 0.13,
+          "count": 5
+        },
+        {
+          "monsterId": "ghost",
+          "intervalMs": 1000,
+          "chance": 0.12,
+          "count": 3
+        }
+      ]
+    }
+  },
+  {
+    "id": "the-first-dragon",
+    "name": "The First Dragon",
+    "health": 50000,
+    "experience": 9000,
+    "attack": {
+      "min": 0,
+      "max": 845
+    },
+    "armor": 52,
+    "defense": 64,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "drown",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 350,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 845
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 695
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 9,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              5,
+              5,
+              5,
+              7,
+              7,
+              7
+            ]
+          }
+        },
+        "power": {
+          "min": 1010,
+          "max": 1995
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 410,
+          "max": 595
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbyfire"
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 280
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 1500,
+          "max": 4500
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 570000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_first_dragon.lua"
+    }
+  },
+  {
+    "id": "the-frog-prince",
+    "name": "The Frog Prince",
+    "health": 55,
+    "experience": 1,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 3,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.98,
+        "energy": 0.9,
+        "earth": 0.8,
+        "fire": 0.9,
+        "ice": 0.9
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_frog_prince.lua"
+    }
+  },
+  {
+    "id": "vemiath",
+    "name": "Vemiath",
+    "health": 350000,
+    "experience": 3250000,
+    "attack": {
+      "min": 1500,
+      "max": 2500
+    },
+    "armor": 105,
+    "defense": 105,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.15,
+        "energy": 0.15,
+        "earth": 0.15,
+        "fire": 0.15,
+        "ice": 0.15,
+        "holy": 0.15,
+        "death": 0.15
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 500,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.08852,
+        "min": 10000,
+        "max": 1250000
+      },
+      "items": [
+        {
+          "itemId": "giant-emerald",
+          "chance": 0.06423
+        },
+        {
+          "itemId": "giant-topaz",
+          "chance": 0.11191
+        },
+        {
+          "itemId": "giant-amethyst",
+          "chance": 0.08527
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.10866
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.08945
+        },
+        {
+          "itemId": "dragon-figurine",
+          "chance": 0.11502
+        },
+        {
+          "itemId": "raw-watermelon-tourmaline",
+          "chance": 0.09302
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0721
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 1500,
+          "max": 2500
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 3000,
+        "chance": 0.2,
+        "target": {
+          "range": 10,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5,
+              7,
+              7,
+              7
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 1000
+        },
+        "damageType": "fire",
+        "kind": "combat"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 700
+        },
+        "damageType": "ice",
+        "kind": "combat"
+      },
+      {
+        "id": "deathwave",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 10,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5,
+              7,
+              7,
+              7
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 800
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "firewave-2",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 800
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "fireattack"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 3000,
+        "chance": 0.1,
+        "heal": {
+          "min": 800,
+          "max": 1500
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 10000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.98,
+    "corpseTtlMs": 180000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/vemiath.lua"
+    }
+  },
+  {
+    "id": "warlord-ruzad",
+    "name": "Warlord Ruzad",
+    "health": 1500,
+    "experience": 1700,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 32,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.01,
+        "earth": -0.1,
+        "fire": 0.8,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 270,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.185,
+        "min": 1,
+        "max": 45
+      },
+      "items": [
+        {
+          "itemId": "orc-leather",
+          "chance": 0.25
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.057
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.057
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0561
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.0468
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.0405
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0269
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.022
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.019
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.0075
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/warlord_ruzad.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "orc-berserker",
+          "intervalMs": 2000,
+          "chance": 0.3,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "willi-wasp",
+    "name": "Willi Wasp",
+    "health": 250,
+    "experience": 250,
+    "attack": {
+      "min": 0,
+      "max": 60
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1500,
+    "speed": 270,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.1765
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0588
+        },
+        {
+          "itemId": "silver-raid-token",
+          "chance": 0.05
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1500,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 60
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 76000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 25,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/williwasp.lua"
+    }
+  },
+  {
+    "id": "zoralurk",
+    "name": "Zoralurk",
+    "health": 55000,
+    "experience": 30000,
+    "attack": {
+      "min": 0,
+      "max": 1013
+    },
+    "armor": 55,
+    "defense": 65,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.6,
+        "energy": 0.6,
+        "earth": 0.8,
+        "ice": 0.5,
+        "holy": 0.4,
+        "death": 0.9
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.16033
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.6
+        },
+        {
+          "itemId": "bright-sword",
+          "chance": 0.2
+        },
+        {
+          "itemId": "bright-sword",
+          "chance": 0.2
+        },
+        {
+          "itemId": "warlord-sword",
+          "chance": 0.06
+        },
+        {
+          "itemId": "patched-boots",
+          "chance": 0.07
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1013
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 600,
+          "max": 900
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 800
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallplants"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 500,
+          "max": 800
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 3000,
+        "chance": 0.35,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 600
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "heal": {
+          "min": 300,
+          "max": 800
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 4000,
+        "chance": 0.8,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 6000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 440
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 10000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.98,
+    "corpseTtlMs": 370000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/zoralurk.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "demon",
+          "intervalMs": 4000,
+          "chance": 0.5,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
+    "id": "zushuka",
+    "name": "Zushuka",
+    "health": 15000,
+    "experience": 9000,
+    "attack": {
+      "min": 0,
+      "max": 560
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.5,
+        "fire": 0.5,
+        "holy": 0.3,
+        "death": -0.1
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.92,
+        "min": 1,
+        "max": 200
+      },
+      "items": [
+        {
+          "itemId": "silver-raid-token",
+          "chance": 0.92
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.57
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.42
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.42
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.42
+        },
+        {
+          "itemId": "glacier-shoes",
+          "chance": 0.35
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.28
+        },
+        {
+          "itemId": "mystic-turban",
+          "chance": 0.28
+        },
+        {
+          "itemId": "glacier-amulet",
+          "chance": 0.21
+        },
+        {
+          "itemId": "crystal-mace",
+          "chance": 0.14
+        },
+        {
+          "itemId": "dragon-necklace",
+          "chance": 0.14
+        },
+        {
+          "itemId": "glacier-kilt",
+          "chance": 0.14
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.14
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.14
+        },
+        {
+          "itemId": "pair-of-earmuffs",
+          "chance": 0.14
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.14
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.07
+        },
+        {
+          "itemId": "glacier-mask",
+          "chance": 0.07
+        },
+        {
+          "itemId": "icy-culottes",
+          "chance": 0.03
+        },
+        {
+          "itemId": "queens-sceptre",
+          "chance": 0.03
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 560
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "icebeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "iceattack"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "snowball"
+        }
+      },
+      {
+        "id": "icebeam-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 750
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "icearea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "icetornado"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -330
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 10000,
+        "chance": 0.01,
+        "heal": {
+          "min": 7500,
+          "max": 7515
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "heal-2",
+        "cadenceMs": 3000,
+        "chance": 0.15,
+        "heal": {
+          "min": 200,
+          "max": 500
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/zushuka.lua"
+    }
+  }
+]

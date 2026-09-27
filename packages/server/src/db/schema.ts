@@ -186,6 +186,16 @@ export const characters = pgTable(
      */
     ammunitionStock: jsonb('ammunition_stock'),
 
+    /**
+     * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
+     * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
+     * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro
+     * como a stamina, porque não recupera fora de hunt (a Cidade não anda, ADR 0004/0023).
+     * `bigint`/`number`, não `jsonb`: é um número só, como `staminaMs`. Default 0: quem nunca
+     * comeu, ou todo personagem anterior a esta migração.
+     */
+    fedMs: bigint('fed_ms', { mode: 'number' }).notNull().default(0),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

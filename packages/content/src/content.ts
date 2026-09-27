@@ -11,6 +11,7 @@ import {
   COMBAT_PROFILES,
   DAMAGE_TYPES,
   NEUTRAL_RATES,
+  SPELL_SKILL_WEAPON,
   abilityPower,
   ammunitionSchema,
   appearancesSchema,
@@ -460,21 +461,25 @@ export function compileItem(
         ...(raw.damage === undefined ? {} : { fixedDamage: raw.damage }),
       };
     } else {
-      const power = powerOf(raw.kind === 'distance' ? 0 : item.attack, family);
+      // O arremessável (#575) NÃO tem lançador: o `attack` é do PRÓPRIO item, como o corpo a
+      // corpo — só a arma COM `ammoFamily` (o bow/crossbow) zera a base e espera o `attack` da
+      // munição no golpe (`#strike`).
+      const isLauncher = raw.kind === 'distance' && raw.ammoFamily !== undefined;
+      const power = powerOf(isLauncher ? 0 : item.attack, family);
       weapon = {
         kind: raw.kind,
         family: familyId,
         damageType,
         range,
         ...(power === undefined ? {} : { power }),
-        ...(raw.kind === 'distance' && raw.ammoFamily !== undefined
-          ? { ammoFamily: raw.ammoFamily }
-          : {}),
+        ...(raw.kind === 'distance' && raw.ammoFamily !== undefined ? { ammoFamily: raw.ammoFamily } : {}),
         // O `hitChance` da arma (#524) é só dado — a chance de acerto à distância é a #522.
         ...(raw.hitChance === undefined ? {} : { hitChance: raw.hitChance }),
         // Elemento e `unproperly` (#687): só dado aqui; só o `combat-v3` os lê no `sim`.
         ...(raw.element === undefined ? {} : { element: raw.element }),
         ...(raw.wieldUnproperly === undefined ? {} : { wieldUnproperly: raw.wieldUnproperly }),
+        // O arremessável (#575): `breakChance` só existe sem `ammoFamily` — ver `weaponSchema`.
+        ...(raw.breakChance === undefined ? {} : { breakChance: raw.breakChance }),
       };
     }
   }
@@ -753,6 +758,16 @@ export function buildContent(raw: RawContent): Content {
         }
       }
     }
+    // A poção de buff (#576) aponta skill pelo id do catálogo em `skillDeltas` — como o bônus de
+    // equipamento (linha ~890) e a família de arma (abaixo), pela MESMA razão: um id errado
+    // bonificaria uma skill que ninguém lê, e a poção pareceria funcionar sem fazer nada.
+    if (effect.kind === 'condition' && effect.condition.effect.kind === 'buff' && skills.size > 0) {
+      for (const skillId of Object.keys(effect.condition.effect.skillDeltas ?? {})) {
+        if (!skills.has(skillId)) {
+          problems.push(`${where}: condition.effect.skillDeltas "${skillId}" não existe`);
+        }
+      }
+    }
   }
   // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa
   // existir, e a combinatória de `kind`/`resource`/`formula` é regra de domínio, não de forma.
@@ -821,18 +836,30 @@ export function buildContent(raw: RawContent): Content {
           );
         }
       }
-      if (weapon.kind === 'distance' && weapon.ammoFamily === undefined) {
-        problems.push(`item "${item.id}": arma de distância precisa de "ammoFamily"`);
-      }
-      if (weapon.kind === 'distance' && weapon.ammoFamily !== undefined
-        && ![...ammunitionDefinitions.values()].some((ammo) => ammo.family === weapon.ammoFamily)) {
-        problems.push(`item "${item.id}": a família "${weapon.ammoFamily}" não tem munição no catálogo`);
+      // Toda arma `distance` é OU lançador (`ammoFamily`, munição por família) OU arremessável
+      // (`breakChance`, #575 — o item É o próprio projétil): nunca os dois, nunca nenhum. Sem
+      // isto, um item de distância sem nenhum campo bateria o `attack` de si mesmo (base do
+      // arremessável) sem nunca quebrar, e um com os dois debitaria gold E consumiria estoque no
+      // mesmo tiro.
+      if (weapon.kind === 'distance') {
+        if (weapon.ammoFamily !== undefined && weapon.breakChance !== undefined) {
+          problems.push(`item "${item.id}": arma de distância não pode ter "ammoFamily" (lançador) E "breakChance" (arremessável) ao mesmo tempo`);
+        } else if (weapon.ammoFamily === undefined && weapon.breakChance === undefined) {
+          problems.push(`item "${item.id}": arma de distância precisa de "ammoFamily" (lançador) ou "breakChance" (arremessável)`);
+        }
+        if (weapon.ammoFamily !== undefined
+          && ![...ammunitionDefinitions.values()].some((ammo) => ammo.family === weapon.ammoFamily)) {
+          problems.push(`item "${item.id}": a família "${weapon.ammoFamily}" não tem munição no catálogo`);
+        }
       }
       if (weapon.kind === 'wand' && (weapon.manaPerHit === undefined || weapon.damage === undefined)) {
         problems.push(`item "${item.id}": wand precisa de "manaPerHit" e "damage"`);
       }
       if (weapon.kind !== 'distance' && weapon.ammoFamily !== undefined) {
         problems.push(`item "${item.id}": só arma de distância tem "ammoFamily"`);
+      }
+      if (weapon.kind !== 'distance' && weapon.breakChance !== undefined) {
+        problems.push(`item "${item.id}": só arma de distância tem "breakChance"`);
       }
       if (weapon.kind !== 'wand' && (weapon.manaPerHit !== undefined || weapon.damage !== undefined)) {
         problems.push(`item "${item.id}": só wand tem "manaPerHit" e "damage"`);
@@ -876,6 +903,12 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.spellbook && item.quiver) {
       problems.push(`item "${item.id}": spellbook e quiver são exclusivos — o escudo é um ou outro`);
+    }
+    // O bônus de perfect shot (#575) só faz sentido na peça da mão secundária — a mesma
+    // disciplina de `spellbook`/`quiver` acima, e independente dos dois (uma aljava comum tem
+    // `quiver: true` sem `perfectShot`; a eldritch quiver tem os dois).
+    if (item.perfectShot !== undefined && item.kind !== 'shield') {
+      problems.push(`item "${item.id}": "perfectShot" só faz sentido em escudo`);
     }
     if (item.ringEffect !== undefined && item.kind !== 'ring') {
       problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
@@ -957,10 +990,12 @@ export function buildContent(raw: RawContent): Content {
   }
   // A skill que escala a magia de cada vocação (#155) precisa existir — quando há skills. O
   // conteúdo de teste sem skills não tem como conferir, e não precisa: `levelOf` de skill
-  // desconhecida é zero.
+  // desconhecida é zero. `SPELL_SKILL_WEAPON` (#567) é a única exceção: é a sentinela "skill da
+  // arma equipada", nunca o id de uma skill do catálogo — não há `skills/weapon.json` para
+  // conferir contra.
   if (skills.size > 0) {
     for (const vocation of vocations.values()) {
-      if (!skills.has(vocation.spellSkill)) {
+      if (vocation.spellSkill !== SPELL_SKILL_WEAPON && !skills.has(vocation.spellSkill)) {
         problems.push(`vocation/${vocation.id}: spellSkill "${vocation.spellSkill}" não existe`);
       }
     }

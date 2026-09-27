@@ -97,7 +97,21 @@
       "idx": 13,
       "version": "7",
       "when": 1790200000000,
-      "tag": "0013_731-character-storage",
+      "tag": "0013_568-melee-skill-persisted-migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0014_731-character-storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0015_726-fed-ms",
       "breakpoints": true
     }
   ]

@@ -44,6 +44,8 @@ const inventory = (over: Partial<InventoryState> = {}): InventoryState => ({
   satchel: [],
   equipped: {},
   capacity: { used: 10, total: 400 },
+  supplies: [],
+  ammunition: [],
   ...over,
 });
 

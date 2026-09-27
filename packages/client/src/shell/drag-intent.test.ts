@@ -12,6 +12,8 @@ const inventory: Inventory = {
   satchel: [null, rock],
   equipped: { hand: { instanceId: 'h1', itemId: 'machete', quantity: 1 } },
   capacity: { used: 10, total: 400 },
+  supplies: [],
+  ammunition: [],
 };
 
 describe('dropIntent', () => {

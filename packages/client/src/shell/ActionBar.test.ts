@@ -182,3 +182,38 @@ describe('ActionBar — a fiação é presa por fonte (RF-05..RF-07)', () => {
     expect(source).toContain('sendIntent');
   });
 });
+
+describe('ActionBar — clique dispara, clique direito configura, mira (ADR 0049 decisão 1/2, #725)', () => {
+  it('o clique esquerdo manda use-slot direto (sem Shift, sem mira)', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'use-slot', set: activeSet, slot: index })");
+  });
+
+  it('um slot `needsAim` arma a mira em vez de disparar sem alvo', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('view.needsAim');
+    expect(source).toContain('aimTracker.startAim(activeSet, index)');
+  });
+
+  it('o clique direito (qualquer slot) abre o ActionConfigModal e não deixa o menu nativo abrir', async () => {
+    const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
+    // Duas ocorrências: o slot vazio e o preenchido — os dois ganham `onContextMenu`.
+    const onContextMenuCount = (source.match(/onContextMenu/g) ?? []).length;
+    expect(onContextMenuCount).toBeGreaterThanOrEqual(2);
+    expect(source).toContain('event.preventDefault(); setConfigSlot(index);');
+  });
+
+  it('o hook de teclado lê event.shiftKey (32 teclas) e Esc cancela a mira', async () => {
+    const source = await readFile(new URL('./useActionKeys.ts', import.meta.url), 'utf8');
+    expect(source).toContain('event.shiftKey');
+    expect(source).toContain("event.code === 'Escape'");
+    expect(source).toContain('aimTracker.cancelAim()');
+  });
+
+  it('Viewport e BattlePanel resolvem a mira antes de selecionar alvo de ataque', async () => {
+    const viewport = await readFile(new URL('./Viewport.tsx', import.meta.url), 'utf8');
+    expect(viewport).toContain('aimTracker.resolveAim');
+    const battlePanel = await readFile(new URL('./BattlePanel.tsx', import.meta.url), 'utf8');
+    expect(battlePanel).toContain('aimTracker.resolveAim');
+  });
+});

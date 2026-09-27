@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { sendIntent } from '../net/current.js';
 import { world } from '../state/world.js';
+import { cancelCorpseApproach } from './corpse-approach.js';
 import { cancelTileApproach } from './tile-approach.js';
 import { DEFAULT_STEP_MS, WalkKeys, directionOf, nextWalkDelay } from './walk-keys.js';
 
@@ -51,6 +52,11 @@ export function useWalkKeys(): void {
       }
       sentAtMs = performance.now();
       sendIntent({ type: 'walk', direction });
+      // Andar pelo teclado cancela um pedido de abrir cadáver (#722, ADR 0048 d.4) OU de usar
+      // um tile (#729) em curso — o jogador escolheu ir para outro lugar, e o `open-corpse`/
+      // `use-on-map` de um clique antigo não pode mandar sozinho atrás dele.
+      cancelCorpseApproach();
+      cancelTileApproach();
       timer = setTimeout(tick, Math.max(1, Math.min(DEFAULT_STEP_MS, lastStepMs)));
     };
     const tick = (): void => {
@@ -79,9 +85,6 @@ export function useWalkKeys(): void {
       const active = keys.press(event.code);
       // Direção nova (ou primeira): manda AGORA. Repetir a mesma tecla não muda o ritmo.
       if (active !== null && active !== before) {
-        // Andar pelo teclado cancela um pedido de usar tile em curso (#729) — o jogador mudou
-        // de intenção, e o `walk` já em voo não pode virar `use-on-map` de um clique antigo.
-        cancelTileApproach();
         stop();
         send();
       }

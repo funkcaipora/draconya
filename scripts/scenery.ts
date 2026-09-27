@@ -45,9 +45,16 @@ export interface CanaryTables {
   readonly levers: readonly number[];
 }
 
+/**
+ * `pressure-plate` (#734, ADR 0050 d.6 T3) não tem tabela do Canary aqui: nenhum dos quatro
+ * recortes carrega uma, e o Draconya não teve evidência de `aid` genérico o bastante para
+ * classificar por atributo (ao contrário de baú/placa/teleporte, que têm `uid`/`text`/
+ * `ATTR_TELE_DEST` como sinal único). É `kind` de AUTORIA À MÃO no JSON do mapa — a mesma
+ * decisão de `floorChanges`/`entryPoint`.
+ */
 export type InteractableKind =
   | 'door' | 'locked-door' | 'level-door' | 'quest-door' | 'grass' | 'stone-pile'
-  | 'rope-spot' | 'ladder' | 'lever' | 'chest' | 'sign' | 'teleport';
+  | 'rope-spot' | 'ladder' | 'lever' | 'chest' | 'sign' | 'teleport' | 'pressure-plate';
 
 export type InteractableTool = 'machete' | 'rope' | 'shovel' | 'pick' | 'key';
 

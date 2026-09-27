@@ -78,6 +78,7 @@ const progression: Progression = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   satchelInitialSlots: 10, containerRow: 5,
   startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
+  regeneration: { requiresFood: false },
   startingKit: [],
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
@@ -1318,5 +1319,110 @@ describe.runIf(ready)('o item que caiu vira instância pelo extrato (FUN-88)', (
     });
 
     expect(await rowsOf(database, characterId)).toHaveLength(0);
+  });
+});
+
+describe.runIf(ready)('sell-items/discard-item apagam a instância no ledger (#724, ADR 0048 d.8)', () => {
+  it('apaga a instância vendida/descartada na MESMA transação da linha de ledger', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      removedInstances: [instanceId],
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const [row] = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row).toBeUndefined();
+  });
+
+  it('reprocessar o mesmo extrato apaga zero linhas na segunda vez — retry não é erro', async () => {
+    // A chave única do ledger (`session_id`, `seq`) já barra o extrato repetido antes de chegar
+    // aqui; o `DELETE` escopado por id É idempotente por conta própria, para o caso de uma
+    // reconciliação futura reprocessar o mesmo extrato por outro caminho.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+
+    await receipts.save({ ...receiptOf(sessionId, characterId), removedInstances: [instanceId] });
+    const primeira = await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    // O mesmo extrato de novo, com outra chave — a chave única do ledger não é o que este
+    // teste prova; o `DELETE` sozinho, contra uma linha que já não existe, não pode falhar.
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), seq: 2, removedInstances: [instanceId],
+    });
+    const segunda = await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect(primeira).toEqual({ written: 1, failed: 0 });
+    expect(segunda).toEqual({ written: 1, failed: 0 });
+  });
+
+  it('não apaga instância de outro personagem, mesmo que o extrato cite o id dela', async () => {
+    // Escopado por DONO, como `applyLayout`/`applyEquipment`: um extrato não apaga item de
+    // outra conta.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const outroId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: outroId, origin: 'loot',
+    });
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      removedInstances: [instanceId],
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const [row] = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row?.id).toBe(instanceId);
+  });
+
+  it('extrato SEM `removedInstances` não toca a tabela', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await database.database.db.insert(itemInstances).values({
+      id: instanceId, itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot',
+    });
+
+    await receipts.save(receiptOf(sessionId, characterId));
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const [row] = await database.database.db
+      .select({ id: itemInstances.id })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row?.id).toBe(instanceId);
   });
 });

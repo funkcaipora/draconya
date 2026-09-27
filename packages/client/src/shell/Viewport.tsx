@@ -3,6 +3,8 @@ import type { MouseEvent } from 'react';
 import type { AssetPack } from '../assets/pack.js';
 import { sendIntent } from '../net/current.js';
 import { targetTracker } from '../state/target.js';
+import { aimTracker } from '../state/aim.js';
+import { cancelCorpseApproach, requestCorpseApproach } from './corpse-approach.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { cancelTileApproach, requestTileUse } from './tile-approach.js';
@@ -91,9 +93,25 @@ export function Viewport() {
     // O canvas é filho do Pixi; o overlay de status é irmão React. Só o clique no canvas escolhe.
     if (!(event.target instanceof HTMLCanvasElement)) return;
     const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
-    if (id === null || id === world.selfId) return;
-    // Escolher uma criatura cancela um pedido de usar tile em curso (#729) — o jogador mudou de
-    // alvo.
+    // A MIRA (AB-09, ADR 0049 decisão 2) tem prioridade sobre tudo abaixo: com ela armada, o
+    // clique no mundo completa a intenção do slot em vez de selecionar alvo de ataque —
+    // inclusive em si mesmo (cura de aliado mirada no próprio personagem é válida). Sem
+    // criatura sob o clique, a mira continua armada (só Esc/`reset` a desarmam) — clicar chão
+    // vazio não é cancelamento.
+    if (id !== null && aimTracker.resolveAim(id, sendIntent)) return;
+    if (id === null || id === world.selfId) {
+      // Sem criatura no ponto: um cadáver (#722, ADR 0048 d.4)? O clique manda `walk-to` na hora
+      // e GUARDA o pedido — `useCorpseApproach` manda `open-corpse` sozinho quando a posição
+      // própria ficar a alcance (o `world` não avisa ninguém, ADR 0007), sem recusar
+      // `too-far-away` de um clique de longe (achado da revisão do DT-01 original).
+      const groundItem = handleRef.current?.groundItemAt(event.clientX, event.clientY) ?? null;
+      if (groundItem === null) return;
+      requestCorpseApproach(groundItem.id, groundItem.position, performance.now());
+      return;
+    }
+    // Escolher uma criatura cancela um pedido de cadáver (#722/#749) OU de usar tile (#729) em
+    // curso — o jogador mudou de alvo.
+    cancelCorpseApproach();
     cancelTileApproach();
     // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O rastreador antecipa
     // a moldura no mesmo quadro e decide o toggle quando o clique é no alvo atual (#471).

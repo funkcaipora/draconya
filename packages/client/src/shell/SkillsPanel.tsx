@@ -1,10 +1,11 @@
 // O painel Skills é a leitura compacta do personagem, fixa na coluna esquerda. As escolhas de
 // linhas são preferência local de tela; os números continuam vindo integralmente do servidor.
 //
-// SV-10 (#346) acrescenta speed e as três skills de combate às seis linhas que já existiam.
+// SV-10 (#346) acrescenta speed e as skills de combate às seis linhas que já existiam.
 // `state.speed` e `state.skills` chegam prontos de `player-stats`/`session-state`
-// (`state/apply.ts`); o painel só formata — magic/melee/distance mostram o nível e passam
-// `percent` ao `StatRow`, que desenha a barra de progresso até o próximo nível.
+// (`state/apply.ts`); o painel só formata — magic/fist/club/sword/axe/distance mostram o nível e
+// passam `percent` ao `StatRow`, que desenha a barra de progresso até o próximo nível. #568 troca
+// a linha única "Corpo a Corpo" pelas quatro skills que a #567 separou por tipo de arma.
 
 import { useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
@@ -104,14 +105,20 @@ export function SkillsPanel() {
     speed: count(speed),
     stamina: staminaClock(staminaMs),
     magic: String(skills.magic.level),
-    melee: String(skills.melee.level),
+    fist: String(skills.fist.level),
+    club: String(skills.club.level),
+    sword: String(skills.sword.level),
+    axe: String(skills.axe.level),
     distance: String(skills.distance.level),
   };
 
-  // Só as três skills de combate desenham a barra — as demais linhas não têm "próximo nível".
+  // Só as skills de combate desenham a barra — as demais linhas não têm "próximo nível".
   const percents: Partial<Record<SkillId, number>> = {
     magic: skills.magic.percent,
-    melee: skills.melee.percent,
+    fist: skills.fist.percent,
+    club: skills.club.percent,
+    sword: skills.sword.percent,
+    axe: skills.axe.percent,
     distance: skills.distance.percent,
   };
 

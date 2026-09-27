@@ -3,10 +3,14 @@
 **Status:** parcial — o importador **classifica** porta, capim, stone pile, rope spot, ladder,
 alavanca, baú, placa e teleporte a partir do OTBM real (#727, ADR 0050 d.1); o mecanismo que muda
 de estado por sessão (`TileOverrides`, #728, ADR 0050 d.2-d.5, d.8) existe para o T1 (porta comum,
-capim, stone pile, alavanca) e para o T2 INTEIRO — porta de level e de chave (#732), porta de
-quest e baú com storage (#733), ADR 0050 d.6; o JOGADOR já pode acionar isso e ver o resultado —
-`use-on-map`, `look` e `tile-update` (#729, ADR 0050 d.7) — e não só o walker automático. Rope
-spot/ladder como passo de andar, e o T3 (teleporte, placa de pressão) continuam em aberto.
+capim, stone pile, alavanca), para o T2 INTEIRO — porta de level e de chave (#732), porta de
+quest e baú com storage (#733), ADR 0050 d.6 — e para o T3 inteiro (#734): teleporte de fato
+(pisar redireciona, gated por alavanca por `revertMs`) e placa de pressão (step-in/step-out, com o
+mesmo `links`/cascade da alavanca) — ver "Teleporte e placa de pressão (T3, #734)" abaixo. O
+JOGADOR já pode acionar isso e ver o resultado — `use-on-map`, `look` e `tile-update` (#729, ADR
+0050 d.7) — e não só o walker automático. Livro com texto já estava resolvido pelo mecanismo
+genérico de `look` do #729 (qualquer `kind` com `text` no conteúdo é lido — nenhum código novo
+precisou). Rope spot/ladder como passo de andar continuam em aberto.
 **PRD:** cenário e uso de item no mapa (não numerado no PRD original; nasceu do pedido "cenário,
 itens usáveis do cenário como alavancas, portas, matos... tudo 100%")
 **Épico:** E18 (Jogável ponta a ponta)
@@ -136,6 +140,52 @@ só as `appearanceKey` que algum mapa importado realmente usa (não a tabela do 
 tem centenas de portas fora dos quatro recortes do Draconya e fora do inventário do pacote
 conferido).
 
+## Teleporte e placa de pressão (T3, #734, ADR 0050 d.6)
+
+**Teleporte é pisar, não clicar.** `MovementWorld.teleportAt`/`move()` (`packages/sim/src/
+movement.ts`) tratam o teleporte como uma escada de destino arbitrário: o passo para o tile do
+teleporte é legal por si só (o tile nunca bloqueia), e SÓ ENTÃO, se o `target` do conteúdo resolve
+para um tile alcançável (dentro do mapa, sem parede, sem ninguém — `tileAdmits`), a criatura é
+redirecionada no MESMO passo — o cliente nunca a vê parada em cima do teleporte. Sem destino
+alcançável, ela simplesmente FICA no tile do teleporte, sem erro nenhum: a mesma degradação de
+`Teleport::addThing` do Canary para `destPos` inválido ou tile de destino ausente (things/sources/
+canary, ADR 0019 — só o mecanismo, nunca o script). `useOnMap` recusa `not-usable` num teleporte —
+ele reage só a pisar.
+
+Um teleporte pode ser **gated por alavanca** ("abrir teleporte por N s", o pedido original da
+#734): `initialState: 'closed'` mais `links` de uma alavanca fazem `HuntRuleset.useOnMap` da
+alavanca ligar o MESMO `#useInteractable`/cascade que já liga uma porta linkada — sem código novo
+por `kind` —, e `revertMs` no teleporte agenda o fechamento sozinho pelo `TILE_REVERT` de sempre
+(capim/stone pile). "Remover parede" do mesmo pedido já estava coberto: uma alavanca ligando um
+`door` é exatamente isso, sem mecanismo adicional.
+
+**Placa de pressão** (`kind: 'pressure-plate'`, novo neste schema — sem tabela do Canary
+correspondente nos quatro recortes; é conteúdo AUTORADO à mão, como `floorChanges`/`entryPoint`)
+reage a step-in/step-out pelo MESMO choke point de movimento que a rota do bot usa
+(`HuntRuleset#step`, "o único lugar que escreve posição"): pisar pressiona (`up`→`down`) e solta
+ao sair (`down`→`up`), com o MESMO `links`/`TILE_REVERT` da alavanca — vale para jogador E monstro
+(`character` é `null` no `#useInteractable` de um monstro; ferramenta exigida simplesmente nunca
+casa, e nenhum conteúdo real declara uma). Nunca bloqueia, em nenhum dos dois estados. `useOnMap`
+recusa `not-usable` — placa reage só a pisar, nunca a clique. **Limite aceito:** o release só
+dispara pelo passo NORMAL de saída; uma criatura removida do tile por outro caminho (morte, saída
+da sessão) não solta a placa sozinha — content que precise da garantia declara `revertMs` na
+própria placa como rede de segurança. Nenhum dos quatro mapas usa placa hoje.
+
+**`tile-update` passivo** (#734): antes desta issue, só `useOnMap` explícito broadcastava
+`tile-update` — o walker abrindo porta/capim sozinho (#728), o `TILE_REVERT` do capim/stone
+pile/teleporte-gated e a placa de pressão nunca tinham mensagem nenhuma além do resync completo
+de `session-attach`. `HuntRuleset.tileOverrideAppearances` (leitura de TODO interativo, não só
+quem difere do `initialState` como `tileAppearanceChanges`) mais `HostedSession.
+sentTileOverrides`/`#presentTileOverrides` (`packages/server/src/game/host.ts`) fecham essa
+lacuna a cada ciclo com visualizador — o mesmo mecanismo de `sentBestiary`/`sentStats`.
+
+**Os quatro teleportes de Thais (#727) nunca redirecionam hoje.** `target` só entra em
+`interactables[]` quando cai DENTRO do recorte importado (`scripts/import-map.ts`, convertido
+para coordenada local, como `at`); os quatro de Thais apontam para fora dele (dois com `destPos`
+(0,0,0) — o "inválido" do próprio Canary — e dois para outra área nunca trazida para este corte),
+então nenhum tem `target` no conteúdo versionado. Comportamento correto e esperado, não um defeito
+desta issue: pisar neles simplesmente não faz nada, como o Canary faz para um `destPos` sem tile.
+
 ## Os quatro mapas (medido em 2026-09-27, pacote 1533, `otservbr.otbm` v3.6.1)
 
 | Mapa | Interativos | Contagem por `kind` |
@@ -187,8 +237,15 @@ número de TILES com essa classificação, não de portas fisicamente distintas.
   "Porta de quest e baú com `uid`" acima. Como em #732, `requires.storageKey`/`reward` REAIS dos
   3 quest-doors e 3 chests de Thais ficam de fora — sem o OTBM de origem e sem quest desenhada,
   fica para quando um dos dois existir, ou como issue própria de wiring do importador.
-- `[ABERTO]` T3 (teleporte de fato, placa de pressão, livro com texto por página) — ADR 0050,
-  escopo três camadas.
+- ~~`[ABERTO]` T3 (teleporte de fato, placa de pressão, livro com texto por página) — ADR 0050,
+  escopo três camadas.~~ → **Resolvido (#734):** ver "Teleporte e placa de pressão (T3, #734)"
+  acima. Livro já estava coberto pelo `look` genérico do #729. Nenhum dos quatro mapas tem placa
+  de pressão real, e nenhum dos quatro teleportes de Thais tem destino dentro do recorte
+  importado — o mecanismo é validado por teste, não por conteúdo real ainda.
+- `[ABERTO]` Livro com PÁGINAS (mais de um `text`, navegação entre elas) — a #734 confirmou que o
+  esquema atual (um `text` por interativo) cobre placa e livro de página única; um livro com mais
+  de uma página exigiria um campo novo (`pages: string[]`) e um protocolo de "virar página" que
+  nenhum dos quatro mapas precisa hoje.
 - `[ABERTO]` Rope spot e ladder como passo de andar (o walker atravessando, `floorChange` por
   `use`) — o plano original das W8-W10 os lista no T1, mas o pedido desta issue (#728) restringiu
   o escopo a porta/capim/stone-pile/alavanca; ficou para uma issue de acompanhamento.

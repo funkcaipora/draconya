@@ -1877,7 +1877,7 @@ Isso é fundamental para bot server-side com troca automática de ring.
 
 ---
 
-# 26. Ground items, stack position e corpses — o que rejeitar
+# 26. Ground items, stack position e corpses — o que rejeitar (emendado pelo ADR 0048)
 
 OpenTibia possui forte semântica de:
 
@@ -1892,23 +1892,37 @@ corpse container
 
 Isso é necessário para o cliente/protocolo Tibia.
 
-O Draconya deliberadamente simplifica loot:
+O Draconya simplifica loot, mas **o ADR 0048 (2026-09-26) reverteu a rejeição do cadáver como
+container** que esta seção registrava: o cadáver do monstro CARREGA o loot sorteado
+(`CorpseState.items`, `packages/sim/src/rulesets/hunt.ts`), com dono (`ownerId`/`eligible`) e um
+filtro de Quick Loot por personagem (`botConfig.loot`) que coleta no abate, sem plateia
+(invariante 3) — o mecanismo do próprio Tibia 13 (`quickLootFilter`/`autoLoot` no Canary), não
+uma invenção. A Caixa de Loot da Sessão que esta seção citava saiu (decisão 7): o que não cabe
+por capacidade fica no cadáver até ele decair, como o Canary faz (`RETURNVALUE_NOTENOUGHCAPACITY`
+deixa o item onde estava). Continua rejeitado:
 
-- item não precisa cair fisicamente;
-- auto-sell pode transformar direto em gold;
-- loot session box existe;
-- cadáver como container não é requisito.
+- `stack position`/`down items`/`top items` do protocolo Tibia — o cliente não empilha por tile;
+- item largado pelo JOGADOR (`drop-item`) — o único container no chão continua sendo o cadáver,
+  nunca um item solto por decisão de quem joga;
+- item físico fora do cadáver na Cidade — o chão compartilhado morreria de lixo sem sessão dona
+  para expirar.
 
 Portanto:
 
-> **não reproduzir o sistema de stackpos/corpse como requisito de engine.**
+> **reproduzir o cadáver como container (dono, filtro, decadência), e continuar rejeitando
+> stack position e item largado pelo jogador.**
 
-Manter apenas o que for necessário para:
+Manter, além do cadáver:
 
 - render layering;
 - tile blocking;
 - field effects;
 - interactive objects.
+
+Ver ADR 0048 (`docs/adr/0048-corpse-loot-and-per-character-quick-loot-filter.md`) para o
+contexto completo — inclusive por que a alternativa "item cai no chão como no Tibia" foi
+descartada (sessão instanciada morre com o chão, e a Cidade compartilhada não tem onde o item
+expirar).
 
 ---
 
