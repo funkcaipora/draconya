@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
-import { balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
+import { actionExhaustKey, balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
+import { normalRandomInt } from './combat/weapon-power.js';
 import { Rng } from './rng.js';
 
 // Esquiva zero e armadura que conta inteira: aqui o assunto é o PORTÃO — level, cooldown,
@@ -835,6 +836,79 @@ describe('a poção do Tibia — faixa fixa, espírito e requisito de vocação 
     const recusa = useSupply(sorcerer, strongHeal);
     expect(recusa.ok).toBe(false);
     if (!recusa.ok) expect(recusa.retryInMs).toBe(0);
+  });
+
+  // #690: o `doTargetCombatHealth`/`doTargetCombatMana` do Canary sorteia pela normal truncada;
+  // só o `combat-v3` troca, `combat-v1`/`v2` seguem uniformes bit a bit (ADR 0031).
+  const combatV2: Combat = { ...combat, compatibilityProfile: 'combat-v2' };
+  const combatV3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+  const paladin = (): CharacterRuntime => {
+    const runtime = bigHero({ level: 90, health: 10, mana: 0, gold: 1_000 });
+    runtime.vocationId = 'paladin';
+    return runtime;
+  };
+
+  it('`combat-v3` sorteia a faixa pela normal truncada: mesma semente = `normalRandomInt`', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const expected = Rng.fromSeed(`n${seed}`);
+      const heal = normalRandomInt(expected, 250, 350);
+      const result = useSupply(paladin(), strongHeal, null, combatV3, Rng.fromSeed(`n${seed}`));
+      expect(result).toMatchObject({ ok: true, healed: heal });
+    }
+  });
+
+  it('`combat-v2` continua no `rng.integer` uniforme — a normal não vaza para v1/v2', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const heal = Rng.fromSeed(`u${seed}`).integer(250, 350);
+      const result = useSupply(paladin(), strongHeal, null, combatV2, Rng.fromSeed(`u${seed}`));
+      expect(result).toMatchObject({ ok: true, healed: heal });
+    }
+  });
+
+  it('`combat-v3` na poção de mana e na de espírito: vida sorteia ANTES da mana', () => {
+    const expectedMana = normalRandomInt(Rng.fromSeed('m'), 115, 185);
+    expect(useSupply(paladin(), strongMana, null, combatV3, Rng.fromSeed('m')))
+      .toMatchObject({ ok: true, manaRestored: expectedMana });
+
+    const sequence = Rng.fromSeed('spirit-v3');
+    const heal = normalRandomInt(sequence, 250, 350);
+    const mana = normalRandomInt(sequence, 100, 200);
+    expect(useSupply(paladin(), spirit, null, combatV3, Rng.fromSeed('spirit-v3')))
+      .toMatchObject({ ok: true, healed: heal, manaRestored: mana });
+  });
+});
+
+describe('a exaustão de ação compartilhada entre poção e runa (#690)', () => {
+  const exhaustingPotion: Supply = { ...potion, actionExhaustMs: 1_000 };
+
+  it('o uso trava `exhaust:action` pelo `actionExhaustMs` do supply', () => {
+    const user = hero({ health: 10, gold: 1_000 });
+    expect(useSupply(user, exhaustingPotion, null, undefined, undefined, undefined, undefined, user, 5_000).ok)
+      .toBe(true);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 5_000)).toBe(1_000);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 5_600)).toBe(400);
+  });
+
+  it('supply SEM `actionExhaustMs` não entra no livro (fixture, Magic Shield Potion)', () => {
+    const user = hero({ health: 10, gold: 1_000 });
+    expect(useSupply(user, potion, null, undefined, undefined, undefined, undefined, user, 0).ok).toBe(true);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 0)).toBe(0);
+  });
+
+  it('o livro só AVANÇA: uma exaustão curta nunca encurta a que já corre', () => {
+    const user = hero({ health: 10, gold: 1_000 });
+    const long: Supply = { ...potion, id: 'long', actionExhaustMs: 3_000 };
+    const short: Supply = { ...potion, id: 'short', group: 'healing', actionExhaustMs: 1_000 };
+    useSupply(user, long, null, undefined, undefined, undefined, undefined, user, 0);
+    useSupply(user, short, null, undefined, undefined, undefined, undefined, user, 500);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 500)).toBe(2_500);
+  });
+
+  it('uso recusado (sem gold) não trava nada', () => {
+    const user = hero({ health: 10, gold: 0 });
+    expect(useSupply(user, exhaustingPotion, null, undefined, undefined, undefined, undefined, user, 0).ok)
+      .toBe(false);
+    expect(user.cooldowns.remainingMs(actionExhaustKey(), 0)).toBe(0);
   });
 });
 

@@ -92,8 +92,9 @@ TP-03 (M22). Ver `economy.md` e `bot.md`.
 
 | Suprimento | Efeito | `group` | `price` | Arquivo |
 |---|---|---|---|---|
-| `health-potion` | `heal` 80 | `potion` | 45 | `data/supplies/health-potion.json` |
-| `mana-potion` | `mana` 100 | `potion` | 50 | `data/supplies/mana-potion.json` |
+| `small-health-potion` | `heal` 60–90 (Canary id 7876) | `potion` | 20 | `data/supplies/small-health-potion.json` |
+| `health-potion` | `heal` 125–175 (Canary id 266; era 80 fixo até o #690) | `potion` | 45 | `data/supplies/health-potion.json` |
+| `mana-potion` | `mana` 75–125 (Canary id 268; era 100 fixo até o #690) | `potion` | 50 | `data/supplies/mana-potion.json` |
 | `avalanche-rune` | `damage` gelo, BP 45, raio 3, alcance 8, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
 
 As nove poções do Tibia (#524, kit level 200): faixa **fixa** sorteada por uso (`effect.amountRange`,
@@ -112,6 +113,26 @@ de NPC do Tibia (TibiaWiki via tibiascape.com).
 | `ultimate-mana-potion` | `mana` 425–575 | level 130, Sorcerer/Druid | 350 | `data/supplies/ultimate-mana-potion.json` |
 | `great-spirit-potion` | `heal` 250–350 **+** `alsoMana` 100–200 | level 80, Paladin | 225 | `data/supplies/great-spirit-potion.json` |
 | `ultimate-spirit-potion` | `heal` 420–580 **+** `alsoMana` 250–350 | level 130, Paladin | 450 | `data/supplies/ultimate-spirit-potion.json` |
+
+**O sorteio da faixa depende do perfil de combate** (#690, ADR 0031): no `combat-v3` é o
+`normal_random(min, max)` do Canary (`doTargetCombatHealth`/`doTargetCombatMana`), a normal
+truncada de `normalRandomInt` (`sim/combat/weapon-power.ts`) — o meio da faixa sai mais que as
+pontas; no `combat-v1`/`v2` continua uniforme (`rng.integer`), bit a bit. A poção de espírito sorteia
+vida ANTES da mana, a ordem de `potions.lua`. Sem `rng` (fixture), a faixa cai no mínimo. Os preços de
+NPC do Canary (Health 50, Mana 56) são da #574; o Draconya segue com 45 e 50.
+
+**Exaustão de ação compartilhada** (#690): toda poção e toda runa declaram `actionExhaustMs: 1000`
+(o `timeBetweenExActions` do Canary) e travam o MESMO livro, `exhaust:action` (`actionExhaustKey`,
+`sim/casting.ts`) — o `nextPotionAction` que o `Actions::useItem` do Canary inicia para runa **ou**
+poção. Os grupos (`potion`, `attack`, `healing`) continuam livros separados e valem ao mesmo tempo:
+uma poção logo depois de uma runa de ataque espera 1000 ms, e outra runa de ataque espera os 2000 ms
+do grupo. O livro só AVANÇA (grava o maior entre o que falta e o novo prazo, como o
+`setNextPotionAction`), viaja no snapshot em `cooldowns` e é da pessoa que USA, não de quem paga na
+party. O uso durante a exaustão é ADIADO, não perdido: o bot volta no vencimento (`retryInMs`), como o
+`playerUseItemEx` do Canary. Supply sem o campo não trava nem lê o livro (fixtures e, na #576, a
+Magic Shield Potion, que o Canary tira da exaustão). Magia não lê este livro. Consequência: uma regra de
+poção que vale SEMPRE, com o grupo de 1000 ms, ganha todo empate no vencimento e deixa a runa sem vez
+— o mesmo que apertar a poção a cada segundo no Canary.
 
 `effect.alsoMana` (#524) é o mecanismo novo da poção de espírito: repõe vida **e** mana no MESMO uso,
 um único `useSupply`. Fica dentro do `kind: 'heal'` — e não vira um quinto `kind` — para não duplicar

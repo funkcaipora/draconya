@@ -24,6 +24,7 @@ import { resolveDamage } from './combat/damage.js';
 import type { DamageOutcome } from './combat/damage.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
+import { normalRandomInt } from './combat/weapon-power.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
 
@@ -160,6 +161,15 @@ export function groupCooldownKey(group: string): string {
  */
 export function supplyCooldownKey(supplyId: string): string {
   return `supply:${supplyId}`;
+}
+
+/**
+ * O livro da exaustão de AÇÃO compartilhada (#690): o `nextPotionAction` do Canary, que poção e
+ * runa travam JUNTAS (`Actions::useItem`, `timeBetweenExActions`). Atravessa os grupos — por
+ * isso não é `group:<g>` — e só o supply que declara `actionExhaustMs` o trava ou o lê.
+ */
+export function actionExhaustKey(): string {
+  return 'exhaust:action';
 }
 
 export function secondaryCooldownKey(name: string): string {
@@ -485,9 +495,15 @@ function fixedAmount(
   amount: number | undefined,
   range: { readonly min: number; readonly max: number } | undefined,
   rng: Rng | undefined,
+  /**
+   * `combat-v3` (#690): o `normal_random(min, max)` do Canary (`doTargetCombatHealth`/
+   * `doTargetCombatMana`). `combat-v1`/`v2` continuam no uniforme, bit a bit (ADR 0031).
+   */
+  normal = false,
 ): number {
-  if (range !== undefined) return rng === undefined ? range.min : rng.integer(range.min, range.max);
-  return amount ?? 0;
+  if (range === undefined) return amount ?? 0;
+  if (rng === undefined) return range.min;
+  return normal ? normalRandomInt(rng, range.min, range.max) : rng.integer(range.min, range.max);
 }
 
 /**
@@ -644,13 +660,19 @@ export function useSupply(
     startSupplyCooldown(user, supply, nowMs);
     // Poção: `amount` fixo OU `amountRange` sorteado (#524), sem contexto de combate — a runa
     // de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
-    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava.
+    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava. A
+    // vida sorteia ANTES da mana, a ordem de `potions.lua` — e a ordem do sorteio é contrato.
+    const normal = combat?.compatibilityProfile === 'combat-v3';
+    const healed = restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng, normal));
     return {
       ok: true,
-      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng)),
+      healed,
       manaRestored: effect.alsoMana === undefined
         ? 0
-        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng)),
+        : restore(
+          recipient, 'mana',
+          fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng, normal),
+        ),
       damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
     };
   }
@@ -676,7 +698,13 @@ export function useSupply(
   return {
     ok: true,
     healed: 0,
-    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng)),
+    manaRestored: restore(
+      recipient, 'mana',
+      fixedAmount(
+        supply.effect.amount, supply.effect.amountRange, rng,
+        combat?.compatibilityProfile === 'combat-v3',
+      ),
+    ),
     damage: 0,
     hits: NO_HITS,
     goldSpent: paidFromStockMana ? 0 : supply.price,
@@ -691,6 +719,13 @@ export function useSupply(
 function startSupplyCooldown(user: CharacterRuntime, supply: Supply, nowMs: number | undefined): void {
   if (nowMs === undefined) return;
   user.cooldowns.start(groupCooldownKey(supply.group), nowMs, supply.groupCooldownMs);
+  // A exaustão de ação compartilhada (#690) só AVANÇA, como o `setNextPotionAction` do Canary:
+  // `Cooldowns.start` sobrescreve o prazo, então só se grava quando o novo é MAIOR que o que
+  // falta — um supply de exaustão curta nunca encurta a de outro.
+  if (supply.actionExhaustMs !== undefined
+    && user.cooldowns.remainingMs(actionExhaustKey(), nowMs) < supply.actionExhaustMs) {
+    user.cooldowns.start(actionExhaustKey(), nowMs, supply.actionExhaustMs);
+  }
 }
 
 /**

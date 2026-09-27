@@ -31,7 +31,7 @@ import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource } from '../area.js';
 import {
-  NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
+  NOT_IN_CATALOG, actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey,
   ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
@@ -3780,6 +3780,14 @@ const slots = bot.groups.get(group);
         this.#scheduleBot(session, group, characterId, this.#botCooldownMs());
         return;
       }
+      // A exaustão de ação compartilhada (#690): a poção logo depois de uma runa ESPERA — o
+      // "adiar" do `playerUseItemEx` do Canary é a volta no vencimento, como a recusa por
+      // cooldown. Nada é pago nem sorteado antes dela.
+      const exhaustWait = this.#actionExhaustWaitOf(character, slot.act, session.nowMs);
+      if (exhaustWait > 0) {
+        if (exhaustWait > retryInMs) retryInMs = exhaustWait;
+        continue;
+      }
       const result = this.#perform(session, character, slot.act, recipient);
       if (result.ok) {
         // O grupo trancou: o próximo vencimento é o cooldown DELE (do conteúdo), não um 1 s
@@ -4644,6 +4652,11 @@ const slots = bot.groups.get(group);
    * `spell:<id>` é consultado à parte — sem isso, uma magia de `cooldownMs: 4000` num grupo de
    * `1000` aparecia `ready` no `slotStates` e o `#perform` recusava por 3 s (DT-08). O supply
    * usa o mesmo caminho com o livro do grupo. Zero é "pode executar".
+   *
+   * O supply que declara `actionExhaustMs` (#690) lê também a exaustão de ação compartilhada
+   * (`exhaust:action`), que atravessa os grupos: a poção logo depois de uma runa de ataque
+   * ESPERA, como o `nextPotionAction` do Canary — o uso é adiado pelo `retryInMs`, não perdido.
+   * Magia não lê este livro: a falada do Canary usa `nextAction`/`spellCooldown`, outro relógio.
    */
   #cooldownWaitOf(character: CharacterRuntime, action: BotActionV2, nowMs: number): number {
     const { cooldownKey, group } = this.#cooldownOf(action);
@@ -4654,7 +4667,20 @@ const slots = bot.groups.get(group);
       character.cooldowns.remainingMs(cooldownKey, nowMs),
       character.cooldowns.remainingMs(groupCooldownKey(group), nowMs),
       character.cooldowns.remainingMs(individualKey, nowMs),
+      this.#actionExhaustWaitOf(character, action, nowMs),
     );
+  }
+
+  /**
+   * Quanto falta para a exaustão de ação compartilhada (#690) liberar ESTA ação. Zero para magia,
+   * para item e para o supply que não declara `actionExhaustMs` (fixture, Magic Shield Potion):
+   * só quem trava o livro o lê. O ciclo automático do bot o confere antes de `#perform`, porque
+   * poção e runa moram em grupos de bot DIFERENTES e cada grupo só se reagenda pelo próprio livro.
+   */
+  #actionExhaustWaitOf(character: CharacterRuntime, action: BotAction, nowMs: number): number {
+    if (action.kind !== 'supply') return 0;
+    if (this.#options.supplies.get(action.supplyId)?.actionExhaustMs === undefined) return 0;
+    return character.cooldowns.remainingMs(actionExhaustKey(), nowMs);
   }
 
   /**

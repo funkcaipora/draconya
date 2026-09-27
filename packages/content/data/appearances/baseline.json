@@ -415,6 +415,9 @@
     "mana-potion": {
       "effect": 13
     },
+    "small-health-potion": {
+      "effect": 14
+    },
     "strong-health-potion": {
       "effect": 14
     },
