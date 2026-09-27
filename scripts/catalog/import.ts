@@ -23,6 +23,7 @@ import { getCatalogType, listCatalogTypes } from './registry.js';
 
 // Importar aqui (só pelo efeito colateral de `registerCatalogType`) é como um `<tipo>` novo
 // entra no comando — uma linha por tipo.
+import './items.js';
 import './monsters.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
