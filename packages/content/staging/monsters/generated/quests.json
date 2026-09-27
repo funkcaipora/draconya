@@ -5643,7 +5643,7 @@
     "health": 300000,
     "experience": 30000,
     "attack": {
-      "min": 600,
+      "min": 0,
       "max": 800
     },
     "armor": 10,
@@ -5686,7 +5686,7 @@
           "range": 1
         },
         "power": {
-          "min": 600,
+          "min": 0,
           "max": 800
         },
         "damageType": "physical",
@@ -6830,7 +6830,7 @@
     "health": 975,
     "experience": 850,
     "attack": {
-      "min": 10,
+      "min": 0,
       "max": 250
     },
     "armor": 30,
@@ -6986,7 +6986,7 @@
     "health": 1150,
     "experience": 1000,
     "attack": {
-      "min": 10,
+      "min": 0,
       "max": 360
     },
     "armor": 30,
@@ -7138,7 +7138,7 @@
     "health": 1650,
     "experience": 1100,
     "attack": {
-      "min": 10,
+      "min": 0,
       "max": 580
     },
     "armor": 30,
@@ -41126,7 +41126,7 @@
     "health": 300000,
     "experience": 30000,
     "attack": {
-      "min": 600,
+      "min": 0,
       "max": 1050
     },
     "armor": 160,
@@ -41283,7 +41283,7 @@
           "range": 1
         },
         "power": {
-          "min": 600,
+          "min": 0,
           "max": 1050
         },
         "damageType": "physical",
@@ -43069,7 +43069,7 @@
     "health": 420000,
     "experience": 30000,
     "attack": {
-      "min": 600,
+      "min": 0,
       "max": 1050
     },
     "armor": 150,
@@ -43259,7 +43259,7 @@
           "range": 1
         },
         "power": {
-          "min": 600,
+          "min": 0,
           "max": 1050
         },
         "damageType": "physical",
@@ -44990,7 +44990,7 @@
     "health": 300000,
     "experience": 30000,
     "attack": {
-      "min": 600,
+      "min": 0,
       "max": 1050
     },
     "armor": 10,
@@ -45153,7 +45153,7 @@
           "range": 1
         },
         "power": {
-          "min": 600,
+          "min": 0,
           "max": 1050
         },
         "damageType": "physical",

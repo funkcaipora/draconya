@@ -66,6 +66,18 @@ describe('mapSpell — ataques', () => {
     if (mapping.kind === 'ability') expect(mapping.ability['kind']).toBe(ABILITY_KIND_SUPPORTED ? 'melee' : undefined);
   });
 
+  it('melee por skill/attack (#684): a faixa sai de meleePower, e o 0..0 do Canary é mapeado, não pulado', () => {
+    const bySkill = map({ name: 'melee', interval: 2000, chance: 100, skill: 50, attack: 82 });
+    expect(bySkill.kind === 'ability' && bySkill.meleeVia).toBe('skill-attack');
+    expect(abilityOf(bySkill)).toMatchObject({ id: 'melee', power: { min: 0, max: 247 } });
+    const negative = map({ name: 'melee', interval: 2000, chance: 100, skill: 70, attack: -100 });
+    expect(negative.kind === 'ability' && negative.meleeVia).toBe('none');
+    expect(abilityOf(negative)).toMatchObject({ id: 'melee', power: { min: 0, max: 0 } });
+    const oneSide = map({ name: 'melee', interval: 2000, maxDamage: -90 });
+    expect(oneSide.kind === 'ability' && oneSide.meleeVia).toBe('none');
+    expect(abilityOf(oneSide)).toMatchObject({ id: 'melee', power: { min: 0, max: 0 } });
+  });
+
   it('combat: bola no alvo, estouro no lançador, alvo único à distância, com as chaves de apresentação', () => {
     expect(abilityOf(map({
       name: 'combat', interval: 2000, chance: 15, type: 'fire', minDamage: -60, maxDamage: -140,

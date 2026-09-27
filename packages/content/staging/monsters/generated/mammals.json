@@ -582,7 +582,7 @@
     "health": 900,
     "experience": 475,
     "attack": {
-      "min": 40,
+      "min": 0,
       "max": 289
     },
     "armor": 45,
@@ -642,7 +642,7 @@
           "range": 1
         },
         "power": {
-          "min": 40,
+          "min": 0,
           "max": 289
         },
         "damageType": "physical",
