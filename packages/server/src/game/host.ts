@@ -2564,6 +2564,8 @@ export class SessionHost {
         case 'creature-health-changed':
         case 'ground-item-appeared':
         case 'ground-item-vanished':
+        case 'field-appeared':
+        case 'field-vanished':
           this.#presentPresence(hosted, event);
           continue;
         case 'creature-hit':
@@ -2683,6 +2685,26 @@ export class SessionHost {
     }
     if (event.kind === 'ground-item-vanished') {
       const vanished: S2CMessage = { type: 'ground-item-disappear', id: event.itemId };
+      for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
+    // O campo de tile (#561, M31-06): o `sim` disse qual id de conteúdo e quais tiles; a arte
+    // é da tabela — a MESMA indireção de `ground-item-appear` resolvendo `corpses`. Campo sem
+    // linha em `appearances.fields` não aparece, e ninguém fica sabendo, de propósito.
+    if (event.kind === 'field-appeared') {
+      const appearanceId = this.#options.appearances?.fields[event.fieldId];
+      if (appearanceId === undefined) return;
+      const appeared: S2CMessage = {
+        type: 'field-appear', id: event.fieldId, tiles: [...event.tiles], appearanceId,
+      };
+      for (const viewer of hosted.viewers) viewer.send(appeared);
+      return;
+    }
+    if (event.kind === 'field-vanished') {
+      // MUDO como o aparecimento (invariante 6): sem linha na tabela, o cliente nunca recebeu
+      // um `field-appear` para este id, e mandar o sumiço seria apagar algo que nunca chegou.
+      if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
+      const vanished: S2CMessage = { type: 'field-disappear', id: event.fieldId };
       for (const viewer of hosted.viewers) viewer.send(vanished);
       return;
     }
@@ -4198,6 +4220,14 @@ export class SessionHost {
         // difere do inicial, para quem reanexa aplicar por cima da pilha estática que já
         // carrega — a MESMA resolução de `tile-update`, pela tabela `appearances.scenery`.
         tileUpdates: this.#tileUpdatesFor(ruleset.tileAppearanceChanges ?? []),
+        // Os campos ATIVOS agora (#561, M31-06), com a arte da tabela; sem linha, sem campo —
+        // a MESMA regra de `groundItems` acima.
+        fields: (ruleset.fields ?? []).flatMap((field) => {
+          const appearanceId = this.#options.appearances?.fields[field.id];
+          return appearanceId === undefined
+            ? []
+            : [{ id: field.id, tiles: [...field.tiles], appearanceId }];
+        }),
       },
       // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.
       aggregates: { ...session.aggregatesOf(characterId) },

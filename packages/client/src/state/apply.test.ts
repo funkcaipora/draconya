@@ -109,7 +109,7 @@ describe('world deltas', () => {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
@@ -136,13 +136,45 @@ describe('world deltas', () => {
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       world: {
-        mapId: 'rat-cellars', creatures: [], tileUpdates: [],
+        mapId: 'rat-cellars', creatures: [], tileUpdates: [], fields: [],
         groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }],
       },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
     expect([...world.groundItems.keys()]).toEqual([9]);
+  });
+
+  it('fields: appear, disappear, and the session-state replaces them (#561, M31-06)', () => {
+    // O campo é por id de CONTEÚDO (não numérico como o cadáver): relançar o MESMO id
+    // substitui a entrada, e o estado completo substitui os que sumiram sem ninguém olhar.
+    const before = world.fieldsVersion;
+    applyMessage({
+      type: 'field-appear', id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2118,
+    }, 0);
+    expect(world.fields.get('fire')).toEqual({ id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2118 });
+    expect(world.fieldsVersion).toBe(before + 1);
+    applyMessage({ type: 'field-disappear', id: 'fire' }, 0);
+    expect(world.fields.has('fire')).toBe(false);
+    applyMessage({ type: 'field-disappear', id: 'fire' }, 0);
+    expect(world.fieldsVersion).toBe(before + 2);
+    applyMessage({
+      type: 'field-appear', id: 'poison', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2121,
+    }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: {
+        mapId: 'rat-cellars', creatures: [], tileUpdates: [], groundItems: [],
+        fields: [{ id: 'energy', tiles: [{ x: 3, y: 3, z: 8 }], appearanceId: 2122 }],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
+      notableEvents: [],
+    }, 0);
+    expect([...world.fields.keys()]).toEqual(['energy']);
   });
 
   it('removes a creature that disappeared', () => {
@@ -187,7 +219,7 @@ describe('cenário usável: tile-update, look-result e o overlay do session-stat
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       world: {
-        mapId: 'rat-cellars', creatures: [], groundItems: [],
+        mapId: 'rat-cellars', creatures: [], groundItems: [], fields: [],
         tileUpdates: [{ position: { x: 4, y: 2, z: 7 }, replace: [{ from: 1638, to: 1639 }] }],
       },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
@@ -254,7 +286,7 @@ describe('as cores de outfit (FUN-104)', () => {
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], tileUpdates: [],
+      world: { groundItems: [], tileUpdates: [], fields: [],
         mapId: 'rat-cellars',
         creatures: [
           { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1, colors },
@@ -426,7 +458,7 @@ describe('combat transients (FUN-106)', () => {
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 0);
@@ -619,7 +651,7 @@ describe('session-state', () => {
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
       speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], tileUpdates: [],
+    world: { groundItems: [], tileUpdates: [], fields: [],
       mapId: 'rat-cellars',
       creatures: creatures.map((c) => ({
         id: c.id, position: at(c.x, c.y), appearanceId: 1,
@@ -726,7 +758,7 @@ describe('o analisador (FUN-83)', () => {
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
       speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120,
       kills: 12, deaths: 0, itemsLooted: 4, suppliesUsed: 7, bestBasicHit: 88,
@@ -815,7 +847,7 @@ describe('o analisador ao vivo (FUN-110)', () => {
         creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35,
         level: 8, xp: 4_200, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
       notableEvents: [{ atMs: 1_000, type: 'level-up' }],
     }, 5_000);
@@ -876,7 +908,7 @@ describe('a party v2 no estado (#405, ADR 0035)', () => {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -979,7 +1011,7 @@ describe('o follow-state do bot (#406, ADR 0035 d.9)', () => {
         creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 1);
@@ -994,7 +1026,7 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -1236,7 +1268,7 @@ describe('jogadores online (SV-07/SV-15, #351)', () => {
       health: 100, maxHealth: 100, mana: 50, maxMana: 50, level: 1, xp: 0, vocationId: null,
       speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], tileUpdates: [], mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,

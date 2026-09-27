@@ -1762,10 +1762,21 @@ interface FieldSpec {                     // declarado em content
 - **Tique x vencimento.** No instante em que o tique do campo cai no vencimento, o VENCIMENTO
   vence (é agendado primeiro) e o tique encontra o campo removido. É a única ordem, e é testada.
   Alvo morto não tiqueta, e o campo é INDEPENDENTE: continua no chão até o próprio prazo.
-- **Sem arte (invariante 6).** Campo não tem `appearanceId`; a apresentação do tique reusa
-  `creature-hit` + `creature-health-changed`, e a ausência de aparência não muda a mecânica.
 - **Snapshot aditivo.** `MonsterState.conditions` e `HuntRulesetState.fields` são opcionais e o
   `tick` antigo (sem `kind`) lê como cura. `SNAPSHOT_FORMAT_VERSION` **não sobe**.
+- **O campo agora aparece no mundo (#561, M31-06).** `applyField` emite `field-appeared` (id de
+  conteúdo + os tiles da forma) ao aplicar OU relançar o mesmo id; `#onFieldExpire` emite
+  `field-vanished` quando de fato removeu um campo — a MESMA indireção de
+  `ground-item-appeared` resolvendo `corpses` (invariante 6): o `sim` diz QUE campo e ONDE, a
+  arte é `appearances.fields` (`id de conteúdo → appearanceId`), resolvida só no hospedeiro.
+  Campo sem linha na tabela é MUDO — a mecânica do tique (acima) não muda, só a apresentação —,
+  e o `session-state.world.fields` leva os campos ATIVOS para quem reanexa no meio da hunt,
+  como `session-state.world.groundItems` já leva os cadáveres. Opcodes S2C `field-appear` (40) e
+  `field-disappear` (41). **Trocar de ESTÁGIO (a cadeia `decayTo` do fogo do Canary) continua
+  fora do escopo aqui**: o `sim` só tem UM campo por relançamento, sem a cadeia decrescente de
+  estágios — isso é o #560 (M31-05), ainda não implementado; o protocolo desta issue não reserva
+  opcode nenhum para isso, porque a forma de uma mensagem de estágio depende de como o #560
+  vier a representar a cadeia no `sim`.
 
 **Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
 e a UI detalhada de buff.

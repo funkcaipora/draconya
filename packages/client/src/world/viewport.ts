@@ -599,7 +599,7 @@ export async function mountViewport(
     const floorsKey = floors.join(',');
     // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele. E o cenário usável
     // (#729): a porta que abriu repinta o tile dela, sem esperar a janela andar.
-    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}:${world.tileOverridesVersion}`;
+    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}:${world.tileOverridesVersion}:${world.fieldsVersion}`;
     if (key === painted) return;
     painted = key;
     terrainRepaints += 1;
@@ -608,6 +608,18 @@ export async function mountViewport(
     // no mesmo lugar em que o tile é pintado.
     let paintedTiles = 0;
 
+    // Os campos por tile, ANTES dos itens do chão (#561, M31-06): a chama fica sob o cadáver
+    // que cair em cima dela, como o Tibia empilha. Um campo cobre vários tiles de uma vez, e a
+    // varredura é a mesma — só na repintura.
+    const fieldsAt = new Map<string, StackedItem[]>();
+    for (const field of world.fields.values()) {
+      for (const tile of field.tiles) {
+        const at = `${tile.x},${tile.y},${tile.z}`;
+        const list = fieldsAt.get(at) ?? [];
+        list.push({ id: field.appearanceId });
+        fieldsAt.set(at, list);
+      }
+    }
     // Os itens do chão por tile, para entrarem na pilha como itens comuns — o mais recente por
     // cima. São poucos (cadáveres com prazo), e a varredura é só na repintura.
     const groundItemsAt = new Map<string, StackedItem[]>();
@@ -619,7 +631,11 @@ export async function mountViewport(
     }
     const stackAt = (x: number, y: number, z: number): TileStack | null => {
       const base = scene?.tileAt(x, y, z) ?? null;
-      const extra = groundItemsAt.get(`${x},${y},${z}`);
+      const field = fieldsAt.get(`${x},${y},${z}`);
+      const ground = groundItemsAt.get(`${x},${y},${z}`);
+      const extra = field === undefined && ground === undefined
+        ? undefined
+        : [...(field ?? []), ...(ground ?? [])];
       const withGround = extra === undefined
         ? base
         : (base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] });
