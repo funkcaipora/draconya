@@ -141,9 +141,24 @@ export type InventoryRefusal =
   /** Um lugar que não existe — índice fora do vetor (#160). */
   | 'no-such-place'
   /** Mover a partir de um lugar vazio (#160). */
-  | 'empty-place';
+  | 'empty-place'
+  /** `sell-items` contra um `value: 0` do catálogo (#724, ADR 0048 d.8): "ninguém compra isto". */
+  | 'not-for-sale';
 
 export type InventoryResult = { readonly ok: true } | {
+  readonly ok: false; readonly reason: InventoryRefusal;
+};
+
+/**
+ * O resultado de `sellItems` (#724, ADR 0048 d.8): as instâncias removidas e o gold que renderam,
+ * `value × quantity` somado. Recusa não muta nada — é transação, como `move`.
+ */
+export type SellResult = { readonly ok: true; readonly removed: readonly CarriedItem[]; readonly gold: number } | {
+  readonly ok: false; readonly reason: InventoryRefusal;
+};
+
+/** O resultado de `discardItem` (#724, ADR 0048 d.8): a instância destruída, sem gold. */
+export type DiscardResult = { readonly ok: true; readonly removed: CarriedItem } | {
   readonly ok: false; readonly reason: InventoryRefusal;
 };
 
@@ -388,6 +403,46 @@ export class Inventory {
   findStack(itemId: string): CarriedItem | null {
     for (const item of this.items()) if (item.itemId === itemId) return item;
     return null;
+  }
+
+  /** A instância nos containers (mochila/bolsa), sem remover — não olha o equipado. */
+  #findCarried(instanceId: string): CarriedItem | null {
+    for (const item of this.items()) if (item.instanceId === instanceId) return item;
+    return null;
+  }
+
+  /**
+   * Vende N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). TRANSAÇÃO: confere TODAS as
+   * instâncias antes de remover qualquer uma — uma faltando, equipada, ou com `value: 0`
+   * ("ninguém compra isto") recusa o lote inteiro, sem mutar nada.
+   */
+  sellItems(instanceIds: readonly string[], catalog: ReadonlyMap<string, Item>): SellResult {
+    const found: CarriedItem[] = [];
+    for (const instanceId of instanceIds) {
+      const carried = this.#findCarried(instanceId);
+      if (carried === null) return { ok: false, reason: 'not-carried' };
+      const value = catalog.get(carried.itemId)?.value ?? 0;
+      if (value <= 0) return { ok: false, reason: 'not-for-sale' };
+      found.push(carried);
+    }
+    let gold = 0;
+    for (const carried of found) {
+      gold += (catalog.get(carried.itemId)?.value ?? 0) * carried.quantity;
+      this.remove(carried.instanceId);
+    }
+    return { ok: true, removed: found, gold };
+  }
+
+  /**
+   * Descarta um item da mochila/bolsa: destrói, sem gold (#724, ADR 0048 d.8). A confirmação
+   * é do cliente — o servidor não pergunta de novo.
+   */
+  discardItem(instanceId: string): DiscardResult {
+    const carried = this.#findCarried(instanceId);
+    if (carried === null) return { ok: false, reason: 'not-carried' };
+    this.remove(instanceId);
+    return { ok: true, removed: carried };
   }
 
   /**

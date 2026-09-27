@@ -124,6 +124,12 @@ export interface SessionReceipt {
    * expirar precisa significar que o item nunca existiu.
    */
   readonly lootBox?: readonly BoxedItem[];
+  /**
+   * As instâncias que `sell-items`/`discard-item` destruíram nesta sessão (#724, ADR 0048 d.8):
+   * o `jobs` apaga as linhas de `item_instance` correspondentes NA MESMA transação da linha de
+   * ledger. Ausente/vazio é "nada vendido nem descartado" — a maioria dos extratos.
+   */
+  readonly removedInstances?: readonly string[];
 }
 
 /** Um lugar de container, como o extrato e o banco o guardam (#160). */

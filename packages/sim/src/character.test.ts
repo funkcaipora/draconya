@@ -201,3 +201,23 @@ describe('settleGoldDelta', () => {
     expect(hero.getState()).toMatchObject({ gold: 11_045, goldDelta: 0 });
   });
 });
+
+describe('drainRemovedInstances (#724, ADR 0048 d.8)', () => {
+  it('returns what sell-items/discard-item destroyed and empties the list', () => {
+    const hero = new CharacterRuntime(state());
+    hero.removedInstances.push('s1:0', 's1:1');
+
+    expect(hero.drainRemovedInstances()).toEqual(['s1:0', 's1:1']);
+    expect(hero.removedInstances).toEqual([]);
+    expect(hero.getState()).not.toHaveProperty('removedInstances');
+  });
+
+  it('round-trips through JSON, and is absent when nothing was removed', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.getState()).not.toHaveProperty('removedInstances');
+
+    hero.removedInstances.push('s1:0');
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+    expect(restored.removedInstances).toEqual(['s1:0']);
+  });
+});

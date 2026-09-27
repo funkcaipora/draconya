@@ -240,6 +240,18 @@ export const C2S_SCHEMAS = {
    * decide se quem mandou pode propor, e se a sessão encerra, é o servidor.
    */
   'party-end-vote': z.object({ approve: z.boolean() }),
+  /**
+   * Vender N itens da mochila/bolsa (#724, ADR 0048 d.8). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; quem decide se existem, se estão carregadas (nunca equipadas) e se `value` do
+   * catálogo é maior que zero é o servidor (invariante 4). `value: 0` recusa o LOTE inteiro —
+   * "ninguém compra isto" — sem vender parte dele.
+   */
+  'sell-items': z.object({ instanceIds: z.array(z.string().min(1)).min(1) }),
+  /**
+   * Descartar um item da mochila/bolsa (#724, ADR 0048 d.8): destrói, sem gold. A confirmação
+   * ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   */
+  'discard-item': z.object({ instanceId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */

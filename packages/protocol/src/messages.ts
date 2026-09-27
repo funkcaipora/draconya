@@ -61,6 +61,23 @@ export const CLIENT_TO_SERVER = {
    * 20: o 19 é do `party-settings`.
    */
   'party-end-vote': 20,
+  /**
+   * Vender N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; existir, estar na mochila/bolsa (nunca equipada) e ter `value > 0` é conferido
+   * pelo servidor (invariante 4). Sucesso é `inventory` reenviado; recusa
+   * (`not-carried`/`not-for-sale`) é `system-message`.
+   *
+   * 21: o 20 é do `party-end-vote`.
+   */
+  'sell-items': 21,
+  /**
+   * Descartar um item da mochila/bolsa, destruindo-o sem gold (#724, ADR 0048 d.8). A
+   * confirmação ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   *
+   * 22: o 21 é do `sell-items`.
+   */
+  'discard-item': 22,
 } as const;
 
 export const SERVER_TO_CLIENT = {
