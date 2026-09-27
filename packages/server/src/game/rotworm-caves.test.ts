@@ -19,7 +19,7 @@ const real = (): Content => {
 };
 
 function enter(
-  content: Content, difficulty: 'cautious' | 'bold' | 'reckless', options: { gold?: number } = {},
+  content: Content, difficulty = 'default', options: { gold?: number } = {},
 ): { session: Session; ruleset: HuntRuleset } {
   const session = createHuntSession({
     id: 'caves', content, huntId: 'rotworm-caves', difficulty, createdAtMs: 0,
@@ -45,22 +45,21 @@ function run(session: Session, durationMs: number, stepMs: number): void {
 }
 
 describe('a Rotworm Caves real (#511)', () => {
-  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 2, 5 e 8', () => {
-    for (const [difficulty, count] of [['cautious', 2], ['bold', 5], ['reckless', 8]] as const) {
-      const { session, ruleset } = enter(real(), difficulty);
-      // O lugar do ponto 0 é o tile em que o herói entra: com `spawnClearRadius` (#236) ele
-      // só nasce quando o herói se afasta, e pelo laço inteiro um lugar recém-vagado espera
-      // o herói sair de perto. A densidade é a da dificuldade — alcançada, e nunca excedida —,
-      // mas num instante qualquer pode faltar o lugar que o herói está pisando.
-      let most = 0;
-      for (let t = 0; t < 10_000; t += 100) {
-        session.advanceBy(100);
-        const alive = ruleset.monsters.filter((m) => m.alive).length;
-        expect(alive, difficulty).toBeLessThanOrEqual(count);
-        most = Math.max(most, alive);
-      }
-      expect(most, difficulty).toBe(count);
+  it('todos os 13 pontos de spawn nascem — sem pull, sem escolha de tamanho (ADR 0039)', () => {
+    // Fim do pull por dificuldade (#583): os 13 pontos da rota nascem juntos, na entrada — a
+    // densidade não é mais 2/5/8 escolhidos, é o total de pontos que a rota declara. `blockable`
+    // (o rotworm declara `true`, #519/#753) segura o ponto onde o herói está em cima, então o
+    // teto observável é 13, mas o instante inicial pode ficar um a menos enquanto esse ponto
+    // espera a vista limpar.
+    const { session, ruleset } = enter(real());
+    let most = 0;
+    for (let t = 0; t < 10_000; t += 100) {
+      session.advanceBy(100);
+      const alive = ruleset.monsters.filter((m) => m.alive).length;
+      expect(alive).toBeLessThanOrEqual(13);
+      most = Math.max(most, alive);
     }
+    expect(most).toBeGreaterThanOrEqual(12);
   });
 
   it('o herói percorre o laço e a caverna rende: abates, gold e loot em dez minutos', () => {

@@ -1,7 +1,7 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA,
+  TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_ROUTE, TEST_STAMINA,
   rawTestContent, testContent,
 } from '../testing/content.js';
 import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigV2Schema } from '@draconya/content';
@@ -128,14 +128,25 @@ describe('session restorer', () => {
 
 describe('retomada num nó de relógio diferente (FUN-70)', () => {
   const content = testContent();
+  // Vida um pouco maior só para o rato do teste de respawn abaixo (#583, ADR 0039): com o
+  // telegraph não-`blockable` de 4200 ms, o segundo rato nasce muito depois do cooldown de
+  // ataque do herói já ter voltado — com a vida padrão (20, um golpe só) ele morreria no MESMO
+  // instante lógico em que nasce, e a amostragem (mesmo fina, a 100 ms) nunca pegaria um
+  // `monsters.length` maior que zero. Vida para dois golpes (o herói bate a cada 2 s) é só o
+  // bastante para o monstro ficar observavelmente vivo entre duas amostras, sem atrasar o
+  // primeiro abate de `noA` (ainda poucos segundos, bem dentro do teto de 60 s do laço).
+  const tankyContent = buildContent({
+    ...rawTestContent(),
+    monsters: [{ ...(rawTestContent().monsters as Array<Record<string, unknown>>)[0], health: 40 }],
+  });
 
   /**
    * Uma hunt com um respawn PENDENTE, avançada como o hospedeiro avança: pelo tempo decorrido
    * desde o último avanço DELE, nunca pelo relógio da sessão.
    */
-  const huntComRespawnPendente = (): Session => {
+  const huntComRespawnPendente = (huntContent = content): Session => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      id: 'hunt-1', content: huntContent, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 5_000, maxHealth: 5_000, mana: 0,
@@ -158,7 +169,7 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
     //
     // Com relógio lógico (FUN-68) o cenário deixa de ser expressável: o relógio do processo
     // não entra na sessão em lugar nenhum. Este teste é o que impede a classe de voltar.
-    const noA = huntComRespawnPendente();
+    const noA = huntComRespawnPendente(tankyContent);
     expect(noA.aggregates.kills).toBe(1);
 
     // Seis horas de `performance.now()` no nó A não deixam marca nenhuma dentro da sessão: o
@@ -166,7 +177,7 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
     const snapshot = JSON.parse(JSON.stringify(noA.snapshot())) as SessionSnapshot;
     expect(snapshot.logicalNowMs).toBeLessThan(60_000);
 
-    const noB = createSessionRestorer(content)(snapshot);
+    const noB = createSessionRestorer(tankyContent)(snapshot);
     if (noB === null) throw new Error('esperava retomar a hunt');
     const ruleset = noB.ruleset as HuntRuleset;
     expect(ruleset.monsters).toHaveLength(0);
@@ -174,15 +185,23 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
     // O nó B avança pelo INTERVALO decorrido nele, como `SessionHost.cycle` faz com
     // `lastAdvancedAtMs` — e o relógio dele começa perto de zero, que é o caso que quebrava.
     //
-    // Dez vezes o `respawnDelayMs`, que é o mesmo excesso que a medição usou para concluir que
-    // a hunt não voltaria nunca. As duas coisas que ela reportou em zero são medidas na JANELA
-    // INTEIRA: um `monsters.length` lido no fim seria frágil por acidente, porque o herói mata
-    // em um golpe e o instante final cai no prazo de respawn na maior parte das vezes.
+    // Dez vezes o `respawnDelayMs` MAIS o telegraph do Canary (#583, ADR 0039): o rato do
+    // conteúdo de teste não é `blockable`, então cada respawn passa pelos 4200 ms de
+    // `NONBLOCKABLE_SPAWN_TELEGRAPH_MS` além do `respawnDelayMs` do ponto — sem a folga, a
+    // janela vencia antes do primeiro respawn nascer, e o teste media exatamente o zero que
+    // ele existe para provar que NÃO é mais um bug. As duas coisas que a issue reportou em
+    // zero são medidas na JANELA INTEIRA: um `monsters.length` lido no fim seria frágil por
+    // acidente, porque o herói mata em um golpe e o instante final cai no prazo de respawn na
+    // maior parte das vezes.
+    // O passo é FINO (100 ms, não 1 s): o herói mata o rato num golpe só, e o monstro pode
+    // nascer e morrer inteiro DENTRO de uma janela de 1 s — um passo largo perderia a vida
+    // dele por amostragem, não porque ele não nasceu.
     let noBAgoraMs = 5_000;
     let monstrosVistos = 0;
-    const ateMs = 5_000 + 10 * TEST_HUNT.difficulties.cautious.respawnDelayMs;
-    for (; noBAgoraMs < ateMs; noBAgoraMs += 1_000) {
-      noB.advanceBy(1_000);
+    const ateMs = 5_000
+      + 10 * ((TEST_ROUTE.spawnPoints[0]?.respawnDelayMs as number) + 4_200);
+    for (; noBAgoraMs < ateMs; noBAgoraMs += 100) {
+      noB.advanceBy(100);
       monstrosVistos = Math.max(monstrosVistos, ruleset.monsters.length);
     }
 
@@ -381,11 +400,12 @@ describe('construtor de sessão de destino (FUN-30)', () => {
       .toBeNull();
   });
 
-  it('recusa dificuldade que a hunt não define', () => {
-    // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um enum
-    // no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
+  it('aceita QUALQUER dificuldade — o conteúdo não define mais nenhuma (#583)', () => {
+    // Até o #583 a dificuldade era validada contra `hunt.difficulties`; o modelo de pull saiu
+    // do conteúdo (ADR 0039), e o campo sobrevive no protocolo só por compatibilidade
+    // (`enter-hunt.difficulty`, #584) — o `sim` aceita e ignora qualquer string.
     expect(build({ to: 'hunt', huntId: 'arena', difficulty: 'legendary' }, cityWith(), 'p1'))
-      .toBeNull();
+      .not.toBeNull();
   });
 
   it('recusa os destinos que ainda não têm ruleset', () => {

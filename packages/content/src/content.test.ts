@@ -17,9 +17,6 @@ const rat = {
 const cellars = {
   id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
   mapId: 'rat-cellars', routeId: 'rat-cellars',
-  difficulties: {
-    cautious: { monsterCount: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
-  },
 };
 const knight = { id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25 };
 const baseline = {
@@ -209,15 +206,18 @@ describe('conteúdo inválido derruba, em vez de degradar', () => {
   });
 
   it('recusa referência cruzada quebrada, que passa em qualquer schema', () => {
-    // Uma hunt apontando monstro inexistente é sintaticamente perfeita e só falha quando
-    // alguém entra nela — possivelmente em produção, possivelmente desanexado.
-    const orfa = {
-      ...cellars,
-      difficulties: {
-        cautious: { monsterCount: 2, composition: [{ monsterId: 'dragon', weight: 1 }], respawnDelayMs: 1000 },
-      },
+    // Um ponto de spawn apontando monstro inexistente é sintaticamente perfeito e só falha
+    // quando alguém entra na hunt — possivelmente em produção, possivelmente desanexado.
+    const orfaMap = { id: 'rat-cellars', z: 7, grid: ['####', '#..#', '#..#', '####'] };
+    const orfaRoute = {
+      id: 'rat-cellars', mapId: 'rat-cellars',
+      tiles: [
+        { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
+      ],
+      spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'dragon', respawnDelayMs: 1000 }],
     };
-    expect(() => buildContent(base({ hunts: [orfa] }))).toThrow(/monstro inexistente "dragon"/);
+    expect(() => buildContent(base({ hunts: [cellars], maps: [orfaMap], routes: [orfaRoute] })))
+      .toThrow(/monstro inexistente "dragon"/);
   });
 
   it('junta todos os problemas numa mensagem só', () => {
@@ -1161,17 +1161,6 @@ describe('a rota da hunt é apontada, não inferida', () => {
   });
 });
 
-
-describe('o raio livre do spawn (#236)', () => {
-  it('ausente é zero: o conteúdo de teste continua nascendo em cima de quem está lá', () => {
-    expect(buildContent(base()).hunts.get('rat-cellars')?.spawnClearRadius).toBe(0);
-  });
-
-  it('recusa raio negativo', () => {
-    expect(() => buildContent(base({ hunts: [{ ...cellars, spawnClearRadius: -1 }] })))
-      .toThrow(/spawnClearRadius/);
-  });
-});
 
 describe('a party (#188, ADR 0027; multiplicador de XP saiu do conteúdo no #525)', () => {
   it('refuses content without it: solo is a party of one', () => {

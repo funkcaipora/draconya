@@ -24,7 +24,7 @@ const route = {
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 1, z: 7 }, { x: 4, y: 1, z: 7 },
     { x: 4, y: 2, z: 7 }, { x: 3, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 4, radius: 1 }],
+  spawnPoints: [{ routeIndex: 4, radius: 1, monsterId: 'caster', respawnDelayMs: 30_000 }],
 };
 
 const caster = {
@@ -52,9 +52,6 @@ const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 const party = { id: 'baseline', maxMembers: 4 };
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: { monsterCount: 1, composition: [{ monsterId: 'caster', weight: 1 }], respawnDelayMs: 30_000 },
-  },
 };
 
 function raw(

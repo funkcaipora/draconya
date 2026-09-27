@@ -23,7 +23,7 @@ import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
-import { totalXpForLevel } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, totalXpForLevel } from '@draconya/sim';
 import { and, eq } from 'drizzle-orm';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
@@ -267,10 +267,9 @@ beforeAll(async () => {
       maxMembers: content.party.maxMembers,
       contentVersion: content.version,
       vocations: [...content.vocations.keys()],
-      difficultiesOf: (huntId) => {
-        const hunt = content.hunts.get(huntId);
-        return hunt === undefined ? null : Object.keys(hunt.difficulties);
-      },
+      // Fim do pull por dificuldade (#583, ADR 0039): sem `difficulties` no conteúdo, o único
+      // nome válido é o vestígio de compatibilidade do protocolo (#584).
+      difficultiesOf: (huntId) => (content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null),
     },
   });
   baseUrl = await api.listen({ port: 0, host: '127.0.0.1' });

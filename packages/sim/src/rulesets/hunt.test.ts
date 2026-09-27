@@ -11,7 +11,7 @@ import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { resolveDeath } from '../death.js';
-import { huntListings } from '../hunt/catalogue.js';
+import { DEFAULT_DIFFICULTY_NAME, huntListings } from '../hunt/catalogue.js';
 import { MonsterRuntime } from '../monster/monster.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -54,18 +54,58 @@ const route = {
     { x: 4, y: 2, z: 7 }, { x: 4, y: 3, z: 7 }, { x: 3, y: 3, z: 7 }, { x: 2, y: 3, z: 7 },
     { x: 1, y: 3, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 4, radius: 2 }],
+  // Fim do pull por dificuldade (#583, ADR 0039): o ponto declara o próprio monstro e o
+  // próprio `respawnDelayMs` — não há mais `hunt.difficulties` para cair como fallback. Testes
+  // que precisam de outro monstro/prazo neste ponto sobrescrevem `route.spawnPoints[0]`.
+  spawnPoints: [{ routeIndex: 4, radius: 2, monsterId: 'rat', respawnDelayMs: 30_000 }],
+};
+
+/**
+ * A mesma rota, com TRÊS pontos de spawn (#583) — o que `difficulty: 'bold'` costumava dar de
+ * graça via `monsterCount: 3` espalhado por cima de um ponto só. Cada teste que pede "bold"
+ * pedia densidade, não um nome; esta é a rota que entrega os três ratos.
+ */
+const threeRatsRoute = {
+  ...route,
+  // Os três no MESMO ponto (índice 4, radius 2) — a mesma posição nominal que o `route` de
+  // sempre já usa, e a mesma vizinhança onde o antigo `Spawner` espalhava os 3 slots do
+  // `monsterCount: 3` de "bold" (#583: cada slot agora é um PONTO, não mais uma fração de um só;
+  // três pontos idênticos reproduzem a mesma vizinhança de spawn, só sem o rodízio antigo).
+  // `respawnDelayMs: 10_000` é o valor que a antiga dificuldade `bold` usava (mais curto que o
+  // `cautious` de 30 000), preservado para não travar o throughput de testes que dependem de
+  // vários ciclos de respawn numa janela de tempo fixa.
+  spawnPoints: [
+    { routeIndex: 4, radius: 2, monsterId: 'rat', respawnDelayMs: 10_000 },
+    { routeIndex: 4, radius: 2, monsterId: 'rat', respawnDelayMs: 10_000 },
+    { routeIndex: 4, radius: 2, monsterId: 'rat', respawnDelayMs: 10_000 },
+  ],
+};
+
+/**
+ * Fartura DELIBERADA — mais pontos e respawn mais curto que `threeRatsRoute` — para os dois
+ * testes de "quem mata mais rápido" (skill/equipamento), onde a disponibilidade de monstro não
+ * pode ser o teto: o que se mede ali é velocidade de abate, não densidade de spawn.
+ */
+const manyRatsRoute = {
+  ...route,
+  spawnPoints: Array.from({ length: 8 }, () => (
+    { routeIndex: 4, radius: 3, monsterId: 'rat', respawnDelayMs: 3_000 }
+  )),
 };
 
 const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
   health: 50, experience: 5, attack: 10, armor: 0,
   attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
-  // `blockable: true` (#519) preserva o comportamento de sempre deste rato de teste — ele
-  // representa o rat-cellars real, que também declara `blockable: true` para manter o
-  // `spawnClearRadius` (#236) observado no Huntera, não o `isBlockable: false` do Canary (que
-  // é o default do SCHEMA, e vale para monstro que não o declara — o caso do dragão do #519).
-  blockable: true,
+  // `blockable` AUSENTE (#583) — o default do Canary, e o que preserva as centenas de testes
+  // deste arquivo que matam o rato em loop e esperam respawn contínuo: a sala é pequena (4×3)
+  // e o herói está sempre dentro da janela de visão do respawn (`SPAWN_VISIBILITY_RADIUS`, ±11
+  // tiles); um rato `blockable: true` NUNCA respawnaria de volta aqui, porque a vista nunca
+  // limpa. `blockable: true` foi tentado antes do #583 mudar o mecanismo (`spawnClearRadius`,
+  // #236, vestigial neste conteúdo de teste — a hunt nunca declarou o campo, então valia 0/
+  // desligado e o campo do monstro não tinha efeito nenhum) e removido nesta revisão porque
+  // passou a ter efeito de verdade e travava o respawn. O describe "respawn: blockable espera a
+  // vista limpar…" testa o mecanismo NOVO isoladamente, com sua própria sala grande.
   // Gold fixo por abate: o que os testes de recompensa conferem é a CONTA, não o sorteio —
   // o sorteio tem teste próprio em `loot.test.ts`.
   loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
@@ -82,14 +122,6 @@ const ratWithDrop = {
 
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: {
-      monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
-    },
-    bold: {
-      monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 10_000,
-    },
-  },
 };
 
 const progression = {
@@ -316,9 +348,13 @@ function start(
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
     inventory?: InventoryState; bestiary?: BestiaryState; gold?: number } = {},
 ): Started {
+  // `difficulty` não seleciona mais nada no conteúdo (#583) — é só um rótulo aceito e ignorado
+  // pelo `sim`. "bold" aqui é o pedido de DENSIDADE que a dificuldade costumava dar de graça
+  // (`monsterCount: 3`): sem `loaded` explícito, cai na rota de três pontos.
+  const defaultContent = options.difficulty === 'bold' ? content({ routes: [threeRatsRoute] }) : content();
   const session = createHuntSession({
     id: 'session-1',
-    content: options.loaded ?? content(),
+    content: options.loaded ?? defaultContent,
     huntId: 'arena',
     difficulty: options.difficulty ?? 'cautious',
     createdAtMs: 0,
@@ -376,10 +412,14 @@ describe('entrada', () => {
     expect(Math.max(Math.abs(other.position.x - hero.position.x), Math.abs(other.position.y - hero.position.y))).toBeLessThanOrEqual(3);
   });
 
-  it('recusa dificuldade que a hunt não define', () => {
+  it('aceita QUALQUER string de dificuldade, e ignora — o conteúdo não define mais nenhuma (#583)', () => {
+    // Antes do #583, uma dificuldade que a hunt não tinha declarado derrubava a construção. O
+    // conteúdo deixou de ter `difficulties` de qualquer forma (ADR 0039); o campo sobrevive no
+    // protocolo só por compatibilidade (`enter-hunt.difficulty`, #584) e o `sim` não o valida
+    // mais — a hunt nasce igual, venha o que vier nesse campo.
     expect(() => createHuntSession({
       id: 's', content: content(), huntId: 'arena', difficulty: 'reckless', createdAtMs: 0,
-    })).toThrow(/não define a dificuldade "reckless"/);
+    })).not.toThrow();
   });
 
   it('#companionAt confere o andar: um "companheiro" no MESMO (x, y) de outro andar não desvia a rota (#519)', () => {
@@ -392,7 +432,7 @@ describe('entrada', () => {
     // hunt hospeda um personagem só hoje (party é Fase 3), então isto é dormant até lá.
     const loaded = content({
       monsters: [{ ...rat, aggroRadius: 0 }],
-      routes: [{ ...route, spawnPoints: [{ routeIndex: 1, radius: 1, monsterId: 'rat' }] }],
+      routes: [{ ...route, spawnPoints: [{ routeIndex: 1, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 }] }],
     });
     const { session, hero } = start({ loaded });
     const phantom = new CharacterRuntime({ ...character().getState(), id: 'phantom' });
@@ -484,10 +524,18 @@ describe('a sessão em si', () => {
     );
   });
 
-  it('monsterCount é o TOTAL da instância: 3 no pull são 3 vivos com respawn instantâneo (FUN-123)', () => {
+  it('todo ponto de spawn nasce, sem pull (#583): 3 pontos são 3 vivos, todos ao mesmo tempo', () => {
+    const tresPontos = {
+      ...route,
+      spawnPoints: [
+        { routeIndex: 0, radius: 1, monsterId: 'rat', respawnDelayMs: 1 },
+        { routeIndex: 3, radius: 1, monsterId: 'rat', respawnDelayMs: 1 },
+        { routeIndex: 6, radius: 1, monsterId: 'rat', respawnDelayMs: 1 },
+      ],
+    };
     const loaded = content({
       monsters: [{ ...rat, health: 100_000, aggroRadius: 0 }],
-      hunts: [{ ...hunt, difficulties: { cautious: { monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1 } } }],
+      routes: [tresPontos],
     });
     const { session, ruleset } = start({ loaded });
     run(session, 5_000, 100);
@@ -604,13 +652,18 @@ describe('a sessão em si', () => {
     // num ponto só.
     expect(ruleset.monsters).toHaveLength(0);
 
-    // Ainda dentro dos 30 s da dificuldade: nada nasce, e portanto nada mais morre.
+    // Ainda dentro dos 30 s do ponto: nada nasce, e portanto nada mais morre.
     session.advanceBy(29_000);
     expect(ruleset.monsters).toHaveLength(0);
     expect(session.aggregates.kills).toBe(1);
 
-    // Prazo cumprido: o evento de spawn vence dentro deste avanço.
+    // `respawnDelayMs` (30 s) cumprido, mas o rato não é `blockable` (#583): ele ainda está no
+    // telegraph de 4200 ms, não existe no mundo ainda.
     session.advanceBy(1_000);
+    expect(ruleset.monsters).toHaveLength(0);
+
+    // Telegraph cumprido: materializa.
+    session.advanceBy(4_300);
     expect(ruleset.monsters).toHaveLength(1);
   });
 });
@@ -900,7 +953,7 @@ describe('level up e penalidade de morte dentro da hunt', () => {
   it('Premium paga menos por morrer', () => {
     const cobrança = (premium: boolean): number => {
       const session = createHuntSession({
-        id: 's', content: content(), huntId: 'arena', difficulty: 'bold',
+        id: 's', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
         createdAtMs: 0, premium,
       });
       const hero = character({ health: 12 });
@@ -1016,9 +1069,10 @@ describe('encerramento', () => {
 
 describe('troca de dificuldade', () => {
   it('encerra a instância e cria outra, em vez de mudar no meio', () => {
-    // §14.7: não existe alteração dinâmica. Mudar `monsterCount` no meio deixaria monstros
-    // da densidade antiga vivos ao lado dos novos, e o jogador veria uma dificuldade que não
-    // é nenhuma das duas.
+    // §14.7: não existe alteração dinâmica — o mecanismo continua existindo por compatibilidade
+    // de protocolo (#584), mas desde o #583 `difficulty` é só um rótulo ignorado pelo `sim`: a
+    // densidade da hunt nova é a MESMA de sempre (os pontos de spawn da rota), não uma
+    // dificuldade "bold" que não existe mais no conteúdo.
     const loaded = content();
     const { session, hero } = start({ loaded });
     run(session, 10_000, 100);
@@ -1033,12 +1087,12 @@ describe('troca de dificuldade', () => {
     expect(receipt.notableEvents.find((e) => e.type === 'difficulty-changed')?.detail)
       .toBe('cautious → bold');
 
-    // Instância NOVA: id novo, agregados zerados, e a densidade da dificuldade nova.
+    // Instância NOVA: id novo, agregados zerados, mesma densidade de sempre (1 ponto de spawn).
     expect(nova.id).toBe('session-2');
     expect(nova.aggregates.kills).toBe(0);
     expect(nova.participants[0]).toBe(hero);
     nova.advanceBy(100);
-    expect((nova.ruleset as HuntRuleset).monsters).toHaveLength(3);
+    expect((nova.ruleset as HuntRuleset).monsters).toHaveLength(1);
   });
 });
 
@@ -1100,9 +1154,13 @@ describe('snapshot', () => {
     retomado.advanceBy(29_000);
     expect(depois.monsters).toHaveLength(0);
 
-    // Prazo cumprido: nasce. É esta linha que falhava com `0 monstros vivos` depois de dez
-    // vezes o `respawnDelayMs`.
+    // Prazo cumprido, mas o rato não é `blockable` (#583): ainda no telegraph de 4200 ms.
     retomado.advanceBy(2_000);
+    expect(depois.monsters).toHaveLength(0);
+
+    // Telegraph cumprido — é esta linha que falhava com `0 monstros vivos` depois de dez
+    // vezes o `respawnDelayMs`, antes da FUN-70.
+    retomado.advanceBy(4_300);
     expect(depois.monsters).toHaveLength(1);
   });
 
@@ -1228,10 +1286,12 @@ describe('seleção de hunt', () => {
   it('mostra level recomendado e não tem onde guardar XP/h', () => {
     // §14.3. A regra vira ESTRUTURA: um número oficial de XP/h vira a métrica pela qual toda
     // hunt é julgada, e a partir daí só existe uma hunt boa — a do topo da tabela.
+    // Sem dificuldade nenhuma desde o #583 (ADR 0039, fim do pull) — `difficulties` sobrevive
+    // só por compatibilidade de protocolo (#584), sempre com o nome único `DEFAULT_DIFFICULTY_NAME`.
     const [listing] = huntListings(content());
     expect(listing).toEqual({
       id: 'arena', name: 'Arena', recommendedLevel: 1,
-      difficulties: ['cautious', 'bold'],
+      difficulties: [DEFAULT_DIFFICULTY_NAME],
     });
   });
 
@@ -1838,7 +1898,7 @@ describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desa
   const withCountRule = (inventory?: InventoryState) => {
     const actuator = recorder();
     const session = createHuntSession({
-      id: 'targets-in-reach', content: content(), huntId: 'arena', difficulty: 'bold',
+      id: 'targets-in-reach', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
       createdAtMs: 0,
       botConfig: botConfig({
         attack: [{ when: { kind: 'targets', op: '>=', count: 3 }, do: { kind: 'spell', spellId: 'x' } }],
@@ -1909,7 +1969,9 @@ const withSpells = (
     progression: [{
       ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
-    ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
+    ...(over.monsters === false
+      ? { routes: [{ ...route, spawnPoints: [] }] }
+      : difficulty === 'bold' ? { routes: [threeRatsRoute] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
     ...(over.items === undefined ? {} : { items: over.items }),
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
@@ -2599,7 +2661,9 @@ const anel = {
   ],
   // `radius: 1` com o tile do centro livre coloca o monstro EXATAMENTE em (4,5):
   // `tilesAround` entrega o centro primeiro, e é isso que torna a posição previsível.
-  spawnPoints: [{ routeIndex: 10, radius: 1 }],
+  // `post-tank` (posteEterno) é o alvo padrão: nunca morre, o que sustenta testes que medem
+  // dano ao longo do tempo sem o alvo sumir no meio.
+  spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'post-tank', respawnDelayMs: 600_000 }],
 };
 
 /**
@@ -2608,6 +2672,9 @@ const anel = {
  * decisão do monstro entre na conta — aqui o assunto é a postura, não a IA dele.
  */
 const poste = {
+  // A população INICIAL sempre nasce na hora (#583, `#onSpawnInitial`, bypassa `blockable` e
+  // o telegraph do não bloqueável) — estes testes conferem posição/postura a
+  // `session.advanceBy(10)` sobre esse primeiro nascimento, nunca sobre um respawn.
   ...rat, id: 'post', name: 'Poste', aggroRadius: 0, health: 40,
 };
 
@@ -2623,29 +2690,39 @@ const posteEterno = { ...poste, id: 'post-tank', name: 'Poste Eterno', health: 1
 
 const huntSalao = {
   id: 'salao', name: 'Salão', recommendedLevel: 1, mapId: 'salao', routeId: 'salao-anel',
-  difficulties: {
-    cautious: {
-      monsterCount: 1, composition: [{ monsterId: 'post', weight: 1 }], respawnDelayMs: 600_000,
-    },
-    bold: {
-      monsterCount: 1, composition: [{ monsterId: 'post-tank', weight: 1 }],
-      respawnDelayMs: 600_000,
-    },
-    // Ratos de verdade — que andam, agroam e renascem. É o cenário movimentado que a
-    // equivalência entre taxas precisa para não medir um empate de zeros.
-    reckless: {
-      monsterCount: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 5_000,
-    },
-  },
+};
+
+/**
+ * As três variantes do salão, uma por ROTA (#583: fim do pull por dificuldade — o que escolhia
+ * entre elas era `difficulty`, agora ignorada; quem escolhe é o `spawnPoints` da rota).
+ * `cautious`/`bold` mantêm o único ponto do `anel` (#2596) com o monstro trocado; `reckless`
+ * ganha um SEGUNDO ponto, porque o cenário quer dois ratos de verdade, não um.
+ */
+const anelCautious = {
+  ...anel, spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'post', respawnDelayMs: 600_000 }],
+};
+const anelBold = {
+  ...anel,
+  spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'post-tank', respawnDelayMs: 600_000 }],
+};
+const anelReckless = {
+  ...anel,
+  spawnPoints: [
+    { routeIndex: 10, radius: 1, monsterId: 'rat', respawnDelayMs: 5_000 },
+    { routeIndex: 4, radius: 1, monsterId: 'rat', respawnDelayMs: 5_000 },
+  ],
 };
 
 const withPosture = (
   over: Record<string, unknown>,
   difficulty: 'cautious' | 'bold' | 'reckless' = 'cautious',
 ) => {
+  const anelDaVariante = difficulty === 'bold'
+    ? anelBold
+    : difficulty === 'reckless' ? anelReckless : anelCautious;
   const loaded = buildContent(raw({
     monsters: [rat, poste, posteEterno], hunts: [hunt, huntSalao],
-    maps: [map, salaGrande], routes: [route, anel],
+    maps: [map, salaGrande], routes: [route, anelDaVariante],
   }));
   const session = createHuntSession({
     id: 'postura', content: loaded, huntId: 'salao', difficulty, createdAtMs: 0,
@@ -3449,13 +3526,17 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     //
     // `damagePerLevel: 0.5` neste conteúdo de teste, alto de propósito: com skill 30 o poder
     // vai de 25 para 275, e um rato de 50 cai num golpe em vez de dois.
-    const cru = start({ difficulty: 'bold' });
-    run(cru.session, 60_000, 100);
+    // Fartura de monstro DELIBERADA (#583: mais pontos que o "bold" comum) — o que este teste
+    // mede é a velocidade de abate, não o quanto o respawn segura; com poucos pontos, os dois
+    // lados empatam no TETO de disponibilidade em vez de discordar na velocidade.
+    const fartura = content({ routes: [manyRatsRoute] });
+    const cru = start({ difficulty: 'bold', loaded: fartura });
+    run(cru.session, 120_000, 100);
 
     const treinado = start({
-      difficulty: 'bold', skills: { melee: { level: 30, points: 0 } },
+      difficulty: 'bold', loaded: fartura, skills: { melee: { level: 30, points: 0 } },
     });
-    run(treinado.session, 60_000, 100);
+    run(treinado.session, 120_000, 100);
 
     expect(treinado.session.aggregates.kills)
       .toBeGreaterThan(cru.session.aggregates.kills);
@@ -3563,11 +3644,17 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
   };
   const defense = { skillId: 'shielding', blockChance: 1, blockTypes: ['physical'] };
 
-  /** O conteúdo do CMB-04: o escudo no catálogo, a skill de bloqueio e o perfil com defesa. */
+  /**
+   * O conteúdo do CMB-04: o escudo no catálogo, a skill de bloqueio e o perfil com defesa. Usa
+   * `threeRatsRoute` por padrão — estes testes entram com `difficulty: 'bold'`, que passava por
+   * `loaded` explícito (não pelo `content()` default de `start`) e por isso não pegava a
+   * densidade de "bold" sozinho (#583: sem mais `monsterCount`, quem decide é a rota).
+   */
   const defenseContent = (over: Partial<RawContent> = {}): Content => content({
     items: [...items, shieldItem],
     skills: [...skills, shielding],
     combat: [{ ...combat, defense }],
+    routes: [threeRatsRoute],
     ...over,
   });
 
@@ -3779,10 +3866,14 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
   });
 
   it('não é por TICK: sem ser atacado, a skill fica parada', () => {
-    // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move.
+    // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move. Um ponto
+    // só (não os três de "bold") — o herói ainda pode matá-lo desarmado por conta própria, e
+    // três respawns ao longo de 60 s multiplicam a chance de um deles nascer já adjacente e
+    // ser confundido com "foi atacado" por um efeito colateral de posicionamento, o que este
+    // teste não quer medir.
     const pacificRat = { ...rat, aggroRadius: 0 };
     const { session, hero } = start({
-      loaded: defenseContent({ monsters: [pacificRat] }), difficulty: 'bold',
+      loaded: defenseContent({ monsters: [pacificRat], routes: [route] }), difficulty: 'bold',
       health: 5_000, inventory: comEscudo,
     });
     run(session, 60_000, 100);
@@ -3796,7 +3887,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     const semRegen = { ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } };
     const { session, hero } = start({
       loaded: defenseContent({
-        progression: [semRegen],
+        progression: [semRegen], routes: [route],
         combat: [{ ...combat, defense, minimumDamageFraction: 0 }],
       }),
       difficulty: 'cautious', health: 5_000, inventory: comEscudo,
@@ -3901,7 +3992,9 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
   // conferem a olho. Com o 1 % do conteúdo real, `floor(5 × 1,01)` continua 5 e o teste não
   // distinguiria bônus de nada.
   const bestiary = { id: 'baseline', milestones: [3, 5], xpBonusPercentPerMilestone: 20 };
-  const withBestiary = () => content({ bestiary: [bestiary] });
+  // `routes: [threeRatsRoute]` — estes testes entram com `difficulty: 'bold'` via `loaded`
+  // explícito, que não pega a densidade de "bold" sozinho (#583).
+  const withBestiary = () => content({ bestiary: [bestiary], routes: [threeRatsRoute] });
 
   /**
    * A XP que CADA abate rendeu, na ordem. Avança em passos de 100 ms e anota a diferença de XP
@@ -4164,11 +4257,14 @@ describe('equipamento no combate (FUN-82)', () => {
     // `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
     // personagem SEM arma. A espada deste conteúdo bate 200 contra os 25 do punho: o rato de
     // 50 cai num golpe em vez de dois.
-    const desarmado = start({ difficulty: 'bold' });
-    run(desarmado.session, 60_000, 100);
+    // Fartura DELIBERADA (ver o comentário em `manyRatsRoute`): o teto de disponibilidade não
+    // pode empatar os dois lados no lugar da velocidade de abate.
+    const fartura = content({ routes: [manyRatsRoute] });
+    const desarmado = start({ difficulty: 'bold', loaded: fartura });
+    run(desarmado.session, 120_000, 100);
 
-    const armado = start({ difficulty: 'bold', inventory: comEspada });
-    run(armado.session, 60_000, 100);
+    const armado = start({ difficulty: 'bold', loaded: fartura, inventory: comEspada });
+    run(armado.session, 120_000, 100);
 
     expect(armado.session.aggregates.kills)
       .toBeGreaterThan(desarmado.session.aggregates.kills);
@@ -4420,6 +4516,7 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
     const loaded = buildContent(raw({
       monsters: [ratWithDrop],
       items: [...items, backpackItem],
+      routes: [threeRatsRoute],
       progression: [{ ...progression, startingCapacity: capacity, capacityPerLevel: 0, satchelInitialSlots: 10, containerRow: 5 }],
     }));
     const session = createHuntSession({ content: loaded, id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0 });
@@ -4685,18 +4782,24 @@ const perseguidor = {
 
 const huntLure = {
   id: 'lure-hunt', name: 'Lure', recommendedLevel: 1, mapId: 'salao', routeId: 'salao-anel',
-  difficulties: {
-    cautious: {
-      monsterCount: 1, composition: [{ monsterId: 'chaser', weight: 1 }],
-      respawnDelayMs: 600_000,
-    },
-    // Três ratos que MORREM, e sem respawn dentro do teste: é o cenário em que a contagem cai
-    // sozinha, e é o único jeito de exercitar o lado do `min` da máquina.
-    bold: {
-      monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }],
-      respawnDelayMs: 600_000,
-    },
-  },
+};
+
+/** O anel com o perseguidor imortal no único ponto — o cenário `cautious` de sempre. */
+const anelChaser = {
+  ...anel, spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'chaser', respawnDelayMs: 600_000 }],
+};
+/**
+ * Três ratos que MORREM, e sem respawn dentro do teste (#583: um ponto por rato, em vez do
+ * `monsterCount: 3` de uma dificuldade só): é o cenário em que a contagem cai sozinha, e é o
+ * único jeito de exercitar o lado do `min` da máquina.
+ */
+const anelThreeRats = {
+  ...anel,
+  spawnPoints: [
+    { routeIndex: 10, radius: 1, monsterId: 'rat', respawnDelayMs: 600_000 },
+    { routeIndex: 4, radius: 1, monsterId: 'rat', respawnDelayMs: 600_000 },
+    { routeIndex: 14, radius: 1, monsterId: 'rat', respawnDelayMs: 600_000 },
+  ],
 };
 
 describe('lure dinâmico (FUN-87, §13.7)', () => {
@@ -4712,7 +4815,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
   ) => {
     const loaded = buildContent(raw({
       monsters: [rat, perseguidor], hunts: [hunt, huntLure],
-      maps: [map, salaGrande], routes: [route, anel],
+      maps: [map, salaGrande], routes: [route, difficulty === 'bold' ? anelThreeRats : anelChaser],
     }));
     const session = createHuntSession({
       id: 'lure', content: loaded, huntId: 'lure-hunt', difficulty, createdAtMs: 0,
@@ -4798,7 +4901,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
     expect((snapshot.ruleset as { luring?: boolean }).luring).toBe(false);
     const loaded = buildContent(raw({
       monsters: [rat, perseguidor], hunts: [hunt, huntLure],
-      maps: [map, salaGrande], routes: [route, anel],
+      maps: [map, salaGrande], routes: [route, anelChaser],
     }));
     const back = huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset;
     const resumed = Session.fromSnapshot(snapshot, back, new Rng(snapshot.rng));
@@ -4817,7 +4920,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
     // renderia diferente da anexada — que é o invariante 2 em uma linha.
     const at = (stepMs: number) => {
       const session = createHuntSession({
-        id: 'lure-hz', content: content(), huntId: 'arena', difficulty: 'bold',
+        id: 'lure-hz', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
         createdAtMs: 0, botConfig: botConfig({ lure: { min: 2, max: 4 } }),
       });
       session.enter(character());
@@ -4839,6 +4942,9 @@ const relogio = {
   health: 1_000_000, experience: 0, attack: 0, armor: 0,
   attackIntervalMs: 100, speed: 1500, aggroRadius: 8, attackRange: 1,
   loot: { items: [] },
+  // `blockable: true`: o teste espera o monstro já vivo desde o primeiro segundo (#583) — sem
+  // isto ele seria não bloqueável e sobraria com o telegraph de 4200 ms antes de existir.
+  blockable: true,
 };
 
 describe('ring swap com histerese (FUN-87, §13.8)', () => {
@@ -4851,17 +4957,9 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
 
   const anelContent = (): Content => buildContent(raw({
     monsters: [relogio],
-    hunts: [{
-      ...hunt,
-      difficulties: {
-        cautious: {
-          monsterCount: 1, composition: [{ monsterId: 'clock', weight: 1 }],
-          respawnDelayMs: 30_000,
-        },
-      },
-    }],
+    hunts: [hunt],
     // Spawn colado no começo da rota: o poste encosta no primeiro segundo e o herói para ali.
-    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1 }] }],
+    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'clock', respawnDelayMs: 30_000 }] }],
     progression: [anelProgression],
   }));
 
@@ -5060,16 +5158,8 @@ describe('Energy Ring no combate (SV-16, #352)', () => {
 
   const ringCombatContent = (): Content => buildContent(raw({
     monsters: [brawler],
-    hunts: [{
-      ...hunt,
-      difficulties: {
-        cautious: {
-          monsterCount: 1, composition: [{ monsterId: 'brawler', weight: 1 }],
-          respawnDelayMs: 30_000,
-        },
-      },
-    }],
-    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1 }] }],
+    hunts: [hunt],
+    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'brawler', respawnDelayMs: 30_000 }] }],
     progression: [ringCombatProgression],
   }));
 
@@ -5531,7 +5621,7 @@ describe('a hunt hospeda N participantes (#203, ADR 0027)', () => {
   };
   const pair = (hz = 10, over: { botConfigs?: Record<string, BotConfig> } = {}) => {
     const session = createHuntSession({
-      id: 'party-session', content: content(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      id: 'party-session', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
       ...(over.botConfigs === undefined ? {} : { botConfigs: over.botConfigs }),
     });
     const a = member('a');
@@ -5573,7 +5663,9 @@ describe('a hunt hospeda N participantes (#203, ADR 0027)', () => {
     expect(state.route).toEqual(state.runners?.['a']?.route);
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
     const restored = Session.fromSnapshot(
-      snapshot, huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset, Rng.fromSeed('x'),
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content({ routes: [threeRatsRoute] })) as HuntRuleset,
+      Rng.fromSeed('x'),
     );
     const again = restored.ruleset as HuntRuleset;
     expect(again.routeIndexOf('a')).toBe(ruleset.routeIndexOf('a'));
@@ -6070,7 +6162,7 @@ describe('lastCombatActionAtMs sobrevive ao snapshot (§525, ADR 0027 emenda 202
     id, name: id, healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10,
   }));
   const fat = { ...rat, experience: 100, health: 30 };
-  const loaded = () => content({ monsters: [fat], vocations });
+  const loaded = () => content({ monsters: [fat], vocations, routes: [threeRatsRoute] });
   const soldier = (id: string, vocationId: string | null) => {
     const stats = statsForLevel(1, null, progression as Progression);
     return new CharacterRuntime({
@@ -6150,7 +6242,9 @@ describe('modo split — o loot vai para um membro sorteado (#191, ADR 0027 deci
     ...rat, health: 30,
     loot: { gold: { chance: 1, min: 1, max: 9 }, items: [{ itemId: 'life-ring', chance: 0.5, min: 1, max: 1 }] },
   };
-  const loaded = () => content({ monsters: [lucky] });
+  // `routes: [threeRatsRoute]` — a hunt entra com `difficulty: 'bold'` via `loaded()` explícito,
+  // que não pega a densidade de "bold" sozinho (#583).
+  const loaded = () => content({ monsters: [lucky], routes: [threeRatsRoute] });
   const member = (id: string, alive = true) => {
     const stats = statsForLevel(1, null, progression as Progression);
     return new CharacterRuntime({
@@ -6233,6 +6327,9 @@ const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword, cheese],
+    // `routes: [threeRatsRoute]` — a hunt entra com `difficulty: 'bold'`, que não pega a
+    // densidade sozinho (#583); os testes que precisam de um ponto só sobrescrevem `routes`.
+    routes: [threeRatsRoute],
     progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
@@ -7176,7 +7273,9 @@ describe('entrada em hunt em curso (#397, ADR 0035 decisão 6)', () => {
   });
 
   it('em party o instanceId leva o dono no meio mesmo com um só presente no drop (DT-03)', () => {
-    const { session } = makeParty({ content: content({ monsters: [ratWithDrop] }), leader: 'lead' });
+    const { session } = makeParty({
+      content: content({ monsters: [ratWithDrop], routes: [threeRatsRoute] }), leader: 'lead',
+    });
     session.enter(member('lead'));
     session.enter(member('b'));
     run(session, 5_000, 100);
@@ -7230,7 +7329,9 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
   // Ratos que batem forte num membro de 1 HP: ele morre no primeiro golpe e SAI com o próprio
   // extrato; os outros ficam. Regra `party-member-lost` em quem a configurou: cascata.
   const killer = { ...rat, health: 30, attack: 50, attackRange: 1, experience: 0 };
-  const loaded = () => content({ monsters: [killer] });
+  // Três pontos (#583: sem mais `monsterCount` para espalhar sozinho) — o suficiente para
+  // "os monstros continuam vindo para quem ficou" mesmo depois de um deles morrer.
+  const loaded = () => content({ monsters: [killer], routes: [threeRatsRoute] });
   const exitOnLoss = botConfig({ exit: [botExitRuleSchema.parse({ kind: 'party-member-lost' })] });
   const member = (id: string, health?: number) => {
     const stats = statsForLevel(1, null, progression as Progression);
@@ -7278,7 +7379,7 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     // Cinco membros exigem um limite de conteúdo maior que o baseline de teste (4): desde o
     // #397 o `onEnter` recusa acima de `maxMembers`, e este cenário é legal em party de 8.
     const roomy = content({
-      monsters: [killer],
+      monsters: [killer], routes: [threeRatsRoute],
       party: [{ id: 'baseline', maxMembers: 8 }],
     });
     const session = createHuntSession({
@@ -7300,17 +7401,25 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
 
   it('party-member-lost com exitDelayMs permanece imediata (DT-03)', () => {
     const loadedWithDelay = content({
-      monsters: [killer],
+      monsters: [killer], routes: [threeRatsRoute],
       hunts: [{ ...hunt, exitDelayMs: 5_000 }],
     });
     const session = createHuntSession({
       id: 'leave-session-delay', content: loadedWithDelay, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
       partyOptions: { leaderId: 'lead', mode: 'split' }, botConfigs: { b: exitOnLoss },
     });
-    session.enter(member('frail', 1));
+    const frail = member('frail', 1);
+    session.enter(frail);
     session.enter(member('lead'));
     session.enter(member('b'));
     session.enter(member('c'));
+
+    // Mata `frail` DIRETO (#583: com três pontos de spawn em vez de um só, qual dos quatro
+    // presentes o `killer` persegue primeiro passou a depender de geometria de tile que este
+    // teste não quer arbitrar) — o assunto aqui é o atraso de `party-member-lost` com
+    // `exitDelayMs`, não o desempate de alvo do monstro, que tem teste próprio.
+    frail.receiveDamage(frail.health);
+    resolveDeath(session, { kind: 'character', character: frail });
 
     run(session, 10_000, 100);
 
@@ -7374,60 +7483,90 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
   });
 });
 
-describe('raio livre do spawn (#236)', () => {
-  // Ponto de spawn em (2,1), raio 1: colado no (1,1) em que o herói entra. Sem o raio livre o
-  // rato nasce no tile ao lado; com `respawnDelayMs` igual ao intervalo de ataque, nascia e
-  // morria no mesmo instante, e o cliente desenhava o golpe num tile vazio.
-  const adjacent = { ...route, spawnPoints: [{ routeIndex: 1, radius: 1 }] };
-  const cheb = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
-    Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+describe('respawn: blockable espera a vista limpar e reinicia o relógio; não bloqueável telegrafa (#583, ADR 0039)', () => {
+  // Uma sala BEM mais larga que a janela de visão (`SPAWN_VISIBILITY_RADIUS`, ±11 tiles): o
+  // herói entra colado no ponto de spawn (x=1) — perto o bastante para o `spawnClearRadius` de
+  // antes bloquear —, e um canto a x=29 fica fora da janela (distância 28), para testar o lado
+  // "sem ninguém à vista" sem trocar de andar.
+  const bigMap = {
+    id: 'arena-big', z: 7,
+    grid: ['#'.repeat(32), `#${'.'.repeat(30)}#`, '#'.repeat(32)],
+  };
+  const bigRoute = {
+    id: 'arena-big-loop', mapId: 'arena-big',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'rat', respawnDelayMs: 2_000 }],
+  };
+  const bigHunt = { ...hunt, mapId: 'arena-big', routeId: 'arena-big-loop' };
+  // O `rat` compartilhado do arquivo é NÃO bloqueável (ausente é `false`, o default — ver o
+  // comentário na definição dele): os dois testes de `blockable` abaixo precisam do próprio
+  // monstro, com o campo declarado, para exercitar a janela de visão de verdade.
+  const blockableRat = { ...rat, blockable: true };
 
-  it('não nasce a menos do raio de um participante vivo', () => {
-    const loaded = content({ routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }] });
+  /** Cria a sessão, deixa o `SPAWN_INITIAL` vencer (nasce no mesmo instante) e trava o herói
+   * na posição de entrada — sem isto o passo do bot o levaria de volta ao laço de dois tiles a
+   * cada vencimento, atrapalhando o teste de distância. */
+  const startPinned = (loaded: Content) => {
+    const started = start({ loaded });
+    started.session.cancelEvent('player-step', started.hero.id);
+    started.session.advanceBy(1);
+    return started;
+  };
+
+  const killFirstMonster = (session: Session, ruleset: HuntRuleset): void => {
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.receiveDamage(monster.health);
+    resolveDeath(session, { kind: 'monster', monster });
+  };
+
+  it('a população INICIAL nasce na hora, mesmo com o herói colado no ponto (#583, `SpawnMonster::startup`)', () => {
+    // O `rat` desta fixture é `blockable: true`, e mesmo assim nasce: o boot bypassa a janela
+    // de visão — só o RESPAWN depois de uma morte a aplica.
+    const loaded = content({ maps: [bigMap], routes: [bigRoute], hunts: [bigHunt] });
     const { session, ruleset } = start({ loaded });
-    session.advanceBy(100);
-    expect(ruleset.monsters).toHaveLength(0);
-  });
-
-  it('adia em vez de cancelar: nasce quando o herói se afasta, e longe dele', () => {
-    const loaded = content({ routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }] });
-    const { session, hero, ruleset } = start({ loaded });
-    let born: { x: number; y: number } | null = null;
-    let apart = 0;
-    for (let t = 0; t < 10_000 && born === null; t += 100) {
-      session.advanceBy(100);
-      for (const event of session.drainEvents()) {
-        if (event.kind !== 'creature-appeared') continue;
-        born = event.position;
-        // O herói dá no máximo um passo por fatia de 100 ms: nascido a ≥ 3 no instante do
-        // spawn, está a ≥ 2 quando a fatia acaba.
-        apart = cheb(hero.position, event.position);
-      }
-    }
-    expect(born).not.toBeNull();
-    expect(apart).toBeGreaterThanOrEqual(2);
+    session.advanceBy(1);
     expect(ruleset.monsters).toHaveLength(1);
   });
 
-  it('sem o campo o raio é zero, e a fixture de hoje nasce como sempre', () => {
-    const loaded = content({ routes: [adjacent] });
-    const { session, ruleset } = start({ loaded });
-    session.advanceBy(100);
-    expect(ruleset.monsters).toHaveLength(1);
+  it('blockable: à vista do herói, o respawn ADIA e reinicia o relógio — nunca um retry curto', () => {
+    const loaded = content({ monsters: [blockableRat], maps: [bigMap], routes: [bigRoute], hunts: [bigHunt] });
+    const { session, ruleset } = startPinned(loaded);
+    killFirstMonster(session, ruleset);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+
+    // Bem além do `respawnDelayMs` (2 000 ms): com o herói sempre colado no ponto, o rato
+    // continua sem nascer — a vista nunca limpa, e o relógio reinicia a cada checagem.
+    run(session, 20_000, 100);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
   });
 
-  it('`blockable` ausente é o padrão do Canary — nasce mesmo com o jogador colado (#519)', () => {
-    // `isBlockable: false` é o que 1.640 dos 1.656 monstros do Canary declaram, Dragon e Dragon
-    // Lord inclusive: eles respawnam OLHANDO para o jogador, ignorando `spawnClearRadius`. Sem
-    // `blockable: true` no monstro, o campo da hunt para de valer para ELE — não porque a hunt
-    // desligou, mas porque o Tibia trata isto como propriedade do monstro, não da instância.
+  it('blockable: sem ninguém à vista, nasce normalmente após o respawnDelayMs', () => {
+    const loaded = content({ monsters: [blockableRat], maps: [bigMap], routes: [bigRoute], hunts: [bigHunt] });
+    const { session, hero, ruleset } = startPinned(loaded);
+    killFirstMonster(session, ruleset);
+    hero.position = { x: 29, y: 1, z: 7 }; // distância 28 do ponto (1,1) — fora da janela de 11.
+
+    run(session, 2_500, 100); // passa do respawnDelayMs de 2 000 ms.
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(1);
+  });
+
+  it('não bloqueável: nasce mesmo com o herói colado, só depois do telegraph de 4200 ms', () => {
     const naoBlockable = { ...rat, blockable: false };
     const loaded = content({
-      monsters: [naoBlockable], routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }],
+      monsters: [naoBlockable], maps: [bigMap], routes: [bigRoute], hunts: [bigHunt],
     });
-    const { session, ruleset } = start({ loaded });
-    session.advanceBy(100);
-    expect(ruleset.monsters).toHaveLength(1);
+    const { session, ruleset } = startPinned(loaded);
+    killFirstMonster(session, ruleset);
+
+    // No instante em que o `respawnDelayMs` (2 000 ms) vence, o telegraph ainda não terminou.
+    run(session, 2_100, 100);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+
+    // 2 000 + 4200 (`NONBLOCKABLE_SPAWN_MONSTER_INTERVAL` × 3) + folga: nasceu, com o herói
+    // ainda colado no ponto — nunca esperou a vista limpar.
+    run(session, 4_300, 100);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(1);
   });
 });
 
@@ -7936,15 +8075,11 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
     ...rat, id: 'summoner', health: 100_000, aggroRadius: 4,
     summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
   };
-  const summonerHunt = {
-    ...hunt,
-    difficulties: {
-      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
-    },
-  };
+  const summonerHunt = hunt;
+  const summonerRoute = { ...route, spawnPoints: [{ ...route.spawnPoints[0], monsterId: 'summoner' }] };
   const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
   const loaded = () => content({
-    monsters: [summoner, minion], hunts: [summonerHunt], combat: [pacifist],
+    monsters: [summoner, minion], hunts: [summonerHunt], routes: [summonerRoute], combat: [pacifist],
   });
 
   it('nunca invoca sem alvo — mestre nunca engajado (aggroRadius: 0) fica no cadenciamento e nunca rola a chance (TFS/Canary hasFollowPath)', () => {
@@ -7959,7 +8094,7 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
       summons: { max: 10, entries: [{ monsterId: 'minion', chance: 1, intervalMs: 1_000, count: 10 }] },
     };
     const neverEngagedContent = content({
-      monsters: [neverEngaged, minion], hunts: [summonerHunt], combat: [pacifist],
+      monsters: [neverEngaged, minion], hunts: [summonerHunt], routes: [summonerRoute], combat: [pacifist],
     });
     const { session, ruleset } = start({ loaded: neverEngagedContent });
     run(session, 10_000, 100); // 10 vencimentos de cadência (1 000 ms cada) sem rolar nenhum.
@@ -8015,7 +8150,7 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
       Math.abs(summon.position.y - masterPositionAtBirth.y),
     )).toBeLessThanOrEqual(1);
 
-    // O ÚNICO lugar do Spawner é do mestre (a hunt pede `monsterCount: 1`), e continua ocupado
+    // O ÚNICO lugar do Spawner é do mestre (a rota tem um ponto só, #583), e continua ocupado
     // por ELE: a invocação nasceu por `#spawnMonster` direto, nunca por `#onSpawn`.
     const slots = ruleset.getState().spawner.slots;
     expect(slots).toHaveLength(1);
@@ -8039,14 +8174,8 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
         ],
       },
     };
-    const cappedHunt = {
-      ...hunt,
-      difficulties: {
-        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'summoner', weight: 1 }] },
-      },
-    };
     const cappedContent = content({
-      monsters: [capped, minionA, minionB], hunts: [cappedHunt], combat: [pacifist],
+      monsters: [capped, minionA, minionB], hunts: [hunt], routes: [summonerRoute], combat: [pacifist],
     });
     const { session, ruleset } = start({ loaded: cappedContent });
     const live = (id: string): number => ruleset.monsters.filter((m) => m.alive && m.monsterId === id).length;
@@ -8234,6 +8363,11 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     mitigation: { resistances: { ice: -0.1 }, immunities: ['fire'] },
     attackIntervalMs: 2000, speed: 172, aggroRadius: 8, attackRange: 1,
     loot: { items: [] },
+    // `blockable: true` diverge do `data/monsters/dragon.json` real (que é `false`, o default do
+    // Canary) — decisão só desta fixture, para o teste medir FREQUÊNCIA de ability sem entrar
+    // no telegraph de 4200 ms do respawn não bloqueável (#583): o assunto aqui é a cadência de
+    // ataque, não o mecanismo de spawn, que tem teste próprio em `spawner.test.ts`.
+    blockable: true,
     abilities: [
       {
         id: 'melee', cadenceMs: 2000, target: { range: 1 },
@@ -8273,17 +8407,14 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
    * é só dele — o herói nunca reduz o HP dele e nunca dispara a fuga por engano. */
   const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
 
-  /** A hunt fixture aponta para "rat"; aqui a composição é o Dragon. */
-  const dragonHunt = {
-    ...hunt,
-    difficulties: {
-      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'dragon', weight: 1 }] },
-      bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'dragon', weight: 1 }] },
-    },
-  };
+  /** A rota-base aponta "rat"; aqui o ponto declara o Dragon (#583). */
+  const dragonHunt = hunt;
+  const dragonRoute = { ...route, spawnPoints: [{ ...route.spawnPoints[0], monsterId: 'dragon' }] };
 
   it('melee, bola de fogo, onda e cura própria saem nas frequências esperadas pela semente (~200 vencimentos)', () => {
-    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], combat: [pacifist] }));
+    const loaded = buildContent(raw({
+      monsters: [dragon], hunts: [dragonHunt], routes: [dragonRoute], combat: [pacifist],
+    }));
     const session = createHuntSession({
       id: 'dragon-freq', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
@@ -8342,7 +8473,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
       weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
       distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
     };
-    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], combat: [v3] }));
+    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], routes: [dragonRoute], combat: [v3] }));
     const draws: { min: number; max: number; profile: string | undefined; value: number; expected: number }[] = [];
     vi.mocked(rollCombatValue).mockImplementation((rng, min, max, profile) => {
       const expected = normalRandomInt(new Rng(rng.getState()), min, max);
@@ -8397,7 +8528,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     // entrada), e capturar "antes" tarde demais mediria zero mesmo com dano de verdade.
     const damageDealt = (spellId: string, spellDef: unknown): number => {
       const loaded = buildContent(raw({
-        monsters: [dragonNoHeal], hunts: [dragonHunt], combat: [pacifist], spells: [spellDef],
+        monsters: [dragonNoHeal], hunts: [dragonHunt], routes: [dragonRoute], combat: [pacifist], spells: [spellDef],
       }));
       const config = botConfig({
         attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId } }],
@@ -8439,7 +8570,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
       ...dragon,
       abilities: dragon.abilities.map((a) => (a.id === 'fireball' ? { ...a, chance: 1 } : a)),
     };
-    const loaded = buildContent(raw({ monsters: [alwaysFireball], hunts: [dragonHunt] }));
+    const loaded = buildContent(raw({ monsters: [alwaysFireball], hunts: [dragonHunt], routes: [dragonRoute] }));
     const session = createHuntSession({
       id: 'dragon-flee', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
@@ -8497,14 +8628,10 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
       ],
       defenses: [],
     };
-    const fieldHunt = {
-      ...hunt,
-      difficulties: {
-        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'dragon-lord', weight: 1 }] },
-        bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'dragon-lord', weight: 1 }] },
-      },
-    };
-    const loaded = buildContent(raw({ monsters: [dragonLordField], hunts: [fieldHunt], combat: [pacifist] }));
+    const dragonLordRoute = { ...route, spawnPoints: [{ ...route.spawnPoints[0], monsterId: 'dragon-lord' }] };
+    const loaded = buildContent(raw({
+      monsters: [dragonLordField], hunts: [hunt], routes: [dragonLordRoute], combat: [pacifist],
+    }));
     const session = createHuntSession({
       id: 'dragon-lord-field', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
@@ -8539,7 +8666,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
         targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
       };
       const loaded = buildContent(raw({
-        monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
+        monsters: [healthPickingDragon], hunts: [dragonHunt], routes: [dragonRoute], combat: [pacifist],
       }));
       const session = createHuntSession({
         id: 'dragon-target-change-random', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
@@ -8574,7 +8701,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
         targetChange: { intervalMs: 1_000, chance: 1 },
       };
       const loaded = buildContent(raw({
-        monsters: [longReachMelee], hunts: [dragonHunt], combat: [pacifist],
+        monsters: [longReachMelee], hunts: [dragonHunt], routes: [dragonRoute], combat: [pacifist],
       }));
       const session = createHuntSession({
         id: 'dragon-target-change-long-reach', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
@@ -8606,7 +8733,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
         targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 }, // favoreceria `wounded-far`
       };
       const loaded = buildContent(raw({
-        monsters: [rangedDragon], hunts: [dragonHunt], combat: [pacifist],
+        monsters: [rangedDragon], hunts: [dragonHunt], routes: [dragonRoute], combat: [pacifist],
       }));
       const session = createHuntSession({
         id: 'dragon-target-change-nearest', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
@@ -8645,7 +8772,7 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
         targetStrategy: { nearest: 0, health: 100, damage: 0, random: 0 },
       };
       const loaded = buildContent(raw({
-        monsters: [healthPickingDragon], hunts: [dragonHunt], combat: [pacifist],
+        monsters: [healthPickingDragon], hunts: [dragonHunt], routes: [dragonRoute], combat: [pacifist],
       }));
       const session = createHuntSession({
         id: 'dragon-flee-rerank', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
@@ -8691,16 +8818,13 @@ describe('manter distância: um atirador recua quando o alvo chega perto (#542, 
     attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 3,
     targetDistance: 3,
     loot: { items: [] },
+    // `blockable: true`: o teste é sobre "nasce colado no jogador e recua" — precisa nascer NA
+    // HORA (#583), não depois do telegraph de 4200 ms do respawn não bloqueável.
+    blockable: true,
   };
 
-  const shooterHunt = {
-    ...hunt,
-    difficulties: {
-      cautious: {
-        ...hunt.difficulties.cautious, composition: [{ monsterId: 'shooter', weight: 1 }],
-      },
-    },
-  };
+  const shooterHunt = hunt;
+  const shooterRoute = { ...route, spawnPoints: [{ ...route.spawnPoints[0], monsterId: 'shooter' }] };
 
   // O alcance DESARMADO do herói também vira o `targetDistance`: sem isto, o herói nunca
   // reconhece o atirador como alvo de ataque (ele nunca chega ao corpo a corpo DE PROPÓSITO) e
@@ -8716,7 +8840,7 @@ describe('manter distância: um atirador recua quando o alvo chega perto (#542, 
 
   it('mantém pelo menos targetDistance tiles de um jogador parado, mesmo nascendo colado nele', () => {
     const loaded = buildContent(raw({
-      monsters: [shooter], hunts: [shooterHunt], combat: [stationaryCombat],
+      monsters: [shooter], hunts: [shooterHunt], routes: [shooterRoute], combat: [stationaryCombat],
     }));
     const { session, hero, ruleset } = start({ loaded });
     session.advanceBy(100);
@@ -8790,16 +8914,13 @@ describe('manter distância: a aproximação também para em targetDistance (rev
     attackIntervalMs: 2000, speed: 300, aggroRadius: 8, attackRange: 5,
     targetDistance: 2,
     loot: { items: [] },
+    // `blockable: true` (#583): o teste conta com o monstro já vivo em `advanceBy(100)`.
+    blockable: true,
   };
 
-  const shooterHunt = {
-    ...hunt,
-    difficulties: {
-      cautious: {
-        ...hunt.difficulties.cautious,
-        composition: [{ monsterId: 'long-range-shooter', weight: 1 }],
-      },
-    },
+  const shooterHunt = hunt;
+  const shooterRoute = {
+    ...route, spawnPoints: [{ ...route.spawnPoints[0], monsterId: 'long-range-shooter' }],
   };
 
   // O alcance desarmado do herói cobre a distância inicial inteira (3, os dois cantos opostos
@@ -8814,7 +8935,7 @@ describe('manter distância: a aproximação também para em targetDistance (rev
 
   it('fecha a distância além do próprio alcance de ability, até o targetDistance preferido', () => {
     const loaded = buildContent(raw({
-      monsters: [longRangeShooter], hunts: [shooterHunt], combat: [stationaryCombat],
+      monsters: [longRangeShooter], hunts: [shooterHunt], routes: [shooterRoute], combat: [stationaryCombat],
     }));
     const { session, hero, ruleset } = start({ loaded });
     session.advanceBy(100);
@@ -8862,14 +8983,11 @@ describe('estoque de supply/munição do loot: solo, split e shared não enviesa
       ],
     },
   };
-  const looterHunt = {
-    ...hunt,
-    difficulties: {
-      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'looter', weight: 1 }], respawnDelayMs: 200 },
-      bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'looter', weight: 1 }], respawnDelayMs: 200 },
-    },
+  const looterHunt = hunt;
+  const looterRoute = {
+    ...route, spawnPoints: [{ ...route.spawnPoints[0], monsterId: 'looter', respawnDelayMs: 200 }],
   };
-  const loaded = () => content({ monsters: [looter], hunts: [looterHunt] });
+  const loaded = () => content({ monsters: [looter], hunts: [looterHunt], routes: [looterRoute] });
   const partyMember = (id: string) => {
     const stats = statsForLevel(1, null, progression as Progression);
     return new CharacterRuntime({
@@ -9215,19 +9333,9 @@ describe('monstro evita campo que não pode atravessar (M29-05)', () => {
   const stuckRoute = {
     id: 'stuck-route', mapId: 'arena',
     tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-    spawnPoints: [{ routeIndex: 0 }],
+    spawnPoints: [{ routeIndex: 0, monsterId: 'field-rat', respawnDelayMs: 30_000 }],
   };
-  const stuckHunt = {
-    ...hunt, routeId: 'stuck-route',
-    difficulties: {
-      cautious: {
-        monsterCount: 1, composition: [{ monsterId: 'field-rat', weight: 1 }], respawnDelayMs: 30_000,
-      },
-      bold: {
-        monsterCount: 1, composition: [{ monsterId: 'field-rat', weight: 1 }], respawnDelayMs: 30_000,
-      },
-    },
-  };
+  const stuckHunt = { ...hunt, routeId: 'stuck-route' };
   // Alcance 3, o bastante para bater no monstro PRESO sem o herói precisar se aproximar.
   const rangeWand = {
     id: 'range-wand', name: 'Range Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
@@ -9951,7 +10059,7 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
     const session = createHuntSession({
       id: 'heal-wake', content: loaded({
         monsters: [tank],
-        routes: [{ ...route, spawnPoints: [{ routeIndex: 5, radius: 1 }] }],
+        routes: [{ ...route, spawnPoints: [{ routeIndex: 5, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 }] }],
       }),
       huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
       botConfigs: { b: healRule({ kind: 'member', characterId: 'a' }) },
@@ -11072,15 +11180,11 @@ describe('hunt multiandar (#519)', () => {
     id: 'casa-loop', mapId: 'casa',
     tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
     // Sem ponto de spawn: "rota sem ponto de spawn é hunt sem monstro" (FUN-123) — este teste
-    // é só sobre o walker, e `monsterCount`/`composition` abaixo existem só porque o schema os
-    // exige, nunca porque algo nasce.
+    // é só sobre o walker, e nada precisa nascer.
     spawnPoints: [],
   };
   const multiFloorHunt = {
     id: 'arena', name: 'Casa', recommendedLevel: 1, mapId: 'casa', routeId: 'casa-loop',
-    difficulties: {
-      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
-    },
   };
   const multiFloor = (): Content =>
     content({ maps: [multiFloorMap], routes: [multiFloorRoute], hunts: [multiFloorHunt] });
@@ -11127,7 +11231,7 @@ describe('hunt multiandar (#519)', () => {
     // a posição antes da checagem, e o teste ficaria sensível a um detalhe que não é o dele.
     const comSpawnEmZ6 = {
       ...multiFloorRoute,
-      spawnPoints: [{ routeIndex: 1, radius: 1, at: { x: 1, y: 2, z: 6 }, monsterId: 'rat' }],
+      spawnPoints: [{ routeIndex: 1, radius: 1, at: { x: 1, y: 2, z: 6 }, monsterId: 'rat', respawnDelayMs: 30_000 }],
     };
     const { session, ruleset } = start({
       loaded: content({
@@ -11360,16 +11464,11 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     const bigRoute = {
       id: 'big-arena-loop', mapId: 'big-arena',
       tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-      spawnPoints: [{ routeIndex: 0, radius: 1, at: { x: 14, y: 14, z: 7 }, monsterId: 'rat' }],
+      spawnPoints: [{ routeIndex: 0, radius: 1, at: { x: 14, y: 14, z: 7 }, monsterId: 'rat', respawnDelayMs: 30_000 }],
     };
     const bigHunt = {
       id: 'big-arena', name: 'Big Arena', recommendedLevel: 1,
       mapId: 'big-arena', routeId: 'big-arena-loop',
-      difficulties: {
-        cautious: {
-          monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
-        },
-      },
     };
     class FilteringRng extends Rng {
       drunkRolls = 0;

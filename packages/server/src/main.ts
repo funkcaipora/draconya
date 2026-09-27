@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
+import { DEFAULT_DIFFICULTY_NAME } from '@draconya/sim';
 import { servedPackProblem } from './served-pack.js';
 import { loadConfiguration, type RoleName } from './config.js';
 import { createLogger } from './log.js';
@@ -159,10 +160,12 @@ async function main(): Promise<void> {
                 // As vocações do catálogo fixado no boot (#501): as chaves da composição da
                 // sala são validadas contra isto ∪ `none`. Do conteúdo, nunca uma lista à mão.
                 vocations: [...content.vocations.keys()],
-                difficultiesOf: (huntId: string) => {
-                  const hunt = content.hunts.get(huntId);
-                  return hunt === undefined ? null : Object.keys(hunt.difficulties);
-                },
+                // Fim do pull por dificuldade (#583, ADR 0039): o conteúdo não define mais
+                // nomes de dificuldade nenhum. `DEFAULT_DIFFICULTY_NAME` é o único válido, para
+                // a validação de party continuar funcionando enquanto o protocolo mandar o
+                // campo (#584 tira a escolha da tela por completo).
+                difficultiesOf: (huntId: string) =>
+                  content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null,
               },
               settleProgress: (characterId: string) =>
                 settleCharacterState(characterId, {

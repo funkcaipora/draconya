@@ -22,7 +22,7 @@ const loop: RouteData = {
     { x: 3, y: 2, z: 7 }, { x: 3, y: 3, z: 7 }, { x: 2, y: 3, z: 7 },
     { x: 1, y: 3, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 2, radius: 2 }],
+  spawnPoints: [{ routeIndex: 2, radius: 2, monsterId: 'rat', respawnDelayMs: 1000 }],
 };
 
 describe('tilemap', () => {
@@ -92,7 +92,9 @@ describe('rota', () => {
   });
 
   it('recusa spawn apontando índice inexistente', () => {
-    const ruim: RouteData = { ...loop, spawnPoints: [{ routeIndex: 99, radius: 2 }] };
+    const ruim: RouteData = {
+      ...loop, spawnPoints: [{ routeIndex: 99, radius: 2, monsterId: 'rat', respawnDelayMs: 1000 }],
+    };
     expect(validateRoute(ruim, map).join()).toMatch(/índice 99/);
   });
 
@@ -100,7 +102,7 @@ describe('rota', () => {
     const ruim: RouteData = {
       ...loop,
       tiles: [{ x: 2, y: 2, z: 7 }, { x: 50, y: 50, z: 7 }],
-      spawnPoints: [{ routeIndex: 99, radius: 1 }],
+      spawnPoints: [{ routeIndex: 99, radius: 1, monsterId: 'rat', respawnDelayMs: 1000 }],
     };
     expect(validateRoute(ruim, map).length).toBeGreaterThanOrEqual(3);
   });
@@ -108,11 +110,13 @@ describe('rota', () => {
   it('ancora no `at` declarado quando o ponto o traz, e leva o `monsterId` junto (#519)', () => {
     const comSpawnDeclarado: RouteData = {
       ...loop,
-      spawnPoints: [{ routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, monsterId: 'dragon' }],
+      spawnPoints: [{
+        routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, monsterId: 'dragon', respawnDelayMs: 1000,
+      }],
     };
     const route = buildRoute(comSpawnDeclarado, map);
     expect(route.spawnPoints[0]).toEqual({
-      routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, monsterId: 'dragon',
+      routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, monsterId: 'dragon', respawnDelayMs: 1000,
     });
   });
 
@@ -120,21 +124,20 @@ describe('rota', () => {
     const comMonstrosPesados: RouteData = {
       ...loop,
       spawnPoints: [{
-        routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 },
+        routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, respawnDelayMs: 1000,
         monsters: [{ monsterId: 'dragon', weight: 3 }, { monsterId: 'dragon-lord', weight: 1 }],
       }],
     };
     const route = buildRoute(comMonstrosPesados, map);
     expect(route.spawnPoints[0]).toEqual({
-      routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 },
+      routeIndex: 2, radius: 1, at: { x: 40, y: 40, z: 12 }, respawnDelayMs: 1000,
       monsters: [{ monsterId: 'dragon', weight: 3 }, { monsterId: 'dragon-lord', weight: 1 }],
     });
   });
 
-  it('leva o `respawnDelayMs` do ponto, o `spawntime` por posição do Canary (#519)', () => {
-    // O Canary declara `spawntime` por `<monster>`, dentro do `<spawn>` — não por zona nem por
-    // dificuldade. Sem o campo, `buildRoute` não inventa nada: quem lê decide o fallback
-    // (`respawnDelayMs` da dificuldade), como sempre foi.
+  it('leva o `respawnDelayMs` do ponto, o `spawntime` por posição do Canary (#519, #583)', () => {
+    // O Canary declara `spawntime` por `<monster>`, dentro do `<spawn>` — não por zona. Desde o
+    // #583 é obrigatório: não há mais dificuldade para cair como fallback quando ausente.
     const comSpawntime: RouteData = {
       ...loop,
       spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'dragon', respawnDelayMs: 90_000 }],
@@ -142,9 +145,6 @@ describe('rota', () => {
     const route = buildRoute(comSpawntime, map);
     expect(route.spawnPoints[0]?.respawnDelayMs).toBe(90_000);
     expect(route.spawnPoints[0]?.at).toEqual({ x: 1, y: 1, z: 7 }); // tiles[0], sem `at` próprio.
-
-    const semSpawntime = buildRoute(loop, map);
-    expect(semSpawntime.spawnPoints[0]?.respawnDelayMs).toBeUndefined();
   });
 });
 
@@ -190,7 +190,7 @@ describe('rota multiandar (#519)', () => {
       // (1,1,7) → degrau de descida (2,1,7), pousa em (3,1,6) → degrau de subida (3,2,6),
       // adjacente ao pouso anterior, pousa em (2,2,7) → fecha na diagonal de volta a (1,1,7).
       tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
-      spawnPoints: [{ routeIndex: 1, radius: 1 }],
+      spawnPoints: [{ routeIndex: 1, radius: 1, monsterId: 'rat', respawnDelayMs: 1000 }],
     };
     expect(validateRoute(rota, casa)).toEqual([]);
     expect(() => buildRoute(rota, casa)).not.toThrow();

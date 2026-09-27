@@ -115,18 +115,18 @@
     { "x": 22, "y": 33, "z": 8 }, { "x": 22, "y": 34, "z": 8 }, { "x": 21, "y": 34, "z": 8 }, { "x": 20, "y": 34, "z": 8 }
   ],
   "spawnPoints": [
-    { "routeIndex": 0, "radius": 2 },
-    { "routeIndex": 10, "radius": 2 },
-    { "routeIndex": 29, "radius": 2 },
-    { "routeIndex": 55, "radius": 2 },
-    { "routeIndex": 68, "radius": 2 },
-    { "routeIndex": 112, "radius": 2 },
-    { "routeIndex": 143, "radius": 2 },
-    { "routeIndex": 205, "radius": 2 },
-    { "routeIndex": 229, "radius": 2 },
-    { "routeIndex": 254, "radius": 2 },
-    { "routeIndex": 310, "radius": 2 },
-    { "routeIndex": 315, "radius": 2 },
-    { "routeIndex": 373, "radius": 2 }
+    { "routeIndex": 0, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 10, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 29, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 55, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 68, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 112, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 143, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 205, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 229, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 254, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 310, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 315, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 },
+    { "routeIndex": 373, "radius": 2, "monsterId": "rotworm", "respawnDelayMs": 2000 }
   ]
 }

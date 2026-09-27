@@ -2190,23 +2190,15 @@ export const monsterSchema = z.strictObject({
 });
 
 /**
- * Os três tamanhos de pull do Huntera (FUN-123): Cauteloso, Ousado, Agressivo. O PRD tinha
- * quatro dificuldades; o produto copiou os três — ver `docs/product/hunt.md`, "Divergências".
+ * O nome de dificuldade que ainda chega no protocolo (`enter-hunt.difficulty`, #584). O modelo de
+ * pull por tamanho do Huntera (Cauteloso/Ousado/Agressivo, FUN-123) foi REMOVIDO do conteúdo e do
+ * `sim` pelo #583 (ADR 0039): toda hunt nasce dos pontos de spawn reais do Canary, nunca de uma
+ * composição sorteada por tamanho de pull. O campo continua existindo no protocolo/servidor só
+ * por compatibilidade — é aceito e IGNORADO (no-op) pelo `sim` — até o #584 tirar de vez a UI e
+ * a mensagem que ainda o mandam. Sem enum: era `(typeof HUNT_DIFFICULTY_NAMES)[number]` antes
+ * desta issue, e vira `string` porque não há mais uma lista fixa de nomes válidos por hunt.
  */
-export const HUNT_DIFFICULTY_NAMES = ['cautious', 'bold', 'reckless'] as const;
-
-export const huntDifficultySchema = z.object({
-  /**
-   * Quantos monstros a instância mantém vivos, NO TOTAL — o `monsterCount` do Huntera (2, 5
-   * e 8 no bueiro), espalhado pelos pontos de spawn da rota (`Spawner`: o lugar `i` no ponto
-   * `⌊i × pontos / total⌋`). Sem variação aleatória de densidade no MVP (§14.5).
-   */
-  monsterCount: z.number().int().positive(),
-  composition: z.array(
-    z.object({ monsterId: z.string().min(1), weight: z.number().positive() }),
-  ).min(1),
-  respawnDelayMs: z.number().int().positive(),
-});
+export type HuntDifficultyName = string;
 
 export const huntSchema = z.object({
   id: z.string().min(1),
@@ -2228,18 +2220,6 @@ export const huntSchema = z.object({
    */
   routeId: z.string().min(1),
   /**
-   * `partialRecord`, e não `record`: uma hunt define as dificuldades que fazem sentido para
-   * ela, não obrigatoriamente as quatro. É o que o `refine` abaixo sempre disse — exigir ao
-   * menos uma só faz sentido se nem todas forem obrigatórias.
-   *
-   * A distinção passou a ser explícita no zod 4, onde `record` com chave de enum virou
-   * exaustivo. No zod 3 as duas se escreviam igual, e o comportamento era este.
-   */
-  difficulties: z.partialRecord(
-    z.enum(HUNT_DIFFICULTY_NAMES),
-    huntDifficultySchema,
-  ).refine((d) => Object.keys(d).length > 0, 'a hunt precisa de ao menos uma dificuldade'),
-  /**
    * Quanto tempo o cadáver de um monstro fica no chão, em milissegundos (FUN-123). Só visual:
    * o loot vai direto à caixa da sessão, e o cadáver some sozinho. Ausente é hunt sem
    * cadáver — o conteúdo de teste que não fala de arte.
@@ -2250,13 +2230,6 @@ export const huntSchema = z.object({
    * Ausente é saída imediata.
    */
   exitDelayMs: z.number().int().positive().optional(),
-  /**
-   * A menos de quantos tiles (Chebyshev) de um participante VIVO o monstro NÃO nasce (#236).
-   * O lugar não é perdido — o spawn espera e tenta de novo (`SPAWN_RETRY_MS` do ruleset); a
-   * densidade continua sendo a da dificuldade. `0` desliga, e é o default: o conteúdo de
-   * teste que cabe numa sala de 4×3 continua nascendo em cima de quem está lá.
-   */
-  spawnClearRadius: z.number().int().nonnegative().default(0),
   /**
    * O texto de apresentação da hunt (R8-13), mostrado no modal de detalhes do kit quando
    * #349/RC-12 o construir. Opcional: hunt sem o campo é hunt cujo parágrafo ainda não foi
@@ -3955,7 +3928,6 @@ export type Monster = Omit<
   readonly defenses: readonly MonsterDefense[];
 };
 export type MonsterAttack = MonsterDefinition['attack'];
-export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
 
 /** A faixa de ataque de um monstro: um número é a faixa de um valor só. */
 export function attackRange(attack: MonsterAttack): { readonly min: number; readonly max: number } {
@@ -3985,7 +3957,6 @@ export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */
 export type LootRoll = NonNullable<LootTable['gold']>;
 export type Hunt = z.infer<typeof huntSchema>;
-export type HuntDifficulty = z.infer<typeof huntDifficultySchema>;
 export type Vocation = z.infer<typeof vocationSchema>;
 
 // --- mapa e rota (FUN-9) -------------------------------------------------------------------
@@ -4065,9 +4036,12 @@ export const routeSchema = z.object({
       routeIndex: z.number().int().nonnegative(),
       radius: z.number().int().positive().default(3),
       /**
-       * O monstro DESTE ponto (#519, hunt copiada do Tibia). Ausente é o de sempre: o `Spawner`
-       * sorteia pela composição da dificuldade. Declarado, o ponto sempre nasce esse monstro —
-       * é como o spawn do Canary funciona, um `<monster name>` por posição, nunca um sorteio.
+       * O monstro DESTE ponto (#519, hunt copiada do Tibia) — é como o spawn do Canary funciona,
+       * um `<monster name>` por posição, nunca um sorteio por zona. Desde o #583 (fim do pull
+       * por dificuldade, ADR 0039), é OBRIGATÓRIO declarar este campo OU `monsters` — o antigo
+       * fallback ("ausente sorteia pela composição da dificuldade") não existe mais porque a
+       * dificuldade também não existe mais: toda hunt nasce do recorte de mapa mais os pontos de
+       * spawn reais, nunca de uma composição sorteada por tamanho de pull.
        */
       monsterId: z.string().min(1).optional(),
       /**
@@ -4090,14 +4064,18 @@ export const routeSchema = z.object({
       at: point.optional(),
       /**
        * O `spawntime` DESTE ponto, em ms (#519) — no Canary é um atributo por `<monster>`
-       * dentro do `<spawn>`, não da zona nem da dificuldade: cada ponto pode render num ritmo
-       * diferente do vizinho. Ausente cai no `respawnDelayMs` da dificuldade, como sempre foi —
-       * é o que mantém rat-cellars/rotworm-caves (sem `spawntime` por ponto) exatamente iguais.
+       * dentro do `<spawn>`, não da zona: cada ponto pode render num ritmo diferente do vizinho.
+       * Desde o #583, OBRIGATÓRIO: o fallback na dificuldade não existe mais, pela mesma razão
+       * de `monsterId`/`monsters` acima — sem dificuldade, não há para onde cair.
        */
-      respawnDelayMs: z.number().int().positive().optional(),
-    }).refine((s) => s.monsterId === undefined || s.monsters === undefined, {
-      message: '`monsterId` e `monsters` são exclusivos — um ponto declara um monstro fixo OU uma lista com peso, nunca os dois',
-    }),
+      respawnDelayMs: z.number().int().positive(),
+    })
+      .refine((s) => s.monsterId === undefined || s.monsters === undefined, {
+        message: '`monsterId` e `monsters` são exclusivos — um ponto declara um monstro fixo OU uma lista com peso, nunca os dois',
+      })
+      .refine((s) => s.monsterId !== undefined || s.monsters !== undefined, {
+        message: 'todo spawnPoint precisa declarar `monsterId` OU `monsters` (#583) — não há mais composição de dificuldade para cair como fallback',
+      }),
   ).default([]),
 });
 

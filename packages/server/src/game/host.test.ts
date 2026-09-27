@@ -20,7 +20,7 @@ import { FakeSocket } from './testing.js';
 import { CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder } from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
+  TEST_COMBAT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
   testContent,
 } from '../testing/content.js';
 
@@ -2692,7 +2692,10 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
       maps: [{ id: 'arena', z: 7, grid }, ...(raw.maps ?? []).filter((m) =>
         (m as { id: string }).id !== 'arena')],
       // O spawn no índice 10 é (6,6): o canto oposto ao herói em (1,1).
-      routes: [{ id: 'arena-loop', mapId: 'arena', tiles, spawnPoints: [{ routeIndex: 10, radius: 1 }] }],
+      routes: [{
+        id: 'arena-loop', mapId: 'arena', tiles,
+        spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'rat', respawnDelayMs: 2_000 }],
+      }],
       monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
         m['id'] === 'rat' ? { ...m, health: 100_000, aggroRadius: 10 } : m),
     };
@@ -3413,14 +3416,17 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
+      // Fim do pull por dificuldade (#583, ADR 0039): "quantos ratos por ponto de spawn" virou
+      // "quantos pontos de spawn" — um ponto a mais por rato extra, no mesmo lugar de sempre.
       ...(over.monsterCount === undefined
         ? {}
         : {
-          hunts: [{
-            ...TEST_HUNT,
-            difficulties: {
-              cautious: { ...TEST_HUNT.difficulties.cautious, monsterCount: over.monsterCount },
-            },
+          routes: [{
+            ...TEST_ROUTE,
+            spawnPoints: Array.from(
+              { length: over.monsterCount },
+              () => TEST_ROUTE.spawnPoints[0],
+            ),
           }],
         }),
       ...(over.monsters === false
@@ -3613,8 +3619,12 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: `xp: 0` em `playerStatsOf` (a XP do fio fica em zero com o herói em
     // 30); `level: 0` idem, pelo level.
+    //
+    // 45 s, não 10 (#583, ADR 0039): o rato não é `blockable`, então cada respawn passa pelo
+    // telegraph de 4200 ms do Canary além do `respawnDelayMs` de 1000 — o ciclo de encontro
+    // de ~2,25 s vira ~7,5 s, e seis abates precisam de ~45 s, não mais dos ~13 s de antes.
     const { runFor, received, hero } = hunt();
-    runFor(10_000);
+    runFor(45_000);
 
     expect(hero().xp).toBeGreaterThan(0);
     expect(hero().level).toBeGreaterThan(1);
@@ -3703,14 +3713,19 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // explosão 12 (invariante 6). A ordem é a do Tibia: o projétil voa, o efeito estoura no
     // tile de chegada, o número cai.
     //
-    // Na arena de 2×2 o rato nasce colado e o primeiro morre no golpe engatilhado do herói,
-    // antes de bater; o segundo nasce com esse golpe em cooldown e bate primeiro — e é o dano
-    // levado que acorda a categoria `attack` do bot (é assim que o `sim` a arma). A magia sai
-    // aí, com `targets ≥ 1`, e por isso a hunt precisa de alguns segundos.
+    // Na arena de 2×2 o rato nasce colado ao herói. Antes do #583, o primeiro rato morria no
+    // golpe engatilhado do herói antes de bater, e o SEGUNDO nascia a tempo de bater primeiro
+    // enquanto o golpe do herói ainda estava em cooldown — e era o dano levado que acordava a
+    // categoria `attack` do bot. Desde o #583 (ADR 0039) um rato não-`blockable` só respawna
+    // depois do `respawnDelayMs` mais o telegraph de 4200 ms do Canary — tempo de sobra para o
+    // golpe do herói já estar pronto de novo e matar o segundo rato tão instantâneo quanto o
+    // primeiro, e a categoria nunca acordaria. Este rato tem vida de sobra para aguentar o
+    // golpe do herói e bater de volta NA PRIMEIRA vida — sem depender de respawn nenhum.
     //
     // Mutação que mata: trocar `from` e `to` no `missile` — o `effect` deixa de estourar
     // onde o projétil chegou. `effectId: look.missile` mata pelo id.
     const { runFor, received } = hunt({
+      rat: { health: 200 },
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
       }] }),
@@ -3813,8 +3828,14 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: ler `appearances.spells[spellId].effect` sem a guarda de `undefined`
     // — o ciclo explode num `TypeError` no primeiro lançamento.
+    //
+    // Vida extra pelo mesmo motivo do teste da magia com tabela (#583, ADR 0039): sem ela, o
+    // rato morre no golpe engatilhado do herói antes de bater, e o respawn não-`blockable`
+    // (`respawnDelayMs` + telegraph de 4200 ms) nunca chega a tempo do cooldown do herói ainda
+    // estar de pé — a categoria `attack` do bot nunca acordaria.
     const { runFor, received } = hunt({
       table: false,
+      rat: { health: 200 },
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
       }] }),
@@ -4153,7 +4174,12 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       },
     };
 
-    const withTable = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    // O rato sobrevive ao herói (#583, ADR 0039): com um único ponto de spawn e o telegraph
+    // não-`blockable` de 4200 ms, um rato com a vida padrão morreria no primeiro golpe do
+    // herói e o PRÓXIMO só nasceria depois do herói já estar pronto para outro golpe instantâneo
+    // — nunca sobraria tempo para o campo bater nem uma vez. A vida alta aqui é só para o rato
+    // aguentar os golpes do herói pelos 6 s inteiros; a ability é quem faz o dano que o teste mede.
+    const withTable = hunt({ rat: { abilities: [ability], health: 1_000 }, regen: false, table: true });
     withTable.runFor(6_000);
     const hitsWith = ofType(withTable.received(), 'creature-hit')
       .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
@@ -4162,7 +4188,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // vida — o que conta é o campo ter ferido depois disso.
     expect(withTable.hero().health).toBeLessThan(withTable.hero().maxHealth);
 
-    const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
+    const withoutTable = hunt({ rat: { abilities: [ability], health: 1_000 }, regen: false, table: false });
     withoutTable.runFor(6_000);
     const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');

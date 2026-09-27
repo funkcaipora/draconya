@@ -122,11 +122,14 @@ describe('loadContent', () => {
     expect(route?.spawnPoints.length).toBe(14);
   });
 
-  it('a Rat Cellars é o bueiro real, com os três pulls do Huntera, o rato do Tibia e o queijo (FUN-123)', () => {
+  it('a Rat Cellars é o bueiro real, com um rato por ponto de spawn (#583), o rato do Tibia e o queijo (FUN-123)', () => {
     const content = loadContent(DATA);
     const hunt = content.hunts.get('rat-cellars');
-    expect(Object.keys(hunt?.difficulties ?? {})).toEqual(['cautious', 'bold', 'reckless']);
-    expect(Object.values(hunt?.difficulties ?? {}).map((d) => d.monsterCount)).toEqual([2, 5, 8]);
+    const route = content.routes.get('rat-cellars');
+    // Fim do pull por dificuldade (#583, ADR 0039): os 14 pontos da rota nascem TODOS, cada um
+    // declarando o próprio `rat` — não há mais `difficulties`/`monsterCount` para escolher
+    // quantos nascem.
+    expect(route?.spawnPoints.every((point) => point.monsterId === 'rat')).toBe(true);
     expect(hunt?.ambience).toBe('cavern');
     expect(hunt?.corpseTtlMs).toBe(30000);
     const rat = content.monsters.get('rat');

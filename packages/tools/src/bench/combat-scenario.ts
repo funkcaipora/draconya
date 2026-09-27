@@ -40,11 +40,19 @@ function loop(): Point[] {
 }
 
 const tiles = loop();
+// 40 pontos, um monstro cada (#583: cada ponto declara os próprios candidatos — não há mais
+// dificuldade para segurar `monsterCount`/`composition`). O sorteio 3:1 entre flamer/brute
+// continua existindo, só que por PONTO (`monsters`, #582) em vez de uma composição única da
+// dificuldade.
 const spawnPoints = tiles
   .map((_, index) => index)
-  .filter((index) => index % 8 === 0)
-  .slice(0, 10)
-  .map((routeIndex) => ({ routeIndex, radius: 3 }));
+  .filter((index) => index % 2 === 0)
+  .slice(0, 40)
+  .map((routeIndex) => ({
+    routeIndex, radius: 1,
+    monsters: [{ monsterId: 'flamer', weight: 3 }, { monsterId: 'brute', weight: 1 }],
+    respawnDelayMs: 30_000,
+  }));
 
 export const COMBAT_HUNT_ID = 'combat';
 export const COMBAT_DIFFICULTY = 'reckless';
@@ -110,13 +118,6 @@ function rawCombatContent(): RawContent {
     hunts: [{
       id: COMBAT_HUNT_ID, name: 'Combat Cellars', recommendedLevel: 1,
       mapId: 'combat', routeId: 'combat-loop',
-      difficulties: {
-        reckless: {
-          monsterCount: 40,
-          composition: [{ monsterId: 'flamer', weight: 3 }, { monsterId: 'brute', weight: 1 }],
-          respawnDelayMs: 30_000,
-        },
-      },
     }],
     vocations: [],
     progression: [{
