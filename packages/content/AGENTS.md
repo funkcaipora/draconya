@@ -507,6 +507,13 @@ entre arquivos resolvem.
   `Spawner` sorteia da composição, a posição é o tile do `routeIndex`, o respawn usa o
   `respawnDelayMs` da DIFICULDADE. `routeIndex` continua obrigatório mesmo com `at` declarado —
   ele ancora ao laço (ordem, andar de referência); `at` é só a posição de nascimento.
+- **`routeSchema.spawnPoints` ganhou `monsters` (#582)**: vários candidatos com peso na MESMA
+  posição — o caso do Canary em que dois `<monster>` do mesmo `<spawn>` caem exatamente no
+  mesmo ponto (`spawn_monster.cpp:90-96`). Mutuamente exclusivo com `monsterId` (`.refine`); o
+  `Spawner` sorteia entre os candidatos DO PONTO, nunca junto com a composição da dificuldade.
+  Nenhum ponto do recorte real (Darashia Dragon Lair, 47 pontos) usa este campo — `weight` não
+  ocorre em nenhuma das 187081 linhas de `otservbr-monster.xml` —, mas o mecanismo existe no
+  Canary e `scripts/catalog/spawns.ts` precisa reconhecê-lo sem quebrar quando aparecer.
 - **`monsterSchema.blockable` é o `isBlockable` do TFS/Canary, e o default é `false`** (#519) —
   NÃO esperar o jogador sair da vista antes de respawnar, porque é isso que 1.640 dos 1.656
   monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`

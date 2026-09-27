@@ -4255,6 +4255,17 @@ export const routeSchema = z.object({
        */
       monsterId: z.string().min(1).optional(),
       /**
+       * Vários monstros no MESMO ponto, cada um com peso (#582) — o caso do Canary em que dois
+       * `<monster>` do mesmo `<spawn>` caem exatamente na mesma posição: `spawn_monster.cpp`
+       * aceita um `weight` por candidato e sorteia entre eles, nunca entre os pontos vizinhos.
+       * Mutuamente exclusivo com `monsterId` (`.refine` abaixo) — um ponto ou declara UM
+       * monstro fixo, ou uma lista para sortear; nunca os dois ao mesmo tempo.
+       */
+      monsters: z.array(z.object({
+        monsterId: z.string().min(1),
+        weight: z.number().int().positive().default(1),
+      })).min(2).optional(),
+      /**
        * A posição EXATA do spawn (#519), quando ela não é o tile do `routeIndex` — o caso do
        * Canary, cujos pontos raramente caem em cima da rota do bot. Ausente é o tile da rota
        * nesse índice, como sempre foi. `routeIndex` continua obrigatório mesmo com `at`: é o
@@ -4268,6 +4279,8 @@ export const routeSchema = z.object({
        * é o que mantém rat-cellars/rotworm-caves (sem `spawntime` por ponto) exatamente iguais.
        */
       respawnDelayMs: z.number().int().positive().optional(),
+    }).refine((s) => s.monsterId === undefined || s.monsters === undefined, {
+      message: '`monsterId` e `monsters` são exclusivos — um ponto declara um monstro fixo OU uma lista com peso, nunca os dois',
     }),
   ).default([]),
 });
