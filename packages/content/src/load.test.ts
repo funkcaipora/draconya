@@ -146,14 +146,16 @@ describe('loadContent', () => {
     expect(hunt?.corpseTtlMs).toBe(30000);
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
-    // packages/content/data/monsters/rat.json — números do Huntera (docs/reference/
-    // huntera-observed.md Parte V §32, 2026-09-22), não mais o provisório da FUN-123.
-    expect(rat?.attack).toEqual({ min: 3, max: 4 });
+    // packages/content/data/monsters/generated/mammals.json — regenerado pelo importador do
+    // Canary (#581; era o provisório do Huntera, docs/reference/huntera-observed.md Parte V
+    // §32). `data-otservbr-global/monster/mammals/rat.lua` (Canary local 47dfd51): attack
+    // 0-8, defense 5, os quatro resistances abaixo (o resto vira 0 na normalização), speed 134.
+    expect(rat?.attack).toEqual({ min: 0, max: 8 });
     expect(rat?.mitigation.resistances).toEqual({
-      physical: 0, energy: 0, earth: -0.2, fire: 0, ice: 0.1, holy: -0.2, death: 0.1,
+      physical: 0, energy: 0, earth: 0.2, fire: 0, ice: -0.1, holy: 0.2, death: -0.1,
       drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
     });
-    expect(rat?.speed).toBe(172);
+    expect(rat?.speed).toBe(134);
     expect(rat?.corpseAppearanceId).toBe(5964);
     expect(rat?.loot.items.map((i) => i.itemId)).toEqual(['cheese']);
     expect(content.items.get('cheese')?.appearanceId).toBe(3607);
@@ -175,8 +177,10 @@ describe('loadContent', () => {
     expect(route?.tiles.every((t) => t.x < 80)).toBe(true);
     const rotworm = content.monsters.get('rotworm');
     expect(rotworm?.class).toBe('vermin');
-    expect(rotworm?.attack).toEqual({ min: 24, max: 30 });
-    expect(rotworm?.speed).toBe(180);
+    // data-otservbr-global/monster/vermins/rotworm.lua (Canary local 47dfd51): attack 0-40,
+    // speed 116 — regenerado pelo importador (#581; era o provisório do Huntera).
+    expect(rotworm?.attack).toEqual({ min: 0, max: 40 });
+    expect(rotworm?.speed).toBe(116);
     expect(rotworm?.corpseAppearanceId).toBe(5967);
     expect(rotworm?.loot.items.map((i) => i.itemId).sort()).toEqual(
       ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),

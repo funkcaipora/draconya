@@ -36,9 +36,15 @@ entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três dest
 (`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
 catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
 item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
-`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord (#581)
-nunca são promovidos por aqui — continuam hand-authored, e é a #581 quem os regenera. `load.ts`
-não lê `staging/`, e nada do jogo deve ler.
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
+são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
+— o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
+Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`), com override próprio
+(`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true` temporário que as
+duas hunts antigas ainda exigem (até o #582+/M36-05 as converter para o comportamento real do
+Canary). `pnpm catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro
+entradas numa reimportação futura — elas só mudam de novo por decisão deliberada, como o #581.
+`load.ts` não lê `staging/`, e nada do jogo deve ler.
 
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
@@ -47,8 +53,8 @@ duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.t
 data/items/backpack.json             # autoral, uma entidade por arquivo (de sempre)
 data/items/generated/weapons.json    # gerado por `pnpm catalog:import items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
-data/monsters/rat.json               # autoral, hand-authored (#581 é quem regenera os quatro)
-data/monsters/generated/mammals.json # promovido por `pnpm catalog:promote-monsters` — um ARRAY
+data/monsters/generated/mammals.json # promovido/regenerado — um ARRAY (Rat mora aqui desde o #581)
+data/monsters/overrides/rat.json     # correção nossa: { id, reason, patch } — blockable temporário
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto

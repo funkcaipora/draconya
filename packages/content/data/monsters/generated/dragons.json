@@ -1,5 +1,222 @@
 [
   {
+    "id": "dragon",
+    "name": "Dragon",
+    "class": "dragon",
+    "health": 1000,
+    "experience": 700,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 25,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": 0.8,
+        "ice": -0.1
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 172,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8992,
+        "min": 1,
+        "max": 102
+      },
+      "items": [
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.6627,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "steel-shield",
+          "chance": 0.1565
+        },
+        {
+          "itemId": "dragons-tail",
+          "chance": 0.0968
+        },
+        {
+          "itemId": "crossbow",
+          "chance": 0.0912
+        },
+        {
+          "itemId": "longsword",
+          "chance": 0.0383
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.0349
+        },
+        {
+          "itemId": "broadsword",
+          "chance": 0.027
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.02029
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.0158
+        },
+        {
+          "itemId": "green-dragon-leather",
+          "chance": 0.0107
+        },
+        {
+          "itemId": "green-dragon-scale",
+          "chance": 0.0101
+        },
+        {
+          "itemId": "wand-of-inferno",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0045
+        },
+        {
+          "itemId": "serpent-sword",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "dragon-hammer",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "dragonbone-staff",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "dragon-shield",
+          "chance": 0.0011
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 140
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 170
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 40,
+          "max": 70
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 300,
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/dragon.lua"
+    }
+  },
+  {
     "id": "dragon-hatchling",
     "name": "Dragon Hatchling",
     "class": "dragon",
@@ -145,6 +362,256 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/dragons/dragon_hatchling.lua"
+    }
+  },
+  {
+    "id": "dragon-lord",
+    "name": "Dragon Lord",
+    "class": "dragon",
+    "health": 1900,
+    "experience": 2100,
+    "attack": {
+      "min": 0,
+      "max": 230
+    },
+    "armor": 34,
+    "defense": 34,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": 0.8,
+        "ice": -0.1
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 1.29,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.953,
+        "min": 1,
+        "max": 237
+      },
+      "items": [
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.7979,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "green-mushroom",
+          "chance": 0.1203
+        },
+        {
+          "itemId": "royal-spear",
+          "chance": 0.0938,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0559
+        },
+        {
+          "itemId": "energy-ring",
+          "chance": 0.0455
+        },
+        {
+          "itemId": "golden-mug",
+          "chance": 0.0331
+        },
+        {
+          "itemId": "red-dragon-scale",
+          "chance": 0.0194
+        },
+        {
+          "itemId": "red-dragon-leather",
+          "chance": 0.0115
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "strange-helmet",
+          "chance": 0.0052
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0041
+        },
+        {
+          "itemId": "fire-sword",
+          "chance": 0.0035
+        },
+        {
+          "itemId": "royal-helmet",
+          "chance": 0.0026
+        },
+        {
+          "itemId": "dragon-slayer",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "dragon-lord-trophy",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "dragon-scale-mail",
+          "chance": 0.0009
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 230
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 220
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "firefield",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "fire"
+        },
+        "field": {
+          "id": "dragon-lord-firefield",
+          "durationMs": 200000,
+          "shape": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          },
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        }
+      },
+      {
+        "id": "firewave",
+        "cadenceMs": 2000,
+        "chance": 0.22,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 150,
+          "max": 270
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 57,
+          "max": 93
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 300,
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dragons/dragon_lord.lua"
     }
   },
   {
