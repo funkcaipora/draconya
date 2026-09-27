@@ -9,6 +9,8 @@ import {
   checkMaps, collectTiles, formatContentMap, formatStackMap, importRegion, parsePoint, parseRange,
 } from './import-map.js';
 import type { OtbmTile, Region } from './otbm.js';
+import { buildSceneryIndex } from './scenery.js';
+import type { CanaryTables } from './scenery.js';
 
 // Um "pacote" sintético: cada id com as flags que interessam ao importador.
 const FLOOR = 100; // chão de velocidade 130
@@ -17,6 +19,13 @@ const WALL = 200; // bottom + unpass
 const TORCH = 201; // item comum, passável
 const STAIRS = 202; // item passável sem chão embaixo (o degrau)
 const WATER = 102; // chão com unpass
+// Cenário usável (#727): porta comum, alavanca (par 2772/2773 do fixture) e capim.
+const DOOR_CLOSED = 300; // unpass — é a porta FECHADA
+const DOOR_OPEN = 301; // passável — a mesma porta ABERTA
+const LEVER_DOWN = 302;
+const LEVER_UP = 303;
+const GRASS_UNCUT = 304;
+const GRASS_CUT = 305;
 const flagsOf = (id: number): AppearanceFlags | null => {
   switch (id) {
     case FLOOR: return { ...NO_FLAGS, bankWaypoints: 130, fullbank: true };
@@ -25,8 +34,23 @@ const flagsOf = (id: number): AppearanceFlags | null => {
     case TORCH: return { ...NO_FLAGS, take: true };
     case STAIRS: return { ...NO_FLAGS };
     case WATER: return { ...NO_FLAGS, bankWaypoints: 0, unpass: true };
+    case DOOR_CLOSED: return { ...NO_FLAGS, unpass: true };
+    case DOOR_OPEN: return { ...NO_FLAGS };
+    case LEVER_DOWN: case LEVER_UP: case GRASS_UNCUT: case GRASS_CUT: return { ...NO_FLAGS };
     default: return null;
   }
+};
+const sceneryTables: CanaryTables = {
+  id: 'canary-test', source: 'fixture',
+  doors: {
+    locked: [], quest: [], level: [],
+    common: [{ closed: DOOR_CLOSED, open: DOOR_OPEN }],
+  },
+  grass: [{ uncut: GRASS_UNCUT, cut: GRASS_CUT, durationSec: 300 }],
+  stonePiles: [],
+  ropeSpots: { ground: [], special: [] },
+  ladders: [],
+  levers: [LEVER_DOWN, LEVER_UP],
 };
 const nameOf = (id: number): string | undefined => (id === STAIRS ? 'stairs' : undefined);
 
@@ -164,6 +188,87 @@ describe('importRegion (FUN-118)', () => {
     expect(buildTilemap(result.content).width).toBe(buildTilemap(content as typeof result.content).width);
     const stack = JSON.parse(formatStackMap(result.stack)) as { tiles: unknown[] };
     expect(stack.tiles).toHaveLength(15);
+  });
+});
+
+describe('importRegion — cenário usável (#727, ADR 0050 d.1)', () => {
+  // Uma sala 3×1: porta comum fechada, alavanca (com aid), capim, e um baú (uid) e placa
+  // (text) que nenhuma tabela do Canary cobre — classificados por atributo.
+  const doorRegion: Region = { x: [1000, 1004], y: [3000, 3000], z: [7, 7] };
+  const withItem = (x: number, y: number, z: number, ground: number, item: OtbmTile['items'][number]): OtbmTile =>
+    ({ x, y, z, ground, items: [item], flags: 0 });
+  const doorRoom = (): OtbmTile[] => [
+    tile(1000, 3000, 7, FLOOR, [DOOR_CLOSED]),
+    withItem(1001, 3000, 7, FLOOR, { id: LEVER_DOWN, actionId: 4000 }),
+    tile(1002, 3000, 7, FLOOR, [GRASS_UNCUT]),
+    withItem(1003, 3000, 7, FLOOR, { id: 2854, uniqueId: 500 }),
+    withItem(1004, 3000, 7, FLOOR, { id: 1950, text: 'You see a sign.' }),
+  ];
+
+  it('o tile de uma porta comum FECHADA vira `.`, não `#` — quem bloqueia é o interativo, não a grade', () => {
+    const sceneryIndex = buildSceneryIndex(sceneryTables);
+    const { content } = importRegion(doorRoom(), {
+      id: 'porta', region: doorRegion, flagsOf, source, version: '1332', sceneryIndex,
+    });
+    expect(content.floors?.['7']?.grid).toEqual(['.....']);
+  });
+
+  it('sem sceneryIndex, o comportamento é o de sempre — a porta fechada continua `#`', () => {
+    const { content } = importRegion(doorRoom(), { id: 'porta', region: doorRegion, flagsOf, source, version: '1332' });
+    expect(content.floors?.['7']?.grid).toEqual(['#....']);
+    expect(content.interactables).toEqual([]);
+  });
+
+  it('classifica porta, alavanca, capim, baú e placa — cada um com kind, estado e appearanceKey', () => {
+    const sceneryIndex = buildSceneryIndex(sceneryTables);
+    const { content, report } = importRegion(doorRoom(), {
+      id: 'porta', region: doorRegion, flagsOf, source, version: '1332', sceneryIndex,
+    });
+    expect(content.interactables).toEqual([
+      { at: { x: 0, y: 0, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-300' },
+      {
+        at: { x: 1, y: 0, z: 7 }, kind: 'lever', initialState: 'down', appearanceKey: 'lever', aid: 4000,
+      },
+      {
+        at: { x: 2, y: 0, z: 7 }, kind: 'grass', initialState: 'uncut', appearanceKey: 'grass-304',
+        requires: { tool: 'machete' },
+      },
+      { at: { x: 3, y: 0, z: 7 }, kind: 'chest', initialState: 'default', appearanceKey: 'chest-2854', uid: 500 },
+      {
+        at: { x: 4, y: 0, z: 7 }, kind: 'sign', initialState: 'default', appearanceKey: 'sign-1950',
+        text: 'You see a sign.',
+      },
+    ]);
+    expect(Object.fromEntries(report.interactablesByKind)).toEqual({
+      door: 1, lever: 1, grass: 1, chest: 1, sign: 1,
+    });
+  });
+
+  it('formatContentMap escreve `interactables` no JSON — sem isto o cenário classificado nunca chega ao arquivo', () => {
+    const sceneryIndex = buildSceneryIndex(sceneryTables);
+    const { content } = importRegion(doorRoom(), {
+      id: 'porta', region: doorRegion, flagsOf, source, version: '1332', sceneryIndex,
+    });
+    const parsed = JSON.parse(formatContentMap(content)) as { interactables: unknown[] };
+    expect(parsed.interactables).toHaveLength(5);
+  });
+
+  it('mapa sem interativo nenhum não ganha `interactables` no JSON escrito', () => {
+    const { content } = importRegion(room(), { id: 'sala', region, flagsOf, source, version: '1332' });
+    const parsed = JSON.parse(formatContentMap(content)) as Record<string, unknown>;
+    expect('interactables' in parsed).toBe(false);
+  });
+
+  it('appearances.scenery mescla o que a tabela do Canary já fecha com o que foi observado', () => {
+    const sceneryIndex = buildSceneryIndex(sceneryTables);
+    const { sceneryAppearances } = importRegion(doorRoom(), {
+      id: 'porta', region: doorRegion, flagsOf, source, version: '1332', sceneryIndex,
+    });
+    expect(sceneryAppearances?.['door-300']).toEqual({ closed: 300, open: 301 });
+    expect(sceneryAppearances?.lever).toEqual({ down: 302, up: 303 });
+    expect(sceneryAppearances?.['grass-304']).toEqual({ uncut: 304, cut: 305 });
+    expect(sceneryAppearances?.['chest-2854']).toEqual({ default: 2854 });
+    expect(sceneryAppearances?.['sign-1950']).toEqual({ default: 1950 });
   });
 });
 

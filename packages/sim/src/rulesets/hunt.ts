@@ -18,7 +18,7 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
-  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, isBlocked, migrateBotConfigV1,
+  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
@@ -42,6 +42,8 @@ import {
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
+import { isToggleable, TileOverrides } from '../tile-overrides.js';
+import type { InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
@@ -184,6 +186,14 @@ const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
 /** O cadáver apodreceu (FUN-123): sai do chão. */
 const CORPSE = 'corpse';
+/**
+ * Um interativo reverte sozinho (#728, ADR 0050 d.3): capim cortado volta a crescer, buraco
+ * enche de volta. Evento na fila (invariante 2) — nunca um prazo somado por tick —, agendado no
+ * `toggle` que abre o estado temporário e cancelado se alguém usar de novo antes de vencer. O
+ * `subject` é o `interactableId` (a posição, `interactableIdOf`); porta não agenda este evento —
+ * ela fecha no `vacate` (`TileOverrides.closeDoorIfVacant`), e alavanca não decai.
+ */
+const TILE_REVERT = 'tile-revert';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
 /**
@@ -985,6 +995,14 @@ export interface HuntRulesetState {
    */
   readonly fields?: readonly TileFieldState[];
   /**
+   * O overlay de cenário usável (#728, ADR 0050 d.2): porta, capim, stone pile e alavanca, por
+   * `interactableId` (a posição). Opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`: ausente é
+   * "ninguém mexeu em nada ainda", o estado que `TileOverrides.fromInteractables` já produz a
+   * partir do conteúdo — o mesmo grau de compatibilidade que `fields` (CMB-07) já tem. Os
+   * eventos `TILE_REVERT` pendentes já vêm na fila serializada da sessão.
+   */
+  readonly tileOverrides?: readonly TileOverrideState[];
+  /**
    * A configuração do bot, CRUA (FUN-81).
    *
    * Crua e não compilada: `CompiledBot` é um vetor de closures, e closure não serializa. O
@@ -1103,6 +1121,13 @@ interface Runner {
    * resultado (passo de verdade, `not-adjacent`, companheiro, parede).
    */
   sameTileStreak: number;
+  /**
+   * Já registrou `route-blocked` no extrato para o bloqueio ATUAL (#728, ADR 0050 d.4)? Evita
+   * uma linha por vencimento parado — zera assim que o passo deixa de ser recusado por
+   * interativo. NUNCA persiste no snapshot, como `followPath`: perder a flag numa retomada só
+   * custa uma linha extra no extrato, nunca um comportamento errado.
+   */
+  routeBlockedWarned: boolean;
   /**
    * Desde QUANDO o líder está esperando a party se juntar (#527, `PARTY_REGROUP_MARGIN`/
    * `PARTY_REGROUP_FLOOR_CHANGE_RADIUS`, válvula `MAX_REGROUP_WAIT_MS`). `null` fora de uma
@@ -1294,6 +1319,14 @@ export class HuntRuleset implements Ruleset {
    */
   #fields = new Fields();
 
+  /**
+   * O overlay de cenário usável desta sessão (#728, ADR 0050 d.2): porta, capim, stone pile e
+   * alavanca. Construído do CONTEÚDO fixado (`Tilemap.interactables`, #727) — nunca do disco —
+   * e mutado só por esta sessão (invariante 9). `TileOccupancy.overrides` referencia a MESMA
+   * instância; `restore()` a atualiza por mutação (`restoreState`), nunca a substitui.
+   */
+  readonly #tileOverrides: TileOverrides;
+
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
 
@@ -1396,7 +1429,8 @@ export class HuntRuleset implements Ruleset {
       'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
-    this.#world = new TileOccupancy(options.map);
+    this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
+    this.#world = new TileOccupancy(options.map, { overrides: this.#tileOverrides });
     // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
     const basics = new Map<AmmoFamily, Ammunition>();
     for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -1563,6 +1597,80 @@ export class HuntRuleset implements Ruleset {
   /** Os campos de tile ativos agora (CMB-07): leitura para snapshot, host e teste. */
   get fields(): readonly TileFieldState[] {
     return this.#fields.getState();
+  }
+
+  /** O overlay de cenário usável desta sessão (#728): leitura para snapshot, host e teste. */
+  get tileOverrides(): readonly TileOverrideState[] {
+    return this.#tileOverrides.getState();
+  }
+
+  /**
+   * Tenta usar UM interativo — abrir a porta, cortar o capim, cavar a pile, puxar a alavanca
+   * (ADR 0050 d.4-d.5). Devolve `true` quando o estado mudou (e portanto o tile deixou de
+   * bloquear, se era esse o caso); `false` sem tocar em nada — kind sem par de estados (T2/T3,
+   * fora do escopo desta issue), ou ferramenta exigida que este personagem não carrega.
+   *
+   * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile); alavanca liga a
+   * quem está em `links` (ADR 0050 d.1) e alterna cada um também — sem re-entrar no MESMO id,
+   * que travaria numa alavanca que se referencia por engano de conteúdo.
+   */
+  #useInteractable(session: Session, character: CharacterRuntime, interactableId: string): boolean {
+    const current = this.#tileOverrides.get(interactableId);
+    if (current === null || !isToggleable(current.kind)) return false;
+    const tool = this.#tileOverrides.contentOf(interactableId)?.requires?.tool;
+    if (tool !== undefined && !this.#hasTool(character, tool)) return false;
+
+    const next = this.#tileOverrides.toggle(interactableId, session.nowMs);
+    if (next === null) return false;
+    session.cancelEvent(TILE_REVERT, interactableId);
+    if (next.revertAtMs !== undefined) {
+      session.scheduleIn(TILE_REVERT, next.revertAtMs - session.nowMs, {
+        priority: EventPriority.Housekeeping, subject: interactableId,
+      });
+    }
+    session.record('tile-used', `${current.kind}:${interactableId}`);
+
+    // Alavanca (ADR 0050 d.1): liga a quem está em `links` e alterna CADA um também — nunca o
+    // PRÓPRIO id de novo, o que evitaria um laço se o conteúdo (por engano) linkar a si mesma.
+    if (current.kind === 'lever') {
+      for (const linkedId of this.#tileOverrides.links(interactableId)) {
+        if (linkedId === interactableId) continue;
+        const linked = this.#tileOverrides.toggle(linkedId, session.nowMs);
+        if (linked === null) continue;
+        session.cancelEvent(TILE_REVERT, linkedId);
+        if (linked.revertAtMs !== undefined) {
+          session.scheduleIn(TILE_REVERT, linked.revertAtMs - session.nowMs, {
+            priority: EventPriority.Housekeeping, subject: linkedId,
+          });
+        }
+      }
+    }
+    return true;
+  }
+
+  /** Este personagem carrega uma ferramenta que serve para `tool` — equipada ou na mochila. */
+  #hasTool(character: CharacterRuntime, tool: InteractableTool): boolean {
+    for (const item of character.inventory.items()) {
+      if (this.#options.items.get(item.itemId)?.use?.tool === tool) return true;
+    }
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped !== null && this.#options.items.get(equipped.itemId)?.use?.tool === tool) return true;
+    }
+    return false;
+  }
+
+  /**
+   * O prazo de reversão de um interativo venceu (#728, ADR 0050 d.3): capim volta a crescer,
+   * buraco enche de volta. Só reverte se o estado AINDA é o que agendou o prazo — usar de novo
+   * antes de vencer já cancelou este evento (`#useInteractable`), mas um snapshot restaurado de
+   * um formato anterior a esta issue nunca teria este evento, então a defesa nunca é o caminho
+   * comum, só a rede de segurança.
+   */
+  #onTileRevert(session: Session, interactableId: string): void {
+    const current = this.#tileOverrides.get(interactableId);
+    if (current === null || current.revertAtMs === undefined) return;
+    this.#tileOverrides.toggle(interactableId, session.nowMs);
   }
 
   /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
@@ -2055,6 +2163,7 @@ export class HuntRuleset implements Ruleset {
       // de jogo. Uma sessão restaurada recalcula na hora se precisar; nada observa a diferença.
       followPath: null,
       followStuckSinceMs: null,
+      routeBlockedWarned: false,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
@@ -2114,6 +2223,7 @@ export class HuntRuleset implements Ruleset {
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
+      case TILE_REVERT: return this.#onTileRevert(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
@@ -2320,6 +2430,7 @@ export class HuntRuleset implements Ruleset {
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
       fields: this.#fields.getState(),
+      tileOverrides: this.#tileOverrides.getState(),
       nextGroundItemId: this.#nextGroundItemId,
       warnedExhausted: state.warnedExhausted,
       warnedFullBackpack: state.warnedFullBackpack,
@@ -2434,6 +2545,11 @@ export class HuntRuleset implements Ruleset {
     // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
     // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
     this.#fields = Fields.fromState(restored.fields);
+    // MUTAÇÃO, não substituição (#728): `TileOccupancy.overrides` já referencia esta MESMA
+    // instância desde o construtor — trocar `this.#tileOverrides` deixaria o mundo lendo um
+    // objeto velho, sempre no estado inicial do conteúdo. Ausente é "nenhuma sessão anterior
+    // mexeu em nada", que já é o que `TileOverrides.fromInteractables` produziu na construção.
+    this.#tileOverrides.restoreState(restored.tileOverrides);
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
@@ -2812,6 +2928,27 @@ export class HuntRuleset implements Ruleset {
     runner.walker.resume();
     const to = runner.walker.step();
     if (to === null) return null;
+    // O walker usa o tile interativo bloqueante antes de pisar (#728, ADR 0050 d.4): a rota
+    // autorada pode atravessar tile usável (porta comum, no T1 desta issue), e quem a percorre
+    // abre sozinho — é automação legítima (invariante 11), não desvio de caminho (ADR 0009: a
+    // rota continua sendo a mesma lista fixa de tiles, nunca recalculada em volta da porta).
+    const blockingHere = this.#tileOverrides.at(to);
+    if (blockingHere !== null && blockingHere.blocked) {
+      if (this.#useInteractable(session, character, blockingHere.interactableId)) {
+        runner.routeBlockedWarned = false;
+      } else {
+        // Sem ferramenta (T2/T3, fora do escopo desta issue) ou kind sem par de estados: segura
+        // como faria com parede, e registra UMA vez — não uma linha por vencimento parado.
+        runner.walker.hold();
+        if (!runner.routeBlockedWarned) {
+          runner.routeBlockedWarned = true;
+          session.record('route-blocked', character.id);
+        }
+        return null;
+      }
+    } else {
+      runner.routeBlockedWarned = false;
+    }
     if (this.#partyRegroupBlocked(session, runner, character, to)) {
       // O LÍDER esperando a party se juntar (#527) — achado numa QA ao vivo com o bot config
       // real: sem haste igual entre vocações, quem não é o líder cai para trás em combate, e o
@@ -3351,8 +3488,8 @@ export class HuntRuleset implements Ruleset {
     // ausente) — o `?? this.#world.map.z` é só para o tipo, nunca alcançado na prática.
     const z = from.z ?? this.#world.map.z;
     const pathBlocked: Blocked = (x, y) => {
-      if (isBlocked(this.#world.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
-      if (grounded && floorChangeAt(this.#world.map, x, y, z) !== null) return true;
+      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (grounded && this.#world.floorChangeAt(x, y, z) !== null) return true;
       if (reserved !== null && x === reserved.x && y === reserved.y && z === reserved.z) return true;
       return false;
     };
@@ -7915,7 +8052,7 @@ const slots = bot.groups.get(group);
     const base = this.#blockedFor(mover);
     const z = mover.position.z;
     return (x, y, stepZ, monsterId) => base(x, y, stepZ, monsterId)
-      || floorChangeAt(this.#world.map, x, y, z) !== null;
+      || this.#world.floorChangeAt(x, y, z) !== null;
   }
 
   /** Para o spawn não há quem se mova: só parede e ocupação. */
@@ -7952,7 +8089,7 @@ const slots = bot.groups.get(group);
   #spawnBlockedFor(session: Session): Blocked {
     const radius = this.#options.hunt.spawnClearRadius;
     return (x, y, z = this.#world.map.z, monsterId) => {
-      if (isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z)) return true;
+      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
       if (radius <= 0) return false;
       const definition = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
       if (definition !== undefined && !definition.blockable) return false;
@@ -7978,7 +8115,7 @@ const slots = bot.groups.get(group);
    */
   #summonBlockedFor(): Blocked {
     return (x, y, z = this.#world.map.z) =>
-      isBlocked(this.#options.map, x, y, z) || this.#world.occupied(x, y, z);
+      this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z);
   }
 
   /**

@@ -3,7 +3,9 @@
 // Desde a FUN-119 (ADR 0025) o mapa tem ANDARES: cada um com o bitmap de bloqueio e, quando
 // importado, a velocidade de chão por tile; e `floorChanges` liga um tile a outro andar.
 
-import type { Point, RouteData, TilemapData, TilemapInput } from './schemas.js';
+import type {
+  Point, RouteData, TilemapData, TilemapInput, TilemapInteractable,
+} from './schemas.js';
 
 /**
  * Velocidade de chão de um tile sem velocidade declarada — o valor que o TFS usa quando o
@@ -56,6 +58,12 @@ export interface Tilemap {
    */
   readonly floorChangesByFloor: ReadonlyMap<number, readonly FloorChange[]>;
   readonly source?: TilemapData['source'];
+  /**
+   * Cenário usável (#727, ADR 0050 d.1): o que o importador CLASSIFICOU, geometria e estado no
+   * instante da importação. O MECANISMO que muda de estado por sessão é `TileOverrides` (#728,
+   * `packages/sim/src/tile-overrides.ts`) — este campo é só o conteúdo fixo que o alimenta.
+   */
+  readonly interactables: readonly TilemapInteractable[];
 }
 
 /** Uma escada: `from` está no andar de origem, `to` pode estar em qualquer outro (FUN-119). */
@@ -164,6 +172,7 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   return {
     id: data.id, width, height, z: data.z, blocked: base.blocked, floors, floorChanges,
     floorChangesByFloor,
+    interactables: data.interactables ?? [],
     ...(data.entryPoint === undefined
       ? {}
       : { entryPoint: { x: data.entryPoint.x, y: data.entryPoint.y, z: data.entryPoint.z ?? data.z } }),

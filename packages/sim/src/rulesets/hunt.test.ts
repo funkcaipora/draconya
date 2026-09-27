@@ -11673,5 +11673,184 @@ describe('linha de visão (#553)', () => {
     const before = { ...hero.position };
     run(session, 3_000, 100);
     expect(hero.position).toEqual(before);
+describe('cenário usável — TileOverrides (#728, ADR 0050 d.2-d.5, d.8)', () => {
+  // A MESMA geometria e a MESMA rota de dez tiles de sempre (`map`/`route`, acima) — só o que
+  // está EM CIMA de dois dos tiles do laço muda: uma porta comum no lugar de `(4,2)` (o lado
+  // direito do laço) e um capim, que exige machete, no lugar de `(2,3)` (o lado de baixo). A
+  // adjacência do laço continua igual: o importador NUNCA marca o tile de um interativo como
+  // `#` (ADR 0050 d.1), então nada aqui muda a validação da rota (FUN-9).
+  const doorMap = {
+    ...map,
+    id: 'door-arena',
+    interactables: [
+      { at: { x: 4, y: 2, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1' },
+      {
+        at: { x: 2, y: 3, z: 7 }, kind: 'grass', initialState: 'uncut', appearanceKey: 'grass-1',
+        requires: { tool: 'machete' }, revertMs: 2_000,
+      },
+    ],
+  };
+  const doorRoute = { ...route, id: 'door-loop', mapId: 'door-arena' };
+  const doorHunt = { ...hunt, mapId: 'door-arena', routeId: 'door-loop' };
+  // `use.tool` nasce sem NENHUM item do catálogo real declarando (#727/#744): a machete de
+  // verdade ganhar `use.tool: 'machete'` é a #573, fora do escopo desta issue. Este item de
+  // teste é o que permite exercitar o requisito de ferramenta SEM esperar por ela.
+  const testMachete = {
+    id: 'test-machete', name: 'Test Machete', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'machete' as const },
+  };
+  const loaded = () => content({
+    maps: [doorMap], routes: [doorRoute], hunts: [doorHunt], items: [...items, testMachete],
+  });
+  const withMachete = {
+    backpack: [{ instanceId: 'machete-1', itemId: 'test-machete', quantity: 1 }],
+    satchel: [], equipped: {},
+  };
+
+  /**
+   * Roda até `predicate()` valer, ou desiste em `maxMs`. Mais robusto que apostar num instante
+   * fixo: o hero enfrenta o rato que nasce perto do início ANTES de conseguir andar (a duração
+   * da luta não é o assunto deste teste, e travar nela contaria como falha de outro sistema).
+   */
+  const runUntil = (session: Session, predicate: () => boolean, maxMs: number): boolean => {
+    for (let elapsed = 0; elapsed < maxMs; elapsed += 100) {
+      if (predicate()) return true;
+      session.advanceBy(100);
+    }
+    return predicate();
+  };
+
+  it('o walker abre a porta fechada no caminho antes de pisar, e ela fecha sozinha ao esvaziar (d.3, d.4)', () => {
+    const { session, ruleset } = start({ loaded: loaded(), inventory: withMachete });
+    const door = () => ruleset.tileOverrides.find((o) => o.kind === 'door');
+    expect(door()).toMatchObject({ state: 'closed', blocked: true });
+
+    // Abriu: só é possível se o walker a usou sozinho no caminho (nenhum outro código deste
+    // teste toca em `tileOverrides`) — é a automação legítima do invariante 11.
+    expect(runUntil(session, () => door()?.state === 'open', 15_000)).toBe(true);
+    expect(door()?.blocked).toBe(false);
+
+    // E fechou de novo: a prova de que o hero SAIU do tile (`vacate`), não que ficou parado
+    // em cima dela para sempre — o mesmo `move()` que o levou embora é quem a fecha (d.3).
+    expect(runUntil(session, () => door()?.state === 'closed', 5_000)).toBe(true);
+    expect(door()?.blocked).toBe(true);
+  });
+
+  it('sem ferramenta nenhuma, o walker segura no capim como faria numa parede, e registra UMA vez (d.4)', () => {
+    // A porta comum não exige nada (ADR 0050 d.6, T1): sem a machete o hero ainda abre a porta
+    // sozinho e SÓ trava no capim, dois tiles depois no laço — a prova de que o requisito de
+    // ferramenta é POR interativo, não um bloqueio geral de "sem inventário".
+    const { session, ruleset } = start({ loaded: loaded() });
+    const grass = () => ruleset.tileOverrides.find((o) => o.kind === 'grass');
+    run(session, 15_000, 100);
+    expect(grass()).toMatchObject({ state: 'uncut', blocked: true }); // nunca cortou
+    const blocked = session.notableEvents.filter((e) => e.type === 'route-blocked');
+    expect(blocked.length).toBe(1); // UMA linha, não uma por vencimento parado
+  });
+
+  it('capim cortado com machete volta a crescer sozinho — evento na fila, nada por tique (d.3)', () => {
+    const { session, ruleset } = start({ loaded: loaded(), inventory: withMachete });
+    const grass = () => ruleset.tileOverrides.find((o) => o.kind === 'grass');
+    expect(grass()).toMatchObject({ state: 'uncut', blocked: true });
+
+    expect(runUntil(session, () => grass()?.state === 'cut', 20_000)).toBe(true);
+    expect(grass()?.blocked).toBe(false);
+    expect(grass()?.revertAtMs).toBeDefined();
+
+    // Cresce de volta SOZINHO, sem ninguém usar de novo — o `TILE_REVERT` da fila (invariante 2).
+    expect(runUntil(session, () => grass()?.state === 'uncut', 5_000)).toBe(true);
+    expect(grass()?.blocked).toBe(true);
+  });
+
+  it('stone pile virada buraco desce um andar, e enche de volta sozinha (d.2-d.3)', () => {
+    const pileMap = {
+      id: 'pile-arena', z: 7,
+      // `grid`+`floors` são exatamente um dos dois (schema): o segundo andar existe só para o
+      // `floorChange` da stone pile ter para onde descer — não para o walker visitar.
+      floors: { 7: { grid: map.grid }, 8: { grid: map.grid } },
+      interactables: [{
+        at: { x: 4, y: 2, z: 7 }, kind: 'stone-pile', initialState: 'pile', appearanceKey: 'pile-1',
+        requires: { tool: 'shovel' }, revertMs: 2_000,
+      }],
+    };
+    const pileMachete = {
+      id: 'test-shovel', name: 'Test Shovel', kind: 'other' as const, weight: 1, value: 0,
+      use: { tool: 'shovel' as const },
+    };
+    const loadedPile = content({
+      maps: [pileMap], routes: [{ ...doorRoute, mapId: 'pile-arena' }],
+      hunts: [{ ...hunt, mapId: 'pile-arena', routeId: 'door-loop' }],
+      items: [...items, pileMachete],
+    });
+    const { session, ruleset } = start({
+      loaded: loadedPile,
+      inventory: { backpack: [{ instanceId: 's1', itemId: 'test-shovel', quantity: 1 }], satchel: [], equipped: {} },
+    });
+    const pile = () => ruleset.tileOverrides.find((o) => o.kind === 'stone-pile');
+    expect(pile()).toMatchObject({ state: 'pile', blocked: true, floorChange: null });
+
+    expect(runUntil(session, () => pile()?.state === 'hole', 15_000)).toBe(true);
+    expect(pile()?.floorChange).toEqual({ x: 4, y: 2, z: 8 });
+
+    expect(runUntil(session, () => pile()?.state === 'pile', 5_000)).toBe(true);
+    expect(pile()?.floorChange).toBeNull();
+  });
+
+  it('a alavanca NUNCA bloqueia — o walker passa por cima sem puxar sozinho (d.1, fora do escopo do #729)', () => {
+    // A alavanca não é um obstáculo (`BLOCKING_STATES` não a lista, `tile-overrides.ts`), então
+    // `#useInteractable` — o gatilho do walker (d.4) — nunca é chamado para ela: ele só usa o
+    // que está NO CAMINHO e bloqueando. Puxar a alavanca DE PROPÓSITO é `#useOnMap` (#729, fora
+    // do escopo desta issue); o mecanismo de alternar/`links` já está pronto e testado
+    // isoladamente em `tile-overrides.test.ts` — este teste prende a FRONTEIRA: o walker não
+    // aciona sozinho o que não impede ele de andar, e é isso que evita puxar alavanca por
+    // engano em toda passagem por cima dela.
+    const leverMap = {
+      ...map,
+      id: 'lever-arena',
+      interactables: [
+        {
+          at: { x: 4, y: 2, z: 7 }, kind: 'lever', initialState: 'down', appearanceKey: 'lever',
+          aid: 2772, links: ['9001'],
+        },
+        {
+          at: { x: 1, y: 2, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1',
+          aid: 9001,
+        },
+      ],
+    };
+    const loadedLever = content({
+      maps: [leverMap], routes: [{ ...doorRoute, mapId: 'lever-arena' }],
+      hunts: [{ ...hunt, mapId: 'lever-arena', routeId: 'door-loop' }],
+    });
+    const { session, ruleset } = start({ loaded: loadedLever });
+    const lever = () => ruleset.tileOverrides.find((o) => o.kind === 'lever');
+    const linkedDoor = () => ruleset.tileOverrides.find((o) => o.kind === 'door');
+    expect(lever()?.state).toBe('down');
+
+    // Duas voltas completas do laço passando por cima da alavanca: ela continua `down`, e a
+    // porta ligada por `aid` continua fechada — nada a acionou.
+    run(session, 15_000, 100);
+    expect(lever()?.state).toBe('down');
+    expect(linkedDoor()).toMatchObject({ state: 'closed', blocked: true });
+  });
+
+  it('o overlay atravessa o snapshot: porta aberta continua aberta ao retomar (invariante 7, sem bump)', () => {
+    const loadedContent = loaded();
+    const { session, ruleset } = start({ loaded: loadedContent, inventory: withMachete });
+    const door = () => ruleset.tileOverrides.find((o) => o.kind === 'door');
+    expect(runUntil(session, () => door()?.state === 'open', 15_000)).toBe(true);
+    session.drainEvents();
+
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loadedContent) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    const restored = resumed.ruleset as HuntRuleset;
+    // O `TileOccupancy.overrides` do ruleset RECÉM-CONSTRUÍDO já é a instância que `restore()`
+    // muta (nunca substitui) — é essa mutação que este teste prova: sem ela, o mundo restaurado
+    // ainda enxergaria a porta fechada, e o `move` de quem retomou em cima dela falharia.
+    expect(restored.tileOverrides.find((o) => o.kind === 'door')).toMatchObject({
+      state: 'open', blocked: false,
+    });
   });
 });
