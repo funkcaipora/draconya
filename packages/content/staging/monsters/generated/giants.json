@@ -1,5 +1,309 @@
 [
   {
+    "id": "beast-hulking-prehemoth",
+    "name": "Beast Hulking Prehemoth",
+    "health": 20700,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 455
+    },
+    "armor": 84,
+    "defense": 84,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "energy": -0.05,
+        "earth": -0.05,
+        "fire": 0.1,
+        "ice": 0.1,
+        "holy": -0.2,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 455
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 300,
+          "max": 400
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/beast_hulking_prehemoth.lua"
+    },
+    "outfitId": 1553
+  },
+  {
+    "id": "behemoth",
+    "name": "Behemoth",
+    "class": "giant",
+    "health": 4000,
+    "experience": 2500,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 50,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.1,
+        "earth": 0.8,
+        "fire": 0.3,
+        "ice": -0.1,
+        "holy": 0.3,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.74,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 200
+      },
+      "items": [
+        {
+          "itemId": "amphora",
+          "chance": 0.001
+        },
+        {
+          "itemId": "crystal-necklace",
+          "chance": 0.0253
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.0638,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "strange-symbol",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "big-bone",
+          "chance": 0.0067
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0598
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.1051
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.01006
+        },
+        {
+          "itemId": "crowbar",
+          "chance": 0.001
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0005
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0393
+        },
+        {
+          "itemId": "dark-armor",
+          "chance": 0.0437
+        },
+        {
+          "itemId": "pick",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "steel-boots",
+          "chance": 0.0038
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.3,
+          "min": 1,
+          "max": 6
+        },
+        {
+          "itemId": "perfect-behemoth-fang",
+          "chance": 0.0109
+        },
+        {
+          "itemId": "behemoth-claw",
+          "chance": 0.0086
+        },
+        {
+          "itemId": "assassin-star",
+          "chance": 0.0975,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "behemoth-trophy",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "great-health-potion",
+          "chance": 0.0512
+        },
+        {
+          "itemId": "battle-stone",
+          "chance": 0.14
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/behemoth.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 55,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 55
+  },
+  {
     "id": "cyclops",
     "name": "Cyclops",
     "class": "giant",
@@ -117,5 +421,2297 @@
       "occurrence": 0
     },
     "outfitId": 22
+  },
+  {
+    "id": "cyclops-drone",
+    "name": "Cyclops Drone",
+    "class": "giant",
+    "health": 325,
+    "experience": 200,
+    "attack": {
+      "min": 0,
+      "max": 105
+    },
+    "armor": 25,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "earth": -0.1,
+        "ice": 0.2,
+        "holy": 0.2,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.72,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 198,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.82,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0068
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.08
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.02
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.016
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.5043,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "cyclops-trophy",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.0052
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0675
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 105
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/cyclops_drone.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 391,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 280
+  },
+  {
+    "id": "cyclops-smith",
+    "name": "Cyclops Smith",
+    "class": "giant",
+    "health": 435,
+    "experience": 255,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 28,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": 0.1,
+        "holy": 0.2,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.96,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 204,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8292,
+        "min": 1,
+        "max": 70
+      },
+      "items": [
+        {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "battle-axe",
+          "chance": 0.0545
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.0088
+        },
+        {
+          "itemId": "battle-hammer",
+          "chance": 0.052
+        },
+        {
+          "itemId": "heavy-machete",
+          "chance": 0.02
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.002
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.02
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0619
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.4995
+        },
+        {
+          "itemId": "cyclops-trophy",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0015
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.0039
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.1028
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 150
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 70
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "whirlwindclub"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "whirlwindclub",
+          "impactKey": "stun"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/cyclops_smith.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 389,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 277
+  },
+  {
+    "id": "frost-giant",
+    "name": "Frost Giant",
+    "class": "giant",
+    "health": 270,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 22,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.82,
+        "min": 1,
+        "max": 40
+      },
+      "items": [
+        {
+          "itemId": "club-ring",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0814
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0135
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.0497,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.0006
+        },
+        {
+          "itemId": "ice-cube",
+          "chance": 0.0218
+        },
+        {
+          "itemId": "norse-shield",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.00819
+        },
+        {
+          "itemId": "frost-giant-pelt",
+          "chance": 0.05
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/frost_giant.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 324,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 257
+  },
+  {
+    "id": "frost-giantess",
+    "name": "Frost Giantess",
+    "class": "giant",
+    "health": 275,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 60
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": 0.2,
+        "holy": 0.1,
+        "death": -0.03
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 194,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 1,
+        "max": 40
+      },
+      "items": [
+        {
+          "itemId": "small-stone",
+          "chance": 0.1036,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "club-ring",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0796
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.0149
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.2099,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.001
+        },
+        {
+          "itemId": "ice-cube",
+          "chance": 0.02008
+        },
+        {
+          "itemId": "norse-shield",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "mana-potion",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "frost-giant-pelt",
+          "chance": 0.048
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 60
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.6,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/frost_giantess.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 334,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 265
+  },
+  {
+    "id": "hulking-prehemoth",
+    "name": "Hulking Prehemoth",
+    "class": "giant",
+    "health": 20700,
+    "experience": 12690,
+    "attack": {
+      "min": 0,
+      "max": 1250
+    },
+    "armor": 84,
+    "defense": 84,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": 0.3,
+        "fire": 0.4,
+        "ice": -0.3,
+        "holy": -0.3
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.51,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 382,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.2824,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "prehemoth-horns",
+          "chance": 0.1987
+        },
+        {
+          "itemId": "prehemoth-claw",
+          "chance": 0.16149,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.1612
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.0705
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0466
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0304
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.0288
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.0116
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.0078
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1250
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 3500,
+        "chance": 0.38,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 850,
+          "max": 1700
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 4100,
+        "chance": 0.3,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 600,
+          "max": 1200
+        },
+        "damageType": "energy",
+        "presentation": {
+          "impactKey": "explosionarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/hulking_prehemoth.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 2271,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
+    "outfitId": 1553
+  },
+  {
+    "id": "ogre-brute",
+    "name": "Ogre Brute",
+    "class": "giant",
+    "health": 1000,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 269
+    },
+    "armor": 41,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "energy": -0.1,
+        "fire": 0.2,
+        "ice": 0.2,
+        "holy": 0.2,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 204,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.92,
+        "min": 1,
+        "max": 130
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.062
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.042
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.062,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "battle-stone",
+          "chance": 0.062
+        },
+        {
+          "itemId": "cookie",
+          "chance": 0.062,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.052
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.012
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.032,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.032,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "power-ring",
+          "chance": 0.022
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.012
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.062,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "bonebreaker",
+          "chance": 0.005
+        },
+        {
+          "itemId": "ogre-klubba",
+          "chance": 0.008
+        },
+        {
+          "itemId": "pot",
+          "chance": 0.005
+        },
+        {
+          "itemId": "rusted-helmet",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "shamanic-mask",
+          "chance": 0.003
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 269
+        },
+        "damageType": "physical",
+        "condition": {
+          "key": "burning",
+          "merge": "strongest",
+          "durationMs": 54000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 6,
+            "intervalMs": 9000,
+            "damageType": "fire"
+          }
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 70,
+          "max": 180
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "teleport"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 80,
+          "max": 95
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/ogre_brute.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1161,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 857
+  },
+  {
+    "id": "ogre-rowdy",
+    "name": "Ogre Rowdy",
+    "class": "giant",
+    "health": 4500,
+    "experience": 4200,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 98,
+    "defense": 98,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": 0.3,
+        "ice": -0.3
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 2.63,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 420,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 600
+      },
+      "items": [
+        {
+          "itemId": "flaming-arrow",
+          "chance": 0.2204,
+          "min": 1,
+          "max": 19
+        },
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.129
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.2097
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.129
+        },
+        {
+          "itemId": "wand-of-inferno",
+          "chance": 0.1
+        },
+        {
+          "itemId": "jalapeno-pepper",
+          "chance": 0.0376,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "wand-of-draconia",
+          "chance": 0.0215
+        },
+        {
+          "itemId": "wand-of-everblazing",
+          "chance": 0.0108
+        },
+        {
+          "itemId": "ogre-choppa",
+          "chance": 0.0054
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 400
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "whirlwindaxe",
+          "impactKey": "explosionhit"
+        }
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 450
+        },
+        "damageType": "fire",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 280,
+          "max": 420
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "flammingarrow"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/ogre_rowdy.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1821,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1213
+  },
+  {
+    "id": "ogre-ruffian",
+    "name": "Ogre Ruffian",
+    "class": "giant",
+    "health": 5500,
+    "experience": 5000,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 102,
+    "defense": 102,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "ice": -0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.72,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 430,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 500
+      },
+      "items": [
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.1727
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.1583
+        },
+        {
+          "itemId": "pair-of-iron-fists",
+          "chance": 0.0216
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.0863,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "diamond-sceptre",
+          "chance": 0.0576
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0216
+        },
+        {
+          "itemId": "metal-spats",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0432
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 450
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 350
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock",
+          "impactKey": "poff"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/ogre_ruffian.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1820,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1212
+  },
+  {
+    "id": "ogre-sage",
+    "name": "Ogre Sage",
+    "class": "giant",
+    "health": 4800,
+    "experience": 5500,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 93,
+    "defense": 93,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.3,
+        "earth": 0.25,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 2.51,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 460,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 300
+      },
+      "items": [
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.0795
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.1583
+        },
+        {
+          "itemId": "shamanic-talisman",
+          "chance": 0.1023
+        },
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.125
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0455
+        },
+        {
+          "itemId": "bone-fetish",
+          "chance": 0.0227
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0114
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.24,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 50,
+          "max": 130
+        },
+        "damageType": "lifedrain",
+        "presentation": {
+          "missileKey": "smallstone"
+        }
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.16,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 100,
+          "max": 165
+        },
+        "damageType": "energy",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 115,
+          "max": 200
+        },
+        "damageType": "death",
+        "presentation": {
+          "missileKey": "death",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.13,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 300
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "hitbypoison"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/ogre_sage.lua"
+    },
+    "summons": {
+      "max": 1,
+      "entries": [
+        {
+          "monsterId": "young-goanna",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 1
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1822,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1214
+  },
+  {
+    "id": "ogre-savage",
+    "name": "Ogre Savage",
+    "class": "giant",
+    "health": 1400,
+    "experience": 950,
+    "attack": {
+      "min": 0,
+      "max": 269
+    },
+    "armor": 32,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": 0.2,
+        "ice": 0.2,
+        "holy": 0.5,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.92,
+        "min": 1,
+        "max": 130
+      },
+      "items": [
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.032,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.032,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "cookie",
+          "chance": 0.022,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "jalapeno-pepper",
+          "chance": 0.012,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.012,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.012,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "berserk-potion",
+          "chance": 0.012
+        },
+        {
+          "itemId": "mysterious-fetish",
+          "chance": 0.022
+        },
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.012
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.012
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.012
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.022,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.006
+        },
+        {
+          "itemId": "shamanic-mask",
+          "chance": 0.003
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 269
+        },
+        "damageType": "physical",
+        "condition": {
+          "key": "burning",
+          "merge": "strongest",
+          "durationMs": 54000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 6,
+            "intervalMs": 9000,
+            "damageType": "fire"
+          }
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 70,
+          "max": 180
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 80,
+          "max": 95
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/ogre_savage.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1162,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 858
+  },
+  {
+    "id": "ogre-shaman",
+    "name": "Ogre Shaman",
+    "class": "giant",
+    "health": 800,
+    "experience": 625,
+    "attack": {
+      "min": 0,
+      "max": 269
+    },
+    "armor": 30,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "fire": 0.2,
+        "ice": 0.2,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.92,
+        "min": 1,
+        "max": 130
+      },
+      "items": [
+        {
+          "itemId": "opal",
+          "chance": 0.012,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "prickly-pear",
+          "chance": 0.062,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.022,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.012,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "bone-fetish",
+          "chance": 0.032
+        },
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.012
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.008
+        },
+        {
+          "itemId": "ogre-ear-stud",
+          "chance": 0.032
+        },
+        {
+          "itemId": "ogre-nose-ring",
+          "chance": 0.022
+        },
+        {
+          "itemId": "shamanic-talisman",
+          "chance": 0.012
+        },
+        {
+          "itemId": "skull",
+          "chance": 0.012
+        },
+        {
+          "itemId": "skull-fetish",
+          "chance": 0.012
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.01,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.006
+        },
+        {
+          "itemId": "waterskin",
+          "chance": 0.005
+        },
+        {
+          "itemId": "ogre-scepta",
+          "chance": 0.003
+        },
+        {
+          "itemId": "shamanic-mask",
+          "chance": 0.003
+        },
+        {
+          "itemId": "voodoo-doll",
+          "chance": 0.001
+        },
+        {
+          "itemId": "didgeridoo",
+          "chance": 0.001,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 269
+        },
+        "damageType": "physical",
+        "condition": {
+          "key": "burning",
+          "merge": "strongest",
+          "durationMs": 54000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 6,
+            "intervalMs": 9000,
+            "damageType": "fire"
+          }
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 70,
+          "max": 180
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "earthbeam",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "beam",
+            "length": 8
+          }
+        },
+        "power": {
+          "min": 15,
+          "max": 120
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "carniphila"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 80,
+          "max": 95
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/ogre_shaman.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "dworc-fleshhunter",
+          "intervalMs": 1000,
+          "chance": 0.3,
+          "count": 1
+        },
+        {
+          "monsterId": "terror-bird",
+          "intervalMs": 1000,
+          "chance": 0.3,
+          "count": 1
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1163,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 859
+  },
+  {
+    "id": "orclops-ravager",
+    "name": "Orclops Ravager",
+    "class": "giant",
+    "health": 1200,
+    "experience": 1100,
+    "attack": {
+      "min": 0,
+      "max": 240
+    },
+    "armor": 35,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": 0.2,
+        "ice": 0.2,
+        "holy": 0.5,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.24,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 260,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5032,
+        "min": 1,
+        "max": 120
+      },
+      "items": [
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.5032
+        },
+        {
+          "itemId": "mysterious-fetish",
+          "chance": 0.5032
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.2
+        },
+        {
+          "itemId": "red-mushroom",
+          "chance": 0.5032,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "reinvigorating-seeds",
+          "chance": 0.06
+        },
+        {
+          "itemId": "bone-toothpick",
+          "chance": 0.049
+        },
+        {
+          "itemId": "beetle-carapace",
+          "chance": 0.018
+        },
+        {
+          "itemId": "bug-meat",
+          "chance": 0.1275
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.0251,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.0194,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.01
+        },
+        {
+          "itemId": "onion",
+          "chance": 0.0887
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.097
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.1529,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "pair-of-iron-fists",
+          "chance": 0.0091
+        },
+        {
+          "itemId": "war-drum",
+          "chance": 0.0091
+        },
+        {
+          "itemId": "berserk-potion",
+          "chance": 0.0091
+        },
+        {
+          "itemId": "dreaded-cleaver",
+          "chance": 0.003
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 240
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 180,
+          "max": 220
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 336
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.17,
+        "heal": {
+          "min": 80,
+          "max": 150
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/orclops_ravager.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 1320,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 935
   }
 ]

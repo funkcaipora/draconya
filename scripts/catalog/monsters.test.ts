@@ -11,6 +11,12 @@ import {
   lootChance, maxMeleeDamage, readMonsterCatalog, readTfsSpeeds, slugify, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
+import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
+
+/** A ability esperada, com o `kind` do #682 só quando o schema desta base o declara. */
+function withKind(ability: Record<string, unknown>, kind: 'melee' | 'combat'): Record<string, unknown> {
+  return ABILITY_KIND_SUPPORTED ? { ...ability, kind } : ability;
+}
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const COMMIT = 'c'.repeat(40);
@@ -113,6 +119,30 @@ monster.speed = 80
 mType:register(monster)
 `;
 
+// Invoca um monstro que não é gerado (o Test Wraith está fora do pacote) — sai junto.
+const SUMMONER = `
+local mType = Game.createMonsterType("Test Summoner")
+local monster = {}
+monster.outfit = { lookType = 21 }
+monster.health = 50
+monster.maxHealth = 50
+monster.speed = 80
+monster.summon = { maxSummons = 2, summons = { { name = "Test Wraith", chance = 10, interval = 2000 } } }
+mType:register(monster)
+`;
+
+// Invoca o Test Rat, que é gerado.
+const RAT_CALLER = `
+local mType = Game.createMonsterType("Test Rat Caller")
+local monster = {}
+monster.outfit = { lookType = 21 }
+monster.health = 50
+monster.maxHealth = 50
+monster.speed = 80
+monster.summon = { maxSummons = 1, summons = { { name = "Test Rat", chance = 20, interval = 3000, count = 1 } } }
+mType:register(monster)
+`;
+
 const OUT_OF_PACK = `
 local mType = Game.createMonsterType("Test Wraith")
 local monster = {}
@@ -156,6 +186,8 @@ function fixture(withTfs: boolean): CatalogImportContext {
   write(join(monsters, 'vermins', 'test_spitter.lua'), SPITTER);
   write(join(monsters, 'familiars', 'test_familiar.lua'), FAMILIAR);
   write(join(monsters, 'undeads', 'test_wraith.lua'), OUT_OF_PACK);
+  write(join(monsters, 'undeads', 'test_summoner.lua'), SUMMONER);
+  write(join(monsters, 'mammals', 'test_rat_caller.lua'), RAT_CALLER);
   write(join(canary, 'data', 'items', 'items.xml'), ITEMS_XML);
   if (withTfs) write(join(tfs, 'data', 'monster', 'monsters', 'test drake.xml'), TFS_DRAKE);
   return {
@@ -273,12 +305,15 @@ describe('convertMonster (fixture sintética)', () => {
     });
   });
 
-  it('ataque além do melee, magia de defesa e outfit fora do pacote bloqueiam a geração', () => {
+  it('defesa sem mapeador e outfit fora do pacote bloqueiam a geração; o combat mapeia', () => {
     const ctx = fixture(false);
     const spitter = convertMonster(SPITTER, 'x/vermins/test_spitter.lua', 'vermins', COMMIT, deps(ctx));
     expect(spitter.blockers).toEqual([
-      'ataque sem mapeador (M35-02): combat',
-      'defesa com magia sem mapeador (M35-02): speed',
+      'sem mapeador: speed (speed de defesa sem speedChange positivo)',
+    ]);
+    expect(spitter.entity['abilities']).toEqual([
+      withKind({ id: 'melee', cadenceMs: 2000, target: { range: 1 }, power: { min: 0, max: 10 }, damageType: 'physical' }, 'melee'),
+      withKind({ id: 'earthstrike', cadenceMs: 2000, chance: 0.1, target: { range: 7 }, power: { min: 5, max: 9 }, damageType: 'earth' }, 'combat'),
     ]);
     const wraith = convertMonster(OUT_OF_PACK, 'x/undeads/test_wraith.lua', 'undeads', COMMIT, deps(ctx));
     expect(wraith.blockers).toEqual(['outfit 9999 fora do pacote 13.32']);
@@ -301,7 +336,14 @@ describe('readMonsterCatalog (fixture sintética)', () => {
 
     expect([...catalog.slices.keys()].sort()).toEqual(['dragons', 'mammals']);
     expect(catalog.slices.get('dragons')?.map((entity) => entity.id)).toEqual(['test-drake']);
-    expect(catalog.skipped.map((entity) => entity.id).sort()).toEqual(['test-spitter', 'test-wraith']);
+    expect(catalog.skipped.map((entity) => entity.id).sort()).toEqual(['test-spitter', 'test-summoner', 'test-wraith']);
+    // A invocação de monstro não gerado leva o invocador junto; a de monstro gerado fica.
+    expect(catalog.skipped.find((entity) => entity.id === 'test-summoner')?.reason).toBe('invoca monstro não gerado: test-wraith');
+    expect(catalog.slices.get('mammals')?.find((entity) => entity.id === 'test-rat-caller')?.['summons']).toEqual({
+      max: 1, entries: [{ monsterId: 'test-rat', intervalMs: 3000, chance: 0.2, count: 1 }],
+    });
+    expect(catalog.notes?.some((note) => note.startsWith('Cobertura (M35-02)'))).toBe(true);
+    expect(catalog.notes?.some((note) => note.includes('`speed` 1 (speed de defesa sem speedChange positivo)'))).toBe(true);
     expect(catalog.notes?.some((note) => note.includes('Canary × 2'))).toBe(true);
   });
 
@@ -311,7 +353,7 @@ describe('readMonsterCatalog (fixture sintética)', () => {
     for (const entities of catalog.slices.values()) {
       for (const entity of entities) {
         expect(() => monsterSchema.parse(asMonster(entity))).not.toThrow();
-        expect(() => bestiaryEntrySchema.parse(entity['bestiary'])).not.toThrow();
+        if (entity['bestiary'] !== undefined) expect(() => bestiaryEntrySchema.parse(entity['bestiary'])).not.toThrow();
       }
     }
   });
@@ -345,6 +387,54 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     expect(convertReal('mammals/rat.lua').entity['speed']).toBe(134);
   });
 
+  it('o Dragon gerado bate com o dragon.json autoral do #520 — onda de fogo, bola e cura', () => {
+    const dragon = convertReal('dragons/dragon.lua');
+    expect(dragon.blockers).toEqual([]);
+    const generated = monsterSchema.parse(asMonster(dragon.entity));
+    const authored = monsterSchema.parse(JSON.parse(
+      readFileSync(join(REPO_ROOT, 'packages/content/data/monsters/dragon.json'), 'utf8'),
+    ) as unknown);
+    // A ÚNICA diferença, e justificada: o Canary não declara `range` na onda (sem limite além da
+    // vista, `Monster::canUseSpell`); o leitor usa o comprimento da onda (8), e o autoral usou 7.
+    // Nenhum dos dois é número do Tibia — é o preenchimento que o schema exige.
+    const firewave = generated.abilities?.find((ability) => ability.id === 'firewave');
+    expect(firewave?.target.range).toBe(8);
+    const aligned = generated.abilities?.map((ability) => {
+      const { kind: _kind, ...rest } = ability as typeof ability & { kind?: string };
+      return ability.id === 'firewave' ? { ...rest, target: { ...rest.target, range: 7 } } : rest;
+    });
+    expect(aligned).toEqual(authored.abilities);
+    for (const field of [
+      'class', 'health', 'experience', 'attack', 'attackIntervalMs', 'armor', 'defense', 'defenseMitigation',
+      'damageType', 'mitigation', 'critChance', 'speed', 'aggroRadius', 'attackRange', 'targetDistance',
+      'blockable', 'defenses', 'targetChange', 'targetStrategy', 'runOnHealth', 'staticAttack', 'summons',
+    ] as const) {
+      expect(generated[field], field).toEqual(authored[field]);
+    }
+  });
+
+  it('o Slime invoca Slime (maxSummons 3, chance 10, intervalo 2000, até 3)', () => {
+    const slime = convertReal('slimes/slime.lua');
+    expect(slime.blockers).toEqual([]);
+    expect(slime.entity['summons']).toEqual({
+      max: 3, entries: [{ monsterId: 'slime', intervalMs: 2000, chance: 0.1, count: 3 }],
+    });
+  });
+
+  it('as chaves de apresentação do Dragon resolvem para os ids que a tabela de aparências já tem', () => {
+    const readerDeps = deps(ctx);
+    const appearances = JSON.parse(readFileSync(join(REPO_ROOT, 'packages/content/data/appearances/baseline.json'), 'utf8')) as {
+      abilities: Record<string, { missile?: number; effect?: number }>;
+    };
+    const dragon = convertReal('dragons/dragon.lua');
+    const uses = dragon.notes.presentation;
+    expect(uses.map((use) => use.key).sort()).toEqual(['blueshimmer', 'fire', 'firearea', 'firearea']);
+    for (const use of uses) {
+      const id = use.role === 'missile' ? readerDeps.missileIds.get(use.constant) : readerDeps.effectIds.get(use.constant);
+      expect(id, use.key).toBe(appearances.abilities[use.key]?.[use.role]);
+    }
+  });
+
   it('toda chance de loot lida volta EXATA ao inteiro do Lua, e todo gerado passa nos schemas', () => {
     const catalog = readMonsterCatalog(ctx, deps(ctx));
     for (const monster of catalog.converted) {
@@ -358,6 +448,15 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
       for (const entity of entities) {
         const parsed = monsterSchema.safeParse(asMonster(entity));
         expect(parsed.success, `${entity.id}: ${parsed.error?.message ?? ''}`).toBe(true);
+        // As regras que o `buildContent` confere além do schema (#518/CMB-07): id de ability
+        // único e fora do `basic`, área de monstro só circle/wave/beam/rows, campo só círculo.
+        const abilities = parsed.data?.abilities ?? [];
+        expect(new Set(abilities.map((ability) => ability.id)).size, entity.id).toBe(abilities.length);
+        for (const ability of abilities) {
+          expect(ability.id).not.toBe('basic');
+          if (ability.target.area !== undefined) expect(['circle', 'wave', 'beam', 'rows']).toContain(ability.target.area.shape);
+          if (ability.field !== undefined) expect(ability.field.shape.shape).toBe('circle');
+        }
         if (entity['bestiary'] !== undefined) {
           const entry = bestiaryEntrySchema.safeParse(entity['bestiary']);
           expect(entry.success, `${entity.id}: ${entry.error?.message ?? ''}`).toBe(true);

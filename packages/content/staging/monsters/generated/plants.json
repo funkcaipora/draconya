@@ -73,5 +73,1116 @@
       "occurrence": 3
     },
     "outfitId": 310
+  },
+  {
+    "id": "carniphila",
+    "name": "Carniphila",
+    "class": "plant",
+    "health": 255,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 22,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": -0.2,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 110,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9,
+        "min": 1,
+        "max": 40
+      },
+      "items": [
+        {
+          "itemId": "corncob",
+          "chance": 0.0089
+        },
+        {
+          "itemId": "dark-mushroom",
+          "chance": 0.07692
+        },
+        {
+          "itemId": "sling-herb",
+          "chance": 0.00446,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "shadow-herb",
+          "chance": 0.0088
+        },
+        {
+          "itemId": "seeds",
+          "chance": 0.0049
+        },
+        {
+          "itemId": "carniphila-seeds",
+          "chance": 0.04166
+        },
+        {
+          "itemId": "carrot-on-a-stick",
+          "chance": 0.0017
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 184000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 100,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 60,
+          "max": 95
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "green-rings"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -800
+          }
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 40,
+          "max": 130
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/carniphila.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 120,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 120
+  },
+  {
+    "id": "haunted-treeling",
+    "name": "Haunted Treeling",
+    "class": "plant",
+    "health": 450,
+    "experience": 310,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 20,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.05,
+        "ice": 0.1,
+        "holy": 0.2,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9192,
+        "min": 1,
+        "max": 95
+      },
+      "items": [
+        {
+          "itemId": "wooden-trash",
+          "chance": 0.2919
+        },
+        {
+          "itemId": "red-mushroom",
+          "chance": 0.077
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0513
+        },
+        {
+          "itemId": "white-mushroom",
+          "chance": 0.0503,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "haunted-piece-of-wood",
+          "chance": 0.0495
+        },
+        {
+          "itemId": "orange-mushroom",
+          "chance": 0.018
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.0104
+        },
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.0066
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0062
+        },
+        {
+          "itemId": "bullseye-potion",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 150
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "manadrainburst",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 30,
+          "max": 100
+        },
+        "damageType": "manadrain",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "beam",
+            "length": 5
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "smallplants"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -700
+          }
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "smallearth",
+          "impactKey": "carniphila"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 55,
+          "max": 100
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 0
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/haunted_treeling.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 511,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 310
+  },
+  {
+    "id": "leaf-golem",
+    "name": "Leaf Golem",
+    "class": "plant",
+    "health": 90,
+    "experience": 45,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 11,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.4,
+        "fire": -0.05,
+        "ice": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 136,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8746,
+        "min": 1,
+        "max": 27
+      },
+      "items": [
+        {
+          "itemId": "fir-cone",
+          "chance": 0.1493
+        },
+        {
+          "itemId": "dowser",
+          "chance": 0.1219
+        },
+        {
+          "itemId": "swampling-club",
+          "chance": 0.0513
+        },
+        {
+          "itemId": "white-mushroom",
+          "chance": 0.0492,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0095
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 15
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "smallstone"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "smallplants"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 9000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/leaf_golem.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 979,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 567
+  },
+  {
+    "id": "omnivora",
+    "name": "Omnivora",
+    "class": "plant",
+    "health": 1200,
+    "experience": 750,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 38,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": -0.1,
+        "ice": 0.2,
+        "death": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.97,
+        "min": 1,
+        "max": 242
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.182,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.02
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.02
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.0221
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.012
+        },
+        {
+          "itemId": "white-mushroom",
+          "chance": 0.019
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.0095
+        },
+        {
+          "itemId": "serpent-sword",
+          "chance": 0.0078
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.007
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.0043
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "carrot-on-a-stick",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 150
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 4000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -350
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 80,
+          "max": 100
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "earthbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "beam",
+            "length": 8
+          }
+        },
+        "power": {
+          "min": 50,
+          "max": 100
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 250,
+          "max": 400
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/omnivora.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 1141,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 717
+  },
+  {
+    "id": "stalking-stalk",
+    "name": "Stalking Stalk",
+    "class": "plant",
+    "health": 17100,
+    "experience": 11569,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 76,
+    "defense": 110,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.25,
+        "earth": 0.25,
+        "fire": 0.25,
+        "ice": -0.1,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.11,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 380,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 2,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.1657,
+        "min": 10000,
+        "max": 30000
+      },
+      "items": [
+        {
+          "itemId": "stalking-seeds",
+          "chance": 0.2152
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0714,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "green-crystal-fragment",
+          "chance": 0.0503
+        },
+        {
+          "itemId": "dragon-necklace",
+          "chance": 0.0454
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.0396,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "magma-coat",
+          "chance": 0.0216
+        },
+        {
+          "itemId": "bow",
+          "chance": 0.02
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0178
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.017
+        },
+        {
+          "itemId": "muck-rod",
+          "chance": 0.0131
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 400
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "carniphila"
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 4000,
+        "chance": 0.4,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 800,
+          "max": 1050
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "hitbyfire"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2900,
+        "chance": 0.25,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 850,
+          "max": 1130
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "plantattack"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/stalking_stalk.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 2272,
+      "toKill": 5000,
+      "firstUnlock": 200,
+      "secondUnlock": 2000,
+      "charmsPoints": 100,
+      "stars": 5,
+      "occurrence": 0
+    },
+    "outfitId": 1554
+  },
+  {
+    "id": "swampling",
+    "name": "Swampling",
+    "class": "plant",
+    "health": 80,
+    "experience": 45,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 4,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.25,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.849,
+        "min": 1,
+        "max": 12
+      },
+      "items": [
+        {
+          "itemId": "rope",
+          "chance": 0.0508
+        },
+        {
+          "itemId": "white-mushroom",
+          "chance": 0.1022,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "swampling-club",
+          "chance": 0.0741
+        },
+        {
+          "itemId": "swampling-moss",
+          "chance": 0.199
+        },
+        {
+          "itemId": "piece-of-swampling-wood",
+          "chance": 0.1487
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 2,
+          "max": 15
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "wave",
+            "length": 3
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "watersplash"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -300
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/plants/swampling.lua"
+    },
+    "bestiary": {
+      "class": "plant",
+      "race": "plant",
+      "raceId": 919,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 535
   }
 ]
