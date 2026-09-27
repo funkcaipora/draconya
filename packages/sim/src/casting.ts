@@ -52,7 +52,14 @@ export type CastRefusal =
   /** O grupo (ou o secundário) da magia ainda está trancado (#155). Carrega prazo, como `on-cooldown`. */
   | 'group-cooldown'
   /** A runa pede magic level que este personagem não tem (#165). */
-  | 'magic-level-too-low';
+  | 'magic-level-too-low'
+  /**
+   * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
+   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
+   * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
+   * bot volta sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   */
+  | 'attack-locked';
 
 export interface CastSuccess {
   readonly ok: true;
@@ -426,6 +433,19 @@ export function castSpell(
   }
 
   const effect = spell.effect;
+  // Stairhop (#554, M30-07, ADR 0040 decisão 1): magia AGRESSIVA recusa enquanto a trava do
+  // lançador não vencer — cura, condição e o resto do vocabulário continuam liberados, como o
+  // Canary libera tudo que não é `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`). Antes
+  // do alcance/mana, pela mesma posição relativa do checklist do Canary (`playerSpellCheck`,
+  // antes de `CastSpell`). Só o `combat-v3` lê — `caster.attackLockedUntil` é sempre `0` fora
+  // dele, e a checagem nunca dispara.
+  if (
+    (effect.kind === 'damage' || effect.kind === 'damage-over-time')
+    && combat.compatibilityProfile === 'combat-v3'
+    && caster.attackLockedUntil > nowMs
+  ) {
+    return { ok: false, reason: 'attack-locked', retryInMs: caster.attackLockedUntil - nowMs };
+  }
   // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
   // e `range` não existe nela (o boot recusa). O dano ao longo do tempo (CMB-07) mira como o

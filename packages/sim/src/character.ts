@@ -213,6 +213,16 @@ export interface CharacterState {
    * pendente; sem bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
    */
   readonly pendingManualAction?: PendingManualActionState;
+  /**
+   * A trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 decisão 1): instante ABSOLUTO
+   * do relógio lógico até quando nem o golpe nem a magia AGRESSIVA saem — `Player::
+   * onChangeZone`/`player.cpp:12417-12423` do Canary, `stairJumpExhaustion` (`config.lua.dist:45`).
+   * Só `HuntRuleset#step` escreve, na troca de `z` ou no redirecionamento por teleporte, e só sob
+   * `combat-v3` com `combat.stairhopDelayMs` declarado (`CombatCompatibilityProfile`/`combatSchema`
+   * em `@draconya/content`). Ausente é `0` — nunca travado, o de sempre —, sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
+   */
+  readonly attackLockedUntil?: number;
 }
 
 /** Ver `CharacterState.pendingManualAction`. */
@@ -342,6 +352,10 @@ export class CharacterRuntime {
   blessings: number;
   /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
   pendingManualAction: PendingManualActionState | null;
+  /**
+   * A trava de stairhop (#554). Só `HuntRuleset#step` escreve — ver `CharacterState.attackLockedUntil`.
+   */
+  attackLockedUntil: number;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -382,6 +396,7 @@ export class CharacterRuntime {
     this.fedMs = state.fedMs ?? 0;
     this.blessings = state.blessings ?? 0;
     this.pendingManualAction = state.pendingManualAction ?? null;
+    this.attackLockedUntil = state.attackLockedUntil ?? 0;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -568,6 +583,7 @@ export class CharacterRuntime {
       ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
+      ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
     };
   }
 

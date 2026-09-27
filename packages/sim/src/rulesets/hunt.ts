@@ -355,7 +355,9 @@ export type UseItemOutcome =
 export type SlotRefusal =
   | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
   | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
-  | 'on-cooldown' | 'group-cooldown';
+  | 'on-cooldown' | 'group-cooldown'
+  /** Stairhop (#554, M30-07): a magia é agressiva e a trava de ataque ainda não venceu. */
+  | 'attack-locked';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -483,6 +485,7 @@ function refusalOf(result: CastRefused): SlotRefusal {
     // O suprimento v2 é ABSTRATO: o "estoque" é o saldo, e a falta dele tem motivo próprio —
     // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
     case 'not-enough-gold': return 'not-enough-gold';
+    case 'attack-locked': return 'attack-locked';
   }
 }
 
@@ -4698,6 +4701,15 @@ export class HuntRuleset implements Ruleset {
       }
     }
 
+    // Stairhop (#554, M30-07, ADR 0040 decisão 1): reagenda para o INSTANTE do destravamento,
+    // sem golpe — nunca engatilha (o alvo continua ao alcance) e nunca dobra o evento, a mesma
+    // invariante de `#schedulePlayerAttack`. `attackLockedUntil` é sempre `0` fora do
+    // `combat-v3` (só `#step` escreve, e só lá), então v1/v2 nunca entram aqui.
+    if (character.attackLockedUntil > session.nowMs) {
+      this.#schedulePlayerAttack(session, characterId, character.attackLockedUntil - session.nowMs);
+      return;
+    }
+
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
     // `combat-v3` (#687): a arma que ficou na mão abaixo do level exigido — o level caiu com
     // ela vestida — bate metade com `wieldUnproperly`, ou NÃO bate (`damagePercent` 0): como o
@@ -6976,6 +6988,20 @@ const slots = bot.groups.get(group);
       // escreve, e só a do personagem — o monstro não lança magia.
       if (mover instanceof CharacterRuntime) {
         mover.direction = directionOf(result.from, result.to) ?? mover.direction;
+        // Stairhop (#554, M30-07, ADR 0040 decisão 1): trocar de andar OU ser redirecionado por
+        // um teleporte tranca o ataque do personagem por `stairhopDelayMs` — `oldPos.z !=
+        // newPos.z || teleport` do Canary (`player.cpp:12417-12423`). Escada e teleporte passam
+        // pelos DOIS mesmos redirecionamentos de `move()` (`packages/sim/src/movement.ts`), e um
+        // que pousa fora do tile adjacente pedido É um dos dois — um passo comum nunca é. Só o
+        // `combat-v3` lê (`#isV3`); ausente é identidade, e nenhuma sessão v1/v2 grava a trava.
+        const stairhopDelayMs = this.#options.combat.stairhopDelayMs;
+        if (stairhopDelayMs !== undefined && this.#isV3() && (
+          result.to.z !== result.from.z
+          || Math.abs(result.to.x - result.from.x) > 1
+          || Math.abs(result.to.y - result.from.y) > 1
+        )) {
+          mover.attackLockedUntil = session.nowMs + stairhopDelayMs;
+        }
       }
       session.emit({
         kind: 'creature-moved', creatureId,

@@ -3074,6 +3074,25 @@ export const combatSchema = z.object({
       }
     }),
   }).optional(),
+  /**
+   * A trava de ataque ao trocar de andar (M30-07, #554, ADR 0040 decisão 1): `stairJumpExhaustion`
+   * do Canary (`config.lua.dist:45`, `2 * 1000`), aplicada em `Player::onChangeZone`
+   * (`player.cpp:2857-2866`) e na mudança de posição com teleporte ou troca de `z`
+   * (`player.cpp:12417-12423`, `teleport || oldPos.z != newPos.z`) — `CONDITION_PACIFIED` por
+   * `STAIRHOP_DELAY`, só para jogador. Em milissegundos: o passo que troca de `z` OU redireciona
+   * por teleporte (escada e teleporte passam pelo mesmo `move()`, `packages/sim/src/movement.ts`)
+   * grava `character.attackLockedUntil = nowMs + stairhopDelayMs`, e nem o golpe corpo a corpo
+   * nem a magia AGRESSIVA (`damage`/`damage-over-time`) saem antes desse instante — cura,
+   * condição e o resto do vocabulário continuam liberados, como o Canary libera tudo que não é
+   * `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`, `Spell::aggressive` é `true` por
+   * padrão). **Ausente é IDENTIDADE**: sem o campo, nenhum passo grava trava nenhuma, e todo
+   * conteúdo que não o declara — `combat-v1`/`v2` inclusive — segue bit a bit. Só o `combat-v3`
+   * lê (`HuntRuleset#isV3`); um `combat-v1`/`v2` que declarasse o campo por engano seria
+   * ignorado do mesmo jeito. Migra para a condição `pacified` de verdade quando ela existir
+   * (M44-04) — até lá é um campo solto no personagem, porque não há efeito de RESOLUÇÃO de golpe
+   * recebido para compor: é só um portão de saída, como `blockCharge`/`attackPractice`.
+   */
+  stairhopDelayMs: z.number().int().positive().optional(),
   _open: z.string().optional(),
 }).superRefine((combat, context) => {
   // A #522/ADR 0037: perfil `combat-v2` sem os blocos novos é conteúdo que o resolver de poder
