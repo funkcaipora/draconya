@@ -33,6 +33,7 @@ import {
   ABILITY_KIND_SUPPORTED, AREA_ROWS_SUPPORTED, mapSpell, mapSummons, RANDOM_TOTAL_REASON, uniqueIds,
   type PresentationUse,
 } from './monster-abilities.js';
+import type { MeleePowerVia } from './monster-melee.js';
 import { extractEnum, MAGIC_EFFECT_ENUM, MAGIC_EFFECT_HEADER, SHOOT_TYPE_ENUM } from './enums.js';
 import { repoRootFrom } from './env.js';
 
@@ -309,6 +310,8 @@ export interface MonsterNotes {
   readonly spellNotes: readonly string[];
   /** Chaves de apresentação usadas, com a constante de origem. */
   readonly presentation: readonly PresentationUse[];
+  /** De onde saiu a faixa de cada `melee` do monstro (#684). */
+  readonly meleeVia: readonly MeleePowerVia[];
   /** Os monstros que este invoca — o catálogo confere que cada um foi gerado. */
   readonly summonedIds: readonly string[];
 }
@@ -351,11 +354,6 @@ export function lootChance(raw: number): number {
   return clamped / CANARY_LOOT_CHANCE_SCALE;
 }
 
-/** O dano máximo do `melee` declarado por `skill`/`attack` (Canary `Weapons::getMaxMeleeDamage`). */
-export function maxMeleeDamage(skill: number, attack: number): number {
-  return Math.ceil(skill * (attack * 0.05) + attack * 0.5);
-}
-
 /** Um nome de ataque/defesa sem mapeador, e o motivo — vai para o relatório. */
 export interface UnmappedSpell {
   readonly name: string;
@@ -369,6 +367,7 @@ interface SpellsResult {
   readonly dropped: string[];
   readonly notes: string[];
   readonly presentation: PresentationUse[];
+  readonly meleeVia: MeleePowerVia[];
 }
 
 /**
@@ -378,7 +377,9 @@ interface SpellsResult {
 function readSpells(
   monsterId: string, attacks: readonly LuaValue[], defenses: readonly LuaValue[], deps: MonsterReaderDeps,
 ): SpellsResult {
-  const result: SpellsResult = { abilities: [], defenses: [], unmapped: [], dropped: [], notes: [], presentation: [] };
+  const result: SpellsResult = {
+    abilities: [], defenses: [], unmapped: [], dropped: [], notes: [], presentation: [], meleeVia: [],
+  };
   // Sem os enums (fixture sem `src/`), toda constante vale.
   const knownConstant = deps.effectIds.size === 0 || deps.missileIds.size === 0
     ? undefined
@@ -389,7 +390,11 @@ function readSpells(
         monsterId, list, presentation: result.presentation, ...(knownConstant === undefined ? {} : { knownConstant }),
       });
       switch (mapped.kind) {
-        case 'ability': result.abilities.push(mapped.ability); result.notes.push(...mapped.notes); break;
+        case 'ability':
+          result.abilities.push(mapped.ability);
+          result.notes.push(...mapped.notes);
+          if (mapped.meleeVia !== undefined) result.meleeVia.push(mapped.meleeVia);
+          break;
         case 'defense': result.defenses.push(mapped.defense); result.notes.push(...mapped.notes); break;
         case 'dropped': result.dropped.push(mapped.reason); break;
         case 'unmapped': result.unmapped.push({ name: mapped.name, reason: mapped.reason }); break;
@@ -556,7 +561,7 @@ export function convertMonster(
   const emptyNotes: MonsterNotes = {
     droppedCoinLines: [], clampedWeaknesses: [], elementImmunities: [], unmappedElements: [],
     speedSource: 'canary-x2', mitigationClamped: false, ignoredFields: [],
-    unmappedSpells: [], droppedSpells: [], spellNotes: [], presentation: [], summonedIds: [],
+    unmappedSpells: [], droppedSpells: [], spellNotes: [], presentation: [], meleeVia: [], summonedIds: [],
   };
   if (typeName === undefined) {
     return {
@@ -708,6 +713,7 @@ export function convertMonster(
       droppedSpells: spells.dropped,
       spellNotes: spells.notes,
       presentation: spells.presentation,
+      meleeVia: spells.meleeVia,
       summonedIds: summons.summonedIds,
     },
   };
@@ -839,6 +845,25 @@ function percent(part: number, whole: number): string {
   return whole === 0 ? '—' : `${((part / whole) * 100).toFixed(1)} %`;
 }
 
+/**
+ * A faixa do `melee` (#684), sobre os monstros LIDOS: quantas linhas saíram de `skill`/`attack`,
+ * quantas de `minDamage`/`maxDamage`, e quem ficou com 0..0 — que é o que o Canary faz com o
+ * `attack` ≤ 0 ou com um lado só da faixa, e por isso é gerado, não pulado.
+ */
+function meleeNote(converted: readonly ConvertedMonster[]): string {
+  const vias = converted.flatMap((monster) => monster.notes.meleeVia);
+  const count = (via: MeleePowerVia): number => vias.filter((entry) => entry === via).length;
+  const zero = converted
+    .filter((monster) => monster.notes.meleeVia.includes('none'))
+    .map((monster) => `\`${monster.id}\``)
+    .sort();
+  return `Melee (#684, monstros lidos): ${count('skill-attack')} linha(s) por skill/attack `
+    + '(`ceil(skill × attack × 0,05 + attack × 0,5)`, em `double` na ordem do Canary), '
+    + `${count('min-max')} por minDamage/maxDamage, ${count('none')} com faixa 0..0 `
+    + '(attack ≤ 0 ou só um lado da faixa, como no Canary): '
+    + `${zero.join(', ') || 'nenhum'}.`;
+}
+
 /** As notas do M35-02: cobertura, nomes sem mapeador, descartes, aproximações e apresentação. */
 function spellNotes(
   converted: readonly ConvertedMonster[], generated: readonly ConvertedMonster[],
@@ -906,6 +931,7 @@ function spellNotes(
   notes.push(`Invocação gerada (\`summons\`): ${summoners.join(', ') || 'nenhuma'}.`);
   const dropped = generated.flatMap((monster) => monster.notes.droppedSpells);
   notes.push(`Descartado por ser só apresentação no Canary (monstros gerados): ${countBy(dropped) || 'nenhum'}.`);
+  notes.push(meleeNote(converted));
   const approximated = generated.flatMap((monster) => monster.notes.spellNotes);
   notes.push(
     `Forma aproximada (monstros gerados): ${countBy(approximated) || 'nenhuma'}. `

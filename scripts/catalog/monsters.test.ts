@@ -8,7 +8,7 @@ import { readSourceCommit } from './env.js';
 import type { CatalogEntity } from './generated-writer.js';
 import {
   BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, listMonsterFiles, loadReaderDeps,
-  lootChance, maxMeleeDamage, readMonsterCatalog, readTfsSpeeds, slugify, type MonsterReaderDeps,
+  lootChance, readMonsterCatalog, readTfsSpeeds, slugify, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
@@ -217,13 +217,6 @@ describe('lootChance', () => {
   });
 });
 
-describe('maxMeleeDamage', () => {
-  it('é o ceil(skill × attack × 0,05 + attack × 0,5) do Canary', () => {
-    expect(maxMeleeDamage(10, 20)).toBe(20);
-    expect(maxMeleeDamage(70, 85)).toBe(Math.ceil(70 * 85 * 0.05 + 85 * 0.5));
-  });
-});
-
 describe('MONSTER_CLASSES', () => {
   it('tem as 20 classes do Bestiário do Canary, e o leitor só produz valores dela', () => {
     expect(MONSTER_CLASSES).toHaveLength(20);
@@ -303,6 +296,9 @@ describe('convertMonster (fixture sintética)', () => {
       attack: { min: 0, max: 20 },
       loot: { rollModel: 'canary', gold: { chance: 0.1, min: 100, max: 300 }, items: [] },
     });
+    // O melee por skill/attack é mapeado (#684): nunca cai em "sem mapeador".
+    expect(converted.notes.unmappedSpells).toEqual([]);
+    expect(converted.notes.meleeVia).toEqual(['skill-attack']);
   });
 
   it('defesa sem mapeador e outfit fora do pacote bloqueiam a geração; o combat mapeia', () => {

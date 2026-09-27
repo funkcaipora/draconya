@@ -106,7 +106,8 @@
           "min": 75,
           "max": 540
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "energyball",
@@ -125,6 +126,7 @@
           "max": 350
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energy",
           "impactKey": "energyarea"
@@ -147,6 +149,7 @@
           "max": 425
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "impactKey": "energyarea"
         }
@@ -168,6 +171,7 @@
           "max": 350
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "missileKey": "largerock",
           "impactKey": "yellowsmoke"
@@ -190,6 +194,7 @@
           "max": 375
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "stone-storm"
         }
@@ -245,7 +250,7 @@
     "health": 2400,
     "experience": 2100,
     "attack": {
-      "min": 50,
+      "min": 0,
       "max": 485
     },
     "armor": 38,
@@ -371,10 +376,11 @@
           "range": 1
         },
         "power": {
-          "min": 50,
+          "min": 0,
           "max": 485
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "paralyze",
@@ -421,6 +427,7 @@
           "max": 335
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-green"
         }
@@ -578,7 +585,8 @@
           "min": 100,
           "max": 575
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "physicalball",
@@ -597,6 +605,7 @@
           "max": 325
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "big-scratch"
         }
@@ -608,8 +617,15 @@
         "target": {
           "range": 6,
           "area": {
-            "shape": "wave",
-            "length": 6
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
           }
         },
         "power": {
@@ -617,6 +633,7 @@
           "max": 375
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "impactKey": "blacksmoke"
         }
@@ -638,6 +655,7 @@
           "max": 400
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "impactKey": "mortarea"
         }
@@ -828,7 +846,8 @@
           "min": 0,
           "max": 300
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "holystrike",
@@ -842,6 +861,7 @@
           "max": 410
         },
         "damageType": "holy",
+        "kind": "combat",
         "presentation": {
           "impactKey": "holyarea"
         }
@@ -858,6 +878,7 @@
           "max": 350
         },
         "damageType": "holy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "holy"
         }
@@ -869,8 +890,13 @@
         "target": {
           "range": 4,
           "area": {
-            "shape": "beam",
-            "length": 4
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1
+            ]
           }
         },
         "power": {
@@ -878,6 +904,7 @@
           "max": 300
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "firearea"
         }
@@ -1030,7 +1057,8 @@
           "min": 75,
           "max": 525
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "fireburst",
@@ -1049,6 +1077,7 @@
           "max": 400
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "impactKey": "fireattack"
         }
@@ -1070,6 +1099,7 @@
           "max": 375
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "groundshaker"
         }
@@ -1091,6 +1121,7 @@
           "max": 375
         },
         "damageType": "physical",
+        "kind": "combat",
         "presentation": {
           "impactKey": "yellowsmoke"
         }
@@ -1112,6 +1143,7 @@
           "max": 300
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "impactKey": "mortarea"
         }

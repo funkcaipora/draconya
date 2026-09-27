@@ -9581,6 +9581,43 @@ describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
       .filter((e) => e.attackerId === 'hero').map((e) => e.creatureId));
     expect(hitRats).toEqual(new Set([a.subject, b.subject]));
   });
+
+  it('o cleave de arma com elemento (#687) leva o secundário na mesma fração (integração)', () => {
+    // `internalUseWeapon` do Canary: a fração do cleave corta o físico E o elemento, e o
+    // elemento vai como secundário sem escudo nem armadura, como no golpe principal.
+    const fireCleaver = {
+      id: 'fire-cleaver', name: 'Fire Cleaver', kind: 'weapon', slot: 'hand',
+      weight: 1, value: 0, attack: 200, cleavePercent: 50,
+      weapon: { kind: 'melee', element: { type: 'fire', attack: 100 } },
+    };
+    const withCleaver: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 's1', itemId: 'fire-cleaver', quantity: 1 } },
+    };
+    const { session, hero, ruleset } = withSpells(botConfig(), {
+      health: 10_000, items: [...items, fireCleaver], inventory: withCleaver,
+      combat: [combatV3],
+      monstersRaw: [{ ...rat, attack: 0, aggroRadius: 0, health: 1_000_000 }],
+    }, 'bold');
+    session.advanceBy(50);
+    const [a, b, c] = ruleset.monsters;
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    hero.position = { x: 1, y: 1, z: hero.position.z };
+    a.position = { x: 2, y: 1 };
+    b.position = { x: 2, y: 2 };
+    c.position = { x: 4, y: 3 };
+    vi.mocked(resolveDamage).mockClear();
+    run(session, 4_000, 100);
+
+    const calls = vi.mocked(resolveDamage).mock.calls;
+    const cleaves = calls.filter(([intent]) => intent.extension === true && intent.source === 'basic-attack');
+    expect(cleaves.length).toBeGreaterThan(0);
+    const withElement = cleaves.filter(([intent]) => intent.secondary !== undefined);
+    expect(withElement.length).toBeGreaterThan(0);
+    for (const [intent] of withElement) {
+      expect(intent.secondary?.damageType).toBe('fire');
+      expect(intent.secondary?.blockable).toEqual(MAGIC_BLOCK_FLAGS);
+    }
+  });
 });
 describe('cura por elemento e reflexo do monstro (#683, M30-G6)', () => {
   const combatV3 = {

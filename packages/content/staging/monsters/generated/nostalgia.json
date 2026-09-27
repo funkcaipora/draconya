@@ -142,7 +142,8 @@
           "min": 0,
           "max": 5
         },
-        "damageType": "physical"
+        "damageType": "physical",
+        "kind": "melee"
       },
       {
         "id": "energystrike",
@@ -156,6 +157,7 @@
           "max": 45
         },
         "damageType": "energy",
+        "kind": "combat",
         "presentation": {
           "missileKey": "energy"
         }
@@ -172,6 +174,7 @@
           "max": 45
         },
         "damageType": "fire",
+        "kind": "combat",
         "presentation": {
           "missileKey": "fire"
         }
@@ -188,6 +191,7 @@
           "max": 50
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "missileKey": "suddendeath",
           "impactKey": "smallclouds"
@@ -205,6 +209,7 @@
           "max": 45
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -221,6 +226,7 @@
           "max": 50
         },
         "damageType": "death",
+        "kind": "combat",
         "presentation": {
           "missileKey": "death"
         }
@@ -237,6 +243,7 @@
           "max": 45
         },
         "damageType": "lifedrain",
+        "kind": "combat",
         "presentation": {
           "impactKey": "magic-red"
         }
@@ -252,7 +259,8 @@
           "min": 5,
           "max": 35
         },
-        "damageType": "manadrain"
+        "damageType": "manadrain",
+        "kind": "combat"
       }
     ],
     "targetChange": {
@@ -434,6 +442,7 @@
           "max": 300
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
@@ -499,6 +508,7 @@
           "max": 70
         },
         "damageType": "earth",
+        "kind": "combat",
         "presentation": {
           "missileKey": "poison"
         }
@@ -712,6 +722,7 @@
           "max": 20
         },
         "damageType": "physical",
+        "kind": "melee",
         "condition": {
           "key": "poisoned",
           "merge": "strongest",
