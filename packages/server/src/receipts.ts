@@ -18,7 +18,7 @@
 
 import type { ChainableCommander, Redis } from 'ioredis';
 import type {
-  Aggregates, BestiaryState, EndReason, NotableEvent, SkillsState,
+  Aggregates, BestiaryState, EndReason, ItemInstanceOverlay, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -104,6 +104,13 @@ export interface SessionReceipt {
    * posição gravada e volta ao primeiro lugar livre na próxima entrada.
    */
   readonly layout?: Readonly<Record<string, ItemPlace>>;
+  /**
+   * O overlay de cada instância que a sessão carrega (#604, ADR 0046): `instanceId → overlay`,
+   * `null` para a instância igual à definição. ABSOLUTO para as instâncias listadas, como o
+   * layout: o `null` é o que apaga do banco o imbuement que venceu na sessão. Instância que NÃO
+   * aparece aqui não é tocada — o extrato de um nó anterior (sem o campo) não apaga nada.
+   */
+  readonly overlays?: Readonly<Record<string, ItemInstanceOverlay | null>>;
   /**
    * Os itens que ESTA sessão criou e que couberam na mochila (§22.2, FUN-88).
    *
@@ -330,6 +337,11 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // A posição dos itens (#160): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['layout'] === 'object' && value['layout'] !== null
       ? { layout: value['layout'] as Record<string, ItemPlace> }
+      : {}),
+    // O overlay por instância (#604): lista de PERMISSÃO, pela razão das skills. O conteúdo de
+    // cada overlay é conferido na escrita (`ledger`), com a mesma leitura defensiva do ticket.
+    ...(typeof value['overlays'] === 'object' && value['overlays'] !== null && !Array.isArray(value['overlays'])
+      ? { overlays: value['overlays'] as Record<string, ItemInstanceOverlay | null> }
       : {}),
     ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
     ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),

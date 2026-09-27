@@ -764,6 +764,15 @@ export const itemSchema = z.strictObject({
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
   }).optional(),
+  /**
+   * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
+   * (`ItemAttribute_t::IMBUEMENT_SLOT`, `src/enums/item_attribute.hpp:36`), de 1 a 3 no
+   * `items.xml`. É o TETO da definição; os imbuements aplicados são estado da INSTÂNCIA e
+   * moram no overlay da entrada de inventário (`sim`, `item-overlay.ts`), nunca aqui — o item
+   * de catálogo continua fixo pelo id. Ausente é a peça que não aceita imbuement. Quem o
+   * preenche no catálogo importado é o importador (M34-02).
+   */
+  imbuementSlots: z.number().int().min(1).max(3).optional(),
   /** Crítico e leech do item, enquanto vestido (M30-04, #551) — ver `itemCombatModifiersSchema`. */
   combatModifiers: itemCombatModifiersSchema.optional(),
   /**

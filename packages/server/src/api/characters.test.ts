@@ -35,7 +35,7 @@ class MemoryRepository implements GameRepository {
     return {
       id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
       quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
-      container: null, slotIndex: null,
+      container: null, slotIndex: null, overlay: null,
       createdAt: new Date(0),
     };
   }

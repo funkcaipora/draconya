@@ -1441,6 +1441,18 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     expect(() => buildContent(base({ items: [{ ...espada, slot: 'back' }] }))).toThrow(/só container/);
   });
 
+  it('slots de imbuement (#604, ADR 0046): de 1 a 3, só em peça que se veste e não empilha', () => {
+    expect(buildContent(base({ items: [{ ...espada, imbuementSlots: 2 }] })).items.get('sword')?.imbuementSlots).toBe(2);
+    // Ausente é a peça que não aceita imbuement — o caso de todo o conteúdo autorado.
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.imbuementSlots).toBeUndefined();
+    expect(() => buildContent(base({ items: [{ ...espada, imbuementSlots: 4 }] }))).toThrow();
+    expect(() => buildContent(base({ items: [{ ...espada, imbuementSlots: 0 }] }))).toThrow();
+    const pedra = { id: 'rock', name: 'Rock', kind: 'other', weight: 1, value: 0, imbuementSlots: 1 };
+    expect(() => buildContent(base({ items: [pedra] }))).toThrow(/imbuementSlots só vale/);
+    expect(() => buildContent(base({ items: [{ ...espada, stackable: true, imbuementSlots: 1 }] })))
+      .toThrow(/imbuementSlots só vale/);
+  });
+
   it('`twoHanded` só em arma', () => {
     expect(buildContent(base({ items: [{ ...espada, twoHanded: true }] })).items.get('sword')?.twoHanded).toBe(true);
     expect(buildContent(base({ items: [espada] })).items.get('sword')?.twoHanded).toBe(false);
