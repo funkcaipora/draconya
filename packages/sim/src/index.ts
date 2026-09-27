@@ -18,6 +18,7 @@ export * from './rates.js';
 export * from './session.js';
 export * from './progression.js';
 export * from './stamina.js';
+export * from './food.js';
 export * from './skills.js';
 export * from './bestiary.js';
 export * from './party.js';

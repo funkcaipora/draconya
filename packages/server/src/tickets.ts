@@ -162,6 +162,12 @@ export interface InitialCharacter {
    */
   readonly storages?: CharacterStorageMap;
   /**
+   * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
+   * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
+   * jejum. Ausente é quem nunca comeu, ou ticket de um `api` antigo: a sessão parte de `0`.
+   */
+  readonly fedMs?: number;
+  /**
    * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
    * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
    * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
@@ -623,6 +629,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // Storages (#731): mesma régua do Bestiário/estoque — inteiro seguro, e nunca o `-1` de
     // ausência (`isCharacterStorageMap`, `sim`). Torto vira AUSENTE, nunca ticket recusado.
     ...(isCharacterStorageMap(initial['storages']) ? { storages: initial['storages'] } : {}),
+    // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
+    ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
+      && initial['fedMs'] >= 0
+      ? { fedMs: initial['fedMs'] }
+      : {}),
     // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
     // recusado — como o Bestiário.
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0

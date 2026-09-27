@@ -44,6 +44,8 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       supplyStock: {}, ammunitionStock: {},
       // E anterior aos storages (#731): `{}` pela mesma razão.
       storages: {},
+      // Comida ativa (#726): mesma regra acima — `0` é "sem comida", nunca a chave omitida.
+      fedMs: 0,
     }]);
   });
 

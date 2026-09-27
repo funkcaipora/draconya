@@ -413,6 +413,29 @@ export class Inventory {
     return null;
   }
 
+  /**
+   * Consome UMA unidade de uma pilha em mochila/bolsa — comida, carga de bênção (#726, ADR
+   * 0049 decisão 3). Decrementa NO LUGAR, sem reconferir peso (só pode diminuir) e remove a
+   * linha quando a pilha zera, aparando o fim como `remove` já faz. Devolve o item de ANTES do
+   * consumo (para o catálogo ler o efeito), ou `null` se a instância não está carregada —
+   * nunca olha o equipado: nada com `use.effect` hoje se veste.
+   */
+  consumeOne(instanceId: string): CarriedItem | null {
+    for (const [target, initial] of [[this.#backpack, this.#initial.backpack], [this.#satchel, this.#initial.satchel]] as const) {
+      const index = target.findIndex((carried) => carried?.instanceId === instanceId);
+      if (index < 0) continue;
+      const found = target[index] as CarriedItem;
+      if (found.quantity <= 1) {
+        target[index] = null;
+        this.#trim(target, initial);
+      } else {
+        target[index] = { ...found, quantity: found.quantity - 1 };
+      }
+      return found;
+    }
+    return null;
+  }
+
   /** Apara `null` do fim, linha a linha, até o tamanho inicial — nunca abaixo dele. */
   #trim(target: (CarriedItem | null)[], initial: number): void {
     while (target.length > initial && target[target.length - 1] === null) target.pop();

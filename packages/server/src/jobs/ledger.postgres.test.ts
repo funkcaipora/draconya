@@ -78,6 +78,7 @@ const progression: Progression = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   satchelInitialSlots: 10, containerRow: 5,
   startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
+  regeneration: { requiresFood: false },
   startingKit: [],
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },

@@ -130,6 +130,32 @@ const CarriedItem = z.object({
   quantity: z.number().int().positive(),
 });
 
+/**
+ * A mira manual (AB-09, ADR 0049 decisão 2), compartilhada por `use-slot`, `use-item` e
+ * `use-item-on` — os três apontam do mesmo jeito. `creatureId` é o id numérico de QUALQUER
+ * criatura (monstro OU personagem); `position` mira um tile vazio (runa de área). O servidor
+ * resolve qual dos dois é e recusa `no-target` sem adivinhar.
+ */
+const manualTargetSchema = z.union([
+  z.object({ creatureId: z.number().int().positive() }),
+  z.object({
+    position: z.object({
+      x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
+    }),
+  }),
+]);
+
+/**
+ * A referência a UM item/suprimento (#726, ADR 0049 decisão 3), compartilhada por `use-item` e
+ * `use-item-on`: `instanceId` é uma unidade concreta na mochila/bolsa/equipada; `supplyId` é
+ * uma unidade do ESTOQUE abstrato (poção, runa, munição — ADR 0026 d.8/ADR 0044), sem instância
+ * própria. O servidor resolve qual dos dois é; um `ref` que não existe recusa `not-carried`.
+ */
+const itemRefSchema = z.union([
+  z.object({ instanceId: z.string().min(1) }),
+  z.object({ supplyId: z.string().min(1) }),
+]);
+
 export const C2S_SCHEMAS = {
   authenticate: z.object({ ticket: z.string().min(1), clientVersion: z.string() }),
   ping: z.object({ t: z.number() }),
@@ -216,14 +242,7 @@ export const C2S_SCHEMAS = {
      * no id, ou fora do mapa, o servidor recusa (`no-target`), nunca adivinha. Opcional: sem
      * `target`, vale o alvo default de sempre (alvo fixado, senão o candidato do bot).
      */
-    target: z.union([
-      z.object({ creatureId: z.number().int().positive() }),
-      z.object({
-        position: z.object({
-          x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
-        }),
-      }),
-    ]).optional(),
+    target: manualTargetSchema.optional(),
   }),
   /**
    * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
@@ -282,6 +301,29 @@ export const C2S_SCHEMAS = {
   'take-loot': z.object({
     groundItemId: z.number().int(),
     instanceId: z.string().min(1).nullable(),
+  }),
+  /**
+   * Usar um item da mochila/bolsa/equipado, ou uma unidade do estoque de suprimento (#726, ADR
+   * 0049 decisão 3). INTENÇÃO: o cliente diz QUAL `ref`; existir, o catálogo saber usá-lo, a
+   * exaustão e o efeito são do servidor (invariante 4). `target` é a mesma mira OPCIONAL de
+   * `use-slot` — vale para runa/poção de dano ou cura que aceita mira; item sem alvo mirável a
+   * ignora, como o `#resolveManualTarget` do `use-slot` já faz. `seq` volta em `use-result`,
+   * para o cliente casar a resposta com o clique (como `select-target`).
+   */
+  'use-item': z.object({
+    ref: itemRefSchema,
+    target: manualTargetSchema.optional(),
+    seq: z.number().int().nonnegative(),
+  }),
+  /**
+   * Usar um item/suprimento COM alvo (#726, ADR 0049 decisão 3) — a runa/poção de dano ou cura
+   * mirada no clique, em vez do alvo default. Mesma forma de `use-item`, com `target`
+   * OBRIGATÓRIO: é a diferença entre "usar" e "usar com…" do menu de contexto da mochila.
+   */
+  'use-item-on': z.object({
+    ref: itemRefSchema,
+    target: manualTargetSchema,
+    seq: z.number().int().nonnegative(),
   }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
@@ -694,6 +736,20 @@ export const S2C_SCHEMAS = {
     equipped: z.record(z.string(), CarriedItem),
     /** Peso carregado e o teto. O teto sobe com o level (§9.3). */
     capacity: z.object({ used: z.number(), total: z.number() }),
+    /**
+     * O estoque ABSTRATO de suprimento que o loot creditou (#520, ADR 0049 decisão 4): poção e
+     * runa não são item físico (ADR 0026 d.8), mas o jogador precisa VER o que tem antes de
+     * gastar gold pela mesma — é a seção "Suprimentos" sob a mochila. `id` é o `supplyId` do
+     * catálogo (não um `instanceId`: não há instância). Opcional e `default([])`: um nó `game`
+     * anterior manda sem, e a seção não aparece.
+     */
+    supplies: z.array(z.object({
+      id: z.string().min(1), quantity: z.number().int().positive(),
+    })).default([]),
+    /** O estoque de munição FÍSICA do loot (#520), na mesma forma e pela mesma razão acima. */
+    ammunition: z.array(z.object({
+      id: z.string().min(1), quantity: z.number().int().positive(),
+    })).default([]),
   }),
   'bot-config-result': z.object({
     ok: z.boolean(),
@@ -1141,6 +1197,19 @@ export const S2C_SCHEMAS = {
     groundItemId: z.number().int(),
     gold: z.number().int().nonnegative(),
     items: z.array(CarriedItem),
+  }),
+  /**
+   * A resposta ao `use-item`/`use-item-on` (#726, ADR 0049 decisão 3), como `slot-result`:
+   * `ok: false` carrega o motivo em palavras (FUN-73). `ok: true` sai tanto quando a ação
+   * executou quanto quando foi ACEITA e ADIADA pela exaustão compartilhada (decisão 6) — o
+   * cliente não distingue os dois casos por aqui; o efeito de verdade (ou uma segunda recusa,
+   * se a ação adiada não coube mais na hora de executar) chega depois pelo `inventory`/
+   * `player-stats`/`creature-hit` de sempre, ou por um segundo `use-result` com o MESMO `seq`.
+   */
+  'use-result': z.object({
+    seq: z.number().int().nonnegative(),
+    ok: z.boolean(),
+    reason: z.string().optional(),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 

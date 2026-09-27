@@ -139,6 +139,18 @@ O que vale do desenho original:
   **uma** linha (`supply-unaffordable`) no extrato, não uma por tentativa. A regra de saída "sair
   quando o gold acabar" é da FUN-86.
 
+### O estoque abstrato agora é VISÍVEL (#726, ADR 0049 decisão 4)
+
+Desde o #520 `useSupply` já gastava do estoque de loot (`supplyStock`/`ammunitionStock`) antes do
+gold — mas o jogador não via o número. A #726 expõe os dois: `inventory.supplies`/`ammunition`
+(`[{ id, quantity }]`, opcionais, `default([])`) levam o estoque inteiro a cada `inventory`
+reenviado, e o cliente já desenha a seção "Suprimentos" sob a mochila
+(`ContainerWindow.tsx`): nome (resolvido em `catalogue.bot.supplies`) e contagem por linha,
+clicar usa direto (`use-item`) e o clique direito abre "Usar"/"Usar com…" — o mesmo
+`ContextMenu` do item consumível. **Sem sprite**: `catalogue.bot.supplies` não carrega
+`appearanceId` — só item de verdade tem essa coluna (FUN-94) —, e dar ícone ao suprimento
+abstrato fica para quando isso for decidido; a linha hoje é texto.
+
 ## Divergências do PRD
 
 ~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88; ADR 0048):**

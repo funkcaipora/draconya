@@ -156,10 +156,44 @@ preenche os dois ao mesmo tempo.
 
 | Item | Efeito | Arquivo |
 |---|---|---|
-| `blessing-charge` | `blessing` (a TP-03, M22, é quem o executa) | `data/items/blessing-charge.json` |
+| `blessing-charge` | `blessing` — consome a carga e soma `CharacterRuntime.blessings` (capado em 5, `MAX_BLESSINGS`), o executor que a TP-03/M22 esperava (#726, ADR 0049 decisão 3/consequências) | `data/items/blessing-charge.json` |
 
 A aparência de EFEITO continua em `data/appearances/baseline.json` (seção `supplies`), conferida
 de um lado só (FUN-109).
+
+**`blessings` ainda não é lida por ninguém** — ligar a bênção à redução de perda de item na
+morte é o [ADR 0042](../adr/0042-tibia-death-promotion-blessings-and-item-loss.md), fora do
+escopo da #726: o campo existe para o `use-item` ter o que fazer com a carga, sem inventar
+comportamento de morte que outra decisão ainda não tomou.
+
+### Comida (#726, ADR 0049 decisão 5, emenda ao ADR 0043)
+
+Comida entrou como item `kind: 'consumable'` **empilhável**, com `effect: { kind: 'food',
+durationMs }` — `durationMs` é `value × 12` segundos em milissegundos, o mecanismo do
+`foods.lua` do Canary (`itemFood[1] * 12`, teto de 1200 s — "You are full"). O item soma o
+contador `CharacterRuntime.fedMs` (`packages/sim/src/food.ts`, `feed`/`drainFedMs`), capado em
+`FOOD_CAP_MS` (1.200.000 ms); comer no teto recusa `you-are-full` **sem consumir** o item. O
+contador drena pelo TEMPO DE HUNT decorrido (o mesmo `dtMs` que já drena a stamina em
+`#burnStamina`), nunca por tick (invariante 2), e não recupera fora de hunt — a Cidade não anda
+(ADR 0004/0023).
+
+| Item | `durationMs` | Canary (`foods.lua`, valor × 12s) | Arquivo |
+|---|---|---|---|
+| `cheese` | 108.000 (108 s) | item 3607, valor 9 | `data/items/cheese.json` |
+| `meat` | 180.000 (180 s) | item 3577, valor 15 | `data/items/meat.json` |
+| `ham` | 360.000 (360 s) | item 3582, valor 30 | `data/items/ham.json` |
+| `dragon-ham` | 720.000 (720 s) | item 3583, valor 60 | `data/items/dragon-ham.json` |
+| `green-mushroom` | 60.000 (60 s) | item 3732, valor 5 | `data/items/green-mushroom.json` |
+
+`progression.regeneration.requiresFood` (default `false`, o Huntera) diz se a regeneração passiva
+(`HuntRuleset#onRegen`) exige `fedMs > 0` para aplicar o pulso — comer sempre soma o contador,
+ligado ou não; só a flag decide quem LÊ. Mensagem de comer ("Munch." etc. do Canary) e a exibição
+do `fedMs` no HUD ficam de fora desta entrega: nenhum dos dois tem campo de protocolo hoje
+(`player-stats`/`session-state` não expõem `fedMs`) — a confirmação visível é o `inventory`
+reenviado, como qualquer consumo de item.
+
+`fedMs` sobrevive ao logout como a stamina: `characters.fed_ms` (migração 0013, aditiva),
+carregado no ticket e escrito pelo extrato — ver `economy.md` e `docs/adr/0049-*.md`.
 
 ### Munição abstrata, colar e escudo (AB-02, AB-05, ADR 0032 decisão 7)
 

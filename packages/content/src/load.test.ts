@@ -463,14 +463,21 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
-  it('blessing-charge é o ÚNICO item consumable: não-empilhável, sem group nem restock (ADR 0026 d.3)', () => {
+  it('blessing-charge é o ÚNICO item consumable NÃO-EMPILHÁVEL, sem group nem restock (ADR 0026 d.3)', () => {
     const content = loadContent(DATA);
     const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
-    expect(consumables.map((item) => item.id)).toEqual(['blessing-charge']);
+    // A comida (#726, ADR 0049 d.5) entrou como `consumable` também — cheese, ham, meat,
+    // dragon-ham, green-mushroom —, mas EMPILHÁVEL, ao contrário da carga de bênção.
+    expect(consumables.map((item) => item.id).sort()).toEqual(
+      ['blessing-charge', 'cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
+    );
     const blessing = content.items.get('blessing-charge');
     expect(blessing?.stackable).toBe(false);
     expect(blessing?.effect).toEqual({ kind: 'blessing' });
     expect(blessing?.weight).toBeGreaterThan(0);
+    const cheese = content.items.get('cheese');
+    expect(cheese?.stackable).toBe(true);
+    expect(cheese?.effect).toEqual({ kind: 'food', durationMs: 108_000 });
   });
 
   it('content.supplies é o catálogo ABSTRATO, com price e group de cooldown (ADR 0026 d.3)', () => {

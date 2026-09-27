@@ -242,10 +242,27 @@ export interface PartyEndVote {
   readonly approved: readonly string[];
 }
 
+/**
+ * O `use-item`/`use-item-on` ADIADO pela exaustão (#726, ADR 0049 decisão 6) terminou de
+ * executar — MAS SÓ QUANDO FALHOU (`ok: false`). O sucesso não emite nada aqui: o jogador já
+ * recebeu `ok: true` no ato do clique (a aceitação), e o efeito de verdade chega pelo
+ * `inventory`/`player-stats`/`creature-hit` de sempre, como qualquer sucesso (decisão 7). Por
+ * PERSONAGEM, como `FollowState`: só quem mandou a ação original precisa saber que ela, afinal,
+ * não coube.
+ */
+export interface ManualActionResult {
+  readonly kind: 'manual-action-result';
+  readonly characterId: string;
+  readonly seq: number;
+  readonly ok: false;
+  readonly reason: string;
+}
+
 export type PartyEvent =
   | PartyBagChanged
   | PartySettlement
   | PartyState
   | MemberLeft
   | FollowState
-  | PartyEndVote;
+  | PartyEndVote
+  | ManualActionResult;

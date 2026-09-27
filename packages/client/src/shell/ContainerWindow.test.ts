@@ -12,11 +12,18 @@ async function render(container: 'backpack' | 'satchel', collapsed = false): Pro
 
 const catalogue: Catalogue = {
   hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 8,
-  bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
+  bot: {
+    vocabularyVersion: 1, slots: {}, spells: [],
+    supplies: [{
+      id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', group: 'potion',
+      requires: {},
+    }],
+  },
   items: [
     { id: 'backpack', name: 'Backpack', appearanceId: 2854, weight: 18, slot: 'back', twoHanded: false },
-    { id: 'cheese', name: 'Cheese', appearanceId: 3607, weight: 1, slot: null, twoHanded: false },
-    { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
+    // `kind: 'consumable'` (#726, ADR 0049): é o que faz o menu de contexto oferecer Usar/Usar com…
+    { id: 'cheese', name: 'Cheese', appearanceId: 3607, weight: 1, slot: null, twoHanded: false, kind: 'consumable' },
+    { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false, kind: 'weapon' },
     { id: 'uh', name: 'Ultimate Healing Rune', appearanceId: 3155, weight: 1, slot: null, twoHanded: false, shortLabel: 'UH' },
   ],
 };
@@ -27,6 +34,8 @@ const inventory = (over: Partial<Inventory> = {}): Inventory => ({
   satchel: Array<null>(10).fill(null),
   equipped: { back: { instanceId: 'b1', itemId: 'backpack', quantity: 1 } },
   capacity: { used: 10, total: 400 },
+  supplies: [],
+  ammunition: [],
   ...over,
 });
 
@@ -91,5 +100,37 @@ describe('ContainerWindow', () => {
     expect(html).not.toContain('ui-context-menu');
     expect(html).not.toContain('ui-modal-scrim');
     expect(html).not.toContain('Descartar item');
+  });
+
+  describe('a seção Suprimentos (#726, ADR 0049 decisão 4)', () => {
+    it('some quando o estoque está vazio (o de sempre, sem loot de supply ainda)', async () => {
+      const html = await render('backpack');
+      expect(html).not.toContain('supply-section');
+    });
+
+    it('aparece SÓ na mochila, com nome (do catálogo) e contagem por linha', async () => {
+      hud.set((state) => ({
+        ...state,
+        inventory: inventory({ supplies: [{ id: 'health-potion', quantity: 4 }] }),
+      }));
+      const backpackHtml = await render('backpack');
+      expect(backpackHtml).toContain('supply-section');
+      expect(backpackHtml).toContain('Suprimentos');
+      expect(backpackHtml).toContain('Poção de Vida');
+      expect(backpackHtml).toContain('supply-row-count">4');
+
+      // A bolsa não repete a seção — o estoque é do personagem, não do container.
+      const satchelHtml = await render('satchel');
+      expect(satchelHtml).not.toContain('supply-section');
+    });
+
+    it('suprimento sem entrada no catálogo cai no próprio id, nunca some em silêncio', async () => {
+      hud.set((state) => ({
+        ...state,
+        inventory: inventory({ supplies: [{ id: 'unknown-supply', quantity: 1 }] }),
+      }));
+      const html = await render('backpack');
+      expect(html).toContain('unknown-supply');
+    });
   });
 });
