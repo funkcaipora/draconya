@@ -49,6 +49,12 @@ export interface BotDraft {
    * assim que o bot básico continua sem lure algum.
    */
   readonly lure?: BotConfigV2['lure'];
+  /**
+   * O filtro de Quick Loot (ADR 0048 decisão 2). `undefined` só antes do primeiro
+   * `loadConfig`; o schema tem default `{ filter: 'skip', itemIds: [], autoSell: [] }`, então
+   * `toConfig` sempre manda algo — a aba Loot da barra que o edita é a #722 (W3).
+   */
+  readonly loot?: BotConfigV2['loot'];
 }
 
 export interface BotState {
@@ -83,6 +89,7 @@ export function emptyDraft(): BotDraft {
 follow: { kind: 'none' },
     exit: [],
     lure: undefined,
+    loot: { filter: 'skip', itemIds: [], autoSell: [] },
   };
 }
 
@@ -108,6 +115,7 @@ export function toConfig(draft: BotDraft): BotConfigV2 {
     targeting: draft.targeting,
     exit: draft.exit,
     follow: draft.follow ?? { kind: 'none' },
+    loot: draft.loot ?? { filter: 'skip', itemIds: [], autoSell: [] },
     ...(draft.lure === undefined ? {} : { lure: draft.lure }),
   };
 }
@@ -266,6 +274,7 @@ export function draftFrom(config: BotConfigV2): BotDraft {
     targeting: config.targeting,
     follow: config.follow,
     exit: config.exit,
+    loot: config.loot,
     ...(config.lure === undefined ? {} : { lure: config.lure }),
   };
 }

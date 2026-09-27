@@ -3641,6 +3641,19 @@ export const botFollowSchema = z.discriminatedUnion('kind', [
 export type BotFollow = z.infer<typeof botFollowSchema>;
 
 /**
+ * O filtro de Quick Loot do personagem (ADR 0048 decisão 2, `quickLootFilter`/`autoLoot` do
+ * Canary). Default: `skip` com `itemIds` vazia — pega tudo, o comportamento de antes deste ADR.
+ * `autoSell` é a autovenda INDIVIDUAL (PRD §22.1): vende ao `value` do catálogo, cortada pelo
+ * limite do PRÓPRIO Premium (`party.autoSellItemTypes`, lido pelo `sim`).
+ */
+export const botLootSchema = z.object({
+  filter: z.enum(['accept', 'skip']).default('skip'),
+  itemIds: z.array(z.string().min(1)).default(() => []),
+  autoSell: z.array(z.string().min(1)).default(() => []),
+});
+export type BotLoot = z.infer<typeof botLootSchema>;
+
+/**
  * A configuração v2 (ADR 0032 d.1): quatro conjuntos de 24 slots, automações, postura, e o
  * `targeting`/`exit`/`lure` herdados da v1 (a migração os copia intactos).
  */
@@ -3659,6 +3672,12 @@ export const botConfigV2Schema = z.object({
    * configuração sobrevive à hunt, e quem valida o membro é o `sim` (§30).
    */
   follow: botFollowSchema.default({ kind: 'none' }),
+  /**
+   * O filtro de Quick Loot (ADR 0048 decisão 2). Campo NOVO com default, como `follow`: uma
+   * config salva antes deste ADR volta com `{ filter: 'skip', itemIds: [], autoSell: [] }` —
+   * pega tudo, sem venda automática, exatamente o que acontecia sem filtro nenhum.
+   */
+  loot: botLootSchema.default(() => botLootSchema.parse({})),
 });
 export type BotConfigV2 = z.infer<typeof botConfigV2Schema>;
 

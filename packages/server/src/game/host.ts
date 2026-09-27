@@ -34,7 +34,7 @@ import type { SessionDirectory, SessionLocation } from '../directory.js';
 import { overlaysOfState, settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
-import type { BoxedItem, LootBoxStore } from '../loot-box.js';
+import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
@@ -173,11 +173,6 @@ export interface SessionHostOptions {
    * arte ainda é uma magia, e derrubar a apresentação por isso esconderia que ela funcionou.
    */
   readonly appearances?: Appearances;
-  /**
-   * Onde a Caixa de Loot da Sessão é guardada (FUN-88). Ausente: o que não coube se perde no
-   * encerramento, e o log diz. Degradação, não falha.
-   */
-  readonly lootBoxes?: LootBoxStore;
   /**
    * Ligar o interest management por célula nas sessões compartilhadas (FUN-33). Padrão: sim.
    *
@@ -3574,8 +3569,10 @@ export class SessionHost {
       ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
       // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
       ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
-      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`, o que não
-      // coube vira Caixa de Loot da Sessão.
+      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
+      // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu; o
+      // que ainda escreve `lootBox` é o grant de vocação/kit e a liquidação de bolsa sem
+      // cadáver de monstro à mão (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`).
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
       ...(owner === undefined || owner.lootBox.length === 0
         ? {}
@@ -3590,19 +3587,6 @@ export class SessionHost {
     if (owner !== undefined && owner.goldDelta !== 0) {
       owner.settleGoldDelta();
     }
-
-    // A caixa é escrita AQUI, e não na liquidação: o relógio de 30 minutos começa no
-    // encerramento (§21.6), e quem sabe que a sessão encerrou é quem a encerrou. Deixar para o
-    // `jobs` faria o prazo começar até dez segundos depois, e por acaso.
-    await this.#saveLootBox(characterId, receipt.sessionId, owner);
-  }
-
-  async #saveLootBox(characterId: string, sessionId: string, owner: CharacterRuntime | undefined): Promise<void> {
-    if (owner === undefined || owner.lootBox.length === 0) return;
-    await this.#options.lootBoxes?.save(sessionId, owner.lootBox)
-      .catch((error: unknown) => {
-        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to save the session loot box');
-      });
   }
 
   /**
@@ -3639,7 +3623,6 @@ export class SessionHost {
       ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
     });
     hosted.dirty.delete(characterId);
-    await this.#saveLootBox(characterId, hosted.session.id, owner);
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
