@@ -258,5 +258,20 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
     problems.push(`${config.exit.length} regras de saída e só ${content.bot.slots.exit} slots`);
   }
 
+  // O filtro de Quick Loot (ADR 0048 decisão 2): `itemIds` referencia o catálogo, como
+  // `party.collect`; `autoSell` além de existir precisa ter `value > 0` — vender item que
+  // ninguém compra é configuração que nunca faz nada, e o certo é recusar na entrada.
+  for (const id of config.loot.itemIds) {
+    if (!content.items.has(id)) problems.push(`loot.itemIds: item "${id}" não existe`);
+  }
+  for (const id of config.loot.autoSell) {
+    const item = content.items.get(id);
+    if (item === undefined) {
+      problems.push(`loot.autoSell: item "${id}" não existe`);
+    } else if (item.value <= 0) {
+      problems.push(`loot.autoSell: item "${id}" não é vendável (value 0)`);
+    }
+  }
+
   return problems;
 }

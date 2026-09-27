@@ -2,7 +2,7 @@
   "id": "strong-mana-potion",
   "name": "Strong Mana Potion",
   "description": "Recupera entre 115 e 185 pontos de mana. Nível 50 ou mais.",
-  "price": 150,
+  "price": 108,
   "group": "potion",
   "groupCooldownMs": 1000,
   "actionExhaustMs": 1000,
@@ -15,5 +15,5 @@
   "requires": {
     "level": 50
   },
-  "_open": "Kit level 200 (#524). Canary `potions.lua`, item id 237: `mana = {115, 185}`, `level = 50`, sem restrição de vocação. `price` 150: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/strong-mana-potion). Faixa fixa (`effect.amountRange`), como a poção de vida — sem escalar por level/ML."
+  "_open": "Kit level 200 (#524). Canary `potions.lua`, item id 237: `mana = {115, 185}`, `level = 50`, sem restrição de vocação. `price` 108 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 237 (ex. `alaistar.lua`) — corrige o 150 anterior (TibiaWiki), o Canary é a fonte precedente (ADR 0037 d.4). Faixa fixa (`effect.amountRange`), como a poção de vida — sem escalar por level/ML."
 }

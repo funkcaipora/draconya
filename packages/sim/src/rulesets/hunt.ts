@@ -17,11 +17,11 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS, floorChangeAt, floorChangeToward,
-  migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
+  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
+  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt, HuntDifficulty,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
   PartyConfig, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
@@ -97,6 +97,7 @@ import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import {
@@ -115,6 +116,7 @@ import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
+import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS, MAX_BLESSINGS } from '../food.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -206,6 +208,23 @@ const END_VOTE_SUBJECT = 'end-vote';
 export const END_VOTE_WINDOW_MS = 60_000;
 
 /**
+ * O disparo manual ACEITO mas ADIADO pela exaustão de ação compartilhada (#726, ADR 0049
+ * decisão 6): agenda no vencimento do livro `exhaust:action`, e um segundo disparo antes disso
+ * SUBSTITUI o primeiro — `character.pendingManualAction` guarda qual, e o subject é o
+ * `characterId` (nunca dois pendentes do mesmo personagem ao mesmo tempo).
+ */
+const PENDING_MANUAL_ACTION = 'pending-manual-action';
+
+/**
+ * A exaustão de ação de um item da mochila/carga/comida que não declara `actionExhaustMs`
+ * próprio (comida, carga de bênção — só o SUPPLY do catálogo declara o campo, #690): o
+ * `timeBetweenExActions` do Canary/TFS (`configmanager.cpp`, default 1000 — distinto do
+ * `timeBetweenActions` de 200 usado por passo/ataque comuns). `use-item`/`use-item-on` são as
+ * "Ex actions" do Tibia (`playerUseItemEx`), e são elas que essa constante regula.
+ */
+const MANUAL_ITEM_EXHAUST_MS = 1_000;
+
+/**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
  * um evento da fila, agendado no equip e cancelado no desequip (invariante 2) — nunca um
  * `remainingMs -= dtMs`. O subject é `<characterId>:<slot>`, o que permite cancelar por slot.
@@ -279,6 +298,50 @@ const BOT_GROUP_PREFIX = 'bot:';
  * `migrateBotConfigV1` a normaliza no boundary. A união some no AB-09.
  */
 type BotConfigInput = BotConfigV2 | BotConfig;
+
+/**
+ * O alvo explícito de um `use-slot` manual (AB-09, ADR 0049 decisão 2), já traduzido pelo host a
+ * partir do `creatureId`/`position` numéricos do fio — o `sim` nunca vê o número, só o domínio
+ * que já conhece (`subject` de monstro, `characterId`, ou tile). `null`/ausente é "sem mira": cai
+ * no default de sempre (alvo fixado, senão o candidato do bot).
+ */
+export type UseSlotTarget =
+  | { readonly kind: 'monster'; readonly subject: string }
+  | { readonly kind: 'character'; readonly characterId: string }
+  | { readonly kind: 'position'; readonly position: FloorPoint }
+  /**
+   * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
+   * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
+   * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
+   * default, que executaria contra um alvo que ele não escolheu.
+   */
+  | { readonly kind: 'invalid' };
+
+/**
+ * A referência a UM item/suprimento de um `use-item`/`use-item-on` (#726, ADR 0049 decisão 3):
+ * `instanceId` é uma unidade concreta na mochila/bolsa; `supplyId` é uma unidade do ESTOQUE
+ * abstrato (poção, runa, munição — ADR 0026 d.8/ADR 0044), sem instância própria — o MESMO
+ * caminho de `useSlot`/`#useSupply`, só que sem passar pela barra. Discriminada por qual CHAVE
+ * está presente — a mesma forma do `ref` do protocolo (`itemRefSchema`) e de
+ * `CharacterState.pendingManualAction.ref` — para viajar sem tradução entre os três.
+ */
+export type ItemRef =
+  | { readonly instanceId: string }
+  | { readonly supplyId: string };
+
+/**
+ * Por que `use-item`/`use-item-on` não aconteceu (#726, ADR 0049 decisão 3/7): as mesmas do
+ * slot, mais as três que só um item da mochila/estoque pode devolver — `not-carried` (a
+ * instância não está com o personagem), `not-usable` (o item existe, mas não tem `effect`
+ * executável hoje — ferramenta, ADR 0050, ainda não implementada) e `you-are-full` (comida no
+ * teto de `fedMs`, "You are full").
+ */
+export type UseItemRefusal = SlotRefusal | 'not-carried' | 'not-usable' | 'you-are-full';
+
+/** O resultado de `use-item`/`use-item-on`: sucesso — inclusive ACEITO e ADIADO (decisão 6) — ou recusa tipada. */
+export type UseItemOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: UseItemRefusal; readonly retryInMs: number };
 
 /**
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
@@ -388,6 +451,11 @@ function refusalOf(result: CastRefused): SlotRefusal {
 
 /** A recusa do manual, montada num lugar só. */
 function refuse(reason: SlotRefusal, retryInMs: number): SlotOutcome {
+  return { ok: false, reason, retryInMs };
+}
+
+/** A recusa de `use-item`/`use-item-on` (#726), pelo mesmo molde de `refuse`. */
+function refuseItem(reason: UseItemRefusal, retryInMs: number): UseItemOutcome {
   return { ok: false, reason, retryInMs };
 }
 
@@ -794,12 +862,40 @@ export interface HuntRulesetOptions {
   readonly premium?: boolean;
 }
 
-/** Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila. */
+/**
+ * Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila.
+ *
+ * Desde o ADR 0048 ele também CARREGA o loot (decisão 1): `items`/`gold` são o que ainda não
+ * foi coletado — o dono coleta no MESMO evento do abate (`#collectFromCorpse`), então o comum é
+ * já nascer com as duas listas vazias/zeradas. `ownerId`/`eligible` espelham `#lootRecipient`/
+ * `eligible` do abate (`null` em `splitLoot` — a bolsa é dona, e o cadáver não guarda nada).
+ * Os quatro são OPCIONAIS na leitura (snapshot anterior a este ADR não os tem — `ausente` é
+ * cadáver vazio, sem bump de `SNAPSHOT_FORMAT_VERSION`), mas sempre presentes ao criar.
+ */
 export interface CorpseState {
   readonly id: number;
   readonly monsterId: string;
   readonly position: WorldPoint;
+  /** MUTÁVEL: colhido por `#collectFromCorpse` e descartado por `#onCorpseDecay`. */
+  items?: CarriedItem[];
+  gold?: number;
+  readonly ownerId?: string | null;
+  readonly eligible?: readonly string[];
 }
+
+/** A recusa comum a `openCorpse`/`takeLoot` (#722, ADR 0048 d.4). */
+export type CorpseRefusal = 'not-found' | 'not-yours' | 'too-far-away';
+
+/** `takeLoot` acrescenta a recusa de capacidade — só ela é OMISSA em `openCorpse`, que não move nada. */
+export type TakeLootRefusal = CorpseRefusal | 'not-enough-capacity';
+
+export type OpenCorpseResult =
+  | { readonly ok: true; readonly corpse: CorpseState }
+  | { readonly ok: false; readonly reason: CorpseRefusal };
+
+export type TakeLootResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: TakeLootRefusal };
 
 /**
  * Quem pode carregar uma condição (CMB-07): personagem ou monstro. Os dois têm `conditions`,
@@ -967,6 +1063,12 @@ function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptio
  * líder a cada abate; criá-lo vazio é o que evita alocar um `Set` por item de quem não vende.
  */
 const EMPTY_AUTO_SELL: ReadonlySet<string> = new Set();
+
+/**
+ * O filtro de Quick Loot de quem nunca configurou nenhum (ADR 0048 decisão 2): `skip` com lista
+ * vazia aceita tudo — o comportamento de sempre, de antes deste ADR.
+ */
+const DEFAULT_LOOT_FILTER: BotLoot = { filter: 'skip', itemIds: [], autoSell: [] };
 
 /**
  * O formato ANTIGO da bolsa no snapshot (`gold: number`, `items: CarriedItem[]`), lido só
@@ -1527,8 +1629,14 @@ export class HuntRuleset implements Ruleset {
    *
    * Cooldown é conferido ANTES de executar, e a ação que não aconteceu não inicia cooldown
    * nenhum — a ordem da elegibilidade é o ponto caro aqui.
+   *
+   * `target` é a mira (ADR 0049 decisão 2): já traduzido pelo host para o domínio do `sim`.
+   * Sem ele, vale o default de sempre (alvo fixado, senão o candidato do bot).
    */
-  useSlot(session: Session, characterId: string, set: number, slotIndex: number): SlotOutcome {
+  useSlot(
+    session: Session, characterId: string, set: number, slotIndex: number,
+    target?: UseSlotTarget,
+  ): SlotOutcome {
     const character = findById(session.participants, characterId);
     const runner = this.#runners.get(characterId);
     if (character === null || !character.alive || runner === undefined) {
@@ -1544,11 +1652,192 @@ export class HuntRuleset implements Ruleset {
     const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
     if (wait > 0) return refuse('on-cooldown', wait);
 
-    const result = this.#perform(session, character, entry.do);
+    // A mira (ADR 0049 decisão 2): resolve recipiente de aliado OU alvo explícito de
+    // monstro/posição. `null` é "não se aplica" (ação sem alvo mirável — o `target` é ruído e é
+    // ignorado, RF-12 da spec); só uma recusa TIPADA interrompe o disparo.
+    const resolved = this.#resolveManualTarget(session, character, entry.do, target);
+    if (resolved !== null && !resolved.ok) return refuse(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#perform(session, character, entry.do, recipient, explicit);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
     return { ok: true };
+  }
+
+  /**
+   * Usa um item da mochila/bolsa OU uma unidade do estoque de suprimento — comida, carga de
+   * bênção, poção ou runa (#726, ADR 0049 decisão 3). SEM passar pela barra: qualquer
+   * suprimento em estoque é usável direto, e o `target` (opcional aqui) é a mesma mira do
+   * `use-slot` — vale para runa/poção de dano ou cura miráveis; item sem alvo mirável a ignora.
+   *
+   * Exaustão compartilhada (#690, ADR 0049 decisão 6): cooldown de GRUPO continua recusa
+   * IMEDIATA, como sempre; só a exaustão de AÇÃO (`exhaust:action`) é ADIADA — `pendingManualAction`
+   * agenda o reenvio para o vencimento do livro, e o jogador recebe `ok: true` na hora (a
+   * aceitação, não a execução).
+   */
+  useItem(
+    session: Session, characterId: string, ref: ItemRef, seq: number, target?: UseSlotTarget,
+  ): UseItemOutcome {
+    return this.#useItemLike(session, characterId, 'item', ref, seq, target);
+  }
+
+  /**
+   * Usa um item/suprimento COM alvo (#726, ADR 0049 decisão 3) — a diferença entre "usar" e
+   * "usar com…" do menu de contexto da mochila. Mesma resolução de `useItem`, com `target`
+   * OBRIGATÓRIO em vez de opcional.
+   */
+  useItemOn(
+    session: Session, characterId: string, ref: ItemRef, seq: number, target: UseSlotTarget,
+  ): UseItemOutcome {
+    return this.#useItemLike(session, characterId, 'item-on', ref, seq, target);
+  }
+
+  #useItemLike(
+    session: Session, characterId: string, kind: 'item' | 'item-on', ref: ItemRef, seq: number,
+    target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const character = findById(session.participants, characterId);
+    if (character === null || !character.alive) return refuseItem('not-carried', 0);
+
+    // A exaustão de ação (#690/ADR 0049 d.6): cooldown de GRUPO/individual continua recusa
+    // imediata (não muda com esta issue); só `exhaust:action` sozinha é ADIADA.
+    const groupWait = this.#groupOrIndividualWaitOf(character, ref, session.nowMs);
+    if (groupWait !== null && groupWait.ms > 0) return refuse(groupWait.reason, groupWait.ms);
+
+    const actionExhaustWait = character.cooldowns.remainingMs(actionExhaustKey(), session.nowMs);
+    if (actionExhaustWait > 0) {
+      // Substitui qualquer pendência anterior — "um segundo disparo antes do vencimento
+      // substitui o primeiro" (decisão 6, o `setNextActionTask` do Canary).
+      session.cancelEvent(PENDING_MANUAL_ACTION, characterId);
+      character.pendingManualAction = { kind, ref, seq, ...(target === undefined ? {} : { target }) };
+      session.scheduleIn(PENDING_MANUAL_ACTION, actionExhaustWait, {
+        priority: EventPriority.Housekeeping, subject: characterId,
+      });
+      return { ok: true };
+    }
+
+    return this.#performItemUse(session, character, ref, target);
+  }
+
+  /**
+   * O vencimento de um `use-item`/`use-item-on` adiado (#726, ADR 0049 decisão 6). Se ninguém o
+   * substituiu no meio do caminho (`pendingManualAction` ainda é ESTE), executa de verdade —
+   * SEM adiar de novo, mesmo que algo tenha reiniciado a exaustão nesse meio-tempo (o Canary
+   * também só tenta uma vez o `nextActionTask`). Falha aqui SÓ ENTÃO vira `use-result`: o
+   * sucesso não precisa de segunda mensagem (decisão 7), e quem pediu já foi avisado com
+   * `ok: true` no ato do clique.
+   */
+  #onPendingManualAction(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    const pending = character?.pendingManualAction;
+    if (character === null || pending === undefined || pending === null) return;
+    character.pendingManualAction = null;
+    const ref: ItemRef = pending.ref;
+    const target: UseSlotTarget | undefined = pending.target;
+    const outcome = this.#performItemUse(session, character, ref, target);
+    if (!outcome.ok) {
+      session.emit({
+        kind: 'manual-action-result', characterId, seq: pending.seq, ok: false, reason: outcome.reason,
+      });
+    }
+  }
+
+  /**
+   * A exaustão de GRUPO/individual de um `ItemRef` (#726) — a parte que continua RECUSA
+   * IMEDIATA da decisão 6. `null`: a referência não resolve para um supply conhecido (o host já
+   * vai recusar `not-carried`/`not-in-catalog` mais adiante) ou é uma instância (comida/bênção
+   * não têm livro de grupo — só `exhaust:action`, comum a todos, se aplica a elas).
+   */
+  #groupOrIndividualWaitOf(
+    character: CharacterRuntime, ref: ItemRef, nowMs: number,
+  ): { readonly ms: number; readonly reason: SlotRefusal } | null {
+    if (!('supplyId' in ref)) return null;
+    const supply = this.#options.supplies.get(ref.supplyId);
+    if (supply === undefined) return null;
+    const groupWait = character.cooldowns.remainingMs(groupCooldownKey(supply.group), nowMs);
+    if (groupWait > 0) return { ms: groupWait, reason: 'group-cooldown' };
+    const individualWait = character.cooldowns.remainingMs(supplyCooldownKey(supply.id), nowMs);
+    if (individualWait > 0) return { ms: individualWait, reason: 'on-cooldown' };
+    return null;
+  }
+
+  /**
+   * A execução DE VERDADE de `use-item`/`use-item-on`, sem checar exaustão (o chamador já
+   * checou, ou é o vencimento do adiamento). Resolve `ref` pelo catálogo — `supply` reaproveita
+   * `#useSupply`/`casting.ts` por inteiro (ADR 0049 decisão 3: "o mesmo caminho do slot, sem
+   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5) ou a carga de
+   * bênção (consome, soma `blessings` — o executor que a TP-03/M22 esperava; ligar a bênção à
+   * redução de perda de item na morte é o ADR 0042, fora do escopo desta issue).
+   */
+  #performItemUse(
+    session: Session, character: CharacterRuntime, ref: ItemRef, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    if ('supplyId' in ref) return this.#performSupplyRef(session, character, ref.supplyId, target);
+    return this.#performInstanceRef(session, character, ref.instanceId, target);
+  }
+
+  #performSupplyRef(
+    session: Session, character: CharacterRuntime, supplyId: string, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const supply = this.#options.supplies.get(supplyId);
+    if (supply === undefined) return refuseItem('not-carried', 0);
+    // Sem estoque e sem gold: `#useSupply`/`useSupply` (`casting.ts`) já recusam
+    // `not-enough-gold` na ordem certa (requisitos antes do gold) — nada a checar aqui antes.
+    const resolved = this.#resolveManualTarget(
+      session, character, { kind: 'supply', supplyId } as BotAction, target,
+    );
+    if (resolved !== null && !resolved.ok) return refuseItem(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#useSupply(session, character, supplyId, recipient, explicit);
+    if (!result.ok) return refuseItem(refusalOf(result), result.retryInMs);
+    character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+    return { ok: true };
+  }
+
+  #performInstanceRef(
+    session: Session, character: CharacterRuntime, instanceId: string, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const carried = [...character.inventory.backpack, ...character.inventory.satchel]
+      .find((item) => item?.instanceId === instanceId);
+    if (carried === undefined || carried === null) return refuseItem('not-carried', 0);
+    const item = this.#options.items.get(carried.itemId);
+    // `Item.effect` é opcional na forma (só `kind: 'consumable'` o declara — `buildContent`
+    // confere isso no boot, não o tipo): o schema não dá o discriminante de graça ao TS.
+    if (item === undefined || item.kind !== 'consumable' || item.effect === undefined) {
+      return refuseItem('not-usable', 0);
+    }
+
+    if (item.effect.kind === 'food') {
+      const fed = feedCharacter(character, item.effect.durationMs);
+      if (!fed.ok) return refuseItem('you-are-full', 0);
+      character.inventory.consumeOne(instanceId);
+      // A confirmação é o `inventory` reenviado (decisão 7: sucesso não vira mensagem própria).
+      // "Munch." etc. do Canary, e o `fedMs` novo em si, ficam fora — nenhum dos dois tem campo
+      // de protocolo hoje (`player-stats`/`session-state` não expõem `fedMs`); ver desvios da
+      // spec desta issue.
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+    if (item.effect.kind === 'blessing') {
+      if (character.blessings >= MAX_BLESSINGS) return refuseItem('not-usable', 0);
+      character.inventory.consumeOne(instanceId);
+      character.blessings += 1;
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+    // `heal`/`mana`/`damage` num item de mochila não têm executor hoje: nenhum item real do
+    // catálogo declara isso (só a runa/poção do ESTOQUE, via `'supplyId' in ref`, executa
+    // dano/cura) — chegar aqui é conteúdo futuro sem mecanismo ainda, e a recusa é a certa.
+    return refuseItem('not-usable', 0);
   }
 
   /**
@@ -2350,6 +2639,7 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
+      case PENDING_MANUAL_ACTION: return this.#onPendingManualAction(session, event.subject);
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case TILE_REVERT: return this.#onTileRevert(session, event.subject);
@@ -2390,6 +2680,10 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       if (!character.alive) continue;
       const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
+      // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
+      // calculado aqui evita um segundo acumulador para a mesma grandeza contínua.
+      drainFedMs(character, dtMs);
       const runner = this.#runners.get(character.id);
       if (!exhausted || runner === undefined || runner.warnedExhausted) continue;
       runner.warnedExhausted = true;
@@ -2418,6 +2712,19 @@ export class HuntRuleset implements Ruleset {
 
     const pulse = this.#regenOf(character)[what];
     if (pulse.amount <= 0) return;
+    // A flag de conteúdo (#726, ADR 0049 decisão 5, emenda ao ADR 0043): default `false`
+    // preserva o Huntera ("regenera sempre em hunt"); ligada, exige `fedMs > 0` — a
+    // `CONDITION_REGENERATION` do Tibia, dada por comida. Sem comida, o pulso NÃO aplica nada
+    // desta vez, mas CONTINUA reagendando — a flag pode ligar no meio da hunt sem reconstruir a
+    // fila, e comer no meio do jejum é atendido no PRÓXIMO vencimento, sem precisar de evento
+    // novo (o `amount <= 0` acima é o único caso em que o evento de fato morre).
+    const requiresFood = this.#options.progression.regeneration?.requiresFood ?? false;
+    if (requiresFood && character.fedMs <= 0) {
+      session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, pulse.ticksMs, {
+        priority: EventPriority.Upkeep, subject: characterId,
+      });
+      return;
+    }
     // Só a vocação: o Life Ring regenera pelos PRÓPRIOS eventos (`ITEM_REGEN`, #688), somados
     // a este pulso, e nunca o multiplica.
     const { amount } = pulse;
@@ -2669,8 +2976,15 @@ export class HuntRuleset implements Ruleset {
     }
     this.#nextCreatureId = restored.nextCreatureId;
     // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
-    // da sessão já trouxe de volta (FUN-123).
-    this.#corpses = [...(restored.corpses ?? [])];
+    // da sessão já trouxe de volta (FUN-123). O loot (ADR 0048) é OPCIONAL na leitura: snapshot
+    // de antes deste ADR não tem as quatro chaves, e ausente é cadáver sem loot nenhum.
+    this.#corpses = (restored.corpses ?? []).map((corpse) => ({
+      ...corpse,
+      items: [...(corpse.items ?? [])],
+      gold: corpse.gold ?? 0,
+      ownerId: corpse.ownerId ?? null,
+      eligible: corpse.eligible ?? [],
+    }));
     // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
     // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
     this.#fields = Fields.fromState(restored.fields);
@@ -2762,6 +3076,7 @@ export class HuntRuleset implements Ruleset {
         return {
           at: point.at, radius: point.radius,
           ...(point.monsterId === undefined ? {} : { monsterId: point.monsterId }),
+          ...(point.monsters === undefined ? {} : { monsters: point.monsters }),
         };
       },
       this.#spawnBlockedFor(session),
@@ -3394,9 +3709,15 @@ export class HuntRuleset implements Ruleset {
     // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
     if (d === want) return null;
 
+    // `keep-distance` só RECUA com visão livre até o alvo (#553): o TFS só deixa um monstro
+    // que mantém distância se afastar quando ele ainda enxerga quem persegue — recuar às cegas
+    // podia levar a se afastar do alvo sem motivo, quando na prática ele já perdeu a linha por
+    // outra razão. Sem visão, mantém a posição — a mesma "decidiu ficar parado" de `d === want`.
     const to = d > want
       ? greedyStep(from, target.position, blocked)
-      : fleeStep(from, target.position, blocked);
+      : (isSightClear(this.#world.map, from, target.position)
+        ? fleeStep(from, target.position, blocked)
+        : null);
     // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
     if (to === null) return null;
@@ -4150,10 +4471,11 @@ const slots = bot.groups.get(group);
   #perform(
     session: Session, character: CharacterRuntime, action: BotAction,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient, explicit);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -4181,6 +4503,51 @@ const slots = bot.groups.get(group);
       return effect.range ?? null;
     }
     return null;
+  }
+
+  /**
+   * Traduz o `target` de um `use-slot` manual (D11, ADR 0049 decisão 2) em recipiente de aliado
+   * OU alvo explícito de monstro/posição, ou recusa tipada.
+   *
+   * `null`: a ação não é mirável — nem `friend` (cura/suporte) nem dano — e `target` é ruído,
+   * ignorado sem recusa nenhuma (RF-12 da spec da #725); inclui a magia/runa de área centrada no
+   * LANÇADOR, porque `#needsTarget` já devolve `false` para ela (RF-13).
+   */
+  #resolveManualTarget(
+    session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
+  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
+    | { ok: false; reason: SlotRefusal } | null {
+    const healRange = this.#healRangeOf(action);
+    if (healRange !== null) {
+      // Ação de ALIADO: sem `target`, cai no default — `#perform` já assume `recipient =
+      // character` (curar A SI MESMO, como hoje, RF-12).
+      if (target === undefined) return null;
+      if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+      if (target.kind !== 'character') return null; // mira de monstro/posição não se aplica
+      const member = findById(session.participants, target.characterId);
+      if (member === null || !member.alive) return { ok: false, reason: 'no-target' };
+      if (!sameFloor(character.position.z, member.position.z)
+        || distance(character.position, member.position) > (healRange || 1)) {
+        return { ok: false, reason: 'out-of-range' };
+      }
+      return { ok: true, recipient: member };
+    }
+
+    const damageEffect = action.kind === 'spell'
+      ? this.#options.spells.get(action.spellId)?.effect
+      : action.kind === 'supply'
+        ? this.#options.supplies.get(action.supplyId)?.effect
+        : undefined;
+    if (damageEffect === undefined || !this.#needsTarget(damageEffect)) return null;
+    if (target === undefined) return null;
+    if (target.kind === 'invalid') return { ok: false, reason: 'no-target' };
+    if (target.kind === 'character') return null; // não se aplica — ignorado (RF-12)
+    if (target.kind === 'monster') {
+      const monster = this.#monsterBySubject.get(target.subject);
+      if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
+      return { ok: true, explicit: monster };
+    }
+    return { ok: true, explicit: target.position };
   }
 
   /**
@@ -4240,14 +4607,15 @@ const slots = bot.groups.get(group);
   #castSpell(
     session: Session, character: CharacterRuntime, spellId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
     const aim = spell.effect.kind === 'damage'
-      ? this.#aimFor(character, spell.effect.range, spell.effect.area)
+      ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
-        ? this.#aimFor(character, spell.effect.range, undefined)
+        ? this.#aimFor(character, spell.effect.range, undefined, explicit)
         : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
@@ -4451,9 +4819,15 @@ const slots = bot.groups.get(group);
    *
    * Os vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`. A única alocação por
    * lançamento é o `Set` de chaves da forma, do tamanho dela.
+   *
+   * `explicit` é a mira manual (ADR 0049 decisão 2): um `MonsterRuntime` (alvo apontado) ou um
+   * `FloorPoint` (tile apontado, para runa de área sobre chão vazio). Área centrada no
+   * LANÇADOR ignora `explicit` (última frase da decisão 2) — a forma sai do lançador de
+   * qualquer forma, e é por isso que o ramo abaixo nem olha o parâmetro.
    */
   #aimFor(
     character: CharacterRuntime, range: number | undefined, area: SpellArea | undefined,
+    explicit?: MonsterRuntime | FloorPoint,
   ): SpellAim | null {
     this.#spellHits.length = 0;
     this.#spellTargets.length = 0;
@@ -4464,6 +4838,10 @@ const slots = bot.groups.get(group);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        // Cada alvo da forma precisa da PRÓPRIA visão (#553, RF-05) — a onda cobre um cone
+        // inteiro, e alguém atrás de uma parede não é atingido só porque outro, mais à frente,
+        // está.
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
       if (this.#spellHits.length === 0) return null;
@@ -4472,21 +4850,51 @@ const slots = bot.groups.get(group);
       return this.#aim;
     }
 
-    const primary = this.#targetInRange(character, range);
-    if (primary === null) return null;
-    this.#collect(character, primary);
+    let primary: MonsterRuntime | null = null;
+    let primaryPoint: WorldPoint;
+    if (explicit === undefined) {
+      primary = this.#targetInRange(character, range);
+      if (primary === null) return null;
+      primaryPoint = this.#at(primary);
+    } else if ('position' in explicit) {
+      // Mira de MONSTRO (`MonsterRuntime`): precisa estar vivo e no MESMO andar (#519) — mas
+      // NÃO recusamos aqui por alcance: `aim.distance` carrega a distância real, e é
+      // `castSpell`/`useSupply` quem já confere `aim.distance > effect.range` e recusa
+      // `out-of-range` tipado (distinto de `no-target`, ADR 0049 decisão 2/RF-10). Filtrar aqui
+      // devolveria `null` → sempre `no-target`, escondendo a recusa certa.
+      if (!explicit.alive || !sameFloor(character.position.z, explicit.position.z)) return null;
+      primary = explicit;
+      primaryPoint = this.#at(explicit);
+    } else {
+      // Mira de POSIÇÃO (`FloorPoint`): sem monstro no tile, só vale para forma em área — alvo
+      // único mirado num tile vazio não tem o que acertar. Mesmo andar (#519); alcance fica
+      // para o chamador, pela mesma razão do ramo acima.
+      if (!sameFloor(character.position.z, explicit.z)) return null;
+      if (area === undefined) return null;
+      primaryPoint = { x: explicit.x, y: explicit.y, z: explicit.z ?? this.#world.map.z };
+    }
+    // A ESCOLHA do alvo (`#targetInRange`) ignora visão de propósito (DT-05 da spec #553): o
+    // bot continua mirando o mesmo alvo atrás da parede, em vez de trocar para um pior só
+    // porque este está sem linha agora. Só a CAPTURA final é filtrada — o golpe não sai. Vale
+    // igual para a mira manual (#725): alvo ou tile atrás da parede não é atingido.
+    if (!isSightClear(this.#world.map, character.position, primaryPoint)) return null;
+    if (primary !== null) this.#collect(character, primary);
 
     if (area !== undefined) {
-      this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
+      this.#aimTiles = areaTiles(area, character.position, character.direction, primaryPoint);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
     }
+    // Sem alvo primário e sem colheita de área (mira de posição vazia): nenhum alvo, `null`
+    // como sempre.
+    if (this.#spellHits.length === 0) return null;
 
-    this.#aim.distance = distance(character.position, primary.position);
+    this.#aim.distance = distance(character.position, primaryPoint);
     this.#aim.targets = this.#spellTargets;
     return this.#aim;
   }
@@ -4494,12 +4902,15 @@ const slots = bot.groups.get(group);
   /**
    * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
    * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
-   * Mind Control) — o item soma no magic level como soma no dano da runa e na cura da poção.
+   * Mind Control) MAIS o de condição (#576: Mastermind Potion soma 3 — `CONDITION_PARAM_BUFF_SPELL`
+   * do Canary é o que faz a poção valer para runa/magia, não só para o golpe) — as fontes somam
+   * no magic level como somam no dano da runa e na cura da poção.
    */
   #runeScaling(character: CharacterRuntime): SpellScaling {
     const magic = this.#options.skills.get('magic');
     const magicLevel = (magic === undefined ? 0 : character.skills.levelOf(magic))
-      + character.inventory.skillBonus(this.#options.items, 'magic');
+      + character.inventory.skillBonus(this.#options.items, 'magic')
+      + character.conditions.skillBonus('magic');
     return {
       skillLevel: magicLevel, powerScale: 1, magicLevel,
       // O ML especializado por elemento (#680): a fórmula da runa soma o do elemento DELA.
@@ -4510,20 +4921,31 @@ const slots = bot.groups.get(group);
   /**
    * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
    * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
-   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid) — MAIS
+   * o de condição (#576: Mastermind Potion soma 3 em `magic`).
+   *
+   * `SPELL_SKILL_WEAPON` (#567) é a sentinela do Knight: desde a separação de `melee` em
+   * `fist`/`club`/`sword`/`axe`, não há mais uma skill fixa para a magia dele — Berserk,
+   * Groundshaker etc. escalam pela skill da FAMÍLIA da arma que está na mão agora, resolvida
+   * do mesmo jeito que `#weaponPower` resolve o golpe (`Inventory.weapon`, desarmado cai no
+   * perfil `fist` de `content.unarmed`).
    */
   #spellScaling(character: CharacterRuntime): SpellScaling {
-    const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const spellSkill = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const skillId = spellSkill === SPELL_SKILL_WEAPON
+      ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
     const magic = this.#options.skills.get('magic');
     return {
       skillLevel: (skill === undefined ? 0 : character.skills.levelOf(skill))
-        + character.inventory.skillBonus(this.#options.items, skillId),
+        + character.inventory.skillBonus(this.#options.items, skillId)
+        + character.conditions.skillBonus(skillId),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
       // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
       magicLevel: (magic === undefined ? 0 : character.skills.levelOf(magic))
-        + character.inventory.skillBonus(this.#options.items, 'magic'),
+        + character.inventory.skillBonus(this.#options.items, 'magic')
+        + character.conditions.skillBonus('magic'),
       // O termo de arma da fórmula baseada em `attack` (#523: Groundshaker, Berserk, Fierce
       // Berserk, Front Sweep, Whirlwind Throw). `0` desarmado — a mesma resposta honesta de
       // `weaponAttack`, nunca um número inventado.
@@ -4890,6 +5312,7 @@ const slots = bot.groups.get(group);
   #useSupply(
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
+    explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -4897,7 +5320,7 @@ const slots = bot.groups.get(group);
     // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
     // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
     const aim = supply.effect.kind === 'damage'
-      ? this.#aimFor(character, supply.effect.range, supply.effect.area)
+      ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
@@ -4926,6 +5349,10 @@ const slots = bot.groups.get(group);
       });
       if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
       else this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
+      // Poção de buff (#576, CMB-07): o `useSupply` devolve a condição já com o USUÁRIO como
+      // alvo e origem (auto-alvo sempre, nunca o `recipient`) — quem agenda o vencimento é quem
+      // tem a fila, a mesma divisão do `#castSpell`.
+      if (result.condition !== undefined) this.#applyConditionTo(session, character, result.condition);
       return result;
     }
 
@@ -5632,6 +6059,7 @@ const slots = bot.groups.get(group);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(
       monster, target, definition, this.#blockedForMonster(monster, definition),
+      (from, to) => isSightClear(this.#world.map, from, to),
     );
     // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
     // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
@@ -5698,6 +6126,7 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
       monster.attackReady = true;
       return;
@@ -5736,9 +6165,11 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
-      // Alvo saiu do alcance (ou o monstro está fugindo e esta ability é corpo a corpo): NÃO
-      // bate, e a ability volta a ficar engatilhada — `#armMonsterAbilities` a re-arma.
+      // Alvo saiu do alcance, ou a visão fechou (#553), ou o monstro está fugindo e esta
+      // ability é corpo a corpo: NÃO bate, e a ability volta a ficar engatilhada —
+      // `#armMonsterAbilities` a re-arma.
       return;
     }
 
@@ -5763,6 +6194,7 @@ const slots = bot.groups.get(group);
     for (const ability of definition.abilities) {
       if (fleeing && isMeleeAbility(ability)) continue;
       if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (!isSightClear(this.#world.map, monster.position, target.position)) continue;
       if (ability.id === BASIC_ABILITY_ID) {
         if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
         continue;
@@ -5786,7 +6218,11 @@ const slots = bot.groups.get(group);
     primary: CharacterRuntime,
   ): void {
     const subject = monster.subject;
-    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
+    // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
+    // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants)
+      .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
     // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
@@ -6349,7 +6785,19 @@ const slots = bot.groups.get(group);
     const reflectAttacker = this.#reflectAttackerFor(character, monster);
 
     if (weapon !== null && how?.kind === 'distance') {
-      const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
+      // Sem visão livre até o alvo (#553), o tiro NÃO sai — como sem munição, antes de gastar
+      // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
+      // reavalia, e acerta assim que a linha abrir. Vale para o arremessável (#575) também —
+      // ele só troca a fonte do projétil, nunca a exigência de linha de visão.
+      if (!isSightClear(this.#world.map, character.position, monster.position)) return;
+      // O arremessável (#575): sem `ammoFamily`, o item na mão É o próprio projétil — não há
+      // seleção por família nem lançador (ADR 0026 d.3 não se aplica a ele). `buildContent` já
+      // garante que toda arma `distance` tem exatamente um dos dois campos.
+      if (how.ammoFamily === undefined) {
+        this.#throwWeapon(session, character, monster, weapon, how, damagePercent, defender, reflectAttacker);
+        return;
+      }
+      const ammo = this.#ammoFor(character, how.ammoFamily);
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
@@ -6405,7 +6853,8 @@ const slots = bot.groups.get(group);
       };
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical,
+          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical
+            + this.#perfectShotBonus(character, monster),
           source: 'basic-attack',
           damageType: profile.damageType,
           modifiers: this.#attackerModifiers(character),
@@ -6621,9 +7070,23 @@ const slots = bot.groups.get(group);
   #skillLevelOf(character: CharacterRuntime, family: CompiledWeaponFamily | undefined): number {
     const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
     // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
-    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item.
+    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item — MAIS o de
+    // condição (#576: Berserk Potion soma 5 em `melee`, Bullseye Potion soma 5 em `distance`).
     return (skill === undefined ? 0 : character.skills.levelOf(skill))
-      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId))
+      + (family === undefined ? 0 : character.conditions.skillBonus(family.skillId));
+  }
+
+  /**
+   * A skill que a arma NA MÃO agora aponta (#567, `SPELL_SKILL_WEAPON`): a mesma leitura de
+   * `#strike` (`Inventory.weapon`), caindo no perfil `fist` de `content.unarmed` desarmado —
+   * nunca um nome fixo, porque `fist`/`club`/`sword`/`axe` são skills diferentes desde a
+   * separação de `melee`. Sem a família no catálogo (conteúdo de teste incompleto), `fist`.
+   */
+  #equippedWeaponSkillId(character: CharacterRuntime): string {
+    const item = character.inventory.weapon(this.#options.items, character);
+    const family = item?.weapon?.family ?? this.#options.unarmed.family;
+    return this.#options.weaponFamilies.get(family)?.skillId ?? 'fist';
   }
 
   /**
@@ -6651,6 +7114,83 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O arremessável (#575, ADR 0026 d.3 NÃO se aplica): sem `ammoFamily`, o item na mão É o
+   * próprio projétil — não há seleção por família nem lançador, e não é munição abstrata: é um
+   * item de verdade, `stackable: true` (spear, throwing star — como o `royal-spear.json`
+   * autoral já declarava, à espera desta issue), looteado e empilhado como qualquer item comum.
+   * `weapon !== null` já garante `quantity >= 1` (`equip` nunca deixa pilha vazia no corpo), então
+   * não há "sem estoque" a conferir aqui — só a QUEBRA, que consome uma unidade da PILHA
+   * (`Inventory.consumeStack`), nunca `ammunitionStock` (isso é só da munição arrow/bolt).
+   */
+  #throwWeapon(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, weapon: Item,
+    how: ResolvedWeapon, damagePercent: number, defender: Defender,
+    reflectAttacker: ReflectAttacker | undefined,
+  ): void {
+    session.emit({
+      kind: 'shot', attackerId: character.id, targetId: monster.subject,
+      weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+    });
+    const hit = this.#rollThrowHit(session, character, monster, how);
+    if (!this.#isV3()) this.#practice(session, character, how.family, 1);
+    // A quebra é rolagem SEMPRE consumida (ADR 0031): a sequência de RNG não pode depender do
+    // valor de `breakChance` — a mesma regra do bloqueio e do crítico.
+    if (session.rng.chance((how.breakChance ?? 0) / 100)) {
+      character.inventory.consumeStack('hand');
+    }
+    if (!hit) {
+      if (this.#isV3()) this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+      return;
+    }
+    const power = this.#weaponPower(session, character, how, damagePercent);
+    const result = resolveDamage(
+      {
+        rawDamage: power.physical + this.#perfectShotBonus(character, monster),
+        source: 'basic-attack',
+        damageType: how.damageType,
+        modifiers: this.#attackerModifiers(character),
+        // Como a munição por família (#548): bloqueia por armadura, nunca por escudo.
+        blockable: DISTANCE_BLOCK_FLAGS,
+        ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
+      },
+      defender, 'pve', this.#options.combat, session.rng, session.nowMs,
+    );
+    this.#land(session, character, monster, result, 'melee');
+    if (this.#isV3()) this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+  }
+
+  /**
+   * A chance de acerto do arremessável (#575): o CAMINHO FIXO de `distance-hit.ts` — o próprio
+   * `how.hitChance` da arma (viper star 80%, leaf star 90%) faz o papel do `ammunition.hitChance`
+   * direto do Canary (`it.hitChance != 0` ANTES da tabela/balde), porque não há munição separada
+   * cujo campo pudesse carregar isso. Sem tabela de `combat.distanceHitChance` (v1), sempre acerta.
+   */
+  #rollThrowHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, how: ResolvedWeapon,
+  ): boolean {
+    const table = this.#options.combat.distanceHitChance;
+    if (table === undefined) return true;
+    const family = this.#options.weaponFamilies.get('distance');
+    const skillLevel = this.#skillLevelOf(character, family);
+    const tiles = distance(character.position, monster.position);
+    return rollDistanceHit(tiles, skillLevel, table, session.rng, undefined, how.hitChance ?? 0, undefined);
+  }
+
+  /**
+   * O bônus de perfect shot (#575; `Player::getPerfectShotDamage`, Canary `weapons.cpp:706-718`/
+   * `game.cpp:8500-8509`): soma quando a distância de Chebyshev até o alvo é EXATAMENTE o
+   * `perfectShot.range` da peça no slot de escudo (a aljava) — nem mais perto, nem mais longe.
+   * Vale para os dois caminhos de tiro (munição por família E arremessável), porque o Canary lê a
+   * MESMA peça nos dois. Sem aljava, ou aljava sem `perfectShot`, o bônus é zero.
+   */
+  #perfectShotBonus(character: CharacterRuntime, monster: MonsterRuntime): number {
+    const shield = character.inventory.shield(this.#options.items, character);
+    const perfectShot = shield?.perfectShot;
+    if (perfectShot === undefined) return 0;
+    return distance(character.position, monster.position) === perfectShot.range ? perfectShot.damage : 0;
+  }
+
+  /**
    * Registra que `characterId` atacou ou curou agora (§525, ADR 0027 emenda 2026-09-24): a
    * atividade que `canShareExperience` lê como `Party::isPlayerActive` do TFS/Canary. Sem
    * `Runner` (id que não é participante — `healerId` de uma condição, por exemplo) é no-op, a
@@ -6662,9 +7202,15 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
-   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
-   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   * Pratica UMA vez pelo golpe, na skill que a família aponta — SÓ ELA (CMB-05, #567). A
+   * prática é o `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por
+   * mana gasta — e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * Chama `#gainSkill` DIRETO, na skill resolvida — nunca `#gainSkills` (o grupo inteiro de
+   * `sk.gain.on`): desde a separação de `melee` em `fist`/`club`/`sword`/`axe`, as quatro
+   * compartilham o MESMO gatilho `melee-hit`, e o grupo faria uma espada treinar `axe` junto —
+   * o defeito que o #567 existe para não introduzir. `distance`/`magic` continuam com uma
+   * skill só por grupo, então o comportamento delas não muda.
    *
    * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
    * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
@@ -6676,7 +7222,7 @@ const slots = bot.groups.get(group);
     if (definition === undefined) return;
     const skill = this.#options.skills.get(definition.skillId);
     if (skill === undefined) return;
-    this.#gainSkills(session, character, skill.gain.on, amount);
+    this.#gainSkill(session, character, skill, amount);
   }
 
   /**
@@ -6861,35 +7407,48 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Credita uso a toda skill alimentada por esta fonte.
+   * Credita uso a toda skill alimentada por esta fonte (`spell-cast`, `shield-block`): hoje uma
+   * skill só por grupo, então iterar ou chamar `#gainSkill` uma vez dá no mesmo — mas iterar é
+   * o que continua certo se um dia houver mais de uma nesse mesmo grupo.
    *
    * `amount` é o que a fonte rende: um golpe é um golpe; uma magia rende a MANA que gastou
    * (§9.4, modelo do Tibia). Sem isso, a forma ótima de subir magia seria lançar mil vezes a
    * magia mais barata, e o jogo viraria macro de spam.
-   *
-   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
-   * jogador quer ver ao voltar, ao lado do level up (§16.2).
    */
   #gainSkills(
     session: Session, character: CharacterRuntime, on: Skill['gain']['on'], amount: number,
   ): void {
-    if (amount <= 0) return;
     const definitions = this.#skillsByGain[on];
-    const vocation = this.#vocationOf(character);
     for (let i = 0; i < definitions.length; i += 1) {
-      const definition = definitions[i] as Skill;
-      const gain = definition.gain;
-      const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
-      // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
-      // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
-      // diferente por quem está usando.
-      const factor = skillFactorFor(definition, vocation, this.#options.progression);
-      // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
-      // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
-      const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
-      if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
-        session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
-      }
+      this.#gainSkill(session, character, definitions[i] as Skill, amount);
+    }
+  }
+
+  /**
+   * Credita uso a UMA skill (#567): a que a família de arma aponta, nunca o grupo inteiro de
+   * `gain.on` — é o que separa `fist`/`club`/`sword`/`axe` de verdade, depois de todas
+   * compartilharem o mesmo gatilho `melee-hit`. `#gainSkills`, acima, continua servindo os
+   * gatilhos que SÃO compartilhados de propósito.
+   *
+   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
+   * jogador quer ver ao voltar, ao lado do level up (§16.2).
+   */
+  #gainSkill(
+    session: Session, character: CharacterRuntime, definition: Skill, amount: number,
+  ): void {
+    if (amount <= 0) return;
+    const gain = definition.gain;
+    const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
+    // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
+    // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
+    // diferente por quem está usando.
+    const vocation = this.#vocationOf(character);
+    const factor = skillFactorFor(definition, vocation, this.#options.progression);
+    // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
+    // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
+    const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
+    if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
+      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
     }
   }
 
@@ -6923,6 +7482,10 @@ const slots = bot.groups.get(group);
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
     const recipient = isSummon ? null : this.#lootRecipient(session, killer, eligible);
+    // O que o cadáver nasce carregando (ADR 0048 decisão 1) — vazio no modo bolsa (o loot vai
+    // direto para ela, "como hoje") e quando não há destinatário nenhum.
+    let corpseGold = 0;
+    let corpseItems: CarriedItem[] = [];
     if (!isSummon && definition !== undefined && this.#bag !== null && session.participants.length > 1) {
       // Modo compartilhado (#192): tudo cai na BOLSA — sem destinatário, sem modificador
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
@@ -6943,17 +7506,18 @@ const slots = bot.groups.get(group);
         this.#creditAmmunition(session, session.participants, loot.ammunition);
       }
     } else if (!isSummon && definition !== undefined && recipient !== null) {
-      // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
-      // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
+      // O sorteio é IDÊNTICO a antes deste ADR — gold, depois itens na ordem da tabela — e o
+      // destino é o cadáver, não mais direto na mochila (ADR 0048 decisão 1). `corpseGold`/
+      // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
+      // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
+      // isso é o W3/#722.
       const loot = rollLoot(
         this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
       );
-      recipient.goldDelta += loot.gold;
-      session.credit(recipient.id, 'goldGained', loot.gold);
-      // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
-      // (FUN-63), e acrescentar destino não muda sorteio nenhum.
-      this.#deliverLoot(session, recipient, loot.items);
-      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold.
+      corpseGold = loot.gold;
+      corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
+      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold —
+      // são abstratos, sem cadáver (ADR 0048 decisão 1).
       this.#creditSupplies(session, [recipient], loot.supplies);
       this.#creditAmmunition(session, [recipient], loot.ammunition);
     }
@@ -6983,16 +7547,29 @@ const slots = bot.groups.get(group);
     // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
     // ele morre em z11 num mapa cujo andar padrão é z10.
     this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
-    // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
-    // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
-    // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
-    const corpseTtlMs = this.#options.hunt.corpseTtlMs;
+    // O cadáver carrega o loot (FUN-123, ADR 0048 decisão 1): fica no tile por `corpseTtlMs` do
+    // MONSTRO (#585 — era da hunt) e some sozinho, levando o que ninguém coletou junto
+    // (decisão 5) — a arte é da tabela, no hospedeiro (invariante 6).
+    //
+    // A COLETA roda sempre, com `corpseTtlMs` ou sem — é o abate creditando gold e item de
+    // sempre, e gatear por um campo de conteúdo opcional quebraria todo monstro que nunca falou
+    // de cadáver. Só a PERSISTÊNCIA do que sobra (o cadáver visível, com prazo próprio) depende
+    // de `corpseTtlMs`: sem ele, o que o filtro não aceitou ou não coube não tem onde esperar, e
+    // desaparece — o "não deixa nada" de antes deste ADR, agora só para a sobra.
+    const corpseTtlMs = definition?.corpseTtlMs;
+    const corpse: CorpseState = {
+      id: corpseTtlMs === undefined ? 0 : this.#nextGroundItemId++,
+      monsterId: monster.monsterId,
+      position: this.#at(monster),
+      items: corpseItems,
+      gold: corpseGold,
+      ownerId: recipient?.id ?? null,
+      eligible: eligible.map((p) => p.id),
+    };
+    // O dono coleta AGORA, sem plateia (invariante 3, ADR 0048 decisão 3): o `autoLoot` do
+    // Canary, sem trava de Premium. O que o filtro não aceita ou não cabe fica no cadáver.
+    if (recipient !== null) this.#collectFromCorpse(session, corpse, recipient);
     if (corpseTtlMs !== undefined) {
-      const corpse: CorpseState = {
-        id: this.#nextGroundItemId++,
-        monsterId: monster.monsterId,
-        position: this.#at(monster),
-      };
       this.#corpses.push(corpse);
       session.emit({
         kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
@@ -7405,8 +7982,9 @@ const slots = bot.groups.get(group);
    * — com quem sai incluído —, no fim, e ao desligar `splitLoot`. Cada entrada é dividida só
    * entre `eligible ∩ present`; cada um recebe a cota em `goldDelta` e `goldGained`; o resto vai
    * um gold por membro na ordem de entrada. O que não se vende (`value: 0`) vai para a mochila
-   * do líder, e o que não couber para a caixa dele. Registrado no extrato — "vendeu nada" também
-   * é informação.
+   * do líder — peso ignorado (`forceAdd`, ADR 0048 decisão 7: sem cadáver de monstro à mão para
+   * segurar o excedente, e o item já não pôde virar gold). Registrado no extrato — "vendeu
+   * nada" também é informação.
    */
   #settle(
     session: Session, present: readonly CharacterRuntime[], reason: 'leave' | 'end' | 'toggle',
@@ -7433,10 +8011,8 @@ const slots = bot.groups.get(group);
     this.#bagWeight = 0;
     const leader = this.#leader(session) ?? present[0];
     if (leader !== undefined) {
-      const wearer = withReservedCapacity(leader, 0);
       for (const item of unsold) {
-        if (leader.inventory.add(item, this.#options.items, wearer, this.#containerRules(leader)).ok) continue;
-        leader.lootBox.push(item);
+        leader.inventory.forceAdd(item, this.#options.items, this.#containerRules(leader));
       }
     }
     session.record('party-settlement', `${String(total)}/${String(present.length)}`);
@@ -7476,59 +8052,189 @@ const slots = bot.groups.get(group);
     return definition.loot;
   }
 
-  #deliverLoot(
-    session: Session, character: CharacterRuntime, items: readonly LootItem[],
-  ): void {
-    // O loot PESSOAL entra na mochila com a capacidade já descontada da reserva que a party fez
-    // dele (§11, DT-05). Hoje `#deliverLoot` só roda quando `#bag` é `null` (o modo compartilhado
-    // entrega pela bolsa), então `reserved` é 0; o `Wearer` derivado fica pela consistência e
-    // blinda o código se uma issue futura mudar quando este caminho roda com bolsa ativa.
+  /**
+   * Materializa o loot sorteado em itens do CADÁVER, com `instanceId` DETERMINÍSTICO (ADR 0048
+   * decisão 1/5) — o id é gasto AQUI, mesmo que o item nunca seja coletado e apodreça com o
+   * cadáver: a idempotência do invariante 10 vem da identidade previsível, não da contagem
+   * contígua. Ver a versão anterior a este ADR (`#deliverLoot`) para o mesmo argumento sobre o
+   * catálogo ser conferido antes de gastar o id.
+   */
+  #instantiateCorpseItems(
+    session: Session, recipient: CharacterRuntime, items: readonly LootItem[],
+  ): CarriedItem[] {
+    const carried: CarriedItem[] = [];
+    for (const rolled of items) {
+      if (this.#options.items.get(rolled.itemId) === undefined) continue;
+      // Em party (#191) o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam; em
+      // solo o formato é o de sempre. O critério é o TIPO de sessão (DT-03, #397), não a
+      // contagem de presentes.
+      const instanceId = this.#party !== undefined
+        ? `${session.id}:${recipient.id}:${String(recipient.lootSeq++)}`
+        : `${session.id}:${String(recipient.lootSeq++)}`;
+      carried.push({ instanceId, itemId: rolled.itemId, quantity: rolled.quantity });
+    }
+    return carried;
+  }
+
+  /**
+   * O limite de autovenda INDIVIDUAL (ADR 0048 decisão 2, PRD §22.1): o mesmo
+   * `party.autoSellItemTypes` da autovenda de party, mas lido pelo PRÓPRIO Premium do
+   * personagem — fora de party, `#options.premium` é quem diz (o mesmo fallback de
+   * `#onCharacterDied` para a penalidade de morte, D3).
+   */
+  #individualAutoSellLimit(characterId: string): number {
+    const premium = this.#party?.premiumByCharacter[characterId] ?? this.#options.premium ?? false;
+    return autoSellLimit({ [characterId]: premium }, characterId, this.#options.party.autoSellItemTypes);
+  }
+
+  /**
+   * O dono coleta do cadáver o que o filtro de Quick Loot aceita e cabe (ADR 0048 decisão 3): o
+   * `autoLoot` do Canary, sem trava de Premium (invariante 11) — roda no MESMO evento do abate,
+   * sem plateia (invariante 3). Gold é sempre coletado (o Quick Loot do Tibia sempre leva a
+   * moeda); item vendável em `loot.autoSell` vira gold na hora, cortado pelo limite do PRÓPRIO
+   * Premium; o resto FICA no cadáver — filtrado ou sem capacidade, sem diferença nenhuma: as
+   * duas são "não coletado" (§14 do `#deliverToBag` de antes já tratava OVERWEIGHT assim).
+   *
+   * `itemsLooted` conta só o que ENTROU na mochila ou foi vendido (decisão 5) — o que ficou no
+   * cadáver não é loot "levado" ainda, mesmo já tendo saído do sorteio.
+   */
+  #collectFromCorpse(session: Session, corpse: CorpseState, character: CharacterRuntime): void {
+    if ((corpse.gold ?? 0) > 0) {
+      const gold = corpse.gold ?? 0;
+      character.goldDelta += gold;
+      session.credit(character.id, 'goldGained', gold);
+      corpse.gold = 0;
+    }
+    const items = corpse.items ?? [];
+    if (items.length === 0) return;
+
+    const filter = this.#runnerOf(character.id).botConfig?.loot ?? DEFAULT_LOOT_FILTER;
+    const autoSellIds = new Set(filter.autoSell.slice(0, this.#individualAutoSellLimit(character.id)));
+    // A capacidade já descontada da reserva que a party fez dele (§11, DT-05) — como
+    // `#deliverLoot` fazia antes deste ADR; `reserved` é 0 fora do modo bolsa.
     const reserved = this.#bag === null
       ? 0
       : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
     const wearer = withReservedCapacity(character, reserved);
-    for (const rolled of items) {
-      // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
-      // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
-      // voo — e aí o certo é não entregar nada e não queimar identidade por um item que não
-      // vai existir.
-      if (this.#options.items.get(rolled.itemId) === undefined) continue;
 
-      // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
-      // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
-      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre. O critério é o
-      // TIPO de sessão, não a contagem de presentes (DT-03, #397): uma party pode ficar
-      // momentaneamente com 1 presente e depois crescer de novo por join em curso, e o formato
-      // de solo colidiria com o de quem entrar depois.
-      const instanceId = this.#party !== undefined
-        ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-        : `${session.id}:${String(character.lootSeq++)}`;
-      const carried: CarriedItem = {
-        instanceId,
-        itemId: rolled.itemId,
-        quantity: rolled.quantity,
-      };
-      // Conta no ANALISADOR aconteça o que acontecer com o destino: o item caiu, e é isso que
-      // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
-      session.credit(character.id, 'itemsLooted', carried.quantity);
+    const remaining: CarriedItem[] = [];
+    for (const item of items) {
+      const accepted = filter.filter === 'accept'
+        ? filter.itemIds.includes(item.itemId)
+        : !filter.itemIds.includes(item.itemId);
+      if (!accepted) { remaining.push(item); continue; }
 
-      if (character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) continue;
+      const definition = this.#options.items.get(item.itemId);
+      if (definition !== undefined && autoSellIds.has(item.itemId) && definition.value > 0) {
+        const amount = definition.value * item.quantity;
+        character.goldDelta += amount;
+        session.credit(character.id, 'goldGained', amount);
+        session.credit(character.id, 'itemsLooted', item.quantity);
+        continue;
+      }
 
-      // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
-      // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
-      // significar que ele nunca existiu, não que existe e ninguém consegue ver.
-      character.lootBox.push(carried);
+      if (character.inventory.add(item, this.#options.items, wearer, this.#containerRules(character)).ok) {
+        session.credit(character.id, 'itemsLooted', item.quantity);
+        continue;
+      }
+
+      // Não coube: fica no cadáver — a segunda chance é ELE, não uma caixa da sessão (ADR 0048
+      // decisão 7). O aviso é o mesmo de sempre, uma linha por sessão.
+      remaining.push(item);
       const runner = this.#runnerOf(character.id);
       if (runner.warnedFullBackpack) continue;
       runner.warnedFullBackpack = true;
-      // UMA linha no extrato, como o aviso de stamina. Uma por item encheria a lista curta da
-      // tela de retorno até ela deixar de ser lista — e o que o jogador precisa saber é que a
-      // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+    corpse.items = remaining;
     // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
-    // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
+    // e as reservas da party. No-op quando não há bolsa, que é o caso comum.
     this.#rebalanceBag(session);
+  }
+
+  /** Ache o cadáver por id do item do chão (#722), ou `undefined` — já apodreceu ou nunca existiu. */
+  #corpseById(groundItemId: number): CorpseState | undefined {
+    return this.#corpses.find((corpse) => corpse.id === groundItemId);
+  }
+
+  /**
+   * Confere se o personagem pode abrir/pegar deste cadáver (#722, ADR 0048 d.4): dono, ou
+   * presente na elegibilidade do abate — o `Player::canOpenCorpse` da party, espelhado por
+   * `ownerId`/`eligible` (que `#onMonsterDied` já grava, ver `CorpseState`).
+   */
+  #canLootCorpse(corpse: CorpseState, characterId: string): boolean {
+    return corpse.ownerId === characterId || (corpse.eligible ?? []).includes(characterId);
+  }
+
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4): confere dono/elegibilidade e distância
+   * (≤ 1, mesmo andar — o `areInRange<1,1,0>`/`Actions::canUse` do Canary, ver §5 da spec da
+   * issue) e devolve o que ainda está lá. PURA: não muta nada — abrir não é coletar
+   * (invariante 3), ao contrário de `takeLoot`.
+   */
+  openCorpse(session: Session, characterId: string, groundItemId: number): OpenCorpseResult {
+    const corpse = this.#corpseById(groundItemId);
+    if (corpse === undefined) return { ok: false, reason: 'not-found' };
+    if (!this.#canLootCorpse(corpse, characterId)) return { ok: false, reason: 'not-yours' };
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'not-found' };
+    if (
+      !sameFloor(character.position.z, corpse.position.z)
+      || distance(character.position, corpse.position) > 1
+    ) {
+      return { ok: false, reason: 'too-far-away' };
+    }
+    return { ok: true, corpse };
+  }
+
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático do abate (#722, ADR 0048 d.4).
+   *
+   * `instanceId: null` é o CLIQUE do Tibia: reaplica o MESMO filtro de Quick Loot do
+   * personagem (`#collectFromCorpse`, que já credita ouro e autovenda) a tudo que ainda está
+   * no cadáver — idempotente quando não sobrou nada. Um `instanceId` é arrastar ESTE item
+   * específico da janela, IGNORANDO o filtro — o "segunda chance" do Canary; ouro não é
+   * tocado nesse ramo, porque ouro não tem `instanceId` para arrastar (o clique já o cobre).
+   */
+  takeLoot(
+    session: Session, characterId: string, groundItemId: number, instanceId: string | null,
+  ): TakeLootResult {
+    const corpse = this.#corpseById(groundItemId);
+    if (corpse === undefined) return { ok: false, reason: 'not-found' };
+    if (!this.#canLootCorpse(corpse, characterId)) return { ok: false, reason: 'not-yours' };
+    const character = findById(session.participants, characterId);
+    if (character === null) return { ok: false, reason: 'not-found' };
+    if (
+      !sameFloor(character.position.z, corpse.position.z)
+      || distance(character.position, corpse.position) > 1
+    ) {
+      return { ok: false, reason: 'too-far-away' };
+    }
+
+    if (instanceId === null) {
+      this.#collectFromCorpse(session, corpse, character);
+      return { ok: true };
+    }
+
+    const items = corpse.items ?? [];
+    const index = items.findIndex((item) => item.instanceId === instanceId);
+    if (index === -1) return { ok: false, reason: 'not-found' };
+    const item = items[index];
+    if (item === undefined) return { ok: false, reason: 'not-found' };
+
+    // A mesma reserva de capacidade que `#collectFromCorpse` usa (§11, DT-05) — `reserved` é 0
+    // fora do modo bolsa.
+    const reserved = this.#bag === null
+      ? 0
+      : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
+    const wearer = withReservedCapacity(character, reserved);
+    const result = character.inventory.add(item, this.#options.items, wearer, this.#containerRules(character));
+    if (!result.ok) return { ok: false, reason: 'not-enough-capacity' };
+
+    session.credit(character.id, 'itemsLooted', item.quantity);
+    corpse.items = items.filter((_, i) => i !== index);
+    this.#rebalanceBag(session);
+    return { ok: true };
   }
 
   /**
@@ -7865,9 +8571,13 @@ const slots = bot.groups.get(group);
     if (skillId === undefined) return source;
     const skill = this.#options.skills.get(skillId);
     if (skill === undefined) return source;
+    // O malus de condição (#576: Berserk/Bullseye tiram 10 de `shielding`) entra na MESMA skill
+    // que escala a defesa — `powerMultiplier` já pisa em `Math.max(0, …)`, então o malus nunca
+    // deixa o nível efetivo negativo, só encosta no piso de `startingLevel`.
+    const level = character.skills.levelOf(skill) + character.conditions.skillBonus(skillId);
     return {
       kind: source.kind,
-      defense: Math.round(source.defense * powerMultiplier(skill, character.skills.levelOf(skill))),
+      defense: Math.round(source.defense * powerMultiplier(skill, level)),
     };
   }
 

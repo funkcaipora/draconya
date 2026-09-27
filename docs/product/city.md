@@ -247,3 +247,9 @@ como fixture de teste (`packages/server/src/testing/content.ts`).
 **O passo na Cidade é fixo — 150 ms por tile, para todos** (decisão do usuário, 2026-09-11,
 cópia do Huntera). A fórmula do Tibia (`chão × 1000 / speed`) vale só na hunt; o regime do PvP
 se decide quando o PvP existir.
+
+**Comer e beber poção na Cidade são recusados — o Tibia deixa** (#726, ADR 0049 decisão 8):
+`use-item`/`use-item-on` respondem `not-in-hunt` para qualquer coisa que simule (comida,
+suprimento) porque a Cidade não tem relógio (`hz` 0, ADR 0004/0023) para exaustão, condição nem
+`fedMs` — não há fila de eventos para agendar o vencimento nem para drenar o contador. Reabre
+quando a Cidade tiver relógio, o que o ADR 0004 diz que não terá.

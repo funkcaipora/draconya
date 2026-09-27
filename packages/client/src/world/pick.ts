@@ -6,7 +6,7 @@
 // (`spatialOrder`, o `zIndex` de `scene`), para o clique acertar o que o olho vê.
 
 import { spatialOrder } from './depth.js';
-import { interpolate, type Creature } from '../state/world.js';
+import { interpolate, type Creature, type GroundItem } from '../state/world.js';
 
 /**
  * O tile inteiro em que a criatura está desenhada no instante dado (interpolação do passo).
@@ -45,4 +45,25 @@ export function pickCreature(
     }
   }
   return picked;
+}
+
+/**
+ * O item do chão sob um tile (#722, ADR 0048 d.4) — o cadáver que o clique abre. Diferente de
+ * `pickCreature`, a posição é FIXA (um cadáver não anda), então não há interpolação nem
+ * desempate por profundidade: o primeiro achado no tile já é a resposta certa, porque a hunt
+ * não empilha dois cadáveres no mesmo lugar.
+ */
+export function pickGroundItem(
+  items: Iterable<GroundItem>, tile: { x: number; y: number; z: number },
+): GroundItem | null {
+  for (const item of items) {
+    if (
+      Math.round(item.position.x) === tile.x
+      && Math.round(item.position.y) === tile.y
+      && Math.round(item.position.z) === tile.z
+    ) {
+      return item;
+    }
+  }
+  return null;
 }

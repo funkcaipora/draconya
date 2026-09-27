@@ -472,6 +472,15 @@ export function decideMonsterAction(
   target: Prey | null,
   definition: Monster,
   blocked: Blocked,
+  /**
+   * Há linha de visão livre do monstro até o alvo (#553, M30-06)? Ausente é SEMPRE `true` — o
+   * comportamento de antes desta issue, e o que preserva todo chamador (inclusive os dezenas
+   * de casos deste arquivo de teste) que ainda não tem mapa para consultar. Só o ramo "manter
+   * distância" abaixo lê isto: o Canary só recua com `isSightClear` verdadeiro
+   * (`Monster::getDistanceStep`); sem visão, o monstro cai no caminho normal de aproximação,
+   * como documentado em `docs/product/combat.md`.
+   */
+  sightClear: (from: FloorPoint, to: FloorPoint) => boolean = () => true,
 ): MonsterAction {
   if (!monster.alive || target === null || !target.alive) return { kind: 'idle' };
 
@@ -492,13 +501,14 @@ export function decideMonsterAction(
   // independente da fuga por vida baixa acima, que já tratou o caso "sempre foge". Precisa do
   // MESMO andar: um alvo em outro piso nunca é "perto demais". Sem passo livre (parede atrás),
   // cai para a checagem de alcance abaixo — ataca parado em vez de ficar preso tentando um
-  // recuo impossível. O Canary só entra neste ramo com linha de visão livre
-  // (`isSightClear`); o sim ainda não modela isso (M30-06) — pendência registrada em
-  // `docs/product/combat.md`.
+  // recuo impossível. O Canary só entra neste ramo com linha de visão livre até o alvo
+  // (`isSightClear`, #553, M30-06): sem visão, o monstro cai no caminho normal de aproximação
+  // (a checagem de alcance logo abaixo), mesmo com o alvo mais perto que `targetDistance`.
   if (
     definition.targetDistance > 1
     && sameFloor(monster.position.z, target.position.z)
     && distance(monster.position, target.position) < definition.targetDistance
+    && sightClear(monster.position, target.position)
   ) {
     const away = fleeStep(monster.position, target.position, blocked);
     if (away !== null) return { kind: 'retreat', to: away };

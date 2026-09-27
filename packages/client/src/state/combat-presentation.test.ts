@@ -142,7 +142,10 @@ describe('apresentação de combate E2E (M24-12, #477)', () => {
     const reason = hud.get().slotStates['0:0']?.reason ?? null;
     expect(reason).toBe('Magic level insuficiente.');
     const title = slotTitle(
-      { label: 'Avalanche Rune', hotkey: undefined, element: undefined, cooldownMs: 0, blocked: true },
+      {
+        label: 'Avalanche Rune', hotkey: undefined, element: undefined, cooldownMs: 0, blocked: true,
+        needsAim: false,
+      },
       reason,
     );
     expect(title).toContain('Magic level insuficiente.');

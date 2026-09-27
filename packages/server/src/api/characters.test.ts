@@ -6,6 +6,7 @@ import {
   CharacterNameTakenError,
   type AccountRecord,
   type CharacterRecord,
+  type CharacterStorageRecord,
   type GameRepository,
   type ItemInstanceRecord,
   type StartingKitPiece,
@@ -42,6 +43,9 @@ class MemoryRepository implements GameRepository {
   async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
     return [];
   }
+  async listCharacterStorages(): Promise<readonly CharacterStorageRecord[]> {
+    return [];
+  }
   async saveBotConfig(characterId: string, config: unknown): Promise<void> {
     const character = this.characters.get(characterId);
     if (character !== undefined) this.characters.set(characterId, { ...character, botConfig: config });
@@ -62,6 +66,7 @@ class MemoryRepository implements GameRepository {
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
       state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
       outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,
+      fedMs: 0,
       createdAt: now,
     };
     this.characters.set(character.id, character);

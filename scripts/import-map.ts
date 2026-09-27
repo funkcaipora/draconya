@@ -172,6 +172,26 @@ function blockedOf(
   return blocked;
 }
 
+/**
+ * Bloqueia LINHA DE VISÃO (#553) quando o chão ou qualquer item da pilha tem `unsight` — a
+ * flag do pacote 13.x que o TFS/Canary chamam de `CONST_PROP_BLOCKPROJECTILE`. Espelha
+ * `blockedOf` (`unpass`), com a MESMA regra de id desconhecido: não bloqueia, e é reportado
+ * pelo `unknown` compartilhado — o chamador já varre os mesmos ids uma vez para `blockedOf`.
+ * Bloqueio de PASSO e bloqueio de VISTA são flags independentes: um tile pode ter uma sem a
+ * outra, e por isso esta função nunca reaproveita o resultado de `blockedOf`.
+ */
+function blocksSightOf(tile: RegionTile, flagsOf: ImportOptions['flagsOf'], unknown: Set<number>): boolean {
+  const ids = tile.ground === null ? [] : [tile.ground];
+  for (const item of tile.items) ids.push(item.id);
+  let blocksSight = false;
+  for (const id of ids) {
+    const flags = flagsOf(id);
+    if (flags === null) { unknown.add(id); continue; }
+    if (flags.unsight) blocksSight = true;
+  }
+  return blocksSight;
+}
+
 /** Componente andável (4 vizinhos) a partir do tile-semente, no andar dele. */
 function walkableComponent(
   tiles: Map<string, RegionTile>, blocked: Map<string, boolean>, seed: { x: number; y: number; z: number },
@@ -215,10 +235,12 @@ const STAIR_NAME = /stair|ladder|ramp|hole|rope spot|trapdoor|sewer grate/i;
 export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions): ImportResult {
   const collected = collectTiles(source);
   const blocked = new Map<string, boolean>();
+  const blocksSight = new Map<string, boolean>();
   let dropped = 0;
   for (const [k, tile] of collected.tiles) {
     if (!exists(tile)) { collected.tiles.delete(k); dropped += 1; continue; }
     blocked.set(k, blockedOf(tile, options.flagsOf, new Set(), options.sceneryIndex));
+    blocksSight.set(k, blocksSightOf(tile, options.flagsOf, new Set()));
   }
 
   // Recorte à componente: fica a componente andável mais a borda de um tile (paredes, decoração).
@@ -298,29 +320,36 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
     charOf.set(speed, char);
   });
 
-  const floors: Record<string, { grid: string[]; speed: string[] }> = {};
+  const floors: Record<string, { grid: string[]; speed: string[]; sight: string[] }> = {};
   const perFloor: Array<{ z: number; tiles: number; blocked: number; walkable: number }> = [];
   for (const z of floorsPresent) {
     const grid: string[] = [];
     const speedRows: string[] = [];
+    const sightRows: string[] = [];
     let count = 0;
     let blockedCount = 0;
     for (let y = region.y[0]; y <= region.y[1]; y++) {
       let row = '';
       let speedRow = '';
+      let sightRow = '';
       for (let x = region.x[0]; x <= region.x[1]; x++) {
         const k = key(x, y, z);
         const tile = collected.tiles.get(k);
-        if (tile === undefined) { row += '#'; speedRow += ' '; continue; }
+        if (tile === undefined) { row += '#'; speedRow += ' '; sightRow += '#'; continue; }
         count += 1;
+        // Bloqueio de visão (#553) é flag INDEPENDENTE do bloqueio de passo: um tile fora do
+        // mapa desenhado (sem tile nenhum) bloqueia os dois — nada existe ali para ver através
+        // —, mas dentro do mapa a grade `sight` segue `blocksSight`, nunca `blocked`.
+        sightRow += blocksSight.get(k) === true ? '#' : '.';
         if (blocked.get(k) === true) { row += '#'; speedRow += ' '; blockedCount += 1; continue; }
         row += '.';
         speedRow += charOf.get(speedOf(tile)) ?? ' ';
       }
       grid.push(row);
       speedRows.push(speedRow);
+      sightRows.push(sightRow);
     }
-    floors[String(z)] = { grid, speed: speedRows };
+    floors[String(z)] = { grid, speed: speedRows, sight: sightRows };
     perFloor.push({ z, tiles: count, blocked: blockedCount, walkable: count - blockedCount });
   }
 
@@ -475,10 +504,17 @@ export function formatContentMap(map: TilemapInput): string {
     lines.push(`    "${z}": {`);
     lines.push('      "grid": [');
     floor.grid.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.grid.length - 1 ? '' : ','}`));
-    lines.push(floor.speed === undefined ? '      ]' : '      ],');
+    const hasMore = floor.speed !== undefined || floor.sight !== undefined;
+    lines.push(hasMore ? '      ],' : '      ]');
     if (floor.speed !== undefined) {
+      const moreAfterSpeed = floor.sight !== undefined;
       lines.push('      "speed": [');
       floor.speed.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.speed!.length - 1 ? '' : ','}`));
+      lines.push(moreAfterSpeed ? '      ],' : '      ]');
+    }
+    if (floor.sight !== undefined) {
+      lines.push('      "sight": [');
+      floor.sight.forEach((row, i) => lines.push(`        ${JSON.stringify(row)}${i === floor.sight!.length - 1 ? '' : ','}`));
       lines.push('      ]');
     }
     lines.push(`    }${index === entries.length - 1 ? '' : ','}`);
@@ -667,7 +703,7 @@ if (import.meta.main) {
     strict: true,
   });
   const thingsDir = resolve(ROOT, values.things ?? process.env.THINGS_DIR ?? 'things');
-  const version = values.version ?? process.env.THINGS_VERSION ?? '1332';
+  const version = values.version ?? process.env.THINGS_VERSION ?? '1533';
   const otbmDir = join(thingsDir, 'maps');
 
   if (values.check) {
