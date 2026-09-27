@@ -1,0 +1,12 @@
+-- #604 (ADR 0046): o estado por INSTÂNCIA de um item — hoje os imbuements (tipo, slot, tempo
+-- restante); depois o prazo restante do anel (#689, `durationRemainingMs`) e o tier da Forja
+-- (#617). O catálogo continua fixo pelo id; o que diverge de uma instância para outra mora aqui.
+--
+-- Aditiva por construção (ADR 0014): uma coluna nova, nulável, sem default. `null` é a instância
+-- igual à definição — toda linha anterior a esta migração, e quase todo item depois dela.
+-- `jsonb` como `bestiary`/`supply_stock`: objeto pequeno de campos opcionais nomeados, lido
+-- inteiro no ticket (`readItemOverlay`, defensivo) e escrito inteiro pelo extrato — ÚLTIMA
+-- ESCRITA VENCE, como o layout: a sessão dona é a única escritora do estado quente (invariante
+-- 9). Sem CHECK: os campos são de mecânicas que entram uma a uma, e um campo novo não pode
+-- exigir outra migração só para ser aceito.
+ALTER TABLE item_instance ADD COLUMN overlay jsonb;
