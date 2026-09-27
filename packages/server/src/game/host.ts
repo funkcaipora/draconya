@@ -3565,6 +3565,11 @@ export class SessionHost {
       // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
       ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
       ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      // E os storages (#731, ADR 0050 d.6 T2): a semente do motor de quest. Pela MESMA razão do
+      // supplyStock — não é monotônico como Bestiário/skills (um script de quest pode voltar um
+      // storage a -1) —, NÃO se olha `.size === 0`: um storage apagado NESTA sessão é resultado
+      // real, e omitir a chave deixaria o valor antigo do Postgres ressuscitar no próximo login.
+      ...(owner === undefined ? {} : { storages: Object.fromEntries(owner.storages) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é

@@ -42,6 +42,8 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       // O dono existe e o snapshot é anterior ao estoque: `{}` é "sem estoque", nunca a chave
       // omitida — omitida deixaria o valor antigo da coluna ressuscitar (#520).
       supplyStock: {}, ammunitionStock: {},
+      // E anterior aos storages (#731): `{}` pela mesma razão.
+      storages: {},
     }]);
   });
 
