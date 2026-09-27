@@ -2301,10 +2301,20 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
 - `[ABERTO]` `ammunition.maxHitChance` e `weapon.hitChance` (#524) não têm nenhum valor não-default
   no catálogo real hoje — nenhuma munição ou arma especial (power bolt, royal crossbow) existe
   ainda. Os campos e a leitura (#522) já existem; falta o item.
-- `[ABERTO]` O erro de tiro (#522) não tem apresentação própria: o cliente não recebe nenhum
-  evento no tiro que erra (sem `creature-hit`), e não existe efeito de "flecha na parede" nem
-  texto "MISS" — fica para quando a apresentação de combate (CMB-09/#242) sair do bloqueio da
-  biblioteca parcial.
+- O erro de tiro (#522) tem apresentação própria desde o #555: o `missile` do `shot` — a MESMA
+  mensagem de sempre, sem opcode nem campo novo — desenha o projétil num tile ERRADO em vez do
+  tile do alvo. `WeaponDistance::useWeapon` (Canary `things/sources/canary/src/items/weapons/
+  weapons.cpp:830-855`): adjacente ao alvo (distância Chebyshev ≤ 1) o Canary não redireciona —
+  o destino continua sendo o alvo; a mais de 1 tile, sorteia um tile ANDÁVEL entre os nove do
+  quadro 3×3 centrado nele (8 vizinhos + o próprio tile do alvo, que também é candidato — um
+  tiro que erra pode, por sorte, "acertar" visualmente sem causar dano). `missShotTile`
+  (`packages/sim/src/combat/distance-hit.ts`) reproduz o MECANISMO (ADR 0037 d.1/d.3): filtra os
+  andáveis primeiro e sorteia um índice uniforme entre eles com `session.rng`, em vez do
+  `shuffle`+primeiro-válido do Canary — mesma distribuição, uma rolagem por tiro errado a mais
+  de 1 tile, nenhuma quando adjacente ou quando o tiro acerta. Ainda não existe texto "MISS" nem
+  efeito de "flecha na parede" — só o destino errado do projétil, que é o que a issue pediu;
+  aquilo fica para quando a apresentação de combate (CMB-09/#242) sair do bloqueio da biblioteca
+  parcial.
 - `[ABERTO]` A #522 investigou se o monstro deveria ganhar um segundo atributo de defesa
   (`Monster::getMitigation`/`getDefense` do Canary — um redutor percentual, distinto do `armor`
   que já existe) para bloquear o corpo a corpo do jogador como o escudo do CMB-04 bloqueia o do
