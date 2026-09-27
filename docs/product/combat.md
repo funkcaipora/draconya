@@ -426,13 +426,21 @@ não mais a exceção. O que o motor ganhou:
   mas a distinção já está testada (`area.test.ts`, raio 1-7 dos dois mecanismos) para quando a
   primeira ability em área chegar,
   `cross` (cruz de `radius` tiles nos quatro eixos cardeais mais o centro, centrada no alvo —
-  a Explosion), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
-  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os **três tiles
+  a Explosion), `rows` (a onda, #679: uma largura ímpar por fileira à frente, transcrita da
+  CONTAGEM de tiles de cada fileira da `AREA_*` do Canary — nunca a matriz, ADR 0019. A fileira
+  0 é a do `3`, que o motor ancora um passo à frente do lançador, `Spells::getCasterPosition`
+  (`spells.cpp:337`), e atinge como qualquer valor não-zero, `AreaCombat::getList`
+  (`combat.cpp:2309`): `AREA_WAVE4` é `[1,3,3,5]`, `AREA_WAVE7` é `[1,3,3,5,5]`,
+  `AREA_SHORTWAVE3` é `[1,3,3]`, `AREA_SQUAREWAVE5` é `[1,1,3,3,3]`), `wave` (legado de fixture:
+  o cone `2⌊k/2⌋+1` — 1, 3, 3, 5, 5 — do #155/#523, que contava sem a fileira do `3`;
+  `load.test.ts` proíbe `wave` em `data/`), `cleave` (os **três tiles
   imediatamente à frente** — Front Sweep e Lesser Front Sweep; o Canary ancora `AREA_WAVE6` um
   passo à frente do lançador antes de aplicar a matriz — `getNextPosition`/`needDirection`,
   `Spells::getCasterPosition` — então em coordenadas do mundo os três tiles da matriz caem
   juntos, a um passo de distância: uma revisão do #523 tinha lido só a matriz local e "corrigido"
-  isto para o lado errado, revertido depois de conferir o motor) e `beam` (linha reta). Onda,
+  isto para o lado errado, revertido depois de conferir o motor) e `beam` (linha reta; `beam n`
+  é exatamente a `AREA_BEAMn`, contando o `3` — até o #679 o conteúdo tinha um tile a menos em
+  todo feixe). Onda,
   cleave, feixe e o círculo no
   lançador são **self-origin**: não exigem alvo nem alcance (o boot recusa `range` nelas), e
   recusam `no-target` só quando nenhum monstro cai nos tiles — sem gastar mana. Saem na
@@ -1130,12 +1138,14 @@ interface MonsterTargetStrategy {
   número. `#onMonsterAttack`/`#onMonsterAbility` sempre REAGENDAM a próxima tentativa antes de
   rolar a chance: o intervalo continua correndo mesmo quando a rolagem falha.
 - **Onda e feixe direcionais**: `monsterAbilityTargetSchema.area` aceita `circle` (de sempre),
-  `wave` e `beam` — as duas últimas saem do MONSTRO na direção do alvo, recalculada a cada golpe
+  `wave`, `rows` (#679) e `beam` — as três últimas saem do MONSTRO na direção do alvo, recalculada a cada golpe
   por `facingDirection` (`packages/sim/src/area.ts`), o mesmo cálculo do TFS
   `updateLookDirection`: o eixo de MAIOR deslocamento decide (`|dx| > |dy|` → leste/oeste), e o
-  empate (inclusive `dx = dy = 0`) decide horizontal pelo sinal de `dx`. A geometria da onda
-  continua a do #155 (`area.ts`, cone `1, 3, 3, 5, 5…`) — fato observado do Tibia, não a matriz
-  `length`/`spread` do TFS (GPL, ADR 0019). `cross`/`cleave` continuam fora; `buildContent`
+  empate (inclusive `dx = dy = 0`) decide horizontal pelo sinal de `dx`. Desde o #679 a onda de
+  monstro é `rows`, com as larguras que `AreaCombat::setupArea(length, spread)` (`combat.cpp`)
+  gera, transcritas já calculadas (números, não a fórmula nem a matriz — ADR 0019): a `firewave`
+  do Dragon e do Dragon Lord (`length = 8, spread = 3`) é `[1,1,3,3,3,5,5,5]`, 26 tiles — o cone
+  `wave 8` de antes dava 40. `cross`/`cleave` continuam fora; `buildContent`
   recusa.
 - **Defesa (`monster.defenses`)**: cura própria, o mecanismo que o Dragon usa (`interval 2000,
   chance 15%, +40..+70`). Cada defesa é um evento NA FILA com a própria cadência — o mesmo
@@ -1672,7 +1682,8 @@ diferente de `basic` — abilities declaradas substituem a básica do boot, não
 `MONSTER_CIRCLE_HALF_WIDTHS[3] = [5,5,3]`, não os 69 que a fórmula de MAGIA daria para o mesmo
 raio; achado da revisão do #536, que também corrigiu `applyField` — o campo de fogo do Dragon
 Lord usava a tabela errada por padrão e cobria 69 tiles em vez de 21, ver "Condições
-generalizadas..." acima), `firewave` (onda comprimento 8, sem alvo — sai do
+generalizadas..." acima), `firewave` (onda `rows [1,1,3,3,3,5,5,5]` — o `setupArea(8, 3)` do Canary, 26 tiles desde o
+#679 —, sem alvo — sai do
 monstro na direção de quem ele mira) e `heal` (defesa). `mitigation.immunities` só cobre `fire`
 — desde o CMB-11 (#556) existe MECANISMO de `paralyze` (a condição `speed`, ver abaixo), mas
 nenhum monstro do recorte o declara em `mitigation.immunities`: a IMUNIDADE por condição é a
@@ -1924,7 +1935,7 @@ com a migração de `botConfig` de quem já as configurou, é issue separada.
 |---|---|---|---|---|---|---|
 | 1 | Buzz | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
-| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
+| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 4 | 10 |
 | 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
@@ -1933,19 +1944,19 @@ com a migração de `botConfig` de quem já as configurou, é issue separada.
 | 14 | Magic Shield | 50 | support (2 s) | 14 s | magic shield 180 s | — |
 | 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Death Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
-| 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 40 |
-| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 4 | 60 |
-| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 7 | 155 |
+| 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 4 | 40 |
+| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 5 | 60 |
+| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 8 | 155 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
-| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 4 | 150 |
-| 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 4 | 100 |
+| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 5 | 150 |
+| 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 5 | 100 |
 | 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 4 | 110 |
 | 55 | Rage of the Skies | 600 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 200 |
 | 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 250 |
 | 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 100 | **Ultimate Energy Strike** (`exori max vis`, novo #523) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
-| 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 5 | 155 |
+| 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 6 | 155 |
 
 Os `X Strike` fortes (Strong Energy/Flame Strike) e Lightning tinham alcance 7 (o real é 3/4).
 Ice Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. † Great Death
@@ -1959,7 +1970,7 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 
 | level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
 |---|---|---|---|---|---|---|
-| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 3 | 10 |
+| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 4 | 10 |
 | 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
 | 1 | Mud Attack | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
 | 8 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
@@ -1971,12 +1982,12 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 | 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Physical Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 50 |
 | 18 | Heal Friend (`exura sio`) | 120 | healing (1 s) | 1 s | cura, alvo em terceiro alcance 5 | 60 |
-| 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 35 |
+| 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 4 | 35 |
 | 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
 | 36 | Mass Healing | 150 | healing (1 s) | 2 s | cura · círculo raio 3 no lançador | 200 |
-| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 4 | 120 |
-| 40 | Strong Ice Wave | 170 | attack (2 s) | 8 s | dano · onda 2 | 150 |
+| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 120 |
+| 40 | Strong Ice Wave | 170 | attack (2 s) | 8 s | dano · onda 3 | 150 |
 | 55 | Wrath of Nature | 700 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 175 |
 | 60 | Eternal Winter | 1050 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 200 |
 | 70 | Strong Terra Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 115 |
@@ -1986,7 +1997,7 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 Mass Healing tinha raio 1 (9 tiles) — o Canary real é `AREA_CIRCLE3X3`, raio 3 (37 tiles). Heal
 Friend saiu da lista de excluídas desde o §26 (ADR 0035 d.10); o `_open` dizia "não auditado
 nesta task" e o #523 confirmou os números reais (level 14→18, mana 30→120). Strong Ice Wave
-tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (2 fileiras) e cooldown 8 s. Ice
+tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (3 fileiras contando a do `3`, #679) e cooldown 8 s. Ice
 Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. \* Forked Thorns não
 tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/` e
 `src/` também) — conteúdo próprio, remoção planejada (ADR 0037), ver `_open`.
@@ -2019,12 +2030,6 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
   (`COMBAT_PROFILES`, o `switch` de `resolveDamage`) e as duas issues inventarem o mesmo id em
   paralelo colidiria. Quem mesclar as duas decide o id (`combat-v2`, o próximo livre) e a
   migração de sessão em voo (invariante 7).
-- `[ABERTO]` A onda das magias em cone (`wave`) continua a aproximação de `2⌊k/2⌋+1` por
-  fileira, calibrada só contra `AREA_CIRCLE3X3`/`AREA_WAVEn` na direção geral — não reproduz
-  `AREA_SQUAREWAVEn` (Terra Wave, Energy Wave: retangular, não cone) nem o número exato de tiles
-  por fileira das outras `AREA_WAVEn`. O #523 ajustou só o `length` (a contagem de FILEIRAS) para
-  bater com a real, sem reescrever a forma — a largura de cada fileira ainda diverge em alguns
-  casos. Reescrever o `wave` para reproduzir a matriz exata é escopo de outra issue.
 - `[ABERTO]` Os percentuais de postura de Blood Rage (+25 % dano) e Sharpshooter (+32 % dano) são
   uma aproximação anterior ao #523: o Canary real dá +35 %/+40 % de SKILL (`SKILL_MELEEPERCENT`/
   `SKILL_DISTANCEPERCENT`), não de dano, e o schema (`damageDealtPercent`) só expressa dano. Só

@@ -12,8 +12,8 @@
     "kind": "damage",
     "basePower": 35,
     "area": {
-      "shape": "wave",
-      "length": 3
+      "shape": "rows",
+      "widths": [1, 3, 3, 5]
     },
     "damageType": "ice",
     "formula": {
