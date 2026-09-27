@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react';
 import type { AssetPack } from '../assets/pack.js';
 import { sendIntent } from '../net/current.js';
 import { targetTracker } from '../state/target.js';
+import { cancelCorpseApproach, requestCorpseApproach } from './corpse-approach.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { TextureBook } from '../world/textures.js';
@@ -91,16 +92,17 @@ export function Viewport() {
     if (!(event.target instanceof HTMLCanvasElement)) return;
     const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
     if (id === null || id === world.selfId) {
-      // Sem criatura no ponto: um cadáver (#722, ADR 0048 d.4)? O clique manda `walk-to` (o
-      // personagem se aproxima) e `open-corpse` juntos — o servidor recusa `too-far-away` sem
-      // efeito colateral quando a chegada ainda não aconteceu, e o jogador clica de novo
-      // (DT-01 da spec da issue: coreografar a espera da chegada fica fora deste corte).
+      // Sem criatura no ponto: um cadáver (#722, ADR 0048 d.4)? O clique manda `walk-to` na hora
+      // e GUARDA o pedido — `useCorpseApproach` manda `open-corpse` sozinho quando a posição
+      // própria ficar a alcance (o `world` não avisa ninguém, ADR 0007), sem recusar
+      // `too-far-away` de um clique de longe (achado da revisão do DT-01 original).
       const groundItem = handleRef.current?.groundItemAt(event.clientX, event.clientY) ?? null;
       if (groundItem === null) return;
-      sendIntent({ type: 'walk-to', destination: groundItem.position });
-      sendIntent({ type: 'open-corpse', groundItemId: groundItem.id });
+      requestCorpseApproach(groundItem.id, groundItem.position, performance.now());
       return;
     }
+    // Escolher uma criatura cancela um pedido de cadáver em curso — o jogador mudou de alvo.
+    cancelCorpseApproach();
     // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O rastreador antecipa
     // a moldura no mesmo quadro e decide o toggle quando o clique é no alvo atual (#471).
     targetTracker.selectTarget(id, sendIntent);

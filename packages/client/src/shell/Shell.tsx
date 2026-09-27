@@ -26,6 +26,7 @@ import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
+import { useCorpseApproach } from './useCorpseApproach.js';
 import { Viewport } from './Viewport.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
@@ -109,6 +110,8 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
+  // O laço que reavalia um pedido de abrir cadáver pendente (#722, ADR 0048 d.4).
+  useCorpseApproach();
   // A store do bot não importa `net/` (ADR 0007): a casca instala o remetente UMA vez. Antes a
   // `ActionBar` e o `AutomationsPanel` instalavam cada um o mesmo singleton, e o unmount de um
   // zerava o remetente do outro; um painel condicional bastaria para quebrar todo Salvar.
