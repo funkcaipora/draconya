@@ -434,9 +434,11 @@ equipamento".
 convergem no mesmo lugar (`CharacterRuntime.receiveDamage`) e NÃO se somam: com o anel vestido E
 a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma vez só.
 
-**Life Ring** — +300% da regeneração passiva BASE de vida e mana. "Base" é o ponto fixo por
-vencimento de `progression.regen` (§10.2), sem nenhum outro bônus — hoje não existe nenhum outro
-modificador de regeneração no jogo, então a conta é direta: 1 ponto vira 4.
+**Life Ring** — +300% da regeneração passiva BASE de vida e mana. "Base" é o `amount` de cada
+PULSO do `regen` da vocação (ou de `progression.regen`, sem vocação — #678), sem nenhum outro
+bônus — hoje não existe nenhum outro modificador de regeneração no jogo, então a conta é
+direta: o pulso quadruplica (Knight: 1 de vida vira 4 e 2 de mana viram 8, a cada 6 s). Virar
+regeneração PRÓPRIA do item, como no Tibia, é a #688.
 
 O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
 dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito

@@ -598,10 +598,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(progression).toEqual({
       startingSpeed: content.progression.startingSpeed,
       speedPerLevel: content.progression.speedPerLevel,
-      regen: {
-        healthPerSecond: content.progression.regen.healthPerSecond,
-        manaPerSecond: content.progression.regen.manaPerSecond,
-      },
+      // A taxa é DERIVADA do pulso (#678): `amount × 1000 / ticksMs` — 1 a cada 1 000 ms é 1/s.
+      regen: { healthPerSecond: 1, manaPerSecond: 1 },
     });
 
     const realContent = loadContent(DATA);
@@ -609,10 +607,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(realCatalogue.progression).toEqual({
       startingSpeed: realContent.progression.startingSpeed,
       speedPerLevel: realContent.progression.speedPerLevel,
-      regen: {
-        healthPerSecond: realContent.progression.regen.healthPerSecond,
-        manaPerSecond: realContent.progression.regen.manaPerSecond,
-      },
+      // A base do Canary (vocação None): 1 de vida a cada 12 s e 2 de mana a cada 6 s (#678).
+      regen: { healthPerSecond: 1000 / 12_000, manaPerSecond: 2000 / 6_000 },
     });
   });
 });

@@ -24,7 +24,7 @@ import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
   CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt, HuntDifficulty,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Progression, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
+  PartyConfig, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
   Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
@@ -1875,15 +1875,18 @@ export class HuntRuleset implements Ruleset {
     this.#schedulePlayerAttack(session, character.id, 0);
     if (attackIntervalMs <= 0) throw new Error('attackIntervalMs must be positive');
 
-    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
-    // Taxa zero não é intervalo infinito: é "não regenera", e então não há evento nenhum.
-    if (healthPerSecond > 0) {
-      session.scheduleIn(HEALTH_REGEN, 0, {
+    const regen = this.#regenOf(character);
+    // Primeiro pulso DEPOIS de `ticksMs` (#678): o contador do Canary começa em 0, e entrar na
+    // hunt não é poção. `amount` zero é "não regenera", e então não há evento nenhum.
+    if (regen.health.amount > 0) {
+      session.scheduleIn(HEALTH_REGEN, regen.health.ticksMs, {
         priority: EventPriority.Upkeep, subject: character.id,
       });
     }
-    if (manaPerSecond > 0) {
-      session.scheduleIn(MANA_REGEN, 0, { priority: EventPriority.Upkeep, subject: character.id });
+    if (regen.mana.amount > 0) {
+      session.scheduleIn(MANA_REGEN, regen.mana.ticksMs, {
+        priority: EventPriority.Upkeep, subject: character.id,
+      });
     }
 
     // Spawn e regras de saída são da INSTÂNCIA, não do participante (#203): entram na fila com
@@ -2135,7 +2138,9 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Regeneração passiva (FUN-36), um ponto por vencimento.
+   * Regeneração passiva (FUN-36): um PULSO por vencimento (#678) — `amount` pontos a cada
+   * `ticksMs`, como a `ConditionRegeneration` do Canary (`condition.cpp`), que soma o intervalo
+   * num contador e, ao passar de `ticks`, aplica o `amount` de uma vez.
    *
    * Vale mesmo com stamina zerada: regenerar não é recompensa, é sobrevivência — e o §10.2 é
    * explícito que o personagem continua podendo morrer, não que ele passa a morrer mais
@@ -2148,13 +2153,13 @@ export class HuntRuleset implements Ruleset {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
 
-    const { healthPerSecond, manaPerSecond } = this.#regenOf(character);
-    const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
-    if (perSecond <= 0) return;
+    const pulse = this.#regenOf(character)[what];
+    if (pulse.amount <= 0) return;
 
     const ring = character.inventory.ringEffect(this.#options.items);
     const bonusPercent = ring?.kind === 'regen-boost' ? ring.percent : 0;
-    const amount = Math.round(1 * (1 + bonusPercent / 100));
+    // O Life Ring (SV-16) multiplica o PULSO: Knight, 1 de vida vira 4 e 2 de mana viram 8.
+    const amount = Math.round(pulse.amount * (1 + bonusPercent / 100));
 
     if (what === 'health') {
       // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
@@ -2166,10 +2171,11 @@ export class HuntRuleset implements Ruleset {
       character.mana = Math.min(character.maxMana, character.mana + amount);
     }
 
-    // `r` por segundo é um evento a cada `1000 / r` ms. Escrever assim, em vez de somar
-    // `r * dtMs / 1000` num acumulador fracionário, é o que mantém a conta exata: somar
-    // `0,1` dez vezes em ponto flutuante dá `0,9999…` e some uma unidade a cada dez.
-    session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, 1000 / perSecond, {
+    // O próximo pulso vence em `ticksMs` inteiros — nada de acumulador fracionário nem de
+    // `1000 / taxa` em ponto flutuante. Relê a vocação de AGORA (promoção, #566), como o
+    // `updateRegeneration` do Canary. Com o recurso cheio o pulso se perde, e o próximo segue
+    // agendado — o Canary também zera o contador.
+    session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, pulse.ticksMs, {
       priority: EventPriority.Upkeep, subject: characterId,
     });
   }
@@ -6986,9 +6992,9 @@ const slots = bot.groups.get(group);
    * A regeneração passiva DESTE personagem (#521, ADR 0037): a da vocação escolhida, ou a da
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
-   * para todo mundo.
+   * para todo mundo. Em pulsos desde #678.
    */
-  #regenOf(character: CharacterRuntime): { healthPerSecond: number; manaPerSecond: number } {
+  #regenOf(character: CharacterRuntime): Regen {
     return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
   }
 
