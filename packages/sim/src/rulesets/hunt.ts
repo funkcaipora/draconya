@@ -7243,13 +7243,16 @@ const slots = bot.groups.get(group);
       }
       // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
       // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta. Rolada
-      // ANTES do `emit` (#555): o destino do `shot` depende de `hit` — errado E a mais de 1
-      // tile do alvo, o projétil visualmente cai num tile adjacente, nunca no do monstro.
+      // ANTES do `emit` (#555): o destino do `shot` depende de `hit` só no `combat-v3` — errado
+      // E a mais de 1 tile do alvo, o projétil visualmente cai num tile adjacente. `v1`/`v2`
+      // continuam com `to` fixo no monstro mesmo no erro (ADR 0031/0040: perfil já publicado é
+      // bit a bit, e `#missDestination` consome um sorteio A MAIS do `session.rng` que esses
+      // dois perfis não podiam ganhar sem virar um perfil novo).
       const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character),
-        to: hit ? this.#at(monster) : this.#missDestination(session, character, monster),
+        to: hit || !this.#isV3() ? this.#at(monster) : this.#missDestination(session, character, monster),
       });
       // `combat-v1`/`v2`: a prática é do TIRO, não do acerto (CMB-05) — imunidade, bloqueio e
       // o erro de pontaria não impedem a skill de subir. No `combat-v3` (#686) quantos tries o
@@ -7536,11 +7539,13 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O destino do `shot` de um tiro à distância que ERROU (#555, `missShotTile`,
-   * `combat/distance-hit.ts`): adjacente ao alvo, o Canary não redireciona, e o destino
-   * continua sendo o próprio alvo; a mais de 1 tile, sorteia com `session.rng` um tile ANDÁVEL
-   * entre os nove do quadro 3×3 centrado nele. Compartilhada pela munição por família
-   * (`#strike`) e pelo arremessável (`#throwWeapon`) — os dois caminhos de tiro que podem errar.
+   * O destino do `shot` de um tiro à distância que ERROU, só sob `combat-v3` (#555,
+   * `missShotTile`, `combat/distance-hit.ts`) — os dois chamadores (`#strike`, `#throwWeapon`)
+   * só entram aqui depois de conferir `this.#isV3()`, nunca em `v1`/`v2`. Adjacente ao alvo, o
+   * Canary não redireciona, e o destino continua sendo o próprio alvo; a mais de 1 tile,
+   * sorteia com `session.rng` um tile ANDÁVEL entre os nove do quadro 3×3 centrado nele.
+   * Compartilhada pela munição por família (`#strike`) e pelo arremessável (`#throwWeapon`) —
+   * os dois caminhos de tiro que podem errar.
    */
   #missDestination(session: Session, character: CharacterRuntime, monster: MonsterRuntime): WorldPoint {
     const tiles = distance(character.position, monster.position);
@@ -7561,13 +7566,14 @@ const slots = bot.groups.get(group);
     how: ResolvedWeapon, damagePercent: number, defender: Defender,
     reflectAttacker: ReflectAttacker | undefined,
   ): void {
-    // A chance de acerto é rolada ANTES do `emit` (#555): errado E a mais de 1 tile do alvo, o
-    // destino do `shot` cai num tile adjacente, nunca no do monstro — ver `#missDestination`.
+    // A chance de acerto é rolada ANTES do `emit` (#555): no `combat-v3`, errado E a mais de 1
+    // tile do alvo, o destino cai num tile adjacente — ver `#missDestination`. `v1`/`v2` mantêm
+    // `to` fixo no monstro mesmo no erro (ADR 0031/0040: perfil já publicado é bit a bit).
     const hit = this.#rollThrowHit(session, character, monster, how);
     session.emit({
       kind: 'shot', attackerId: character.id, targetId: monster.subject,
       weaponItemId: weapon.id, from: this.#at(character),
-      to: hit ? this.#at(monster) : this.#missDestination(session, character, monster),
+      to: hit || !this.#isV3() ? this.#at(monster) : this.#missDestination(session, character, monster),
     });
     if (!this.#isV3()) this.#practice(session, character, how.family, 1);
     // A quebra é rolagem SEMPRE consumida (ADR 0031): a sequência de RNG não pode depender do

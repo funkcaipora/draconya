@@ -104,6 +104,13 @@ const MISS_OFFSETS: ReadonlyArray<readonly [number, number]> = [
  * nunca quando `tiles <= 1`, nem quando o tiro acertou (o chamador só invoca isto no erro).
  * `candidates` já vem FILTRADO pelos andáveis antes do sorteio, então o número de rolagens não
  * depende de quantos tiles do quadro são parede — só de o tiro ter errado e a distância ser > 1.
+ *
+ * Por ISSO esta função só pode ser chamada sob `combat-v3` (ADR 0031/0040): ela consome uma
+ * rolagem que `combat-v1`/`v2` nunca consumiram, e os dois perfis já publicados são contrato
+ * bit a bit — uma rolagem nova desloca a sequência de `session.rng` de TUDO o que vem depois
+ * deste tiro. `HuntRuleset#strike`/`#throwWeapon` (`rulesets/hunt.ts`) só chamam
+ * `#missDestination` atrás de `this.#isV3()`; esta função em si não confere o perfil — quem
+ * confere é o chamador, como o resto do `combat-v3` (`distanceTries`, `blockable`, …).
  */
 export function missShotTile(
   map: Tilemap, tiles: number, target: WorldPoint, rng: Rng,
