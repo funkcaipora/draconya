@@ -1,10 +1,25 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { packHas } from './pack.js';
 import type { Appearances } from './schemas.js';
+
+/**
+ * Todo arquivo dentro de `dir`, recursivo — `data/items/generated/` e `data/items/overrides/`
+ * (ADR 0038, o importador de catálogo) são subpastas de verdade desde o #573, e uma varredura que
+ * só lê `readdirSync` raso lançaria `EISDIR` ao tentar ler uma delas como arquivo.
+ */
+function filesRecursively(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) out.push(...filesRecursively(path));
+    else out.push(path);
+  }
+  return out;
+}
 
 // A auditoria de apresentação de combate (#242, CMB-09): o contrato que o host usa para
 // transformar o que o `sim` emite em `effect`/`missile` no fio é a tabela de aparências, e a
@@ -179,9 +194,9 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
     // Mutação que mata: colar a frase de volta.
     const offenders: string[] = [];
     for (const folder of readdirSync(DATA)) {
-      for (const file of readdirSync(join(DATA, folder))) {
-        const text = readFileSync(join(DATA, folder, file), 'utf8');
-        if (/sem conferência visual/.test(text)) offenders.push(`${folder}/${file}`);
+      for (const file of filesRecursively(join(DATA, folder))) {
+        const text = readFileSync(file, 'utf8');
+        if (/sem conferência visual/.test(text)) offenders.push(file);
       }
     }
     expect(offenders).toEqual([]);

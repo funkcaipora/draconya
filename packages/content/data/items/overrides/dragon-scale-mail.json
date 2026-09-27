@@ -1,0 +1,7 @@
+{
+  "id": "dragon-scale-mail",
+  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 1.",
+  "patch": {
+    "imbuementSlots": 1
+  }
+}

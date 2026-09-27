@@ -1,0 +1,21 @@
+{
+  "id": "wand-of-vortex",
+  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: requires.level: (ausente) → 6; weapon.manaPerHit: 2 → 1.",
+  "patch": {
+    "requires": {
+      "vocationId": "sorcerer",
+      "level": 6
+    },
+    "weapon": {
+      "kind": "wand",
+      "family": "wand",
+      "range": 3,
+      "damageType": "energy",
+      "manaPerHit": 1,
+      "damage": {
+        "min": 8,
+        "max": 18
+      }
+    }
+  }
+}

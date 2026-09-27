@@ -1,0 +1,7 @@
+{
+  "id": "mystic-blade",
+  "reason": "Reconciliação do importador de itens (#573) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 2.",
+  "patch": {
+    "imbuementSlots": 2
+  }
+}
