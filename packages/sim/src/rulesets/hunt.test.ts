@@ -11498,3 +11498,180 @@ describe('arma vestida abaixo do level e elemento da arma no combat-v3 (#687)', 
     expect(swings.every(([intent]) => intent.secondary === undefined)).toBe(true);
   });
 });
+
+// --- linha de visão (isSightClear, #553) ------------------------------------------------------
+
+describe('linha de visão (#553)', () => {
+  // Sala 10×7: uma parede única em (5,3) separa dois lados abertos — o "atrás da quina" da
+  // spec. `sight` e `grid` marcam o MESMO tile de propósito: é uma parede de verdade, que
+  // bloqueia passo e vista pela mesma razão (as duas flags do pacote, `unpass` e `unsight`,
+  // coincidindo na mesma peça).
+  //
+  //     0123456789
+  //   0 ##########
+  //   1 #........#
+  //   2 #........#
+  //   3 #....#...#   <- parede em x=5
+  //   4 #........#
+  //   5 #........#
+  //   6 ##########
+  const wallRow = '#....#...#';
+  const openRow = '#........#';
+  const borderRow = '##########';
+  const losMap = {
+    id: 'arena', z: 7,
+    floors: {
+      7: {
+        grid: [borderRow, openRow, openRow, wallRow, openRow, openRow, borderRow],
+        sight: [borderRow, openRow, openRow, wallRow, openRow, openRow, borderRow],
+      },
+    },
+  };
+  const losRoute = {
+    id: 'arena-loop', mapId: 'arena',
+    tiles: [{ x: 2, y: 3, z: 7 }, { x: 3, y: 3, z: 7 }],
+    spawnPoints: [{ routeIndex: 0, radius: 2 }],
+  };
+  const bow = {
+    id: 'los-bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
+    weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+  };
+  const armed: InventoryState = {
+    backpack: [], equipped: { hand: { instanceId: 'i-los-bow', itemId: 'los-bow', quantity: 1 } },
+  };
+  // `aggroRadius: 0` (RF-03/RF-05/RF-07): o rato nunca adquire o herói como alvo, e por isso
+  // fica PARADO onde o teste o pôs — sem isto, ele perseguiria o herói contornando a parede
+  // pelo movimento (que é livre; só a VISÃO está bloqueada), e o teste deixaria de medir o
+  // portão de LOS para medir o passo guloso.
+  const losRat = { ...rat, aggroRadius: 0 };
+  const losLoaded = () => content({
+    maps: [losMap], routes: [losRoute], items: [...items, bow], monsters: [losRat],
+  });
+
+  it('RF-03: o tiro não sai sem visão livre até o alvo, mesmo dentro do alcance da arma', () => {
+    const { session, hero, ruleset } = start({ loaded: losLoaded(), gold: 1_000, inventory: armed });
+    session.advanceBy(50);
+    session.drainEvents(); // descarta o que aconteceu enquanto o rato ainda estava perto do spawn
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem monstro nesta hunt');
+    // Hero entra em (2,3) — o primeiro tile da rota. O alvo do outro lado da parede, a
+    // distância 6 (o alcance do bow), com a parede de x=5 exatamente no meio da linha.
+    expect(hero.position).toEqual({ x: 2, y: 3, z: 7 });
+    target.position = { x: 8, y: 3, z: 7 };
+    const healthBefore = target.health;
+    run(session, 10_000, 100);
+    const events = session.drainEvents();
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(events.some((e) => e.kind === 'creature-hit')).toBe(false);
+    expect(target.health).toBe(healthBefore);
+  });
+
+  it('RF-03: o mesmo alvo, do MESMO lado da parede, é atingido normalmente', () => {
+    const { session, ruleset } = start({ loaded: losLoaded(), gold: 1_000, inventory: armed });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem monstro nesta hunt');
+    target.position = { x: 4, y: 3, z: 7 }; // mesmo lado do hero (2,3); nada entre os dois
+    run(session, 10_000, 100);
+    const events = session.drainEvents();
+    expect(events.some((e) => e.kind === 'shot')).toBe(true);
+    expect(events.some((e) => e.kind === 'creature-hit')).toBe(true);
+  });
+
+  it('RF-03: a parede sai de cena (alvo anda) e o próximo vencimento acerta', () => {
+    const { session, ruleset } = start({ loaded: losLoaded(), gold: 1_000, inventory: armed });
+    session.advanceBy(50);
+    session.drainEvents();
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem monstro nesta hunt');
+    target.position = { x: 8, y: 3, z: 7 };
+    run(session, 2_000, 100);
+    expect(session.drainEvents().some((e) => e.kind === 'shot')).toBe(false);
+    // Sai da sombra da parede: mesma distância, sem obstáculo na linha.
+    target.position = { x: 8, y: 1, z: 7 };
+    run(session, 10_000, 100);
+    expect(session.drainEvents().some((e) => e.kind === 'shot')).toBe(true);
+  });
+
+  it('RF-05: magia em área não atinge quem está atrás da parede, mesmo dentro da forma', () => {
+    // `blast`: alcance 3, área círculo raio 2 centrada no alvo (spell fixture do topo do
+    // arquivo). Os dois monstros nascem LONGE do hero (fora do alcance da magia, #553 §7):
+    // sem isso, o bot lançaria a magia sozinho ainda durante o aquecimento, antes de o teste
+    // poder posicionar os dois lados da parede. O alvo principal fica do MESMO lado do hero
+    // (visão livre, distância 2); o segundo cai dentro da forma (raio 2 alcança ±2 na linha do
+    // alvo) mas do OUTRO lado da parede, visto do hero.
+    const twoMonsters = {
+      ...hunt, difficulties: { cautious: { ...hunt.difficulties.cautious, monsterCount: 2 } },
+    };
+    const distantSpawn = {
+      id: 'arena-loop', mapId: 'arena',
+      tiles: losRoute.tiles,
+      spawnPoints: [{ routeIndex: 0, radius: 1, at: { x: 8, y: 4, z: 7 } }],
+    };
+    const loaded = buildContent(raw({
+      maps: [losMap], routes: [distantSpawn], hunts: [twoMonsters], monsters: [losRat],
+      progression: [{ ...progression, startingMana: 200 }],
+    }));
+    const session = createHuntSession({
+      id: 'los-area-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+      botConfig: botConfig({
+        attack: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'blast' } }],
+      }),
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    const ruleset = session.ruleset as HuntRuleset;
+    session.advanceBy(50);
+    session.drainEvents();
+    const [primary, splash] = ruleset.monsters;
+    if (primary === undefined || splash === undefined) throw new Error('faltou monstro nesta hunt');
+    primary.position = { x: 4, y: 3, z: 7 }; // mesmo lado do hero (2,3): visão livre
+    splash.position = { x: 6, y: 3, z: 7 }; // outro lado da parede (x=5): dentro da forma (±2)
+    const primaryHealthBefore = primary.health;
+    const splashHealthBefore = splash.health;
+    run(session, 5_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'spell-cast').length).toBeGreaterThan(0);
+    expect(primary.health).toBeLessThan(primaryHealthBefore);
+    expect(splash.health).toBe(splashHealthBefore);
+  });
+
+  it('RF-07: a postura keep-distance só recua com visão livre até o alvo', () => {
+    const kept: BotConfig = botConfig({
+      targeting: { policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'keep-distance', tiles: 4 } },
+    });
+    const loaded = losLoaded();
+    const session = createHuntSession({
+      id: 'los-posture-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: kept,
+    });
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: 1_000, maxHealth: 1_000, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    const ruleset = session.ruleset as HuntRuleset;
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target === undefined) throw new Error('sem monstro nesta hunt');
+    // Hero encostado na parede (4,3); alvo bem mais perto do que os 4 tiles configurados, do
+    // OUTRO lado dela (6,3) — a linha (4,3)→(6,3) cruza a parede em x=5. Sem visão, a postura
+    // não deve recuar (posição não muda).
+    hero.position = { x: 4, y: 3, z: 7 };
+    target.position = { x: 6, y: 3, z: 7 };
+    const before = { ...hero.position };
+    run(session, 3_000, 100);
+    expect(hero.position).toEqual(before);
+  });
+});

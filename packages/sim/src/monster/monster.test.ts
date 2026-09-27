@@ -540,6 +540,35 @@ describe('decideMonsterAction: manter distância (#542, targetDistance)', () => 
   });
 });
 
+describe('decideMonsterAction: recuo exige visão livre (#553, M30-06)', () => {
+  const shooter = { ...rat, targetDistance: 4, attackRange: 4 };
+  const blockedSight = () => false;
+  const clearSight = () => true;
+
+  it('without the 5th argument, retreats as before (default is always clear)', () => {
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 7, 5), shooter, open))
+      .toEqual({ kind: 'retreat', to: { x: 4, y: 5 } });
+  });
+
+  it('with sight explicitly clear, retreats the same way', () => {
+    const monster = monsterAt(5, 5);
+    expect(decideMonsterAction(monster, prey('p', 7, 5), shooter, open, clearSight))
+      .toEqual({ kind: 'retreat', to: { x: 4, y: 5 } });
+  });
+
+  it('without sight, does NOT retreat — falls through to the normal approach/attack check', () => {
+    const monster = monsterAt(5, 5);
+    // Alvo a 2 tiles (dentro de targetDistance=4, o gatilho do recuo) e dentro do attackRange
+    // (4) também — como `distance < targetDistance` sempre implica `distance <= targetDistance`
+    // (o `approachStopRange` de quem declara `targetDistance > 1`), a checagem seguinte SEMPRE
+    // acha o alvo a distância de ataque quando o recuo teria disparado: sem visão, o Canary cai
+    // no caminho normal — aqui, ataca parado, em vez de recuar às cegas.
+    expect(decideMonsterAction(monster, prey('p', 7, 5), shooter, open, blockedSight))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+});
+
 describe('canMonsterEnterField (M29-05)', () => {
   const withDamage = (
     id: string, tiles: readonly { x: number; y: number }[], damageType: 'fire' | 'earth' | 'energy',

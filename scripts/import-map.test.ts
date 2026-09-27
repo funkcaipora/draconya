@@ -58,6 +58,15 @@ describe('importRegion (FUN-118)', () => {
     expect(report.stairCandidates).toEqual([{ x: 2, y: 2, z: 7, id: STAIRS, name: 'stairs' }]);
   });
 
+  it('deriva a camada de visão (#553) da flag `unsight`, independente de `unpass`', () => {
+    const { content } = importRegion(room(), { id: 'sala', region, flagsOf, nameOf, source, version: '1332' });
+    // WALL tem unpass E unsight — bloqueia os dois, como na grade de movimento.
+    // WATER (1002,2001) tem unpass SEM unsight — bloqueia passo (`grid` tem `#` ali), mas não
+    // visão (`sight` tem `.` no mesmo lugar): a linha 1 diverge das duas grades.
+    expect(content.floors?.['7']?.sight).toEqual(['#...#', '#...#', '##.##']);
+    expect(content.floors?.['7']?.grid).toEqual(['#...#', '#.#.#', '##.##']);
+  });
+
   it('a velocidade do chão vira paleta em ordem crescente, e o padrão vale para quem não tem chão', () => {
     const { content } = importRegion(room(), { id: 'sala', region, flagsOf, source, version: '1332' });
     // 130 → a, 150 (o degrau sem chão, padrão) → b, 200 → c.
