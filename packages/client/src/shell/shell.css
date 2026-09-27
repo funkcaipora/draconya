@@ -719,6 +719,29 @@ body {
 }
 .automation-row-off .automation-row-text { color: var(--text-faint); text-decoration: line-through; }
 
+/* ---- Bloco Loot do painel AUTOMAÇÕES: busca + marcados no topo (#722, ADR 0048 d.2/d.4; #764).
+   Antes, o bloco não tinha CSS nenhum — uma `<ul>` de checkbox nativo, que é o que o QA da #764
+   achou ilegível. Segue o mesmo grid de `.cyclopedia-modal-item-row`, inclusive os 34px do
+   sprite — encolher o wrapper abaixo do `ITEM_SPRITE_SIZE` (32px) recortaria o quadro. */
+.automation-loot { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
+.automation-loot-search { margin: 0; }
+.automation-loot-items {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 4px;
+  max-height: 220px; overflow: auto; scrollbar-width: thin;
+}
+.automation-loot-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; gap: 6px;
+  align-items: center; padding: 5px 6px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--surface-slot);
+}
+.automation-loot-row-sprite { position: relative; width: 34px; height: 34px; }
+.automation-loot-row-name {
+  min-width: 0; font: 8px var(--font-mono); color: var(--parchment-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.automation-loot-empty { margin: 2px 0; }
+.automation-loot-hint { font: 7px var(--font-mono); color: var(--text-faint); margin: 0; }
+
 /* ---- O catálogo de modelos (#427, AB-12, régua kit/35) ------------------------------------- */
 .automation-catalogue { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .automation-option {
