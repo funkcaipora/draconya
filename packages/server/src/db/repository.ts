@@ -78,6 +78,8 @@ export interface ItemInstanceRecord {
   /** Onde está dentro dos containers (#160); nulos é linha sem posição gravada. */
   readonly container: string | null;
   readonly slotIndex: number | null;
+  /** O overlay por instância (#604, ADR 0046), cru da coluna `jsonb`; `null` é sem overlay. */
+  readonly overlay: unknown;
   readonly createdAt: Date;
 }
 

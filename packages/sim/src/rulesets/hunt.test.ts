@@ -3,6 +3,10 @@ import type { Content, FieldSpec, Item, Progression, RawContent } from '@dracony
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
+import type { DamageOutcome } from '../combat/damage.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS } from '../combat/blockhit.js';
+import { rollCombatValue } from '../combat/combat-value.js';
+import { normalRandomInt } from '../combat/weapon-power.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
@@ -26,6 +30,13 @@ import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 vi.mock('../combat/damage.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../combat/damage.js')>();
   return { ...actual, resolveDamage: vi.fn(actual.resolveDamage) };
+});
+
+// O sorteio de valor (#681) é ENVOLVIDO pelo mesmo motivo: delega para o real, e o bloco do
+// Dragon sob `combat-v3` prova que a ability e a cura do monstro passam por ele.
+vi.mock('../combat/combat-value.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../combat/combat-value.js')>();
+  return { ...actual, rollCombatValue: vi.fn(actual.rollCombatValue) };
 });
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
@@ -3179,6 +3190,82 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
   });
 });
 
+// --- rates do servidor (#691) ----------------------------------------------------------------
+
+describe('rates do servidor (#691)', () => {
+  const withRates = (rates: Record<string, unknown>, over: Partial<RawContent> = {}): Content =>
+    content({ progression: [{ ...progression, rates }], ...over });
+
+  it('experience 2 dobra a XP DEPOIS do Bestiário: rato de 5 XP rende 10', () => {
+    const { session, hero } = start({ loaded: withRates({ experience: 2 }) });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience * 2);
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('com useStages, o stage do level decide; o rate simples é ignorado', () => {
+    const { session, hero } = start({
+      loaded: withRates({ experience: 2, useStages: true, experienceStages: [{ minLevel: 1, maxLevel: 1, multiplier: 3 }] }),
+    });
+    session.advanceBy(100);
+    while (session.aggregates.kills === 0) session.advanceBy(100);
+    // O primeiro abate é pago no level 1: stage × 3, não o `experience` 2.
+    expect(hero.xp).toBe(rat.experience * 3);
+  });
+
+  it('monster.attack 2 dobra o rawDamage do monstro, com a mesma semente e o mesmo sorteio', () => {
+    const biter = { ...rat, attack: { min: 0, max: 8 }, health: 100_000 };
+    const hitsOf = (rates: Record<string, unknown>): number[] => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({ loaded: withRates(rates, { monsters: [biter] }) });
+      run(session, 20_000, 100);
+      return vi.mocked(resolveDamage).mock.calls
+        .filter(([intent]) => intent.source === 'monster-attack')
+        .map(([intent]) => intent.rawDamage);
+    };
+    const neutral = hitsOf({});
+    const doubled = hitsOf({ monster: { attack: 2 } });
+    expect(neutral.length).toBeGreaterThan(3);
+    expect(new Set(neutral).size).toBeGreaterThan(1);
+    expect(doubled).toEqual(neutral.map((damage) => damage * 2));
+    // O bloco `boss` não vale para monstro comum.
+    expect(hitsOf({ boss: { attack: 2 } })).toEqual(neutral);
+  });
+
+  it('boss usa o bloco boss para o ataque', () => {
+    const boss = { ...rat, attack: { min: 0, max: 8 }, health: 100_000, boss: true };
+    const hitsOf = (rates: Record<string, unknown>): number[] => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({ loaded: withRates(rates, { monsters: [boss] }) });
+      run(session, 20_000, 100);
+      return vi.mocked(resolveDamage).mock.calls
+        .filter(([intent]) => intent.source === 'monster-attack')
+        .map(([intent]) => intent.rawDamage);
+    };
+    const neutral = hitsOf({});
+    expect(hitsOf({ boss: { attack: 3 } })).toEqual(neutral.map((damage) => damage * 3));
+    expect(hitsOf({ monster: { attack: 3 } })).toEqual(neutral);
+  });
+
+  it('loot 0 desliga o gold do abate', () => {
+    const { session, hero } = start({ loaded: withRates({ loot: 0 }) });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.goldGained).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('skill 2 sobe o corpo a corpo mais rápido no mesmo tempo', () => {
+    const levelOf = (rates: Record<string, unknown>): number => {
+      const { session, hero } = start({ difficulty: 'bold', loaded: withRates(rates) });
+      run(session, 30_000, 100);
+      return hero.skills.getState()['melee']?.level ?? 0;
+    };
+    expect(levelOf({ skill: 2 })).toBeGreaterThan(levelOf({}));
+  });
+});
+
 // --- skills sobem pelo USO (FUN-75) ----------------------------------------------------------
 
 describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
@@ -3380,6 +3467,77 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
   });
 
+  describe('#682: a ability física que não é corpo a corpo passa pela armadura, não pelo escudo', () => {
+    // O Stone Golem/Hunter do Canary: um `combat` FÍSICO de alcance 7. Antes do #682 ia ao
+    // `blockHit` como magia (`MAGIC_BLOCK_FLAGS`) e a armadura não tirava nada.
+    const stoneRat = {
+      ...rat,
+      abilities: [{
+        id: 'stone', cadenceMs: 2_000, power: { min: 40, max: 60 }, damageType: 'physical',
+        target: { range: 7 },
+      }],
+    };
+    const comEscudoEArmadura: InventoryState = {
+      backpack: [],
+      equipped: {
+        shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        chest: { instanceId: 'p1', itemId: 'plate', quantity: 1 },
+      },
+    };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const abilityHits = () => vi.mocked(resolveDamage).mock.calls
+      .map((args, i) => ({ args, outcome: vi.mocked(resolveDamage).mock.results[i]?.value as DamageOutcome }))
+      .filter(({ args: [intent] }) => intent.source === 'monster-attack');
+
+    it('sob combat-v3: armadura em faixa, escudo não bloqueia e shielding não treina', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session, hero } = start({
+        loaded: defenseContent({ monsters: [stoneRat], combat: [combatV3] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender], outcome } of hits) {
+        expect(intent.blockable).toEqual(DISTANCE_BLOCK_FLAGS);
+        // O escudo não tira nada: a defesa é a identidade.
+        expect(outcome.afterDefense).toBe(intent.rawDamage);
+        // Armadura > 3 é faixa `[armor/2, armor - (armor%2 + 1)]`, nunca 0.
+        expect(defender.armor).toBeGreaterThan(3);
+        expect(outcome.armorReduction).toBeGreaterThan(0);
+      }
+      // O `hunt.ts` treina shielding por `blockable.shield` sob v3 — a pedra não é bloqueio.
+      expect(shieldingOf(hero)?.level ?? 10).toBe(10);
+    });
+
+    it('sob combat-v1: `blockable` é ignorado — o resultado é o mesmo com as flags de antes', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({
+        loaded: defenseContent({ monsters: [stoneRat] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender, context, combatDef, , nowMs] } of hits) {
+        // Reexecuta o golpe com as flags de ANTES do #682 e as de agora, na mesma semente.
+        const before = resolveDamage(
+          { ...intent, blockable: MAGIC_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        const after = resolveDamage(
+          { ...intent, blockable: DISTANCE_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        expect({ ...after, intent: null }).toEqual({ ...before, intent: null });
+      }
+    });
+  });
+
   it('#549 (achado de revisão): wand/rod sem escudo usa skill ZERO na defesa — o piso do Canary (1), não a fórmula com defenseValue zerado (0)', () => {
     // Um Sorcerer/Druid com só a wand na mão e sem escudo (o caso comum antes do nível 50, ou
     // de quem simplesmente não veste um spellbook): `Player::getWeaponSkill` do Canary devolve
@@ -3510,6 +3668,75 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
 
     expect(retomado.participants[0]?.skills.getState()['shielding'])
       .toEqual(session.participants[0]?.skills.getState()['shielding']);
+  });
+
+  describe('combat-v3: de onde vem cada try (#686)', () => {
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+    const immuneRat = { ...rat, mitigation: { resistances: {}, immunities: ['physical'] } };
+    const meleeOf = (hero: CharacterRuntime) => hero.skills.getState()['melee'] ?? null;
+    const comEspada: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 } },
+    };
+
+    it('corpo a corpo contra monstro imune: a skill NÃO sobe (v2 sobe)', () => {
+      const v3 = start({
+        loaded: defenseContent({ monsters: [immuneRat], combat: [combatV3] }),
+        difficulty: 'bold', health: 5_000,
+      });
+      run(v3.session, 30_000, 100);
+      expect(meleeOf(v3.hero)).toBeNull();
+      expect(v3.hero.attackPractice.lastBlockType).toBe('immunity');
+
+      const v2 = start({
+        loaded: defenseContent({ monsters: [immuneRat], combat: [combatV2] }),
+        difficulty: 'bold', health: 5_000,
+      });
+      run(v2.session, 30_000, 100);
+      expect(meleeOf(v2.hero)).not.toBeNull();
+    });
+
+    it('corpo a corpo contra monstro comum: o golpe limpo treina e recarrega os contadores', () => {
+      const { session, hero } = start({
+        loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      });
+      run(session, 30_000, 100);
+      expect(meleeOf(hero)).not.toBeNull();
+      expect(hero.attackPractice.addAttackSkill).toBe(true);
+    });
+
+    it('arma de uma mão sem escudo, apanhando: shielding NÃO sobe (v2 sobe)', () => {
+      const v3 = start({
+        loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+        inventory: comEspada,
+      });
+      run(v3.session, 30_000, 100);
+      expect(shieldingOf(v3.hero)).toBeNull();
+
+      const v2 = start({
+        loaded: defenseContent({ combat: [combatV2] }), difficulty: 'bold', health: 5_000,
+        inventory: comEspada,
+      });
+      run(v2.session, 30_000, 100);
+      expect(shieldingOf(v2.hero)).not.toBeNull();
+    });
+
+    it('o estado de prática atravessa o snapshot', () => {
+      const loaded = defenseContent({ combat: [combatV3] });
+      const { session, hero } = start({ loaded, difficulty: 'bold', health: 5_000 });
+      run(session, 10_000, 100);
+      expect(hero.attackPractice.bloodHitCount).toBeGreaterThan(0);
+
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const retomado = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+      );
+      expect(retomado.participants[0]?.attackPractice).toEqual(hero.attackPractice);
+    });
   });
 });
 
@@ -7905,6 +8132,50 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     expect(meleeHits).toBeGreaterThan(casts('firewave') * 3);
   });
 
+  it('#681: sob combat-v3, a ability e a cura do Dragon sorteiam pela normal truncada do Canary', async () => {
+    // `combat.cpp:189` (`getCombatValues` → `normal_random`) e `monster.cpp:2218`: o valor da
+    // ability e da cura própria do monstro saem da normal, não do `rng.integer` uniforme. Cada
+    // sorteio é conferido contra `normalRandomInt` sobre um CLONE do `Rng` no estado de antes.
+    const actual = await vi.importActual<typeof import('../combat/combat-value.js')>('../combat/combat-value.js');
+    const v3 = {
+      ...pacifist, compatibilityProfile: 'combat-v3',
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], combat: [v3] }));
+    const draws: { min: number; max: number; profile: string | undefined; value: number; expected: number }[] = [];
+    vi.mocked(rollCombatValue).mockImplementation((rng, min, max, profile) => {
+      const expected = normalRandomInt(new Rng(rng.getState()), min, max);
+      const value = actual.rollCombatValue(rng, min, max, profile);
+      draws.push({ min, max, profile: profile?.compatibilityProfile, value, expected });
+      return value;
+    });
+    try {
+      const session = createHuntSession({
+        id: 'dragon-v3', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      session.enter(heroLevel200());
+      session.advanceBy(100);
+      const target = (session.ruleset as HuntRuleset).monsters[0];
+      if (target === undefined) throw new Error('sem monstro nesta cena');
+      target.receiveDamage(50_000); // ferido: a cura tem o que repor.
+      for (let t = 0; t < 400_000 && session.ended === null; t += 100) session.advanceBy(100);
+    } finally {
+      vi.mocked(rollCombatValue).mockImplementation(actual.rollCombatValue);
+    }
+
+    const melee = draws.filter((d) => d.min === 0 && d.max === 120);
+    const heals = draws.filter((d) => d.min === 40 && d.max === 70);
+    expect(melee.length).toBeGreaterThan(100);
+    expect(heals.length).toBeGreaterThan(10);
+    for (const draw of [...melee, ...heals]) {
+      expect(draw.profile).toBe('combat-v3');
+      expect(draw.value).toBe(draw.expected);
+    }
+    // A cauda: a uniforme poria ~10,7 % dos golpes em [0,12]; a normal truncada, ~3,4 %.
+    expect(melee.filter((d) => d.value <= 12).length / melee.length).toBeLessThan(0.07);
+  });
+
   it('fogo não causa dano (imune) e gelo causa +10 % (vulnerável) — a mitigação do Dragon', () => {
     // Sem `defenses`: a cura própria do Dragon (15 % a cada 2 s) contaminaria a leitura de UM
     // golpe se rolasse no meio da janela — este teste é sobre o TIPO de dano, não sobre a cura,
@@ -10461,5 +10732,85 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     monster.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
     run(sessionB, 20_000, 200);
     expect(withDrunk.drunkRolls).toBeGreaterThan(0);
+  });
+});
+
+describe('arma vestida abaixo do level e elemento da arma no combat-v3 (#687)', () => {
+  // O level caiu com a arma na mão (penalidade de morte): o personagem de level 1 segurando
+  // arma de level 30 é o mesmo estado, sem precisar morrer para chegar nele.
+  const spikeSword = {
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon', slot: 'hand',
+    weight: 50, value: 0, attack: 24, defense: 10, requires: { level: 30 },
+  };
+  const fireSword = {
+    id: 'fire-sword', name: 'Fire Sword', kind: 'weapon', slot: 'hand',
+    weight: 23, value: 0, attack: 24, defense: 20, requires: { level: 30 },
+    weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+  };
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+  const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+  const holding = (itemId: string): InventoryState => ({
+    backpack: [], equipped: { hand: { instanceId: 'h1', itemId, quantity: 1 } },
+  });
+  const loaded = (combatProfile: object): Content =>
+    content({ items: [...items, spikeSword, fireSword], combat: [combatProfile] });
+
+  it('v3: sem wieldUnproperly a arma não bate — nem golpe de punho, nem prática', () => {
+    const { session, hero } = start({
+      loaded: loaded(combatV3), difficulty: 'bold', health: 5_000, inventory: holding('spike-sword'),
+    });
+    const before = hero.skills.getState()['melee'] ?? null;
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero')).toHaveLength(0);
+    expect(hero.skills.getState()['melee'] ?? null).toEqual(before);
+    expect(session.notableEvents.filter((e) => e.type === 'skill-up')).toHaveLength(0);
+  });
+
+  it('v2: a mesma arma abaixo do level segue virando punho (bit a bit)', () => {
+    const { session } = start({
+      loaded: loaded(combatV2), difficulty: 'bold', health: 5_000, inventory: holding('spike-sword'),
+    });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero').length)
+      .toBeGreaterThan(0);
+  });
+
+  it('v3: com wieldUnproperly bate, e o elemento vai como secundário sem escudo nem armadura', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session } = start({
+      loaded: loaded(combatV3), difficulty: 'bold', health: 5_000, inventory: holding('fire-sword'),
+    });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero').length)
+      .toBeGreaterThan(0);
+    const swings = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'basic-attack');
+    const elemental = swings.filter(([intent]) => intent.secondary !== undefined);
+    expect(elemental.length).toBeGreaterThan(0);
+    for (const [intent] of elemental) {
+      expect(intent.secondary?.damageType).toBe('fire');
+      expect(intent.secondary?.blockable).toEqual({ armor: false, shield: false });
+      expect(intent.secondary?.rawDamage).toBeGreaterThan(0);
+    }
+  });
+
+  it('v2: o elemento é ignorado — nenhum golpe leva secundário', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session, hero } = start({
+      loaded: loaded(combatV2), difficulty: 'bold', health: 5_000, inventory: holding('fire-sword'),
+    });
+    hero.level = 30;
+    run(session, 20_000, 100);
+    const swings = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'basic-attack');
+    expect(swings.length).toBeGreaterThan(0);
+    expect(swings.every(([intent]) => intent.secondary === undefined)).toBe(true);
   });
 });

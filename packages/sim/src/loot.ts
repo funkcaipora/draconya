@@ -43,6 +43,7 @@ export interface LootResult {
 const NO_ITEMS: readonly LootItem[] = [];
 const NO_SUPPLIES: readonly LootSupply[] = [];
 const NO_AMMUNITION: readonly LootAmmunition[] = [];
+const EMPTY_LOOT: LootResult = { gold: 0, items: NO_ITEMS, supplies: NO_SUPPLIES, ammunition: NO_AMMUNITION };
 
 /**
  * Sorteia a tabela com o `Rng` da SESSÃO, nunca `Math.random`: sem isso, uma sessão retomada
@@ -55,13 +56,16 @@ const NO_AMMUNITION: readonly LootAmmunition[] = [];
  * `supplyId` ou `ammunitionId`; separar os três resultados em listas diferentes DEPOIS de
  * sortear não muda a sequência nenhuma (FUN-63).
  */
-export function rollLoot(table: LootTable, rng: Rng): LootResult {
-  const gold = table.gold === undefined ? 0 : rollLine(table.gold, rng);
+export function rollLoot(table: LootTable, rng: Rng, lootRate = 1): LootResult {
+  // `rateLoot <= 0` desliga o loot (#691, `monster.cpp:3431` do Canary): nada cai, e NENHUM
+  // sorteio é consumido — o loot desligado não pode deslocar a sequência do resto da hunt.
+  if (lootRate <= 0) return EMPTY_LOOT;
+  const gold = table.gold === undefined ? 0 : rollLine(table.gold, rng, lootRate);
   let items: LootItem[] | null = null;
   let supplies: LootSupply[] | null = null;
   let ammunition: LootAmmunition[] | null = null;
   for (const line of table.items) {
-    const quantity = rollLine(line, rng);
+    const quantity = rollLine(line, rng, lootRate);
     if (quantity === 0) continue;
     if (line.itemId !== undefined) {
       (items ??= []).push({ itemId: line.itemId, quantity });
@@ -84,8 +88,12 @@ export function rollLoot(table: LootTable, rng: Rng): LootResult {
  * sequência das outras — semente é contrato. `min === max` também não consome o sorteio de
  * intervalo, pela mesma razão: quantidade fixa não tem o que sortear.
  */
-function rollLine(line: LootRoll, rng: Rng): number {
+function rollLine(line: LootRoll, rng: Rng, lootRate: number): number {
   if (line.chance <= 0) return 0;
-  if (!rng.chance(line.chance)) return 0;
+  // O rate de loot (#691) multiplica a CHANCE, com teto 1 — o `getLootRandom` do Canary
+  // (`random × 100 / max(1, rateLoot)`): um rate entre 0 e 1 age como 1. Com rate 1 a chamada
+  // é exatamente a de sempre.
+  const chance = lootRate === 1 ? line.chance : Math.min(1, line.chance * Math.max(1, lootRate));
+  if (!rng.chance(chance)) return 0;
   return line.min === line.max ? line.min : rng.integer(line.min, line.max);
 }
