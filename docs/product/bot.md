@@ -661,7 +661,7 @@ com o `server`, que precisa dela para saber se o que veio no ticket é dado novo
 
 ## Uso manual de item/suprimento fora da barra (#726, ADR 0049 decisão 3/6)
 
-`use-item`/`use-item-on` (C2S 25/26; `use-result`, S2C 36) usam um item da mochila/bolsa
+`use-item`/`use-item-on` (C2S 25/26; `use-result`, S2C 37 — o 36 é `corpse-contents`, #722) usam um item da mochila/bolsa
 (`ref: { instanceId }`) OU uma unidade do estoque de suprimento (`ref: { supplyId }`) **sem
 passar pela barra** — o `HuntRuleset` resolve pelo catálogo: `supplyId` reaproveita
 `#useSupply`/`useSupply` (`casting.ts`) por inteiro, o MESMO caminho de `use-slot`; comida soma
@@ -681,9 +681,15 @@ SEGUNDA mensagem (`manual-action-result` → `use-result` de novo, com o MESMO `
 adiada, na hora de rodar, afinal não coube. Sucesso não gera segunda mensagem (decisão 7): o
 `inventory`/`player-stats`/`creature-hit` de sempre é a confirmação.
 
-O menu de contexto da mochila (Usar/Usar com…) e a seção **Suprimentos** — ver `economy.md` —
-não estão implementados nesta entrega: o protocolo e o motor já aceitam as duas mensagens, e o
-gatilho de UI fica para uma PR seguinte.
+**O menu de contexto da mochila** (`ContainerWindow.tsx`) abre no clique direito de um item
+`kind: 'consumable'`: "Usar" manda `use-item` na hora (`shell/use-item-intent.ts`, a decisão
+pura, no molde de `drag-intent.ts`); "Usar com…" arma a mira (`state/aim.ts`,
+`startAimForItem`) e o PRÓXIMO clique no mundo/Batalha resolve com `use-item-on` — a MESMA
+máquina de mira do `use-slot` (decisão 2), generalizada para carregar um `ItemRef` em vez de um
+`set`/`slot`. O `ContextMenu` (`shell/ui/ContextMenu.tsx`) é o MESMO componente que a #741/#724
+("Vender/Descartar") introduziu — trazido de lá para a tela nunca ter dois menus de contexto
+diferentes. A seção **Suprimentos** — ver `economy.md` — lista `inventory.supplies` por nome e
+contagem, sem sprite (o catálogo não carrega `appearanceId` para suprimento abstrato hoje).
 
 ## A tela (AB-10…AB-13)
 

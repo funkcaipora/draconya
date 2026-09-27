@@ -67,3 +67,38 @@ describe('mira do disparo manual (RF-06/RF-07/RF-08)', () => {
     expect(sent).toEqual([{ type: 'use-slot', set: 0, slot: 2, target: { creatureId: 9 } }]);
   });
 });
+
+describe('mira do "usar com…" da mochila (#726, ADR 0049 decisão 3)', () => {
+  it('`startAimForItem` arma a mira de um item, e o clique seguinte manda `use-item-on`', () => {
+    const tracker = createAimTracker();
+    const { send, sent } = senderSpy();
+
+    tracker.startAimForItem({ instanceId: 'i1' }, 5);
+    expect(tracker.isAiming()).toBe(true);
+
+    expect(tracker.resolveAim(42, send)).toBe(true);
+    expect(sent).toEqual([{ type: 'use-item-on', ref: { instanceId: 'i1' }, seq: 5, target: { creatureId: 42 } }]);
+    expect(tracker.isAiming()).toBe(false);
+  });
+
+  it('mira de suprimento (`ref.supplyId`) manda a mesma forma', () => {
+    const tracker = createAimTracker();
+    const { send, sent } = senderSpy();
+
+    tracker.startAimForItem({ supplyId: 'avalanche-rune' }, 1);
+    tracker.resolveAim(7, send);
+
+    expect(sent).toEqual([{ type: 'use-item-on', ref: { supplyId: 'avalanche-rune' }, seq: 1, target: { creatureId: 7 } }]);
+  });
+
+  it('mira de slot e mira de item são a MESMA máquina: a segunda substitui a primeira, seja qual for', () => {
+    const tracker = createAimTracker();
+    const { send, sent } = senderSpy();
+
+    tracker.startAim(0, 1);
+    tracker.startAimForItem({ instanceId: 'i9' }, 2); // trocou de mira: item vence.
+    tracker.resolveAim(3, send);
+
+    expect(sent).toEqual([{ type: 'use-item-on', ref: { instanceId: 'i9' }, seq: 2, target: { creatureId: 3 } }]);
+  });
+});

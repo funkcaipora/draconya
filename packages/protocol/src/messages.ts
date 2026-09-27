@@ -240,10 +240,10 @@ export const SERVER_TO_CLIENT = {
    * vê erro nenhum, e o efeito de verdade chega depois pelo `inventory`/`player-stats`/
    * `creature-hit` de sempre, quando a ação de fato executa.
    *
-   * 36: o 35 é do `target-cancel`. Nenhuma das PRs abertas na base desta branch (#741, #742,
-   * #743) reserva o 36 — conferido no diff das três antes de escolher o número.
+   * 37: o 36 é do `corpse-contents` (#722, PR #749) — conferido no diff de #741, #742 e #749
+   * antes de escolher o número (as três param em 35, exceto a #749, que usa 36).
    */
-  'use-result': 36,
+  'use-result': 37,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

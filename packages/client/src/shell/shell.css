@@ -1331,6 +1331,24 @@ body {
   list-style: none; margin: 6px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
+/* A seção Suprimentos (#726, ADR 0049 decisão 4): o estoque abstrato — poção/runa/munição do
+   loot — sob a mochila. Sem sprite próprio hoje: `catalogue.bot.supplies` não carrega
+   `appearanceId` (só item de verdade tem, FUN-94), então a linha é nome + contagem, como uma
+   linha do analisador (`.ui-stat-row`), não um `Slot`. */
+.supply-section { margin-top: 8px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
+.supply-section-title {
+  margin: 0 0 4px; font: 9px var(--font-mono); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.supply-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.supply-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 4px 6px; border-radius: 2px; cursor: pointer; background: var(--ash-2);
+  font: 10px var(--font-body); color: var(--text-primary);
+}
+.supply-row:hover { background: var(--ash-3); }
+.supply-row-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.supply-row-count { color: var(--gold-4); font: 10px var(--font-mono); }
 /* O seletor de munição (#152, ADR 0026 d.3): flutua sob a coluna direita, sobre o mundo, como
    o resto das janelas do HUD. A lista é a família do bow, com sprite, attack e preço por tiro. */
 .ammo-picker {

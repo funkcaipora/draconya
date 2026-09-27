@@ -9,16 +9,31 @@
 // **Fixa e minimizável, nunca removida.** O clique veste (o caminho do celular); arrastar move
 // entre lugares ou para o corpo. A decisão de qual intenção sai é `drag-intent.ts`, puro; o
 // DnD nativo só carrega o LUGAR de origem — nunca o item.
+//
+// **O clique direito num item consumível abre "Usar"/"Usar com…"** (#726, ADR 0049 decisão 3):
+// o mesmo `ContextMenu` da #724 (`ui/ContextMenu.tsx`), trazido de lá para não haver dois menus
+// na mesma tela. "Usar" manda `use-item` na hora; "Usar com…" arma a mira (`state/aim.ts`,
+// `startAimForItem`) e o PRÓXIMO clique no mundo/Batalha completa com `use-item-on` — o mesmo
+// gesto de mirar do `use-slot` (ADR 0049 decisão 2). **A seção Suprimentos**, logo abaixo da
+// mochila, expõe o estoque abstrato (`inventory.supplies`, ADR 0049 decisão 4): poção/runa/
+// munição que caíram em loot e ainda não têm sprite próprio no catálogo (§ "Em aberto" —
+// `catalogue.bot.supplies` não carrega `appearanceId` hoje), então a linha é nome + contagem.
 
-import type { DragEvent } from 'react';
+import { useState, type DragEvent, type MouseEvent } from 'react';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import type { Inventory } from '../state/hud.js';
+import { aimTracker } from '../state/aim.js';
+import { nextUseItemSeq } from '../state/use-item-seq.js';
 import { clickIntent, dropIntent, parsePlace, serializePlace } from './drag-intent.js';
 import type { DragPlace } from './drag-intent.js';
+import { isUsable, useIntent } from './use-item-intent.js';
+import type { UseItemRef } from './use-item-intent.js';
 import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
 import { Slot } from './ui/Slot.js';
+import { ContextMenu } from './ui/ContextMenu.js';
+import type { ContextMenuAction } from './ui/ContextMenu.js';
 
 const TITLE: Readonly<Record<'backpack' | 'satchel', string>> = { backpack: 'Mochila', satchel: 'Bolsa' };
 
@@ -36,11 +51,28 @@ export function startDrag(place: DragPlace, event: DragEvent): void {
   event.dataTransfer.effectAllowed = 'move';
 }
 
+/** As duas ações de "Usar" (#726): direto, ou com mira. Reaproveitada por item e por suprimento. */
+function useActions(ref: UseItemRef): ContextMenuAction[] {
+  return [
+    {
+      label: 'Usar',
+      onSelect: () => { sendIntent(useIntent(ref, nextUseItemSeq())); },
+    },
+    {
+      label: 'Usar com…',
+      onSelect: () => { aimTracker.startAimForItem(ref, nextUseItemSeq()); },
+    },
+  ];
+}
+
+interface MenuState { readonly x: number; readonly y: number; readonly ref: UseItemRef }
+
 export function ContainerWindow({ container, collapsed = false, onToggle }: {
   container: 'backpack' | 'satchel'; collapsed?: boolean; onToggle?: () => void;
 }) {
   const inventory = useHudSlice((state) => state.inventory);
   const catalogue = useHudSlice((state) => state.catalogue);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   const title = TITLE[container];
   const panelProps = onToggle === undefined ? {} : { onToggle };
 
@@ -53,8 +85,15 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
   }
 
   const byId = new Map(catalogue.items.map((item) => [item.id, item]));
+  const supplyById = new Map((catalogue.bot.supplies ?? []).map((supply) => [supply.id, supply]));
   const places = inventory[container];
   const used = places.filter((place) => place !== null).length;
+  const supplies = container === 'backpack' ? inventory.supplies : [];
+
+  const openMenu = (ref: UseItemRef, event: MouseEvent): void => {
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, ref });
+  };
 
   return (
     <Panel
@@ -85,6 +124,7 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
               const definition = byId.get(item.itemId);
               const name = definition?.name ?? item.itemId;
               const wearable = definition?.slot !== null && definition?.slot !== undefined;
+              const usable = isUsable(definition?.kind);
               return (
                 <li
                   key={item.instanceId}
@@ -106,6 +146,7 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                     icon={<ItemSprite appearanceId={definition?.appearanceId} name={name} />}
                     // `exactOptionalPropertyTypes`: só entra a prop quando o conteúdo a declara.
                     {...(definition?.shortLabel === undefined ? {} : { label: definition.shortLabel })}
+                    {...(usable ? { onContextMenu: (event: MouseEvent) => { openMenu({ instanceId: item.instanceId }, event); } } : {})}
                     count={item.quantity}
                   />
                 </li>
@@ -113,6 +154,37 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
             })}
           </ul>
         )}
+      {container === 'backpack' && supplies.length > 0 && (
+        <div className="supply-section">
+          <p className="supply-section-title">Suprimentos</p>
+          <ul className="supply-list">
+            {supplies.map((supply) => {
+              const definition = supplyById.get(supply.id);
+              const name = definition?.name ?? supply.id;
+              return (
+                <li
+                  key={supply.id}
+                  className="supply-row"
+                  title={`Usar ${name}`}
+                  onClick={() => { sendIntent(useIntent({ supplyId: supply.id }, nextUseItemSeq())); }}
+                  onContextMenu={(event) => { openMenu({ supplyId: supply.id }, event); }}
+                >
+                  <span className="supply-row-name">{name}</span>
+                  <span className="supply-row-count">{supply.quantity}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      {menu !== null && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          actions={useActions(menu.ref)}
+          onClose={() => { setMenu(null); }}
+        />
+      )}
     </Panel>
   );
 }

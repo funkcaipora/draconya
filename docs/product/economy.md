@@ -138,9 +138,12 @@ O que vale do desenho original:
 Desde o #520 `useSupply` já gastava do estoque de loot (`supplyStock`/`ammunitionStock`) antes do
 gold — mas o jogador não via o número. A #726 expõe os dois: `inventory.supplies`/`ammunition`
 (`[{ id, quantity }]`, opcionais, `default([])`) levam o estoque inteiro a cada `inventory`
-reenviado. O cliente desenhar a seção "Suprimentos" sob a mochila (sprite + contagem, clicar usa)
-fica para uma entrega seguinte — o dado já viaja no protocolo e no store do cliente
-(`state/hud.ts`), só falta o componente que o lê.
+reenviado, e o cliente já desenha a seção "Suprimentos" sob a mochila
+(`ContainerWindow.tsx`): nome (resolvido em `catalogue.bot.supplies`) e contagem por linha,
+clicar usa direto (`use-item`) e o clique direito abre "Usar"/"Usar com…" — o mesmo
+`ContextMenu` do item consumível. **Sem sprite**: `catalogue.bot.supplies` não carrega
+`appearanceId` — só item de verdade tem essa coluna (FUN-94) —, e dar ícone ao suprimento
+abstrato fica para quando isso for decidido; a linha hoje é texto.
 
 ## Divergências do PRD
 
