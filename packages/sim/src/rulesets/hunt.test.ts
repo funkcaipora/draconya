@@ -3,6 +3,8 @@ import type { Content, FieldSpec, Item, Progression, RawContent } from '@dracony
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
+import type { DamageOutcome } from '../combat/damage.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS } from '../combat/blockhit.js';
 import { rollCombatValue } from '../combat/combat-value.js';
 import { normalRandomInt } from '../combat/weapon-power.js';
 import type { BestiaryState } from '../bestiary.js';
@@ -3387,6 +3389,77 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     });
     run(session, 30_000, 100);
     expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
+  describe('#682: a ability física que não é corpo a corpo passa pela armadura, não pelo escudo', () => {
+    // O Stone Golem/Hunter do Canary: um `combat` FÍSICO de alcance 7. Antes do #682 ia ao
+    // `blockHit` como magia (`MAGIC_BLOCK_FLAGS`) e a armadura não tirava nada.
+    const stoneRat = {
+      ...rat,
+      abilities: [{
+        id: 'stone', cadenceMs: 2_000, power: { min: 40, max: 60 }, damageType: 'physical',
+        target: { range: 7 },
+      }],
+    };
+    const comEscudoEArmadura: InventoryState = {
+      backpack: [],
+      equipped: {
+        shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        chest: { instanceId: 'p1', itemId: 'plate', quantity: 1 },
+      },
+    };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const abilityHits = () => vi.mocked(resolveDamage).mock.calls
+      .map((args, i) => ({ args, outcome: vi.mocked(resolveDamage).mock.results[i]?.value as DamageOutcome }))
+      .filter(({ args: [intent] }) => intent.source === 'monster-attack');
+
+    it('sob combat-v3: armadura em faixa, escudo não bloqueia e shielding não treina', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session, hero } = start({
+        loaded: defenseContent({ monsters: [stoneRat], combat: [combatV3] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender], outcome } of hits) {
+        expect(intent.blockable).toEqual(DISTANCE_BLOCK_FLAGS);
+        // O escudo não tira nada: a defesa é a identidade.
+        expect(outcome.afterDefense).toBe(intent.rawDamage);
+        // Armadura > 3 é faixa `[armor/2, armor - (armor%2 + 1)]`, nunca 0.
+        expect(defender.armor).toBeGreaterThan(3);
+        expect(outcome.armorReduction).toBeGreaterThan(0);
+      }
+      // O `hunt.ts` treina shielding por `blockable.shield` sob v3 — a pedra não é bloqueio.
+      expect(shieldingOf(hero)?.level ?? 10).toBe(10);
+    });
+
+    it('sob combat-v1: `blockable` é ignorado — o resultado é o mesmo com as flags de antes', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({
+        loaded: defenseContent({ monsters: [stoneRat] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender, context, combatDef, , nowMs] } of hits) {
+        // Reexecuta o golpe com as flags de ANTES do #682 e as de agora, na mesma semente.
+        const before = resolveDamage(
+          { ...intent, blockable: MAGIC_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        const after = resolveDamage(
+          { ...intent, blockable: DISTANCE_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        expect({ ...after, intent: null }).toEqual({ ...before, intent: null });
+      }
+    });
   });
 
   it('#549 (achado de revisão): wand/rod sem escudo usa skill ZERO na defesa — o piso do Canary (1), não a fórmula com defenseValue zerado (0)', () => {

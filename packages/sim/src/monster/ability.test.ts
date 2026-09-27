@@ -14,7 +14,8 @@ import { Session } from '../session.js';
 import type { DomainEvent } from '../session.js';
 import { createHuntSession, HuntRuleset } from '../rulesets/hunt.js';
 import type { WorldPoint } from '../movement.js';
-import { abilityTargets, abilityTiles, isMeleeAbility } from './ability.js';
+import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from './ability.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS } from '../combat/blockhit.js';
 
 const map = { id: 'arena', z: 7, grid: ['######', '#....#', '#....#', '######'] };
 const route = {
@@ -243,6 +244,30 @@ describe('abilityTargets (puro)', () => {
         { x: 5, y: 6, z: 7 }, { x: 5, y: 7, z: 7 }, { x: 5, y: 8, z: 7 },
       ]);
     });
+  });
+});
+
+describe('abilityBlockFlags (#682, `Monsters::deserializeSpell` do Canary)', () => {
+  const physical = (over: Partial<MonsterAbility> = {}): MonsterAbility => ({
+    id: 'a', cadenceMs: 2_000, power: { min: 1, max: 1 }, damageType: 'physical',
+    target: { range: 1 }, ...over,
+  });
+  const circle = { shape: 'circle', radius: 1, centered: 'caster' } as const;
+
+  it.each([
+    ['a básica (sem kind, alcance 1, sem área)', physical(), MELEE_BLOCK_FLAGS],
+    ['`melee` declarado', physical({ kind: 'melee' }), MELEE_BLOCK_FLAGS],
+    ['`combat` físico de alcance 7', physical({ kind: 'combat', target: { range: 7 } }), DISTANCE_BLOCK_FLAGS],
+    ['`combat` físico de alcance 1 com área', physical({ kind: 'combat', target: { range: 1, area: circle } }), DISTANCE_BLOCK_FLAGS],
+    ['`combat` físico de alcance 1 sem área', physical({ kind: 'combat' }), DISTANCE_BLOCK_FLAGS],
+    ['`combat` de fogo', physical({ kind: 'combat', damageType: 'fire', target: { range: 7 } }), MAGIC_BLOCK_FLAGS],
+    ['sem kind: físico de alcance 7 (a forma não é corpo a corpo)', physical({ target: { range: 7 } }), DISTANCE_BLOCK_FLAGS],
+    ['sem kind: físico em área, alcance 1', physical({ target: { range: 1, area: circle } }), DISTANCE_BLOCK_FLAGS],
+    ['sem kind: fogo à distância', physical({ damageType: 'fire', target: { range: 7 } }), MAGIC_BLOCK_FLAGS],
+    ['sem kind: corpo a corpo elemental (a forma decide)', physical({ damageType: 'fire' }), MELEE_BLOCK_FLAGS],
+  ])('%s', (_name, ability, flags) => {
+    // `toBe`: as constantes compartilhadas, nenhuma alocação no caminho quente.
+    expect(abilityBlockFlags(ability)).toBe(flags);
   });
 });
 

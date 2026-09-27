@@ -807,9 +807,23 @@ Diferente do CMB-04 (que aprovava por `damageType`), o `combat-v3` decide se def
 valem pela ORIGEM do golpe — `checkDefense`/`checkArmor` do Canary: corpo a corpo (e o punho
 desarmado) bloqueiam os dois; distância só armadura (`WeaponDistance` do Canary não seta
 `blockedByShield`); magia, runa, wand/rod e DOT não bloqueiam nenhum dos dois — o default de
-`CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ability de monstro segue o mesmo critério
-pela FORMA dela (`isMeleeAbility`): corpo a corpo bloqueia os dois, a de alcance/área é magia
-para este estágio. A mitigação percentual (passo 5) é a ÚNICA que se aplica sempre, mesmo à
+`CombatParams` sem `BLOCKARMOR`/`BLOCKSHIELD` declarado. Ability de monstro segue o TIPO DE
+ATAQUE dela (#682, `abilityBlockFlags` em `packages/sim/src/monster/ability.ts`), a regra de
+`Monsters::deserializeSpell` do Canary — alcance e área não entram:
+
+| Ability (`kind` × `damageType`) | Escudo | Armadura | Flags |
+|---|---|---|---|
+| `melee` (sempre físico; o boot recusa `melee` de outro tipo) | sim | sim | `MELEE_BLOCK_FLAGS` |
+| `combat` físico — qualquer alcance, com ou sem área | não | sim | `DISTANCE_BLOCK_FLAGS` |
+| `combat` de qualquer outro tipo | não | não | `MAGIC_BLOCK_FLAGS` |
+| sem `kind`, forma corpo a corpo (alcance 1, sem área — a básica do boot inclusive) | sim | sim | `MELEE_BLOCK_FLAGS` |
+| sem `kind`, outra forma | pelo tipo, como `combat` | | |
+
+`kind` é opcional em `monsterAbilitySchema` (`packages/content/src/schemas.ts`) e existe porque a
+forma sozinha confunde os 30 `combat` físicos do Canary de alcance 1 sem área com o `melee`; o
+importador de ataques (#579) o preenche. A apresentação (`source: 'melee' | 'spell'`) continua
+pela FORMA — não muda número. Nenhum monstro do catálogo atual muda: só têm físico em `melee`
+de alcance 1. A mitigação percentual (passo 5) é a ÚNICA que se aplica sempre, mesmo à
 magia — é assim no Canary (`if (damage != 0) mitigateDamage(...)`, fora do bloco de
 `checkDefense`/`checkArmor`).
 

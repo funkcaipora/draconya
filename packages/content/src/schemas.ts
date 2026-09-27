@@ -1481,6 +1481,14 @@ export const monsterAbilitySchema = z.strictObject({
   /** O tipo de dano da ability (CMB-03). Ausente é `physical`, o default que preserva o v1. */
   damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /**
+   * Se a ability é o ataque `melee` ou um `combat` do Canary (#682) — é o que decide o
+   * bloqueio no `combat-v3` (`Monsters::deserializeSpell`, `monsters.cpp:105-120`): `melee`
+   * bloqueia defesa e armadura; `combat` FÍSICO só armadura, em qualquer alcance ou área;
+   * `combat` de outro tipo, nada. Ausente: decide a forma (`isMeleeAbility`), o comportamento
+   * de antes — o conteúdo escrito à mão e a ability básica do boot não mudam.
+   */
+  kind: z.enum(['melee', 'combat']).optional(),
+  /**
    * As chaves SEMÂNTICAS de apresentação (CMB-06): o host as resolve em ids de aparência na
    * tabela versionada (`appearances.abilities`). Chave sem linha é MUDA, nunca erro.
    */
@@ -1500,7 +1508,12 @@ export const monsterAbilitySchema = z.strictObject({
    */
   field: fieldSpecSchema.optional(),
   _open: z.string().optional(),
-});
+}).refine(
+  // O Canary fixa `COMBAT_PHYSICALDAMAGE` no `melee` (#682): um `melee` de fogo é conteúdo
+  // que o motor de referência não tem como produzir.
+  (ability) => ability.kind !== 'melee' || ability.damageType === 'physical',
+  { message: "kind 'melee' exige damageType 'physical'", path: ['kind'] },
+);
 
 export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
 
@@ -1516,6 +1529,11 @@ export interface MonsterAbility {
   readonly target: { readonly range: number; readonly area?: SpellArea };
   readonly power: MonsterAbilityPower;
   readonly damageType: DamageType;
+  /**
+   * `melee` ou `combat` do Canary (#682): decide as flags de bloqueio no `combat-v3`
+   * (`abilityBlockFlags`, `sim`). Ausente: a forma decide o corpo a corpo.
+   */
+  readonly kind?: 'melee' | 'combat';
   readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
   /** A condição que a ability aplica a quem acerta (CMB-07). Ausente: só o golpe. */
   readonly condition?: ConditionSpec;
