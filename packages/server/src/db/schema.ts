@@ -204,6 +204,41 @@ export const characters = pgTable(
 );
 
 /**
+ * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value` — a semente do motor de
+ * quest, a mesma pergunta do Canary (`player:getStorageValue`/`setStorageValue`).
+ *
+ * **Uma linha por chave, e não uma coluna `jsonb`** — ao contrário de `bestiary`/`ammo`/
+ * `supplyStock`: uma linha da Cidade de Thais sozinha já tem ~110 interativos gated por
+ * storage (51 portas de chave + 59 baús, ADR 0050 contexto), e o motor de quest inteiro que
+ * este sistema semeia só cresce daqui. Uma linha por chave é o que permite ler/escrever POR
+ * CHAVE mais tarde, sem reescrever um blob inteiro a cada storage tocado.
+ *
+ * `id` próprio, como `friend`: a linha é uma entidade, e o índice único faz o papel de trava
+ * contra o duplo clique/retry. Sem CHECK no valor — `-1` (ausência) nunca é gravado aqui por
+ * construção (`CharacterRuntime.setStorageValue` apaga a linha em vez de gravar `-1`), mas o
+ * banco não é o lugar de impor isso: quem lê de volta é defensivo (`readCharacterStorage`), na
+ * régua do Bestiário/overlay de item.
+ */
+export const characterStorages = pgTable(
+  'character_storage',
+  {
+    id: text('id').primaryKey(),
+    characterId: text('character_id').notNull().references(() => characters.id),
+    storageKey: text('storage_key').notNull(),
+    value: integer('value').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Um personagem, uma chave — uma linha. É a trava contra o duplo clique/retry, como
+    // `friend_pair_unique`; o extrato faz `ON CONFLICT` contra ela.
+    uniqueIndex('character_storage_key_unique').on(table.characterId, table.storageKey),
+    // O acesso real é "os storages DESTE personagem", na emissão do ticket — sem índice, ler
+    // varre a tabela inteira.
+    index('character_storage_character').on(table.characterId),
+  ],
+);
+
+/**
  * Amigos é o mínimo do §21 (ADR 0031 decisão 6): adicionar por nome, listar com online/onde,
  * remover. Direção única — A ter B como amigo não implica B ter A. Sem pedido nem bloqueio: o
  * kit desenha as abas, e elas esperam o épico social.

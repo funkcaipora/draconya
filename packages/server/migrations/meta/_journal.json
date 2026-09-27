@@ -92,6 +92,13 @@
       "when": 1790100000000,
       "tag": "0012_604-item-instance-overlay",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0013_731-character-storage",
+      "breakpoints": true
     }
   ]
 }
