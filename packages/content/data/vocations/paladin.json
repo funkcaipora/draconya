@@ -22,7 +22,10 @@
     "mana": { "ticksMs": 4000, "amount": 2 }
   },
   "skillMultipliers": {
-    "melee": 1.2,
+    "fist": 1.2,
+    "club": 1.2,
+    "sword": 1.2,
+    "axe": 1.2,
     "distance": 1.1,
     "shielding": 1.1,
     "magic": 1.4
