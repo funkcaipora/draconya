@@ -757,6 +757,39 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     }
   });
 
+  it('a skill da fórmula transcreve o callback do Canary: LEVELMAGIC declara `magic` (#677)', () => {
+    // `CALLBACK_PARAM_LEVELMAGICVALUE` em `data/scripts/spells/attack/<nome>.lua` (lido em
+    // 2026-09-26). Em Druid/Sorcerer `spellSkill` já é `magic` e o campo não muda número; no
+    // Paladin, Divine Caldera e Divine Missile passam a ler o ML em vez da distance.
+    const LEVEL_MAGIC = [
+      'apprentices-strike-druid', 'chill-out', 'energy-strike-druid', 'eternal-winter',
+      'flame-strike-druid', 'ice-strike-druid', 'ice-wave', 'mud-attack', 'physical-strike',
+      'strong-ice-strike', 'strong-ice-wave', 'strong-terra-strike', 'terra-strike-druid',
+      'terra-wave', 'wrath-of-nature',
+      'apprentices-strike-sorcerer', 'buzz', 'death-strike', 'energy-beam', 'energy-strike-sorcerer',
+      'energy-wave', 'fire-wave', 'flame-strike-sorcerer', 'great-death-beam', 'great-energy-beam',
+      'great-fire-wave', 'hells-core', 'ice-strike-sorcerer', 'lightning', 'rage-of-the-skies',
+      'scorch', 'strong-energy-strike', 'strong-flame-strike', 'terra-strike-sorcerer',
+      'ultimate-energy-strike',
+      'divine-caldera', 'divine-missile',
+    ];
+    // `CALLBACK_PARAM_SKILLVALUE`: a skill da vocação (e o ataque da arma), sem `scaling`.
+    const SKILL_VALUE = [
+      'berserk', 'brutal-strike', 'fierce-berserk', 'front-sweep', 'groundshaker',
+      'lesser-front-sweep', 'whirlwind-throw',
+      'ethereal-spear', 'lesser-ethereal-spear', 'strong-ethereal-spear',
+    ];
+    expect(LEVEL_MAGIC).toHaveLength(37);
+    const declared: string[] = [];
+    const undeclared: string[] = [];
+    for (const spell of content.spells.values()) {
+      if (spell.effect.kind !== 'damage' || spell.effect.formula === undefined) continue;
+      (spell.effect.formula.scaling === 'magic' ? declared : undeclared).push(spell.id);
+    }
+    expect(declared.sort()).toEqual([...LEVEL_MAGIC].sort());
+    expect(undeclared.sort()).toEqual([...SKILL_VALUE].sort());
+  });
+
   it('a allowlist do que NÃO vem do Canary não cresce sem ninguém notar', () => {
     // As três genéricas pré-vocação (nunca tiveram vocationId nem BP do TibiaWiki) e as três
     // inventadas (têm vocationId e basePower, mas nome sem correspondente em

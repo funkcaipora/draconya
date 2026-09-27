@@ -845,9 +845,11 @@ export type SpellArea = z.infer<typeof spellAreaSchema>;
  * ```
  *
  * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência). Na magia de DANO o `skill` é
- * a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no Paladin, `melee` no
- * Knight); na magia e na runa de CURA é sempre o MAGIC LEVEL. Sem `formula`, o efeito continua no
- * caminho provisório de `basePower` × `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ * o que `scaling` declara (#677): o MAGIC LEVEL em `magic` (o `CALLBACK_PARAM_LEVELMAGICVALUE` do
+ * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no
+ * Paladin, `melee` no Knight — o que a `SKILLVALUE` lê); na magia e na runa de CURA é sempre o
+ * MAGIC LEVEL. Sem `formula`, o efeito continua no caminho provisório de `basePower` ×
+ * `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
  */
 export const spellFormulaSchema = z.object({
   /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
@@ -875,6 +877,14 @@ export const spellFormulaSchema = z.object({
   attackMax: z.number().optional(),
   skillAttackMin: z.number().optional(),
   skillAttackMax: z.number().optional(),
+  /**
+   * QUAL skill entra no termo `skill` (#677). `magic` = `CALLBACK_PARAM_LEVELMAGICVALUE` do
+   * Canary (magic level em qualquer vocação); `vocation` = `spellSkill`, o que a SKILLVALUE lê.
+   * AUSENTE = `vocation`, bit a bit (ADR 0031). Sem efeito em cura e runa (sempre ML).
+   * `optional()` e não `default()`: as fixtures de `sim` montam `SpellFormula` (tipo de SAÍDA)
+   * à mão (`casting.test.ts`), e um default tornaria o campo obrigatório nelas.
+   */
+  scaling: z.enum(['vocation', 'magic']).optional(),
 });
 
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;
