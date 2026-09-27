@@ -17,8 +17,8 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS, floorChangeAt, floorChangeToward,
-  migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
+  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
@@ -97,6 +97,7 @@ import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import {
@@ -3264,9 +3265,15 @@ export class HuntRuleset implements Ruleset {
     // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
     if (d === want) return null;
 
+    // `keep-distance` só RECUA com visão livre até o alvo (#553): o TFS só deixa um monstro
+    // que mantém distância se afastar quando ele ainda enxerga quem persegue — recuar às cegas
+    // podia levar a se afastar do alvo sem motivo, quando na prática ele já perdeu a linha por
+    // outra razão. Sem visão, mantém a posição — a mesma "decidiu ficar parado" de `d === want`.
     const to = d > want
       ? greedyStep(from, target.position, blocked)
-      : fleeStep(from, target.position, blocked);
+      : (isSightClear(this.#world.map, from, target.position)
+        ? fleeStep(from, target.position, blocked)
+        : null);
     // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
     if (to === null) return null;
@@ -4334,6 +4341,10 @@ const slots = bot.groups.get(group);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        // Cada alvo da forma precisa da PRÓPRIA visão (#553, RF-05) — a onda cobre um cone
+        // inteiro, e alguém atrás de uma parede não é atingido só porque outro, mais à frente,
+        // está.
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
       if (this.#spellHits.length === 0) return null;
@@ -4343,7 +4354,12 @@ const slots = bot.groups.get(group);
     }
 
     const primary = this.#targetInRange(character, range);
-    if (primary === null) return null;
+    // A ESCOLHA do alvo (`#targetInRange`) ignora visão de propósito (DT-05 da spec #553): o
+    // bot continua mirando o mesmo alvo atrás da parede, em vez de trocar para um pior só
+    // porque este está sem linha agora. Só a CAPTURA final é filtrada — o golpe não sai.
+    if (primary === null || !isSightClear(this.#world.map, character.position, primary.position)) {
+      return null;
+    }
     this.#collect(character, primary);
 
     if (area !== undefined) {
@@ -4352,6 +4368,7 @@ const slots = bot.groups.get(group);
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
+        if (!isSightClear(this.#world.map, character.position, monster.position)) continue;
         this.#collect(character, monster);
       }
     }
@@ -4381,9 +4398,17 @@ const slots = bot.groups.get(group);
    * O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por
    * uso — MAIS o bônus de equipamento da MESMA skill (#524): a Paladin Armor soma em `distance`
    * (a skill da magia do Paladin), o Hat of the Mad/Focus Cape em `magic` (Sorcerer/Druid).
+   *
+   * `SPELL_SKILL_WEAPON` (#567) é a sentinela do Knight: desde a separação de `melee` em
+   * `fist`/`club`/`sword`/`axe`, não há mais uma skill fixa para a magia dele — Berserk,
+   * Groundshaker etc. escalam pela skill da FAMÍLIA da arma que está na mão agora, resolvida
+   * do mesmo jeito que `#weaponPower` resolve o golpe (`Inventory.weapon`, desarmado cai no
+   * perfil `fist` de `content.unarmed`).
    */
   #spellScaling(character: CharacterRuntime): SpellScaling {
-    const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const spellSkill = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const skillId = spellSkill === SPELL_SKILL_WEAPON
+      ? this.#equippedWeaponSkillId(character) : spellSkill;
     const skill = this.#options.skills.get(skillId);
     const magic = this.#options.skills.get('magic');
     return {
@@ -5502,6 +5527,7 @@ const slots = bot.groups.get(group);
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(
       monster, target, definition, this.#blockedForMonster(monster, definition),
+      (from, to) => isSightClear(this.#world.map, from, to),
     );
     // Preso: tinha alvo vivo e a decisão não achou passo, nem aproximando nem fugindo. É o dado
     // que `#land`/`#applyHits` consultam ao aplicar dano, para armar o bypass acima.
@@ -5568,6 +5594,7 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
       monster.attackReady = true;
       return;
@@ -5606,9 +5633,11 @@ const slots = bot.groups.get(group);
     const target = findById(session.participants, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
+      || !isSightClear(this.#world.map, monster.position, target.position)
       || (isMonsterFleeing(monster, definition) && isMeleeAbility(ability))) {
-      // Alvo saiu do alcance (ou o monstro está fugindo e esta ability é corpo a corpo): NÃO
-      // bate, e a ability volta a ficar engatilhada — `#armMonsterAbilities` a re-arma.
+      // Alvo saiu do alcance, ou a visão fechou (#553), ou o monstro está fugindo e esta
+      // ability é corpo a corpo: NÃO bate, e a ability volta a ficar engatilhada —
+      // `#armMonsterAbilities` a re-arma.
       return;
     }
 
@@ -5633,6 +5662,7 @@ const slots = bot.groups.get(group);
     for (const ability of definition.abilities) {
       if (fleeing && isMeleeAbility(ability)) continue;
       if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (!isSightClear(this.#world.map, monster.position, target.position)) continue;
       if (ability.id === BASIC_ABILITY_ID) {
         if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
         continue;
@@ -5656,7 +5686,11 @@ const slots = bot.groups.get(group);
     primary: CharacterRuntime,
   ): void {
     const subject = monster.subject;
-    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
+    // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
+    // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants)
+      .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
     // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
@@ -6219,6 +6253,10 @@ const slots = bot.groups.get(group);
     const reflectAttacker = this.#reflectAttackerFor(character, monster);
 
     if (weapon !== null && how?.kind === 'distance') {
+      // Sem visão livre até o alvo (#553), o tiro NÃO sai — como sem munição, antes de gastar
+      // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
+      // reavalia, e acerta assim que a linha abrir.
+      if (!isSightClear(this.#world.map, character.position, monster.position)) return;
       const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
@@ -6497,6 +6535,18 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * A skill que a arma NA MÃO agora aponta (#567, `SPELL_SKILL_WEAPON`): a mesma leitura de
+   * `#strike` (`Inventory.weapon`), caindo no perfil `fist` de `content.unarmed` desarmado —
+   * nunca um nome fixo, porque `fist`/`club`/`sword`/`axe` são skills diferentes desde a
+   * separação de `melee`. Sem a família no catálogo (conteúdo de teste incompleto), `fist`.
+   */
+  #equippedWeaponSkillId(character: CharacterRuntime): string {
+    const item = character.inventory.weapon(this.#options.items, character);
+    const family = item?.weapon?.family ?? this.#options.unarmed.family;
+    return this.#options.weaponFamilies.get(family)?.skillId ?? 'fist';
+  }
+
+  /**
    * A chance de acerto à distância (#522, `combat-v2`): uma rolagem por tiro, SEMPRE consumida
    * quando o conteúdo declara `combat.distanceHitChance` — a mesma regra do bloqueio e do
    * crítico (ADR 0031). Conteúdo `combat-v1` (sem a tabela) não rola nada e sempre acerta, o
@@ -6532,9 +6582,15 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
-   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
-   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   * Pratica UMA vez pelo golpe, na skill que a família aponta — SÓ ELA (CMB-05, #567). A
+   * prática é o `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por
+   * mana gasta — e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * Chama `#gainSkill` DIRETO, na skill resolvida — nunca `#gainSkills` (o grupo inteiro de
+   * `sk.gain.on`): desde a separação de `melee` em `fist`/`club`/`sword`/`axe`, as quatro
+   * compartilham o MESMO gatilho `melee-hit`, e o grupo faria uma espada treinar `axe` junto —
+   * o defeito que o #567 existe para não introduzir. `distance`/`magic` continuam com uma
+   * skill só por grupo, então o comportamento delas não muda.
    *
    * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
    * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
@@ -6546,7 +6602,7 @@ const slots = bot.groups.get(group);
     if (definition === undefined) return;
     const skill = this.#options.skills.get(definition.skillId);
     if (skill === undefined) return;
-    this.#gainSkills(session, character, skill.gain.on, amount);
+    this.#gainSkill(session, character, skill, amount);
   }
 
   /**
@@ -6731,35 +6787,48 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Credita uso a toda skill alimentada por esta fonte.
+   * Credita uso a toda skill alimentada por esta fonte (`spell-cast`, `shield-block`): hoje uma
+   * skill só por grupo, então iterar ou chamar `#gainSkill` uma vez dá no mesmo — mas iterar é
+   * o que continua certo se um dia houver mais de uma nesse mesmo grupo.
    *
    * `amount` é o que a fonte rende: um golpe é um golpe; uma magia rende a MANA que gastou
    * (§9.4, modelo do Tibia). Sem isso, a forma ótima de subir magia seria lançar mil vezes a
    * magia mais barata, e o jogo viraria macro de spam.
-   *
-   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
-   * jogador quer ver ao voltar, ao lado do level up (§16.2).
    */
   #gainSkills(
     session: Session, character: CharacterRuntime, on: Skill['gain']['on'], amount: number,
   ): void {
-    if (amount <= 0) return;
     const definitions = this.#skillsByGain[on];
-    const vocation = this.#vocationOf(character);
     for (let i = 0; i < definitions.length; i += 1) {
-      const definition = definitions[i] as Skill;
-      const gain = definition.gain;
-      const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
-      // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
-      // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
-      // diferente por quem está usando.
-      const factor = skillFactorFor(definition, vocation, this.#options.progression);
-      // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
-      // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
-      const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
-      if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
-        session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
-      }
+      this.#gainSkill(session, character, definitions[i] as Skill, amount);
+    }
+  }
+
+  /**
+   * Credita uso a UMA skill (#567): a que a família de arma aponta, nunca o grupo inteiro de
+   * `gain.on` — é o que separa `fist`/`club`/`sword`/`axe` de verdade, depois de todas
+   * compartilharem o mesmo gatilho `melee-hit`. `#gainSkills`, acima, continua servindo os
+   * gatilhos que SÃO compartilhados de propósito.
+   *
+   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
+   * jogador quer ver ao voltar, ao lado do level up (§16.2).
+   */
+  #gainSkill(
+    session: Session, character: CharacterRuntime, definition: Skill, amount: number,
+  ): void {
+    if (amount <= 0) return;
+    const gain = definition.gain;
+    const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
+    // O fator de crescimento é DESTA vocação (#521, ADR 0037): um Knight sobe corpo a corpo
+    // rápido e magia devagar, um Sorcerer o oposto — a mesma curva de conteúdo, um `factor`
+    // diferente por quem está usando.
+    const vocation = this.#vocationOf(character);
+    const factor = skillFactorFor(definition, vocation, this.#options.progression);
+    // O rate de skill/magia (#691), pelo stage do nível BASE — o Canary acha o stage do ML
+    // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
+    const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
+    if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
+      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
     }
   }
 

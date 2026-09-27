@@ -3,6 +3,6 @@
   "name": "Burst Arrow",
   "family": "arrow",
   "attack": 27,
-  "price": 3,
-  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 27 e preço 3 são provisórios (TibiaWiki como ponto de partida; docs/reference/huntera-observed.md não observa munição). Aparência: ícone 3446 e projétil (missile 4) ainda sem PNG na biblioteca local parcial; conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
+  "price": 15,
+  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 27 é do TibiaWiki (docs/reference/huntera-observed.md não observa munição). `price` 15 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 3449 (`archery.lua`) — corrige o 3 anterior (TibiaWiki), o Canary é a fonte precedente (ADR 0037 d.4). Aparência: ícone 3446 e projétil (missile 4) ainda sem PNG na biblioteca local parcial; conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
 }

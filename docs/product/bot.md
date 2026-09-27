@@ -220,8 +220,8 @@ por cooldown.
 | Grupo de cooldown por magia | `attack` / `healing` / `support` | `packages/content/data/spells/*.json`, campo `group` |
 | Grupo de cooldown por supply | `potion` / `attack` | `packages/content/data/supplies/*.json`, campo `group` |
 | Exaustão de ação compartilhada (poção + runa) | 1000 ms (`timeBetweenExActions` do Canary, #690) | `packages/content/data/supplies/*.json`, campo `actionExhaustMs` |
-| Preço do supply (gold no uso) | small health potion 20 (#690, `buy` de NPC do Canary, NÃO provisório); poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]`; as nove poções do Tibia (#524, kit level 200) 115–480, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
-| Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]`; power bolt 10 (#524, NÃO provisório) | `packages/content/data/ammunition/*.json`, campo `price` |
+| Preço do supply (gold no uso) | small health potion 20; poção de vida 50; poção de mana 56; avalanche 64 — menor `buy` de NPC do Canary (M34-03/#574, NÃO provisório); as nove poções do Tibia (#524, kit level 200) 115–650, preço de NPC real, NÃO provisório — tabela completa em `items.md` | `packages/content/data/supplies/*.json`, campo `price` |
+| Preço do tiro de munição | arrow 2; burst arrow 15; sniper arrow 5; onyx arrow 7 — menor `buy` de NPC do Canary (M34-03/#574, NÃO provisório); power bolt 7 (idem) | `packages/content/data/ammunition/*.json`, campo `price` |
 | Raio de busca de alvo | 8 tiles | `packages/content/data/bot/baseline.json`, `targetSearchRadius` |
 | Teto de regras de saída | 4 | `packages/content/data/bot/baseline.json`, `slots.exit` |
 | Baseline v2 por vocação (slots + automações) | cavaleiro: arma/escudo por vida; paladino: munição por alvos; sorcerer: renovar anel; druid: renovar colar `[ABERTO — provisório]` | `packages/content/data/bot/baseline.json`, `defaultConfigByVocation` |

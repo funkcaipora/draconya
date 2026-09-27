@@ -27,21 +27,28 @@ estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 ## O catálogo importado (ADR 0038, #572)
 
-**`staging/monsters/` não é conteúdo carregado** (#578): é onde `pnpm catalog:import monsters`
-escreve enquanto o monstro gerado não passa no boot — o loot aponta item por slug de nome, e o
-catálogo de itens (#573) e as linhas de aparência ainda não existem. Cada entidade de lá é a forma
-do `monsterSchema` mais dois campos que o #580 separa ao mover para `data/`: `bestiary` (vai para
-`bestiary/baseline.json`, `entries`) e `outfitId` (vai para `appearances/baseline.json`). `load.ts`
+**`staging/monsters/` não é conteúdo carregado** (#578/#579): é onde `pnpm catalog:import monsters`
+escreve — a transcrição PURA do Canary, item ainda por slug de nome, sem passar pelo catálogo de
+itens (#573/#574) nem pela tabela de aparências. `pnpm catalog:promote-monsters` (#580) é o passo
+SEGUINTE, e não depende de `CANARY_DIR`: lê o que já está commitado em `staging/` e separa cada
+entidade (a forma do `monsterSchema` mais `bestiary` e `outfitId`) em três destinos —
+`data/monsters/generated/<fatia>.json` (o monstro, sem os dois campos), `bestiary/baseline.json`
+(`entries`) e `appearances/baseline.json` (`monsters`). De caminho, valida `loot.items` contra o
+catálogo de itens REAL (`data/items` — o que `load.ts` de fato carrega hoje) e remove a linha cujo
+item não existe, ou que pede pilha de item que não empilha — contada, nunca em silêncio, em
+`docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord (#581)
+nunca são promovidos por aqui — continuam hand-authored, e é a #581 quem os regenera. `load.ts`
 não lê `staging/`, e nada do jogo deve ler.
 
-Qualquer `data/<tipo>/` (hoje `items/`, mais tarde `monsters/`) aceita, além do arquivo autoral
-direto na pasta, duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em
-`content.ts`:
+Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
+duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
 ```
-data/items/backpack.json          # autoral, uma entidade por arquivo (de sempre)
-data/items/generated/weapons.json # gerado por `pnpm catalog:import items` — um ARRAY por fatia
-data/items/overrides/*.json       # correção nossa: { id, reason, patch }
+data/items/backpack.json             # autoral, uma entidade por arquivo (de sempre)
+data/items/generated/weapons.json    # gerado por `pnpm catalog:import items` — um ARRAY por fatia
+data/items/overrides/*.json          # correção nossa: { id, reason, patch }
+data/monsters/rat.json               # autoral, hand-authored (#581 é quem regenera os quatro)
+data/monsters/generated/mammals.json # promovido por `pnpm catalog:promote-monsters` — um ARRAY
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
@@ -169,7 +176,7 @@ data/appearances/baseline.json     # id de conteúdo → id de aparência
 ```jsonc
 {
   "id": "baseline",
-  "pack": "tibia-1332",            // de qual pacote vieram estes números
+  "pack": "tibia-1533",            // de qual pacote vieram estes números
   "monsters": { "rat": 21 },       // → outfitId
   "items": { "spike-sword": 3271 } // → appearanceId
 }
@@ -241,7 +248,7 @@ ninguém conferir arte à mão.
 ## O inventário do pacote (FUN-21)
 
 ```
-data/packs/tibia-1332.json         # quais ids EXISTEM no pacote, por registro, em faixas
+data/packs/tibia-1533.json         # quais ids EXISTEM no pacote, por registro, em faixas
 ```
 
 A tabela acima diz que o rato é o outfit 21; nada conferia que o outfit 21 **existe**. O
@@ -250,7 +257,7 @@ invisível — o cliente pede um quadro que não há e desenha o fallback, a tr�
 causa. O pacote em si mora em `things/`, fora do Git, e o servidor nem o carrega; o que entra
 aqui é a **sombra** dele: `[[100,167],[169,370],…]` por `object`, `outfit`, `effect` e
 `missile`. `buildContent` cruza a tabela com essas faixas e recusa o id que não está em
-nenhuma — `appearances.monsters.rat: outfit 9999 não existe no pacote tibia-1332`. Roda no
+nenhuma — `appearances.monsters.rat: outfit 9999 não existe no pacote tibia-1533`. Roda no
 boot, no `pnpm content:check` e em `load.test.ts`, que é o que faz o CI reprovar sem ter pacote
 nenhum.
 
@@ -270,7 +277,7 @@ senão apagar `packs/` desligaria a conferência em silêncio.
 `VITE_THINGS_URL`, que é configuração de deploy. `buildContent` expõe `content.pack`, e o
 `game` recusa subir quando `THINGS_VERSION` não bate com `pack.version`
 (`packages/server/src/served-pack.ts`) — o compose deriva `VITE_THINGS_URL` da mesma
-variável. Sem isso, um deploy apontando `/things/1400` com o conteúdo conferido contra o 1332
+variável. Sem isso, um deploy apontando `/things/1400` com o conteúdo conferido contra o 1533
 passaria em tudo e desenharia exatamente o quadrado que a conferência existe para impedir.
 
 **Fica fora de `computeVersion`.** O inventário não é lido por sessão nenhuma; regenerá-lo

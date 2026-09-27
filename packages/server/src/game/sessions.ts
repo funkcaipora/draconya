@@ -264,6 +264,9 @@ export function characterFromTicket(
         ? {} : { supplyStock: initialCharacter.supplyStock }),
       ...(initialCharacter.ammunitionStock === undefined
         ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
+      // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
+      // parte sem storage nenhum setado — a mesma degradação de sempre.
+      ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)
