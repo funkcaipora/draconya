@@ -18,7 +18,7 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
-  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, migrateBotConfigV1,
+  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
@@ -42,7 +42,7 @@ import {
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
-import { chestStorageKeyOf, isToggleable, TileOverrides } from '../tile-overrides.js';
+import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../tile-overrides.js';
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
@@ -640,6 +640,26 @@ const FOLLOW_PATHFIND_RADIUS = 30;
 const FOLLOW_PATHFIND_DELAY_MS = 4_000;
 
 /**
+ * O raio (Chebyshev) do BFS limitado de um `walk-to` DISTANTE na hunt (#763, achado do QA da
+ * #730: `requestMove` só aceitava tile adjacente, e um clique num cadáver de longe nunca fazia
+ * o personagem chegar). O MESMO mecanismo do follow (`boundedPath`, ADR 0009 emenda) — bot é
+ * automação própria (ADR 0037), e um destino clicado pelo jogador tem a mesma natureza: não
+ * precisa da fidelidade ao Tibia que a rota AUTORADA mantém (que nunca faz path-finding, ADR
+ * 0009). Trinta tiles cobre qualquer clique plausível dentro do campo de visão sem varrer o
+ * mapa inteiro a cada pedido.
+ */
+const MANUAL_WALK_PATHFIND_RADIUS = 30;
+
+/**
+ * Quanto tempo o bot fica PAUSADO depois que o personagem chega ao destino de um `walk-to`
+ * distante (#763): a janela para o jogador agir — abrir o cadáver, pegar o loot, usar um item —
+ * antes de a rota retomar sozinha. Renovada por qualquer intenção manual (`#renewManualWalkHold`)
+ * enquanto durar; dez segundos é generoso para um clique duplo humano e curto o bastante para
+ * não prender a hunt inteira quando o jogador só clicou e foi embora.
+ */
+const MANUAL_WALK_HOLD_MS = 10_000;
+
+/**
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
@@ -689,6 +709,8 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.crossFloorStuckSinceMs === null ? {} : { crossFloorStuckSinceMs: runner.crossFloorStuckSinceMs }),
     ...(runner.sameTileStreak === 0 ? {} : { sameTileStreak: runner.sameTileStreak }),
     ...(runner.regroupSinceMs === null ? {} : { regroupSinceMs: runner.regroupSinceMs }),
+    ...(runner.manualWalkTo === null ? {} : { manualWalkTo: runner.manualWalkTo }),
+    ...(runner.manualWalkHoldUntilMs === null ? {} : { manualWalkHoldUntilMs: runner.manualWalkHoldUntilMs }),
   };
 }
 
@@ -1367,6 +1389,26 @@ interface Runner {
    * esta atividade). Um quinto ponto de escrita divergiria do que já é creditado em algum lugar.
    */
   lastCombatActionAtMs: number | null;
+  /**
+   * O caminho de um `walk-to` DISTANTE pedido pelo jogador (#763): quando `to` não é adjacente,
+   * `requestMove` calcula com o BFS limitado (`#planManualWalk`, o mesmo mecanismo do follow) e
+   * guarda aqui — o PRÓPRIO caminho a percorrer, não um cache de desempenho como `followPath`.
+   * Precisa sobreviver a um snapshot (a hunt é idle-first, invariante 3: fechar o navegador no
+   * meio do caminho não pode apagá-lo), então é OPCIONAL no `RunnerState`, ao contrário do cache
+   * do follow. Enquanto existe, `#playerStep` consome um tile por vencimento em vez de andar
+   * pela rota ou perseguir o alvo do bot (RF-02 da spec) — `destination` é só para comparar com
+   * um pedido novo, que substitui em vez de acumular.
+   */
+  manualWalkTo: { readonly destination: FloorPoint; readonly path: readonly GridPoint[] } | null;
+  /**
+   * Até QUANDO o bot fica pausado depois de CHEGAR ao destino de um `walk-to` distante (#763,
+   * `MANUAL_WALK_HOLD_MS`) — renovada por uma intenção manual (`#renewManualWalkHold`:
+   * `open-corpse`, `take-loot`, `use-item`/`use-item-on`, `use-on-map`). `null` fora da janela;
+   * precisa sobreviver ao snapshot pela mesma razão de `manualWalkTo` — sem isto, uma hunt
+   * retomada bem no meio da janela perderia a pausa e a rota atropelaria o jogador que acabou de
+   * chegar.
+   */
+  manualWalkHoldUntilMs: number | null;
 }
 
 /**
@@ -1445,6 +1487,13 @@ export interface RunnerState {
   readonly sameTileStreak?: number;
   /** Desde quando o líder espera a party se juntar (#527). Ausente/`null` é fora. */
   readonly regroupSinceMs?: number | null;
+  /**
+   * O caminho de um `walk-to` distante em curso (#763). Ausente é "sem caminho manual" — o
+   * padrão de sempre, e o que todo snapshot anterior a esta issue tem.
+   */
+  readonly manualWalkTo?: { readonly destination: FloorPoint; readonly path: readonly GridPoint[] };
+  /** Até quando o bot fica pausado depois de chegar (#763). Ausente/`null` é fora da janela. */
+  readonly manualWalkHoldUntilMs?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1739,6 +1788,9 @@ export class HuntRuleset implements Ruleset {
   ): UseItemOutcome {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return refuseItem('not-carried', 0);
+    // Intenção manual (#763): renova a janela de pausa de um `walk-to` em curso, mesmo quando a
+    // ação em si é ADIADA pela exaustão (abaixo) — o clique já aconteceu.
+    this.#renewManualWalkHold(characterId, session.nowMs);
 
     // A exaustão de ação (#690/ADR 0049 d.6): cooldown de GRUPO/individual continua recusa
     // imediata (não muda com esta issue); só `exhaust:action` sozinha é ADIADA.
@@ -2044,6 +2096,9 @@ export class HuntRuleset implements Ruleset {
     ) {
       return { ok: false, reason: 'out-of-range' };
     }
+    // Intenção manual (#763): renova a pausa de um `walk-to` em curso, mesmo quando o tile
+    // não tem nada de usável (abaixo) — o clique em si já é a intenção.
+    this.#renewManualWalkHold(characterId, session.nowMs);
     const current = this.#tileOverrides.at(position);
     if (current === null) return { ok: false, reason: 'nothing-there' };
     // Baú (#733, ADR 0050 d.6 T2): NUNCA passa por `isToggleable`/`#useInteractable` — não tem
@@ -2772,6 +2827,8 @@ export class HuntRuleset implements Ruleset {
       followTargetId: state?.followTargetId,
       followReason: state?.followReason,
       lastCombatActionAtMs: state?.lastCombatActionAtMs ?? null,
+      manualWalkTo: state?.manualWalkTo ?? null,
+      manualWalkHoldUntilMs: state?.manualWalkHoldUntilMs ?? null,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -3532,6 +3589,22 @@ export class HuntRuleset implements Ruleset {
       return null;
     }
 
+    // `walk-to` distante em curso (#763, RF-02): suprime rota E perseguição enquanto durar — o
+    // combate já rodou acima, e continua tendo prioridade sobre um destino clicado, como já tem
+    // sobre o follow logo abaixo. Chegado o destino, a MESMA checagem segura o personagem pela
+    // janela curta de `MANUAL_WALK_HOLD_MS`, para o jogador agir antes da rota retomar.
+    if (runner.manualWalkTo !== null) {
+      this.#armPlayerAttack(session, character);
+      return this.#advanceManualWalk(session, character);
+    }
+    if (runner.manualWalkHoldUntilMs !== null) {
+      if (session.nowMs < runner.manualWalkHoldUntilMs) {
+        this.#armPlayerAttack(session, character);
+        return null;
+      }
+      runner.manualWalkHoldUntilMs = null;
+    }
+
     // Follow de membro (ADR 0035 d.9, §D10, #398): substitui a rota E a postura contra monstro
     // enquanto ativo. O combate já rodou acima — é ele, não isto, que decide se o personagem
     // para para bater; seguir não impede atacar quem estiver ao alcance da arma.
@@ -4080,6 +4153,95 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O caminho para um `walk-to` DISTANTE (#763, achado do QA da #730). O MESMO BFS limitado do
+   * follow (`boundedPath`, `route/pathfind.ts`, ADR 0009 emenda) — reaproveita a legalidade de
+   * `canOccupy`/`MovementWorld` (parede, fora do mapa, ocupação, troca de andar), com UMA
+   * exceção: uma porta FECHADA do overlay de sessão (#728) é tratada como PASSÁVEL aqui, porque
+   * quem percorre o caminho a abre sozinha ao chegar (`#advanceManualWalk`, a MESMA automação do
+   * walker de rota em `#playerStep` — `isDoorKind`, nunca grama/stone-pile, que exigem
+   * ferramenta e nunca abrem "de passagem"). Troca de andar fica de fora do caminho: o destino
+   * de um `walk-to` é sempre do MESMO `z` do personagem (`requestMove` já fixa isso), e deixar o
+   * BFS atravessar uma escada faria um clique perto dela levar para outro andar sem o jogador
+   * ter pedido isso.
+   *
+   * `null` é "fora do raio ou sem caminho" — quem chama (`requestMove`) devolve a recusa tipada
+   * `unreachable` (RF-03 da spec): destino genuinamente inalcançável não pode deixar o pedido
+   * pendurado sem resposta.
+   */
+  #planManualWalk(from: FloorPoint, to: GridPoint): readonly GridPoint[] | null {
+    // `from` é sempre `character.position` (#519: personagem carrega `z` de verdade, nunca
+    // ausente) — o `?? this.#world.map.z` é só para o tipo, como em `#followStep`.
+    const z = from.z ?? this.#world.map.z;
+    const pathBlocked: Blocked = (x, y) => {
+      if (this.#world.occupied(x, y, z)) return true;
+      if (this.#world.floorChangeAt(x, y, z) !== null) return true;
+      const override = this.#tileOverrides.at({ x, y, z });
+      if (override !== null && override.blocked) return !isDoorKind(override.kind);
+      return isBlocked(this.#world.map, x, y, z);
+    };
+    return boundedPath(from, isExactly(to), pathBlocked, MANUAL_WALK_PATHFIND_RADIUS);
+  }
+
+  /**
+   * Avança o caminho manual pendente (#763): um tile por vencimento, pela MESMA fila de eventos
+   * do resto do motor (invariante 2) — nunca o caminho inteiro de uma vez. Chamado tanto por
+   * `requestMove` (o primeiro passo, na hora do pedido) quanto por `#playerStep` (os seguintes).
+   *
+   * Uma porta fechada no próprio caminho é aberta aqui, do MESMO jeito que o walker de rota abre
+   * a dela em `#playerStep` — `#planManualWalk` já a tratou como passável, então a única forma
+   * dela continuar bloqueada agora é o personagem não cumprir o requisito (chave, nível, quest):
+   * aí o caminho manual é ABANDONADO (o bot retoma sozinho no vencimento seguinte, pelo tile
+   * mais próximo — o mecanismo que já existe), nunca preso esperando para sempre.
+   */
+  #advanceManualWalk(session: Session, character: CharacterRuntime): MoveResult | null {
+    const runner = this.#runnerOf(character.id);
+    const manual = runner.manualWalkTo;
+    if (manual === null) return null;
+    const next = manual.path[0];
+    if (next === undefined) {
+      // Chegou (RF-02): liga a janela de espera, e o vencimento seguinte já cai no
+      // ramo de `manualWalkHoldUntilMs` de `#playerStep` — nenhuma andança nesta mesma chamada.
+      runner.manualWalkTo = null;
+      runner.manualWalkHoldUntilMs = session.nowMs + MANUAL_WALK_HOLD_MS;
+      return null;
+    }
+    const at = { x: next.x, y: next.y, z: character.position.z };
+    const blockingHere = this.#tileOverrides.at(at);
+    if (blockingHere !== null && blockingHere.blocked) {
+      if (this.#useInteractable(session, character, blockingHere.interactableId) === null) {
+        // Sem ferramenta, level ou storage: o destino era alcançável no instante do pedido e
+        // deixou de ser (alguém trancou a porta de novo). Desiste do caminho manual — não do
+        // passo do personagem, que segue livre para a rota/bot no próprio vencimento.
+        runner.manualWalkTo = null;
+        return null;
+      }
+    }
+    const result = this.#step(session, character, at, character.id);
+    if (result.ok) {
+      runner.manualWalkTo = { destination: manual.destination, path: manual.path.slice(1) };
+    }
+    // Recusado (tile temporariamente ocupado por outra criatura, por exemplo): o caminho
+    // continua de pé, e o vencimento seguinte tenta o MESMO tile de novo — a mesma tolerância a
+    // bloqueio passageiro que a rota autorada já tem, nunca um recálculo a cada tentativa.
+    return result;
+  }
+
+  /**
+   * Renova a janela de pausa do bot depois de um `walk-to` distante (#763, `MANUAL_WALK_HOLD_MS`)
+   * — chamada por toda intenção manual que a spec lista: `openCorpse`, `takeLoot`,
+   * `#useItemLike` (`useItem`/`useItemOn`) e `useOnMap`. SÓ renova quando já existe uma janela
+   * aberta (`manualWalkHoldUntilMs !== null`): um clique de abrir cadáver que não veio de um
+   * `walk-to` (o personagem já estava adjacente, sem nunca ter caminho manual) não tem por que
+   * criar uma pausa do nada — a intenção que abre a janela é sempre a chegada de
+   * `#advanceManualWalk`, nunca esta função.
+   */
+  #renewManualWalkHold(characterId: string, nowMs: number): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.manualWalkHoldUntilMs === null) return;
+    runner.manualWalkHoldUntilMs = nowMs + MANUAL_WALK_HOLD_MS;
+  }
+
+  /**
    * O passo em direção a `goal` para o FOLLOW (#527, emenda ao ADR 0009 —
    * `docs/adr/0009-fixed-hunt-route-without-pathfinding.md`): guloso primeiro — resolve a
    * esmagadora maioria dos casos, O(1), sem estado —, e só quando ele emperra (devolve `null`,
@@ -4445,12 +4607,38 @@ export class HuntRuleset implements Ruleset {
    * (FUN-122): o próximo vencimento do bot conta a partir dele. Sem isto, o `PLAYER_STEP` já
    * agendado — com a cadência do passo anterior — vencia logo depois, e o personagem dava
    * dois passos dentro da duração de um.
+   *
+   * `to` DISTANTE (#763, achado do QA da #730): antes, só o tile ADJACENTE era aceito — um
+   * `walk-to` para um cadáver a seis tiles nunca chegava, e o cliente (que só manda intenção e
+   * espera o servidor decidir, invariante 4) ficava esperando um passo que nunca vinha.
+   * `#planManualWalk` calcula o caminho com o BFS limitado do follow; sem caminho dentro do
+   * raio, a recusa é `unreachable` — TIPADA, para o bot nunca ficar esperando uma resposta que
+   * não vem (RF-03). Um `to` ADJACENTE continua o de sempre (compatível com seta/clique de um
+   * tile) e CANCELA um caminho manual em curso — é intenção nova, sobrepõe a anterior, como o
+   * cliente já cancela o próprio pedido de aproximação por qualquer outra ação.
    */
   requestMove(session: Session, characterId: string, to: GridPoint): MoveResult {
     const character = findById(session.participants, characterId);
     if (character === null) return { ok: false, reason: 'tile-blocked' };
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
-    const result = this.#step(session, character, { ...to, z: character.position.z }, characterId);
+    const runner = this.#runnerOf(characterId);
+    const from = character.position;
+    const adjacent = Math.abs(to.x - from.x) <= 1 && Math.abs(to.y - from.y) <= 1;
+
+    let result: MoveResult;
+    if (adjacent) {
+      runner.manualWalkTo = null;
+      runner.manualWalkHoldUntilMs = null;
+      result = this.#step(session, character, { ...to, z: from.z }, characterId);
+    } else {
+      const path = this.#planManualWalk(from, to);
+      if (path === null) return { ok: false, reason: 'unreachable' };
+      runner.manualWalkTo = { destination: { ...to, z: from.z }, path };
+      // O primeiro tile SAI já neste pedido — o mesmo "responde na hora" do caso adjacente;
+      // os seguintes vêm de `#playerStep`, um por vencimento (invariante 2).
+      result = this.#advanceManualWalk(session, character) ?? { ok: false, reason: 'tile-blocked' };
+    }
+
     if (result.ok) {
       session.cancelEvent(PLAYER_STEP, characterId);
       session.scheduleIn(PLAYER_STEP, result.durationMs, {
@@ -8380,8 +8568,10 @@ const slots = bot.groups.get(group);
   /**
    * Abrir a janela do cadáver (#722, ADR 0048 d.4): confere dono/elegibilidade e distância
    * (≤ 1, mesmo andar — o `areInRange<1,1,0>`/`Actions::canUse` do Canary, ver §5 da spec da
-   * issue) e devolve o que ainda está lá. PURA: não muta nada — abrir não é coletar
-   * (invariante 3), ao contrário de `takeLoot`.
+   * issue) e devolve o que ainda está lá. PURA quanto a JOGO — abrir não é coletar (invariante
+   * 3), ao contrário de `takeLoot` — mas renova a janela de pausa de um `walk-to` distante em
+   * curso (#763, `#renewManualWalkHold`): bookkeeping do `Runner`, não estado de jogo, como
+   * `routeBlockedWarned` já é em outro lugar.
    */
   openCorpse(session: Session, characterId: string, groundItemId: number): OpenCorpseResult {
     const corpse = this.#corpseById(groundItemId);
@@ -8395,6 +8585,7 @@ const slots = bot.groups.get(group);
     ) {
       return { ok: false, reason: 'too-far-away' };
     }
+    this.#renewManualWalkHold(characterId, session.nowMs);
     return { ok: true, corpse };
   }
 
@@ -8421,6 +8612,7 @@ const slots = bot.groups.get(group);
     ) {
       return { ok: false, reason: 'too-far-away' };
     }
+    this.#renewManualWalkHold(characterId, session.nowMs);
 
     if (instanceId === null) {
       this.#collectFromCorpse(session, corpse, character);

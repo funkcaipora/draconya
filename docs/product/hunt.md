@@ -189,8 +189,9 @@ avançar, parar, retomar, dar a volta.
 Desde a FUN-69 **ninguém escreve posição de criatura fora de `packages/sim/src/movement.ts`**, e
 o `pnpm source-policy` reprova quem tentar. Bot, monstro e o `walk` do socket passam pelo mesmo
 caminho — `canOccupy` → `move` — e recebem a **mesma razão de recusa**: `out-of-bounds`,
-`tile-blocked`, `tile-occupied`, `not-adjacent` ou `same-tile`. É o padrão do §8 do documento
-de referência OpenTibia, e é conceitual: *validar → commit atômico → evento*.
+`tile-blocked`, `tile-occupied`, `not-adjacent`, `same-tile` ou `unreachable` (#763, só de um
+`walk-to` distante — ver abaixo). É o padrão do §8 do documento de referência OpenTibia, e é
+conceitual: *validar → commit atômico → evento*.
 
 Três consequências que o jogador sente:
 
@@ -202,6 +203,30 @@ Três consequências que o jogador sente:
   `creature-move` — um por passo, com origem, destino e duração, e o cliente interpola. A hunt
   desanexada produz exatamente os mesmos eventos e não serializa nenhum. Antes disto a hunt
   **não transmitia mundo**: os 42,8 bytes/s medidos na FUN-45 eram handshake e `ping`.
+
+#### `walk-to` distante: caminho no servidor e pausa do bot (#763)
+
+Até a #763, `requestMove` só aceitava um tile ADJACENTE — clicar num cadáver a mais de um tile
+mandava um único `walk-to` com o destino final (o cliente, que só manda intenção, espera o
+personagem chegar sozinho: `corpse-approach.ts`/`tile-approach.ts`) e o servidor recusava
+`not-adjacent` na hora; o personagem nunca chegava, e "selecionar quais itens pegar do loot"
+não funcionava na prática.
+
+Um `to` NÃO-adjacente agora calcula um caminho com o mesmo BFS limitado do follow do bot (#527,
+`boundedPath`, `packages/sim/src/route/pathfind.ts`) — a mesma legalidade de
+`canOccupy`/`MovementWorld`, com a exceção de uma porta FECHADA do overlay de cenário (#728):
+o caminho a trata como passável, porque o personagem a abre sozinho ao encontrá-la, a mesma
+automação que já existe para a rota autorada. Sem caminho dentro do raio (parede genuína, fora
+do raio, ou um interativo que não é porta), a recusa é `unreachable` — tipada, para o cliente
+nunca ficar esperando uma resposta que não vem.
+
+Enquanto o caminho está em curso, o personagem consome um tile por vencimento (invariante 2) e
+**não anda pela rota nem persegue alvo** — o combate em andamento continua tendo prioridade,
+como já tinha sobre o follow. Ao chegar, o bot fica PAUSADO por dez segundos, renovados por
+qualquer intenção manual (abrir cadáver, pegar loot, usar item, usar no mapa) — é a janela para
+o jogador agir antes de a rota retomar sozinha, pelo tile mais próximo (o mecanismo que já
+existe). Um pedido de passo adjacente novo (seta, ou outro clique a um tile) cancela um caminho
+em curso — é intenção nova, sobrepõe a anterior.
 
 A colocação inicial passa pela mesma legalidade. O personagem nasce no `entryPoint` do mapa da
 Cidade — conteúdo, validado no boot contra `isBlocked` — e não mais no literal `(0,0)`, que é

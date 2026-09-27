@@ -1381,15 +1381,20 @@ describe('movimento com escritor único (FUN-69)', () => {
     session.advanceBy(100);
     const { x, y } = hero.position;
 
-    // A parede logo ao norte: a arena tem y=0 bloqueado inteiro.
+    // A parede logo ao norte: a arena tem y=0 bloqueado inteiro — sempre RECUSA, adjacente ou
+    // não. Não-adjacente vira `unreachable` (#763: o BFS nem alcança um tile de parede), nunca
+    // mais `not-adjacent` — essa razão SUMIU de `requestMove`, que agora tenta o caminho antes
+    // de recusar (ver o describe "walk-to distante", abaixo).
     expect(ruleset.requestMove(session, hero.id, { x, y: 0 }))
-      .toEqual({ ok: false, reason: y === 1 ? 'tile-blocked' : 'not-adjacent' });
-    expect(ruleset.requestMove(session, hero.id, { x: x + 2, y }))
-      .toEqual({ ok: false, reason: 'not-adjacent' });
+      .toEqual({ ok: false, reason: y === 1 ? 'tile-blocked' : 'unreachable' });
+    // Fora do mapa: nenhum caminho alcança, e o BFS nunca tenta um passo de verdade — as
+    // quatro chamadas deste teste continuam livres de efeito colateral, como antes da #763.
+    expect(ruleset.requestMove(session, hero.id, { x: x + 100, y }))
+      .toEqual({ ok: false, reason: 'unreachable' });
     expect(ruleset.requestMove(session, hero.id, { x, y }))
       .toEqual({ ok: false, reason: 'same-tile' });
     expect(ruleset.requestMove(session, hero.id, { x: -1, y: -1 }))
-      .toEqual({ ok: false, reason: 'not-adjacent' });
+      .toEqual({ ok: false, reason: 'unreachable' });
   });
 
   it('monstros nunca acabam em parede nem dois no mesmo tile — a legalidade é compartilhada', () => {
@@ -1464,6 +1469,109 @@ describe('movimento com escritor único (FUN-69)', () => {
     )).toBe(true);
   });
 
+  it('requestMove recusa unreachable para um destino fora do raio do BFS — nunca trava esperando', () => {
+    // O corredor padrão da arena não chega nem perto do raio; o ponto aqui é só a recusa
+    // TIPADA (RF-03 da spec da #763) — nunca um `walk-to` sem resposta.
+    const { session, ruleset, hero } = start();
+    const longe = { x: hero.position.x + 1000, y: hero.position.y };
+    expect(ruleset.requestMove(session, hero.id, longe)).toEqual({ ok: false, reason: 'unreachable' });
+  });
+});
+
+describe('walk-to distante na hunt: caminho no servidor e pausa do bot (#763)', () => {
+  // A arena padrão (4×3 de interior) não cabe um cadáver a seis tiles — um corredor comprido,
+  // de um tile de largura, dá ao BFS um único caminho possível e deixa o teste livre de
+  // ambiguidade sobre QUAL rota o servidor escolheu.
+  const corridorMap = {
+    id: 'corridor', z: 7,
+    grid: ['############', '#..........#', '############'],
+  };
+  const corridorRoute = {
+    id: 'corridor-loop', mapId: 'corridor',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  };
+  const corridorHunt = {
+    ...hunt, id: 'corridor', mapId: 'corridor', routeId: 'corridor-loop',
+    difficulties: {
+      // `respawnDelayMs` bem alto: só um rato morre dentro da janela do teste, então só um
+      // cadáver existe — nada a desambiguar ao procurar "o" cadáver com sobra.
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1_000_000 },
+    },
+  };
+
+  const startFar = () => {
+    const loaded = buildContent(raw({
+      // TTL bem folgado: o teste ainda vai andar seis tiles depois de o cadáver aparecer, e
+      // não pode correr risco de apodrecer no meio do caminho.
+      monsters: [{ ...ratWithDrop, corpseTtlMs: 300_000 }],
+      maps: [corridorMap], routes: [corridorRoute], hunts: [corridorHunt],
+      // Capacidade baixa (como `comDrop`): a espada (peso 50) nunca cabe na mochila — fica no
+      // cadáver, e é o ouro (sempre coletado, sem peso) que prova que `takeLoot` de fato agiu.
+      progression: [{ ...progression, startingCapacity: 10, capacityPerLevel: 0 }],
+    }));
+    const session = createHuntSession({
+      content: loaded, id: 'walk-to-far', huntId: 'corridor', difficulty: 'cautious', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      capacity: stats.capacity,
+    });
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('cadáver a seis tiles: walk-to chega, abre o cadáver e pega o loot', () => {
+    const { session, hero, ruleset } = startFar();
+    // Deixa o rato nascer perto do início e o herói matá-lo desarmado — o mesmo caminho de
+    // `comDrop`, só que num corredor comprido em vez da arena pequena.
+    run(session, 60_000, 100);
+    const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0);
+    expect(corpse).toBeDefined();
+    if (corpse === undefined) return;
+    // O herói patrulha só (1,1)/(2,1) — a briga pode tê-lo deixado em qualquer um dos dois.
+
+    // Reposiciona o cadáver seis tiles adiante no MESMO corredor (mutação de teste, como o
+    // `hero.position = ...` já usado em outros testes deste arquivo) — onde o rato de fato
+    // morreu já tem teste próprio (#722); aqui o que importa é só a distância do `walk-to`.
+    const destino = { x: corpse.position.x + 6, y: corpse.position.y, z: corpse.position.z };
+    Object.assign(corpse, { position: destino });
+
+    const walk = ruleset.requestMove(session, hero.id, destino);
+    expect(walk.ok).toBe(true);
+
+    // Seis passos retos (o corredor tem um tile de largura, sem diagonal possível) — tempo de
+    // sobra sem exagerar a ponto de o rato seguinte nascer e atrapalhar.
+    run(session, 8_000, 50);
+    expect(hero.position).toEqual(destino);
+
+    const opened = ruleset.openCorpse(session, hero.id, corpse.id);
+    expect(opened.ok).toBe(true);
+    if (opened.ok) expect(opened.corpse.items?.length).toBeGreaterThan(0);
+
+    // O ouro (sem peso) já foi coletado pelo Quick Loot automático no instante do abate (#721)
+    // — o que sobra no cadáver, e o que `takeLoot` reaplica o filtro em cima, é só a espada
+    // (peso 50 contra capacidade 10). `ok: true` é o critério de aceite da #763 (RF-04):
+    // chegar, abrir e pegar — capacidade justa já tem teste próprio no describe do #722.
+    const taken = ruleset.takeLoot(session, hero.id, corpse.id, null);
+    expect(taken.ok).toBe(true);
+  });
+
+  it('destino atrás de parede (fora do corredor) recusa unreachable, e o bot não trava', () => {
+    const { session, hero, ruleset } = startFar();
+    // (5, 0) é a parede norte do corredor — nunca adjacente livre, nunca alcançável.
+    const result = ruleset.requestMove(session, hero.id, { x: 5, y: 0 });
+    expect(result).toEqual({ ok: false, reason: 'unreachable' });
+    // O bot segue vivo: um passo comum ainda funciona depois da recusa.
+    run(session, 1_000, 50);
+    expect(session.ended).toBeNull();
+  });
 });
 
 // --- as cinco categorias do bot (FUN-84) -----------------------------------------------------

@@ -138,6 +138,18 @@ export function isToggleable(kind: InteractableKind): boolean {
 }
 
 /**
+ * As quatro portas (comum, de level, de chave, de quest) — nunca grama/stone-pile, que exigem
+ * ferramenta e nunca abrem "de passagem". Usado pelo walker de rota (`#playerStep`) E pelo BFS
+ * do `walk-to` distante (#763, `HuntRuleset.#planManualWalk`): as duas tratam uma porta FECHADA
+ * como algo que se abre sozinho ao encontrar no caminho, nunca como parede definitiva — a
+ * legalidade de `canOccupy`/`MovementWorld` continua bloqueando-a até o passo que a atravessa
+ * de fato tentar abri-la (`HuntRuleset.#useInteractable`).
+ */
+export function isDoorKind(kind: InteractableKind): boolean {
+  return kind === 'door' || kind === 'level-door' || kind === 'locked-door' || kind === 'quest-door';
+}
+
+/**
  * `floorChange` de um estado (T1: só a stone pile virada buraco). O Canary desce um andar no
  * MESMO tile ("floorchange down", ADR 0050 contexto) — rope/ladder (que trocam de andar pelo
  * outro sentido) ficam fora do escopo desta issue (#728, fora do escopo: "rope spot/ladder como
