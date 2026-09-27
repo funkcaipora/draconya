@@ -13,6 +13,15 @@ import { childrenOf, parseXml } from './xml.js';
 const COMMIT = 'a'.repeat(40);
 const PATH = 'data/items/items.xml';
 
+/** Staging carrega `appearanceId` (#748, o mesmo recurso que `outfitId` já usa em
+ *  `monsters.test.ts`/`asMonster`) — `itemSchema` não o declara, então todo teste que valida a
+ *  entidade CONVERTIDA contra o schema real precisa tirá-lo primeiro, como `promote-items.ts`
+ *  faz de verdade antes de escrever `data/items/generated/`. */
+function asItem(entity: unknown): unknown {
+  const { appearanceId: _appearanceId, ...rest } = entity as Record<string, unknown>;
+  return rest;
+}
+
 // Fixture SINTÉTICA no formato do Canary — números inventados, nunca um arquivo real copiado
 // (ADR 0019/0038 d.7).
 const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
@@ -265,6 +274,27 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="weight" value="100"/>
 	</item>
 	<item id="90041" article="an" name="test water"/>
+	<item id="90042" article="a" name="test rusted shield">
+		<attribute key="primarytype" value="valuables"/>
+		<attribute key="weaponType" value="shield"/>
+		<attribute key="defense" value="1"/>
+		<attribute key="weight" value="6500"/>
+	</item>
+	<item id="90043" name="test broken iks spear">
+		<attribute key="primarytype" value="axe weapons"/>
+		<attribute key="weight" value="1300"/>
+		<attribute key="attack" value="1"/>
+		<attribute key="defense" value="1"/>
+		<attribute key="weaponType" value="distance"/>
+		<attribute key="range" value="3"/>
+	</item>
+	<item id="90044" article="a" name="test slotless weapon">
+		<attribute key="primarytype" value="sword weapons"/>
+		<attribute key="weaponType" value="sword"/>
+		<attribute key="attack" value="10"/>
+		<attribute key="weight" value="3000"/>
+		<attribute key="imbuementslot" value="1"/>
+	</item>
 </items>
 `;
 
@@ -330,7 +360,7 @@ describe('convertItem', () => {
       weight: 35, attack: 14, defense: 12, extraDefense: 1, imbuementSlots: 2,
       weapon: { kind: 'melee', family: 'sword' },
     });
-    expect(itemSchema.parse(sword?.entity)).toBeTruthy();
+    expect(itemSchema.parse(asItem(sword?.entity))).toBeTruthy();
   });
 
   it('espada de duas mãos: twoHanded, requires.level e vocationId, unproperly', () => {
@@ -345,7 +375,7 @@ describe('convertItem', () => {
     const fireSword = convert('90003');
     expect(fireSword?.entity['attack']).toBe(24);
     expect(fireSword?.entity['weapon']).toMatchObject({ element: { type: 'fire', attack: 11 } });
-    expect(itemSchema.parse(fireSword?.entity)).toBeTruthy();
+    expect(itemSchema.parse(asItem(fireSword?.entity))).toBeTruthy();
   });
 
   it('bow real (com ammotype) vira arma de distância; throwing star sem ammotype fica fora', () => {
@@ -380,6 +410,26 @@ describe('convertItem', () => {
   it('quiver fica fora do corte', () => {
     const quiver = convert('90010');
     expect(quiver?.blockers[0]).toMatch(/quiver/);
+  });
+
+  it('arma sem <script>/slot declarado recebe slot "hand" por default (a maioria das armas do Canary)', () => {
+    const slotless = convert('90044');
+    expect(slotless?.blockers).toEqual([]);
+    expect(slotless?.entity).toMatchObject({ kind: 'weapon', slot: 'hand', imbuementSlots: 1 });
+    expect(itemSchema.parse(asItem(slotless?.entity))).toBeTruthy();
+  });
+
+  it('defense de item classificado "valuables"/"creature products" (curiosidade de quest) não entra na entidade', () => {
+    const rustedShield = convert('90042');
+    expect(rustedShield?.blockers).toEqual([]);
+    expect(rustedShield?.entity).toMatchObject({ kind: 'other' });
+    expect(rustedShield?.entity['defense']).toBeUndefined();
+    expect(rustedShield?.entity['weapon']).toBeUndefined();
+  });
+
+  it('arma de distância cujo primarytype MENTE (diz "axe weapons", weaponType é "distance") ainda cai fora do corte por falta de ammoFamily', () => {
+    const brokenSpear = convert('90043');
+    expect(brokenSpear?.blockers[0]).toMatch(/M34-04/);
   });
 
   it('helmet/armor/legs/boots pelo primarytype, com o slot correspondente', () => {
@@ -450,7 +500,7 @@ describe('convertItem', () => {
     });
     expect(item?.entity['reflect']).toEqual({ physical: { flat: 10 } });
     expect(item?.entity['cleavePercent']).toBe(20);
-    expect(itemSchema.parse(item?.entity)).toBeTruthy();
+    expect(itemSchema.parse(asItem(item?.entity))).toBeTruthy();
   });
 
   it('regeneração incompleta (sem o par de ticks) é descartada e registrada', () => {
@@ -586,7 +636,7 @@ describe('readItemCatalog e reconcileAuthored', () => {
       expect(catalog.skipped.some((s) => s.reason.includes('M34-04'))).toBe(true);
       expect(catalog.notes?.some((n) => n.includes('M34-03'))).toBe(true);
       for (const entities of catalog.slices.values()) {
-        for (const entity of entities) expect(() => itemSchema.parse(entity)).not.toThrow();
+        for (const entity of entities) expect(() => itemSchema.parse(asItem(entity))).not.toThrow();
       }
     });
   });

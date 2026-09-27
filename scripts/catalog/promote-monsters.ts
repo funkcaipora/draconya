@@ -14,8 +14,11 @@
 //     (`monsters`).
 //
 // Loot é validado contra o catálogo de itens REAL — `packages/content/data/items`, o que
-// `loadContent` de fato carrega hoje (o catálogo gerado por #573/#574 ainda mora só em
-// `packages/content/staging/items/`, sem promoção própria) —: uma linha de `loot.items` cujo
+// `loadContent` de fato carrega hoje. Desde a promoção de itens (#748, `promote-items.ts`) isso
+// inclui `data/items/generated/`, que `readItemCatalog` (abaixo) já lê sem mudança nenhuma —
+// `readEntitiesFrom(join(itemsDir, 'generated'))` sempre existiu aqui, escrito ANTES de haver o
+// que promover, porque a convenção de três camadas (autoral/gerado/override) é a mesma de
+// `packages/content/src/load.ts` para qualquer `data/<tipo>/`. Uma linha de `loot.items` cujo
 // `itemId` não existe nesse catálogo, ou que pede `max > 1` de um item que não empilha
 // (`rollModel: "canary"`, a mesma regra de `content.ts`), é removida e contada no relatório —
 // nunca falha o boot em silêncio. Rat, Rotworm, Dragon e Dragon Lord (#581) continuam
@@ -280,8 +283,8 @@ function formatReport(repoRoot: string, result: PromotionResult): string {
     'Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pura do Canary, '
       + '#578/#579) em `data/monsters/generated/` + `data/bestiary/baseline.json` + '
       + '`data/appearances/baseline.json`, e valida `loot.items` contra o catálogo de itens REAL '
-      + '(`packages/content/data/items` — o que `loadContent` de fato carrega hoje; o catálogo '
-      + 'gerado por #573/#574 ainda não tem promoção própria).',
+      + '(`packages/content/data/items`, autoral + `generated/` — o que `loadContent` de fato '
+      + 'carrega hoje; a promoção de itens é `promote-items.ts`, #748).',
     '',
     `${promotedCount} monstro(s) promovido(s) em ${result.slices.size} fatia(s):`,
     '',

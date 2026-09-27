@@ -91,7 +91,16 @@
         "min": 1,
         "max": 40
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "seeds",
+          "chance": 0.0049
+        },
+        {
+          "itemId": "carniphila-seeds",
+          "chance": 0.04166
+        }
+      ]
     },
     "abilities": [
       {
@@ -242,7 +251,16 @@
         "min": 1,
         "max": 95
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "dwarven-ring",
+          "chance": 0.0066
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0062
+        }
+      ]
     },
     "abilities": [
       {
@@ -436,7 +454,24 @@
         "min": 1,
         "max": 27
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "fir-cone",
+          "chance": 0.1493
+        },
+        {
+          "itemId": "dowser",
+          "chance": 0.1219
+        },
+        {
+          "itemId": "swampling-club",
+          "chance": 0.0513
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0095
+        }
+      ]
     },
     "abilities": [
       {
@@ -558,6 +593,18 @@
       },
       "items": [
         {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.02
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.02
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.0221
+        },
+        {
           "itemId": "ham",
           "chance": 0.012
         },
@@ -568,6 +615,22 @@
         {
           "itemId": "serpent-sword",
           "chance": 0.0078
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.007
+        },
+        {
+          "itemId": "terra-boots",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.0043
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.0032
         }
       ]
     },
@@ -729,18 +792,42 @@
       },
       "items": [
         {
+          "itemId": "stalking-seeds",
+          "chance": 0.2152
+        },
+        {
           "itemId": "small-diamond",
           "chance": 0.0714,
           "min": 1,
           "max": 3
         },
         {
+          "itemId": "green-crystal-fragment",
+          "chance": 0.0503
+        },
+        {
           "itemId": "dragon-necklace",
           "chance": 0.0454
         },
         {
+          "itemId": "magma-coat",
+          "chance": 0.0216
+        },
+        {
           "itemId": "bow",
           "chance": 0.02
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0178
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.017
+        },
+        {
+          "itemId": "muck-rod",
+          "chance": 0.0131
         }
       ]
     },
@@ -853,7 +940,16 @@
         "min": 1,
         "max": 12
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "swampling-club",
+          "chance": 0.0741
+        },
+        {
+          "itemId": "swampling-moss",
+          "chance": 0.199
+        }
+      ]
     },
     "abilities": [
       {

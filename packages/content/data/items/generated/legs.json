@@ -17,8 +17,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21168
+    }
   },
   {
     "id": "bast-legs",
@@ -49,8 +48,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35517
+    }
   },
   {
     "id": "bast-skirt",
@@ -63,8 +61,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3560
+    }
   },
   {
     "id": "blue-legs",
@@ -78,8 +75,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 645
+    }
   },
   {
     "id": "brass-legs",
@@ -93,8 +89,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3372
+    }
   },
   {
     "id": "broken-iks-faulds",
@@ -108,8 +103,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40531
+    }
   },
   {
     "id": "chain-legs",
@@ -123,8 +117,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3558
+    }
   },
   {
     "id": "chocolatey-dragon-scale-legs",
@@ -138,29 +131,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24402
-  },
-  {
-    "id": "crown-legs",
-    "name": "crown legs",
-    "kind": "armor",
-    "weight": 65,
-    "value": 60,
-    "slot": "legs",
-    "armor": 8,
-    "requires": {
-      "vocationId": [
-        "knight",
-        "paladin"
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3382
+    }
   },
   {
     "id": "dawnfire-pantaloons",
@@ -191,8 +162,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39166
+    }
   },
   {
     "id": "demon-legs",
@@ -206,8 +176,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3389
+    }
   },
   {
     "id": "depth-ocrea",
@@ -233,8 +202,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13996
+    }
   },
   {
     "id": "dragon-scale-legs",
@@ -248,8 +216,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3363
+    }
   },
   {
     "id": "dwarven-legs",
@@ -268,8 +235,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3398
+    }
   },
   {
     "id": "eldritch-breeches",
@@ -303,8 +269,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36667
+    }
   },
   {
     "id": "elven-legs",
@@ -318,8 +283,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3401
+    }
   },
   {
     "id": "exotic-legs",
@@ -342,8 +306,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35516
+    }
   },
   {
     "id": "fabulous-legs",
@@ -384,8 +347,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32617
+    }
   },
   {
     "id": "falcon-greaves",
@@ -426,8 +388,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28720
+    }
   },
   {
     "id": "genesis-serenity-legs",
@@ -461,8 +422,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51299
+    }
   },
   {
     "id": "gill-legs",
@@ -499,8 +459,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16106
+    }
   },
   {
     "id": "glacier-kilt",
@@ -529,8 +488,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 823
+    }
   },
   {
     "id": "gnome-legs",
@@ -567,8 +525,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27649
+    }
   },
   {
     "id": "golden-legs",
@@ -588,8 +545,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3364
+    }
   },
   {
     "id": "grasshopper-legs",
@@ -609,8 +565,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14087
+    }
   },
   {
     "id": "green-demon-legs",
@@ -624,8 +579,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 37607
+    }
   },
   {
     "id": "icy-culottes",
@@ -650,8 +604,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19366
+    }
   },
   {
     "id": "jade-legs",
@@ -683,8 +636,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50185
+    }
   },
   {
     "id": "jungle-survivor-legs",
@@ -707,29 +659,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50186
-  },
-  {
-    "id": "knight-legs",
-    "name": "knight legs",
-    "kind": "armor",
-    "weight": 70,
-    "value": 5000,
-    "slot": "legs",
-    "armor": 8,
-    "requires": {
-      "vocationId": [
-        "knight",
-        "paladin"
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3371
+    }
   },
   {
     "id": "leaf-legs",
@@ -742,23 +672,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9014
-  },
-  {
-    "id": "leather-legs",
-    "name": "leather legs",
-    "kind": "armor",
-    "weight": 18,
-    "value": 9,
-    "slot": "legs",
-    "armor": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3559
+    }
   },
   {
     "id": "lederhosen",
@@ -771,8 +685,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32097
+    }
   },
   {
     "id": "legs-of-enlightenment",
@@ -795,8 +708,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50269
+    }
   },
   {
     "id": "legs-of-wisdom",
@@ -819,8 +731,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50187
+    }
   },
   {
     "id": "lightning-legs",
@@ -849,8 +760,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 822
+    }
   },
   {
     "id": "magma-legs",
@@ -879,8 +789,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 821
+    }
   },
   {
     "id": "mammoth-fur-shorts",
@@ -893,8 +802,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7464
+    }
   },
   {
     "id": "midnight-sarong",
@@ -925,8 +833,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39167
+    }
   },
   {
     "id": "mutant-bone-kilt",
@@ -957,8 +864,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40595
+    }
   },
   {
     "id": "mutant-hide-trousers",
@@ -992,8 +898,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50184
+    }
   },
   {
     "id": "mutated-skin-legs",
@@ -1027,8 +932,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40590
+    }
   },
   {
     "id": "norcferatu-bloodstrider",
@@ -1059,8 +963,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51266
+    }
   },
   {
     "id": "norcferatu-fleshguards",
@@ -1083,8 +986,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51267
+    }
   },
   {
     "id": "norcferatu-thornwraps",
@@ -1118,8 +1020,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51265
+    }
   },
   {
     "id": "ornate-legs",
@@ -1142,8 +1043,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13999
+    }
   },
   {
     "id": "pirate-knee-breeches",
@@ -1157,23 +1057,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5918
-  },
-  {
-    "id": "plate-legs",
-    "name": "plate legs",
-    "kind": "armor",
-    "weight": 50,
-    "value": 115,
-    "slot": "legs",
-    "armor": 7,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3557
+    }
   },
   {
     "id": "prismatic-legs",
@@ -1204,8 +1088,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16111
+    }
   },
   {
     "id": "ranger-legs",
@@ -1222,8 +1105,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8095
+    }
   },
   {
     "id": "sanguine-greaves",
@@ -1260,8 +1142,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43881
+    }
   },
   {
     "id": "sanguine-legs",
@@ -1295,8 +1176,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43876
+    }
   },
   {
     "id": "sanguine-trousers",
@@ -1330,8 +1210,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50146
+    }
   },
   {
     "id": "soulful-legs",
@@ -1365,8 +1244,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32618
+    }
   },
   {
     "id": "soulshanks",
@@ -1397,8 +1275,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34092
+    }
   },
   {
     "id": "soulstrider",
@@ -1429,8 +1306,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34093
+    }
   },
   {
     "id": "stitched-mutant-hide-legs",
@@ -1464,8 +1340,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40589
+    }
   },
   {
     "id": "stoic-iks-culet",
@@ -1499,8 +1374,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44642
+    }
   },
   {
     "id": "stoic-iks-faulds",
@@ -1531,8 +1405,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44643
+    }
   },
   {
     "id": "studded-legs",
@@ -1546,8 +1419,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3362
+    }
   },
   {
     "id": "tatty-dragon-scale-legs",
@@ -1561,8 +1433,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24404
+    }
   },
   {
     "id": "terra-legs",
@@ -1591,8 +1462,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 812
+    }
   },
   {
     "id": "trousers-of-the-ancients",
@@ -1606,8 +1476,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9383
+    }
   },
   {
     "id": "wereboar-loincloth",
@@ -1621,8 +1490,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22087
+    }
   },
   {
     "id": "yalahari-leg-piece",
@@ -1653,27 +1521,6 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8863
-  },
-  {
-    "id": "zaoan-legs",
-    "name": "Zaoan legs",
-    "kind": "armor",
-    "weight": 66,
-    "value": 0,
-    "slot": "legs",
-    "armor": 8,
-    "absorb": {
-      "physical": {
-        "percent": 2
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 10387
+    }
   }
 ]

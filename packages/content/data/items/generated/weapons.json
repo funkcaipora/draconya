@@ -23,8 +23,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7414
+    }
   },
   {
     "id": "amber-axe",
@@ -61,8 +60,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47375
+    }
   },
   {
     "id": "amber-bludgeon",
@@ -99,8 +97,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47370
+    }
   },
   {
     "id": "amber-bow",
@@ -141,8 +138,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47371
+    }
   },
   {
     "id": "amber-crossbow",
@@ -183,8 +179,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47377
+    }
   },
   {
     "id": "amber-cudgel",
@@ -221,8 +216,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47376
+    }
   },
   {
     "id": "amber-greataxe",
@@ -259,8 +253,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47369
+    }
   },
   {
     "id": "amber-rod",
@@ -306,8 +299,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47373
+    }
   },
   {
     "id": "amber-sabre",
@@ -344,8 +336,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47374
+    }
   },
   {
     "id": "amber-slayer",
@@ -382,8 +373,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47368
+    }
   },
   {
     "id": "amber-staff",
@@ -408,8 +398,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7426
+    }
   },
   {
     "id": "amber-wand",
@@ -455,8 +444,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 47372
+    }
   },
   {
     "id": "angelic-axe",
@@ -481,8 +469,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7436
+    }
   },
   {
     "id": "arbalest",
@@ -509,8 +496,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5803
+    }
   },
   {
     "id": "arcane-staff",
@@ -535,8 +521,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3341
+    }
   },
   {
     "id": "assassin-dagger",
@@ -560,8 +545,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7404
+    }
   },
   {
     "id": "avenger",
@@ -587,8 +571,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6527
+    }
   },
   {
     "id": "axe",
@@ -607,8 +590,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3274
+    }
   },
   {
     "id": "axe-of-destruction",
@@ -633,8 +615,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27451
+    }
   },
   {
     "id": "banana-staff",
@@ -654,8 +635,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3348
+    }
   },
   {
     "id": "barbarian-axe",
@@ -680,8 +660,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3317
+    }
   },
   {
     "id": "battle-axe",
@@ -705,8 +684,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3266
+    }
   },
   {
     "id": "battle-hammer",
@@ -725,8 +703,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3305
+    }
   },
   {
     "id": "beastslayer-axe",
@@ -751,8 +728,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3344
+    }
   },
   {
     "id": "berserker",
@@ -778,8 +754,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7403
+    }
   },
   {
     "id": "blacksteel-sword",
@@ -805,8 +780,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7406
+    }
   },
   {
     "id": "blade-of-corruption",
@@ -831,8 +805,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11693
+    }
   },
   {
     "id": "blade-of-destruction",
@@ -857,8 +830,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27449
+    }
   },
   {
     "id": "blessed-sceptre",
@@ -883,8 +855,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7429
+    }
   },
   {
     "id": "bloody-edge",
@@ -908,8 +879,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7416
+    }
   },
   {
     "id": "bone-club",
@@ -928,8 +898,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3337
+    }
   },
   {
     "id": "bone-sword",
@@ -948,8 +917,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3338
+    }
   },
   {
     "id": "bonebreaker",
@@ -974,29 +942,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7428
-  },
-  {
-    "id": "bow",
-    "name": "bow",
-    "kind": "weapon",
-    "weight": 31,
-    "value": 400,
-    "slot": "hand",
-    "twoHanded": true,
-    "weapon": {
-      "kind": "distance",
-      "family": "distance",
-      "range": 6,
-      "ammoFamily": "arrow"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3350
+    }
   },
   {
     "id": "bow-of-cataclysm",
@@ -1037,8 +983,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31581
+    }
   },
   {
     "id": "bow-of-destruction",
@@ -1066,8 +1011,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27455
+    }
   },
   {
     "id": "bright-sword",
@@ -1092,33 +1036,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3295
-  },
-  {
-    "id": "broadsword",
-    "name": "broadsword",
-    "kind": "weapon",
-    "weight": 52.5,
-    "value": 10,
-    "slot": "hand",
-    "twoHanded": true,
-    "attack": 26,
-    "defense": 23,
-    "imbuementSlots": 3,
-    "requires": {
-      "vocationId": "knight"
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "sword"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3301
+    }
   },
   {
     "id": "brutetamers-staff",
@@ -1142,8 +1060,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7379
+    }
   },
   {
     "id": "butchers-axe",
@@ -1167,8 +1084,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7412
+    }
   },
   {
     "id": "calamity",
@@ -1193,8 +1109,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8104
+    }
   },
   {
     "id": "carlin-sword",
@@ -1214,8 +1129,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3283
+    }
   },
   {
     "id": "chain-bolter",
@@ -1242,8 +1156,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8022
+    }
   },
   {
     "id": "chaos-mace",
@@ -1267,8 +1180,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7427
+    }
   },
   {
     "id": "chiller",
@@ -1296,8 +1208,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21350
+    }
   },
   {
     "id": "chopper-of-destruction",
@@ -1323,8 +1234,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27452
+    }
   },
   {
     "id": "clerical-mace",
@@ -1349,8 +1259,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3311
+    }
   },
   {
     "id": "club",
@@ -1369,8 +1278,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3270
+    }
   },
   {
     "id": "club-of-the-fury",
@@ -1389,8 +1297,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9385
+    }
   },
   {
     "id": "cobra-crossbow",
@@ -1426,8 +1333,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30393
+    }
   },
   {
     "id": "cobra-rod",
@@ -1467,8 +1373,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30400
+    }
   },
   {
     "id": "cobra-wand",
@@ -1509,8 +1414,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30399
+    }
   },
   {
     "id": "combat-knife",
@@ -1529,8 +1433,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3292
+    }
   },
   {
     "id": "composite-hornbow",
@@ -1558,8 +1461,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8027
+    }
   },
   {
     "id": "cowtana",
@@ -1583,8 +1485,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21177
+    }
   },
   {
     "id": "cranial-basher",
@@ -1608,8 +1509,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7415
+    }
   },
   {
     "id": "crimson-sword",
@@ -1628,30 +1528,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 860
-  },
-  {
-    "id": "crossbow",
-    "name": "crossbow",
-    "kind": "weapon",
-    "weight": 40,
-    "value": 500,
-    "slot": "hand",
-    "twoHanded": true,
-    "imbuementSlots": 3,
-    "weapon": {
-      "kind": "distance",
-      "family": "distance",
-      "range": 5,
-      "ammoFamily": "bolt"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3349
+    }
   },
   {
     "id": "crossbow-of-destruction",
@@ -1679,8 +1556,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27456
+    }
   },
   {
     "id": "crowbar",
@@ -1699,8 +1575,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3304
+    }
   },
   {
     "id": "crude-umbral-axe",
@@ -1725,8 +1600,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20070
+    }
   },
   {
     "id": "crude-umbral-blade",
@@ -1751,8 +1625,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20064
+    }
   },
   {
     "id": "crude-umbral-bow",
@@ -1779,8 +1652,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20082
+    }
   },
   {
     "id": "crude-umbral-chopper",
@@ -1805,8 +1677,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20073
+    }
   },
   {
     "id": "crude-umbral-crossbow",
@@ -1833,8 +1704,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20085
+    }
   },
   {
     "id": "crude-umbral-hammer",
@@ -1859,8 +1729,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20079
+    }
   },
   {
     "id": "crude-umbral-mace",
@@ -1885,8 +1754,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20076
+    }
   },
   {
     "id": "crude-umbral-slayer",
@@ -1911,8 +1779,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20067
+    }
   },
   {
     "id": "crystal-crossbow",
@@ -1939,8 +1806,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16163
+    }
   },
   {
     "id": "crystal-mace",
@@ -1965,8 +1831,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3333
+    }
   },
   {
     "id": "crystal-sword",
@@ -1991,8 +1856,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7449
+    }
   },
   {
     "id": "crystalline-axe",
@@ -2025,8 +1889,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16161
+    }
   },
   {
     "id": "crystalline-sword",
@@ -2050,8 +1913,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16160
+    }
   },
   {
     "id": "dagger",
@@ -2070,8 +1932,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3267
+    }
   },
   {
     "id": "daramian-axe",
@@ -2090,8 +1951,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3329
+    }
   },
   {
     "id": "daramian-mace",
@@ -2110,8 +1970,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3327
+    }
   },
   {
     "id": "daramian-waraxe",
@@ -2136,8 +1995,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3328
+    }
   },
   {
     "id": "dark-trinity-mace",
@@ -2160,8 +2018,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8099
+    }
   },
   {
     "id": "deepling-axe",
@@ -2184,8 +2041,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13991
+    }
   },
   {
     "id": "deepling-ceremonial-dagger",
@@ -2230,8 +2086,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28825
+    }
   },
   {
     "id": "deepling-fork",
@@ -2280,8 +2135,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28826
+    }
   },
   {
     "id": "deepling-squelcher",
@@ -2305,8 +2159,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14250
+    }
   },
   {
     "id": "deepling-staff",
@@ -2330,8 +2183,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13987
+    }
   },
   {
     "id": "demonbone",
@@ -2355,8 +2207,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7431
+    }
   },
   {
     "id": "demonrage-sword",
@@ -2382,8 +2233,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7382
+    }
   },
   {
     "id": "demonwing-axe",
@@ -2409,8 +2259,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8098
+    }
   },
   {
     "id": "devileye",
@@ -2438,8 +2287,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8024
+    }
   },
   {
     "id": "diamond-sceptre",
@@ -2462,8 +2310,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7387
+    }
   },
   {
     "id": "djinn-blade",
@@ -2488,58 +2335,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3339
-  },
-  {
-    "id": "double-axe",
-    "name": "double axe",
-    "kind": "weapon",
-    "weight": 70,
-    "value": 260,
-    "slot": "hand",
-    "twoHanded": true,
-    "attack": 35,
-    "defense": 12,
-    "requires": {
-      "level": 25,
-      "vocationId": "knight"
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "axe",
-      "wieldUnproperly": true
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3275
-  },
-  {
-    "id": "dragon-hammer",
-    "name": "dragon hammer",
-    "kind": "weapon",
-    "weight": 97,
-    "value": 2000,
-    "slot": "hand",
-    "attack": 32,
-    "defense": 20,
-    "requires": {
-      "level": 25
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "club",
-      "wieldUnproperly": true
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3322
+    }
   },
   {
     "id": "dragon-lance",
@@ -2564,60 +2360,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3302
-  },
-  {
-    "id": "dragon-slayer",
-    "name": "dragon slayer",
-    "kind": "weapon",
-    "weight": 82,
-    "value": 15000,
-    "slot": "hand",
-    "twoHanded": true,
-    "attack": 44,
-    "defense": 28,
-    "imbuementSlots": 3,
-    "requires": {
-      "level": 45,
-      "vocationId": "knight"
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "sword",
-      "wieldUnproperly": true
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 7402
-  },
-  {
-    "id": "dragonbone-staff",
-    "name": "dragonbone staff",
-    "kind": "weapon",
-    "weight": 18,
-    "value": 3000,
-    "slot": "hand",
-    "attack": 35,
-    "defense": 18,
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 30
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "club",
-      "wieldUnproperly": true
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 7430
+    }
   },
   {
     "id": "draining-inferniarch-arbalest",
@@ -2660,8 +2403,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49862
+    }
   },
   {
     "id": "draining-inferniarch-battleaxe",
@@ -2702,8 +2444,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49865
+    }
   },
   {
     "id": "draining-inferniarch-blade",
@@ -2744,8 +2485,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49877
+    }
   },
   {
     "id": "draining-inferniarch-bow",
@@ -2788,8 +2528,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49859
+    }
   },
   {
     "id": "draining-inferniarch-flail",
@@ -2830,8 +2569,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49871
+    }
   },
   {
     "id": "draining-inferniarch-greataxe",
@@ -2873,8 +2611,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49868
+    }
   },
   {
     "id": "draining-inferniarch-rod",
@@ -2923,8 +2660,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49886
+    }
   },
   {
     "id": "draining-inferniarch-slayer",
@@ -2966,8 +2702,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49880
+    }
   },
   {
     "id": "draining-inferniarch-wand",
@@ -3016,8 +2751,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49883
+    }
   },
   {
     "id": "draining-inferniarch-warhammer",
@@ -3059,8 +2793,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49874
+    }
   },
   {
     "id": "drakinata",
@@ -3085,8 +2818,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10388
+    }
   },
   {
     "id": "dreaded-cleaver",
@@ -3110,8 +2842,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7419
+    }
   },
   {
     "id": "dream-blossom-staff",
@@ -3151,8 +2882,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25700
+    }
   },
   {
     "id": "dwarven-axe",
@@ -3177,8 +2907,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3323
+    }
   },
   {
     "id": "earth-barbaric-axe-replica",
@@ -3197,8 +2926,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25950
+    }
   },
   {
     "id": "earth-basher-replica",
@@ -3217,8 +2945,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25957
+    }
   },
   {
     "id": "earth-blacksteel-replica",
@@ -3237,8 +2964,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25948
+    }
   },
   {
     "id": "earth-cleric-mace-replica",
@@ -3257,8 +2983,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25955
+    }
   },
   {
     "id": "earth-crystal-mace-replica",
@@ -3277,8 +3002,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25956
+    }
   },
   {
     "id": "earth-headchopper-replica",
@@ -3297,8 +3021,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25953
+    }
   },
   {
     "id": "earth-heroic-axe-replica",
@@ -3317,8 +3040,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25952
+    }
   },
   {
     "id": "earth-knight-axe-replica",
@@ -3337,8 +3059,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25951
+    }
   },
   {
     "id": "earth-mystic-blade-replica",
@@ -3357,8 +3078,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25947
+    }
   },
   {
     "id": "earth-orcish-maul-replica",
@@ -3377,8 +3097,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25958
+    }
   },
   {
     "id": "earth-relic-sword-replica",
@@ -3397,8 +3116,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25946
+    }
   },
   {
     "id": "earth-slayer-replica",
@@ -3417,8 +3135,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25949
+    }
   },
   {
     "id": "earth-spike-sword-replica",
@@ -3437,8 +3154,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25945
+    }
   },
   {
     "id": "earth-war-axe-replica",
@@ -3457,8 +3173,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25954
+    }
   },
   {
     "id": "earth-war-hammer-replica",
@@ -3477,8 +3192,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25959
+    }
   },
   {
     "id": "eldritch-bow",
@@ -3517,8 +3231,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36664
+    }
   },
   {
     "id": "eldritch-claymore",
@@ -3557,8 +3270,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36657
+    }
   },
   {
     "id": "eldritch-greataxe",
@@ -3593,8 +3305,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36661
+    }
   },
   {
     "id": "eldritch-rod",
@@ -3640,8 +3351,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36674
+    }
   },
   {
     "id": "eldritch-wand",
@@ -3686,8 +3396,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36668
+    }
   },
   {
     "id": "eldritch-warmace",
@@ -3726,8 +3435,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36659
+    }
   },
   {
     "id": "elethriels-elemental-bow",
@@ -3753,8 +3461,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8030
+    }
   },
   {
     "id": "elvish-bow",
@@ -3776,8 +3483,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7438
+    }
   },
   {
     "id": "emerald-sword",
@@ -3802,8 +3508,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8102
+    }
   },
   {
     "id": "enchanted-staff",
@@ -3824,8 +3529,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3321
+    }
   },
   {
     "id": "energized-limb",
@@ -3870,8 +3574,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29425
+    }
   },
   {
     "id": "energy-axe-replica",
@@ -3890,8 +3593,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25965
+    }
   },
   {
     "id": "energy-basher-replica",
@@ -3910,8 +3612,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25972
+    }
   },
   {
     "id": "energy-blacksteel-replica",
@@ -3930,8 +3631,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25963
+    }
   },
   {
     "id": "energy-blade-replica",
@@ -3950,8 +3650,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25962
+    }
   },
   {
     "id": "energy-cleric-mace-replica",
@@ -3970,8 +3669,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25970
+    }
   },
   {
     "id": "energy-headchopper-replica",
@@ -3990,8 +3688,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25968
+    }
   },
   {
     "id": "energy-heroic-axe-replica",
@@ -4010,8 +3707,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25967
+    }
   },
   {
     "id": "energy-knight-axe-replica",
@@ -4030,8 +3726,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25966
+    }
   },
   {
     "id": "energy-mace-replica",
@@ -4050,8 +3745,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25971
+    }
   },
   {
     "id": "energy-orcish-maul-replica",
@@ -4070,8 +3764,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25973
+    }
   },
   {
     "id": "energy-relic-sword-replica",
@@ -4090,8 +3783,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25961
+    }
   },
   {
     "id": "energy-slayer-replica",
@@ -4110,8 +3802,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25964
+    }
   },
   {
     "id": "energy-spike-sword-replica",
@@ -4130,8 +3821,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25960
+    }
   },
   {
     "id": "energy-war-axe-replica",
@@ -4150,8 +3840,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25969
+    }
   },
   {
     "id": "energy-war-hammer-replica",
@@ -4170,8 +3859,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25974
+    }
   },
   {
     "id": "epee",
@@ -4195,8 +3883,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3326
+    }
   },
   {
     "id": "epiphany",
@@ -4221,8 +3908,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8103
+    }
   },
   {
     "id": "execowtioner-axe",
@@ -4246,8 +3932,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21176
+    }
   },
   {
     "id": "executioner",
@@ -4273,8 +3958,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7453
+    }
   },
   {
     "id": "falcon-battleaxe",
@@ -4317,8 +4001,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28724
+    }
   },
   {
     "id": "falcon-bow",
@@ -4359,8 +4042,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28718
+    }
   },
   {
     "id": "falcon-longsword",
@@ -4399,8 +4081,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28723
+    }
   },
   {
     "id": "falcon-mace",
@@ -4443,8 +4124,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28725
+    }
   },
   {
     "id": "falcon-rod",
@@ -4486,8 +4166,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28716
+    }
   },
   {
     "id": "falcon-wand",
@@ -4529,8 +4208,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28717
+    }
   },
   {
     "id": "farmers-avenger",
@@ -4550,8 +4228,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9386
+    }
   },
   {
     "id": "ferumbras-staff",
@@ -4574,8 +4251,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22764
+    }
   },
   {
     "id": "fiery-barbarian-axe-replica",
@@ -4594,8 +4270,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25920
+    }
   },
   {
     "id": "fiery-basher-replica",
@@ -4614,8 +4289,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25927
+    }
   },
   {
     "id": "fiery-clerical-mace-replica",
@@ -4634,8 +4308,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25925
+    }
   },
   {
     "id": "fiery-crystal-mace-replica",
@@ -4654,8 +4327,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25926
+    }
   },
   {
     "id": "fiery-dragon-slayer-replica",
@@ -4674,8 +4346,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25919
+    }
   },
   {
     "id": "fiery-headchopper-replica",
@@ -4694,8 +4365,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25923
+    }
   },
   {
     "id": "fiery-heroic-axe-replica",
@@ -4714,8 +4384,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25922
+    }
   },
   {
     "id": "fiery-knight-axe-replica",
@@ -4734,8 +4403,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25921
+    }
   },
   {
     "id": "fiery-mystic-blade-replica",
@@ -4754,8 +4422,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25917
+    }
   },
   {
     "id": "fiery-orcish-maul-replica",
@@ -4774,8 +4441,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25928
+    }
   },
   {
     "id": "fiery-relic-sword-replica",
@@ -4794,8 +4460,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25916
+    }
   },
   {
     "id": "fiery-spike-sword-replica",
@@ -4814,8 +4479,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25915
+    }
   },
   {
     "id": "fiery-war-axe-replica",
@@ -4834,8 +4498,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25924
+    }
   },
   {
     "id": "fiery-war-hammer-replica",
@@ -4854,8 +4517,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25929
+    }
   },
   {
     "id": "fire-axe",
@@ -4883,8 +4545,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3320
+    }
   },
   {
     "id": "fire-blacksteel-replica",
@@ -4903,37 +4564,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25918
-  },
-  {
-    "id": "fire-sword",
-    "name": "fire sword",
-    "kind": "weapon",
-    "weight": 23,
-    "value": 1000,
-    "slot": "hand",
-    "attack": 24,
-    "defense": 20,
-    "extraDefense": 1,
-    "requires": {
-      "level": 30
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "sword",
-      "wieldUnproperly": true,
-      "element": {
-        "type": "fire",
-        "attack": 11
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3280
+    }
   },
   {
     "id": "furry-club",
@@ -4957,8 +4588,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7432
+    }
   },
   {
     "id": "giant-smithhammer",
@@ -4977,8 +4607,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3208
+    }
   },
   {
     "id": "giant-sword",
@@ -5004,8 +4633,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3281
+    }
   },
   {
     "id": "gilded-eldritch-bow",
@@ -5044,8 +4672,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36665
+    }
   },
   {
     "id": "gilded-eldritch-claymore",
@@ -5084,8 +4711,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36658
+    }
   },
   {
     "id": "gilded-eldritch-greataxe",
@@ -5120,8 +4746,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36662
+    }
   },
   {
     "id": "gilded-eldritch-rod",
@@ -5167,8 +4792,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36675
+    }
   },
   {
     "id": "gilded-eldritch-wand",
@@ -5213,8 +4837,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36669
+    }
   },
   {
     "id": "gilded-eldritch-warmace",
@@ -5253,8 +4876,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36660
+    }
   },
   {
     "id": "glacial-rod",
@@ -5290,8 +4912,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16118
+    }
   },
   {
     "id": "glooth-axe",
@@ -5321,8 +4942,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21180
+    }
   },
   {
     "id": "glooth-blade",
@@ -5352,8 +4972,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21179
+    }
   },
   {
     "id": "glooth-club",
@@ -5383,8 +5002,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21178
+    }
   },
   {
     "id": "glooth-whip",
@@ -5408,8 +5026,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21172
+    }
   },
   {
     "id": "glorious-axe",
@@ -5434,8 +5051,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7454
+    }
   },
   {
     "id": "gluttons-mace",
@@ -5454,8 +5070,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9373
+    }
   },
   {
     "id": "gnome-sword",
@@ -5498,8 +5113,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27651
+    }
   },
   {
     "id": "golden-axe",
@@ -5519,8 +5133,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29286
+    }
   },
   {
     "id": "golden-sickle",
@@ -5539,8 +5152,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3306
+    }
   },
   {
     "id": "grand-sanguine-battleaxe",
@@ -5582,8 +5194,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43875
+    }
   },
   {
     "id": "grand-sanguine-blade",
@@ -5625,8 +5236,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43865
+    }
   },
   {
     "id": "grand-sanguine-bludgeon",
@@ -5668,8 +5278,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43873
+    }
   },
   {
     "id": "grand-sanguine-bow",
@@ -5714,8 +5323,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43878
+    }
   },
   {
     "id": "grand-sanguine-coil",
@@ -5768,8 +5376,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43883
+    }
   },
   {
     "id": "grand-sanguine-crossbow",
@@ -5814,8 +5421,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43880
+    }
   },
   {
     "id": "grand-sanguine-cudgel",
@@ -5857,8 +5463,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43867
+    }
   },
   {
     "id": "grand-sanguine-hatchet",
@@ -5900,8 +5505,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43869
+    }
   },
   {
     "id": "grand-sanguine-razor",
@@ -5943,8 +5547,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43871
+    }
   },
   {
     "id": "grand-sanguine-rod",
@@ -5997,8 +5600,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43886
+    }
   },
   {
     "id": "great-axe",
@@ -6024,8 +5626,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3303
+    }
   },
   {
     "id": "guardian-axe",
@@ -6049,8 +5650,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14043
+    }
   },
   {
     "id": "guardian-halberd",
@@ -6075,37 +5675,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3315
-  },
-  {
-    "id": "hailstorm-rod",
-    "name": "hailstorm rod",
-    "kind": "weapon",
-    "weight": 27,
-    "value": 3000,
-    "slot": "hand",
-    "requires": {
-      "level": 33,
-      "vocationId": "druid"
-    },
-    "weapon": {
-      "kind": "wand",
-      "family": "rod",
-      "range": 3,
-      "damageType": "ice",
-      "manaPerHit": 13,
-      "damage": {
-        "min": 56,
-        "max": 74
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3067
+    }
   },
   {
     "id": "halberd",
@@ -6129,8 +5699,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3269
+    }
   },
   {
     "id": "hammer-of-destruction",
@@ -6156,8 +5725,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27454
+    }
   },
   {
     "id": "hammer-of-mighty-cheating",
@@ -6176,8 +5744,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12510
+    }
   },
   {
     "id": "hammer-of-prophecy",
@@ -6202,8 +5769,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7450
+    }
   },
   {
     "id": "hammer-of-wrath",
@@ -6229,8 +5795,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3332
+    }
   },
   {
     "id": "hand-axe",
@@ -6249,8 +5814,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3268
+    }
   },
   {
     "id": "hatchet",
@@ -6269,8 +5833,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3276
+    }
   },
   {
     "id": "haunted-blade",
@@ -6296,8 +5859,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7407
+    }
   },
   {
     "id": "havoc-blade",
@@ -6323,8 +5885,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7405
+    }
   },
   {
     "id": "headchopper",
@@ -6350,8 +5911,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7380
+    }
   },
   {
     "id": "heavy-mace",
@@ -6376,8 +5936,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3340
+    }
   },
   {
     "id": "heavy-machete",
@@ -6396,8 +5955,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3330
+    }
   },
   {
     "id": "heavy-trident",
@@ -6421,8 +5979,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12683
+    }
   },
   {
     "id": "hellforged-axe",
@@ -6447,8 +6004,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8096
+    }
   },
   {
     "id": "heroic-axe",
@@ -6473,8 +6029,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7389
+    }
   },
   {
     "id": "hive-bow",
@@ -6502,8 +6057,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14246
+    }
   },
   {
     "id": "hive-scythe",
@@ -6527,8 +6081,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14089
+    }
   },
   {
     "id": "ice-rapier",
@@ -6552,8 +6105,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3284
+    }
   },
   {
     "id": "icicle-bow",
@@ -6577,8 +6129,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19362
+    }
   },
   {
     "id": "icy-barbarian-axe-replica",
@@ -6597,8 +6148,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25935
+    }
   },
   {
     "id": "icy-blacksteel-replica",
@@ -6617,8 +6167,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25933
+    }
   },
   {
     "id": "icy-clerical-mace-replica",
@@ -6637,8 +6186,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25940
+    }
   },
   {
     "id": "icy-cranial-basher-replica",
@@ -6657,8 +6205,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25942
+    }
   },
   {
     "id": "icy-crystal-mace-replica",
@@ -6677,8 +6224,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25941
+    }
   },
   {
     "id": "icy-dragon-slayer-replica",
@@ -6697,8 +6243,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25934
+    }
   },
   {
     "id": "icy-headchopper-replica",
@@ -6717,8 +6262,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25938
+    }
   },
   {
     "id": "icy-heroic-axe-replica",
@@ -6737,8 +6281,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25937
+    }
   },
   {
     "id": "icy-knight-axe-replica",
@@ -6757,8 +6300,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25936
+    }
   },
   {
     "id": "icy-mystic-blade-replica",
@@ -6777,8 +6319,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25932
+    }
   },
   {
     "id": "icy-orcish-maul-replica",
@@ -6797,8 +6338,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25943
+    }
   },
   {
     "id": "icy-relic-sword-replica",
@@ -6817,8 +6357,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25931
+    }
   },
   {
     "id": "icy-spike-sword-replica",
@@ -6837,8 +6376,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25930
+    }
   },
   {
     "id": "icy-war-axe-replica",
@@ -6857,8 +6395,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25939
+    }
   },
   {
     "id": "icy-war-hammer-replica",
@@ -6877,8 +6414,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25944
+    }
   },
   {
     "id": "impaler",
@@ -6902,8 +6438,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7435
+    }
   },
   {
     "id": "impaler-of-the-igniter",
@@ -6931,8 +6466,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22760
+    }
   },
   {
     "id": "incredible-mumpiz-slayer",
@@ -6951,8 +6485,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9396
+    }
   },
   {
     "id": "inferniarch-arbalest",
@@ -6992,8 +6525,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49522
+    }
   },
   {
     "id": "inferniarch-battleaxe",
@@ -7031,8 +6563,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49523
+    }
   },
   {
     "id": "inferniarch-blade",
@@ -7070,8 +6601,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49527
+    }
   },
   {
     "id": "inferniarch-bow",
@@ -7112,8 +6642,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49520
+    }
   },
   {
     "id": "inferniarch-flail",
@@ -7151,8 +6680,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49525
+    }
   },
   {
     "id": "inferniarch-greataxe",
@@ -7191,8 +6719,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49524
+    }
   },
   {
     "id": "inferniarch-rod",
@@ -7238,8 +6765,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49529
+    }
   },
   {
     "id": "inferniarch-slayer",
@@ -7278,8 +6804,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49530
+    }
   },
   {
     "id": "inferniarch-wand",
@@ -7325,8 +6850,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49528
+    }
   },
   {
     "id": "inferniarch-warhammer",
@@ -7365,8 +6889,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49526
+    }
   },
   {
     "id": "iron-hammer",
@@ -7385,8 +6908,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3310
+    }
   },
   {
     "id": "ironworker",
@@ -7413,8 +6935,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8025
+    }
   },
   {
     "id": "jade-hammer",
@@ -7438,8 +6959,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7422
+    }
   },
   {
     "id": "jagged-sword",
@@ -7459,8 +6979,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7774
+    }
   },
   {
     "id": "jungle-bow",
@@ -7501,8 +7020,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35518
+    }
   },
   {
     "id": "jungle-flail",
@@ -7528,8 +7046,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35514
+    }
   },
   {
     "id": "jungle-rod",
@@ -7571,8 +7088,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35521
+    }
   },
   {
     "id": "jungle-wand",
@@ -7614,8 +7130,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35522
+    }
   },
   {
     "id": "justice-seeker",
@@ -7639,8 +7154,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7390
+    }
   },
   {
     "id": "katana",
@@ -7660,8 +7174,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3300
+    }
   },
   {
     "id": "knife",
@@ -7680,8 +7193,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3291
+    }
   },
   {
     "id": "knight-axe",
@@ -7706,8 +7218,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3318
+    }
   },
   {
     "id": "lich-staff",
@@ -7731,8 +7242,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3343
+    }
   },
   {
     "id": "life-preserver",
@@ -7757,8 +7267,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17813
+    }
   },
   {
     "id": "light-mace",
@@ -7777,8 +7286,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3325
+    }
   },
   {
     "id": "lion-axe",
@@ -7816,8 +7324,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34253
+    }
   },
   {
     "id": "lion-hammer",
@@ -7855,8 +7362,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34254
+    }
   },
   {
     "id": "lion-longbow",
@@ -7897,8 +7403,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34150
+    }
   },
   {
     "id": "lion-longsword",
@@ -7936,8 +7441,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34155
+    }
   },
   {
     "id": "lion-rod",
@@ -7978,8 +7482,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34151
+    }
   },
   {
     "id": "lion-wand",
@@ -8019,8 +7522,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34152
+    }
   },
   {
     "id": "living-vine-bow",
@@ -8061,28 +7563,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29417
-  },
-  {
-    "id": "longsword",
-    "name": "longsword",
-    "kind": "weapon",
-    "weight": 42,
-    "value": 51,
-    "slot": "hand",
-    "attack": 17,
-    "defense": 14,
-    "weapon": {
-      "kind": "melee",
-      "family": "sword"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3285
+    }
   },
   {
     "id": "lunar-staff",
@@ -8107,28 +7588,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7424
-  },
-  {
-    "id": "mace",
-    "name": "mace",
-    "kind": "weapon",
-    "weight": 38,
-    "value": 30,
-    "slot": "hand",
-    "attack": 16,
-    "defense": 11,
-    "weapon": {
-      "kind": "melee",
-      "family": "club"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3286
+    }
   },
   {
     "id": "mace-of-destruction",
@@ -8153,28 +7613,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27453
-  },
-  {
-    "id": "machete",
-    "name": "machete",
-    "kind": "weapon",
-    "weight": 16.5,
-    "value": 6,
-    "slot": "hand",
-    "attack": 12,
-    "defense": 9,
-    "weapon": {
-      "kind": "melee",
-      "family": "sword"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3308
+    }
   },
   {
     "id": "magic-longsword",
@@ -8199,8 +7638,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3278
+    }
   },
   {
     "id": "magic-sword",
@@ -8225,8 +7663,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3288
+    }
   },
   {
     "id": "maimer",
@@ -8250,8 +7687,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22762
+    }
   },
   {
     "id": "mallet-handle",
@@ -8270,8 +7706,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27525
+    }
   },
   {
     "id": "mammoth-whopper",
@@ -8294,8 +7729,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7381
+    }
   },
   {
     "id": "mercenary-sword",
@@ -8320,8 +7754,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7386
+    }
   },
   {
     "id": "metal-bat",
@@ -8344,8 +7777,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21171
+    }
   },
   {
     "id": "mino-lance",
@@ -8368,8 +7800,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21174
+    }
   },
   {
     "id": "modified-crossbow",
@@ -8396,8 +7827,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8021
+    }
   },
   {
     "id": "moohtant-cudgel",
@@ -8421,8 +7851,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21173
+    }
   },
   {
     "id": "moonlight-rod",
@@ -8450,8 +7879,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3070
+    }
   },
   {
     "id": "morning-star",
@@ -8470,8 +7898,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3282
+    }
   },
   {
     "id": "mortal-mace",
@@ -8509,8 +7936,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31580
+    }
   },
   {
     "id": "muck-rod",
@@ -8546,8 +7972,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16117
+    }
   },
   {
     "id": "musicians-bow",
@@ -8568,8 +7993,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9378
+    }
   },
   {
     "id": "mycological-bow",
@@ -8597,8 +8021,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16164
+    }
   },
   {
     "id": "mycological-mace",
@@ -8631,34 +8054,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16162
-  },
-  {
-    "id": "mystic-blade",
-    "name": "mystic blade",
-    "kind": "weapon",
-    "weight": 35,
-    "value": 30000,
-    "slot": "hand",
-    "attack": 44,
-    "defense": 25,
-    "extraDefense": 2,
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 60
-    },
-    "weapon": {
-      "kind": "melee",
-      "family": "sword",
-      "wieldUnproperly": true
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 7384
+    }
   },
   {
     "id": "mythril-axe",
@@ -8683,8 +8079,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7455
+    }
   },
   {
     "id": "naga-axe",
@@ -8722,8 +8117,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39156
+    }
   },
   {
     "id": "naga-club",
@@ -8757,8 +8151,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39157
+    }
   },
   {
     "id": "naga-crossbow",
@@ -8799,8 +8192,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39159
+    }
   },
   {
     "id": "naga-rod",
@@ -8846,8 +8238,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39163
+    }
   },
   {
     "id": "naga-sword",
@@ -8885,8 +8276,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39155
+    }
   },
   {
     "id": "naga-wand",
@@ -8932,8 +8322,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39162
+    }
   },
   {
     "id": "naginata",
@@ -8957,8 +8346,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3314
+    }
   },
   {
     "id": "necrotic-rod",
@@ -8986,8 +8374,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3069
+    }
   },
   {
     "id": "nightmare-blade",
@@ -9011,8 +8398,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7418
+    }
   },
   {
     "id": "noble-axe",
@@ -9036,8 +8422,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7456
+    }
   },
   {
     "id": "northern-star",
@@ -9061,8 +8446,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7409
+    }
   },
   {
     "id": "northwind-rod",
@@ -9091,8 +8475,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8083
+    }
   },
   {
     "id": "obsidian-lance",
@@ -9116,8 +8499,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3313
+    }
   },
   {
     "id": "obsidian-truncheon",
@@ -9142,8 +8524,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8100
+    }
   },
   {
     "id": "ogre-choppa",
@@ -9167,8 +8548,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22172
+    }
   },
   {
     "id": "ogre-klubba",
@@ -9192,8 +8572,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22171
+    }
   },
   {
     "id": "ogre-scepta",
@@ -9222,8 +8601,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22183
+    }
   },
   {
     "id": "one-hit-wonder",
@@ -9247,8 +8625,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21219
+    }
   },
   {
     "id": "onyx-flail",
@@ -9272,8 +8649,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7421
+    }
   },
   {
     "id": "orcish-axe",
@@ -9292,8 +8668,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3316
+    }
   },
   {
     "id": "orcish-maul",
@@ -9318,8 +8693,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7392
+    }
   },
   {
     "id": "ornamented-axe",
@@ -9343,8 +8717,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7411
+    }
   },
   {
     "id": "ornate-crossbow",
@@ -9371,8 +8744,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14247
+    }
   },
   {
     "id": "ornate-mace",
@@ -9396,8 +8768,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14001
+    }
   },
   {
     "id": "phantasmal-axe",
@@ -9435,8 +8806,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32616
+    }
   },
   {
     "id": "pharaoh-sword",
@@ -9460,8 +8830,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3334
+    }
   },
   {
     "id": "plague-bite",
@@ -9489,8 +8858,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22759
+    }
   },
   {
     "id": "poets-fencing-quill",
@@ -9509,8 +8877,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9387
+    }
   },
   {
     "id": "pointed-rabbitslayer",
@@ -9529,8 +8896,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9375
+    }
   },
   {
     "id": "poison-dagger",
@@ -9553,8 +8919,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3299
+    }
   },
   {
     "id": "queens-sceptre",
@@ -9578,8 +8943,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7410
+    }
   },
   {
     "id": "rapier",
@@ -9599,8 +8963,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3272
+    }
   },
   {
     "id": "ratana",
@@ -9624,8 +8987,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17812
+    }
   },
   {
     "id": "ravagers-axe",
@@ -9650,8 +9012,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3331
+    }
   },
   {
     "id": "ravenwing",
@@ -9675,8 +9036,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7433
+    }
   },
   {
     "id": "reapers-axe",
@@ -9700,8 +9060,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7420
+    }
   },
   {
     "id": "relic-sword",
@@ -9726,8 +9085,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7383
+    }
   },
   {
     "id": "rending-inferniarch-arbalest",
@@ -9771,8 +9129,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49861
+    }
   },
   {
     "id": "rending-inferniarch-battleaxe",
@@ -9814,8 +9171,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49864
+    }
   },
   {
     "id": "rending-inferniarch-blade",
@@ -9857,8 +9213,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49876
+    }
   },
   {
     "id": "rending-inferniarch-bow",
@@ -9903,8 +9258,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49858
+    }
   },
   {
     "id": "rending-inferniarch-flail",
@@ -9946,8 +9300,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49870
+    }
   },
   {
     "id": "rending-inferniarch-greataxe",
@@ -9990,8 +9343,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49867
+    }
   },
   {
     "id": "rending-inferniarch-rod",
@@ -10041,8 +9393,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49885
+    }
   },
   {
     "id": "rending-inferniarch-slayer",
@@ -10085,8 +9436,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49879
+    }
   },
   {
     "id": "rending-inferniarch-wand",
@@ -10136,8 +9486,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49882
+    }
   },
   {
     "id": "rending-inferniarch-warhammer",
@@ -10180,8 +9529,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49873
+    }
   },
   {
     "id": "resizer",
@@ -10219,8 +9567,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29419
+    }
   },
   {
     "id": "rift-bow",
@@ -10248,8 +9595,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22866
+    }
   },
   {
     "id": "rift-crossbow",
@@ -10277,8 +9623,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22867
+    }
   },
   {
     "id": "rift-lance",
@@ -10303,8 +9648,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22727
+    }
   },
   {
     "id": "ripper-lance",
@@ -10324,8 +9668,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3346
+    }
   },
   {
     "id": "rod-of-destruction",
@@ -10362,8 +9705,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27458
+    }
   },
   {
     "id": "ron-the-rippers-sabre",
@@ -10382,8 +9724,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6101
+    }
   },
   {
     "id": "rotten-demonbone",
@@ -10413,8 +9754,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28829
+    }
   },
   {
     "id": "royal-axe",
@@ -10439,37 +9779,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7434
-  },
-  {
-    "id": "royal-crossbow",
-    "name": "royal crossbow",
-    "kind": "weapon",
-    "weight": 120,
-    "value": 0,
-    "slot": "hand",
-    "twoHanded": true,
-    "attack": 5,
-    "imbuementSlots": 3,
-    "requires": {
-      "level": 130,
-      "vocationId": "paladin"
-    },
-    "weapon": {
-      "kind": "distance",
-      "family": "distance",
-      "range": 6,
-      "ammoFamily": "bolt",
-      "hitChance": 3,
-      "wieldUnproperly": true
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 8023
+    }
   },
   {
     "id": "runed-sword",
@@ -10494,8 +9804,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7417
+    }
   },
   {
     "id": "ruthless-axe",
@@ -10521,8 +9830,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6553
+    }
   },
   {
     "id": "sabre",
@@ -10542,8 +9850,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3273
+    }
   },
   {
     "id": "sanguine-battleaxe",
@@ -10585,8 +9892,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43874
+    }
   },
   {
     "id": "sanguine-blade",
@@ -10628,8 +9934,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43864
+    }
   },
   {
     "id": "sanguine-bludgeon",
@@ -10671,8 +9976,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43872
+    }
   },
   {
     "id": "sanguine-bow",
@@ -10717,8 +10021,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43877
+    }
   },
   {
     "id": "sanguine-coil",
@@ -10771,8 +10074,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43882
+    }
   },
   {
     "id": "sanguine-crossbow",
@@ -10817,8 +10119,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43879
+    }
   },
   {
     "id": "sanguine-cudgel",
@@ -10860,8 +10161,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43866
+    }
   },
   {
     "id": "sanguine-hatchet",
@@ -10903,8 +10203,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43868
+    }
   },
   {
     "id": "sanguine-razor",
@@ -10945,8 +10244,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43870
+    }
   },
   {
     "id": "sanguine-rod",
@@ -10999,8 +10297,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43885
+    }
   },
   {
     "id": "sapphire-hammer",
@@ -11024,8 +10321,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7437
+    }
   },
   {
     "id": "schnitzel-meat-grinder",
@@ -11043,8 +10339,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32093
+    }
   },
   {
     "id": "scimitar",
@@ -11064,8 +10359,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3307
+    }
   },
   {
     "id": "scorcher",
@@ -11093,8 +10387,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21348
+    }
   },
   {
     "id": "scythe",
@@ -11114,8 +10407,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3453
+    }
   },
   {
     "id": "scythe-of-the-reaper",
@@ -11135,33 +10427,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9384
-  },
-  {
-    "id": "serpent-sword",
-    "name": "serpent sword",
-    "kind": "weapon",
-    "weight": 41,
-    "value": 900,
-    "slot": "hand",
-    "attack": 18,
-    "defense": 15,
-    "extraDefense": 1,
-    "weapon": {
-      "kind": "melee",
-      "family": "sword",
-      "element": {
-        "type": "earth",
-        "attack": 8
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3297
+    }
   },
   {
     "id": "shadow-sceptre",
@@ -11185,8 +10451,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7451
+    }
   },
   {
     "id": "shimmer-bow",
@@ -11214,8 +10479,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12733
+    }
   },
   {
     "id": "shimmer-rod",
@@ -11244,8 +10508,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12732
+    }
   },
   {
     "id": "shimmer-sword",
@@ -11269,8 +10532,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12731
+    }
   },
   {
     "id": "shimmer-wand",
@@ -11299,8 +10561,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12741
+    }
   },
   {
     "id": "shiny-blade",
@@ -11333,8 +10594,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16175
+    }
   },
   {
     "id": "short-sword",
@@ -11353,8 +10613,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3294
+    }
   },
   {
     "id": "sickle",
@@ -11373,8 +10632,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3293
+    }
   },
   {
     "id": "silkweaver-bow",
@@ -11401,8 +10659,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8029
+    }
   },
   {
     "id": "silver-dagger",
@@ -11421,8 +10678,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3290
+    }
   },
   {
     "id": "silver-mace",
@@ -11447,8 +10703,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3312
+    }
   },
   {
     "id": "siphoning-inferniarch-arbalest",
@@ -11491,8 +10746,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49863
+    }
   },
   {
     "id": "siphoning-inferniarch-battleaxe",
@@ -11533,8 +10787,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49866
+    }
   },
   {
     "id": "siphoning-inferniarch-blade",
@@ -11575,8 +10828,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49878
+    }
   },
   {
     "id": "siphoning-inferniarch-bow",
@@ -11620,8 +10872,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49860
+    }
   },
   {
     "id": "siphoning-inferniarch-flail",
@@ -11662,8 +10913,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49872
+    }
   },
   {
     "id": "siphoning-inferniarch-greataxe",
@@ -11705,8 +10955,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49869
+    }
   },
   {
     "id": "siphoning-inferniarch-rod",
@@ -11755,8 +11004,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49887
+    }
   },
   {
     "id": "siphoning-inferniarch-slayer",
@@ -11798,8 +11046,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49881
+    }
   },
   {
     "id": "siphoning-inferniarch-wand",
@@ -11848,8 +11095,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49884
+    }
   },
   {
     "id": "siphoning-inferniarch-warhammer",
@@ -11891,8 +11137,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49875
+    }
   },
   {
     "id": "skull-staff",
@@ -11917,8 +11162,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3324
+    }
   },
   {
     "id": "skullcrusher",
@@ -11944,8 +11188,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7423
+    }
   },
   {
     "id": "slayer-of-destruction",
@@ -11971,8 +11214,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27450
+    }
   },
   {
     "id": "snake-gods-sceptre",
@@ -11997,37 +11239,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11692
-  },
-  {
-    "id": "snakebite-rod",
-    "name": "snakebite rod",
-    "kind": "weapon",
-    "weight": 19,
-    "value": 100,
-    "slot": "hand",
-    "requires": {
-      "level": 6,
-      "vocationId": "druid"
-    },
-    "weapon": {
-      "kind": "wand",
-      "family": "rod",
-      "range": 3,
-      "damageType": "earth",
-      "manaPerHit": 2,
-      "damage": {
-        "min": 8,
-        "max": 18
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3066
+    }
   },
   {
     "id": "solar-axe",
@@ -12052,8 +11264,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8097
+    }
   },
   {
     "id": "sorcerer-and-druid-staff",
@@ -12080,8 +11291,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17111
+    }
   },
   {
     "id": "soulbiter",
@@ -12123,8 +11333,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34084
+    }
   },
   {
     "id": "soulbleeder",
@@ -12169,8 +11378,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34088
+    }
   },
   {
     "id": "soulcrusher",
@@ -12212,8 +11420,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34086
+    }
   },
   {
     "id": "soulcutter",
@@ -12255,8 +11462,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34082
+    }
   },
   {
     "id": "souleater",
@@ -12298,8 +11504,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34085
+    }
   },
   {
     "id": "soulhexer",
@@ -12345,8 +11550,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34091
+    }
   },
   {
     "id": "soulmaimer",
@@ -12388,8 +11592,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34087
+    }
   },
   {
     "id": "soulpiercer",
@@ -12433,8 +11636,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34089
+    }
   },
   {
     "id": "soulshredder",
@@ -12476,8 +11678,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34083
+    }
   },
   {
     "id": "soultainter",
@@ -12522,30 +11723,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34090
-  },
-  {
-    "id": "spike-sword",
-    "name": "spike sword",
-    "kind": "weapon",
-    "weight": 50,
-    "value": 240,
-    "slot": "hand",
-    "attack": 24,
-    "defense": 21,
-    "extraDefense": 2,
-    "imbuementSlots": 2,
-    "weapon": {
-      "kind": "melee",
-      "family": "sword"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3271
+    }
   },
   {
     "id": "spiked-squelcher",
@@ -12571,8 +11749,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7452
+    }
   },
   {
     "id": "spiky-club",
@@ -12595,8 +11772,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17859
+    }
   },
   {
     "id": "springsprout-rod",
@@ -12624,8 +11800,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8084
+    }
   },
   {
     "id": "staff",
@@ -12645,8 +11820,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3289
+    }
   },
   {
     "id": "stale-bread-of-ancientness",
@@ -12665,28 +11839,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9376
-  },
-  {
-    "id": "steel-axe",
-    "name": "steel axe",
-    "kind": "weapon",
-    "weight": 41,
-    "value": 0,
-    "slot": "hand",
-    "attack": 21,
-    "defense": 10,
-    "weapon": {
-      "kind": "melee",
-      "family": "axe"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 7773
+    }
   },
   {
     "id": "stomper",
@@ -12712,8 +11865,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8101
+    }
   },
   {
     "id": "stonecutter-axe",
@@ -12738,8 +11890,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3319
+    }
   },
   {
     "id": "strange-mallet",
@@ -12758,8 +11909,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27523
+    }
   },
   {
     "id": "studded-club",
@@ -12778,8 +11928,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3336
+    }
   },
   {
     "id": "summerblade",
@@ -12817,8 +11966,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29421
+    }
   },
   {
     "id": "swampling-club",
@@ -12837,30 +11985,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17824
-  },
-  {
-    "id": "sword",
-    "name": "sword",
-    "kind": "weapon",
-    "weight": 35,
-    "value": 25,
-    "slot": "hand",
-    "attack": 14,
-    "defense": 12,
-    "extraDefense": 1,
-    "imbuementSlots": 2,
-    "weapon": {
-      "kind": "melee",
-      "family": "sword"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3264
+    }
   },
   {
     "id": "tagralt-blade",
@@ -12898,8 +12023,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31614
+    }
   },
   {
     "id": "taurus-mace",
@@ -12923,8 +12047,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7425
+    }
   },
   {
     "id": "templar-scytheblade",
@@ -12944,8 +12067,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3345
+    }
   },
   {
     "id": "terra-rod",
@@ -12973,8 +12095,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3065
+    }
   },
   {
     "id": "thaian-sword",
@@ -13000,8 +12121,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7391
+    }
   },
   {
     "id": "thorn-spitter",
@@ -13029,8 +12149,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14768
+    }
   },
   {
     "id": "throwing-axe",
@@ -13064,8 +12183,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35515
+    }
   },
   {
     "id": "thunder-hammer",
@@ -13090,8 +12208,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3309
+    }
   },
   {
     "id": "titan-axe",
@@ -13116,8 +12233,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7413
+    }
   },
   {
     "id": "triple-bolt-crossbow",
@@ -13145,8 +12261,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19356
+    }
   },
   {
     "id": "twiceslicer",
@@ -13172,8 +12287,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11657
+    }
   },
   {
     "id": "twin-axe",
@@ -13199,8 +12313,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3335
+    }
   },
   {
     "id": "twin-hooks",
@@ -13226,8 +12339,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10392
+    }
   },
   {
     "id": "two-handed-sword",
@@ -13252,8 +12364,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3265
+    }
   },
   {
     "id": "umbral-axe",
@@ -13279,8 +12390,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20071
+    }
   },
   {
     "id": "umbral-blade",
@@ -13306,8 +12416,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20065
+    }
   },
   {
     "id": "umbral-bow",
@@ -13335,8 +12444,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20083
+    }
   },
   {
     "id": "umbral-chopper",
@@ -13362,8 +12470,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20074
+    }
   },
   {
     "id": "umbral-crossbow",
@@ -13391,8 +12498,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20086
+    }
   },
   {
     "id": "umbral-hammer",
@@ -13418,8 +12524,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20080
+    }
   },
   {
     "id": "umbral-mace",
@@ -13445,8 +12550,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20077
+    }
   },
   {
     "id": "umbral-master-axe",
@@ -13480,8 +12584,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20072
+    }
   },
   {
     "id": "umbral-master-bow",
@@ -13517,8 +12620,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20084
+    }
   },
   {
     "id": "umbral-master-chopper",
@@ -13552,8 +12654,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20075
+    }
   },
   {
     "id": "umbral-master-crossbow",
@@ -13589,8 +12690,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20087
+    }
   },
   {
     "id": "umbral-master-hammer",
@@ -13624,8 +12724,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20081
+    }
   },
   {
     "id": "umbral-master-mace",
@@ -13659,8 +12758,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20078
+    }
   },
   {
     "id": "umbral-master-slayer",
@@ -13694,8 +12792,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20069
+    }
   },
   {
     "id": "umbral-masterblade",
@@ -13729,8 +12826,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20066
+    }
   },
   {
     "id": "umbral-slayer",
@@ -13756,8 +12852,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20068
+    }
   },
   {
     "id": "underworld-rod",
@@ -13786,8 +12881,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8082
+    }
   },
   {
     "id": "vile-axe",
@@ -13811,8 +12905,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7388
+    }
   },
   {
     "id": "wand-of-cosmic-energy",
@@ -13840,8 +12933,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3073
+    }
   },
   {
     "id": "wand-of-darkness",
@@ -13882,8 +12974,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25760
+    }
   },
   {
     "id": "wand-of-decay",
@@ -13911,8 +13002,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3072
+    }
   },
   {
     "id": "wand-of-defiance",
@@ -13948,8 +13038,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16096
+    }
   },
   {
     "id": "wand-of-destruction",
@@ -13986,8 +13075,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27457
+    }
   },
   {
     "id": "wand-of-dimensions",
@@ -14015,8 +13103,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12603
+    }
   },
   {
     "id": "wand-of-draconia",
@@ -14045,8 +13132,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8093
+    }
   },
   {
     "id": "wand-of-dragonbreath",
@@ -14075,8 +13161,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3075
+    }
   },
   {
     "id": "wand-of-everblazing",
@@ -14112,67 +13197,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16115
-  },
-  {
-    "id": "wand-of-inferno",
-    "name": "wand of inferno",
-    "kind": "weapon",
-    "weight": 27,
-    "value": 3000,
-    "slot": "hand",
-    "requires": {
-      "level": 33,
-      "vocationId": "sorcerer"
-    },
-    "weapon": {
-      "kind": "wand",
-      "family": "wand",
-      "range": 3,
-      "damageType": "fire",
-      "manaPerHit": 8,
-      "damage": {
-        "min": 56,
-        "max": 74
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3071
-  },
-  {
-    "id": "wand-of-starstorm",
-    "name": "wand of starstorm",
-    "kind": "weapon",
-    "weight": 25.5,
-    "value": 3600,
-    "slot": "hand",
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 37,
-      "vocationId": "sorcerer"
-    },
-    "weapon": {
-      "kind": "wand",
-      "family": "wand",
-      "range": 3,
-      "damageType": "energy",
-      "manaPerHit": 13,
-      "damage": {
-        "min": 56,
-        "max": 74
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 8092
+    }
   },
   {
     "id": "wand-of-voodoo",
@@ -14201,37 +13226,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8094
-  },
-  {
-    "id": "wand-of-vortex",
-    "name": "wand of vortex",
-    "kind": "weapon",
-    "weight": 19,
-    "value": 100,
-    "slot": "hand",
-    "requires": {
-      "level": 6,
-      "vocationId": "sorcerer"
-    },
-    "weapon": {
-      "kind": "wand",
-      "family": "wand",
-      "range": 3,
-      "damageType": "energy",
-      "manaPerHit": 1,
-      "damage": {
-        "min": 8,
-        "max": 18
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3074
+    }
   },
   {
     "id": "war-axe",
@@ -14257,8 +13252,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3342
+    }
   },
   {
     "id": "war-hammer",
@@ -14284,8 +13278,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3279
+    }
   },
   {
     "id": "warlord-sword",
@@ -14310,8 +13303,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3296
+    }
   },
   {
     "id": "warriors-axe",
@@ -14335,8 +13327,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14040
+    }
   },
   {
     "id": "warsinger-bow",
@@ -14364,8 +13355,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8026
+    }
   },
   {
     "id": "winterblade",
@@ -14403,8 +13393,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29422
+    }
   },
   {
     "id": "wooden-sword",
@@ -14423,8 +13412,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12673
+    }
   },
   {
     "id": "wyvern-fang",
@@ -14449,8 +13437,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7408
+    }
   },
   {
     "id": "yols-bow",
@@ -14476,8 +13463,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8028
+    }
   },
   {
     "id": "zaoan-halberd",
@@ -14502,8 +13488,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10406
+    }
   },
   {
     "id": "zaoan-sword",
@@ -14528,7 +13513,6 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10390
+    }
   }
 ]

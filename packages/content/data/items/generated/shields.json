@@ -10,8 +10,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28915
+    }
   },
   {
     "id": "alchemists-notepad",
@@ -47,8 +46,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40594
+    }
   },
   {
     "id": "amazon-shield",
@@ -63,8 +61,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3437
+    }
   },
   {
     "id": "ancient-shield",
@@ -78,8 +75,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3432
+    }
   },
   {
     "id": "arboreal-tome",
@@ -119,8 +115,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39154
+    }
   },
   {
     "id": "arcanomancer-folio",
@@ -160,8 +155,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39152
+    }
   },
   {
     "id": "battle-shield",
@@ -175,8 +169,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3413
+    }
   },
   {
     "id": "biscuit-barrier",
@@ -220,8 +213,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45643
+    }
   },
   {
     "id": "black-shield",
@@ -235,8 +227,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3429
+    }
   },
   {
     "id": "blessed-shield",
@@ -250,8 +241,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3423
+    }
   },
   {
     "id": "bone-shield",
@@ -265,8 +255,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3441
+    }
   },
   {
     "id": "bonelord-shield",
@@ -281,8 +270,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3418
+    }
   },
   {
     "id": "book-of-lies",
@@ -312,8 +300,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22755
+    }
   },
   {
     "id": "brain-in-a-jar",
@@ -348,8 +335,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29426
+    }
   },
   {
     "id": "brass-shield",
@@ -363,8 +349,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3411
+    }
   },
   {
     "id": "broken-wooden-shield",
@@ -378,8 +363,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21401
+    }
   },
   {
     "id": "carapace-shield",
@@ -394,8 +378,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14088
+    }
   },
   {
     "id": "castle-shield",
@@ -410,8 +393,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3435
+    }
   },
   {
     "id": "cocoa-grimoire",
@@ -441,8 +423,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45639
+    }
   },
   {
     "id": "copper-shield",
@@ -456,8 +437,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3430
+    }
   },
   {
     "id": "creamy-grimoire",
@@ -496,8 +476,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45640
+    }
   },
   {
     "id": "crown-shield",
@@ -512,8 +491,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3419
+    }
   },
   {
     "id": "crude-umbral-spellbook",
@@ -557,8 +535,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20088
+    }
   },
   {
     "id": "dark-shield",
@@ -572,8 +549,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3421
+    }
   },
   {
     "id": "death-gaze",
@@ -591,8 +567,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22758
+    }
   },
   {
     "id": "demon-shield",
@@ -607,8 +582,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3420
+    }
   },
   {
     "id": "depth-scutum",
@@ -638,24 +612,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13998
-  },
-  {
-    "id": "dragon-shield",
-    "name": "dragon shield",
-    "kind": "shield",
-    "weight": 60,
-    "value": 360,
-    "slot": "shield",
-    "defense": 31,
-    "imbuementSlots": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3416
+    }
   },
   {
     "id": "dwarven-shield",
@@ -669,8 +626,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3425
+    }
   },
   {
     "id": "eagle-shield",
@@ -684,8 +640,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3438
+    }
   },
   {
     "id": "ectoplasmic-shield",
@@ -720,8 +675,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29430
+    }
   },
   {
     "id": "eerie-song-book",
@@ -734,8 +688,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20140
+    }
   },
   {
     "id": "eldritch-folio",
@@ -771,8 +724,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36672
+    }
   },
   {
     "id": "eldritch-shield",
@@ -801,8 +753,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36656
+    }
   },
   {
     "id": "eldritch-tome",
@@ -838,8 +789,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36673
+    }
   },
   {
     "id": "falcon-escutcheon",
@@ -869,8 +819,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28722
+    }
   },
   {
     "id": "falcon-shield",
@@ -900,8 +849,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28721
+    }
   },
   {
     "id": "fiery-rainbow-shield",
@@ -928,8 +876,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8078
+    }
   },
   {
     "id": "gnome-shield",
@@ -970,8 +917,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27650
+    }
   },
   {
     "id": "golden-blessed-shield",
@@ -984,8 +930,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36994
+    }
   },
   {
     "id": "gourd",
@@ -998,8 +943,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22651
+    }
   },
   {
     "id": "great-shield",
@@ -1014,8 +958,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3422
+    }
   },
   {
     "id": "griffin-shield",
@@ -1030,8 +973,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3433
+    }
   },
   {
     "id": "guardian-shield",
@@ -1045,8 +987,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3415
+    }
   },
   {
     "id": "haunted-mirror-piece",
@@ -1061,8 +1002,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19373
+    }
   },
   {
     "id": "icy-rainbow-shield",
@@ -1081,8 +1021,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8079
+    }
   },
   {
     "id": "journal-shield",
@@ -1095,8 +1034,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28887
+    }
   },
   {
     "id": "lion-shield",
@@ -1123,8 +1061,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34154
+    }
   },
   {
     "id": "lion-spellbook",
@@ -1163,24 +1100,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34153
-  },
-  {
-    "id": "mastermind-shield",
-    "name": "mastermind shield",
-    "kind": "shield",
-    "weight": 57,
-    "value": 50000,
-    "slot": "shield",
-    "defense": 37,
-    "imbuementSlots": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3414
+    }
   },
   {
     "id": "mathmaster-shield",
@@ -1193,8 +1113,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25982
+    }
   },
   {
     "id": "meat-shield",
@@ -1209,8 +1128,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9372
+    }
   },
   {
     "id": "medusa-shield",
@@ -1225,8 +1143,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3436
+    }
   },
   {
     "id": "mino-shield",
@@ -1240,8 +1157,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21175
+    }
   },
   {
     "id": "necromancer-shield",
@@ -1256,8 +1172,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6432
+    }
   },
   {
     "id": "nightmare-shield",
@@ -1272,8 +1187,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6390
+    }
   },
   {
     "id": "norse-shield",
@@ -1288,8 +1202,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7460
+    }
   },
   {
     "id": "ornamented-shield",
@@ -1304,8 +1217,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3424
+    }
   },
   {
     "id": "ornate-shield",
@@ -1329,8 +1241,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14000
+    }
   },
   {
     "id": "painted-gourd-rattle",
@@ -1343,8 +1254,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22190
+    }
   },
   {
     "id": "phoenix-shield",
@@ -1359,8 +1269,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3439
+    }
   },
   {
     "id": "plate-shield",
@@ -1374,8 +1283,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3410
+    }
   },
   {
     "id": "prismatic-shield",
@@ -1406,8 +1314,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16116
+    }
   },
   {
     "id": "rainbow-shield",
@@ -1425,8 +1332,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8077
+    }
   },
   {
     "id": "rattling-gourd",
@@ -1439,8 +1345,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22650
+    }
   },
   {
     "id": "rift-shield",
@@ -1455,8 +1360,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22726
+    }
   },
   {
     "id": "rose-shield",
@@ -1470,8 +1374,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3427
+    }
   },
   {
     "id": "runic-ice-shield",
@@ -1486,8 +1389,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19363
+    }
   },
   {
     "id": "salamander-shield",
@@ -1501,8 +1403,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3445
+    }
   },
   {
     "id": "scarab-shield",
@@ -1516,8 +1417,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3440
+    }
   },
   {
     "id": "sentinel-shield",
@@ -1532,8 +1432,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3444
+    }
   },
   {
     "id": "shield-nevermourn",
@@ -1547,8 +1446,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9401
+    }
   },
   {
     "id": "shield-of-care",
@@ -1563,8 +1461,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9380
+    }
   },
   {
     "id": "shield-of-corruption",
@@ -1591,8 +1488,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11688
+    }
   },
   {
     "id": "shield-of-honour",
@@ -1606,8 +1502,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3417
+    }
   },
   {
     "id": "shield-of-the-white-knight",
@@ -1622,8 +1517,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9377
+    }
   },
   {
     "id": "shoulder-plate",
@@ -1662,8 +1556,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29420
+    }
   },
   {
     "id": "silver-chimes",
@@ -1676,8 +1569,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28494
+    }
   },
   {
     "id": "snake-gods-wristguard",
@@ -1706,8 +1598,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11691
+    }
   },
   {
     "id": "soulbastion",
@@ -1734,8 +1625,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34099
+    }
   },
   {
     "id": "sparking-rainbow-shield",
@@ -1757,8 +1647,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8080
+    }
   },
   {
     "id": "spellbook",
@@ -1780,8 +1669,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3059
+    }
   },
   {
     "id": "spellbook-of-ancient-arcana",
@@ -1815,8 +1703,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14769
+    }
   },
   {
     "id": "spellbook-of-dark-mysteries",
@@ -1845,8 +1732,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8090
+    }
   },
   {
     "id": "spellbook-of-enlightenment",
@@ -1876,8 +1762,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8072
+    }
   },
   {
     "id": "spellbook-of-lost-souls",
@@ -1906,38 +1791,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8075
-  },
-  {
-    "id": "spellbook-of-mind-control",
-    "name": "spellbook of mind control",
-    "kind": "shield",
-    "weight": 24.5,
-    "value": 13000,
-    "slot": "shield",
-    "defense": 16,
-    "requires": {
-      "level": 50,
-      "vocationId": [
-        "druid",
-        "sorcerer"
-      ]
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "magic",
-          "amount": 2
-        }
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 8074
+    }
   },
   {
     "id": "spellbook-of-the-novice",
@@ -1957,8 +1811,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21400
+    }
   },
   {
     "id": "spellbook-of-vigilance",
@@ -1995,8 +1848,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16107
+    }
   },
   {
     "id": "spellbook-of-warding",
@@ -2026,8 +1878,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8073
+    }
   },
   {
     "id": "spellscroll-of-prophecies",
@@ -2056,8 +1907,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8076
+    }
   },
   {
     "id": "spike-shield",
@@ -2071,8 +1921,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17810
+    }
   },
   {
     "id": "spirit-guide",
@@ -2108,24 +1957,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29431
-  },
-  {
-    "id": "steel-shield",
-    "name": "steel shield",
-    "kind": "shield",
-    "weight": 69,
-    "value": 80,
-    "slot": "shield",
-    "defense": 21,
-    "imbuementSlots": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3409
+    }
   },
   {
     "id": "strange-good-night-songs",
@@ -2138,8 +1970,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20050
+    }
   },
   {
     "id": "studded-shield",
@@ -2153,8 +1984,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3426
+    }
   },
   {
     "id": "tempest-shield",
@@ -2169,8 +1999,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3442
+    }
   },
   {
     "id": "terran-rainbow-shield",
@@ -2197,8 +2026,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8081
+    }
   },
   {
     "id": "tortoise-shield",
@@ -2212,24 +2040,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6131
-  },
-  {
-    "id": "tower-shield",
-    "name": "tower shield",
-    "kind": "shield",
-    "weight": 82,
-    "value": 8000,
-    "slot": "shield",
-    "defense": 32,
-    "imbuementSlots": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3428
+    }
   },
   {
     "id": "traditional-stein",
@@ -2242,8 +2053,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32102
+    }
   },
   {
     "id": "tusk-shield",
@@ -2257,8 +2067,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3443
+    }
   },
   {
     "id": "umbral-master-spellbook",
@@ -2303,8 +2112,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20090
+    }
   },
   {
     "id": "umbral-spellbook",
@@ -2349,8 +2157,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20089
+    }
   },
   {
     "id": "vampire-shield",
@@ -2365,8 +2172,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3434
+    }
   },
   {
     "id": "viking-shield",
@@ -2381,8 +2187,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3431
+    }
   },
   {
     "id": "warriors-shield",
@@ -2397,23 +2202,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14042
-  },
-  {
-    "id": "wooden-shield",
-    "name": "wooden shield",
-    "kind": "shield",
-    "weight": 40,
-    "value": 5,
-    "slot": "shield",
-    "defense": 14,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3412
+    }
   },
   {
     "id": "wooden-spellbook",
@@ -2449,7 +2238,6 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25699
+    }
   }
 ]

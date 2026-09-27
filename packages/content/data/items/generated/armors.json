@@ -12,8 +12,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19358
+    }
   },
   {
     "id": "amazon-armor",
@@ -40,8 +39,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3394
+    }
   },
   {
     "id": "arcane-dragon-robe",
@@ -79,8 +77,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44623
+    }
   },
   {
     "id": "ball-gown",
@@ -93,8 +90,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3570
+    }
   },
   {
     "id": "bear-skin",
@@ -129,8 +125,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31578
+    }
   },
   {
     "id": "belted-cape",
@@ -147,8 +142,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8044
+    }
   },
   {
     "id": "blue-robe",
@@ -163,8 +157,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3567
+    }
   },
   {
     "id": "brass-armor",
@@ -178,8 +171,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3359
+    }
   },
   {
     "id": "broken-iks-cuirass",
@@ -193,8 +185,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40533
+    }
   },
   {
     "id": "buckle",
@@ -208,8 +199,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17829
+    }
   },
   {
     "id": "burial-shroud",
@@ -227,8 +217,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32585
+    }
   },
   {
     "id": "calopteryx-cape",
@@ -262,8 +251,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14086
+    }
   },
   {
     "id": "cape",
@@ -277,8 +265,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3565
+    }
   },
   {
     "id": "chain-armor",
@@ -293,8 +280,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3358
+    }
   },
   {
     "id": "coat",
@@ -308,8 +294,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3562
+    }
   },
   {
     "id": "crown-armor",
@@ -330,8 +315,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3381
+    }
   },
   {
     "id": "crystalline-armor",
@@ -360,8 +344,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8050
+    }
   },
   {
     "id": "dark-armor",
@@ -375,8 +358,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3383
+    }
   },
   {
     "id": "dark-lords-cape",
@@ -402,8 +384,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8037
+    }
   },
   {
     "id": "dauntless-dragon-scale-armor",
@@ -435,8 +416,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44621
+    }
   },
   {
     "id": "dawnfire-sherwani",
@@ -471,8 +451,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39164
+    }
   },
   {
     "id": "death-oyoroi",
@@ -504,8 +483,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50260
+    }
   },
   {
     "id": "demon-armor",
@@ -520,8 +498,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3388
+    }
   },
   {
     "id": "depth-lorica",
@@ -553,8 +530,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13994
+    }
   },
   {
     "id": "divine-plate",
@@ -580,8 +556,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8057
+    }
   },
   {
     "id": "doublet",
@@ -595,8 +570,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3379
+    }
   },
   {
     "id": "dragon-robe",
@@ -622,30 +596,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8039
-  },
-  {
-    "id": "dragon-scale-mail",
-    "name": "dragon scale mail",
-    "kind": "armor",
-    "weight": 114,
-    "value": 40000,
-    "slot": "chest",
-    "armor": 15,
-    "imbuementSlots": 1,
-    "requires": {
-      "vocationId": [
-        "knight",
-        "paladin"
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3386
+    }
   },
   {
     "id": "dream-shroud",
@@ -680,8 +631,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29423
+    }
   },
   {
     "id": "dwarven-armor",
@@ -701,8 +651,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3397
+    }
   },
   {
     "id": "earthborn-titan-armor",
@@ -736,8 +685,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8054
+    }
   },
   {
     "id": "earthheart-cuirass",
@@ -771,8 +719,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22521
+    }
   },
   {
     "id": "earthheart-hauberk",
@@ -806,8 +753,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22522
+    }
   },
   {
     "id": "earthheart-platemail",
@@ -841,8 +787,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22523
+    }
   },
   {
     "id": "earthmind-raiment",
@@ -879,8 +824,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22535
+    }
   },
   {
     "id": "earthsoul-tabard",
@@ -914,8 +858,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22531
+    }
   },
   {
     "id": "eldritch-cuirass",
@@ -939,8 +882,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36663
+    }
   },
   {
     "id": "elite-draken-mail",
@@ -965,8 +907,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11651
+    }
   },
   {
     "id": "elven-mail",
@@ -981,8 +922,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3399
+    }
   },
   {
     "id": "embrace-of-nature",
@@ -1017,8 +957,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31579
+    }
   },
   {
     "id": "energy-robe",
@@ -1052,8 +991,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50279
+    }
   },
   {
     "id": "ethno-coat",
@@ -1081,8 +1019,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8064
+    }
   },
   {
     "id": "falcon-plate",
@@ -1114,8 +1051,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28719
+    }
   },
   {
     "id": "fireborn-giant-armor",
@@ -1149,8 +1085,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8053
+    }
   },
   {
     "id": "fireheart-cuirass",
@@ -1184,8 +1119,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22518
+    }
   },
   {
     "id": "fireheart-hauberk",
@@ -1219,8 +1153,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22519
+    }
   },
   {
     "id": "fireheart-platemail",
@@ -1254,8 +1187,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22520
+    }
   },
   {
     "id": "firemind-raiment",
@@ -1292,8 +1224,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22534
+    }
   },
   {
     "id": "firesoul-tabard",
@@ -1327,8 +1258,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22530
+    }
   },
   {
     "id": "flower-dress",
@@ -1341,37 +1271,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9015
-  },
-  {
-    "id": "focus-cape",
-    "name": "focus cape",
-    "kind": "armor",
-    "weight": 21,
-    "value": 6000,
-    "slot": "chest",
-    "armor": 9,
-    "requires": {
-      "vocationId": [
-        "druid",
-        "sorcerer"
-      ]
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "magic",
-          "amount": 1
-        }
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 8043
+    }
   },
   {
     "id": "frostheart-cuirass",
@@ -1405,8 +1305,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22527
+    }
   },
   {
     "id": "frostheart-hauberk",
@@ -1440,8 +1339,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22528
+    }
   },
   {
     "id": "frostheart-platemail",
@@ -1475,8 +1373,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22529
+    }
   },
   {
     "id": "frostmind-raiment",
@@ -1513,8 +1410,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22537
+    }
   },
   {
     "id": "frostsoul-tabard",
@@ -1548,8 +1444,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22533
+    }
   },
   {
     "id": "frozen-plate",
@@ -1575,8 +1470,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8059
+    }
   },
   {
     "id": "fur-armor",
@@ -1601,8 +1495,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22085
+    }
   },
   {
     "id": "furious-frock",
@@ -1636,8 +1529,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19391
+    }
   },
   {
     "id": "genesis-serenity-armor",
@@ -1672,8 +1564,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51295
+    }
   },
   {
     "id": "ghazbaran-oyoroi",
@@ -1707,8 +1598,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50275
+    }
   },
   {
     "id": "ghost-chestplate",
@@ -1740,8 +1630,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32628
+    }
   },
   {
     "id": "gill-coat",
@@ -1778,8 +1667,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16105
+    }
   },
   {
     "id": "glacier-robe",
@@ -1808,8 +1696,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 824
+    }
   },
   {
     "id": "glooth-cape",
@@ -1838,8 +1725,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21164
+    }
   },
   {
     "id": "gnome-armor",
@@ -1877,8 +1763,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27648
+    }
   },
   {
     "id": "gnomish-cuirass",
@@ -1902,8 +1787,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50276
+    }
   },
   {
     "id": "golden-armor",
@@ -1924,8 +1808,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3360
+    }
   },
   {
     "id": "goo-shell",
@@ -1947,8 +1830,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19372
+    }
   },
   {
     "id": "green-demon-armor",
@@ -1963,8 +1845,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 37608
+    }
   },
   {
     "id": "green-tunic",
@@ -1978,8 +1859,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3563
+    }
   },
   {
     "id": "greenwood-coat",
@@ -2005,8 +1885,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8041
+    }
   },
   {
     "id": "heat-core",
@@ -2021,8 +1900,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21167
+    }
   },
   {
     "id": "heavy-metal-t-shirt",
@@ -2037,8 +1915,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9379
+    }
   },
   {
     "id": "hibiscus-dress",
@@ -2051,8 +1928,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8045
+    }
   },
   {
     "id": "ice-robe",
@@ -2078,8 +1954,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50280
+    }
   },
   {
     "id": "jacket",
@@ -2093,8 +1968,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3561
+    }
   },
   {
     "id": "knight-armor",
@@ -2115,8 +1989,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3370
+    }
   },
   {
     "id": "lavos-armor",
@@ -2145,8 +2018,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8049
+    }
   },
   {
     "id": "leaf-robe",
@@ -2172,23 +2044,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50277
-  },
-  {
-    "id": "leather-armor",
-    "name": "leather armor",
-    "kind": "armor",
-    "weight": 60,
-    "value": 12,
-    "slot": "chest",
-    "armor": 4,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3361
+    }
   },
   {
     "id": "leather-harness",
@@ -2202,8 +2058,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17846
+    }
   },
   {
     "id": "leopard-armor",
@@ -2218,8 +2073,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3404
+    }
   },
   {
     "id": "lightning-robe",
@@ -2248,8 +2102,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 825
+    }
   },
   {
     "id": "lion-plate",
@@ -2281,8 +2134,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34157
+    }
   },
   {
     "id": "living-armor",
@@ -2320,30 +2172,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29418
-  },
-  {
-    "id": "magic-plate-armor",
-    "name": "magic plate armor",
-    "kind": "armor",
-    "weight": 85,
-    "value": 90000,
-    "slot": "chest",
-    "armor": 17,
-    "imbuementSlots": 2,
-    "requires": {
-      "vocationId": [
-        "knight",
-        "paladin"
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3366
+    }
   },
   {
     "id": "magicians-robe",
@@ -2363,8 +2192,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7991
+    }
   },
   {
     "id": "magma-coat",
@@ -2393,8 +2221,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 826
+    }
   },
   {
     "id": "magma-robe",
@@ -2420,8 +2247,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50278
+    }
   },
   {
     "id": "mammoth-fur-cape",
@@ -2436,8 +2262,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7463
+    }
   },
   {
     "id": "master-archers-armor",
@@ -2464,8 +2289,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8060
+    }
   },
   {
     "id": "merudri-battle-mail",
@@ -2500,8 +2324,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50264
+    }
   },
   {
     "id": "merudri-nanbando",
@@ -2520,8 +2343,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50261
+    }
   },
   {
     "id": "merudri-scale-mail",
@@ -2544,8 +2366,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50263
+    }
   },
   {
     "id": "midnight-tunic",
@@ -2577,8 +2398,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39165
+    }
   },
   {
     "id": "molten-plate",
@@ -2604,8 +2424,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8058
+    }
   },
   {
     "id": "monk-robe",
@@ -2622,8 +2441,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50258
+    }
   },
   {
     "id": "moohtah-plate",
@@ -2644,8 +2462,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21166
+    }
   },
   {
     "id": "mutated-skin-armor",
@@ -2680,8 +2497,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40591
+    }
   },
   {
     "id": "mystical-dragon-robe",
@@ -2719,8 +2535,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44624
+    }
   },
   {
     "id": "naga-tanko",
@@ -2755,8 +2570,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50262
+    }
   },
   {
     "id": "native-armor",
@@ -2770,8 +2584,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3402
+    }
   },
   {
     "id": "noble-armor",
@@ -2786,8 +2599,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3380
+    }
   },
   {
     "id": "norcferatu-bloodhide",
@@ -2817,8 +2629,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51263
+    }
   },
   {
     "id": "norcferatu-bonecloak",
@@ -2848,8 +2659,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51264
+    }
   },
   {
     "id": "norcferatu-tuskplate",
@@ -2880,8 +2690,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51262
+    }
   },
   {
     "id": "oceanborn-leviathan-armor",
@@ -2915,8 +2724,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8056
+    }
   },
   {
     "id": "old-cape",
@@ -2930,8 +2738,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11701
+    }
   },
   {
     "id": "ornate-chestplate",
@@ -2963,8 +2770,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13993
+    }
   },
   {
     "id": "ornate-testtplate",
@@ -2977,8 +2783,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28475
+    }
   },
   {
     "id": "pair-of-old-bracers",
@@ -2992,35 +2797,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32705
-  },
-  {
-    "id": "paladin-armor",
-    "name": "paladin armor",
-    "kind": "armor",
-    "weight": 65,
-    "value": 15000,
-    "slot": "chest",
-    "armor": 12,
-    "imbuementSlots": 1,
-    "requires": {
-      "vocationId": "paladin"
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "distance",
-          "amount": 2
-        }
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 8063
+    }
   },
   {
     "id": "pirate-shirt",
@@ -3034,8 +2811,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6095
+    }
   },
   {
     "id": "plain-monk-robe",
@@ -3052,8 +2828,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50257
+    }
   },
   {
     "id": "plate-armor",
@@ -3067,8 +2842,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3357
+    }
   },
   {
     "id": "prismatic-armor",
@@ -3098,8 +2872,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16110
+    }
   },
   {
     "id": "rain-coat",
@@ -3113,8 +2886,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9400
+    }
   },
   {
     "id": "rangers-cloak",
@@ -3131,8 +2903,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3571
+    }
   },
   {
     "id": "red-robe",
@@ -3146,8 +2917,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3566
+    }
   },
   {
     "id": "red-tunic",
@@ -3161,8 +2931,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3564
+    }
   },
   {
     "id": "robe-of-enlightenment",
@@ -3194,8 +2963,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50268
+    }
   },
   {
     "id": "robe-of-the-ice-queen",
@@ -3221,8 +2989,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8038
+    }
   },
   {
     "id": "robe-of-the-underworld",
@@ -3248,8 +3015,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8062
+    }
   },
   {
     "id": "royal-draken-mail",
@@ -3280,8 +3046,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11686
+    }
   },
   {
     "id": "royal-scale-robe",
@@ -3315,8 +3080,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11687
+    }
   },
   {
     "id": "scale-armor",
@@ -3330,8 +3094,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3377
+    }
   },
   {
     "id": "simple-dress",
@@ -3344,8 +3107,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3568
+    }
   },
   {
     "id": "skullcracker-armor",
@@ -3371,8 +3133,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8061
+    }
   },
   {
     "id": "soulgarb",
@@ -3407,8 +3168,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50254
+    }
   },
   {
     "id": "soulmantle",
@@ -3440,8 +3200,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34095
+    }
   },
   {
     "id": "soulshell",
@@ -3476,8 +3235,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34094
+    }
   },
   {
     "id": "soulshroud",
@@ -3509,8 +3267,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34096
+    }
   },
   {
     "id": "spectral-dress",
@@ -3523,8 +3280,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 4836
+    }
   },
   {
     "id": "spellweavers-robe",
@@ -3553,8 +3309,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10438
+    }
   },
   {
     "id": "spirit-bind",
@@ -3580,8 +3335,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51294
+    }
   },
   {
     "id": "spirit-cloak",
@@ -3609,8 +3363,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8042
+    }
   },
   {
     "id": "spiritthorn-armor",
@@ -3647,8 +3400,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39147
+    }
   },
   {
     "id": "stoic-iks-chestplate",
@@ -3680,8 +3432,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44620
+    }
   },
   {
     "id": "stoic-iks-cuirass",
@@ -3713,8 +3464,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44619
+    }
   },
   {
     "id": "stoic-iks-robe",
@@ -3741,8 +3491,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50255
+    }
   },
   {
     "id": "studded-armor",
@@ -3756,8 +3505,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3378
+    }
   },
   {
     "id": "summer-dress",
@@ -3775,8 +3523,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8046
+    }
   },
   {
     "id": "swamplair-armor",
@@ -3805,8 +3552,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8052
+    }
   },
   {
     "id": "swan-feather-cloak",
@@ -3834,8 +3580,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25779
+    }
   },
   {
     "id": "terra-mantle",
@@ -3864,8 +3609,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 811
+    }
   },
   {
     "id": "thunderheart-cuirass",
@@ -3899,8 +3643,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22524
+    }
   },
   {
     "id": "thunderheart-hauberk",
@@ -3934,8 +3677,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22525
+    }
   },
   {
     "id": "thunderheart-platemail",
@@ -3969,8 +3711,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22526
+    }
   },
   {
     "id": "thundermind-raiment",
@@ -4007,8 +3748,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22536
+    }
   },
   {
     "id": "thundersoul-tabard",
@@ -4042,8 +3782,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22532
+    }
   },
   {
     "id": "toga-mortis",
@@ -4075,8 +3814,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31583
+    }
   },
   {
     "id": "traditional-shirt",
@@ -4089,8 +3827,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32099
+    }
   },
   {
     "id": "tunic",
@@ -4103,8 +3840,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8047
+    }
   },
   {
     "id": "unerring-dragon-scale-armor",
@@ -4142,8 +3878,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44622
+    }
   },
   {
     "id": "velvet-mantle",
@@ -4169,8 +3904,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8040
+    }
   },
   {
     "id": "voltage-armor",
@@ -4199,8 +3933,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8051
+    }
   },
   {
     "id": "white-dress",
@@ -4213,8 +3946,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3569
+    }
   },
   {
     "id": "windborn-colossus-armor",
@@ -4248,8 +3980,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8055
+    }
   },
   {
     "id": "witchhunters-coat",
@@ -4274,8 +4005,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7993
+    }
   },
   {
     "id": "yalahari-armor",
@@ -4298,8 +4028,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8862
+    }
   },
   {
     "id": "zaoan-armor",
@@ -4323,8 +4052,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10384
+    }
   },
   {
     "id": "zaoan-monk-robe",
@@ -4342,8 +4070,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50259
+    }
   },
   {
     "id": "zaoan-robe",
@@ -4372,7 +4099,6 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10439
+    }
   }
 ]

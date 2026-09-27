@@ -40,12 +40,31 @@ item não existe, ou que pede pilha de item que não empilha — contada, nunca 
 nunca são promovidos por aqui — continuam hand-authored, e é a #581 quem os regenera. `load.ts`
 não lê `staging/`, e nada do jogo deve ler.
 
+**`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
+escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
+sem `<script><attribute key="slot">` (a maioria do Canary não declara — os 22 itens `kind:
+'weapon'` autorais concordam: `hand`, twoHanded ou não), e não copia `defense` de item que o
+PRÓPRIO Canary classifica fora de `shield`/arma (`primarytype` "valuables"/"creature products"
+com `weaponType shield`/`sword` residual — "rusted shield", "broken macuahuitl": curiosidade de
+quest, não equipamento). Uma arma cujo `primarytype` MENTE (diz "axe weapons" mas `weaponType` é
+`distance` sem `ammotype` — "broken Iks spear") também sai do corte, pela mesma regra M34-04 que
+já vale para `primarytype: "distance weapons"`. `pnpm catalog:promote-items` (#748) é o passo
+SEGUINTE, na mesma forma de `promote-monsters.ts`: lê `staging/items/generated/`, e escreve
+`data/items/generated/<fatia>.json` MENOS duas exclusões, cada uma contada em
+`docs/reference/catalog/items-promotion-report.md`, nunca em silêncio — id que colide com item
+AUTORAL (os 73 de sempre; o autoral vence, ADR 0014), e `appearanceId` (o `id` do `<item>` do
+Canary, que É o clientid do OTB) fora do inventário do pacote que `appearances/baseline.json.pack`
+DECLARA (FUN-21; lido pelo nome do campo, nunca fixo em código — a troca de pacote, quando
+acontecer, não pede mudança aqui). `appearanceId` é staging-only — o mesmo recurso que `outfitId`
+usa em monstro — e vira linha em `appearances/baseline.json.items`, nunca campo do item
+(`itemSchema` não o declara).
+
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
 ```
 data/items/backpack.json             # autoral, uma entidade por arquivo (de sempre)
-data/items/generated/weapons.json    # gerado por `pnpm catalog:import items` — um ARRAY por fatia
+data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
 data/monsters/rat.json               # autoral, hand-authored (#581 é quem regenera os quatro)
 data/monsters/generated/mammals.json # promovido por `pnpm catalog:promote-monsters` — um ARRAY

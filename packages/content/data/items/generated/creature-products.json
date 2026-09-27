@@ -9,8 +9,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10296
+    }
   },
   {
     "id": "afflicted-strider-head",
@@ -22,8 +21,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36789
+    }
   },
   {
     "id": "afflicted-strider-worms",
@@ -35,8 +33,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36790
+    }
   },
   {
     "id": "ancient-belt-buckle",
@@ -48,8 +45,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24384
+    }
   },
   {
     "id": "ancient-iks-ritual-chalice",
@@ -61,8 +57,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44432
+    }
   },
   {
     "id": "ancient-liche-bone",
@@ -74,8 +69,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31588
+    }
   },
   {
     "id": "ancient-stone",
@@ -87,8 +81,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9632
+    }
   },
   {
     "id": "ancient-watch",
@@ -100,8 +93,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24969
+    }
   },
   {
     "id": "antlers",
@@ -113,8 +105,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10297
+    }
   },
   {
     "id": "ape-fur",
@@ -126,8 +117,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5883
+    }
   },
   {
     "id": "apron",
@@ -139,8 +129,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33933
+    }
   },
   {
     "id": "astral-glyph",
@@ -152,8 +141,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24225
+    }
   },
   {
     "id": "astral-source",
@@ -165,8 +153,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24228
+    }
   },
   {
     "id": "badger-fur",
@@ -178,8 +165,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 903
+    }
   },
   {
     "id": "bamboo-stick",
@@ -191,8 +177,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11445
+    }
   },
   {
     "id": "banana-sash",
@@ -204,8 +189,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11511
+    }
   },
   {
     "id": "basalt-fetish",
@@ -217,8 +201,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17856
+    }
   },
   {
     "id": "basalt-figurine",
@@ -230,8 +213,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17857
+    }
   },
   {
     "id": "bashmu-fang",
@@ -243,8 +225,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36820
+    }
   },
   {
     "id": "bashmu-feather",
@@ -256,8 +237,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36823
+    }
   },
   {
     "id": "bashmu-tongue",
@@ -269,8 +249,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36821
+    }
   },
   {
     "id": "bat-wing",
@@ -282,8 +261,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5894
+    }
   },
   {
     "id": "battle-stone",
@@ -295,8 +273,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11447
+    }
   },
   {
     "id": "bear-paw",
@@ -308,8 +285,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5896
+    }
   },
   {
     "id": "beetle-carapace",
@@ -321,8 +297,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24381
+    }
   },
   {
     "id": "behemoth-claw",
@@ -334,8 +309,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5930
+    }
   },
   {
     "id": "black-hood",
@@ -347,8 +321,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9645
+    }
   },
   {
     "id": "black-wool",
@@ -360,8 +333,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11448
+    }
   },
   {
     "id": "blazing-bone",
@@ -373,8 +345,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16131
+    }
   },
   {
     "id": "blemished-spawn-abdomen",
@@ -386,8 +357,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36779
+    }
   },
   {
     "id": "blemished-spawn-head",
@@ -399,8 +369,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36778
+    }
   },
   {
     "id": "blemished-spawn-tail",
@@ -412,8 +381,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36780
+    }
   },
   {
     "id": "blood-preservation",
@@ -425,8 +393,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11449
+    }
   },
   {
     "id": "bloodstained-scythe",
@@ -438,8 +405,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50101
+    }
   },
   {
     "id": "bloody-dwarven-beard",
@@ -451,8 +417,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17827
+    }
   },
   {
     "id": "bloody-pincers",
@@ -464,8 +429,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9633
+    }
   },
   {
     "id": "bloody-tears",
@@ -477,8 +441,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32594
+    }
   },
   {
     "id": "blue-goanna-scale",
@@ -490,8 +453,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31559
+    }
   },
   {
     "id": "boar-man-hoof",
@@ -503,8 +465,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40584
+    }
   },
   {
     "id": "boggy-dreads",
@@ -516,8 +477,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9667
+    }
   },
   {
     "id": "bola",
@@ -529,8 +489,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17809
+    }
   },
   {
     "id": "bone-fetish",
@@ -542,8 +501,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17831
+    }
   },
   {
     "id": "bone-shoulderplate",
@@ -555,8 +513,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10404
+    }
   },
   {
     "id": "bone-toothpick",
@@ -568,8 +525,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24380
+    }
   },
   {
     "id": "bonecarving-knife",
@@ -581,8 +537,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17830
+    }
   },
   {
     "id": "bonelord-eye",
@@ -594,8 +549,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5898
+    }
   },
   {
     "id": "bony-tail",
@@ -607,8 +561,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10277
+    }
   },
   {
     "id": "book-page",
@@ -620,8 +573,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28569
+    }
   },
   {
     "id": "bright-bell",
@@ -633,8 +585,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30324
+    }
   },
   {
     "id": "brimstone-fangs",
@@ -646,8 +597,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11702
+    }
   },
   {
     "id": "brimstone-shell",
@@ -659,8 +609,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11703
+    }
   },
   {
     "id": "brinebrute-claw",
@@ -672,8 +621,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50056
+    }
   },
   {
     "id": "broken-crossbow",
@@ -685,8 +633,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11451
+    }
   },
   {
     "id": "broken-draken-mail",
@@ -698,8 +645,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11660
+    }
   },
   {
     "id": "broken-gladiator-shield",
@@ -711,8 +657,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9656
+    }
   },
   {
     "id": "broken-halberd",
@@ -724,8 +669,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10418
+    }
   },
   {
     "id": "broken-helmet",
@@ -737,8 +681,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11453
+    }
   },
   {
     "id": "broken-key-ring",
@@ -750,8 +693,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11652
+    }
   },
   {
     "id": "broken-longbow",
@@ -763,8 +705,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34161
+    }
   },
   {
     "id": "broken-macuahuitl",
@@ -778,8 +719,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40530
+    }
   },
   {
     "id": "broken-mitmah-necklace",
@@ -791,8 +731,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44438
+    }
   },
   {
     "id": "broken-shamanic-staff",
@@ -804,8 +743,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11452
+    }
   },
   {
     "id": "broken-slicer",
@@ -817,8 +755,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11661
+    }
   },
   {
     "id": "broken-throwing-axe",
@@ -830,8 +767,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17851
+    }
   },
   {
     "id": "broodrider-saddle",
@@ -843,8 +779,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50058
+    }
   },
   {
     "id": "capricious-heart",
@@ -856,8 +791,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34138
+    }
   },
   {
     "id": "capricious-robe",
@@ -869,8 +803,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34145
+    }
   },
   {
     "id": "carniphila-seeds",
@@ -882,8 +815,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10300
+    }
   },
   {
     "id": "carnisylvan-bark",
@@ -895,8 +827,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36806
+    }
   },
   {
     "id": "carnisylvan-finger",
@@ -908,8 +839,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36805
+    }
   },
   {
     "id": "carnivostrich-feather",
@@ -921,8 +851,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40586
+    }
   },
   {
     "id": "carrion-worm-fang",
@@ -934,8 +863,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10275
+    }
   },
   {
     "id": "cave-chimera-head",
@@ -947,8 +875,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36787
+    }
   },
   {
     "id": "cave-chimera-leg",
@@ -960,8 +887,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36788
+    }
   },
   {
     "id": "cave-devourer-eyes",
@@ -973,8 +899,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27599
+    }
   },
   {
     "id": "cave-devourer-legs",
@@ -986,8 +911,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27601
+    }
   },
   {
     "id": "cave-devourer-maw",
@@ -999,8 +923,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27600
+    }
   },
   {
     "id": "cavebear-skull",
@@ -1012,8 +935,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12316
+    }
   },
   {
     "id": "centipede-leg",
@@ -1025,8 +947,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10301
+    }
   },
   {
     "id": "ceremonial-brush",
@@ -1038,8 +959,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44433
+    }
   },
   {
     "id": "chasm-spawn-abdomen",
@@ -1051,8 +971,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27603
+    }
   },
   {
     "id": "chasm-spawn-head",
@@ -1064,8 +983,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27602
+    }
   },
   {
     "id": "chasm-spawn-tail",
@@ -1077,8 +995,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27604
+    }
   },
   {
     "id": "cheese-cutter",
@@ -1090,8 +1007,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17817
+    }
   },
   {
     "id": "cheesy-figurine",
@@ -1103,8 +1019,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17818
+    }
   },
   {
     "id": "cheesy-membership-card",
@@ -1116,8 +1031,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35614
+    }
   },
   {
     "id": "chicken-feather",
@@ -1129,8 +1043,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5890
+    }
   },
   {
     "id": "cliff-strider-claw",
@@ -1142,8 +1055,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16134
+    }
   },
   {
     "id": "coal",
@@ -1155,8 +1067,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12600
+    }
   },
   {
     "id": "coal-eyes",
@@ -1168,8 +1079,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24978
+    }
   },
   {
     "id": "cobra-crest",
@@ -1181,8 +1091,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31678
+    }
   },
   {
     "id": "cobra-tongue",
@@ -1194,8 +1103,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9634
+    }
   },
   {
     "id": "cockroach-leg",
@@ -1207,8 +1115,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7882
+    }
   },
   {
     "id": "colourful-feather",
@@ -1220,8 +1127,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11514
+    }
   },
   {
     "id": "colourful-feathers",
@@ -1233,8 +1139,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25089
+    }
   },
   {
     "id": "colourful-snail-shell",
@@ -1246,8 +1151,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25696
+    }
   },
   {
     "id": "compass",
@@ -1259,8 +1163,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10302
+    }
   },
   {
     "id": "compound-eye",
@@ -1272,8 +1175,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14083
+    }
   },
   {
     "id": "condensed-energy",
@@ -1285,8 +1187,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23501
+    }
   },
   {
     "id": "coral-branch",
@@ -1298,8 +1199,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39406
+    }
   },
   {
     "id": "corrupt-naga-scales",
@@ -1311,8 +1211,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39415
+    }
   },
   {
     "id": "corrupted-flag",
@@ -1324,8 +1223,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10409
+    }
   },
   {
     "id": "cow-bell",
@@ -1337,8 +1235,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32012
+    }
   },
   {
     "id": "cowbell",
@@ -1350,8 +1247,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21204
+    }
   },
   {
     "id": "crab-man-claws",
@@ -1363,8 +1259,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40582
+    }
   },
   {
     "id": "crab-pincers",
@@ -1376,8 +1271,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10272
+    }
   },
   {
     "id": "cracked-alabaster-vase",
@@ -1389,8 +1283,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24385
+    }
   },
   {
     "id": "crawler-head-plating",
@@ -1402,8 +1295,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14079
+    }
   },
   {
     "id": "cry-stal",
@@ -1415,8 +1307,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39394
+    }
   },
   {
     "id": "crystal-bone",
@@ -1428,8 +1319,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23521
+    }
   },
   {
     "id": "crystal-of-the-mitmah",
@@ -1441,8 +1331,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44439
+    }
   },
   {
     "id": "crystalline-spikes",
@@ -1454,8 +1343,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16138
+    }
   },
   {
     "id": "crystallized-anger",
@@ -1467,8 +1355,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23507
+    }
   },
   {
     "id": "cultish-mask",
@@ -1480,8 +1367,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9638
+    }
   },
   {
     "id": "cultish-robe",
@@ -1493,8 +1379,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9639
+    }
   },
   {
     "id": "cultish-symbol",
@@ -1506,8 +1391,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11455
+    }
   },
   {
     "id": "curious-matter",
@@ -1519,8 +1403,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23511
+    }
   },
   {
     "id": "cursed-bone",
@@ -1532,8 +1415,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32774
+    }
   },
   {
     "id": "cursed-shoulder-spikes",
@@ -1545,8 +1427,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10410
+    }
   },
   {
     "id": "cyclops-toe",
@@ -1558,8 +1439,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9657
+    }
   },
   {
     "id": "daedal-chisel",
@@ -1571,8 +1451,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40522
+    }
   },
   {
     "id": "damaged-armor-plates",
@@ -1584,8 +1463,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28822
+    }
   },
   {
     "id": "damaged-worm-head",
@@ -1597,8 +1475,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27620
+    }
   },
   {
     "id": "damselfly-eye",
@@ -1610,8 +1487,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17463
+    }
   },
   {
     "id": "damselfly-wing",
@@ -1623,8 +1499,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17458
+    }
   },
   {
     "id": "dandelion-seeds",
@@ -1636,8 +1511,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25695
+    }
   },
   {
     "id": "dangerous-proto-matter",
@@ -1649,8 +1523,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23515
+    }
   },
   {
     "id": "dark-bell",
@@ -1662,8 +1535,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30325
+    }
   },
   {
     "id": "dark-obsidian-splinter",
@@ -1675,8 +1547,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43850
+    }
   },
   {
     "id": "dark-rosary",
@@ -1688,8 +1559,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10303
+    }
   },
   {
     "id": "darklight-basalt-chunk",
@@ -1701,8 +1571,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43852
+    }
   },
   {
     "id": "darklight-core",
@@ -1714,8 +1583,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43853
+    }
   },
   {
     "id": "darklight-matter",
@@ -1727,8 +1595,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43851
+    }
   },
   {
     "id": "dead-weight",
@@ -1740,8 +1607,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20202
+    }
   },
   {
     "id": "deadeye-devious-eye-patch",
@@ -1753,8 +1619,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6102
+    }
   },
   {
     "id": "decayed-finger-bone",
@@ -1766,8 +1631,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43846
+    }
   },
   {
     "id": "deepling-breaktime-snack",
@@ -1779,8 +1643,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14011
+    }
   },
   {
     "id": "deepling-claw",
@@ -1792,8 +1655,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14044
+    }
   },
   {
     "id": "deepling-guard-belt-buckle",
@@ -1805,8 +1667,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14010
+    }
   },
   {
     "id": "deepling-ridge",
@@ -1818,8 +1679,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14041
+    }
   },
   {
     "id": "deepling-scales",
@@ -1831,8 +1691,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14017
+    }
   },
   {
     "id": "deepling-warts",
@@ -1844,8 +1703,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14012
+    }
   },
   {
     "id": "deeptags",
@@ -1857,8 +1715,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14013
+    }
   },
   {
     "id": "deepworm-jaws",
@@ -1870,8 +1727,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27594
+    }
   },
   {
     "id": "deepworm-spike-roots",
@@ -1883,8 +1739,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27593
+    }
   },
   {
     "id": "deepworm-spikes",
@@ -1896,8 +1751,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27592
+    }
   },
   {
     "id": "demon-dust",
@@ -1910,8 +1764,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5526
+    }
   },
   {
     "id": "demon-horn",
@@ -1923,8 +1776,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5954
+    }
   },
   {
     "id": "demonic-essence",
@@ -1936,8 +1788,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6499
+    }
   },
   {
     "id": "demonic-finger",
@@ -1949,8 +1800,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12541
+    }
   },
   {
     "id": "demonic-skeletal-hand",
@@ -1962,8 +1812,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9647
+    }
   },
   {
     "id": "diremaw-brainpan",
@@ -1975,8 +1824,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27597
+    }
   },
   {
     "id": "diremaw-legs",
@@ -1988,8 +1836,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27598
+    }
   },
   {
     "id": "dirty-turban",
@@ -2001,8 +1848,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11456
+    }
   },
   {
     "id": "distorted-heart",
@@ -2014,8 +1860,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34142
+    }
   },
   {
     "id": "distorted-robe",
@@ -2027,8 +1872,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34149
+    }
   },
   {
     "id": "downy-feather",
@@ -2040,8 +1884,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11684
+    }
   },
   {
     "id": "dowser",
@@ -2053,8 +1896,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19110
+    }
   },
   {
     "id": "dragolisk-eye",
@@ -2066,8 +1908,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44746
+    }
   },
   {
     "id": "dragolisk-poison-gland",
@@ -2079,8 +1920,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44747
+    }
   },
   {
     "id": "dragon-blood",
@@ -2092,8 +1932,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24937
+    }
   },
   {
     "id": "dragon-claw",
@@ -2105,8 +1944,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5919
+    }
   },
   {
     "id": "dragon-crown",
@@ -2118,8 +1956,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24967
+    }
   },
   {
     "id": "dragon-tongue",
@@ -2131,8 +1968,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24938
+    }
   },
   {
     "id": "draken-sulphur",
@@ -2144,8 +1980,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11658
+    }
   },
   {
     "id": "draken-wristbands",
@@ -2157,8 +1992,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11659
+    }
   },
   {
     "id": "draptor-scales",
@@ -2170,8 +2004,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12309
+    }
   },
   {
     "id": "dream-essence-egg",
@@ -2183,8 +2016,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30005
+    }
   },
   {
     "id": "dream-matter",
@@ -2196,8 +2028,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20063
+    }
   },
   {
     "id": "dream-warden-claw",
@@ -2209,8 +2040,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20275
+    }
   },
   {
     "id": "dream-warden-mask",
@@ -2222,8 +2052,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20276
+    }
   },
   {
     "id": "dung-ball",
@@ -2235,8 +2064,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14225
+    }
   },
   {
     "id": "dwarven-beard",
@@ -2248,8 +2076,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5900
+    }
   },
   {
     "id": "earflap",
@@ -2261,8 +2088,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17819
+    }
   },
   {
     "id": "elder-bonelord-tentacle",
@@ -2274,8 +2100,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10276
+    }
   },
   {
     "id": "elemental-spikes",
@@ -2287,8 +2112,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12803
+    }
   },
   {
     "id": "elven-astral-observer",
@@ -2300,8 +2124,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11465
+    }
   },
   {
     "id": "elven-hoof",
@@ -2313,8 +2136,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18994
+    }
   },
   {
     "id": "elven-scouting-glass",
@@ -2326,8 +2148,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11464
+    }
   },
   {
     "id": "elvish-talisman",
@@ -2339,8 +2160,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9635
+    }
   },
   {
     "id": "emerald-tortoise-shell",
@@ -2352,8 +2172,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39379
+    }
   },
   {
     "id": "empty-honey-glass",
@@ -2365,8 +2184,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31331
+    }
   },
   {
     "id": "enchanted-chicken-wing",
@@ -2378,8 +2196,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5891
+    }
   },
   {
     "id": "energy-ball",
@@ -2391,8 +2208,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23523
+    }
   },
   {
     "id": "energy-soil",
@@ -2404,8 +2220,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 945
+    }
   },
   {
     "id": "energy-vein",
@@ -2417,8 +2232,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23508
+    }
   },
   {
     "id": "ensouled-essence",
@@ -2430,8 +2244,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32698
+    }
   },
   {
     "id": "eternal-flames",
@@ -2443,8 +2256,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 946
+    }
   },
   {
     "id": "execowtioner-mask",
@@ -2456,8 +2268,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21201
+    }
   },
   {
     "id": "eye-patch",
@@ -2469,8 +2280,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6098
+    }
   },
   {
     "id": "eyeless-devourer-legs",
@@ -2482,8 +2292,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36776
+    }
   },
   {
     "id": "eyeless-devourer-maw",
@@ -2495,8 +2304,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36775
+    }
   },
   {
     "id": "eyeless-devourer-tongue",
@@ -2508,8 +2316,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36777
+    }
   },
   {
     "id": "fafnar-symbol",
@@ -2521,8 +2328,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31443
+    }
   },
   {
     "id": "fairy-wings",
@@ -2534,8 +2340,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25694
+    }
   },
   {
     "id": "falcon-crest",
@@ -2547,8 +2352,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28823
+    }
   },
   {
     "id": "fiery-heart",
@@ -2560,8 +2364,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9636
+    }
   },
   {
     "id": "fig-leaf",
@@ -2573,8 +2376,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25742
+    }
   },
   {
     "id": "fir-cone",
@@ -2586,8 +2388,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 19111
+    }
   },
   {
     "id": "fireworks-capsule",
@@ -2599,8 +2400,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30208
+    }
   },
   {
     "id": "fish-eye",
@@ -2612,8 +2412,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 48517
+    }
   },
   {
     "id": "fish-fin",
@@ -2625,8 +2424,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5895
+    }
   },
   {
     "id": "flawless-ice-crystal",
@@ -2638,8 +2436,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 942
+    }
   },
   {
     "id": "flintstone",
@@ -2651,8 +2448,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12806
+    }
   },
   {
     "id": "flotsam",
@@ -2664,8 +2460,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39407
+    }
   },
   {
     "id": "foam-stalker-spume",
@@ -2677,8 +2472,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39240
+    }
   },
   {
     "id": "forbidden-tome",
@@ -2690,8 +2484,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24971
+    }
   },
   {
     "id": "fox-paw",
@@ -2703,8 +2496,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27462
+    }
   },
   {
     "id": "frazzle-skin",
@@ -2716,8 +2508,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20199
+    }
   },
   {
     "id": "frazzle-tongue",
@@ -2729,8 +2520,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20198
+    }
   },
   {
     "id": "frost-giant-pelt",
@@ -2742,8 +2532,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9658
+    }
   },
   {
     "id": "frosty-heart",
@@ -2755,8 +2544,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9661
+    }
   },
   {
     "id": "frozen-chain",
@@ -2768,8 +2556,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30281
+    }
   },
   {
     "id": "frozen-claw",
@@ -2782,8 +2569,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30279
+    }
   },
   {
     "id": "frozen-lightning",
@@ -2795,8 +2581,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23519
+    }
   },
   {
     "id": "frozen-time",
@@ -2808,8 +2593,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24970
+    }
   },
   {
     "id": "fungal-blister",
@@ -2821,8 +2605,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39385
+    }
   },
   {
     "id": "fur-shred",
@@ -2834,8 +2617,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34164
+    }
   },
   {
     "id": "gauze-bandage",
@@ -2847,8 +2629,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9649
+    }
   },
   {
     "id": "gear-crystal",
@@ -2860,8 +2641,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9655
+    }
   },
   {
     "id": "gear-wheel",
@@ -2873,8 +2653,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8775
+    }
   },
   {
     "id": "ghastly-dragon-head",
@@ -2886,8 +2665,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10449
+    }
   },
   {
     "id": "ghostly-tissue",
@@ -2899,8 +2677,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9690
+    }
   },
   {
     "id": "ghoul-snack",
@@ -2912,8 +2689,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11467
+    }
   },
   {
     "id": "giant-crab-pincer",
@@ -2925,8 +2701,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12317
+    }
   },
   {
     "id": "giant-eye",
@@ -2938,8 +2713,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10280
+    }
   },
   {
     "id": "giant-pacifier",
@@ -2951,8 +2725,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21199
+    }
   },
   {
     "id": "giant-tentacle",
@@ -2964,8 +2737,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27619
+    }
   },
   {
     "id": "girlish-hair-decoration",
@@ -2977,8 +2749,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11443
+    }
   },
   {
     "id": "girtablilu-warrior-carapace",
@@ -2990,8 +2761,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36971
+    }
   },
   {
     "id": "gland",
@@ -3003,8 +2773,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8143
+    }
   },
   {
     "id": "glimmering-soil",
@@ -3016,8 +2785,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 941
+    }
   },
   {
     "id": "glistening-bone",
@@ -3029,8 +2797,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23522
+    }
   },
   {
     "id": "gloom-wolf-fur",
@@ -3042,8 +2809,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22007
+    }
   },
   {
     "id": "glooth-injection-tube",
@@ -3055,8 +2821,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21103
+    }
   },
   {
     "id": "glowing-carrot",
@@ -3068,8 +2833,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24977
+    }
   },
   {
     "id": "glowing-rune",
@@ -3081,8 +2845,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28570
+    }
   },
   {
     "id": "goanna-claw",
@@ -3094,8 +2857,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31561
+    }
   },
   {
     "id": "goanna-meat",
@@ -3107,8 +2869,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31560
+    }
   },
   {
     "id": "goblin-ear",
@@ -3120,8 +2881,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11539
+    }
   },
   {
     "id": "gold-brocaded-cloth",
@@ -3133,8 +2893,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40529
+    }
   },
   {
     "id": "golden-bell",
@@ -3146,8 +2905,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30195
+    }
   },
   {
     "id": "golden-cotton-reel",
@@ -3159,8 +2917,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30285
+    }
   },
   {
     "id": "golden-lotus-brooch",
@@ -3172,8 +2929,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21974
+    }
   },
   {
     "id": "golden-sun-coin",
@@ -3185,8 +2941,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43734
+    }
   },
   {
     "id": "golden-talon",
@@ -3198,8 +2953,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24968
+    }
   },
   {
     "id": "golden-tiger-coin",
@@ -3211,8 +2965,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43735
+    }
   },
   {
     "id": "goosebump-leather",
@@ -3224,8 +2977,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20205
+    }
   },
   {
     "id": "gorerilla-mane",
@@ -3237,8 +2989,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39392
+    }
   },
   {
     "id": "gorerilla-tail",
@@ -3250,8 +3001,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39393
+    }
   },
   {
     "id": "gorger-antlers",
@@ -3263,8 +3013,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50059
+    }
   },
   {
     "id": "grappling-hook",
@@ -3276,8 +3025,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5800
+    }
   },
   {
     "id": "greasy-wool",
@@ -3289,8 +3037,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31725
+    }
   },
   {
     "id": "green-bandage",
@@ -3302,34 +3049,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25697
-  },
-  {
-    "id": "green-dragon-leather",
-    "name": "green dragon leather",
-    "kind": "other",
-    "weight": 0.6,
-    "value": 100,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 5877
-  },
-  {
-    "id": "green-dragon-scale",
-    "name": "green dragon scale",
-    "kind": "other",
-    "weight": 0.8,
-    "value": 100,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 5920
+    }
   },
   {
     "id": "grimace",
@@ -3341,8 +3061,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32593
+    }
   },
   {
     "id": "guidebook",
@@ -3354,8 +3073,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25745
+    }
   },
   {
     "id": "half-digested-stones",
@@ -3367,8 +3085,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27369
+    }
   },
   {
     "id": "half-eaten-brain",
@@ -3380,8 +3097,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9659
+    }
   },
   {
     "id": "hand",
@@ -3393,8 +3109,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33936
+    }
   },
   {
     "id": "hard-boiled-hydra-egg",
@@ -3406,8 +3121,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33947
+    }
   },
   {
     "id": "hardened-bone",
@@ -3419,8 +3133,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5925
+    }
   },
   {
     "id": "harpy-feathers",
@@ -3432,8 +3145,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40585
+    }
   },
   {
     "id": "hatched-rorc-egg",
@@ -3445,8 +3157,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18997
+    }
   },
   {
     "id": "hazardous-heart",
@@ -3458,8 +3169,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34140
+    }
   },
   {
     "id": "hazardous-robe",
@@ -3471,8 +3181,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34147
+    }
   },
   {
     "id": "headpecker-beak",
@@ -3484,8 +3193,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39387
+    }
   },
   {
     "id": "headpecker-feather",
@@ -3497,8 +3205,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39388
+    }
   },
   {
     "id": "heaven-blossom",
@@ -3510,8 +3217,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3657
+    }
   },
   {
     "id": "hellhound-slobber",
@@ -3523,8 +3229,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9637
+    }
   },
   {
     "id": "hellhunter-eye",
@@ -3536,8 +3241,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50055
+    }
   },
   {
     "id": "hellspawn-tail",
@@ -3549,8 +3253,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10304
+    }
   },
   {
     "id": "hemp-rope",
@@ -3562,8 +3265,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20206
+    }
   },
   {
     "id": "hideous-chunk",
@@ -3575,8 +3277,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16140
+    }
   },
   {
     "id": "high-guard-flag",
@@ -3588,8 +3289,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10415
+    }
   },
   {
     "id": "high-guard-shoulderplates",
@@ -3601,8 +3301,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10416
+    }
   },
   {
     "id": "hollow-stampor-hoof",
@@ -3614,8 +3313,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12314
+    }
   },
   {
     "id": "holy-ash",
@@ -3627,8 +3325,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17850
+    }
   },
   {
     "id": "holy-orchid",
@@ -3640,8 +3337,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5922
+    }
   },
   {
     "id": "honeycomb",
@@ -3653,8 +3349,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5902
+    }
   },
   {
     "id": "hook",
@@ -3666,8 +3361,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6097
+    }
   },
   {
     "id": "horoscope",
@@ -3679,8 +3373,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18926
+    }
   },
   {
     "id": "horseshoe",
@@ -3692,8 +3385,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30318
+    }
   },
   {
     "id": "huge-shell",
@@ -3705,8 +3397,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27621
+    }
   },
   {
     "id": "huge-spiky-snail-shell",
@@ -3718,8 +3409,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27627
+    }
   },
   {
     "id": "human-teeth",
@@ -3731,8 +3421,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36807
+    }
   },
   {
     "id": "humongous-chunk",
@@ -3744,8 +3433,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16139
+    }
   },
   {
     "id": "hydra-egg",
@@ -3757,8 +3445,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 4839
+    }
   },
   {
     "id": "hydra-head",
@@ -3770,8 +3457,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10282
+    }
   },
   {
     "id": "hydrophytes",
@@ -3783,8 +3469,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39410
+    }
   },
   {
     "id": "iced-soil",
@@ -3796,8 +3481,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 944
+    }
   },
   {
     "id": "incantation-notes",
@@ -3809,8 +3493,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18929
+    }
   },
   {
     "id": "infernal-heart",
@@ -3822,8 +3505,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34139
+    }
   },
   {
     "id": "infernal-robe",
@@ -3835,8 +3517,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34146
+    }
   },
   {
     "id": "instable-proto-matter",
@@ -3848,8 +3529,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23516
+    }
   },
   {
     "id": "iron-ore",
@@ -3861,8 +3541,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5880
+    }
   },
   {
     "id": "ivory-carving",
@@ -3874,8 +3553,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33945
+    }
   },
   {
     "id": "jagged-sickle",
@@ -3887,8 +3565,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32595
+    }
   },
   {
     "id": "jaws",
@@ -3900,8 +3577,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34014
+    }
   },
   {
     "id": "jewelled-belt",
@@ -3913,8 +3589,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11470
+    }
   },
   {
     "id": "jungle-moa-claw",
@@ -3926,8 +3601,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39404
+    }
   },
   {
     "id": "jungle-moa-egg",
@@ -3939,8 +3613,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39405
+    }
   },
   {
     "id": "jungle-moa-feather",
@@ -3952,8 +3625,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39403
+    }
   },
   {
     "id": "katex-blood",
@@ -3965,8 +3637,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34100
+    }
   },
   {
     "id": "kollos-shell",
@@ -3978,8 +3649,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14077
+    }
   },
   {
     "id": "lamassu-hoof",
@@ -3991,8 +3661,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31441
+    }
   },
   {
     "id": "lamassu-horn",
@@ -4004,8 +3673,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31442
+    }
   },
   {
     "id": "lancer-beetle-shell",
@@ -4017,8 +3685,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10455
+    }
   },
   {
     "id": "lancet",
@@ -4030,8 +3697,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18925
+    }
   },
   {
     "id": "lavafungus-head",
@@ -4043,8 +3709,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36785
+    }
   },
   {
     "id": "lavafungus-ring",
@@ -4056,8 +3721,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36786
+    }
   },
   {
     "id": "lavaworm-jaws",
@@ -4069,8 +3733,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36771
+    }
   },
   {
     "id": "lavaworm-spike-roots",
@@ -4082,8 +3745,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36769
+    }
   },
   {
     "id": "lavaworm-spikes",
@@ -4095,8 +3757,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36770
+    }
   },
   {
     "id": "legionnaire-flags",
@@ -4108,8 +3769,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10417
+    }
   },
   {
     "id": "liodile-fang",
@@ -4121,8 +3781,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40583
+    }
   },
   {
     "id": "lion-cloak-patch",
@@ -4134,8 +3793,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34162
+    }
   },
   {
     "id": "lion-crest",
@@ -4147,8 +3805,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34160
+    }
   },
   {
     "id": "lion-seal",
@@ -4160,8 +3817,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34163
+    }
   },
   {
     "id": "lizard-essence",
@@ -4173,8 +3829,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11680
+    }
   },
   {
     "id": "lizard-heart",
@@ -4186,8 +3841,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31340
+    }
   },
   {
     "id": "lizard-leather",
@@ -4199,8 +3853,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5876
+    }
   },
   {
     "id": "lizard-scale",
@@ -4212,8 +3865,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5881
+    }
   },
   {
     "id": "longing-eyes",
@@ -4225,8 +3877,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27624
+    }
   },
   {
     "id": "lost-bracers",
@@ -4238,8 +3889,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17853
+    }
   },
   {
     "id": "lucky-pig",
@@ -4251,8 +3901,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30320
+    }
   },
   {
     "id": "luminous-orb",
@@ -4264,8 +3913,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11454
+    }
   },
   {
     "id": "mad-froth",
@@ -4277,8 +3925,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17854
+    }
   },
   {
     "id": "magic-sulphur",
@@ -4290,8 +3937,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5904
+    }
   },
   {
     "id": "magma-clump",
@@ -4303,8 +3949,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16130
+    }
   },
   {
     "id": "makara-fin",
@@ -4316,8 +3961,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39401
+    }
   },
   {
     "id": "makara-tongue",
@@ -4329,8 +3973,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39402
+    }
   },
   {
     "id": "mammoth-tusk",
@@ -4342,8 +3985,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10321
+    }
   },
   {
     "id": "mantassin-tail",
@@ -4355,8 +3997,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11489
+    }
   },
   {
     "id": "manticore-ear",
@@ -4368,8 +4009,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31440
+    }
   },
   {
     "id": "manticore-tail",
@@ -4381,8 +4021,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31439
+    }
   },
   {
     "id": "mantosaurus-jaw",
@@ -4394,8 +4033,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39386
+    }
   },
   {
     "id": "marsh-stalker-beak",
@@ -4407,8 +4045,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17461
+    }
   },
   {
     "id": "marsh-stalker-feather",
@@ -4420,8 +4057,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17462
+    }
   },
   {
     "id": "maxilla",
@@ -4433,8 +4069,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12315
+    }
   },
   {
     "id": "maxxenius-head",
@@ -4446,8 +4081,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29942
+    }
   },
   {
     "id": "meat-hammer",
@@ -4459,8 +4093,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32010
+    }
   },
   {
     "id": "mega-dragon-heart",
@@ -4472,8 +4105,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44745
+    }
   },
   {
     "id": "mercurial-wing",
@@ -4485,8 +4117,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39395
+    }
   },
   {
     "id": "metal-jaw",
@@ -4498,8 +4129,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21193
+    }
   },
   {
     "id": "metal-spike",
@@ -4511,8 +4141,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10298
+    }
   },
   {
     "id": "metal-toe",
@@ -4524,8 +4153,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21198
+    }
   },
   {
     "id": "milk-churn",
@@ -4537,8 +4165,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32011
+    }
   },
   {
     "id": "minotaur-horn",
@@ -4550,8 +4177,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11472
+    }
   },
   {
     "id": "minotaur-leather",
@@ -4563,8 +4189,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5878
+    }
   },
   {
     "id": "miraculum",
@@ -4576,8 +4201,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11474
+    }
   },
   {
     "id": "molten-dragon-essence",
@@ -4589,8 +4213,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44744
+    }
   },
   {
     "id": "moohtant-horn",
@@ -4602,8 +4225,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21200
+    }
   },
   {
     "id": "moon-pin",
@@ -4615,8 +4237,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43736
+    }
   },
   {
     "id": "mother-soil",
@@ -4628,8 +4249,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 947
+    }
   },
   {
     "id": "mould-heart",
@@ -4641,8 +4261,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34141
+    }
   },
   {
     "id": "mould-robe",
@@ -4654,8 +4273,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34148
+    }
   },
   {
     "id": "mouldy-powder",
@@ -4667,8 +4285,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35596
+    }
   },
   {
     "id": "mutated-bat-ear",
@@ -4680,8 +4297,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9662
+    }
   },
   {
     "id": "mutated-flesh",
@@ -4693,8 +4309,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10308
+    }
   },
   {
     "id": "mutated-rat-tail",
@@ -4706,8 +4321,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9668
+    }
   },
   {
     "id": "mysterious-remains",
@@ -4719,8 +4333,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23509
+    }
   },
   {
     "id": "mystical-hourglass",
@@ -4732,8 +4345,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9660
+    }
   },
   {
     "id": "naga-archer-scales",
@@ -4745,8 +4357,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39413
+    }
   },
   {
     "id": "naga-armring",
@@ -4758,8 +4369,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39411
+    }
   },
   {
     "id": "naga-earring",
@@ -4771,8 +4381,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39412
+    }
   },
   {
     "id": "naga-warrior-scales",
@@ -4784,8 +4393,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39414
+    }
   },
   {
     "id": "natural-soil",
@@ -4797,8 +4405,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 940
+    }
   },
   {
     "id": "necromantic-robe",
@@ -4810,8 +4417,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11475
+    }
   },
   {
     "id": "necromantic-rust",
@@ -4823,8 +4429,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21196
+    }
   },
   {
     "id": "nettle-blossom",
@@ -4836,8 +4441,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10314
+    }
   },
   {
     "id": "nettle-spit",
@@ -4849,8 +4453,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11476
+    }
   },
   {
     "id": "neutral-matter",
@@ -4862,8 +4465,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 954
+    }
   },
   {
     "id": "nighthunter-wing",
@@ -4875,8 +4477,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39381
+    }
   },
   {
     "id": "nimmersatts-seal",
@@ -4888,8 +4489,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44743
+    }
   },
   {
     "id": "noble-amulet",
@@ -4901,8 +4501,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31595
+    }
   },
   {
     "id": "noble-cape",
@@ -4914,8 +4513,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31593
+    }
   },
   {
     "id": "noble-turban",
@@ -4927,8 +4525,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11486
+    }
   },
   {
     "id": "nose-ring",
@@ -4940,8 +4537,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5804
+    }
   },
   {
     "id": "obujos-shell",
@@ -4953,8 +4549,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14023
+    }
   },
   {
     "id": "odd-organ",
@@ -4966,8 +4561,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23510
+    }
   },
   {
     "id": "ogre-ear-stud",
@@ -4979,8 +4573,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22188
+    }
   },
   {
     "id": "ogre-nose-ring",
@@ -4992,8 +4585,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22189
+    }
   },
   {
     "id": "old-girtablilu-carapace",
@@ -5005,8 +4597,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36972
+    }
   },
   {
     "id": "old-royal-diary",
@@ -5018,8 +4609,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36808
+    }
   },
   {
     "id": "orc-leather",
@@ -5031,8 +4621,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11479
+    }
   },
   {
     "id": "orc-tooth",
@@ -5044,8 +4633,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10196
+    }
   },
   {
     "id": "orc-tusk",
@@ -5057,8 +4645,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7786
+    }
   },
   {
     "id": "orcish-gear",
@@ -5070,8 +4657,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11477
+    }
   },
   {
     "id": "panther-head",
@@ -5083,8 +4669,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12039
+    }
   },
   {
     "id": "panther-paw",
@@ -5096,8 +4681,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12040
+    }
   },
   {
     "id": "parder-fur",
@@ -5109,8 +4693,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39418
+    }
   },
   {
     "id": "parder-tooth",
@@ -5122,8 +4705,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39417
+    }
   },
   {
     "id": "peacock-feather-fan",
@@ -5135,8 +4717,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21975
+    }
   },
   {
     "id": "peg-leg",
@@ -5148,8 +4729,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6126
+    }
   },
   {
     "id": "pelvis-bone",
@@ -5161,8 +4741,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11481
+    }
   },
   {
     "id": "percht-broom",
@@ -5174,8 +4753,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30282
+    }
   },
   {
     "id": "percht-handkerchief",
@@ -5187,8 +4765,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30284
+    }
   },
   {
     "id": "percht-horns",
@@ -5200,8 +4777,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30186
+    }
   },
   {
     "id": "percht-skull",
@@ -5213,8 +4789,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30192
+    }
   },
   {
     "id": "perfect-behemoth-fang",
@@ -5226,8 +4801,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5893
+    }
   },
   {
     "id": "petrified-scream",
@@ -5239,8 +4813,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10420
+    }
   },
   {
     "id": "phantasmal-hair",
@@ -5252,8 +4825,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32704
+    }
   },
   {
     "id": "pig-foot",
@@ -5265,8 +4837,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9693
+    }
   },
   {
     "id": "pirate-coin",
@@ -5278,8 +4849,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35572
+    }
   },
   {
     "id": "plagueroot-offshoot",
@@ -5291,8 +4861,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30087
+    }
   },
   {
     "id": "plasma-pearls",
@@ -5304,8 +4873,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23506
+    }
   },
   {
     "id": "plasmatic-lightning",
@@ -5317,8 +4885,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23520
+    }
   },
   {
     "id": "poison-gland",
@@ -5330,8 +4897,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29348
+    }
   },
   {
     "id": "poison-spider-shell",
@@ -5343,8 +4909,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11485
+    }
   },
   {
     "id": "poisoned-fang",
@@ -5356,8 +4921,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21195
+    }
   },
   {
     "id": "poisonous-slime",
@@ -5369,8 +4933,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9640
+    }
   },
   {
     "id": "polar-bear-paw",
@@ -5382,8 +4945,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9650
+    }
   },
   {
     "id": "prehemoth-claw",
@@ -5395,8 +4957,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39383
+    }
   },
   {
     "id": "prehemoth-horns",
@@ -5408,8 +4969,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39382
+    }
   },
   {
     "id": "preserved-dark-seed",
@@ -5421,8 +4981,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 48505
+    }
   },
   {
     "id": "preserved-light-blue-seed",
@@ -5434,8 +4993,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45654
+    }
   },
   {
     "id": "preserved-pink-seed",
@@ -5447,8 +5005,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45652
+    }
   },
   {
     "id": "preserved-purple-seed",
@@ -5460,8 +5017,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45656
+    }
   },
   {
     "id": "preserved-red-seed",
@@ -5473,8 +5029,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45653
+    }
   },
   {
     "id": "preserved-violet-seed",
@@ -5486,8 +5041,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45655
+    }
   },
   {
     "id": "preserved-yellow-seed",
@@ -5499,8 +5053,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 45657
+    }
   },
   {
     "id": "pristine-worm-head",
@@ -5512,8 +5065,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27618
+    }
   },
   {
     "id": "protective-charm",
@@ -5525,8 +5077,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11444
+    }
   },
   {
     "id": "pulverized-ore",
@@ -5538,8 +5089,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16133
+    }
   },
   {
     "id": "purple-robe",
@@ -5551,8 +5101,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11473
+    }
   },
   {
     "id": "quara-bone",
@@ -5564,8 +5113,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11491
+    }
   },
   {
     "id": "quara-eye",
@@ -5577,8 +5125,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11488
+    }
   },
   {
     "id": "quara-pincers",
@@ -5590,8 +5137,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11490
+    }
   },
   {
     "id": "quara-tentacle",
@@ -5603,8 +5149,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11487
+    }
   },
   {
     "id": "quill",
@@ -5616,8 +5161,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28567
+    }
   },
   {
     "id": "rare-earth",
@@ -5629,8 +5173,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27301
+    }
   },
   {
     "id": "ravenous-circlet",
@@ -5642,8 +5185,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32597
+    }
   },
   {
     "id": "raw-meat",
@@ -5655,8 +5197,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22186
+    }
   },
   {
     "id": "reality-splinter",
@@ -5668,34 +5209,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51259
-  },
-  {
-    "id": "red-dragon-leather",
-    "name": "red dragon leather",
-    "kind": "other",
-    "weight": 0.6,
-    "value": 200,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 5948
-  },
-  {
-    "id": "red-dragon-scale",
-    "name": "red dragon scale",
-    "kind": "other",
-    "weight": 0.9,
-    "value": 200,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 5882
+    }
   },
   {
     "id": "red-goanna-scale",
@@ -5707,8 +5221,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31558
+    }
   },
   {
     "id": "red-hair-dye",
@@ -5720,8 +5233,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17855
+    }
   },
   {
     "id": "red-lantern",
@@ -5733,8 +5245,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10289
+    }
   },
   {
     "id": "rhindeer-antlers",
@@ -5746,8 +5257,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40587
+    }
   },
   {
     "id": "rhino-hide",
@@ -5759,8 +5269,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24388
+    }
   },
   {
     "id": "rhino-horn",
@@ -5772,8 +5281,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24389
+    }
   },
   {
     "id": "rhino-horn-carving",
@@ -5785,8 +5293,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24386
+    }
   },
   {
     "id": "ripptor-claw",
@@ -5798,8 +5305,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39389
+    }
   },
   {
     "id": "ripptor-scales",
@@ -5811,8 +5317,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39391
+    }
   },
   {
     "id": "ritual-tooth",
@@ -5824,8 +5329,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40528
+    }
   },
   {
     "id": "rogue-naga-scales",
@@ -5837,8 +5341,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39416
+    }
   },
   {
     "id": "roots",
@@ -5850,8 +5353,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33938
+    }
   },
   {
     "id": "rope-belt",
@@ -5863,8 +5365,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11492
+    }
   },
   {
     "id": "rorc-egg",
@@ -5876,8 +5377,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18996
+    }
   },
   {
     "id": "rorc-feather",
@@ -5889,8 +5389,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18993
+    }
   },
   {
     "id": "rotten-feather",
@@ -5902,8 +5401,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40527
+    }
   },
   {
     "id": "rotten-heart",
@@ -5915,8 +5413,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31589
+    }
   },
   {
     "id": "rotten-roots",
@@ -5928,8 +5425,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43849
+    }
   },
   {
     "id": "rotten-vermin-ichor",
@@ -5941,8 +5437,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43847
+    }
   },
   {
     "id": "sabretooth",
@@ -5954,8 +5449,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10311
+    }
   },
   {
     "id": "sabretooth-fur",
@@ -5967,8 +5461,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39378
+    }
   },
   {
     "id": "safety-pin",
@@ -5980,8 +5473,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11493
+    }
   },
   {
     "id": "sandcrawler-shell",
@@ -5993,8 +5485,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10456
+    }
   },
   {
     "id": "scarab-pincers",
@@ -6006,8 +5497,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9631
+    }
   },
   {
     "id": "scorpion-charm",
@@ -6019,8 +5509,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36822
+    }
   },
   {
     "id": "scorpion-tail",
@@ -6032,8 +5521,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9651
+    }
   },
   {
     "id": "scythe-leg",
@@ -6045,8 +5533,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10312
+    }
   },
   {
     "id": "sea-horse-figurine",
@@ -6058,8 +5545,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31323
+    }
   },
   {
     "id": "sea-serpent-scale",
@@ -6071,8 +5557,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9666
+    }
   },
   {
     "id": "seacrest-hair",
@@ -6084,8 +5569,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21801
+    }
   },
   {
     "id": "seacrest-pearl",
@@ -6097,8 +5581,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21747
+    }
   },
   {
     "id": "seacrest-scale",
@@ -6110,8 +5593,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21800
+    }
   },
   {
     "id": "seeds",
@@ -6123,8 +5605,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 647
+    }
   },
   {
     "id": "shadow-mask",
@@ -6136,8 +5617,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24973
+    }
   },
   {
     "id": "shadow-paint",
@@ -6149,8 +5629,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24974
+    }
   },
   {
     "id": "shaggy-tail",
@@ -6162,8 +5641,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10407
+    }
   },
   {
     "id": "shamanic-hood",
@@ -6175,8 +5653,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11478
+    }
   },
   {
     "id": "shamanic-talisman",
@@ -6188,8 +5665,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22184
+    }
   },
   {
     "id": "shard",
@@ -6201,8 +5677,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7290
+    }
   },
   {
     "id": "shark-fins",
@@ -6214,8 +5689,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35574
+    }
   },
   {
     "id": "shimmering-beetles",
@@ -6227,8 +5701,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25693
+    }
   },
   {
     "id": "shiny-stone",
@@ -6240,8 +5713,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10310
+    }
   },
   {
     "id": "signet-ring",
@@ -6253,8 +5725,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31592
+    }
   },
   {
     "id": "silencer-claws",
@@ -6266,8 +5737,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20200
+    }
   },
   {
     "id": "silencer-resonating-chamber",
@@ -6279,8 +5749,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20201
+    }
   },
   {
     "id": "silken-bookmark",
@@ -6292,8 +5761,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28566
+    }
   },
   {
     "id": "silky-fur",
@@ -6305,8 +5773,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10292
+    }
   },
   {
     "id": "silver-foxmouse-coin",
@@ -6318,8 +5785,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43733
+    }
   },
   {
     "id": "silver-moon-coin",
@@ -6331,8 +5797,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43732
+    }
   },
   {
     "id": "sineater-wing",
@@ -6344,8 +5809,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50057
+    }
   },
   {
     "id": "single-human-eye",
@@ -6357,8 +5821,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25701
+    }
   },
   {
     "id": "skull-belt",
@@ -6370,8 +5833,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11480
+    }
   },
   {
     "id": "skull-fetish",
@@ -6383,8 +5845,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22191
+    }
   },
   {
     "id": "skull-shatterer",
@@ -6396,8 +5857,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17849
+    }
   },
   {
     "id": "skunk-tail",
@@ -6409,8 +5869,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10274
+    }
   },
   {
     "id": "slime-heart",
@@ -6422,8 +5881,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21194
+    }
   },
   {
     "id": "slime-mould",
@@ -6435,8 +5893,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12601
+    }
   },
   {
     "id": "slimy-leaf-tentacle",
@@ -6448,8 +5905,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21197
+    }
   },
   {
     "id": "slimy-leg",
@@ -6461,8 +5917,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27623
+    }
   },
   {
     "id": "small-energy-ball",
@@ -6474,8 +5929,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23524
+    }
   },
   {
     "id": "small-ladybug",
@@ -6487,8 +5941,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30322
+    }
   },
   {
     "id": "small-notebook",
@@ -6500,8 +5953,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11450
+    }
   },
   {
     "id": "small-oil-lamp",
@@ -6513,8 +5965,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 2933
+    }
   },
   {
     "id": "small-pitchfork",
@@ -6526,8 +5977,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11513
+    }
   },
   {
     "id": "small-treasure-chest",
@@ -6539,8 +5989,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 35571
+    }
   },
   {
     "id": "small-tropical-fish",
@@ -6552,8 +6001,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39408
+    }
   },
   {
     "id": "smoldering-eye",
@@ -6565,8 +6013,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39543
+    }
   },
   {
     "id": "snake-skin",
@@ -6578,8 +6025,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9694
+    }
   },
   {
     "id": "sniper-gloves",
@@ -6591,8 +6037,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5875
+    }
   },
   {
     "id": "some-grimeleech-wings",
@@ -6604,8 +6049,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22730
+    }
   },
   {
     "id": "soul-stone",
@@ -6617,8 +6061,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5809
+    }
   },
   {
     "id": "spark-sphere",
@@ -6630,8 +6073,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23518
+    }
   },
   {
     "id": "sparkion-claw",
@@ -6643,8 +6085,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23502
+    }
   },
   {
     "id": "sparkion-legs",
@@ -6656,8 +6097,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23504
+    }
   },
   {
     "id": "sparkion-stings",
@@ -6669,8 +6109,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23505
+    }
   },
   {
     "id": "sparkion-tail",
@@ -6682,8 +6121,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23503
+    }
   },
   {
     "id": "spectral-gold-nugget",
@@ -6695,8 +6133,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32724
+    }
   },
   {
     "id": "spectral-silver-nugget",
@@ -6708,8 +6145,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32725
+    }
   },
   {
     "id": "spellreaper-staff-totem",
@@ -6721,8 +6157,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50054
+    }
   },
   {
     "id": "sphinx-feather",
@@ -6734,8 +6169,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31437
+    }
   },
   {
     "id": "sphinx-tiara",
@@ -6748,8 +6182,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31438
+    }
   },
   {
     "id": "spider-fangs",
@@ -6761,8 +6194,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8031
+    }
   },
   {
     "id": "spider-silk",
@@ -6774,8 +6206,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5879
+    }
   },
   {
     "id": "spiderweb-clouds-shreds",
@@ -6787,8 +6218,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31339
+    }
   },
   {
     "id": "spidris-mandible",
@@ -6800,8 +6230,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14082
+    }
   },
   {
     "id": "spiked-iron-ball",
@@ -6813,8 +6242,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10408
+    }
   },
   {
     "id": "spirited-soil",
@@ -6826,8 +6254,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51276
+    }
   },
   {
     "id": "spitter-nose",
@@ -6839,8 +6266,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14078
+    }
   },
   {
     "id": "spooky-blue-eye",
@@ -6852,8 +6278,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9642
+    }
   },
   {
     "id": "srezz-eye",
@@ -6865,8 +6290,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34103
+    }
   },
   {
     "id": "stalking-seeds",
@@ -6878,8 +6302,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39384
+    }
   },
   {
     "id": "stampor-horn",
@@ -6891,8 +6314,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12312
+    }
   },
   {
     "id": "stampor-talons",
@@ -6904,8 +6326,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12313
+    }
   },
   {
     "id": "star-herb",
@@ -6917,8 +6338,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3736
+    }
   },
   {
     "id": "stone-herb",
@@ -6930,8 +6350,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3735
+    }
   },
   {
     "id": "stone-nose",
@@ -6943,8 +6362,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16137
+    }
   },
   {
     "id": "stone-wing",
@@ -6956,8 +6374,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10278
+    }
   },
   {
     "id": "strange-proto-matter",
@@ -6969,8 +6386,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23513
+    }
   },
   {
     "id": "strange-symbol",
@@ -6982,8 +6398,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3058
+    }
   },
   {
     "id": "streaked-devourer-eyes",
@@ -6995,8 +6410,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36772
+    }
   },
   {
     "id": "streaked-devourer-legs",
@@ -7008,8 +6422,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36774
+    }
   },
   {
     "id": "streaked-devourer-maw",
@@ -7021,8 +6434,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36773
+    }
   },
   {
     "id": "striped-fur",
@@ -7034,8 +6446,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10293
+    }
   },
   {
     "id": "sulphider-shell",
@@ -7047,8 +6458,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39375
+    }
   },
   {
     "id": "sulphur-powder",
@@ -7060,8 +6470,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39376
+    }
   },
   {
     "id": "sulphurous-stone",
@@ -7073,8 +6482,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10315
+    }
   },
   {
     "id": "sun-brooch",
@@ -7086,8 +6494,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43737
+    }
   },
   {
     "id": "swamp-grass",
@@ -7099,8 +6506,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9686
+    }
   },
   {
     "id": "swampling-moss",
@@ -7112,8 +6518,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17822
+    }
   },
   {
     "id": "swarmer-antenna",
@@ -7125,8 +6530,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14076
+    }
   },
   {
     "id": "tanjis-sight",
@@ -7138,8 +6542,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14022
+    }
   },
   {
     "id": "tarantula-egg",
@@ -7151,8 +6554,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10281
+    }
   },
   {
     "id": "tarnished-rhino-figurine",
@@ -7164,8 +6566,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24387
+    }
   },
   {
     "id": "technomancer-beard",
@@ -7177,8 +6578,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 396
+    }
   },
   {
     "id": "telescope-eye",
@@ -7190,8 +6590,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33934
+    }
   },
   {
     "id": "tentacle-piece",
@@ -7203,8 +6602,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11666
+    }
   },
   {
     "id": "terramite-legs",
@@ -7216,8 +6614,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10454
+    }
   },
   {
     "id": "terramite-shell",
@@ -7229,8 +6626,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10452
+    }
   },
   {
     "id": "terrorbird-beak",
@@ -7242,8 +6638,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10273
+    }
   },
   {
     "id": "thick-fur",
@@ -7255,8 +6650,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10307
+    }
   },
   {
     "id": "thorn",
@@ -7268,8 +6662,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9643
+    }
   },
   {
     "id": "thorn-seed",
@@ -7281,8 +6674,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24965
+    }
   },
   {
     "id": "tooth-file",
@@ -7294,8 +6686,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18924
+    }
   },
   {
     "id": "torn-shirt",
@@ -7307,8 +6698,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25744
+    }
   },
   {
     "id": "trapped-bad-dream-monster",
@@ -7320,8 +6710,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20203
+    }
   },
   {
     "id": "tremendous-tyrant-head",
@@ -7333,8 +6722,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36783
+    }
   },
   {
     "id": "tremendous-tyrant-shell",
@@ -7346,8 +6734,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36784
+    }
   },
   {
     "id": "trollroot",
@@ -7359,8 +6746,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11515
+    }
   },
   {
     "id": "tunnel-tyrant-head",
@@ -7372,8 +6758,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27595
+    }
   },
   {
     "id": "tunnel-tyrant-shell",
@@ -7385,8 +6770,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27596
+    }
   },
   {
     "id": "turtle-shell",
@@ -7398,8 +6782,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5899
+    }
   },
   {
     "id": "tusk",
@@ -7411,8 +6794,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3044
+    }
   },
   {
     "id": "twig-arms",
@@ -7424,8 +6806,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30337
+    }
   },
   {
     "id": "two-headed-turtle-heads",
@@ -7437,8 +6818,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39409
+    }
   },
   {
     "id": "ulcer-probe",
@@ -7450,8 +6830,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32197
+    }
   },
   {
     "id": "undead-heart",
@@ -7463,8 +6842,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10450
+    }
   },
   {
     "id": "undertaker-fangs",
@@ -7476,8 +6854,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39380
+    }
   },
   {
     "id": "unholy-bone",
@@ -7489,8 +6866,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10316
+    }
   },
   {
     "id": "vampire-dust",
@@ -7502,8 +6878,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5905
+    }
   },
   {
     "id": "vampire-teeth",
@@ -7515,8 +6890,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9685
+    }
   },
   {
     "id": "varnished-diremaw-brainpan",
@@ -7528,8 +6902,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36781
+    }
   },
   {
     "id": "varnished-diremaw-legs",
@@ -7541,8 +6914,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36782
+    }
   },
   {
     "id": "venison",
@@ -7554,8 +6926,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 18995
+    }
   },
   {
     "id": "versicolour-fireworks-powder",
@@ -7567,8 +6938,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30187
+    }
   },
   {
     "id": "vexclaw-talon",
@@ -7580,8 +6950,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22728
+    }
   },
   {
     "id": "vibrant-heart",
@@ -7593,8 +6962,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34143
+    }
   },
   {
     "id": "vibrant-robe",
@@ -7606,8 +6974,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34144
+    }
   },
   {
     "id": "volatile-proto-matter",
@@ -7619,8 +6986,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23514
+    }
   },
   {
     "id": "war-crystal",
@@ -7632,8 +6998,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9654
+    }
   },
   {
     "id": "wardragon-claw",
@@ -7645,8 +7010,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44748
+    }
   },
   {
     "id": "wardragon-tooth",
@@ -7658,8 +7022,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44749
+    }
   },
   {
     "id": "warwolf-fur",
@@ -7671,8 +7034,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10318
+    }
   },
   {
     "id": "waspoid-claw",
@@ -7684,8 +7046,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14080
+    }
   },
   {
     "id": "waspoid-wing",
@@ -7697,8 +7058,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 14081
+    }
   },
   {
     "id": "werebadger-claws",
@@ -7710,8 +7070,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22051
+    }
   },
   {
     "id": "werebadger-skull",
@@ -7723,8 +7082,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22055
+    }
   },
   {
     "id": "werebear-fur",
@@ -7736,8 +7094,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22057
+    }
   },
   {
     "id": "werebear-skull",
@@ -7749,8 +7106,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22056
+    }
   },
   {
     "id": "wereboar-hooves",
@@ -7762,8 +7118,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22053
+    }
   },
   {
     "id": "wereboar-tusks",
@@ -7775,8 +7130,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22054
+    }
   },
   {
     "id": "werecrocodile-tongue",
@@ -7788,8 +7142,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43729
+    }
   },
   {
     "id": "werefox-tail",
@@ -7801,8 +7154,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27463
+    }
   },
   {
     "id": "werehyaena-nose",
@@ -7814,8 +7166,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33943
+    }
   },
   {
     "id": "werehyaena-talisman",
@@ -7827,8 +7178,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 33944
+    }
   },
   {
     "id": "werepanther-claw",
@@ -7840,8 +7190,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43731
+    }
   },
   {
     "id": "weretiger-tooth",
@@ -7853,8 +7202,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43730
+    }
   },
   {
     "id": "werewolf-fangs",
@@ -7866,8 +7214,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22052
+    }
   },
   {
     "id": "werewolf-fur",
@@ -7879,8 +7226,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10317
+    }
   },
   {
     "id": "white-deer-antlers",
@@ -7892,8 +7238,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12544
+    }
   },
   {
     "id": "white-deer-skin",
@@ -7905,8 +7250,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12545
+    }
   },
   {
     "id": "wild-flowers",
@@ -7918,8 +7262,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25691
+    }
   },
   {
     "id": "wimp-tooth-chain",
@@ -7931,8 +7274,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17847
+    }
   },
   {
     "id": "winged-tail",
@@ -7944,8 +7286,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10313
+    }
   },
   {
     "id": "winter-wolf-fur",
@@ -7957,8 +7298,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10295
+    }
   },
   {
     "id": "witch-broom",
@@ -7970,8 +7310,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9652
+    }
   },
   {
     "id": "withered-pauldrons",
@@ -7983,8 +7322,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27607
+    }
   },
   {
     "id": "withered-scalp",
@@ -7996,8 +7334,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27608
+    }
   },
   {
     "id": "wolf-paw",
@@ -8009,8 +7346,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5897
+    }
   },
   {
     "id": "wood",
@@ -8022,8 +7358,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5901
+    }
   },
   {
     "id": "wool",
@@ -8035,21 +7370,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10319
-  },
-  {
-    "id": "worm",
-    "name": "worm",
-    "kind": "other",
-    "weight": 0.05,
-    "value": 0,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3492
+    }
   },
   {
     "id": "worm-sponge",
@@ -8061,8 +7382,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 43848
+    }
   },
   {
     "id": "writhing-brain",
@@ -8074,8 +7394,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32600
+    }
   },
   {
     "id": "writhing-heart",
@@ -8087,8 +7406,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32599
+    }
   },
   {
     "id": "wyrm-scale",
@@ -8100,8 +7418,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9665
+    }
   },
   {
     "id": "wyvern-talisman",
@@ -8113,8 +7430,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9644
+    }
   },
   {
     "id": "yapunac-dagger",
@@ -8126,8 +7442,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44440
+    }
   },
   {
     "id": "yielocks",
@@ -8139,8 +7454,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12805
+    }
   },
   {
     "id": "yielowax",
@@ -8152,8 +7466,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12742
+    }
   },
   {
     "id": "yirkas-egg",
@@ -8165,8 +7478,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34102
+    }
   },
   {
     "id": "young-lich-worm",
@@ -8178,8 +7490,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31590
+    }
   },
   {
     "id": "zaogun-flag",
@@ -8191,8 +7502,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10413
+    }
   },
   {
     "id": "zaogun-shoulderplates",
@@ -8204,7 +7514,6 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10414
+    }
   }
 ]

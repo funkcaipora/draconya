@@ -40,6 +40,50 @@
       },
       "items": [
         {
+          "itemId": "guardian-halberd",
+          "chance": 0.0941
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.0894
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0694
+        },
+        {
+          "itemId": "violet-crystal-shard",
+          "chance": 0.0541
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.0506
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.0682
+        },
+        {
+          "itemId": "belted-cape",
+          "chance": 0.0376
+        },
+        {
+          "itemId": "afflicted-strider-head",
+          "chance": 0.0482
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0459
+        },
+        {
+          "itemId": "spirit-cloak",
+          "chance": 0.0306
+        },
+        {
+          "itemId": "magma-coat",
+          "chance": 0.0247
+        },
+        {
           "itemId": "serpent-sword",
           "chance": 0.0224
         },
@@ -54,6 +98,26 @@
         {
           "itemId": "focus-cape",
           "chance": 0.0224
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0224
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0188
+        },
+        {
+          "itemId": "haunted-blade",
+          "chance": 0.0141
+        },
+        {
+          "itemId": "mercenary-sword",
+          "chance": 0.0153
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0129
         }
       ]
     },
@@ -188,16 +252,76 @@
       },
       "items": [
         {
+          "itemId": "terra-rod",
+          "chance": 0.2653
+        },
+        {
+          "itemId": "blemished-spawn-abdomen",
+          "chance": 0.0969
+        },
+        {
           "itemId": "hailstorm-rod",
           "chance": 0.0555
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0475
         },
         {
           "itemId": "dragonbone-staff",
           "chance": 0.0395
         },
         {
+          "itemId": "violet-gem",
+          "chance": 0.0466
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0456
+        },
+        {
           "itemId": "wand-of-starstorm",
           "chance": 0.0419
+        },
+        {
+          "itemId": "northwind-rod",
+          "chance": 0.0532
+        },
+        {
+          "itemId": "blemished-spawn-head",
+          "chance": 0.0484
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.04
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0461
+        },
+        {
+          "itemId": "diamond-sceptre",
+          "chance": 0.0395
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0395
+        },
+        {
+          "itemId": "staff",
+          "chance": 0.0376
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0362
+        },
+        {
+          "itemId": "blemished-spawn-tail",
+          "chance": 0.0353
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0136
         }
       ]
     },
@@ -457,6 +581,14 @@
           "chance": 0.021,
           "min": 1,
           "max": 2
+        },
+        {
+          "itemId": "carrion-worm-fang",
+          "chance": 0.1
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0021
         }
       ]
     },
@@ -518,8 +650,60 @@
       },
       "items": [
         {
+          "itemId": "violet-gem",
+          "chance": 0.0696
+        },
+        {
+          "itemId": "cave-chimera-leg",
+          "chance": 0.0435
+        },
+        {
+          "itemId": "cave-chimera-head",
+          "chance": 0.0348
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0266
+        },
+        {
           "itemId": "glacier-amulet",
           "chance": 0.0248
+        },
+        {
+          "itemId": "ring-of-blue-plasma",
+          "chance": 0.0172
+        },
+        {
+          "itemId": "glacier-kilt",
+          "chance": 0.0154
+        },
+        {
+          "itemId": "gold-ring",
+          "chance": 0.0143
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0097
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0097
+        },
+        {
+          "itemId": "ornate-crossbow",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "crystal-crossbow",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "composite-hornbow",
+          "chance": 0.001
+        },
+        {
+          "itemId": "elvish-bow",
+          "chance": 0.0008
         }
       ]
     },
@@ -671,7 +855,12 @@
         "min": 1,
         "max": 15
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "centipede-leg",
+          "chance": 0.103
+        }
+      ]
     },
     "abilities": [
       {
@@ -742,7 +931,12 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "cockroach-leg",
+          "chance": 1
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 60000,
@@ -804,7 +998,32 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0053
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0207
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "crawler-head-plating",
+          "chance": 0.1843
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.1464
+        },
+        {
+          "itemId": "grasshopper-legs",
+          "chance": 0.001
+        }
+      ]
     },
     "abilities": [
       {
@@ -930,12 +1149,56 @@
       },
       "items": [
         {
+          "itemId": "crystal-ring",
+          "chance": 0.0156
+        },
+        {
+          "itemId": "crystal-necklace",
+          "chance": 0.0164
+        },
+        {
+          "itemId": "time-ring",
+          "chance": 0.0148
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.0013
+        },
+        {
           "itemId": "steel-helmet",
           "chance": 0.052
         },
         {
+          "itemId": "plate-armor",
+          "chance": 0.09993
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0056
+        },
+        {
           "itemId": "knight-legs",
           "chance": 0.0076
+        },
+        {
+          "itemId": "spider-silk",
+          "chance": 0.0201
+        },
+        {
+          "itemId": "shard",
+          "chance": 0.0074
+        },
+        {
+          "itemId": "sapphire-hammer",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.0249
+        },
+        {
+          "itemId": "glacier-mask",
+          "chance": 0.0067
         }
       ]
     },
@@ -1106,6 +1369,10 @@
       "rollModel": "canary",
       "items": [
         {
+          "itemId": "deepworm-jaws",
+          "chance": 0.2401
+        },
+        {
           "itemId": "life-ring",
           "chance": 0.0732
         },
@@ -1124,6 +1391,30 @@
         {
           "itemId": "green-mushroom",
           "chance": 0.1852
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.0536
+        },
+        {
+          "itemId": "deepworm-spikes",
+          "chance": 0.0988
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.0506
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0112
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0239
+        },
+        {
+          "itemId": "suspicious-device",
+          "chance": 0.0053
         }
       ]
     },
@@ -1260,6 +1551,38 @@
           "chance": 0.0458,
           "min": 1,
           "max": 5
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0175
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.0054
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.0236
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.1213
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.0978
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.0926
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.0961
+        },
+        {
+          "itemId": "pulverized-ore",
+          "chance": 0.054
         }
       ]
     },
@@ -1429,7 +1752,16 @@
         "min": 1,
         "max": 18
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "damselfly-wing",
+          "chance": 0.1183
+        },
+        {
+          "itemId": "damselfly-eye",
+          "chance": 0.0997
+        }
+      ]
     },
     "abilities": [
       {
@@ -1593,7 +1925,24 @@
         "min": 100,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "terra-boots",
+          "chance": 0.044
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0455
+        },
+        {
+          "itemId": "spider-silk",
+          "chance": 0.0285
+        },
+        {
+          "itemId": "terra-mantle",
+          "chance": 0.0085
+        }
+      ]
     },
     "abilities": [
       {
@@ -1724,8 +2073,72 @@
       },
       "items": [
         {
+          "itemId": "eyeless-devourer-maw",
+          "chance": 0.1468
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.063
+        },
+        {
+          "itemId": "eyeless-devourer-tongue",
+          "chance": 0.0359
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0319
+        },
+        {
+          "itemId": "crystal-mace",
+          "chance": 0.0184
+        },
+        {
           "itemId": "glacier-amulet",
           "chance": 0.0279
+        },
+        {
+          "itemId": "noble-axe",
+          "chance": 0.0184
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "relic-sword",
+          "chance": 0.0088
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.0088
+        },
+        {
+          "itemId": "mercenary-sword",
+          "chance": 0.0064
+        },
+        {
+          "itemId": "war-axe",
+          "chance": 0.0136
+        },
+        {
+          "itemId": "execowtioner-axe",
+          "chance": 0.0064
+        },
+        {
+          "itemId": "ornate-crossbow",
+          "chance": 0.0104
+        },
+        {
+          "itemId": "jade-hammer",
+          "chance": 0.012
+        },
+        {
+          "itemId": "shadow-sceptre",
+          "chance": 0.004
+        },
+        {
+          "itemId": "metal-bat",
+          "chance": 0.0032
         }
       ]
     },
@@ -1873,8 +2286,28 @@
       },
       "items": [
         {
+          "itemId": "time-ring",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.051
+        },
+        {
           "itemId": "steel-helmet",
           "chance": 0.0498
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0998
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.005
         },
         {
           "itemId": "knight-legs",
@@ -1883,6 +2316,14 @@
         {
           "itemId": "plate-legs",
           "chance": 0.08333
+        },
+        {
+          "itemId": "spider-silk",
+          "chance": 0.0199
+        },
+        {
+          "itemId": "lightning-headband",
+          "chance": 0.0027
         }
       ]
     },
@@ -2205,7 +2646,16 @@
         "min": 1,
         "max": 80
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "club-ring",
+          "chance": 0.001
+        },
+        {
+          "itemId": "ripper-lance",
+          "chance": 0.0085
+        }
+      ]
     },
     "abilities": [
       {
@@ -2292,7 +2742,24 @@
         "min": 1,
         "max": 90
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0288
+        },
+        {
+          "itemId": "epee",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.1538
+        },
+        {
+          "itemId": "dung-ball",
+          "chance": 0.1499
+        }
+      ]
     },
     "abilities": [
       {
@@ -2379,7 +2846,40 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.0327
+        },
+        {
+          "itemId": "steel-boots",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0516
+        },
+        {
+          "itemId": "kollos-shell",
+          "chance": 0.1539
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.1572
+        },
+        {
+          "itemId": "calopteryx-cape",
+          "chance": 0.0036
+        },
+        {
+          "itemId": "carapace-shield",
+          "chance": 0.0031
+        },
+        {
+          "itemId": "hive-scythe",
+          "chance": 0.007
+        }
+      ]
     },
     "abilities": [
       {
@@ -2725,6 +3225,42 @@
       },
       "items": [
         {
+          "itemId": "violet-gem",
+          "chance": 0.0675
+        },
+        {
+          "itemId": "lavaworm-spikes",
+          "chance": 0.0423
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0413
+        },
+        {
+          "itemId": "butterfly-ring",
+          "chance": 0.0312
+        },
+        {
+          "itemId": "underworld-rod",
+          "chance": 0.0292
+        },
+        {
+          "itemId": "lavaworm-jaws",
+          "chance": 0.0262
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0252
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0156
+        },
+        {
+          "itemId": "wand-of-voodoo",
+          "chance": 0.0156
+        },
+        {
           "itemId": "crusader-helmet",
           "chance": 0.0156
         },
@@ -3036,7 +3572,12 @@
         "min": 1,
         "max": 4
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "poison-spider-shell",
+          "chance": 0.0114
+        }
+      ]
     },
     "abilities": [
       {
@@ -3123,7 +3664,20 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0505
+        },
+        {
+          "itemId": "spider-fangs",
+          "chance": 0.2538
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.0006
+        }
+      ]
     },
     "abilities": [
       {
@@ -3222,7 +3776,12 @@
         "min": 1,
         "max": 6
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "sandcrawler-shell",
+          "chance": 0.02173
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 5000,
@@ -3276,7 +3835,12 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "scorpion-tail",
+          "chance": 0.0493
+        }
+      ]
     },
     "abilities": [
       {
@@ -3456,7 +4020,12 @@
         "min": 1,
         "max": 5
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "spider-fangs",
+          "chance": 0.0096
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -3518,7 +4087,40 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0077
+        },
+        {
+          "itemId": "death-ring",
+          "chance": 0.027
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0092
+        },
+        {
+          "itemId": "spidris-mandible",
+          "chance": 0.1496
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.125
+        },
+        {
+          "itemId": "calopteryx-cape",
+          "chance": 0.0037
+        },
+        {
+          "itemId": "carapace-shield",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "hive-scythe",
+          "chance": 0.0069
+        }
+      ]
     },
     "abilities": [
       {
@@ -3637,7 +4239,40 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0112
+        },
+        {
+          "itemId": "death-ring",
+          "chance": 0.0448
+        },
+        {
+          "itemId": "titan-axe",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "spidris-mandible",
+          "chance": 0.2744
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.1321
+        },
+        {
+          "itemId": "calopteryx-cape",
+          "chance": 0.0128
+        },
+        {
+          "itemId": "carapace-shield",
+          "chance": 0.0117
+        },
+        {
+          "itemId": "hive-scythe",
+          "chance": 0.0139
+        }
+      ]
     },
     "targetChange": {
       "intervalMs": 4000,
@@ -3699,8 +4334,40 @@
       },
       "items": [
         {
+          "itemId": "green-gem",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "time-ring",
+          "chance": 0.024
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.0026
+        },
+        {
           "itemId": "crusader-helmet",
           "chance": 0.0023
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.02
+        },
+        {
+          "itemId": "spitter-nose",
+          "chance": 0.18
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.15
+        },
+        {
+          "itemId": "calopteryx-cape",
+          "chance": 0.0024
+        },
+        {
+          "itemId": "grasshopper-legs",
+          "chance": 0.0013
         }
       ]
     },
@@ -3855,7 +4522,24 @@
         "min": 1,
         "max": 75
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0092
+        },
+        {
+          "itemId": "epee",
+          "chance": 0.0045
+        },
+        {
+          "itemId": "swarmer-antenna",
+          "chance": 0.153
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.125
+        }
+      ]
     },
     "abilities": [
       {
@@ -4063,8 +4747,28 @@
       },
       "items": [
         {
+          "itemId": "time-ring",
+          "chance": 0.0012
+        },
+        {
           "itemId": "steel-helmet",
           "chance": 0.0099
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.0305
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.02
+        },
+        {
+          "itemId": "spider-fangs",
+          "chance": 0.0482
+        },
+        {
+          "itemId": "tarantula-egg",
+          "chance": 0.1
         }
       ]
     },
@@ -4194,7 +4898,16 @@
         "min": 1,
         "max": 45
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "terramite-shell",
+          "chance": 0.0773
+        },
+        {
+          "itemId": "terramite-legs",
+          "chance": 0.1488
+        }
+      ]
     },
     "abilities": [
       {
@@ -4285,20 +4998,72 @@
       },
       "items": [
         {
+          "itemId": "red-gem",
+          "chance": 0.1455
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.0545
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0545
+        },
+        {
+          "itemId": "tremendous-tyrant-shell",
+          "chance": 0.0455
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "spellbook-of-warding",
+          "chance": 0.0818
+        },
+        {
           "itemId": "wand-of-starstorm",
           "chance": 0.0091
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0182
         },
         {
           "itemId": "hailstorm-rod",
           "chance": 0.0273
         },
         {
+          "itemId": "knight-axe",
+          "chance": 0.0455
+        },
+        {
           "itemId": "dragonbone-staff",
           "chance": 0.0364
         },
         {
+          "itemId": "tremendous-tyrant-head",
+          "chance": 0.0818
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0273
+        },
+        {
+          "itemId": "warriors-shield",
+          "chance": 0.0182
+        },
+        {
+          "itemId": "elven-amulet",
+          "chance": 0.0273
+        },
+        {
           "itemId": "focus-cape",
           "chance": 0.0182
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.04555
         }
       ]
     },
@@ -4443,18 +5208,78 @@
       },
       "items": [
         {
+          "itemId": "terra-rod",
+          "chance": 0.3009
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.1858
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.1062
+        },
+        {
           "itemId": "small-diamond",
           "chance": 0.0973,
           "min": 1,
           "max": 6
         },
         {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.0531
+        },
+        {
+          "itemId": "varnished-diremaw-brainpan",
+          "chance": 0.0265
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0619
+        },
+        {
           "itemId": "hailstorm-rod",
           "chance": 0.0619
         },
         {
+          "itemId": "diamond-sceptre",
+          "chance": 0.0265
+        },
+        {
           "itemId": "wand-of-starstorm",
           "chance": 0.0265
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0708
+        },
+        {
+          "itemId": "glacier-shoes",
+          "chance": 0.0265
+        },
+        {
+          "itemId": "spellbook-of-warding",
+          "chance": 0.0177
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0164
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.0265
+        },
+        {
+          "itemId": "haunted-blade",
+          "chance": 0.0137
+        },
+        {
+          "itemId": "glacier-kilt",
+          "chance": 0.0088
+        },
+        {
+          "itemId": "crown-shield",
+          "chance": 0.0088
         }
       ]
     },
@@ -4594,8 +5419,20 @@
       },
       "items": [
         {
+          "itemId": "halberd",
+          "chance": 0.0446
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.02854
+        },
+        {
           "itemId": "green-mushroom",
           "chance": 0.03208
+        },
+        {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0221
         }
       ]
     },
@@ -4772,7 +5609,12 @@
     "blockable": false,
     "loot": {
       "rollModel": "canary",
-      "items": []
+      "items": [
+        {
+          "itemId": "honeycomb",
+          "chance": 0.03
+        }
+      ]
     },
     "abilities": [
       {
@@ -4860,7 +5702,44 @@
         "min": 1,
         "max": 100
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.0204
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.0423
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0104
+        },
+        {
+          "itemId": "waspoid-claw",
+          "chance": 0.09096
+        },
+        {
+          "itemId": "waspoid-wing",
+          "chance": 0.1389
+        },
+        {
+          "itemId": "compound-eye",
+          "chance": 0.0606
+        },
+        {
+          "itemId": "grasshopper-legs",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "carapace-shield",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "hive-scythe",
+          "chance": 0.0033
+        }
+      ]
     },
     "abilities": [
       {

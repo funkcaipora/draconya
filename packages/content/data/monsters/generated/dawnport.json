@@ -34,12 +34,32 @@
       },
       "items": [
         {
+          "itemId": "brass-shield",
+          "chance": 0.0292
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.0477
+        },
+        {
           "itemId": "mace",
           "chance": 0.0477
         },
         {
+          "itemId": "pelvis-bone",
+          "chance": 0.0928
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0292
+        },
+        {
           "itemId": "sword",
           "chance": 0.061
+        },
+        {
+          "itemId": "viking-helmet",
+          "chance": 0.0398
         }
       ]
     },
@@ -127,7 +147,23 @@
       },
       "items": [
         {
+          "itemId": "axe",
+          "chance": 0.1286
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.2571
+        },
+        {
           "itemId": "leather-legs",
+          "chance": 0.0857
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.1714
+        },
+        {
+          "itemId": "studded-armor",
           "chance": 0.0857
         }
       ]
@@ -342,7 +378,20 @@
         "min": 1,
         "max": 12
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "doublet",
+          "chance": 0.0414
+        },
+        {
+          "itemId": "damselfly-wing",
+          "chance": 0.1194
+        },
+        {
+          "itemId": "damselfly-eye",
+          "chance": 0.1013
+        }
+      ]
     },
     "abilities": [
       {
@@ -463,6 +512,22 @@
       },
       "items": [
         {
+          "itemId": "chain-armor",
+          "chance": 0.1081
+        },
+        {
+          "itemId": "chain-helmet",
+          "chance": 0.1216
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0405
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.0946
+        },
+        {
           "itemId": "mace",
           "chance": 0.1892
         },
@@ -471,8 +536,20 @@
           "chance": 0.3007
         },
         {
+          "itemId": "plate-shield",
+          "chance": 0.0135
+        },
+        {
+          "itemId": "studded-legs",
+          "chance": 0.0946
+        },
+        {
           "itemId": "sword",
           "chance": 0.2162
+        },
+        {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.0135
         }
       ]
     },
@@ -561,7 +638,12 @@
         "min": 1,
         "max": 10
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "small-pitchfork",
+          "chance": 0.2281
+        }
+      ]
     },
     "abilities": [
       {
@@ -686,12 +768,28 @@
           "chance": 0.2525
         },
         {
+          "itemId": "marsh-stalker-beak",
+          "chance": 0.0606
+        },
+        {
+          "itemId": "seeds",
+          "chance": 0.0016
+        },
+        {
+          "itemId": "marsh-stalker-feather",
+          "chance": 0.0898
+        },
+        {
           "itemId": "longsword",
           "chance": 0.0764
         },
         {
           "itemId": "mace",
           "chance": 0.0831
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.0666
         }
       ]
     },
@@ -807,12 +905,24 @@
       },
       "items": [
         {
+          "itemId": "hand-axe",
+          "chance": 0.0359
+        },
+        {
           "itemId": "leather-armor",
           "chance": 0.0406
         },
         {
           "itemId": "meat",
           "chance": 0.2798
+        },
+        {
+          "itemId": "rapier",
+          "chance": 0.0347
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.0351
         }
       ]
     },
@@ -868,12 +978,28 @@
       },
       "items": [
         {
+          "itemId": "bone-club",
+          "chance": 0.0944
+        },
+        {
+          "itemId": "dagger",
+          "chance": 0.1704
+        },
+        {
+          "itemId": "goblin-ear",
+          "chance": 0.0113
+        },
+        {
           "itemId": "leather-armor",
           "chance": 0.0606
         },
         {
           "itemId": "leather-helmet",
           "chance": 0.0268
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0972
         }
       ]
     },
@@ -962,12 +1088,24 @@
       },
       "items": [
         {
+          "itemId": "bone-club",
+          "chance": 0.1186
+        },
+        {
+          "itemId": "dagger",
+          "chance": 0.3041
+        },
+        {
           "itemId": "leather-armor",
           "chance": 0.0799
         },
         {
           "itemId": "leather-helmet",
           "chance": 0.0799
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.1186
         }
       ]
     },
@@ -1183,7 +1321,28 @@
         "min": 1,
         "max": 17
       },
-      "items": []
+      "items": [
+        {
+          "itemId": "broken-shamanic-staff",
+          "chance": 0.037
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.1111
+        },
+        {
+          "itemId": "shamanic-hood",
+          "chance": 0.037
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.037
+        },
+        {
+          "itemId": "studded-legs",
+          "chance": 0.1111
+        }
+      ]
     },
     "abilities": [
       {
@@ -1319,8 +1478,24 @@
       },
       "items": [
         {
+          "itemId": "broken-helmet",
+          "chance": 0.0674
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0562
+        },
+        {
           "itemId": "meat",
           "chance": 0.1348
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.0562
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0112
         }
       ]
     },
@@ -1442,6 +1617,22 @@
           "chance": 0.2468
         },
         {
+          "itemId": "silver-amulet",
+          "chance": 0.013
+        },
+        {
+          "itemId": "studded-club",
+          "chance": 0.1039
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "trollroot",
+          "chance": 0.0519
+        },
+        {
           "itemId": "wooden-shield",
           "chance": 0.1169
         }
@@ -1502,8 +1693,28 @@
       },
       "items": [
         {
+          "itemId": "axe",
+          "chance": 0.0508
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.0463
+        },
+        {
+          "itemId": "chain-helmet",
+          "chance": 0.063
+        },
+        {
           "itemId": "meat",
           "chance": 0.0994
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0447
+        },
+        {
+          "itemId": "studded-helmet",
+          "chance": 0.0407
         }
       ]
     },

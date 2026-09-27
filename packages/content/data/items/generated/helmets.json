@@ -47,8 +47,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39149
+    }
   },
   {
     "id": "amazon-helmet",
@@ -63,8 +62,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3393
+    }
   },
   {
     "id": "ancient-tiara",
@@ -78,8 +76,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3022
+    }
   },
   {
     "id": "antler-horn-helmet",
@@ -114,8 +111,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40588
+    }
   },
   {
     "id": "arboreal-crown",
@@ -153,8 +149,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39153
+    }
   },
   {
     "id": "arcanomancer-regalia",
@@ -192,8 +187,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39151
+    }
   },
   {
     "id": "bandana",
@@ -207,8 +201,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5917
+    }
   },
   {
     "id": "batwing-hat",
@@ -238,8 +231,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9103
+    }
   },
   {
     "id": "blue-spectacles",
@@ -252,8 +244,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27522
+    }
   },
   {
     "id": "bonelord-helmet",
@@ -268,8 +259,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3408
+    }
   },
   {
     "id": "brass-button",
@@ -282,8 +272,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 37604
+    }
   },
   {
     "id": "brass-helmet",
@@ -297,8 +286,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3354
+    }
   },
   {
     "id": "bridal-wreath",
@@ -311,8 +299,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 37336
+    }
   },
   {
     "id": "broken-iks-headpiece",
@@ -326,8 +313,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 40532
+    }
   },
   {
     "id": "broken-visor",
@@ -341,8 +327,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 20184
+    }
   },
   {
     "id": "ceremonial-mask",
@@ -356,8 +341,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3395
+    }
   },
   {
     "id": "chain-helmet",
@@ -371,8 +355,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3352
+    }
   },
   {
     "id": "charmers-tiara",
@@ -386,8 +369,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3407
+    }
   },
   {
     "id": "cobra-crown",
@@ -423,8 +405,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11674
+    }
   },
   {
     "id": "cobra-hood",
@@ -456,8 +437,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 30397
+    }
   },
   {
     "id": "coned-hat-of-enlightenment",
@@ -476,8 +456,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50274
+    }
   },
   {
     "id": "crest-of-the-deep-seas",
@@ -502,8 +481,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21892
+    }
   },
   {
     "id": "crown",
@@ -516,8 +494,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3011
+    }
   },
   {
     "id": "crown-helmet",
@@ -532,24 +509,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3385
-  },
-  {
-    "id": "crusader-helmet",
-    "name": "crusader helmet",
-    "kind": "armor",
-    "weight": 52,
-    "value": 0,
-    "slot": "head",
-    "armor": 8,
-    "imbuementSlots": 2,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3391
+    }
   },
   {
     "id": "damaged-helmet",
@@ -563,8 +523,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3226
+    }
   },
   {
     "id": "dark-helmet",
@@ -578,8 +537,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3384
+    }
   },
   {
     "id": "dark-vision-bandana",
@@ -603,8 +561,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50190
+    }
   },
   {
     "id": "dark-whispers",
@@ -636,8 +593,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 29427
+    }
   },
   {
     "id": "demon-helmet",
@@ -652,8 +608,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3387
+    }
   },
   {
     "id": "demon-mengu",
@@ -688,8 +643,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50189
+    }
   },
   {
     "id": "demonfang-mask",
@@ -727,8 +681,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49534
+    }
   },
   {
     "id": "depth-galea",
@@ -750,8 +703,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 13995
+    }
   },
   {
     "id": "devil-helmet",
@@ -765,8 +717,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3356
+    }
   },
   {
     "id": "dragon-scale-helmet",
@@ -780,8 +731,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3400
+    }
   },
   {
     "id": "dreadfire-headpiece",
@@ -816,8 +766,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49533
+    }
   },
   {
     "id": "dwarven-helmet",
@@ -837,8 +786,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3396
+    }
   },
   {
     "id": "eldritch-cowl",
@@ -870,8 +818,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36670
+    }
   },
   {
     "id": "eldritch-hood",
@@ -903,8 +850,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 36671
+    }
   },
   {
     "id": "elite-draken-helmet",
@@ -936,8 +882,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11689
+    }
   },
   {
     "id": "enchanted-werewolf-helmet",
@@ -969,8 +914,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22127
+    }
   },
   {
     "id": "ethereal-coned-hat",
@@ -1005,8 +949,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50188
+    }
   },
   {
     "id": "falcon-circlet",
@@ -1041,8 +984,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28714
+    }
   },
   {
     "id": "falcon-coif",
@@ -1084,8 +1026,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 28715
+    }
   },
   {
     "id": "feather-headdress",
@@ -1099,8 +1040,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3406
+    }
   },
   {
     "id": "ferumbras-candy-hat",
@@ -1114,8 +1054,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24397
+    }
   },
   {
     "id": "ferumbras-hat",
@@ -1129,8 +1068,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5903
+    }
   },
   {
     "id": "flower-wreath",
@@ -1143,8 +1081,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9013
+    }
   },
   {
     "id": "full-helmet-of-the-ancients",
@@ -1159,8 +1096,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3230
+    }
   },
   {
     "id": "fur-cap",
@@ -1175,8 +1111,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7458
+    }
   },
   {
     "id": "galea-mortis",
@@ -1211,8 +1146,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31582
+    }
   },
   {
     "id": "gill-gugel",
@@ -1249,8 +1183,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16104
+    }
   },
   {
     "id": "glacier-mask",
@@ -1278,8 +1211,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 829
+    }
   },
   {
     "id": "gnome-helmet",
@@ -1320,8 +1252,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 27647
+    }
   },
   {
     "id": "golden-crown",
@@ -1334,8 +1265,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32925
+    }
   },
   {
     "id": "golden-helmet",
@@ -1350,8 +1280,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3365
+    }
   },
   {
     "id": "golden-horned-helmet",
@@ -1364,8 +1293,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 37164
+    }
   },
   {
     "id": "green-demon-helmet",
@@ -1380,8 +1308,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 37609
+    }
   },
   {
     "id": "gryphon-mask",
@@ -1394,38 +1321,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31369
-  },
-  {
-    "id": "hat-of-the-mad",
-    "name": "hat of the mad",
-    "kind": "armor",
-    "weight": 7,
-    "value": 0,
-    "slot": "head",
-    "armor": 3,
-    "imbuementSlots": 1,
-    "requires": {
-      "vocationId": [
-        "druid",
-        "sorcerer"
-      ]
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "magic",
-          "amount": 1
-        }
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3210
+    }
   },
   {
     "id": "hellstalker-visor",
@@ -1460,8 +1356,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49532
+    }
   },
   {
     "id": "helmet-of-nature",
@@ -1476,8 +1371,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9382
+    }
   },
   {
     "id": "helmet-of-the-ancients",
@@ -1491,8 +1385,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3229
+    }
   },
   {
     "id": "helmet-of-the-deep",
@@ -1511,8 +1404,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5460
+    }
   },
   {
     "id": "helmet-of-the-lost",
@@ -1527,8 +1419,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 17852
+    }
   },
   {
     "id": "helmet-of-ultimate-terror",
@@ -1543,8 +1434,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9381
+    }
   },
   {
     "id": "horned-helmet",
@@ -1558,8 +1448,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3390
+    }
   },
   {
     "id": "horseman-helmet",
@@ -1573,8 +1462,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3405
+    }
   },
   {
     "id": "incandescent-crown",
@@ -1587,8 +1475,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 26189
+    }
   },
   {
     "id": "iron-crown",
@@ -1601,8 +1488,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 26188
+    }
   },
   {
     "id": "iron-helmet",
@@ -1616,8 +1502,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3353
+    }
   },
   {
     "id": "jade-conical-hat",
@@ -1641,8 +1526,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50193
+    }
   },
   {
     "id": "jade-hat",
@@ -1672,8 +1556,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10451
+    }
   },
   {
     "id": "jester-hat",
@@ -1687,8 +1570,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 894
+    }
   },
   {
     "id": "krimhorn-helmet",
@@ -1702,8 +1584,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7461
+    }
   },
   {
     "id": "laurel-wreath",
@@ -1716,8 +1597,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9221
+    }
   },
   {
     "id": "leaf-crown",
@@ -1730,38 +1610,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 26187
-  },
-  {
-    "id": "leather-helmet",
-    "name": "leather helmet",
-    "kind": "armor",
-    "weight": 22,
-    "value": 4,
-    "slot": "head",
-    "armor": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3355
-  },
-  {
-    "id": "legion-helmet",
-    "name": "legion helmet",
-    "kind": "armor",
-    "weight": 31,
-    "value": 22,
-    "slot": "head",
-    "armor": 4,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3374
+    }
   },
   {
     "id": "light-bandana",
@@ -1778,8 +1627,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 50194
+    }
   },
   {
     "id": "lightning-headband",
@@ -1807,8 +1655,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 828
+    }
   },
   {
     "id": "lion-spangenhelm",
@@ -1843,8 +1690,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 34156
+    }
   },
   {
     "id": "mage-hat",
@@ -1865,8 +1711,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7992
+    }
   },
   {
     "id": "mages-cap",
@@ -1891,8 +1736,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 12599
+    }
   },
   {
     "id": "magician-hat",
@@ -1907,8 +1751,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3573
+    }
   },
   {
     "id": "magma-monocle",
@@ -1936,8 +1779,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 827
+    }
   },
   {
     "id": "maliceforged-helmet",
@@ -1972,8 +1814,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 49531
+    }
   },
   {
     "id": "mighty-helm-of-green-sparks",
@@ -1987,8 +1828,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9399
+    }
   },
   {
     "id": "mining-helmet",
@@ -2002,8 +1842,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 139
+    }
   },
   {
     "id": "mystic-turban",
@@ -2017,8 +1856,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3574
+    }
   },
   {
     "id": "norcferatu-bonehood",
@@ -2045,8 +1883,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51261
+    }
   },
   {
     "id": "norcferatu-skullguard",
@@ -2081,8 +1918,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 51260
+    }
   },
   {
     "id": "odd-hat",
@@ -2097,8 +1933,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9374
+    }
   },
   {
     "id": "pair-of-earmuffs",
@@ -2116,8 +1951,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7459
+    }
   },
   {
     "id": "party-hat",
@@ -2131,8 +1965,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6578
+    }
   },
   {
     "id": "pirate-hat",
@@ -2146,8 +1979,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6096
+    }
   },
   {
     "id": "porcelain-mask",
@@ -2166,8 +1998,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 25088
+    }
   },
   {
     "id": "post-officers-hat",
@@ -2181,8 +2012,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3576
+    }
   },
   {
     "id": "prismatic-helmet",
@@ -2213,8 +2043,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 16109
+    }
   },
   {
     "id": "ragnir-helmet",
@@ -2228,8 +2057,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 7462
+    }
   },
   {
     "id": "reflecting-crown",
@@ -2242,24 +2070,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 26190
-  },
-  {
-    "id": "royal-helmet",
-    "name": "royal helmet",
-    "kind": "armor",
-    "weight": 48,
-    "value": 0,
-    "slot": "head",
-    "armor": 9,
-    "imbuementSlots": 2,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3392
+    }
   },
   {
     "id": "rubber-cap",
@@ -2296,8 +2107,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 21165
+    }
   },
   {
     "id": "rusty-winged-helmet",
@@ -2311,8 +2121,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 24405
+    }
   },
   {
     "id": "santa-hat",
@@ -2326,8 +2135,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 6531
+    }
   },
   {
     "id": "sedge-hat",
@@ -2341,8 +2149,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 11700
+    }
   },
   {
     "id": "shamanic-mask",
@@ -2357,8 +2164,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22192
+    }
   },
   {
     "id": "shroud-of-despair",
@@ -2380,8 +2186,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22757
+    }
   },
   {
     "id": "silver-mask",
@@ -2394,8 +2199,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31370
+    }
   },
   {
     "id": "skull-helmet",
@@ -2410,8 +2214,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 5741
+    }
   },
   {
     "id": "soldier-helmet",
@@ -2425,8 +2228,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3375
+    }
   },
   {
     "id": "spiritthorn-helmet",
@@ -2466,8 +2268,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 39148
+    }
   },
   {
     "id": "spooky-hood",
@@ -2480,23 +2281,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 32630
-  },
-  {
-    "id": "steel-helmet",
-    "name": "steel helmet",
-    "kind": "armor",
-    "weight": 46,
-    "value": 293,
-    "slot": "head",
-    "armor": 6,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3351
+    }
   },
   {
     "id": "stoic-iks-casque",
@@ -2531,8 +2316,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44636
+    }
   },
   {
     "id": "stoic-iks-headpiece",
@@ -2564,23 +2348,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 44637
-  },
-  {
-    "id": "strange-helmet",
-    "name": "strange helmet",
-    "kind": "armor",
-    "weight": 46,
-    "value": 500,
-    "slot": "head",
-    "armor": 6,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    },
-    "appearanceId": 3373
+    }
   },
   {
     "id": "studded-helmet",
@@ -2594,8 +2362,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3376
+    }
   },
   {
     "id": "terra-helmet",
@@ -2630,8 +2397,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 31577
+    }
   },
   {
     "id": "terra-hood",
@@ -2659,8 +2425,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 830
+    }
   },
   {
     "id": "tiara-of-power",
@@ -2696,8 +2461,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 23475
+    }
   },
   {
     "id": "tribal-mask",
@@ -2711,8 +2475,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3403
+    }
   },
   {
     "id": "viking-helmet",
@@ -2726,8 +2489,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3367
+    }
   },
   {
     "id": "visage-of-the-end-days",
@@ -2742,8 +2504,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22754
+    }
   },
   {
     "id": "warrior-helmet",
@@ -2758,8 +2519,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3369
+    }
   },
   {
     "id": "werewolf-helmet",
@@ -2779,8 +2539,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 22062
+    }
   },
   {
     "id": "winged-helmet",
@@ -2794,8 +2553,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3368
+    }
   },
   {
     "id": "witch-hat",
@@ -2821,8 +2579,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 9653
+    }
   },
   {
     "id": "wood-cape",
@@ -2852,8 +2609,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 3575
+    }
   },
   {
     "id": "yalahari-mask",
@@ -2883,8 +2639,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 8864
+    }
   },
   {
     "id": "zaoan-helmet",
@@ -2910,7 +2665,6 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    },
-    "appearanceId": 10385
+    }
   }
 ]
