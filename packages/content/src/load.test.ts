@@ -143,7 +143,6 @@ describe('loadContent', () => {
     expect(Object.keys(hunt?.difficulties ?? {})).toEqual(['cautious', 'bold', 'reckless']);
     expect(Object.values(hunt?.difficulties ?? {}).map((d) => d.monsterCount)).toEqual([2, 5, 8]);
     expect(hunt?.ambience).toBe('cavern');
-    expect(hunt?.corpseTtlMs).toBe(30000);
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
     // packages/content/data/monsters/generated/mammals.json — regenerado pelo importador do
@@ -151,6 +150,9 @@ describe('loadContent', () => {
     // §32). `data-otservbr-global/monster/mammals/rat.lua` (Canary local 47dfd51): attack
     // 0-8, defense 5, os quatro resistances abaixo (o resto vira 0 na normalização), speed 134.
     expect(rat?.attack).toEqual({ min: 0, max: 8 });
+    // corpseTtlMs mora no MONSTRO (#585), não mais na hunt — a soma da cadeia de decaimento
+    // real do Canary `items.xml` a partir de `monster.corpse`, gerada pelo mesmo importador.
+    expect(rat?.corpseTtlMs).toBe(670000);
     expect(rat?.mitigation.resistances).toEqual({
       physical: 0, energy: 0, earth: 0.2, fire: 0, ice: -0.1, holy: 0.2, death: -0.1,
       drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
@@ -182,6 +184,7 @@ describe('loadContent', () => {
     expect(rotworm?.attack).toEqual({ min: 0, max: 40 });
     expect(rotworm?.speed).toBe(116);
     expect(rotworm?.corpseAppearanceId).toBe(5967);
+    expect(rotworm?.corpseTtlMs).toBe(670000);
     expect(rotworm?.loot.items.map((i) => i.itemId).sort()).toEqual(
       ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
     );
@@ -1169,6 +1172,12 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
       const effect = content.spells.get(id)?.effect;
       expect(effect?.kind, id).toBe('damage');
       if (effect?.kind === 'damage') expect(effect.area, id).toEqual(area);
+    }
+  });
+
+  it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
+    for (const id of ['dragon', 'dragon-lord']) {
+      expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
     }
   });
 

@@ -2710,7 +2710,8 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const raw = rawTestContent();
     const withCorpses = (base: RawContent): RawContent => ({
       ...base,
-      hunts: (base.hunts as Array<Record<string, unknown>>).map((h) => ({ ...h, corpseTtlMs: 500 })),
+      // `corpseTtlMs` mora no MONSTRO (#585, era da hunt).
+      monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => ({ ...m, corpseTtlMs: 500 })),
       appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({ ...a, corpses: { rat: 7 } })),
     });
     const content = over.corpses === true
@@ -3095,10 +3096,14 @@ describe('open-corpse / take-loot pelo socket (#722, ADR 0048 decisão 4)', () =
     const raw: RawContent = {
       ...base,
       items: [gem],
+      // `corpseTtlMs` mora no MONSTRO (#585, era da hunt).
       monsters: (base.monsters as Array<Record<string, unknown>>).map((m) => (m['id'] === 'rat'
-        ? { ...m, loot: { gold: { chance: 1, min: 2, max: 2 }, items: [{ itemId: 'gem', chance: 1, min: 1, max: 1 }] } }
+        ? {
+          ...m,
+          loot: { gold: { chance: 1, min: 2, max: 2 }, items: [{ itemId: 'gem', chance: 1, min: 1, max: 1 }] },
+          corpseTtlMs: 60_000,
+        }
         : m)),
-      hunts: (base.hunts as Array<Record<string, unknown>>).map((h) => ({ ...h, corpseTtlMs: 60_000 })),
       appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({
         ...a, corpses: { rat: 7 }, items: { gem: 5 },
       })),

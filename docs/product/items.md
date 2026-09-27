@@ -406,8 +406,9 @@ de Quick Loot** dele aceita e cabe pela capacidade:
 2. **venda automática** (autovenda individual, ver abaixo), quando o item está na lista `autoSell`
    do filtro — vira gold na hora, sem passar pela mochila;
 3. **fica no cadáver**, quando o filtro recusa OU não cabe — as duas são "não coletado". É a
-   segunda chance: enquanto o cadáver não decai (o mesmo prazo `corpseTtlMs` da hunt, sem fila
-   separada), quem está olhando pode abrir e pegar o resto (janela do cadáver, W3/#722, abaixo).
+   segunda chance: enquanto o cadáver não decai (o mesmo prazo `corpseTtlMs` do MONSTRO, #585 —
+   era da hunt —, sem fila separada), quem está olhando pode abrir e pegar o resto (janela do
+   cadáver, W3/#722).
 
 O que ninguém pegou **apodrece com o cadáver** — nunca vira `item_instance` no banco, pela mesma
 razão que a Caixa de Loot nunca foi: expirar precisa significar que o item nunca existiu. A Caixa
@@ -794,7 +795,7 @@ Glacier Amulet manualmente.
 |---|---|---|
 | Stack máximo por item | 100 | caminho previsto: `packages/content/items` |
 | Defesa (blocking físico) da arma de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` (CMB-04) | `packages/content/data/items/*.json`, `defense` |
-| Prazo do cadáver com loot à espera | `corpseTtlMs` da hunt (ADR 0048 — a Caixa de Loot da Sessão saiu) | `packages/content/data/hunts/*.json`, `corpseTtlMs` |
+| Prazo do cadáver com loot à espera | `corpseTtlMs` do MONSTRO (ADR 0048 — a Caixa de Loot da Sessão saiu; #585 — o campo é do monstro, não da hunt) | `packages/content/data/monsters/*.json`, `corpseTtlMs` |
 | Autovenda — tipos configuráveis (Free) | 5 | `party.autoSellItemTypes.free` (`packages/content/data/party/baseline.json`) |
 | Autovenda — tipos configuráveis (Premium) | 20 | `party.autoSellItemTypes.premium` (`packages/content/data/party/baseline.json`) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |

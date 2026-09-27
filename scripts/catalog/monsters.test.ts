@@ -7,8 +7,9 @@ import { bestiaryEntrySchema, MONSTER_CLASSES, monsterSchema } from '../../packa
 import { readSourceCommit } from './env.js';
 import type { CatalogEntity } from './generated-writer.js';
 import {
-  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, listMonsterFiles, loadReaderDeps,
-  lootChance, readMonsterCatalog, readTfsSpeeds, slugify, type MonsterReaderDeps,
+  BESTIARY_CLASS_MAP, CANARY_LOOT_CHANCE_SCALE, convertMonster, corpseTtlMsFromChain,
+  listMonsterFiles, loadReaderDeps, lootChance, readCorpseDecayChains, readMonsterCatalog,
+  readTfsSpeeds, slugify, type DecayStage, type MonsterReaderDeps,
 } from './monsters.js';
 import type { CatalogImportContext } from './registry.js';
 import { ABILITY_KIND_SUPPORTED } from './monster-abilities.js';
@@ -157,6 +158,14 @@ const ITEMS_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <items>
   <item id="3449" article="a" name="burst arrow" />
   <item fromid="10" toid="12" name="ranged thing" />
+  <item id="1" article="a" name="dead test drake">
+    <attribute key="duration" value="10"/>
+    <attribute key="decayTo" value="2"/>
+  </item>
+  <item id="2" article="a" name="dead test drake">
+    <attribute key="duration" value="5"/>
+    <attribute key="decayTo" value="0"/>
+  </item>
 </items>
 `;
 
@@ -238,6 +247,35 @@ describe('readTfsSpeeds', () => {
   });
 });
 
+describe('readCorpseDecayChains / corpseTtlMsFromChain (#585)', () => {
+  it('lê duration/decayTo do items.xml, e soma a cadeia inteira em ms', () => {
+    const ctx = fixture(false);
+    const chains = readCorpseDecayChains(join(ctx.canaryDir, 'data/items/items.xml'));
+    expect(chains.get(1)).toEqual({ durationSeconds: 10, decayTo: 2 });
+    expect(chains.get(2)).toEqual({ durationSeconds: 5, decayTo: 0 });
+    expect(corpseTtlMsFromChain(1, chains)).toBe(15000);
+  });
+
+  it('id sem cadeia (ou monstro sem `corpse`) devolve undefined', () => {
+    const chains: Map<number, DecayStage> = new Map();
+    expect(corpseTtlMsFromChain(undefined, chains)).toBeUndefined();
+    expect(corpseTtlMsFromChain(9999, chains)).toBeUndefined();
+  });
+
+  it('ciclo no decayTo não trava, e devolve undefined em vez de somar para sempre', () => {
+    const chains: Map<number, DecayStage> = new Map([
+      [1, { durationSeconds: 10, decayTo: 2 }],
+      [2, { durationSeconds: 10, decayTo: 1 }],
+    ]);
+    expect(corpseTtlMsFromChain(1, chains)).toBeUndefined();
+  });
+
+  it('item sem `decayTo` é o último estágio, e a soma para nele', () => {
+    const chains: Map<number, DecayStage> = new Map([[1, { durationSeconds: 42 }]]);
+    expect(corpseTtlMsFromChain(1, chains)).toBe(42000);
+  });
+});
+
 describe('convertMonster (fixture sintética)', () => {
   it('mapeia stats, flags, elementos, loot e Bestiário do Test Drake', () => {
     const ctx = fixture(false);
@@ -254,6 +292,9 @@ describe('convertMonster (fixture sintética)', () => {
       targetChange: { intervalMs: 4000, chance: 0.1 },
       targetStrategy: { nearest: 70, health: 10, damage: 10, random: 10 },
       runOnHealth: 300, staticAttack: 0.8, outfitId: 34,
+      // `monster.corpse = 1` (#585): 1 (duration 10 → decayTo 2) → 2 (duration 5 → decayTo 0),
+      // 10 + 5 = 15 s = 15000 ms.
+      corpseTtlMs: 15000,
       source: { engine: 'canary', commit: COMMIT, path: 'data-otservbr-global/monster/dragons/test_drake.lua' },
       bestiary: {
         class: 'dragon', race: 'dragon', raceId: 34, toKill: 1000, firstUnlock: 50, secondUnlock: 500,
@@ -296,6 +337,9 @@ describe('convertMonster (fixture sintética)', () => {
       attack: { min: 0, max: 20 },
       loot: { rollModel: 'canary', gold: { chance: 0.1, min: 100, max: 300 }, items: [] },
     });
+    // Test Rat não declara `monster.corpse` (#585): sem cadeia para seguir, sem `corpseTtlMs` —
+    // o default seguro de monstro sem cadáver.
+    expect(converted.entity['corpseTtlMs']).toBeUndefined();
     // O melee por skill/attack é mapeado (#684): nunca cai em "sem mapeador".
     expect(converted.notes.unmappedSpells).toEqual([]);
     expect(converted.notes.meleeVia).toEqual(['skill-attack']);

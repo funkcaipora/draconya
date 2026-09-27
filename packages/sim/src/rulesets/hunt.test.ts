@@ -442,8 +442,8 @@ describe('a sessão em si', () => {
 
   it('o abate deixa o cadáver no chão, que some sozinho depois de corpseTtlMs (FUN-123)', () => {
     // Só visual: o `sim` diz QUAL monstro morreu e ONDE; a arte é do hospedeiro. O loot já foi
-    // para a caixa antes. Sem `corpseTtlMs` na hunt, nada disto acontece.
-    const loaded = content({ hunts: [{ ...hunt, corpseTtlMs: 1_000 }] });
+    // para a caixa antes. Sem `corpseTtlMs` no monstro (#585, era da hunt), nada disto acontece.
+    const loaded = content({ monsters: [{ ...rat, corpseTtlMs: 1_000 }] });
     const { session, ruleset } = start({ loaded });
     run(session, 10_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(0);
@@ -464,7 +464,7 @@ describe('a sessão em si', () => {
   });
 
   it('o cadáver atravessa o snapshot, e apodrece do outro lado no prazo (FUN-123)', () => {
-    const loaded = content({ hunts: [{ ...hunt, corpseTtlMs: 5_000 }] });
+    const loaded = content({ monsters: [{ ...rat, corpseTtlMs: 5_000 }] });
     const { session, ruleset } = start({ loaded });
     run(session, 3_000, 100);
     if (ruleset.groundItems.length === 0) run(session, 3_000, 100);
@@ -4335,11 +4335,11 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     capacity?: number; staminaMs?: number; catalog?: boolean; loot?: BotConfigV2['loot'];
   } = {}) => {
     const loaded = buildContent(raw({
-      monsters: [ratWithDrop],
-      // `corpseTtlMs` (ADR 0048): sem ele o cadáver não persiste, e o que não coube na
-      // mochila simplesmente desaparece em vez de ficar à espera — estes testes falam
-      // justamente do que sobra, então precisam de onde ele possa ficar.
-      hunts: [{ ...hunt, corpseTtlMs: 60_000 }],
+      // `corpseTtlMs` (ADR 0048; #585 — o campo é do monstro, não da hunt): sem ele o cadáver
+      // não persiste, e o que não coube na mochila simplesmente desaparece em vez de ficar à
+      // espera — estes testes falam justamente do que sobra, então precisam de onde ele possa
+      // ficar.
+      monsters: [{ ...ratWithDrop, corpseTtlMs: 60_000 }],
       progression: [{
         ...progression, startingCapacity: over.capacity ?? 10_000, capacityPerLevel: 0,
       }],
@@ -4446,7 +4446,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     const retomado = Session.fromSnapshot(
       snapshot,
       huntRulesetFromSnapshot(
-        snapshot, buildContent(raw({ monsters: [ratWithDrop], hunts: [{ ...hunt, corpseTtlMs: 60_000 }] })),
+        snapshot, buildContent(raw({ monsters: [{ ...ratWithDrop, corpseTtlMs: 60_000 }] })),
       ) as HuntRuleset,
       Rng.fromSeed(snapshot.id),
     );
@@ -4580,11 +4580,11 @@ describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
   /** Um herói com a mochila nas costas, numa arena em que cada rato solta uma espada. */
   const withBackpack = (capacity: number) => {
     const loaded = buildContent(raw({
-      monsters: [ratWithDrop],
+      // `corpseTtlMs` (ADR 0048; #585 — o campo é do monstro, não da hunt): o teste de
+      // excedente por peso precisa de onde o item que não coube possa ficar — sem cadáver,
+      // ele desapareceria em vez de esperar.
+      monsters: [{ ...ratWithDrop, corpseTtlMs: 60_000 }],
       items: [...items, backpackItem],
-      // `corpseTtlMs` (ADR 0048): o teste de excedente por peso precisa de onde o item que
-      // não coube possa ficar — sem cadáver, ele desapareceria em vez de esperar.
-      hunts: [{ ...hunt, corpseTtlMs: 60_000 }],
       progression: [{ ...progression, startingCapacity: capacity, capacityPerLevel: 0, satchelInitialSlots: 10, containerRow: 5 }],
     }));
     const session = createHuntSession({ content: loaded, id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0 });
@@ -4715,8 +4715,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     // o ADR 0048, o que fica no cadáver não é loot "levado" ainda: `itemsLooted` conta só o que
     // ENTROU na mochila ou foi vendido, e o resto — filtrado ou sem capacidade — não soma.
     const loaded = buildContent(raw({
-      monsters: [ratWithDrop],
-      hunts: [{ ...hunt, corpseTtlMs: 60_000 }],
+      monsters: [{ ...ratWithDrop, corpseTtlMs: 60_000 }],
       progression: [{ ...progression, startingCapacity: 50, capacityPerLevel: 0 }],
     }));
     const session = createHuntSession({

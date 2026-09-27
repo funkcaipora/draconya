@@ -28,7 +28,7 @@ import { evaluateAssignments, MIXED_TABLE_ITEMS_KEY, type ConstantResolver, type
 import type { CatalogEntity, CatalogSource } from './generated-writer.js';
 import { registerCatalogType, type CatalogImportContext, type CatalogImportResult } from './registry.js';
 import type { SkippedEntity } from './report.js';
-import { attrOptional, readXmlFile } from './xml.js';
+import { attrNumberOptional, attrOptional, readXmlFile } from './xml.js';
 import {
   ABILITY_KIND_SUPPORTED, AREA_ROWS_SUPPORTED, mapSpell, mapSummons, RANDOM_TOTAL_REASON, uniqueIds,
   type PresentationUse,
@@ -200,6 +200,70 @@ export function readItemNames(itemsXmlPath: string): Map<number, string> {
   return names;
 }
 
+/** Um estágio da cadeia de decaimento de UM item do `items.xml` (`durationSeconds` em SEGUNDOS,
+ * como o próprio atributo `duration` — a conversão para ms é de quem soma a cadeia). */
+export interface DecayStage {
+  readonly durationSeconds: number;
+  readonly decayTo?: number;
+}
+
+/**
+ * `id → estágio de decaimento` de todo `<item id="…" duration="…">` do `items.xml` — a MESMA
+ * árvore que `readItemNames` já abre, numa segunda passada (#585). Item sem `duration` não
+ * decai e não entra no mapa: um `corpse` que aponte para ele produz cadeia de zero estágios,
+ * não um estágio com duração 0.
+ */
+export function readCorpseDecayChains(itemsXmlPath: string): Map<number, DecayStage> {
+  const root = readXmlFile(itemsXmlPath);
+  const stages = new Map<number, DecayStage>();
+  for (const item of root.children) {
+    if (item.tag !== 'item') continue;
+    const id = attrOptional(item, 'id');
+    if (id === undefined) continue;
+    let durationSeconds: number | undefined;
+    let decayTo: number | undefined;
+    for (const attribute of item.children) {
+      if (attribute.tag !== 'attribute') continue;
+      const key = attrOptional(attribute, 'key');
+      if (key === 'duration') durationSeconds = attrNumberOptional(attribute, 'value');
+      if (key === 'decayTo') decayTo = attrNumberOptional(attribute, 'value');
+    }
+    if (durationSeconds === undefined) continue;
+    stages.set(Number(id), decayTo === undefined ? { durationSeconds } : { durationSeconds, decayTo });
+  }
+  return stages;
+}
+
+/** Limite de estágios ao seguir uma cadeia — nenhuma cadeia real do Canary chega perto disto;
+ * só protege contra um `decayTo` que aponte de volta para um id já visitado. */
+const MAX_DECAY_STAGES = 32;
+
+/**
+ * Soma, em MILISSEGUNDOS, a cadeia de decaimento a partir de `corpseId` até o último estágio
+ * sem `decayTo` (ou com `decayTo === 0`) — `undefined` se `corpseId` não tem estágio nenhum
+ * (monstro sem cadáver resolvível: sem `monster.corpse`, ou apontando para um id fora do
+ * `items.xml`). `durationSeconds` é somado em segundos e só multiplicado por 1000 no final —
+ * a mesma fórmula do Canary (`item.cpp`, `newDuration = it.decayTime * 1000`).
+ */
+export function corpseTtlMsFromChain(
+  corpseId: number | undefined, chains: ReadonlyMap<number, DecayStage>,
+): number | undefined {
+  if (corpseId === undefined) return undefined;
+  let current: number | undefined = corpseId;
+  let totalSeconds = 0;
+  const visited = new Set<number>();
+  for (let step = 0; step < MAX_DECAY_STAGES; step += 1) {
+    if (current === undefined || current === 0) break;
+    if (visited.has(current)) return undefined;
+    visited.add(current);
+    const stage = chains.get(current);
+    if (stage === undefined) return step === 0 ? undefined : totalSeconds * 1000;
+    totalSeconds += stage.durationSeconds;
+    current = stage.decayTo;
+  }
+  return totalSeconds > 0 ? totalSeconds * 1000 : undefined;
+}
+
 function walk(dir: string, suffix: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir).sort()) {
@@ -259,6 +323,8 @@ export interface MonsterReaderDeps {
   readonly effectIds: ReadonlyMap<string, number>;
   /** `CONST_ANI_*` → id (`ShootType_t`). */
   readonly missileIds: ReadonlyMap<string, number>;
+  /** A cadeia de decaimento do `items.xml`, para `monster.corpse` virar `corpseTtlMs` (#585). */
+  readonly corpseChains: ReadonlyMap<number, DecayStage>;
 }
 
 export interface LootLine {
@@ -330,12 +396,12 @@ export interface ConvertedMonster {
 const READ_FIELDS: ReadonlySet<string> = new Set([
   'name', 'description', 'experience', 'outfit', 'raceId', 'Bestiary', 'health', 'maxHealth', 'race',
   'speed', 'manaCost', 'changeTarget', 'strategiesTarget', 'flags', 'loot', 'attacks', 'defenses',
-  'elements', 'immunities', 'summon', 'maxSummons', 'summons', 'critChance',
+  'elements', 'immunities', 'summon', 'maxSummons', 'summons', 'critChance', 'corpse',
 ]);
 
 /** Campos que não entram NUNCA nesta issue, com o dono de cada um. */
 const IGNORED_FIELD_OWNERS: Readonly<Record<string, string>> = {
-  events: 'M44', voices: 'M44', light: 'M44', corpse: 'sem campo no schema',
+  events: 'M44', voices: 'M44', light: 'M44',
   heals: '#683', reflects: '#683', bosstiary: 'sem sistema de Bosstiary', faction: 'sem facção',
   enemyFactions: 'sem facção',
 };
@@ -690,6 +756,11 @@ export function convertMonster(
   if (melee === undefined && spells.abilities.length === 0 && spells.unmapped.length === 0) {
     entity['_open'] = 'Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.';
   }
+  // A vida do cadáver (#585): a soma da cadeia `duration`/`decayTo` do `items.xml` a partir de
+  // `monster.corpse` — ausente quando o monstro não declara `corpse`, ou quando o id não tem
+  // estágio nenhum no `items.xml` (monstro fica sem cadáver, o default seguro).
+  const corpseTtlMs = corpseTtlMsFromChain(num(raw['corpse']), deps.corpseChains);
+  if (corpseTtlMs !== undefined) entity['corpseTtlMs'] = corpseTtlMs;
   entity['source'] = source;
   if (summons.summons !== undefined) entity['summons'] = summons.summons;
   // Staging (#580 separa): a ficha de Bestiário e o outfit não moram na entidade de `data/`.
@@ -970,6 +1041,7 @@ export function loadReaderDeps(ctx: CatalogImportContext, repoRoot: string): Mon
     itemNames: readItemNames(join(ctx.canaryDir, CANARY_ITEMS_XML)),
     tfsSpeeds: ctx.forgottenServerCommit === '' ? new Map() : readTfsSpeeds(ctx.forgottenServerDir),
     outfitRanges: readPackOutfits(join(repoRoot, 'packages', 'content', 'data', 'packs', 'tibia-1533.json')),
+    corpseChains: readCorpseDecayChains(join(ctx.canaryDir, CANARY_ITEMS_XML)),
     ...readPresentationEnums(ctx.canaryDir),
   };
 }

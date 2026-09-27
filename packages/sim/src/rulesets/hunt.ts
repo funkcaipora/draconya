@@ -7417,16 +7417,16 @@ const slots = bot.groups.get(group);
     // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
     // ele morre em z11 num mapa cujo andar padrão é z10.
     this.#world.vacate(monster.position.x, monster.position.y, this.#floorOf(monster));
-    // O cadáver carrega o loot (FUN-123, ADR 0048 decisão 1): fica no tile por `corpseTtlMs` e
-    // some sozinho, levando o que ninguém coletou junto (decisão 5) — a arte é da tabela, no
-    // hospedeiro (invariante 6).
+    // O cadáver carrega o loot (FUN-123, ADR 0048 decisão 1): fica no tile por `corpseTtlMs` do
+    // MONSTRO (#585 — era da hunt) e some sozinho, levando o que ninguém coletou junto
+    // (decisão 5) — a arte é da tabela, no hospedeiro (invariante 6).
     //
     // A COLETA roda sempre, com `corpseTtlMs` ou sem — é o abate creditando gold e item de
-    // sempre, e gatear por um campo de conteúdo opcional quebraria toda hunt que nunca falou de
-    // cadáver. Só a PERSISTÊNCIA do que sobra (o cadáver visível, com prazo próprio) depende de
-    // `corpseTtlMs`: sem ele, o que o filtro não aceitou ou não coube não tem onde esperar, e
+    // sempre, e gatear por um campo de conteúdo opcional quebraria todo monstro que nunca falou
+    // de cadáver. Só a PERSISTÊNCIA do que sobra (o cadáver visível, com prazo próprio) depende
+    // de `corpseTtlMs`: sem ele, o que o filtro não aceitou ou não coube não tem onde esperar, e
     // desaparece — o "não deixa nada" de antes deste ADR, agora só para a sobra.
-    const corpseTtlMs = this.#options.hunt.corpseTtlMs;
+    const corpseTtlMs = definition?.corpseTtlMs;
     const corpse: CorpseState = {
       id: corpseTtlMs === undefined ? 0 : this.#nextGroundItemId++,
       monsterId: monster.monsterId,

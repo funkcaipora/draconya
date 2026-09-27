@@ -326,7 +326,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
-  `corpseTtlMs` da hunt — hunt sem o campo não deixa cadáver. Os cadáveres entram no snapshot
+  `corpseTtlMs` do MONSTRO (#585, era da hunt) — monstro sem o campo não deixa cadáver. Os cadáveres entram no snapshot
   (`corpses`, `nextGroundItemId`), e o evento de apodrecer volta com a fila. O loot NUNCA passa
   pelo cadáver: já foi para a caixa antes de ele cair.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
