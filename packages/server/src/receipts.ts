@@ -351,5 +351,12 @@ function parseReceipt(raw: string): SessionReceipt | null {
       : {}),
     ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
     ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),
+    // As instâncias vendidas/descartadas (#724, ADR 0048 d.8): lista de PERMISSÃO, pela mesma
+    // razão das skills — e é EXATAMENTE o defeito que este comentário já registrava: campo
+    // novo em `SessionReceipt` que não entra aqui some no caminho de volta sem erro nenhum. O
+    // `item_instance` correspondente nunca seria apagado, e ninguém veria por quê.
+    ...(Array.isArray(value['removedInstances'])
+      ? { removedInstances: value['removedInstances'] as string[] }
+      : {}),
   };
 }
