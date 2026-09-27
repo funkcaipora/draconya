@@ -66,7 +66,6 @@ especificar essas issues vira ADR na hora, como qualquer outra.
 | PvP: skulls, frags, unjust kill, PZ lock por agressão a jogador, Twist of Fate, bênção PvP, redução de morte por justiça | As hunts são PvE e instanciadas (invariante 8). O ADR 0031 exige perfil e ADR próprios para PvP; a Guild War é modo à parte (`docs/product/guild-war.md`), fora da mecânica de caça. |
 | Casas, móveis, decoração, camas, portas e as magias de casa | O Draconya não tem mundo persistente com moradia, e nada disso cai de monstro nem é equipado. |
 | Raids como evento global de mundo | Pressupõem mundo aberto compartilhado; as hunts são sessões instanciadas. Os monstros das raids entram no catálogo como qualquer outro. |
-| Cadáver como container com dono e decadência em estágios de loot | Rejeitado pelo ADR 0037 (Alternativas). O loot vai para a caixa da sessão; a vida do cadáver é tratada no M36-04 sem precisar de dono. |
 | Chase mode, secure mode, seleção de alvo do jogador e hotkeys | Caem nas exceções do ADR 0037 decisão 2 (barra de ações e automação do bot). |
 | Store, Tibia Coins, XP boost de loja, VIP, Daily Reward, Soul War taint | Monetização e engajamento sem efeito no mecanismo de caça (`docs/product/monetization.md`); boosts de quest dependem de um motor de quest inexistente. |
 | Vocação Monk e as magias dela, Enlighten Party, Transcendence Potion | O Monk veio depois do pacote de arte 13.32, referência de release (ADR 0031) e de aparência (invariante 6); não há outfit nem sprite. Reavaliar se o pacote trocar. |
@@ -76,6 +75,13 @@ especificar essas issues vira ADR na hora, como qualquer outra.
 | Monstros de familiars/, trainers/, traps/ e dos modos Dawnport, Nostalgia e Wild Magics | Familiares entram pelas magias (M38-02); trainers e traps não são criaturas caçadas; modos sazonais não se aplicam a um ruleset único, embora os monstros deles possam ser importados se o mapa for usado. |
 | Recuperar munição do chão | O Canary consome munição por tiro; sem item no chão no Draconya, o arremessável é tratado pela `breakChance` do M34-04. |
 | Practise spells (practise_fire_wave, practise_healing) | Magias de zero dano para os bonecos de treino de NPC, sem análogo no Draconya. |
+
+> **Emenda (ADR 0048, 2026-09-26):** a linha "cadáver como container com dono e decadência em
+> estágios de loot" que estava nesta tabela — rejeitada pelo ADR 0037 (Alternativas), com o loot
+> indo para a Caixa de Loot da Sessão — saiu de fora do escopo. O ADR 0048 reverteu a decisão: o
+> cadáver carrega o loot, com dono e filtro de Quick Loot por personagem, e a Caixa de Loot saiu
+> (era ela quem ninguém lia, resgatava ou mostrava). Ver
+> `docs/adr/0048-corpse-loot-and-per-character-quick-loot-filter.md`.
 
 ## 4. Correções feitas na verificação de 2026-09-25
 

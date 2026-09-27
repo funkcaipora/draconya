@@ -1,0 +1,2975 @@
+[
+  {
+    "id": "adult-goanna",
+    "name": "Adult Goanna",
+    "class": "reptile",
+    "health": 8300,
+    "experience": 6650,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 84,
+    "defense": 84,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.25
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.6,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 420,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 300
+      },
+      "items": [
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.1224
+        },
+        {
+          "itemId": "goanna-meat",
+          "chance": 0.1165
+        },
+        {
+          "itemId": "small-enchanted-emerald",
+          "chance": 0.1003
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.091
+        },
+        {
+          "itemId": "terra-rod",
+          "chance": 0.0825
+        },
+        {
+          "itemId": "red-goanna-scale",
+          "chance": 0.0791
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0782
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0689,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "terra-hood",
+          "chance": 0.0663
+        },
+        {
+          "itemId": "goanna-claw",
+          "chance": 0.0621
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.0604
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0425
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.04
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0315
+        },
+        {
+          "itemId": "serpent-sword",
+          "chance": 0.0281
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.0264
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0153
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.0136
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0136
+        },
+        {
+          "itemId": "wood-cape",
+          "chance": 0.0128
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0128
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "coral-brooch",
+          "chance": 0.0077
+        },
+        {
+          "itemId": "lizard-heart",
+          "chance": 0.0077
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 236000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 200,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2500,
+        "chance": 0.3,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 300,
+          "max": 600
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "earth",
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 3000,
+        "chance": 0.3,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 380
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 3600,
+        "chance": 0.4,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 390
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 420
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/adult_goanna.lua"
+    }
+  },
+  {
+    "id": "boar-man",
+    "name": "Boar Man",
+    "class": "humanoid",
+    "health": 9200,
+    "experience": 7720,
+    "attack": {
+      "min": 0,
+      "max": 498
+    },
+    "armor": 72,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.15,
+        "energy": 0.15,
+        "earth": 0.05,
+        "fire": 0.15,
+        "ice": 0.05,
+        "holy": -0.1,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7895,
+        "min": 100,
+        "max": 2200
+      },
+      "items": [
+        {
+          "itemId": "sapphire-hammer",
+          "chance": 0.027
+        },
+        {
+          "itemId": "crystal-mace",
+          "chance": 0.0216
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.0131
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.0071
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 498
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2300,
+        "chance": 0.3,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 375,
+          "max": 392
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2600,
+        "chance": 0.4,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 386,
+          "max": 480
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 2900,
+        "chance": 0.3,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 140
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionarea"
+        }
+      },
+      {
+        "id": "energywave",
+        "cadenceMs": 3200,
+        "chance": 0.35,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 311,
+          "max": 400
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/boar_man.lua"
+    }
+  },
+  {
+    "id": "crape-man",
+    "name": "Crape Man",
+    "class": "humanoid",
+    "health": 9150,
+    "experience": 5040,
+    "attack": {
+      "min": 0,
+      "max": 498
+    },
+    "armor": 80,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.25,
+        "energy": 0.1,
+        "earth": 0.05,
+        "ice": -0.05,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 310,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7154,
+        "min": 100,
+        "max": 2500
+      },
+      "items": [
+        {
+          "itemId": "green-gem",
+          "chance": 0.0301
+        },
+        {
+          "itemId": "guardian-halberd",
+          "chance": 0.024
+        },
+        {
+          "itemId": "lightning-legs",
+          "chance": 0.009
+        },
+        {
+          "itemId": "warriors-shield",
+          "chance": 0.009
+        },
+        {
+          "itemId": "glacier-kilt",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "noble-axe",
+          "chance": 0.007
+        },
+        {
+          "itemId": "hammer-of-wrath",
+          "chance": 0.004
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 498
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 3500,
+        "chance": 0.4,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 120,
+          "max": 320
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      },
+      {
+        "id": "energyball",
+        "cadenceMs": 2500,
+        "chance": 0.5,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 330,
+          "max": 380
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energyball",
+          "impactKey": "purpleenergy"
+        }
+      },
+      {
+        "id": "energywave",
+        "cadenceMs": 3000,
+        "chance": 0.65,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 311,
+          "max": 370
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/crape_man.lua"
+    }
+  },
+  {
+    "id": "crocodile",
+    "name": "Crocodile",
+    "class": "reptile",
+    "health": 105,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 13,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "energy": -0.05,
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.13,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "ham",
+          "chance": 0.4
+        },
+        {
+          "itemId": "crocodile-boots",
+          "chance": 0.001
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/crocodile.lua"
+    }
+  },
+  {
+    "id": "dreadmaw",
+    "name": "Dreadmaw",
+    "health": 2000,
+    "experience": 1500,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9999,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.9999
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.5
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/dreadmaw.lua"
+    }
+  },
+  {
+    "id": "killer-caiman",
+    "name": "Killer Caiman",
+    "class": "reptile",
+    "health": 1500,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 180
+    },
+    "armor": 40,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": -0.05,
+        "earth": 0.2,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.38,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 186,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "obsidian-lance",
+          "chance": 0.04975
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.401
+        },
+        {
+          "itemId": "crocodile-boots",
+          "chance": 0.0051
+        }
+      ]
+    },
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 700
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/killer_caiman.lua"
+    }
+  },
+  {
+    "id": "liodile",
+    "name": "Liodile",
+    "class": "humanoid",
+    "health": 8600,
+    "experience": 6860,
+    "attack": {
+      "min": 0,
+      "max": 500
+    },
+    "armor": 71,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "energy": 0.15,
+        "fire": -0.1,
+        "ice": -0.1,
+        "holy": -0.2,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 330,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8054,
+        "min": 100,
+        "max": 2300
+      },
+      "items": [
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0979,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.0536
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0372
+        },
+        {
+          "itemId": "assassin-dagger",
+          "chance": 0.026
+        },
+        {
+          "itemId": "terra-legs",
+          "chance": 0.0242
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0161
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0083
+        },
+        {
+          "itemId": "leviathans-amulet",
+          "chance": 0.0072
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 500
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 325,
+          "max": 400
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poisonarrow"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.34,
+        "target": {
+          "range": 2
+        },
+        "power": {
+          "min": 300,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/liodile.lua"
+    }
+  },
+  {
+    "id": "lizard-high-guard",
+    "name": "Lizard High Guard",
+    "class": "reptile",
+    "health": 1800,
+    "experience": 1450,
+    "attack": {
+      "min": 0,
+      "max": 306
+    },
+    "armor": 40,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.45,
+        "ice": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.18,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 238,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.32,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0104
+        },
+        {
+          "itemId": "lizard-leather",
+          "chance": 0.01
+        },
+        {
+          "itemId": "lizard-scale",
+          "chance": 0.0097
+        },
+        {
+          "itemId": "red-lantern",
+          "chance": 0.0122
+        },
+        {
+          "itemId": "zaoan-armor",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "zaoan-shoes",
+          "chance": 0.007
+        },
+        {
+          "itemId": "zaoan-legs",
+          "chance": 0.0072
+        },
+        {
+          "itemId": "spiked-iron-ball",
+          "chance": 0.07
+        },
+        {
+          "itemId": "high-guard-flag",
+          "chance": 0.0299
+        },
+        {
+          "itemId": "high-guard-shoulderplates",
+          "chance": 0.0815
+        }
+      ]
+    },
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 25,
+          "max": 75
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/lizard_high_guard.lua"
+    }
+  },
+  {
+    "id": "lizard-legionnaire",
+    "name": "Lizard Legionnaire",
+    "class": "reptile",
+    "health": 1400,
+    "experience": 1100,
+    "attack": {
+      "min": 0,
+      "max": 180
+    },
+    "armor": 30,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.45,
+        "ice": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.07,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 266,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.44,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-diamond",
+          "chance": 0.01001,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "lizard-leather",
+          "chance": 0.0097
+        },
+        {
+          "itemId": "red-lantern",
+          "chance": 0.0053
+        },
+        {
+          "itemId": "zaoan-armor",
+          "chance": 0.0007
+        },
+        {
+          "itemId": "zaoan-shoes",
+          "chance": 0.0046
+        },
+        {
+          "itemId": "drakinata",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "zaoan-halberd",
+          "chance": 0.0096
+        },
+        {
+          "itemId": "legionnaire-flags",
+          "chance": 0.0194
+        },
+        {
+          "itemId": "broken-halberd",
+          "chance": 0.1494
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 180
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.4,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/lizard_legionnaire.lua"
+    }
+  },
+  {
+    "id": "lizard-noble",
+    "name": "Lizard Noble",
+    "class": "reptile",
+    "health": 7000,
+    "experience": 2000,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 27,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.85
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.02,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 256,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.913,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "lizard-leather",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "lizard-scale",
+          "chance": 0.0065
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 120,
+          "max": 250
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "heal": {
+          "min": 200,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/lizard_noble.lua"
+    }
+  },
+  {
+    "id": "lizard-sentinel",
+    "name": "Lizard Sentinel",
+    "class": "reptile",
+    "health": 265,
+    "experience": 110,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 17,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.62,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.89,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0051
+        },
+        {
+          "itemId": "obsidian-lance",
+          "chance": 0.0112
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0856
+        },
+        {
+          "itemId": "scale-armor",
+          "chance": 0.0773
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.047
+        },
+        {
+          "itemId": "sentinel-shield",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "lizard-leather",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "lizard-scale",
+          "chance": 0.0096
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 45
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 70
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/lizard_sentinel.lua"
+    }
+  },
+  {
+    "id": "lizard-templar",
+    "name": "Lizard Templar",
+    "class": "reptile",
+    "health": 410,
+    "experience": 155,
+    "attack": {
+      "min": 0,
+      "max": 70
+    },
+    "armor": 26,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 174,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.84,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.04
+        },
+        {
+          "itemId": "morning-star",
+          "chance": 0.0199
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.095
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.02
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.01
+        },
+        {
+          "itemId": "templar-scytheblade",
+          "chance": 0.005
+        },
+        {
+          "itemId": "salamander-shield",
+          "chance": 0.0011
+        },
+        {
+          "itemId": "lizard-leather",
+          "chance": 0.0088
+        },
+        {
+          "itemId": "lizard-scale",
+          "chance": 0.0099
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/lizard_templar.lua"
+    }
+  },
+  {
+    "id": "lizard-zaogun",
+    "name": "Lizard Zaogun",
+    "class": "reptile",
+    "health": 2955,
+    "experience": 1700,
+    "attack": {
+      "min": 0,
+      "max": 349
+    },
+    "armor": 42,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": 0.2,
+        "fire": 0.45,
+        "ice": 0.15,
+        "death": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.37,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 276,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.315,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "tower-shield",
+          "chance": 0.01
+        },
+        {
+          "itemId": "lizard-leather",
+          "chance": 0.1436
+        },
+        {
+          "itemId": "lizard-scale",
+          "chance": 0.1252
+        },
+        {
+          "itemId": "red-lantern",
+          "chance": 0.0217
+        },
+        {
+          "itemId": "zaoan-armor",
+          "chance": 0.0053
+        },
+        {
+          "itemId": "zaoan-shoes",
+          "chance": 0.01
+        },
+        {
+          "itemId": "zaoan-legs",
+          "chance": 0.01001
+        },
+        {
+          "itemId": "zaogun-flag",
+          "chance": 0.0828
+        },
+        {
+          "itemId": "zaogun-shoulderplates",
+          "chance": 0.1498
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 349
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 220,
+          "max": 375
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 175,
+          "max": 275
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/lizard_zaogun.lua"
+    }
+  },
+  {
+    "id": "serpent-spawn",
+    "name": "Serpent Spawn",
+    "class": "reptile",
+    "health": 3000,
+    "experience": 3050,
+    "attack": {
+      "min": 0,
+      "max": 252
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 234,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9725,
+        "min": 1,
+        "max": 239
+      },
+      "items": [
+        {
+          "itemId": "golden-mug",
+          "chance": 0.0287
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.12
+        },
+        {
+          "itemId": "energy-ring",
+          "chance": 0.0059
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.0625
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.008
+        },
+        {
+          "itemId": "snakebite-rod",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "strange-helmet",
+          "chance": 0.0067
+        },
+        {
+          "itemId": "crown-armor",
+          "chance": 0.0051
+        },
+        {
+          "itemId": "royal-helmet",
+          "chance": 0.0014
+        },
+        {
+          "itemId": "tower-shield",
+          "chance": 0.0092
+        },
+        {
+          "itemId": "green-mushroom",
+          "chance": 0.182
+        },
+        {
+          "itemId": "charmers-tiara",
+          "chance": 0.0018
+        },
+        {
+          "itemId": "mercenary-sword",
+          "chance": 0.0207
+        },
+        {
+          "itemId": "noble-axe",
+          "chance": 0.0075
+        },
+        {
+          "itemId": "swamplair-armor",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "spellbook-of-mind-control",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "snake-skin",
+          "chance": 0.148
+        },
+        {
+          "itemId": "winged-tail",
+          "chance": 0.0096
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 252
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 80,
+          "max": 300
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "green-rings"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -850
+          }
+        }
+      },
+      {
+        "id": "lifedrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 500
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "sound-red"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 500
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 250,
+          "max": 500
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 340
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 30,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 275,
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/serpent_spawn.lua"
+    }
+  },
+  {
+    "id": "snake",
+    "name": "Snake",
+    "class": "reptile",
+    "health": 15,
+    "experience": 10,
+    "attack": {
+      "min": 0,
+      "max": 8
+    },
+    "armor": 0,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": 0.4,
+        "fire": -0.1,
+        "ice": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.03,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 8
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 60000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 15,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/snake.lua"
+    }
+  },
+  {
+    "id": "thornback-tortoise",
+    "name": "Thornback Tortoise",
+    "class": "reptile",
+    "health": 300,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 24,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.3,
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.7,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.895,
+        "min": 1,
+        "max": 48
+      },
+      "items": [
+        {
+          "itemId": "white-pearl",
+          "chance": 0.016
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.008
+        },
+        {
+          "itemId": "war-hammer",
+          "chance": 0.0026
+        },
+        {
+          "itemId": "turtle-shell",
+          "chance": 0.008
+        },
+        {
+          "itemId": "thorn",
+          "chance": 0.1598
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 120000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 40,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/thornback_tortoise.lua"
+    }
+  },
+  {
+    "id": "tortoise",
+    "name": "Tortoise",
+    "class": "reptile",
+    "health": 185,
+    "experience": 90,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 22,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 130,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.59,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "battle-hammer",
+          "chance": 0.0073
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.0285
+        },
+        {
+          "itemId": "turtle-shell",
+          "chance": 0.013
+        },
+        {
+          "itemId": "tortoise-shield",
+          "chance": 0.002
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/tortoise.lua"
+    }
+  },
+  {
+    "id": "two-headed-turtle",
+    "name": "Two-Headed Turtle",
+    "class": "reptile",
+    "health": 5010,
+    "experience": 2930,
+    "attack": {
+      "min": 100,
+      "max": 300
+    },
+    "armor": 72,
+    "defense": 72,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "earth": -0.2,
+        "fire": 0.5,
+        "ice": 0.5,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.02,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 800
+      },
+      "items": [
+        {
+          "itemId": "two-headed-turtle-heads",
+          "chance": 0.087
+        },
+        {
+          "itemId": "hydrophytes",
+          "chance": 0.11
+        },
+        {
+          "itemId": "glacier-shoes",
+          "chance": 0.0465
+        },
+        {
+          "itemId": "small-tropical-fish",
+          "chance": 0.03582
+        },
+        {
+          "itemId": "coral-brooch",
+          "chance": 0.026
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.02507
+        },
+        {
+          "itemId": "lightning-headband",
+          "chance": 0.0211
+        },
+        {
+          "itemId": "knight-legs",
+          "chance": 0.02
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0209
+        },
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.01373
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.01373
+        },
+        {
+          "itemId": "gold-nugget",
+          "chance": 0.01313
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.013
+        },
+        {
+          "itemId": "cape",
+          "chance": 0.01015
+        },
+        {
+          "itemId": "white-gem",
+          "chance": 0.00418
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 100,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 2500,
+        "chance": 0.35,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 300
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "lifedrainball",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 300
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "ghostly-bite"
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 3000,
+        "chance": 0.45,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "explosionarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/two-headed_turtle.lua"
+    }
+  },
+  {
+    "id": "wyvern",
+    "name": "Wyvern",
+    "class": "reptile",
+    "health": 795,
+    "experience": 515,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 19,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "ice": 0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 1.21,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 186,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 90
+      },
+      "items": [
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.0054
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.05
+        },
+        {
+          "itemId": "wand-of-inferno",
+          "chance": 0.0081
+        },
+        {
+          "itemId": "dragon-ham",
+          "chance": 0.605,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "wyvern-fang",
+          "chance": 0.0041
+        },
+        {
+          "itemId": "wyvern-talisman",
+          "chance": 0.123
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 304000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 480,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "poisoned",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 126000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 240,
+            "intervalMs": 2000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "sound-red"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 45,
+          "max": 65
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 300
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 300,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/wyvern.lua"
+    }
+  },
+  {
+    "id": "young-goanna",
+    "name": "Young Goanna",
+    "class": "reptile",
+    "health": 6200,
+    "experience": 6100,
+    "attack": {
+      "min": 0,
+      "max": 500
+    },
+    "armor": 78,
+    "defense": 78,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.2,
+        "earth": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.16,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 380,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 300
+      },
+      "items": [
+        {
+          "itemId": "snakebite-rod",
+          "chance": 0.1062
+        },
+        {
+          "itemId": "goanna-meat",
+          "chance": 0.1003
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0911
+        },
+        {
+          "itemId": "terra-rod",
+          "chance": 0.0894
+        },
+        {
+          "itemId": "blue-goanna-scale",
+          "chance": 0.0826
+        },
+        {
+          "itemId": "small-enchanted-emerald",
+          "chance": 0.0489
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.0405
+        },
+        {
+          "itemId": "goanna-claw",
+          "chance": 0.0388
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0354
+        },
+        {
+          "itemId": "serpent-sword",
+          "chance": 0.0337
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0337
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.0295
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0253
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0228
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.0143
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.0118
+        },
+        {
+          "itemId": "terra-hood",
+          "chance": 0.011
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.0101
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0084
+        },
+        {
+          "itemId": "lizard-heart",
+          "chance": 0.0059
+        },
+        {
+          "itemId": "wooden-spellbook",
+          "chance": 0.0017
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0008
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 500
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 236000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 200,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2500,
+        "chance": 0.3,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 300,
+          "max": 490
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "earth",
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 3000,
+        "chance": 0.3,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 500
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
+        "id": "earthstrike-2",
+        "cadenceMs": 3500,
+        "chance": 0.3,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 300,
+          "max": 490
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "green-rings"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 420
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/reptiles/young_goanna.lua"
+    }
+  }
+]

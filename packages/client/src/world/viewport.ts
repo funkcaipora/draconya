@@ -25,7 +25,8 @@ import { buildTilemap, type Tilemap } from '@draconya/content';
 import { NO_FLAGS } from '../assets/appearances.js';
 import type { AssetPack } from '../assets/pack.js';
 import {
-  interpolate, tileOverrideKey, world, type Creature, type Effect, type FloatingText, type Missile,
+  interpolate, tileOverrideKey, world,
+  type Creature, type Effect, type FloatingText, type GroundItem, type Missile,
 } from '../state/world.js';
 import {
   TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
@@ -46,7 +47,7 @@ import {
   creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
-import { pickCreature } from './pick.js';
+import { pickCreature, pickGroundItem } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
@@ -209,6 +210,12 @@ export interface ViewportHandle {
    * clique: quem manda a intenção `select-target` é o `shell`, nunca este módulo (invariante 4).
    */
   creatureAt(clientX: number, clientY: number): number | null;
+  /**
+   * O item do chão sob um ponto do canvas (#722, ADR 0048 d.4) — o cadáver que o clique abre.
+   * `null` sem item ali. Quem manda `open-corpse`/`walk-to` é o `shell`, nunca este módulo
+   * (invariante 4).
+   */
+  groundItemAt(clientX: number, clientY: number): GroundItem | null;
   /**
    * O tile sob um ponto do canvas (px do cliente), no andar da câmera (#729, ADR 0050 d.7).
    * Diferente de `creatureAt`/`groundItemAt`: não pergunta o que está NELE, só ONDE ele é — o
@@ -1289,6 +1296,18 @@ export async function mountViewport(
         world.creatures.values(),
         { x: at.x, y: at.y, z: Math.round(center.z) },
         performance.now(),
+      );
+    },
+    groundItemAt(clientX, clientY) {
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = tileAtScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return pickGroundItem(
+        world.groundItems.values(),
+        { x: at.x, y: at.y, z: Math.round(center.z) },
       );
     },
     tileAt(clientX, clientY) {

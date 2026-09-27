@@ -1,8 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
-  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, spellAreaSchema, spellFormulaSchema,
+  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, routeSchema, spellAreaSchema, spellFormulaSchema,
 } from './schemas.js';
+
+describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#582)', () => {
+  const route = (spawnPoints: unknown): unknown => ({
+    id: 'r', mapId: 'm', tiles: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], spawnPoints,
+  });
+
+  it('aceita `monsters` com dois ou mais candidatos e peso default 1', () => {
+    const parsed = routeSchema.parse(route([
+      { routeIndex: 0, monsters: [{ monsterId: 'dragon' }, { monsterId: 'dragon-lord', weight: 3 }] },
+    ]));
+    expect(parsed.spawnPoints[0]?.monsters).toEqual([
+      { monsterId: 'dragon', weight: 1 }, { monsterId: 'dragon-lord', weight: 3 },
+    ]);
+  });
+
+  it('recusa `monsterId` e `monsters` juntos no mesmo ponto', () => {
+    expect(() => routeSchema.parse(route([
+      { routeIndex: 0, monsterId: 'dragon', monsters: [{ monsterId: 'dragon' }, { monsterId: 'wyvern' }] },
+    ]))).toThrow(/exclusivos/);
+  });
+
+  it('recusa `monsters` com um candidato só — isso é `monsterId`', () => {
+    expect(() => routeSchema.parse(route([
+      { routeIndex: 0, monsters: [{ monsterId: 'dragon' }] },
+    ]))).toThrow();
+  });
+});
 
 describe('spellAreaSchema — rows (#679)', () => {
   it('accepts odd widths, one per row', () => {
@@ -141,6 +168,29 @@ describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)',
     expect(() => itemSchema.parse({ ...ring, price: 10 })).toThrow();
     expect(() => itemSchema.parse({ ...ring, group: 'potion' })).toThrow();
     expect(() => itemSchema.parse({ ...ring, restock: { batch: 1, min: 0 } })).toThrow();
+  });
+});
+
+describe('itemSchema — `use.keyId` só em `use.tool: "key"` (#732, ADR 0050 d.6 T2)', () => {
+  const key = {
+    id: 'brass-key', name: 'Brass Key', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'key' as const, keyId: 42 },
+  };
+
+  it('aceita a chave com `keyId`', () => {
+    const parsed = itemSchema.parse(key);
+    expect(parsed.use).toEqual({ tool: 'key', keyId: 42 });
+  });
+
+  it('aceita `use.tool: "key"` sem `keyId` (chave que não se pode ligar a uma porta específica)', () => {
+    const { use: _use, ...rest } = key;
+    const parsed = itemSchema.parse({ ...rest, use: { tool: 'key' } });
+    expect(parsed.use).toEqual({ tool: 'key' });
+  });
+
+  it('recusa `keyId` numa ferramenta que não é chave — machete não precisa de id nenhum', () => {
+    const { use: _use, ...rest } = key;
+    expect(() => itemSchema.parse({ ...rest, use: { tool: 'machete', keyId: 1 } })).toThrow(/keyId/);
   });
 });
 

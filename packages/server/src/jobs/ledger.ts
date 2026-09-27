@@ -7,12 +7,16 @@
 // operação nula.
 
 import { randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Bestiary, Skills, levelForXp, readItemOverlay } from '@draconya/sim';
-import type { BestiaryState, ItemInstanceOverlay, SkillsState } from '@draconya/sim';
+import type {
+  BestiaryState, CharacterStorageMap, ItemInstanceOverlay, SkillsState,
+} from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
-import { characters, itemInstances, ledger } from '../db/schema.js';
+import {
+  characterStorages, characters, itemInstances, ledger,
+} from '../db/schema.js';
 import type { Logger } from '../log.js';
 import type { ItemPlace, ReceiptStore, SessionReceipt } from '../receipts.js';
 
@@ -221,6 +225,10 @@ async function applyProgression(
   const ammunitionStock = receipt.ammunitionStock === undefined
     ? {} : { ammunitionStock: receipt.ammunitionStock };
 
+  // Comida ativa (#726, ADR 0049 decisão 5): ABSOLUTA e última-escrita-vence, como o estoque
+  // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
+  const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -246,6 +254,21 @@ async function applyProgression(
       .onConflictDoNothing();
   }
 
+  // As instâncias vendidas/descartadas nesta sessão (#724, ADR 0048 d.8): apagadas na MESMA
+  // transação do ledger — é a primeira vez que uma sessão faz `item_instance` deixar de
+  // existir (`items.md` §"Como o item vai e volta do banco" ganha a exceção nomeada).
+  // Escopado por DONO, como `acquired`/`applyLayout`: um extrato não apaga item de outra
+  // conta, nem que traga o id dela. `DELETE` é idempotente por id — reprocessar o mesmo
+  // extrato (retry após falha) apaga zero linhas na segunda vez, nunca erro.
+  if (receipt.removedInstances !== undefined && receipt.removedInstances.length > 0) {
+    await tx
+      .delete(itemInstances)
+      .where(and(
+        eq(itemInstances.ownerCharacterId, receipt.characterId),
+        inArray(itemInstances.id, receipt.removedInstances),
+      ));
+  }
+
   // O layout de equipamento (FUN-82). Escopado por dono dentro do próprio `applyEquipment`:
   // um extrato não move item de outra pessoa nem que traga o id dela.
   if (receipt.equipment !== undefined) {
@@ -262,6 +285,12 @@ async function applyProgression(
   if (receipt.overlays !== undefined) {
     await applyOverlays(tx, receipt.characterId, receipt.overlays);
   }
+  // E os storages (#731, ADR 0050 d.6 T2): ao contrário do overlay (patch por instância), o
+  // extrato manda o mapa INTEIRO — a mesma forma de `supplyStock` — e `applyStorages` o trata
+  // como o ESTADO COMPLETO do personagem: toda chave do banco que não aparece nele é apagada.
+  if (receipt.storages !== undefined) {
+    await applyStorages(tx, receipt.characterId, receipt.storages);
+  }
 
   await tx
     .update(characters)
@@ -273,6 +302,7 @@ async function applyProgression(
       ...ammo,
       ...supplyStock,
       ...ammunitionStock,
+      ...fedMs,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined
@@ -331,6 +361,52 @@ async function applyOverlays(
     const next = readItemOverlay(overlays[row.id]) ?? null;
     if (JSON.stringify(readItemOverlay(row.overlay) ?? null) === JSON.stringify(next)) continue;
     await tx.update(itemInstances).set({ overlay: next }).where(eq(itemInstances.id, row.id));
+  }
+}
+
+/**
+ * Os storages do personagem (#731, ADR 0050 d.6 T2). Ao contrário de `applyOverlays` (patch por
+ * instância) e como `ammo`/`supplyStock` na coluna de `characters`, aqui o extrato manda o
+ * ESTADO INTEIRO — mas como storage é uma linha por chave (não uma coluna `jsonb`), "estado
+ * inteiro" precisa de duas metades: upsert de toda chave presente, e DELETE de toda chave que
+ * o banco tem e o extrato não lista mais — é essa segunda metade que faz um storage apagado
+ * NESTA sessão (voltado a -1, `CharacterRuntime.setStorageValue`) sumir do banco de verdade,
+ * em vez de sobreviver como uma linha órfã que o próximo ticket devolve por engano.
+ *
+ * `readCharacterStorage`/`isCharacterStorageMap` não entram aqui: o mapa já é o que o `sim`
+ * gravou (`getState().storages`), e a leitura defensiva mora do lado que LÊ dado alheio (o
+ * ticket, `initialCharacterOf`) — a mesma divisão de trabalho de `applyOverlays`, que também
+ * não valida de novo o que o próprio `readItemOverlay` já validou na escrita do extrato.
+ */
+async function applyStorages(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  characterId: string,
+  storages: CharacterStorageMap,
+): Promise<void> {
+  const owned = await tx
+    .select({ id: characterStorages.id, storageKey: characterStorages.storageKey, value: characterStorages.value })
+    .from(characterStorages)
+    .where(eq(characterStorages.characterId, characterId));
+  const byKey = new Map(owned.map((row) => [row.storageKey, row]));
+
+  for (const [key, value] of Object.entries(storages)) {
+    const current = byKey.get(key);
+    if (current !== undefined && current.value === value) continue;
+    if (current === undefined) {
+      await tx.insert(characterStorages).values({
+        id: randomUUID(), characterId, storageKey: key, value,
+      });
+    } else {
+      await tx.update(characterStorages).set({ value }).where(eq(characterStorages.id, current.id));
+    }
+  }
+
+  // O que o banco tem e o extrato não lista mais voltou a "nunca setado" (-1) NESTA sessão —
+  // a linha inteira sai, porque -1 nunca é gravado (ver o schema).
+  for (const row of owned) {
+    if (Object.hasOwn(storages, row.storageKey)) continue;
+    await tx.delete(characterStorages)
+      .where(and(eq(characterStorages.characterId, characterId), eq(characterStorages.id, row.id)));
   }
 }
 

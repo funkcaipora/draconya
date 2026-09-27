@@ -73,15 +73,14 @@ describe('chooseVocation', () => {
     expect([...hero.inventory.items()].map((item) => item.itemId)).toEqual(['machete']);
   });
 
-  it('keeps the choice when the weapon does not fit the capacity: it goes to the loot box', () => {
+  it('keeps the choice when the weapon does not fit the capacity: it equips anyway (ADR 0048 d.7, forceAdd ignores weight)', () => {
     // A vocação não pode ser punida pela mochila. Mutação que mata: devolver `ok: false`
-    // quando `add` recusa por peso.
+    // quando o peso estoura, ou deixar de vestir por causa dele.
     const heavy = new CharacterRuntime(state({ capacity: 20 }));
     const result = heavy.chooseVocation(knight, catalog.get('steel-axe') ?? null, options());
-    expect(result).toEqual({ ok: true, weapon: 'in-loot-box' });
+    expect(result).toEqual({ ok: true, weapon: 'equipped' });
     expect(heavy.vocationId).toBe('knight');
-    expect(heavy.lootBox.map((item) => item.itemId)).toEqual(['steel-axe']);
-    expect(heavy.inventory.equippedAt('hand')?.itemId).toBe('machete');
+    expect(heavy.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
   });
 
   it('leaves the bow in the backpack when a shield is worn (hands-full), and the choice still holds', () => {
@@ -168,18 +167,18 @@ describe('chooseVocation com o kit completo da vocação (#496)', () => {
       .toBe('vocation-choice');
   });
 
-  it('sends the piece that does not fit the capacity to the loot box, and equips what fits', () => {
-    // A vocação não pode ser punida pela mochila — nem pela metade: o que coube veste, o que
-    // não coube vai para a Caixa, e a escolha vale inteira.
-    const hero = new CharacterRuntime(state({ capacity: 60 }));
+  it('equips every piece even when none of them fits the capacity (ADR 0048 d.7, forceAdd ignores weight)', () => {
+    // A vocação não pode ser punida pela mochila — nem pela metade: a escolha vale inteira,
+    // peso nenhum.
+    const hero = new CharacterRuntime(state({ capacity: 0 }));
     const result = hero.chooseVocation(knight, null, kitOptions());
     expect(result).toEqual({
       ok: true, weapon: 'none',
-      kit: [{ itemId: 'steel-axe', status: 'equipped' }, { itemId: 'shield', status: 'in-loot-box' }],
+      kit: [{ itemId: 'steel-axe', status: 'equipped' }, { itemId: 'shield', status: 'equipped' }],
     });
     expect(hero.vocationId).toBe('knight');
-    expect(hero.lootBox.map((item) => item.itemId)).toEqual(['shield']);
     expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
+    expect(hero.inventory.equippedAt('shield')?.itemId).toBe('shield');
   });
 
   it('keeps the legacy single-weapon path when there is no kit (test content and old calls)', () => {
@@ -199,5 +198,73 @@ describe('settleGoldDelta', () => {
     expect(hero.gold).toBe(11_045);
     expect(hero.goldDelta).toBe(0);
     expect(hero.getState()).toMatchObject({ gold: 11_045, goldDelta: 0 });
+  });
+});
+
+describe('storages (#731)', () => {
+  it('reads -1 (the Tibia convention) for a key never set', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(-1);
+  });
+
+  it('sets and reads a storage back', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(1);
+  });
+
+  it('setting -1 erases the key, back to "never set"', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    hero.setStorageValue('quest:rat-cellars', -1);
+    expect(hero.getStorageValue('quest:rat-cellars')).toBe(-1);
+    expect(hero.storages.has('quest:rat-cellars')).toBe(false);
+  });
+
+  it('always includes storages in getState, even when drained back to empty (#536 lesson)', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('a', 1);
+    hero.setStorageValue('a', -1);
+    expect(hero.getState().storages).toEqual({});
+  });
+
+  it('round-trips through a snapshot', () => {
+    const hero = new CharacterRuntime(state());
+    hero.setStorageValue('quest:rat-cellars', 1);
+    hero.setStorageValue('quest:progress', 0);
+
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+
+    expect(restored.getStorageValue('quest:rat-cellars')).toBe(1);
+    expect(restored.getStorageValue('quest:progress')).toBe(0);
+    expect(restored.getStorageValue('quest:never-touched')).toBe(-1);
+  });
+
+  it('drops a crooked stored value defensively instead of throwing (readCharacterStorage)', () => {
+    const hero = new CharacterRuntime(state({
+      storages: { good: 2, bad: Number.NaN } as unknown as Readonly<Record<string, number>>,
+    }));
+    expect(hero.getStorageValue('good')).toBe(2);
+    expect(hero.getStorageValue('bad')).toBe(-1);
+  });
+});
+
+describe('drainRemovedInstances (#724, ADR 0048 d.8)', () => {
+  it('returns what sell-items/discard-item destroyed and empties the list', () => {
+    const hero = new CharacterRuntime(state());
+    hero.removedInstances.push('s1:0', 's1:1');
+
+    expect(hero.drainRemovedInstances()).toEqual(['s1:0', 's1:1']);
+    expect(hero.removedInstances).toEqual([]);
+    expect(hero.getState()).not.toHaveProperty('removedInstances');
+  });
+
+  it('round-trips through JSON, and is absent when nothing was removed', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.getState()).not.toHaveProperty('removedInstances');
+
+    hero.removedInstances.push('s1:0');
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+    expect(restored.removedInstances).toEqual(['s1:0']);
   });
 });

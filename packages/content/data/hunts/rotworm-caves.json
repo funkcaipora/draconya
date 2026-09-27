@@ -6,7 +6,6 @@
   "routeId": "rotworm-caves",
   "ambience": "cavern",
   "description": "Cavernas úmidas dominadas por rotworms — vermes lentos que aguentam apanhar bastante antes de cair.",
-  "corpseTtlMs": 30000,
   "spawnClearRadius": 3,
   "difficulties": {
     "cautious": {
@@ -40,5 +39,5 @@
       "respawnDelayMs": 2000
     }
   },
-  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II §15). corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius: ainda o provisório da Rat Cellars (3 tiles, #236), sem captura própria da Rotworm Caves no Huntera."
+  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II §15). corpseTtlMs saiu daqui e mora no monstro (#585): `data/monsters/rotworm.json` declara 670000 ms, a soma da cadeia real do Canary `items.xml` — não mais os 30000 ms copiados do Huntera (Parte VI §36, #515), que eram só o prazo observado do PRIMEIRO estágio de decaimento. spawnClearRadius: ainda o provisório da Rat Cellars (3 tiles, #236), sem captura própria da Rotworm Caves no Huntera."
 }

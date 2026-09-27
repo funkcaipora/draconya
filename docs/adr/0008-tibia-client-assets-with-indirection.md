@@ -106,3 +106,39 @@ de arte, e por isso **também nunca é versionado** — mora em `things/maps/`, 
 aparências por tile que o importador produz para o cliente mora em `things/<versão>/maps/`,
 servida por `/things/` como as folhas. O que entra em `content/` é só geometria (bloqueio,
 velocidade de chão, escadas), regenerável de qualquer fonte. Ver ADR 0025.
+
+## Emenda — 2026-09-26 (#675): o pacote de referência passa a ser o 15.33
+
+**Contexto.** O pacote fixado era o **13.32** (`packs/tibia-1332.json`, `THINGS_VERSION=1332`). A
+CipSoft só distribui o cliente ATUAL, e o 13.32 existia numa única máquina: uma máquina nova, um
+servidor de deploy ou uma perda de disco deixavam o projeto sem arte, sem caminho oficial para
+recuperá-la. Numa máquina com o cliente oficial recém-instalado, a versão servida é a **15.33**.
+
+**Decisão.** O pacote de referência passa a ser o **15.33**, obtido do cliente oficial instalado
+(no macOS, `~/Library/Application Support/CipSoft GmbH/Tibia/packages/Tibia.app/Contents/Resources/
+assets/`) e copiado para `things/1533/`. `packs/tibia-1533.json` substitui o inventário do 13.32;
+`appearances/baseline.json` aponta para ele; `THINGS_VERSION` passa a `1533` em `server/config.ts`,
+`.env.example`, `Dockerfile`, `compose.coolify.yml` e nos scripts.
+
+**O que foi conferido antes** (a premissa da troca, medida no pacote instalado):
+
+- os 42 107 objetos e 1 443 outfits do `appearances.dat` do Canary 13.x existem todos no 15.33;
+- as 234 referências de aparência de `content/` existem todas — a tabela não mudou uma linha;
+- do inventário 13.32 faltam 2 objetos (44780, 44781), que nada usa: nem conteúdo, nem o
+  `items.xml` do Canary, nem o mapa;
+- do mapa inteiro falta 1 id (2141, "RESERVED SPRITE" no próprio Canary), num tile do andar 14;
+- regenerados com as flags do 15.33, Rat Cellars, Rotworm Caves e Darashia Dragon Lair têm
+  geometria **idêntica**; Thais muda **um** tile, `(181, 137, 7)` local, no canto sudeste do
+  recorte: o objeto 50227 bloqueia, e o 13.32 não o conhecia (era tratado como andável por
+  `--allow-unknown`). Com o 15.33 os quatro recortes têm **zero** aparência desconhecida.
+
+**Alternativas.** Manter o 13.32 (descartada: depende de uma cópia sem fonte oficial). Validar o
+conteúdo contra os DOIS pacotes (descartada: complexidade sem ganho, já que o 15.33 cobre o 13.32).
+
+**Consequências.** `pnpm check` passa a conferir o inventário contra o pacote real em qualquer
+máquina com o cliente instalado. O deploy troca `/things/1332` por `/things/1533` — o `game` recusa
+subir com a versão errada (`served-pack.ts`), então a troca é atômica ou não acontece. A arte do
+15.33 é às vezes redesenhada para o mesmo id; o que isso muda é só apresentação. Outfits e itens
+posteriores ao 13.32 passam a existir no pacote — a vocação Monk, que o plano de paridade deixou de
+fora por falta de arte, deixa de ter esse impedimento. **O risco jurídico não muda**: é arte da
+CipSoft nas duas versões, e esta decisão continua assumindo-o como no texto original.

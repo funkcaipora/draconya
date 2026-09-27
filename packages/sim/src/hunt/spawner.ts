@@ -37,15 +37,23 @@ export interface SpawnRequest {
   readonly position: Point;
 }
 
+/** Um candidato a sorteio por peso: composição da dificuldade, ou os `monsters` de um ponto (#582). */
+export interface WeightedMonster {
+  readonly monsterId: string;
+  readonly weight: number;
+}
+
 /**
- * Sorteia dentro dos pesos. É o ÚNICO sorteio do spawn.
+ * Sorteia dentro dos pesos. É o ÚNICO sorteio do spawn — usado tanto para a composição da
+ * dificuldade quanto para os `monsters` de um ponto que declara mais de um candidato (#582, o
+ * caso do Canary em que dois `<monster>` do mesmo `<spawn>` caem na mesma posição).
  *
  * Peso zero é permitido e significa "não sai": deixar uma variante no arquivo com peso zero é
  * como se desliga um monstro sem apagar a linha, e apagar linha é como se perde o histórico
  * de balanceamento.
  */
 export function pickByWeight(
-  composition: HuntDifficulty['composition'],
+  composition: readonly WeightedMonster[],
   rng: Rng,
 ): string | null {
   const total = composition.reduce((sum, entry) => sum + Math.max(0, entry.weight), 0);
@@ -115,8 +123,10 @@ export class Spawner {
     const area = spawnPointOf(slot.pointIndex);
     // O ponto pode DECLARAR o monstro (#519, hunt copiada do Tibia: cada spawn do Canary tem o
     // seu, na posição dele) — a composição sorteada vira fallback, para o ponto sem `monsterId`
-    // continuar exatamente como antes.
-    const monsterId = area.monsterId ?? pickByWeight(difficulty.composition, rng);
+    // continuar exatamente como antes. `monsters` (#582) é o meio-termo: vários candidatos SÓ
+    // deste ponto, sorteados entre si — nunca junto com a composição da dificuldade.
+    const monsterId = area.monsterId
+      ?? (area.monsters !== undefined ? pickByWeight(area.monsters, rng) : pickByWeight(difficulty.composition, rng));
     if (monsterId === null) return null;
 
     const position = this.#freeTile(area.at, area.radius, blocked, monsterId);
@@ -178,4 +188,6 @@ export interface SpawnArea {
   readonly at: Point;
   readonly radius: number;
   readonly monsterId?: string;
+  /** Vários candidatos SÓ deste ponto, com peso (#582). Exclusivo com `monsterId`. */
+  readonly monsters?: readonly WeightedMonster[];
 }
