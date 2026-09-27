@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react';
 import { sendIntent } from '../net/current.js';
 import { targetTracker } from '../state/target.js';
+import { aimTracker } from '../state/aim.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import type { Creature, Point } from '../state/world.js';
@@ -154,6 +155,9 @@ export function BattlePanel() {
                   type="button"
                   className={row.id === targetId ? 'battle-row battle-row-selected' : 'battle-row'}
                   onClick={() => {
+                    // A MIRA (ADR 0049 decisão 2) tem prioridade, como no Viewport: com ela
+                    // armada, o clique na linha completa a intenção do slot.
+                    if (aimTracker.resolveAim(row.id, sendIntent)) return;
                     // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O
                     // rastreador compartilha o MESMO `hud.targetId` do Viewport (#471) e o
                     // segundo clique no alvo atual cancela.

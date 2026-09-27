@@ -18,7 +18,8 @@
 
 import type { ChainableCommander, Redis } from 'ioredis';
 import type {
-  Aggregates, BestiaryState, EndReason, ItemInstanceOverlay, NotableEvent, SkillsState,
+  Aggregates, BestiaryState, CharacterStorageMap, EndReason, ItemInstanceOverlay, NotableEvent,
+  SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -112,6 +113,16 @@ export interface SessionReceipt {
    */
   readonly overlays?: Readonly<Record<string, ItemInstanceOverlay | null>>;
   /**
+   * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value`. ABSOLUTO e
+   * última-escrita-vence, como `supplyStock` — NÃO gateado por vazio: um storage setado e
+   * depois apagado NESTA sessão é um resultado real (voltou a "nunca setado"), e omitir a
+   * chave faria o valor antigo ressuscitar no próximo login (a lição do #536). O mapa nunca
+   * contém `-1` (a convenção de ausência): quem quer apagar simplesmente não lista a chave
+   * aqui — o `jobs` (`applyStorages`, `jobs/ledger.ts`) trata este mapa como o ESTADO INTEIRO
+   * do personagem e apaga do banco toda chave que não aparecer nele.
+   */
+  readonly storages?: CharacterStorageMap;
+  /**
    * Os itens que ESTA sessão criou e que couberam na mochila (§22.2, FUN-88).
    *
    * Viram linha de `item_instance` na liquidação. O id vem do `sim` e é determinístico
@@ -119,11 +130,6 @@ export interface SessionReceipt {
    * — a mesma idempotência que a `UNIQUE (session_id, seq)` dá ao ledger.
    */
   readonly acquired?: readonly BoxedItem[];
-  /**
-   * O que caiu e NÃO coube (§21.6). Vai para a Caixa de Loot da Sessão, não para o banco:
-   * expirar precisa significar que o item nunca existiu.
-   */
-  readonly lootBox?: readonly BoxedItem[];
   /**
    * As instâncias que `sell-items`/`discard-item` destruíram nesta sessão (#724, ADR 0048 d.8):
    * o `jobs` apaga as linhas de `item_instance` correspondentes NA MESMA transação da linha de
@@ -349,14 +355,11 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['overlays'] === 'object' && value['overlays'] !== null && !Array.isArray(value['overlays'])
       ? { overlays: value['overlays'] as Record<string, ItemInstanceOverlay | null> }
       : {}),
-    ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
-    ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),
-    // As instâncias vendidas/descartadas (#724, ADR 0048 d.8): lista de PERMISSÃO, pela mesma
-    // razão das skills — e é EXATAMENTE o defeito que este comentário já registrava: campo
-    // novo em `SessionReceipt` que não entra aqui some no caminho de volta sem erro nenhum. O
-    // `item_instance` correspondente nunca seria apagado, e ninguém veria por quê.
-    ...(Array.isArray(value['removedInstances'])
-      ? { removedInstances: value['removedInstances'] as string[] }
+    // Storages (#731): lista de PERMISSÃO, pela razão das skills. O conteúdo é conferido na
+    // escrita (`ledger`, `applyStorages`), com a mesma leitura defensiva do ticket.
+    ...(typeof value['storages'] === 'object' && value['storages'] !== null && !Array.isArray(value['storages'])
+      ? { storages: value['storages'] as CharacterStorageMap }
       : {}),
+    ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
   };
 }

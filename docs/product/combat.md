@@ -489,7 +489,9 @@ não mais a exceção. O que o motor ganhou:
   `CALLBACK_PARAM_LEVELMAGICVALUE` (o MAGIC LEVEL, com o bônus de item `magic`, em qualquer
   vocação: as 37 magias LEVELMAGIC do catálogo, inclusive Divine Caldera e Divine Missile do
   Paladin); ausente (= `vocation`) é a skill da vocação (`vocation.spellSkill`: `magic`,
-  `distance` no Paladin, `melee` no Knight), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
+  `distance` no Paladin, e `SPELL_SKILL_WEAPON` ("weapon") no Knight desde o #567 — a skill da
+  FAMÍLIA da arma equipada agora, resolvida em tempo de execução porque `melee` virou quatro
+  skills e não há mais uma fixa só dele), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
   Knight e as Ethereal Spear). `scaling: 'magic'` com termo de ataque de arma é recusado no boot.
   Na magia e na runa de CURA é sempre o MAGIC LEVEL (#475). Onde o termo é o MAGIC LEVEL (cura,
   `scaling: 'magic'` e a runa com `formula`), ele ganha o **ML especializado** do elemento do
@@ -667,7 +669,7 @@ resistência e imunidade do monstro.
 | Bow — alcance | 6 | `packages/content/data/items/bow.json`, `weapon.range` |
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
-| Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
+| Munição — attack e preço | arrow 25 `[ABERTO — attack provisório]` / 2; burst arrow 27 `[ABERTO — idem]` / 15; sniper arrow 28 `[ABERTO — idem]` / 5; onyx arrow 38 `[ABERTO — idem]` / 7 — `attack` continua do TibiaWiki (provisório); `price` é o menor `buy` de NPC do Canary (M34-03/#574, NÃO mais provisório) | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
 | Distância — início, curva (base), dano por nível | 10 / 30 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` da distância no Canary; `factor` por vocação, #521, ADR 0037 — ver `docs/product/progression.md`) | `packages/content/data/skills/distance.json` |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (só vale para wand/rod e para o `combat-v1`; ver abaixo) | `packages/content/data/skills/distance.json` |
 
@@ -1282,6 +1284,12 @@ interface MonsterAbility {
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
 
+**O catálogo (#580) trouxe 933 monstros gerados** para `packages/content/data/monsters/generated/`,
+ao lado de Rat, Rotworm, Dragon e Dragon Lord (hand-authored, só o #581 os regenera). O que ficou
+de fora do corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado
+(#573/#574) — está em `docs/reference/catalog/monsters-promotion-report.md`;
+`scripts/catalog/promote-monsters.ts` é quem separa `bestiary`/`outfitId` do monstro ao promover.
+
 ## IA de monstro do TFS: chance, onda direcional, defesa, troca de alvo e fuga (#518)
 
 O CMB-06 deu ao monstro uma lista de abilities, mas cada uma disparava **sempre** que o
@@ -1428,6 +1436,69 @@ interface MonsterTargetStrategy {
   fila e curaria em dobro no primeiro vencimento.
 - Rato e rotworm não declaram nenhum destes campos — o comportamento entregue não muda.
 
+## Linha de visão (isSightClear, #553, M30-06)
+
+O TFS/Canary recusam dano — tiro, magia mirada, habilidade de monstro, tile de área — quando não
+há linha de visão livre entre a origem e o destino (`Map::isSightClear`/`checkSightLine`,
+`src/map/map.cpp`): uma varredura tile a tile entre os dois extremos, reprovando se algum tile NO
+MEIO (nunca os extremos) tem a propriedade `CONST_PROP_BLOCKPROJECTILE` — a flag `unsight` do
+pacote de aparências 13.x. Antes desta issue, todo portão de combate do Draconya olhava só
+distância; um paladin atrás de uma quina acertava um monstro do outro lado da parede.
+
+**A camada de dado é nova, e é OPCIONAL** (`packages/content`): `floorSchema` ganha `sight` —
+uma grade `#`/livre, exatamente como `grid`, mas em camada SEPARADA, porque bloquear passo
+(`unpass`) e bloquear visão (`unsight`) são flags independentes do pacote — uma peça de
+decoração pode ter uma sem a outra. `Floor.blocksSight` é `Uint8Array | null`; `null` (nenhum
+mapa reimportado ainda tem a camada) significa "nada bloqueia visão neste andar", o mesmo
+"sem dado, sem restrição" que `speed` ausente já usa para velocidade de chão — **todo mapa de
+hoje continua com LOS sempre livre até ser reimportado** (`pnpm map:import`, que agora deriva
+`sight` da flag `unsight`, espelhando como `grid` já deriva de `unpass`).
+
+**O algoritmo é novo, e mora em `sim`** (`packages/sim/src/line-of-sight.ts`,
+`isSightClear(map, from, to)`), não em `content` ao lado de `isBlocked`: a própria issue #553
+enquadra LOS como mecanismo de COMBATE, e os dados (`blocksSight`) continuam em `content`, só a
+varredura muda de pacote. Um midpoint-line (Bresenham) comum — não a variante de Wu com
+acumulador de erro do TFS (ADR 0019: nunca copiar código GPL) — decide o MESMO resultado
+qualitativo: tile bloqueado ENTRE os extremos derruba a visão; os extremos nunca bloqueiam a
+própria linha; andar diferente é SEMPRE bloqueado (nenhuma chamada de combate do Canary permite
+LOS entre andares — todas usam `floorCheck: true`; a única exceção, arremesso livre de item, o
+Draconya não tem).
+
+**Cinco portões consultam `isSightClear`, e a escolha de alvo continua ignorando visão em
+todos** (a automação mira o mesmo alvo atrás da parede e espera abrir linha, em vez de trocar
+para um pior; ver `packages/sim/src/rulesets/hunt.ts`):
+
+1. **Tiro** (`#strike`, arma `distance`): sem visão, o tiro não sai — nem munição gasta, nem
+   gold debitado, nem `shot` emitido — exatamente como "sem munição" já recusava.
+2. **Magia mirada e magia em área** (`#aimFor`): o alvo principal só é capturado com visão
+   livre do lançador; cada alvo SECUNDÁRIO da forma (onda, círculo em volta do alvo) também
+   precisa da PRÓPRIA visão — alguém atrás de uma parede não é atingido só porque outro, mais à
+   frente, está.
+3. **Habilidade de monstro** (`#onMonsterAttack`/`#onMonsterAbility`/`#armMonsterAbilities`):
+   entra na MESMA condição composta que já olhava `distance(...) > ability.target.range` —
+   sem visão, a ability fica engatilhada, como "fora de alcance".
+4. **Tile de área de ability de monstro** (`#executeMonsterAbility`): os alvos que
+   `abilityTargets` colhe da forma são filtrados por `isSightClear` a partir do monstro, a
+   mesma regra do item 2 do lado do jogador.
+5. **Recuo de `targetDistance`** (`decideMonsterAction`, ver "Manter distância" abaixo): fecha
+   a divergência que aquela seção registrava — o monstro só recua com visão livre, como o
+   Canary.
+
+**Bônus, fora da lista de cinco da issue**: a postura `keep-distance` do PERSONAGEM
+(`#holdPosture`) também só recua (`fleeStep`) com visão livre até o alvo — o mesmo princípio do
+item 5, aplicado ao lado do jogador, que já tinha a mecânica de recuo por distância configurada
+e sofria do mesmo problema.
+
+**Custo**: a checagem de visão é sempre a ÚLTIMA da cadeia, nos seis pontos acima — nunca antes
+da conferência de andar/distância/alcance —, para não pagar Bresenham por par já descartado por
+outro motivo. Sem a camada `sight` (todo mapa hoje), o custo é um `if` e retorno imediato.
+
+**Fora do escopo**: reimportar os mapas reais (`thais`, `rat-cellars`, `rotworm-caves`,
+`darashia-dragon-lair`) com a camada `sight` — feito quando alguém rodar `pnpm map:import` numa
+máquina com `THINGS_DIR` apontando para o pacote 13.x; arremesso livre de item entre andares
+(mecânica que o Draconya não tem); e uma IA de monstro "persegue e recua sozinho" além do que
+`targetDistance` já cobre.
+
 ## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
 
 O M29-02 dá ao monstro um segundo número de alcance, distinto de `attackRange`: `monster.
@@ -1488,13 +1559,17 @@ e `1` nunca aciona nem o ramo de recuo (a condição é `distance < targetDistan
 quando `targetDistance` é `1` e a distância Chebyshev nunca é negativa) nem muda onde a
 aproximação para (o alcance de parada continua sendo o maior alcance de ability, CMB-06).
 
-**Divergência aceita: sem exigência de linha de visão** (ver "Divergências do PRD" abaixo). O
-Canary só entra no ramo de recuo com `isSightClear(creaturePos, targetPos, true)` verdadeiro —
-sem visão livre, ele cai no caminho normal (A*, aproxima) mesmo com o alvo mais perto que
-`targetDistance`. O `sim` ainda não tem esse conceito (chega com o M30-06, linha de visão do
-`combat-v3`); até lá, o recuo do Draconya dispara só pela distância, sem checar parede entre os
-dois — o mesmo corredor bloqueado que já vale para toda a IA de monstro hoje (nenhuma ability
-verifica linha de visão ainda).
+**Linha de visão exigida no recuo (#553, M30-06 — fechada a divergência que esta seção
+registrava)**: o Canary só entra no ramo de recuo com `isSightClear(creaturePos, targetPos,
+true)` verdadeiro — sem visão livre, ele cai no caminho normal (aproxima) mesmo com o alvo mais
+perto que `targetDistance`. `decideMonsterAction` (`packages/sim/src/monster/monster.ts`) recebe
+agora um quinto parâmetro opcional, `sightClear: (from, to) => boolean` — ausente é sempre
+`true`, o comportamento de antes do #553, o que preserva as dezenas de chamadas de
+`monster.test.ts` que não têm mapa para consultar. `hunt.ts#onMonsterStep` é o único chamador em
+produção, e passa `(from, to) => isSightClear(this.#world.map, from, to)` —
+`packages/sim/src/line-of-sight.ts`, a linha de visão pura que este mesmo issue introduz (ver
+"Linha de visão" mais abaixo). Sem visão, o monstro cai para a checagem de alcance seguinte
+(aproxima ou ataca parado), exatamente como o Canary.
 
 ## Invocação de monstro por monstro (#546, TFS/Canary `monster.summon`/`maxSummons`)
 
@@ -2194,8 +2269,9 @@ tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-ots
 - `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
   zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
   muda o consumo de RNG e exige perfil novo (ADR 0031).
-- `[ABERTO]` Os números da Avalanche Rune (preço por uso, Base Power, raio, requisitos) são
-  provisórios até a leitura da infobox do TibiaWiki. O elemento é `ice` desde o CMB-03.
+- `[ABERTO]` Base Power, raio e requisitos da Avalanche Rune são provisórios até a leitura da
+  infobox do TibiaWiki (o preço por uso é `[RESOLVIDO]` — 64, menor `buy` de NPC do Canary,
+  M34-03/#574). O elemento é `ice` desde o CMB-03.
 - `[ABERTO]` `physical-strike` é dano físico no Tibia, mas fica em `arcane` nesta versão para
   não mudar o dano entregue (a armadura passaria a contar). Trocar para `physical` exige perfil
   novo (ADR 0031).
@@ -2255,14 +2331,6 @@ ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
-- **O recuo de `targetDistance` não exige linha de visão** (#542, M29-02; M30-06 fecha a
-  divergência). O Canary só entra no ramo de recuo de `Monster::getDistanceStep` com
-  `isSightClear` verdadeiro entre monstro e alvo — sem visão livre, ele cai no caminho normal
-  mesmo com o alvo mais perto que `targetDistance`. O `sim` ainda não modela linha de visão em
-  lugar nenhum da IA de monstro (nenhuma ability verifica, e o combate corpo a corpo/à distância
-  atravessa parede tanto quanto sempre atravessou); adicionar a checagem só para o recuo, sem o
-  resto da IA, criaria uma exceção só ele — o M30-06 (combate do Canary, `combat-v3`) é onde essa
-  peça de infraestrutura entra para valer, e o recuo passa a usá-la no mesmo commit.
 - **`monster.staticAttack` é aceito no schema, mas não muda comportamento nenhum** (#518). O
   TFS usa este número para decidir se o monstro, podendo atacar, fica parado ou dá um passo
   aleatório colado no alvo (`randomStepping`/`getDanceStep`) — puramente cosmético, não afeta

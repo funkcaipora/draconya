@@ -1,0 +1,7 @@
+{
+  "id": "hailstorm-rod",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: value: 2000 → 3000.",
+  "patch": {
+    "value": 3000
+  }
+}

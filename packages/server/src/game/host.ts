@@ -27,14 +27,14 @@ import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitL
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, TakeLootRefusal, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
 import { overlaysOfState, settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
-import type { BoxedItem, LootBoxStore } from '../loot-box.js';
+import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
@@ -174,11 +174,6 @@ export interface SessionHostOptions {
    */
   readonly appearances?: Appearances;
   /**
-   * Onde a Caixa de Loot da Sessão é guardada (FUN-88). Ausente: o que não coube se perde no
-   * encerramento, e o log diz. Degradação, não falha.
-   */
-  readonly lootBoxes?: LootBoxStore;
-  /**
    * Ligar o interest management por célula nas sessões compartilhadas (FUN-33). Padrão: sim.
    *
    * Existe desligável por duas razões, e nenhuma é "por precaução": é o GRUPO DE CONTROLE da
@@ -227,6 +222,14 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
 const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
   'level-too-low': 'Você ainda não tem o level dessa munição.',
+};
+
+/** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
+const CORPSE_REFUSAL: Readonly<Record<TakeLootRefusal, string>> = {
+  'not-found': 'Esse cadáver já não está mais lá.',
+  'not-yours': 'Isto não é seu.',
+  'too-far-away': 'Você está longe demais.',
+  'not-enough-capacity': INVENTORY_REFUSAL['over-capacity'],
 };
 
 /**
@@ -1430,9 +1433,9 @@ export class SessionHost {
         this.#requestMove(viewer, message.from, message.to);
         return;
       case 'use-slot':
-        // INTENÇÃO (invariante 4): o cliente diz QUAL slot; elegibilidade, estoque, mana e
-        // cooldown são do servidor (AB-09, ADR 0032 d.3).
-        this.#requestUseSlot(viewer, message.set, message.slot);
+        // INTENÇÃO (invariante 4): o cliente diz QUAL slot e QUEM/ONDE mirou; elegibilidade,
+        // estoque, mana, alcance e cooldown são do servidor (AB-09, ADR 0032 d.3; ADR 0049 d.2).
+        this.#requestUseSlot(viewer, message.set, message.slot, message.target);
         return;
       case 'select-target':
         // INTENÇÃO (invariante 4): o cliente diz QUAL criatura (ou `0`, cancelar); quem valida
@@ -1466,6 +1469,16 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o líder propõe e os membros respondem; quem confere quem
         // pode propor e se todos já aprovaram é o `sim`, dentro da sessão dona (invariante 9).
         this.#partyEndVote(viewer, message);
+        return;
+      case 'open-corpse':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL item do chão; dono, elegibilidade e
+        // distância são conferidos no `sim` (#722, ADR 0048 d.4).
+        this.#requestOpenCorpse(viewer, message.groundItemId);
+        return;
+      case 'take-loot':
+        // INTENÇÃO (invariante 4): `instanceId: null` é o clique (filtro do personagem); um id
+        // é arrastar ESTE item, ignorando o filtro. Dono, distância e capacidade são do `sim`.
+        this.#requestTakeLoot(viewer, message.groundItemId, message.instanceId);
         return;
       case 'say':
         // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
@@ -1665,13 +1678,24 @@ export class SessionHost {
    *
    * Fora de hunt é RECUSA com motivo, nunca silêncio: a barra é montada na Cidade e a tecla
    * existe lá — "não estou numa caçada" é a resposta, não esconder o botão (ADR 0032 d.3).
+   *
+   * `target` é a mira (ADR 0049 decisão 2), ainda no vocabulário do FIO (`creatureId` numérico
+   * ou `position`); `#resolveUseSlotTarget` a traduz para o domínio que o `sim` entende ANTES de
+   * chamar `useSlot` — o `sim` nunca vê o id numérico (invariante 1: ele não conhece o
+   * hospedeiro que atribui esses ids).
    */
-  #requestUseSlot(viewer: Viewer, set: number, slot: number): void {
+  #requestUseSlot(
+    viewer: Viewer, set: number, slot: number,
+    target?: Extract<C2SMessage, { type: 'use-slot' }>['target'],
+  ): void {
     const hosted = this.#hostedSession(viewer.characterId);
     const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    const resolvedTarget = hosted === undefined || target === undefined
+      ? undefined
+      : this.#resolveUseSlotTarget(hosted, target);
     const outcome = hosted === undefined || ruleset?.useSlot === undefined
       ? undefined
-      : ruleset.useSlot(hosted.session, viewer.characterId, set, slot);
+      : ruleset.useSlot(hosted.session, viewer.characterId, set, slot, resolvedTarget);
     if (outcome === undefined) {
       viewer.send({ type: 'slot-result', set, slot, ok: false, reason: 'Você não está numa caçada.' });
       return;
@@ -1737,6 +1761,58 @@ export class SessionHost {
   }
 
   /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4). Processado NA CHEGADA, como equipar: dono,
+   * elegibilidade e distância são conferidos no `sim` (`openCorpse`), dentro da sessão dona
+   * (invariante 9). Sucesso é `corpse-contents`; recusa é `system-message` (FUN-73).
+   */
+  #requestOpenCorpse(viewer: Viewer, groundItemId: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.openCorpse === undefined) return;
+    const result = ruleset.openCorpse(hosted.session, viewer.characterId, groundItemId);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CORPSE_REFUSAL[result.reason] });
+      return;
+    }
+    viewer.send({
+      type: 'corpse-contents', groundItemId,
+      gold: result.corpse.gold ?? 0,
+      items: (result.corpse.items ?? []).map((item) => ({ ...item })),
+    });
+  }
+
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático do abate (#722, ADR 0048 d.4).
+   * `instanceId: null` reaplica o filtro do PRÓPRIO personagem; um id arrasta ESTE item,
+   * ignorando o filtro. Sucesso reenvia `corpse-contents` (o que sobrou) e `inventory` (o que
+   * entrou); recusa é `system-message`, como o resto do inventário.
+   */
+  #requestTakeLoot(viewer: Viewer, groundItemId: number, instanceId: string | null): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.takeLoot === undefined) return;
+    const result = ruleset.takeLoot(hosted.session, viewer.characterId, groundItemId, instanceId);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CORPSE_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(viewer.characterId);
+    this.#sendInventory(viewer.characterId);
+    // O cadáver pode ter deixado de existir (decaiu no MESMO instante — improvável, mas
+    // `#corpseById` já teria recusado `not-found` antes; aqui ele sobrevive à coleta) — a
+    // leitura é feita de novo, pelo mesmo `Partial<HuntRuleset>` do início do método.
+    const corpse = ruleset.groundItems?.find((item) => item.id === groundItemId);
+    if (corpse === undefined) return;
+    viewer.send({
+      type: 'corpse-contents', groundItemId,
+      gold: corpse.gold ?? 0,
+      items: (corpse.items ?? []).map((item) => ({ ...item })),
+    });
+  }
+
+  /**
    * O alvo autoritativo para quem olha o personagem (#470): a confirmação imediata de um
    * `select-target`, ou a troca que o auto-target (#444) fez sozinho. Escreve `sentTarget` —
    * o que acabou de sair É o último entregue.
@@ -1756,6 +1832,32 @@ export class SessionHost {
       if (id === creatureId) return subject;
     }
     return null;
+  }
+
+  /**
+   * Traduz `use-slot.target` (ADR 0049 decisão 2), ainda no vocabulário NUMÉRICO do fio, para o
+   * `UseSlotTarget` de domínio que o `sim` entende. `creatureId` sem dono vira `{ kind:
+   * 'invalid' }` — NÃO `undefined` — porque o jogador mirou algo; cair em "sem mira" executaria
+   * contra um alvo que ele não escolheu (o default do bot), em vez de recusar `no-target`.
+   *
+   * O prefixo `m:` é o de `monsterSubject` (`packages/sim/src/monster/monster.ts`): um subject
+   * de monstro sempre começa assim, e o de personagem é o próprio `characterId` — nenhum
+   * `characterId` deste jogo é escrito nesse formato (UUID), então a distinção nunca colide.
+   */
+  #resolveUseSlotTarget(
+    hosted: HostedSession, target: NonNullable<Extract<C2SMessage, { type: 'use-slot' }>['target']>,
+  ): UseSlotTarget {
+    if ('position' in target) {
+      const { x, y, z } = target.position;
+      // `exactOptionalPropertyTypes`: `FloorPoint.z` é opcional SEM `undefined` explícito — só
+      // entra a chave quando o cliente de fato mandou o andar.
+      return { kind: 'position', position: z === undefined ? { x, y } : { x, y, z } };
+    }
+    const subject = this.#subjectOfCreature(hosted, target.creatureId);
+    if (subject === null) return { kind: 'invalid' };
+    return subject.startsWith('m:')
+      ? { kind: 'monster', subject }
+      : { kind: 'character', characterId: subject };
   }
 
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
@@ -1831,22 +1933,8 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: VOCATION_REFUSAL[result.reason] });
       return;
     }
-    if (result.kit === undefined) {
-      if (result.weapon === 'in-loot-box') {
-        viewer.send({
-          type: 'system-message', level: 'info',
-          text: 'A arma da sua vocação não coube na mochila e foi para a Caixa de Loot.',
-        });
-      }
-    } else {
-      for (const piece of result.kit) {
-        if (piece.status !== 'in-loot-box') continue;
-        viewer.send({
-          type: 'system-message', level: 'info',
-          text: `A peça "${catalog.get(piece.itemId)?.name ?? piece.itemId}" do seu kit não coube na mochila e foi para a Caixa de Loot.`,
-        });
-      }
-    }
+    // Peso nunca recusa o grant de vocação/kit (ADR 0048 decisão 7, `Inventory.forceAdd`): não
+    // há mais status "não coube" para avisar aqui — o que sobra é só vestir ou ficar na mochila.
     hosted.dirty.add(character.id);
     const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
@@ -2358,7 +2446,18 @@ export class SessionHost {
     if (event.kind === 'ground-item-appeared') {
       const appearanceId = this.#options.monsterCatalog?.get(event.monsterId)?.corpseAppearanceId;
       if (appearanceId === undefined) return;
-      const appeared: S2CMessage = { type: 'ground-item-appear', id: event.itemId, position: event.position, appearanceId };
+      // O destaque de loot (#722, ADR 0048 d.4): lido AGORA, depois que o Quick Loot automático
+      // do abate já rodou (`#collectFromCorpse` corre ANTES deste evento, no mesmo instante da
+      // morte) — é o que sobrou de fato, não uma previsão.
+      const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+      const corpse = ruleset.groundItems?.find((item) => item.id === event.itemId);
+      const lootable = corpse === undefined
+        ? undefined
+        : (corpse.items?.length ?? 0) > 0 || (corpse.gold ?? 0) > 0;
+      const appeared: S2CMessage = {
+        type: 'ground-item-appear', id: event.itemId, position: event.position, appearanceId,
+        ...(lootable === undefined ? {} : { lootable }),
+      };
       for (const viewer of hosted.viewers) viewer.send(appeared);
       return;
     }
@@ -3622,6 +3721,11 @@ export class SessionHost {
       // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
       ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
       ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      // E os storages (#731, ADR 0050 d.6 T2): a semente do motor de quest. Pela MESMA razão do
+      // supplyStock — não é monotônico como Bestiário/skills (um script de quest pode voltar um
+      // storage a -1) —, NÃO se olha `.size === 0`: um storage apagado NESTA sessão é resultado
+      // real, e omitir a chave deixaria o valor antigo do Postgres ressuscitar no próximo login.
+      ...(owner === undefined ? {} : { storages: Object.fromEntries(owner.storages) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
@@ -3631,12 +3735,12 @@ export class SessionHost {
       ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
       // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
       ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
-      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`, o que não
-      // coube vira Caixa de Loot da Sessão.
+      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
+      // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu, e com
+      // ela o campo `lootBox` do extrato: o grant de vocação/kit e a liquidação de bolsa
+      // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
+      // sempre entra na mochila — não sobra nada para carregar aqui.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
-      ...(owner === undefined || owner.lootBox.length === 0
-        ? {}
-        : { lootBox: owner.lootBox }),
     });
 
     // O extrato agora é durável no Redis e será a fonte que o ledger aplica no Postgres.
@@ -3647,19 +3751,6 @@ export class SessionHost {
     if (owner !== undefined && owner.goldDelta !== 0) {
       owner.settleGoldDelta();
     }
-
-    // A caixa é escrita AQUI, e não na liquidação: o relógio de 30 minutos começa no
-    // encerramento (§21.6), e quem sabe que a sessão encerrou é quem a encerrou. Deixar para o
-    // `jobs` faria o prazo começar até dez segundos depois, e por acaso.
-    await this.#saveLootBox(characterId, receipt.sessionId, owner);
-  }
-
-  async #saveLootBox(characterId: string, sessionId: string, owner: CharacterRuntime | undefined): Promise<void> {
-    if (owner === undefined || owner.lootBox.length === 0) return;
-    await this.#options.lootBoxes?.save(sessionId, owner.lootBox)
-      .catch((error: unknown) => {
-        this.#logger.error({ err: error, characterId, sessionId }, 'Failed to save the session loot box');
-      });
   }
 
   /**
@@ -3702,7 +3793,6 @@ export class SessionHost {
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
-      ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
       // As instâncias vendidas/descartadas na praça (#724, ADR 0048 d.8) — mesmo mecanismo do
       // extrato de hunt, drenado aqui em vez de `#receiptFor` porque o shard nunca passa pelo
       // `Receipt` do `sim` (ADR 0023: a Cidade não gera extrato de progresso).
@@ -3712,7 +3802,6 @@ export class SessionHost {
     // Como `#persistReceipt`: incorpora o delta à base ANTES do próximo extrato reencontrar uma
     // base antiga mais uma variação já liquidada no ledger.
     if (owner.goldDelta !== 0) owner.settleGoldDelta();
-    await this.#saveLootBox(characterId, hosted.session.id, owner);
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
@@ -3859,7 +3948,10 @@ export class SessionHost {
         // Os cadáveres no chão (FUN-123), com a arte da tabela; sem linha, sem cadáver.
         groundItems: (ruleset.groundItems ?? []).flatMap((corpse) => {
           const appearanceId = this.#options.monsterCatalog?.get(corpse.monsterId)?.corpseAppearanceId;
-          return appearanceId === undefined ? [] : [{ id: corpse.id, position: corpse.position, appearanceId }];
+          if (appearanceId === undefined) return [];
+          // O destaque de loot (#722): quem reanexa precisa ver quais cadáveres ainda têm algo.
+          const lootable = (corpse.items?.length ?? 0) > 0 || (corpse.gold ?? 0) > 0;
+          return [{ id: corpse.id, position: corpse.position, appearanceId, lootable }];
         }),
       },
       // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.

@@ -106,8 +106,9 @@ const rules: ContainerRules = { backpackSlots: 0, satchelSlots: 0, row: 1 };
 
 describe('capacidade é PESO, no paradigma do Tibia (§21.5)', () => {
   it('recusa o que não cabe, e não guarda pela metade', () => {
-    // Recusar em vez de estourar: o item que não cabe vai para a Caixa de Loot da Sessão, que
-    // é issue própria. Guardar parte dele seria inventar meia espada.
+    // Recusar em vez de estourar: quem chama decide o destino de `over-capacity` (hoje, o item
+    // fica no cadáver do monstro — ADR 0048 decisão 7). Guardar parte dele seria inventar meia
+    // espada.
     const inventory = new Inventory();
     const apertado = wearer({ capacity: 100 });
 
@@ -115,6 +116,24 @@ describe('capacidade é PESO, no paradigma do Tibia (§21.5)', () => {
     expect(inventory.add(carried('sword'), catalog, apertado, rules))
       .toEqual({ ok: false, reason: 'over-capacity' });
     expect([...inventory.items()]).toHaveLength(1);
+  });
+
+  it('forceAdd ignora o peso: usado só onde não há cadáver para segurar o excedente (ADR 0048 d.7)', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('armor'), catalog, wearer({ capacity: 100 }), rules);
+
+    expect(inventory.forceAdd(carried('sword'), catalog, rules).ok).toBe(true);
+    expect([...inventory.items()].map((i) => i.itemId)).toEqual(['armor', 'sword']);
+    // O peso passa a estourar a capacidade de propósito — `forceAdd` não confere `Wearer`.
+    expect(inventory.weight(catalog)).toBeGreaterThan(100);
+  });
+
+  it('forceAdd ainda recusa catálogo desconhecido e pilha grande demais — só o peso é ignorado', () => {
+    const inventory = new Inventory();
+    expect(inventory.forceAdd(carried('nope'), catalog, rules))
+      .toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.forceAdd(carried('arrow', 'a', 101), catalog, rules))
+      .toEqual({ ok: false, reason: 'stack-too-large' });
   });
 
   it('o que está EQUIPADO conta no peso', () => {

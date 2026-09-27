@@ -12,7 +12,10 @@
 import { useState } from 'react';
 import type { BotAutomation } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { bot, removeAutomation, setFollow, toggleAutomation } from '../bot/store.js';
+import {
+  bot, removeAutomation, setFollow, setLootFilter, toggleAutoSellItem, toggleAutomation,
+  toggleLootItem,
+} from '../bot/store.js';
 import { automationSummary, blankAutomation } from '../bot/automation-text.js';
 import { Panel } from './ui/Panel.js';
 import { Select } from './ui/Select.js';
@@ -39,6 +42,7 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   const followState = useHudSlice((state) => state.followState);
   const automations = useStoreSlice(bot, (state) => state.draft.automations);
   const follow = useStoreSlice(bot, (state) => state.draft.follow);
+  const loot = useStoreSlice(bot, (state) => state.draft.loot);
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [adding, setAdding] = useState(false);
@@ -125,6 +129,46 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
         <Button variant="secondary" size="sm" block onClick={() => { setAdding(true); }}>+ Adicionar</Button>
         {/* A recusa fica na tela e o rascunho FICA: descartar seria a pior resposta a "corrija isto". */}
         {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
+        {/* O filtro de Quick Loot (#722, ADR 0048 d.2/d.4): o que o bot coleta sozinho no abate,
+            e o que ele vende na hora — a mesma config que `#collectFromCorpse` já lê no `sim`. */}
+        <div className="automation-loot">
+          <Select
+            label="Loot"
+            size="sm"
+            options={[
+              { value: 'skip', label: 'Pegar tudo, exceto…' },
+              { value: 'accept', label: 'Pegar só…' },
+            ]}
+            value={loot?.filter ?? 'skip'}
+            onChange={(value) => { setLootFilter(value === 'accept' ? 'accept' : 'skip'); }}
+          />
+          {items.length > 0 && (
+            <ul className="automation-loot-items">
+              {items.map((item) => (
+                <li key={item.id} className="automation-loot-row">
+                  <label title={`${loot?.filter === 'accept' ? 'Pegar' : 'Ignorar'} ${item.name}`}>
+                    <input
+                      type="checkbox"
+                      checked={loot?.itemIds.includes(item.id) ?? false}
+                      onChange={() => { toggleLootItem(item.id); }}
+                    />
+                    {item.name}
+                  </label>
+                  {item.value !== undefined && item.value > 0 && (
+                    <label title={`Vender ${item.name} automaticamente ao coletar`}>
+                      <input
+                        type="checkbox"
+                        checked={loot?.autoSell.includes(item.id) ?? false}
+                        onChange={() => { toggleAutoSellItem(item.id); }}
+                      />
+                      Autovenda
+                    </label>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </Panel>
       {adding && (
         <AddAutomationModal

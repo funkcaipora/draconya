@@ -49,6 +49,12 @@ export interface BotDraft {
    * assim que o bot básico continua sem lure algum.
    */
   readonly lure?: BotConfigV2['lure'];
+  /**
+   * O filtro de Quick Loot (ADR 0048 decisão 2). `undefined` só antes do primeiro
+   * `loadConfig`; o schema tem default `{ filter: 'skip', itemIds: [], autoSell: [] }`, então
+   * `toConfig` sempre manda algo — a aba Loot da barra que o edita é a #722 (W3).
+   */
+  readonly loot?: BotConfigV2['loot'];
 }
 
 export interface BotState {
@@ -83,6 +89,7 @@ export function emptyDraft(): BotDraft {
 follow: { kind: 'none' },
     exit: [],
     lure: undefined,
+    loot: { filter: 'skip', itemIds: [], autoSell: [] },
   };
 }
 
@@ -108,6 +115,7 @@ export function toConfig(draft: BotDraft): BotConfigV2 {
     targeting: draft.targeting,
     exit: draft.exit,
     follow: draft.follow ?? { kind: 'none' },
+    loot: draft.loot ?? { filter: 'skip', itemIds: [], autoSell: [] },
     ...(draft.lure === undefined ? {} : { lure: draft.lure }),
   };
 }
@@ -266,6 +274,7 @@ export function draftFrom(config: BotConfigV2): BotDraft {
     targeting: config.targeting,
     follow: config.follow,
     exit: config.exit,
+    loot: config.loot,
     ...(config.lure === undefined ? {} : { lure: config.lure }),
   };
 }
@@ -273,6 +282,43 @@ export function draftFrom(config: BotConfigV2): BotDraft {
 /** Troca quem o bot segue (#406, ADR 0035 d.9) e salva com debounce — mesmo padrão de `setPosture`. */
 export function setFollow(follow: BotConfigV2['follow']): void {
   edit((draft) => ({ ...draft, follow }));
+  scheduleSave();
+}
+
+/** O filtro de Quick Loot atual, ou o default do schema quando o rascunho ainda não tocou nele. */
+const DEFAULT_LOOT: BotConfigV2['loot'] = { filter: 'skip', itemIds: [], autoSell: [] };
+
+/** Troca `accept`/`skip` do filtro de Quick Loot (#722, ADR 0048 d.2/d.4) e salva com debounce. */
+export function setLootFilter(filter: BotConfigV2['loot']['filter']): void {
+  edit((draft) => ({ ...draft, loot: { ...(draft.loot ?? DEFAULT_LOOT), filter } }));
+  scheduleSave();
+}
+
+/**
+ * Liga/desliga UM item na lista do filtro (`itemIds`) — a aba Loot marca/desmarca por item do
+ * catálogo (#722, ADR 0048 d.4). O SERVIDOR confere se o id existe; a tela só reflete o que o
+ * jogador clicou.
+ */
+export function toggleLootItem(itemId: string): void {
+  edit((draft) => {
+    const loot = draft.loot ?? DEFAULT_LOOT;
+    const itemIds = loot.itemIds.includes(itemId)
+      ? loot.itemIds.filter((id) => id !== itemId)
+      : [...loot.itemIds, itemId];
+    return { ...draft, loot: { ...loot, itemIds } };
+  });
+  scheduleSave();
+}
+
+/** Liga/desliga UM item na lista de autovenda individual (§22.1, ADR 0048 d.2) e salva com debounce. */
+export function toggleAutoSellItem(itemId: string): void {
+  edit((draft) => {
+    const loot = draft.loot ?? DEFAULT_LOOT;
+    const autoSell = loot.autoSell.includes(itemId)
+      ? loot.autoSell.filter((id) => id !== itemId)
+      : [...loot.autoSell, itemId];
+    return { ...draft, loot: { ...loot, autoSell } };
+  });
   scheduleSave();
 }
 
