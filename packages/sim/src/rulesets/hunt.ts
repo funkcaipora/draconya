@@ -17,7 +17,7 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, floorChangeAt, floorChangeToward,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS, floorChangeAt, floorChangeToward,
   isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
@@ -196,6 +196,19 @@ export const END_VOTE_WINDOW_MS = 60_000;
 const EQUIP_EXPIRE = 'equip-expire';
 function equipExpirySubject(characterId: string, slot: ItemSlot): string {
   return `${characterId}:${slot}`;
+}
+
+/**
+ * Um ganho da regeneração PRÓPRIA de um item vestido (#688, `bonuses.regeneration`): a
+ * `CONDITION_REGENERATION` que o Canary cria por slot em `MoveEvent::EquipItem`. Um evento por
+ * ganho, no instante exato (invariante 2), somado à regeneração da vocação e independente dela —
+ * as cadências diferem. O subject é `<characterId>:<slot>:<health|mana>`, o que permite
+ * cancelar por slot quando o item sai.
+ */
+const ITEM_REGEN = 'item-regen';
+type ItemRegenResource = 'health' | 'mana';
+function itemRegenSubject(characterId: string, slot: ItemSlot, what: ItemRegenResource): string {
+  return `${characterId}:${slot}:${what}`;
 }
 
 /**
@@ -2099,6 +2112,7 @@ export class HuntRuleset implements Ruleset {
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
+      case ITEM_REGEN: return this.#onItemRegen(session, event.subject);
       case AUTOMATION: return this.#onAutomation(session, event.subject);
       default:
         // Um grupo do bot venceu (AB-07): `bot:<group>`. Um evento de tipo que este ruleset não
@@ -2155,11 +2169,9 @@ export class HuntRuleset implements Ruleset {
 
     const pulse = this.#regenOf(character)[what];
     if (pulse.amount <= 0) return;
-
-    const ring = character.inventory.ringEffect(this.#options.items);
-    const bonusPercent = ring?.kind === 'regen-boost' ? ring.percent : 0;
-    // O Life Ring (SV-16) multiplica o PULSO: Knight, 1 de vida vira 4 e 2 de mana viram 8.
-    const amount = Math.round(pulse.amount * (1 + bonusPercent / 100));
+    // Só a vocação: o Life Ring regenera pelos PRÓPRIOS eventos (`ITEM_REGEN`, #688), somados
+    // a este pulso, e nunca o multiplica.
+    const { amount } = pulse;
 
     if (what === 'health') {
       // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
@@ -4242,6 +4254,10 @@ const slots = bot.groups.get(group);
    * um segundo retorno.
    */
   #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+    // Item que suprime a condição (#688, Dwarven Ring): ela não entra, como a recusa de
+    // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
+    if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
+      && target.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return;
     const subject = conditionSubject(this.#subjectOf(target), condition.key);
     const previous = target.conditions.get(condition.key);
     const tick = tickOf(condition);
@@ -5071,12 +5087,68 @@ const slots = bot.groups.get(group);
       const equipped = character.inventory.equippedAt(slot);
       if (equipped === null) continue;
       const definition = this.#options.items.get(equipped.itemId);
-      if (definition?.durationMs === undefined) continue;
+      if (definition === undefined) continue;
+      this.#scheduleItemRegen(session, character.id, slot, definition);
+      if (definition.durationMs === undefined) continue;
       session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
         priority: EventPriority.Housekeeping,
         subject: equipExpirySubject(character.id, slot),
       });
     }
+  }
+
+  /**
+   * Agenda o PRIMEIRO ganho da regeneração de um item recém-vestido (#688): `*TicksMs` depois,
+   * como a `ConditionRegeneration` do Canary, que acumula o intervalo antes de curar. Ganho zero
+   * é "não regenera este recurso", e então não há evento.
+   */
+  #scheduleItemRegen(session: Session, characterId: string, slot: ItemSlot, item: Item): void {
+    const regen = item.bonuses?.regeneration;
+    if (regen === undefined) return;
+    if (regen.healthGain > 0) {
+      session.scheduleIn(ITEM_REGEN, regen.healthTicksMs, {
+        priority: EventPriority.Upkeep, subject: itemRegenSubject(characterId, slot, 'health'),
+      });
+    }
+    if (regen.manaGain > 0) {
+      session.scheduleIn(ITEM_REGEN, regen.manaTicksMs, {
+        priority: EventPriority.Upkeep, subject: itemRegenSubject(characterId, slot, 'mana'),
+      });
+    }
+  }
+
+  /** Tira os eventos de regeneração de um slot (#688): o item saiu, a regeneração dele acaba. */
+  #cancelItemRegen(session: Session, characterId: string, slot: ItemSlot): void {
+    session.cancelEvent(ITEM_REGEN, itemRegenSubject(characterId, slot, 'health'));
+    session.cancelEvent(ITEM_REGEN, itemRegenSubject(characterId, slot, 'mana'));
+  }
+
+  /**
+   * Um ganho da regeneração de item venceu (#688). Confere que o slot ainda tem um item que
+   * regenera — o cancelamento no desequip cobre o caso comum, e a guarda cobre o resto —, cura e
+   * reagenda pela cadência do item que está vestido AGORA.
+   */
+  #onItemRegen(session: Session, subject: string): void {
+    const [characterId, slot, what] = subject.split(':') as [string, ItemSlot, ItemRegenResource];
+    const character = findById(session.participants, characterId);
+    // Morto não regenera, e o evento morre com ele, como em `#onRegen`.
+    if (character === null || !character.alive) return;
+    const equipped = character.inventory.equippedAt(slot);
+    const regen = equipped === null
+      ? undefined
+      : this.#options.items.get(equipped.itemId)?.bonuses?.regeneration;
+    if (regen === undefined) return;
+    const gain = what === 'health' ? regen.healthGain : regen.manaGain;
+    if (gain <= 0) return;
+    if (what === 'health') {
+      // Só a barra, e só quando repôs — a mesma regra de `#onRegen`.
+      if (character.heal(gain) > 0) this.#emitCharacterHealth(session, character);
+    } else {
+      character.mana = Math.min(character.maxMana, character.mana + gain);
+    }
+    session.scheduleIn(ITEM_REGEN, what === 'health' ? regen.healthTicksMs : regen.manaTicksMs, {
+      priority: EventPriority.Upkeep, subject,
+    });
   }
 
   /** O que agenda e cancela o vencimento por duração, e reavalia a velocidade. Closure pura sobre a `Session`. */
@@ -5093,10 +5165,17 @@ const slots = bot.groups.get(group);
             priority: EventPriority.Housekeeping, subject,
           });
         }
+        // A regeneração também é cancelada SEMPRE (#688): trocar Life Ring por Life Ring cria a
+        // condição de novo no Canary, e o primeiro ganho volta a sair `*TicksMs` depois.
+        this.#cancelItemRegen(session, characterId, slot);
+        if (definition !== undefined) {
+          this.#scheduleItemRegen(session, characterId, slot, definition);
+        }
         this.#recomputeSpeed(session, characterId);
       },
       onUnequip: (slot) => {
         session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(characterId, slot));
+        this.#cancelItemRegen(session, characterId, slot);
         this.#recomputeSpeed(session, characterId);
       },
     };
@@ -5699,6 +5778,10 @@ const slots = bot.groups.get(group);
   #drunkTarget<P extends GridPoint>(session: Session, mover: Movable<P>, to: P): P {
     if (!(mover instanceof CharacterRuntime) && !(mover instanceof MonsterRuntime)) return to;
     if (!mover.conditions.hasDrunk()) return to;
+    // O drunk que já estava ativo quando o item suprimidor foi vestido fica oculto (#688, o
+    // `hasCondition` do Canary devolve false): sem desvio, e sem consumir sorteio.
+    if (mover instanceof CharacterRuntime
+      && mover.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return to;
     const { direction } = rollDrunkDeviation(session.rng);
     // `speak` (r <= 4, "Hicks!") fica sem consumidor: o Draconya ainda não tem evento de fala de
     // criatura (docs/product/combat.md) — presentação, não regra de hunt (ADR 0037 d.6).

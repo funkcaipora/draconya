@@ -191,7 +191,13 @@ const items = [
   {
     id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
     weight: 1, value: 0, armor: 2,
-    ringEffect: { kind: 'regen-boost', percent: 300 },
+    // A regeneração PRÓPRIA do Canary id 3089 (#688), somada à da vocação.
+    bonuses: { regeneration: { healthGain: 2, healthTicksMs: 6000, manaGain: 8, manaTicksMs: 6000 } },
+  },
+  // O Dwarven Ring (#688, Canary id 3099 `suppressdrunk`): drunk não entra nem desvia.
+  {
+    id: 'dwarven-ring', name: 'Dwarven Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0, bonuses: { suppress: ['drunk'] },
   },
   {
     id: 'energy-ring', name: 'Energy Ring', kind: 'ring', slot: 'finger',
@@ -244,7 +250,7 @@ const items = [
   // Item de bônus de skill (#524, Hat of the Mad/Paladin Armor): soma na skill `distance`.
   {
     id: 'sharp-hat', name: 'Sharp Hat', kind: 'armor', slot: 'head',
-    weight: 1, value: 0, bonuses: { skill: { skillId: 'melee', amount: 20 } },
+    weight: 1, value: 0, bonuses: { skills: [{ skillId: 'melee', amount: 20 }] },
   },
   // Crítico e leech de EQUIPAMENTO (M30-04, #551): 100 % de chance, +100 % de dano e 50 % de
   // life leech — números redondos para os testes medirem sem depender de sorteio.
@@ -609,7 +615,7 @@ describe('regeneração (FUN-36)', () => {
     expect(at(20)).toBe(at(10));
   });
 
-  it('o Life Ring quadruplica a regeneração passiva (220 HP em 30s em vez de 130)', () => {
+  it('o Life Ring SOMA a própria regeneração à da vocação (140 HP em 30 s em vez de 130)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({
       loaded: semSpawn, health: 100,
@@ -621,9 +627,9 @@ describe('regeneração (FUN-36)', () => {
 
     run(session, 30_000, 100);
 
-    // Bônus de +300% (SV-16) sobre o PULSO (#678): 1 ponto vira 4 a cada vencimento. Em 30
-    // segundos são 30 vencimentos × 4 = 120 pontos somados aos 100 iniciais.
-    expect(hero.health).toBe(220);
+    // A vocação continua igual (30 pulsos × 1) e o anel soma os dele (#688): +2 a cada 6 s,
+    // cinco ganhos em 30 s. Até #688 o anel multiplicava o pulso por 4 e dava 220.
+    expect(hero.health).toBe(140);
   });
 
   it('o Life Ring rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
@@ -732,14 +738,54 @@ describe('regeneração (FUN-36)', () => {
     expect(hero.mana).toBe(20);
   });
 
-  it('Knight com Life Ring: o anel multiplica o PULSO — +4 vida e +8 mana a cada 6 s', () => {
+  it('Knight com Life Ring: o anel SOMA +2 vida e +8 mana a cada 6 s à vocação (#688)', () => {
+    const { session, hero } = knightIn(lifeRing);
+    session.advanceBy(5_999);
+    expect(hero.health).toBe(100);
+    expect(hero.mana).toBe(0);
+    session.advanceBy(1);
+    // Vocação (+1/+2) e anel (+2/+8) no mesmo instante — nenhum multiplica o outro.
+    expect(hero.health).toBe(103);
+    expect(hero.mana).toBe(10);
+    session.advanceBy(6_000);
+    expect(hero.health).toBe(106);
+    expect(hero.mana).toBe(20);
+    run(session, 48_000, 100);
+    expect(hero.health).toBe(130);
+    expect(hero.mana).toBe(100);
+  });
+
+  it('tirar o Life Ring encerra a regeneração dele: tirado aos 7 000 ms, nada do anel aos 12 000', () => {
     const { session, hero } = knightIn(lifeRing);
     session.advanceBy(6_000);
+    expect(hero.health).toBe(103);
+    session.advanceBy(1_000);
+    expect(hero.inventory.unequip('finger', { backpackSlots: 20, satchelSlots: 0, row: 1 }).ok)
+      .toBe(true);
+    // Nenhum evento órfão do slot sobra na fila.
+    expect(session.cancelEvent('item-regen', `${hero.id}:finger:health`)).toBe(0);
+    expect(session.cancelEvent('item-regen', `${hero.id}:finger:mana`)).toBe(0);
+    session.advanceBy(5_000);
+    // Só a vocação aos 12 s: +1 vida e +2 mana.
     expect(hero.health).toBe(104);
-    expect(hero.mana).toBe(8);
-    run(session, 54_000, 100);
-    expect(hero.health).toBe(140);
-    expect(hero.mana).toBe(80);
+    expect(hero.mana).toBe(12);
+  });
+
+  it('vestir o Life Ring no meio da hunt: o primeiro ganho sai 6 s depois de vestir', () => {
+    const inventory: InventoryState = {
+      backpack: [{ instanceId: 'ring', itemId: 'life-ring', quantity: 1 }], equipped: {},
+    };
+    const { session, hero } = knightIn(inventory);
+    session.advanceBy(1_000);
+    expect(hero.inventory.equip('ring', hero, withKnightRegen.items).ok).toBe(true);
+    session.advanceBy(5_000);
+    // Aos 6 s só a vocação; o anel vence aos 7 s.
+    expect(hero.health).toBe(101);
+    session.advanceBy(999);
+    expect(hero.health).toBe(101);
+    session.advanceBy(1);
+    expect(hero.health).toBe(103);
+    expect(hero.mana).toBe(10);
   });
 
   it('Knight, com e sem Life Ring, rende exatamente o mesmo a 1 Hz e a 10 Hz', () => {
@@ -751,6 +797,8 @@ describe('regeneração (FUN-36)', () => {
     expect(at(1)).toEqual(at(10));
     expect(at(1, lifeRing)).toEqual(at(10, lifeRing));
     expect(at(10)).toEqual([200, 200]);
+    // 100 ganhos do anel em 600 s: +200 vida e +800 mana por cima da vocação.
+    expect(at(10, lifeRing)).toEqual([400, 1_000]);
   });
 });
 
@@ -3658,7 +3706,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     const shieldWithBonus = {
       id: 'shield-of-focus', name: 'Shield of Focus', kind: 'shield', slot: 'shield',
       weight: 40, value: 0, defense: 30,
-      bonuses: { skill: { skillId: 'shielding', amount: 20 } },
+      bonuses: { skills: [{ skillId: 'shielding', amount: 20 }] },
     };
     const combatV3 = {
       ...combat, compatibilityProfile: 'combat-v3', defense,
@@ -10716,6 +10764,51 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     expect(deviated).toBeGreaterThan(0);
     expect(deviated / total).toBeGreaterThan(0.02);
     expect(deviated / total).toBeLessThan(0.12);
+  });
+
+  const dwarvenRing: InventoryState = {
+    backpack: [],
+    equipped: { finger: { instanceId: 'dwarven', itemId: 'dwarven-ring', quantity: 1 } },
+  };
+
+  it('item com `suppress: [drunk]` (#688): o drunk já ativo não desvia nem consome sorteio', () => {
+    const rng = new CountingRng(Rng.fromSeed('drunk-suppressed').getState());
+    const loaded = content({ monsters: [{ ...rat, aggroRadius: 0 }] });
+    const ruleset = createHuntRuleset(loaded, 'arena', 'cautious');
+    const session = new Session({
+      id: 'drunk-688', contentVersion: loaded.version, ruleset, rng, createdAtMs: 0,
+    });
+    const hero = character({ inventory: dwarvenRing });
+    session.enter(hero);
+    hero.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
+
+    const dx = { value: 1 };
+    for (let i = 0; i < 200; i += 1) {
+      const target = bounce(hero, dx);
+      const result = ruleset.requestMove(session, hero.id, target);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.to).toEqual({ ...target, z: 7 });
+    }
+    expect(rng.integerCalls).toBe(0);
+  });
+
+  it('item com `suppress: [drunk]` (#688): a ability de drunk não entra no personagem', () => {
+    const drunkRat = {
+      ...rat, aggroRadius: 20, health: 100_000,
+      abilities: [{
+        id: 'booze', cadenceMs: 1_000, target: { range: 20 }, power: 0, damageType: 'physical',
+        condition: { key: 'drunk', durationMs: 30_000, effect: { kind: 'drunk' } },
+      }],
+    };
+    const at = (inventory?: InventoryState): boolean => {
+      const loaded = content({ monsters: [drunkRat] });
+      const { session, hero } = start({ loaded, ...(inventory === undefined ? {} : { inventory }) });
+      for (let t = 0; t < 3_000 && session.ended === null; t += 100) session.advanceBy(100);
+      return hero.conditions.get('drunk') !== null;
+    };
+    // O controle: sem o anel, a mesma ability embriaga — o teste mede a supressão, não a mira.
+    expect(at()).toBe(true);
+    expect(at(dwarvenRing)).toBe(false);
   });
 
   it('o bot NUNCA rola drunk duas vezes no MESMO vencimento, mesmo com o contorno de companheiro (#651)', () => {
