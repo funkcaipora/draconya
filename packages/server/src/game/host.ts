@@ -27,7 +27,7 @@ import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitL
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -1429,9 +1429,9 @@ export class SessionHost {
         this.#requestMove(viewer, message.from, message.to);
         return;
       case 'use-slot':
-        // INTENÇÃO (invariante 4): o cliente diz QUAL slot; elegibilidade, estoque, mana e
-        // cooldown são do servidor (AB-09, ADR 0032 d.3).
-        this.#requestUseSlot(viewer, message.set, message.slot);
+        // INTENÇÃO (invariante 4): o cliente diz QUAL slot e QUEM/ONDE mirou; elegibilidade,
+        // estoque, mana, alcance e cooldown são do servidor (AB-09, ADR 0032 d.3; ADR 0049 d.2).
+        this.#requestUseSlot(viewer, message.set, message.slot, message.target);
         return;
       case 'select-target':
         // INTENÇÃO (invariante 4): o cliente diz QUAL criatura (ou `0`, cancelar); quem valida
@@ -1611,13 +1611,24 @@ export class SessionHost {
    *
    * Fora de hunt é RECUSA com motivo, nunca silêncio: a barra é montada na Cidade e a tecla
    * existe lá — "não estou numa caçada" é a resposta, não esconder o botão (ADR 0032 d.3).
+   *
+   * `target` é a mira (ADR 0049 decisão 2), ainda no vocabulário do FIO (`creatureId` numérico
+   * ou `position`); `#resolveUseSlotTarget` a traduz para o domínio que o `sim` entende ANTES de
+   * chamar `useSlot` — o `sim` nunca vê o id numérico (invariante 1: ele não conhece o
+   * hospedeiro que atribui esses ids).
    */
-  #requestUseSlot(viewer: Viewer, set: number, slot: number): void {
+  #requestUseSlot(
+    viewer: Viewer, set: number, slot: number,
+    target?: Extract<C2SMessage, { type: 'use-slot' }>['target'],
+  ): void {
     const hosted = this.#hostedSession(viewer.characterId);
     const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    const resolvedTarget = hosted === undefined || target === undefined
+      ? undefined
+      : this.#resolveUseSlotTarget(hosted, target);
     const outcome = hosted === undefined || ruleset?.useSlot === undefined
       ? undefined
-      : ruleset.useSlot(hosted.session, viewer.characterId, set, slot);
+      : ruleset.useSlot(hosted.session, viewer.characterId, set, slot, resolvedTarget);
     if (outcome === undefined) {
       viewer.send({ type: 'slot-result', set, slot, ok: false, reason: 'Você não está numa caçada.' });
       return;
@@ -1702,6 +1713,32 @@ export class SessionHost {
       if (id === creatureId) return subject;
     }
     return null;
+  }
+
+  /**
+   * Traduz `use-slot.target` (ADR 0049 decisão 2), ainda no vocabulário NUMÉRICO do fio, para o
+   * `UseSlotTarget` de domínio que o `sim` entende. `creatureId` sem dono vira `{ kind:
+   * 'invalid' }` — NÃO `undefined` — porque o jogador mirou algo; cair em "sem mira" executaria
+   * contra um alvo que ele não escolheu (o default do bot), em vez de recusar `no-target`.
+   *
+   * O prefixo `m:` é o de `monsterSubject` (`packages/sim/src/monster/monster.ts`): um subject
+   * de monstro sempre começa assim, e o de personagem é o próprio `characterId` — nenhum
+   * `characterId` deste jogo é escrito nesse formato (UUID), então a distinção nunca colide.
+   */
+  #resolveUseSlotTarget(
+    hosted: HostedSession, target: NonNullable<Extract<C2SMessage, { type: 'use-slot' }>['target']>,
+  ): UseSlotTarget {
+    if ('position' in target) {
+      const { x, y, z } = target.position;
+      // `exactOptionalPropertyTypes`: `FloorPoint.z` é opcional SEM `undefined` explícito — só
+      // entra a chave quando o cliente de fato mandou o andar.
+      return { kind: 'position', position: z === undefined ? { x, y } : { x, y, z } };
+    }
+    const subject = this.#subjectOfCreature(hosted, target.creatureId);
+    if (subject === null) return { kind: 'invalid' };
+    return subject.startsWith('m:')
+      ? { kind: 'monster', subject }
+      : { kind: 'character', characterId: subject };
   }
 
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */

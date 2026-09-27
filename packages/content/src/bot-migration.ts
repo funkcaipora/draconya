@@ -17,6 +17,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
+ * As 22 teclas SEM modificador (ADR 0032, DT-02) — as únicas que a v1 conhecia. `BOT_HOTKEYS`
+ * ganhou as 10 `shift+…` no final (ADR 0049 decisão 1); a migração continua indexando só aqui,
+ * senão os slots 22/23 de cada conjunto passariam a herdar `shift+1`/`shift+2` em vez de ficarem
+ * sem tecla.
+ */
+const LEGACY_HOTKEYS = BOT_HOTKEYS.slice(0, 22);
+
+/**
  * A detecção de "já é v2", compartilhada com o `server` (#424): o host precisa dela para saber
  * se uma config que veio no ticket é dado NOVO a persistir (v1 migrada) ou já o vocabulário
  * atual (v2 intacta). Uma segunda definição divergiria na primeira mudança de versão.
@@ -72,12 +80,14 @@ export function migrateBotConfigV1(raw: unknown): BotConfigV2 {
     throw new Error('config v1 acima de 96 regras: impossível pelo schema v1');
   }
 
-  // 2) Teclas em sequência, reiniciando a cada conjunto. 22 teclas para 24 slots: os dois
-  //    últimos de cada conjunto ficam sem tecla — o schema aceita `hotkey` ausente (DT-02).
+  // 2) Teclas em sequência, reiniciando a cada conjunto. 22 teclas SEM modificador para 24
+  //    slots: os dois últimos de cada conjunto ficam sem tecla — o schema aceita `hotkey`
+  //    ausente (DT-02). A v1 nunca teve Shift, então a migração usa só as 22 primeiras de
+  //    `BOT_HOTKEYS` (ADR 0049 decisão 1 ampliou o enum para 32, mas não muda este índice).
   const slots: (BotSlot | null)[] = [];
   flat.forEach((slot, index) => {
     const withinSet = index % BOT_SLOTS_PER_SET;
-    const key = BOT_HOTKEYS[withinSet];
+    const key = LEGACY_HOTKEYS[withinSet];
     slots.push(key === undefined ? slot : botSlotSchema.parse({ ...slot, hotkey: key }));
   });
   while (slots.length % BOT_SLOTS_PER_SET !== 0) slots.push(null);
