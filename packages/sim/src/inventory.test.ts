@@ -62,6 +62,15 @@ const catalog = new Map<string, Item>([
     id: 'leech-ring', kind: 'ring', slot: 'finger', weight: 2, value: 0,
     combatModifiers: { lifeLeech: 1000, manaLeech: 500 },
   })],
+  // ML especializado por elemento (#680): `firemagiclevelpoints` & cia. do Canary.
+  ['fire-wand', define({
+    id: 'fire-wand', kind: 'weapon', slot: 'hand', weight: 20, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 1 } },
+  })],
+  ['fire-healing-hat', define({
+    id: 'fire-healing-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 2, healing: 1 } },
+  })],
   ['crit-armor', define({
     id: 'crit-armor', kind: 'armor', slot: 'chest', weight: 60, value: 0,
     combatModifiers: { criticalChance: 500 },
@@ -478,6 +487,21 @@ describe('o que o combate lê', () => {
     expect(inventory.combatModifiers(catalog)).toEqual({
       critical: { chance: 0.1, multiplier: 1.35 },
     });
+  });
+
+  it('specializedMagicLevel soma por elemento só o que está vestido (#680)', () => {
+    const inventory = new Inventory();
+    // Nada declara: `undefined`, e a fórmula fica bit a bit.
+    expect(inventory.specializedMagicLevel(catalog)).toBeUndefined();
+    inventory.add(carried('fire-wand'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('fire-healing-hat'), catalog, wearer({ capacity: 1_000 }), rules);
+    // Na mochila não conta.
+    expect(inventory.specializedMagicLevel(catalog)).toBeUndefined();
+    inventory.equip('fire-wand', wearer(), catalog);
+    inventory.equip('fire-healing-hat', wearer(), catalog);
+    expect(inventory.specializedMagicLevel(catalog)).toEqual({ fire: 3, healing: 1 });
+    inventory.unequip('head', rules);
+    expect(inventory.specializedMagicLevel(catalog)).toEqual({ fire: 1 });
   });
 
   it('duas peças de crítico somam pontos-base antes de UMA rolagem só (como o Canary soma itens)', () => {

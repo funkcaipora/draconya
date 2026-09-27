@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
-import { actionExhaustKey, balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
+import { actionExhaustKey, balanceOf, castSpell, executeHealing, spellCooldownKey, useSupply } from './casting.js';
+import type { SpellScaling } from './casting.js';
 import { normalRandomInt } from './combat/weapon-power.js';
 import { Rng } from './rng.js';
 
@@ -657,6 +658,106 @@ describe('a skill da fórmula: LEVELMAGIC lê o magic level, SKILLVALUE a da voc
     if (!result.ok) throw new Error('lançamento recusado');
     expect(result.hits[0]).toBeGreaterThanOrEqual(100);
     expect(result.hits[0]).toBeLessThanOrEqual(140);
+  });
+});
+
+describe('o ML especializado do elemento soma no termo de ML da fórmula (#680)', () => {
+  // Level 100, ML 20. O que se mede é a FAIXA sorteada: `rng.integer(min, max)` é a primeira
+  // rolagem do efeito (sem crítico declarado, nada sorteia antes).
+  const firstRoll = (act: (random: Rng) => void): [number, number] => {
+    const random = rng();
+    const spy = vi.spyOn(random, 'integer');
+    act(random);
+    const call = spy.mock.calls[0];
+    if (call === undefined) throw new Error('nenhum sorteio');
+    return [call[0], call[1]];
+  };
+  const sorcerer = (): CharacterRuntime => hero({ level: 100, mana: 1_000 });
+  const base: SpellScaling = { skillLevel: 20, powerScale: 1, magicLevel: 20 };
+  // Fire Wave (`fire-wave.json`): LEVELMAGIC, min = level/5 + ML×1.25 + 4, max = level/5 + ML×2 + 12.
+  const fireWave: Spell = {
+    id: 'fire-wave', name: 'Fire Wave', manaCost: 25, cooldownMs: 4_000, minLevel: 18,
+    effect: {
+      kind: 'damage', basePower: 40, damageType: 'fire', area: { shape: 'wave', length: 3 },
+      formula: { levelFactor: 0.2, skillMin: 1.25, skillMax: 2, baseMin: 4, baseMax: 12, scaling: 'magic' },
+    },
+  };
+  // Ethereal Spear: SKILLVALUE (sem `scaling`), `physical`.
+  const etherealSpear: Spell = {
+    id: 'ethereal-spear', name: 'Ethereal Spear', manaCost: 25, cooldownMs: 2_000, minLevel: 23,
+    effect: {
+      kind: 'damage', basePower: 25, range: 7, damageType: 'physical',
+      formula: { levelFactor: 0.2, skillMin: 0.333333, skillMax: 1, baseMin: 8.333333, baseMax: 25 },
+    },
+  };
+  // Ultimate Healing (`ultimate-healing-*.json`) e Mass Healing (`mass-healing.json`, que lê o ML cru).
+  const ultimateHealing = {
+    kind: 'heal' as const,
+    formula: { levelFactor: 0.2, skillMin: 6.8, skillMax: 12.9, baseMin: 42, baseMax: 90 },
+  };
+  const massHealing = {
+    kind: 'heal' as const,
+    formula: {
+      levelFactor: 0.2, skillMin: 5.7, skillMax: 10.43, baseMin: 26, baseMax: 62,
+      includeSpecializedMagicLevel: false,
+    },
+  };
+
+  it('Fire Wave com fire +2 sorteia em [51, 76]; sem o item, [49, 72]', () => {
+    const cast = (scaling: SpellScaling) => firstRoll((random) => {
+      castSpell(sorcerer(), fireWave, near(), 0, combat, random, scaling);
+    });
+    expect(cast(base)).toEqual([49, 72]);
+    expect(cast({ ...base, specializedMagicLevel: { fire: 2 } })).toEqual([51, 76]);
+  });
+
+  it('o especializado de OUTRO elemento não soma, e a SKILLVALUE nunca soma', () => {
+    const fire = firstRoll((random) => {
+      castSpell(sorcerer(), fireWave, near(), 0, combat, random, { ...base, specializedMagicLevel: { energy: 2 } });
+    });
+    expect(fire).toEqual([49, 72]);
+    const spear = (scaling: SpellScaling) => firstRoll((random) => {
+      castSpell(sorcerer(), etherealSpear, near({ distance: 3 }), 0, combat, random, scaling);
+    });
+    expect(spear({ ...base, specializedMagicLevel: { physical: 5 } })).toEqual(spear(base));
+  });
+
+  it('Ultimate Healing soma o `healing`: [211, 393] com +2, [198, 368] sem', () => {
+    const healRoll = (scaling: SpellScaling) => firstRoll((random) => {
+      executeHealing(sorcerer(), sorcerer(), ultimateHealing, scaling, combat, random);
+    });
+    expect(healRoll(base)).toEqual([198, 368]);
+    expect(healRoll({ ...base, specializedMagicLevel: { healing: 2 } })).toEqual([211, 393]);
+  });
+
+  it('Mass Healing (`includeSpecializedMagicLevel: false`) lê o ML cru', () => {
+    const healRoll = (scaling: SpellScaling) => firstRoll((random) => {
+      executeHealing(sorcerer(), sorcerer(), massHealing, scaling, combat, random);
+    });
+    expect(healRoll({ ...base, specializedMagicLevel: { healing: 5 } })).toEqual(healRoll(base));
+  });
+
+  it('a runa soma o do elemento DELA na fórmula, mas o requisito de ML lê o ML cru', () => {
+    const rune: Supply = {
+      id: 'great-fireball-rune', name: 'Great Fireball Rune', price: 10, group: 'attack', groupCooldownMs: 2_000,
+      requires: { level: 30, magicLevel: 20 },
+      effect: {
+        kind: 'damage', basePower: 60, range: 4, damageType: 'fire',
+        area: { shape: 'circle', radius: 3, centered: 'target' },
+        formula: { levelFactor: 0.2, skillMin: 1.2, skillMax: 2.4, baseMin: 7, baseMax: 16 },
+      },
+    };
+    const user = () => hero({ level: 100, gold: 1_000 });
+    // ML 19 + fire 5: o Canary confere `getMagicLevel()` cru — recusa.
+    expect(useSupply(user(), rune, near({ distance: 2 }), combat, rng(), {
+      skillLevel: 19, powerScale: 1, magicLevel: 19, specializedMagicLevel: { fire: 5 },
+    })).toEqual({ ok: false, reason: 'magic-level-too-low', retryInMs: 0 });
+    // ML 20 + fire 1: a faixa é a do ML 21 — min = 20 + 21×1.2 + 7, max = 20 + 21×2.4 + 16.
+    const roll = (scaling: SpellScaling) => firstRoll((random) => {
+      useSupply(user(), rune, near({ distance: 2 }), combat, random, scaling);
+    });
+    expect(roll(base)).toEqual([51, 84]);
+    expect(roll({ ...base, specializedMagicLevel: { fire: 1 } })).toEqual([52, 86]);
   });
 });
 
