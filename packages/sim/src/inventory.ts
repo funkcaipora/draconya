@@ -24,7 +24,7 @@
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
   CompiledMitigation, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot, Progression,
-  RingEffect, SpecializedMagicElement,
+  RingEffect, SpecializedMagicElement, SuppressibleCondition,
 } from '@draconya/content';
 import type { SpecializedMagicLevels } from './casting.js';
 import { NO_DEFENSE } from './combat/defense.js';
@@ -708,18 +708,32 @@ export class Inventory {
   }
 
   /**
-   * O bônus de UMA skill do que está vestido, somado (#524): o Hat of the Mad soma na `magic`
-   * (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`. Molde de `armor()`: uma
-   * varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
-   * limitado e não depende do catálogo.
+   * O bônus de UMA skill do que está vestido, somado (#524, #688): o Hat of the Mad soma na
+   * `magic` (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`, e um item com
+   * várias skills soma em cada uma delas — o laço de `setVarSkill` do Canary. Molde de `armor()`:
+   * uma varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
+   * limitado e não depende do catálogo. O boot garante uma entrada por skill por item.
    */
   skillBonus(catalog: ReadonlyMap<string, Item>, skillId: string): number {
     let total = 0;
     for (const carried of this.#equipped.values()) {
-      const bonus = catalog.get(carried.itemId)?.bonuses?.skill;
-      if (bonus !== undefined && bonus.skillId === skillId) total += bonus.amount;
+      for (const bonus of catalog.get(carried.itemId)?.bonuses?.skills ?? []) {
+        if (bonus.skillId === skillId) total += bonus.amount;
+      }
     }
     return total;
+  }
+
+  /**
+   * Se algo vestido suprime `condition` (#688, `suppress*` do Canary): o Dwarven Ring suprime
+   * `drunk`. Como `Creature::addCondition`/`hasCondition` do Canary, quem consulta isto recusa a
+   * condição nova e ignora a que já estava ativa enquanto o item estiver vestido.
+   */
+  suppresses(catalog: ReadonlyMap<string, Item>, condition: SuppressibleCondition): boolean {
+    for (const carried of this.#equipped.values()) {
+      if (catalog.get(carried.itemId)?.bonuses?.suppress?.includes(condition) === true) return true;
+    }
+    return false;
   }
 
   /**

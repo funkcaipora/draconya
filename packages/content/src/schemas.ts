@@ -539,18 +539,26 @@ export type ResolvedWeapon = WeaponProfile & {
  * - `energy-shield`: o Energy Ring. O dano sofrido debita da MANA antes da vida — a MESMA leitura
  *   que a condição `mana-shield` do utamo vita já faz em `applyDamageOutcome`
  *   (`sim/combat/outcome.ts`, CMB-08); as duas convergem no mesmo estágio e não se somam.
- * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o `amount` de cada
- *   pulso de `regen` (#678), sem nenhum outro bônus, porque hoje não existe nenhum.
- *   `percent: 300` é +300% (quadruplica o pulso: Knight, 1 de vida vira 4 e 2 de mana viram 8).
+ *
+ * O Life Ring NÃO é `ringEffect`: a regeneração dele é `bonuses.regeneration`, a do Canary
+ * (`healthgain`/`manaticks`…), somada à da vocação (#688). O antigo `ringEffect` que
+ * multiplicava o pulso da vocação (+300%) não tinha fonte no Tibia e saiu.
  */
-export const RING_EFFECT_KINDS = ['energy-shield', 'regen-boost'] as const;
+export const RING_EFFECT_KINDS = ['energy-shield'] as const;
 export type RingEffectKind = (typeof RING_EFFECT_KINDS)[number];
 
 export const ringEffectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('energy-shield') }),
-  z.strictObject({ kind: z.literal('regen-boost'), percent: z.number().int().positive() }),
 ]);
 export type RingEffect = z.infer<typeof ringEffectSchema>;
+
+/**
+ * Condições que um item suprime enquanto vestido (`suppress*` do Canary, `MoveEvent::EquipItem`
+ * → `addConditionSuppressions`). Só `drunk` por ora: o Draconya não tem afogamento
+ * (`suppressdrown`), e o enum cresce junto com a condição que ele suprime.
+ */
+export const SUPPRESSIBLE_CONDITIONS = ['drunk'] as const;
+export type SuppressibleCondition = (typeof SUPPRESSIBLE_CONDITIONS)[number];
 
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 /**
@@ -774,22 +782,26 @@ export const itemSchema = z.strictObject({
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
   /**
-   * Bônus PASSIVO enquanto o item está equipado (#524, kit level 200): skill (inclusive magic
-   * level — que aqui é a skill `magic`, FUN-92) e velocidade. Ausente é o item comum de sempre,
-   * sem bônus nenhum. Mora num objeto só, como `ringEffect`, porque os dois são "efeito de estar
-   * vestido" — ao contrário de `charges`/`durationMs`, que são consumo.
+   * Bônus PASSIVO enquanto o item está equipado (#524, kit level 200; #688): skills (inclusive
+   * magic level — que aqui é a skill `magic`, FUN-92), velocidade, regeneração própria e
+   * supressão de condição — o que o Canary aplica em `MoveEvent::EquipItem`. Ausente é o item
+   * comum de sempre, sem bônus nenhum. Mora num objeto só, como `ringEffect`, porque os dois são
+   * "efeito de estar vestido" — ao contrário de `charges`/`durationMs`, que são consumo.
    *
-   * Um item só declara UM bônus de skill (o Hat of the Mad soma magic level; a Paladin Armor
-   * soma distância) — o Canary também nunca soma dois `skillboost`/`*points` no mesmo item base
-   * (o que teria dois é imbuement, que o catálogo ainda não modela, `docs/product/items.md`
-   * "Em aberto"). Lista viraria generalidade sem exemplo — o mesmo motivo do `itemSchema` inteiro
-   * ser enxuto de propósito.
+   * Um item pode declarar VÁRIAS skills: o Canary soma todas (`setVarSkill` num laço por skill),
+   * e 54 itens base do `items.xml` têm mais de uma (collar of red plasma, id 23528: sword, axe e
+   * club +4). Os `skillboost` dentro de `imbuementslot` não contam — aquilo é a lista de
+   * imbuements permitidos, não bônus.
    */
   bonuses: z.object({
-    skill: z.object({
+    /**
+     * As skills do item (`skill*`/`magiclevelpoints` do Canary). Uma entrada por skill: o boot
+     * recusa skillId repetido no mesmo item (`buildContent`).
+     */
+    skills: z.array(z.strictObject({
       skillId: z.string().min(1),
       amount: z.number().int().positive(),
-    }).optional(),
+    })).min(1).optional(),
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
     /**
@@ -800,6 +812,19 @@ export const itemSchema = z.strictObject({
     specializedMagicLevel: z.partialRecord(
       z.enum(SPECIALIZED_MAGIC_ELEMENTS), z.number().int().positive(),
     ).optional(),
+    /**
+     * Regeneração PRÓPRIA do item (`healthgain`/`healthticks`/`managain`/`manaticks`), somada à
+     * da vocação. O primeiro ganho sai `*TicksMs` depois de vestir, como na
+     * `ConditionRegeneration` do Canary, que acumula o intervalo antes de curar.
+     */
+    regeneration: z.strictObject({
+      healthGain: z.number().int().nonnegative(),
+      healthTicksMs: z.number().int().positive(),
+      manaGain: z.number().int().nonnegative(),
+      manaTicksMs: z.number().int().positive(),
+    }).refine((r) => r.healthGain > 0 || r.manaGain > 0, 'regeneração sem ganho').optional(),
+    /** Condições que o item suprime enquanto vestido (`suppress*` do Canary). */
+    suppress: z.array(z.enum(SUPPRESSIBLE_CONDITIONS)).min(1).optional(),
   }).optional(),
   /**
    * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary

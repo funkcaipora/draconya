@@ -1593,23 +1593,25 @@ describe('catálogo de itens (FUN-76)', () => {
     expect(content.items.get('time-ring')?.durationMs).toBe(600_000);
   });
 
-  it('anel aceita ringEffect (energy-shield e regen-boost); outros kinds rejeitam', () => {
+  it('anel aceita ringEffect (energy-shield); o antigo multiplicador e outros kinds rejeitam', () => {
     const energyRing = {
       id: 'energy-ring', name: 'Energy Ring', kind: 'ring', slot: 'finger',
       weight: 2, value: 100, ringEffect: { kind: 'energy-shield' },
     };
+    // O multiplicador de pulso do Life Ring saiu (#688): a regeneração dele é
+    // `bonuses.regeneration`, e nenhum outro `kind` além de `energy-shield` passa.
     const lifeRing = {
       id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
-      weight: 2, value: 100, ringEffect: { kind: 'regen-boost', percent: 300 },
+      weight: 2, value: 100, ringEffect: { kind: 'regeneration', percent: 300 },
     };
     const espada = {
       id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand',
       weight: 10, value: 0, attack: 10, ringEffect: { kind: 'energy-shield' },
     };
 
-    const content = buildContent(base({ items: [energyRing, lifeRing] }));
+    const content = buildContent(base({ items: [energyRing] }));
     expect(content.items.get('energy-ring')?.ringEffect).toEqual({ kind: 'energy-shield' });
-    expect(content.items.get('life-ring')?.ringEffect).toEqual({ kind: 'regen-boost', percent: 300 });
+    expect(() => buildContent(base({ items: [lifeRing] }))).toThrow();
 
     expect(() => buildContent(base({ items: [espada] }))).toThrow(/"ringEffect" só faz sentido em anel/);
   });
@@ -2052,15 +2054,39 @@ describe('requisito de mais de uma vocação em item e suprimento (#524, kit lev
     expect(() => buildContent(base({ vocations: [], items: [orphanArmor] }))).not.toThrow();
   });
 
-  it('item: `bonuses.skill.skillId` precisa existir no catálogo de skills', () => {
+  it('item: cada `bonuses.skills[].skillId` precisa existir no catálogo de skills', () => {
     const mlHat = {
       id: 'ml-hat', name: 'ML Hat', kind: 'armor', slot: 'head', weight: 1, value: 0,
-      bonuses: { skill: { skillId: 'nope', amount: 1 } },
+      bonuses: { skills: [{ skillId: 'magic', amount: 1 }, { skillId: 'nope', amount: 1 }] },
     };
     expect(() => buildContent(base({ items: [mlHat] })))
-      .toThrow(/item "ml-hat": bonuses.skill.skillId "nope" não existe/);
-    const fixed = { ...mlHat, bonuses: { skill: { skillId: 'magic', amount: 1 } } };
+      .toThrow(/item "ml-hat": bonuses.skills.skillId "nope" não existe/);
+    const fixed = { ...mlHat, bonuses: { skills: [{ skillId: 'magic', amount: 1 }] } };
     expect(() => buildContent(base({ items: [fixed] }))).not.toThrow();
+  });
+
+  it('item: `bonuses.skills` recusa skillId repetido e a lista vazia (#688)', () => {
+    const collar = {
+      id: 'collar', name: 'Collar', kind: 'amulet', slot: 'neck', weight: 1, value: 0,
+      bonuses: { skills: [{ skillId: 'magic', amount: 2 }, { skillId: 'magic', amount: 4 }] },
+    };
+    expect(() => buildContent(base({ items: [collar] })))
+      .toThrow(/item "collar": bonuses.skills repete "magic"/);
+    expect(() => buildContent(base({ items: [{ ...collar, bonuses: { skills: [] } }] }))).toThrow();
+  });
+
+  it('item: `bonuses.regeneration` exige algum ganho; `suppress` só conhece drunk (#688)', () => {
+    const ring = { id: 'ring', name: 'Ring', kind: 'ring', slot: 'finger', weight: 1, value: 0 };
+    const regeneration = { healthGain: 2, healthTicksMs: 6000, manaGain: 8, manaTicksMs: 6000 };
+    const content = buildContent(base({ items: [{ ...ring, bonuses: { regeneration } }] }));
+    expect(content.items.get('ring')?.bonuses?.regeneration).toEqual(regeneration);
+    const noGain = { ...regeneration, healthGain: 0, manaGain: 0 };
+    expect(() => buildContent(base({ items: [{ ...ring, bonuses: { regeneration: noGain } }] })))
+      .toThrow(/regeneração sem ganho/);
+    const dwarven = buildContent(base({ items: [{ ...ring, bonuses: { suppress: ['drunk'] } }] }));
+    expect(dwarven.items.get('ring')?.bonuses?.suppress).toEqual(['drunk']);
+    expect(() => buildContent(base({ items: [{ ...ring, bonuses: { suppress: ['drown'] } }] })))
+      .toThrow();
   });
 
   it('suprimento: `requires.vocationId` também aceita uma LISTA, com a mesma conferência', () => {
