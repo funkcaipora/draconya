@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { createHuntSession, Inventory, levelForXp } from '@draconya/sim';
 import type { InventoryState } from '@draconya/sim';
+import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
@@ -80,6 +81,7 @@ const progression: Progression = {
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+  rates: NEUTRAL_RATES,
 };
 
 /**

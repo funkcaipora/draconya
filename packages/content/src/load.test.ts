@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { floorChangeAt, isBlocked } from './map.js';
-import { BOT_CATEGORIES } from './schemas.js';
+import { BOT_CATEGORIES, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -236,6 +236,12 @@ describe('loadContent', () => {
     expect(content.items.get('snakebite-rod')?.requires.vocationId).toBe('druid');
     expect(content.items.get('backpack')).toMatchObject({ kind: 'container', slot: 'back' });
     expect(content.items.get('leather-armor')?.weight).toBe(60);
+  });
+
+  it('o conteúdo real não declara rates: o default é o Tibia com rate 1 (#691)', () => {
+    const raw = JSON.parse(readFileSync(join(DATA, 'progression', 'baseline.json'), 'utf8')) as Record<string, unknown>;
+    expect(raw).not.toHaveProperty('rates');
+    expect(loadContent(DATA).progression.rates).toEqual(NEUTRAL_RATES);
   });
 
   it('todo personagem nasce vestido com o kit do ADR 0026: seis peças, uma por slot, sem exigir nada (#153)', () => {

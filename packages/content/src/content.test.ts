@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildContent, computeVersion, ContentError, placeholderAppearances,
+  buildContent, compileMonster, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
-import { wallSetOf } from './schemas.js';
+import { monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf } from './schemas.js';
 
 const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
@@ -250,6 +250,78 @@ describe('progression baseline', () => {
     const content = buildContent(base());
     expect(content.progression.startingHealth).toBe(150);
     expect(content.progression.vocationLevel).toBe(8);
+  });
+});
+
+describe('rates do servidor (#691)', () => {
+  const dragon = {
+    ...rat, id: 'dragon', name: 'Dragon', health: 1000, armor: 25, defense: 30, defenseMitigation: 0.99,
+  };
+
+  it('sem rates, a progressão recebe o neutro e o monstro sai como sempre', () => {
+    const content = buildContent(base({ monsters: [rat, dragon] }));
+    expect(content.progression.rates).toEqual(NEUTRAL_RATES);
+    expect(content.progression.rates).toMatchObject({
+      experience: 1, skill: 1, magic: 1, loot: 1, useStages: false,
+      monster: { health: 1, attack: 1, defense: 1 }, boss: { health: 1, attack: 1, defense: 1 },
+    });
+    expect(content.monsters.get('dragon')).toMatchObject({ health: 1000, armor: 25, defense: 30, defenseMitigation: 0.99 });
+  });
+
+  it('monster.health 1.5: o Dragon de 1000 nasce com 1500; defesa escala armadura, defesa e mitigação', () => {
+    const rates = { monster: { health: 1.5, defense: 1.5 } };
+    const content = buildContent(base({ monsters: [rat, dragon], progression: [{ ...baseline, rates }] }));
+    expect(content.monsters.get('dragon')).toMatchObject({
+      health: 1500, armor: 37, defense: 45, defenseMitigation: 0.99 * 1.5,
+    });
+  });
+
+  it('boss usa o bloco boss, e não o de monstro', () => {
+    const rates = ratesSchema.parse({ monster: { health: 2 }, boss: { health: 3 } });
+    const boss = compileMonster(monsterSchema.parse({ ...dragon, boss: true }), rates);
+    const plain = compileMonster(monsterSchema.parse(dragon), rates);
+    expect(boss.health).toBe(3000);
+    expect(plain.health).toBe(2000);
+  });
+
+  it('a vida escalada nunca cai abaixo de 1', () => {
+    const rates = ratesSchema.parse({ monster: { health: 0.01 } });
+    expect(compileMonster(monsterSchema.parse(rat), rates).health).toBe(1);
+  });
+
+  it('sem rates, compileMonster devolve os mesmos números de antes', () => {
+    const parsed = monsterSchema.parse(dragon);
+    expect(compileMonster(parsed)).toEqual(compileMonster(parsed, NEUTRAL_RATES));
+    expect(compileMonster(parsed).health).toBe(1000);
+  });
+
+  it('recusa stage aberto no meio, faixas sobrepostas e min acima de max', () => {
+    const withStages = (experienceStages: unknown) => base({
+      progression: [{ ...baseline, rates: { useStages: true, experienceStages } }],
+    });
+    expect(() => buildContent(withStages([
+      { minLevel: 1, multiplier: 7 }, { minLevel: 9, maxLevel: 20, multiplier: 6 },
+    ]))).toThrow(/sem maxLevel em 0 não é a última/);
+    expect(() => buildContent(withStages([
+      { minLevel: 1, maxLevel: 10, multiplier: 7 }, { minLevel: 10, multiplier: 6 },
+    ]))).toThrow(/sobrepostas em 0 e 1/);
+    expect(() => buildContent(withStages([{ minLevel: 10, maxLevel: 5, multiplier: 2 }])))
+      .toThrow(/minLevel acima de maxLevel/);
+    expect(() => buildContent(withStages([
+      { minLevel: 1, maxLevel: 8, multiplier: 7 }, { minLevel: 9, multiplier: 6 },
+    ]))).not.toThrow();
+  });
+
+  it('loot é inteiro e não negativo, como o rateLoot do Canary', () => {
+    expect(() => buildContent(base({ progression: [{ ...baseline, rates: { loot: 1.5 } }] }))).toThrow(ContentError);
+    expect(() => buildContent(base({ progression: [{ ...baseline, rates: { loot: -1 } }] }))).toThrow(ContentError);
+    expect(buildContent(base({ progression: [{ ...baseline, rates: { loot: 0 } }] })).progression.rates.loot).toBe(0);
+  });
+
+  it('o rate entra na versão do conteúdo (invariante 7)', () => {
+    const neutral = buildContent(base()).version;
+    const doubled = buildContent(base({ progression: [{ ...baseline, rates: { experience: 2 } }] })).version;
+    expect(doubled).not.toBe(neutral);
   });
 });
 
