@@ -3347,7 +3347,7 @@
     "experience": 1000,
     "attack": {
       "min": 0,
-      "max": 350
+      "max": 0
     },
     "armor": 76,
     "defense": 76,
@@ -3379,7 +3379,7 @@
         },
         "power": {
           "min": 0,
-          "max": 350
+          "max": 0
         },
         "damageType": "physical"
       },

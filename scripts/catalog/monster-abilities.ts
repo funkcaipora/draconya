@@ -22,6 +22,7 @@ import {
   spellAreaSchema, type DamageOverTimeEffect,
 } from '../../packages/content/src/schemas.js';
 import { MIXED_TABLE_ITEMS_KEY, type LuaValue } from './lua-table.js';
+import { meleePower, type MeleePowerVia } from './monster-melee.js';
 
 /** O raio de agressão/visão do monstro do Canary (`MAP_MAX_VIEW_PORT_X`); ver `monsters.ts`. */
 const CANARY_VIEW_RADIUS = 11;
@@ -236,7 +237,11 @@ function attachedCondition(raw: LuaRecord): Record<string, unknown> | string | u
 
 /** O resultado de UMA entrada. */
 export type SpellMapping =
-  | { readonly kind: 'ability'; readonly ability: Record<string, unknown>; readonly notes: readonly string[] }
+  | {
+    readonly kind: 'ability'; readonly ability: Record<string, unknown>; readonly notes: readonly string[];
+    /** Só no `melee`: de onde a faixa saiu (#684) — o relatório conta cada caso. */
+    readonly meleeVia?: MeleePowerVia;
+  }
   | { readonly kind: 'defense'; readonly defense: Record<string, unknown>; readonly notes: readonly string[] }
   /** O Canary não faz nada mecânico com o nome: descartado, com o motivo, e o monstro segue. */
   | { readonly kind: 'dropped'; readonly reason: string }
@@ -330,19 +335,17 @@ function shapeTag(geometry: Geometry): string {
 function mapMelee(raw: LuaRecord, ctx: SpellContext): SpellMapping {
   if (ctx.list === 'defenses') return unmapped('melee', 'melee em defenses');
   const notes: string[] = [];
-  const skill = num(raw['skill']);
-  const attackValue = num(raw['attack']);
-  const hit = skill !== undefined && attackValue !== undefined && skill > 0 && attackValue > 0
-    ? { min: 0, max: Math.ceil(skill * (attackValue * 0.05) + attackValue * 0.5) }
-    : power(raw);
+  // A faixa, com a precedência e o arredondamento do Canary (#684): uma leitura só.
+  const hit = meleePower(raw);
   if (raw['type'] !== undefined) notes.push('melee.type ignorado (o Canary não lê type em melee)');
   const condition = attachedCondition(raw);
   if (typeof condition === 'string') return unmapped('melee', condition);
   return {
     kind: 'ability',
     notes,
+    meleeVia: hit.via,
     ability: ability({
-      id: 'melee', cadenceMs: cadence(raw), target: { range: 1 }, power: hit, damageType: 'physical',
+      id: 'melee', cadenceMs: cadence(raw), target: { range: 1 }, power: { ...hit.power }, damageType: 'physical',
       kind: 'melee', presentation: presentationOf(raw, ctx), ...(condition === undefined ? {} : { condition }),
     }),
   };
