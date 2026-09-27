@@ -791,11 +791,17 @@ export function buildContent(raw: RawContent): Content {
     // O bônus de skill do item (#524) aponta uma skill que precisa existir — como a família de
     // arma aponta a dela (linha ~620). Sem a conferência, "hat of the mad" bonificaria uma skill
     // que ninguém lê, e o item pareceria funcionar sem fazer nada.
-    if (item.bonuses?.skill !== undefined && skills.size > 0
-      && !skills.has(item.bonuses.skill.skillId)) {
-      problems.push(
-        `item "${item.id}": bonuses.skill.skillId "${item.bonuses.skill.skillId}" não existe`,
-      );
+    // Skill repetida no mesmo item (#688) seria dois números para a mesma coisa: o importador
+    // colapsa sword/axe/club em `melee` (#521) gravando uma entrada só, com o maior valor.
+    const bonusSkills = new Set<string>();
+    for (const bonus of item.bonuses?.skills ?? []) {
+      if (bonusSkills.has(bonus.skillId)) {
+        problems.push(`item "${item.id}": bonuses.skills repete "${bonus.skillId}"`);
+      }
+      bonusSkills.add(bonus.skillId);
+      if (skills.size > 0 && !skills.has(bonus.skillId)) {
+        problems.push(`item "${item.id}": bonuses.skills.skillId "${bonus.skillId}" não existe`);
+      }
     }
   }
   // A munição é abstrata (ADR 0026 d.3): NÃO existe munição grátis por família — cada tiro

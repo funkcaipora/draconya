@@ -42,11 +42,20 @@ const catalog = new Map<string, Item>([
   // Bônus de equipamento (#524, kit level 200): skill e velocidade, ativos só enquanto vestido.
   ['ml-hat', define({
     id: 'ml-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
-    bonuses: { skill: { skillId: 'magic', amount: 1 } },
+    bonuses: { skills: [{ skillId: 'magic', amount: 1 }] },
   })],
   ['dist-armor', define({
     id: 'dist-armor', kind: 'armor', slot: 'chest', weight: 30, value: 0,
-    bonuses: { skill: { skillId: 'distance', amount: 2 } },
+    bonuses: { skills: [{ skillId: 'distance', amount: 2 }] },
+  })],
+  // Várias skills num item só (#688, o collar of red plasma do Canary soma três) e a supressão
+  // de condição (o Dwarven Ring suprime drunk).
+  ['twin-collar', define({
+    id: 'twin-collar', kind: 'amulet', slot: 'neck', weight: 5, value: 0,
+    bonuses: { skills: [{ skillId: 'melee', amount: 3 }, { skillId: 'distance', amount: 3 }] },
+  })],
+  ['dwarven-ring', define({
+    id: 'dwarven-ring', kind: 'ring', slot: 'finger', weight: 2, bonuses: { suppress: ['drunk'] },
   })],
   ['haste-boots', define({
     id: 'haste-boots', kind: 'armor', slot: 'feet', weight: 5, value: 0,
@@ -414,6 +423,31 @@ describe('o que o combate lê', () => {
     inventory.unequip('head', rules);
     expect(inventory.skillBonus(catalog, 'magic')).toBe(0);
     expect(inventory.skillBonus(catalog, 'distance')).toBe(2);
+  });
+
+  it('skillBonus soma CADA skill de um item com várias (#688), não só a primeira', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('twin-collar'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('dist-armor'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('twin-collar', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'melee')).toBe(3);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(3);
+    expect(inventory.skillBonus(catalog, 'magic')).toBe(0);
+    // Soma entre peças: o colar (+3) e a armadura (+2) na mesma skill.
+    inventory.equip('dist-armor', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(5);
+  });
+
+  it('suppresses só é verdade enquanto o item que suprime está vestido (#688)', () => {
+    const inventory = new Inventory();
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+    inventory.add(carried('dwarven-ring'), catalog, wearer(), rules);
+    // Carregado na mochila não suprime nada.
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+    inventory.equip('dwarven-ring', wearer(), catalog);
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(true);
+    inventory.unequip('finger', rules);
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
   });
 
   it('speedBonus soma a velocidade do que está vestido (#524, boots of haste)', () => {

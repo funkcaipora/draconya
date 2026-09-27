@@ -381,11 +381,29 @@ equipamento".
 convergem no mesmo lugar (`CharacterRuntime.receiveDamage`) e NÃO se somam: com o anel vestido E
 a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma vez só.
 
-**Life Ring** — +300% da regeneração passiva BASE de vida e mana. "Base" é o `amount` de cada
-PULSO do `regen` da vocação (ou de `progression.regen`, sem vocação — #678), sem nenhum outro
-bônus — hoje não existe nenhum outro modificador de regeneração no jogo, então a conta é
-direta: o pulso quadruplica (Knight: 1 de vida vira 4 e 2 de mana viram 8, a cada 6 s). Virar
-regeneração PRÓPRIA do item, como no Tibia, é a #688.
+**Life Ring** — regeneração PRÓPRIA do item, somada à da vocação (#688): **+2 de vida e +8 de
+mana a cada 6 s**, os números do Canary `items.xml` id 3089 (`healthgain`/`healthticks`,
+`managain`/`manaticks`). Não é `ringEffect`: é `bonuses.regeneration`, o mesmo campo que
+qualquer item com regeneração usa (ring of healing, terran rainbow shield… entram pelo importador,
+#573). No Canary é uma `CONDITION_REGENERATION` presa ao slot; aqui cada ganho é um evento
+`item-regen` da fila, por slot e por recurso (`<characterId>:<slot>:<health|mana>`), no instante
+exato — a 1 Hz desanexada rende o mesmo que a 10 Hz (invariante 2). O primeiro ganho sai 6 s
+DEPOIS de vestir (a condição do Canary acumula o intervalo antes de curar), e trocar Life Ring
+por Life Ring recomeça a contagem. Tirar o anel, ou ele vencer (`EQUIP_EXPIRE` → `destroy` →
+`onUnequip`), cancela os dois eventos. Knight com Life Ring, parado: +3 de vida e +10 de mana a
+cada 6 s (1+2 e 2+8).
+
+Divergência do que existia antes: até o #688 o Life Ring era um `ringEffect` de +300%,
+multiplicando o pulso da vocação (Knight: +4/+8 a cada 6 s). Não tinha fonte no Tibia, e saiu —
+`RING_EFFECT_KINDS` ficou só com `energy-shield`. A duração do anel (1200 s no Canary) e a
+forma ativa/inativa ficam para #689.
+
+**Supressão de condição** (#688) — `bonuses.suppress: ['drunk']` (o Dwarven Ring do Canary,
+`suppressdrunk`): enquanto o item está vestido, a condição `drunk` não entra no personagem
+(`#applyConditionTo` recusa, como `Creature::addCondition`) e a que já estava ativa não desvia
+passo nem consome sorteio (`#drunkTarget`, como o `hasCondition` do Canary, que devolve falso para
+condição suprimida). Só `drunk` por ora (`SUPPRESSIBLE_CONDITIONS`): o Draconya não tem
+afogamento (`suppressdrown`). Monstro não veste item e não suprime nada.
 
 O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
 dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito
@@ -434,8 +452,11 @@ Sorcerer+Druid. Diferente da magia (um arquivo por vocação, `haste-knight.json
 formato pode mudar por vocação (mana, alcance); aqui o item físico é IDÊNTICO nas duas, e
 duplicar o arquivo só para variar `vocationId` divergiria peso/preço no primeiro balanceamento.
 
-**Bônus passivo de equipamento.** `item.bonuses` (§21.2): `skill` (uma skill, um valor — o magic
-level do Tibia É a skill `magic` no Draconya, FUN-92) e `speed` (somado direto a
+**Bônus passivo de equipamento.** `item.bonuses` (§21.2): `skills` (uma LISTA de skill e valor
+desde o #688 — o Canary soma todas as skills de um item, e 54 itens base do `items.xml` têm mais
+de uma, como o collar of red plasma, id 23528, sword/axe/club +4; o boot recusa a mesma skill
+repetida no item; o magic level do Tibia É a skill `magic` no Draconya, FUN-92),
+`regeneration` e `suppress` (ver "Anéis com efeito passivo") e `speed` (somado direto a
 `character.speed`, as boots of haste — 40 desde o #527, a escala TFS clássica do
 `forgottenserver` `items.xml` id 2195, a MESMA de `progression.startingSpeed`; o Canary guarda 20
 porque a base dele também é metade). Lido por `Inventory.skillBonus`/`speedBonus` — a MESMA
@@ -452,8 +473,8 @@ sem o quarto ponto, um personagem recém-criado com a bota já no kit (o level 2
 hunt.
 
 **Anel com carga**, além do colar (ver "Duração e carga do equipamento", acima): o Might Ring é
-`kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy/Life
-Ring (efeito permanente enquanto vestido, sem carga). `#consumeAmuletCharge` foi alargado para
+`kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy
+Ring e do Life Ring (efeito permanente enquanto vestido, sem carga). `#consumeAmuletCharge` foi alargado para
 conferir os dois slots (`neck` e `finger`) independente.
 
 **hitChance, só dado.** `weapon.hitChance` (a Royal Crossbow, +3) e `ammunition.maxHitChance` (o
@@ -498,7 +519,7 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
 | Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
-| Bônus de regeneração do Life Ring | +300% da base (fixo, SV-16) | `packages/content/data/items/life-ring.json`, campo `ringEffect.percent` |
+| Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |
 | Suprimentos — `price` / `group` | poção de vida 45 / `potion` `[ABERTO — preço provisório]`; poção de mana 50 / `potion` `[ABERTO — idem]`; avalanche rune 14 / `attack` `[ABERTO — idem]` | `packages/content/data/supplies/*.json` |
 | Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/blessing-charge.json` |
 | Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
