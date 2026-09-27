@@ -63,6 +63,14 @@ export interface BlockHitInput {
   readonly nowMs: number;
 }
 
+/**
+ * O tipo de bloqueio que o ATACANTE vê (#686, `BlockType_t` do Canary): imunidade, defesa que
+ * zerou o golpe, armadura que zerou o golpe, ou nenhum. É decidido ANTES da mitigação
+ * percentual — ela nunca muda o tipo — e é o que alimenta a prática de skill do atacante
+ * (`combat/attack-practice.ts`) e do escudo do defensor.
+ */
+export type BlockType = 'none' | 'immunity' | 'defense' | 'armor';
+
 /** O resultado auditável do estágio — o irmão de `DefenseOutcome` (CMB-04) para o `combat-v3`. */
 export interface BlockHitOutcome {
   readonly immune: boolean;
@@ -78,6 +86,13 @@ export interface BlockHitOutcome {
   readonly damage: number;
   /** As cargas de bloqueio DEPOIS deste golpe — quem chama grava de volta (invariante 9). */
   readonly blockCharge: BlockChargeState;
+  /** O tipo de bloqueio (#686), antes da mitigação percentual — ver `BlockType`. */
+  readonly blockType: BlockType;
+  /**
+   * Se havia carga de `blockCount` para consumir (#686, o `hasDefense` do Canary). `false` com
+   * imunidade e com origem que não bloqueia nada (nenhuma carga é consultada).
+   */
+  readonly hadBlockCharge: boolean;
 }
 
 /**
@@ -101,6 +116,7 @@ export function resolveBlockHit(input: BlockHitInput, rng: Rng): BlockHitOutcome
       immune: true, defenseBlocked: 0, afterDefense: input.rawDamage,
       armorReduction: 0, afterArmor: input.rawDamage, mitigationRemoved: 0,
       damage: 0, blockCharge: input.blockCharge,
+      blockType: 'immunity', hadBlockCharge: false,
     };
   }
 
@@ -108,6 +124,8 @@ export function resolveBlockHit(input: BlockHitInput, rng: Rng): BlockHitOutcome
   let defenseBlocked = 0;
   let armorApplies = input.blockable.armor;
   let blockCharge = input.blockCharge;
+  let blockType: BlockType = 'none';
+  let hadBlockCharge = false;
 
   if (input.blockable.shield || input.blockable.armor) {
     // A carga é consumida sempre que UM dos dois vale — mesmo sem defesa gastar nada, e mesmo
@@ -116,6 +134,7 @@ export function resolveBlockHit(input: BlockHitInput, rng: Rng): BlockHitOutcome
     // --blockCount; hasDefense = true; } ... }`.
     const consumption = consumeBlockCharge(blockCharge, input.nowMs);
     blockCharge = consumption.state;
+    hadBlockCharge = consumption.hadCharge;
     if (input.blockable.shield && consumption.hadCharge) {
       // A rolagem acontece SEMPRE que há carga, mesmo com `defense` 0 — a sequência não pode
       // depender do VALOR da peça (a mesma regra do bloqueio binário do CMB-04).
@@ -124,6 +143,7 @@ export function resolveBlockHit(input: BlockHitInput, rng: Rng): BlockHitOutcome
       damage -= defenseBlocked;
       if (damage <= 0) {
         damage = 0;
+        blockType = 'defense';
         armorApplies = false; // o Canary pula a armadura quando a defesa já zerou o golpe.
       }
     }
@@ -141,7 +161,12 @@ export function resolveBlockHit(input: BlockHitInput, rng: Rng): BlockHitOutcome
       armorReduction = 1;
       damage -= 1;
     }
-    if (damage <= 0) damage = 0;
+    // Zerou aqui — inclusive o golpe que já chegou com 0 (`rawDamage` 0): o Canary marca
+    // armadura mesmo sem ela ter tirado nada, porque a checagem é `damage <= 0` depois do estágio.
+    if (damage <= 0) {
+      damage = 0;
+      blockType = 'armor';
+    }
   }
 
   const afterArmor = damage;
@@ -153,6 +178,6 @@ export function resolveBlockHit(input: BlockHitInput, rng: Rng): BlockHitOutcome
 
   return {
     immune: false, defenseBlocked, afterDefense, armorReduction, afterArmor,
-    mitigationRemoved, damage, blockCharge,
+    mitigationRemoved, damage, blockCharge, blockType, hadBlockCharge,
   };
 }

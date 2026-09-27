@@ -1,6 +1,6 @@
 # 0046 — Estado por instância de item: imbuement e tier da Forja
 
-**Status:** proposto — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
+**Status:** aceito (2026-09-26, #604) — decorre do [ADR 0037](0037-tfs-canary-fidelity-except-action-bar-and-automation.md)
 decisão 1; nenhuma das doze questões do plano bloqueia esta decisão diretamente (ver seção
 própria)
 **Data:** 2026-09-25
@@ -88,3 +88,17 @@ que aditiva — merece a confirmação explícita do dono do produto antes de en
 Nenhum muda de texto. O invariante 2 é quem exige que o decaimento seja calculado sob demanda. O
 invariante 6 continua intocado: overlay carrega tipo e tempo restante, nunca `appearanceId` nem
 caminho de arte.
+
+## Implementação (#604, 2026-09-26)
+
+- **Forma do overlay:** `ItemInstanceOverlay` em `packages/sim/src/item-overlay.ts`, pendurado em
+  `CarriedItem.overlay` — objeto de campos opcionais nomeados, "ausente é o da definição". Hoje só
+  `imbuements: [{ slot, typeId, remainingMs }]`. O tier (#617) e o prazo restante do anel (#689,
+  `durationRemainingMs`) entram como campos irmãos, sem mudar banco, extrato nem snapshot.
+- **Não empilha (d.3):** `Inventory.add`/`move` não juntam pilha quando um dos lados tem overlay;
+  overlay vazio é normalizado para ausente. `Inventory.setOverlay` é o escritor único no `sim`.
+- **Persistência:** `item_instance.overlay jsonb` (migração `0012`, aditiva). Extrato leva
+  `overlays: { instanceId → overlay | null }`; o ledger aplica último-escrito-vence escopado por
+  dono; a leitura (`readItemOverlay`) é defensiva e preserva campo desconhecido (ADR 0014).
+- **Catálogo:** `imbuementSlots` (1–3) no item, só em peça que se veste e não empilha.
+

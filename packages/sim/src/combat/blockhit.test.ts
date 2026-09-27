@@ -154,3 +154,63 @@ describe('resolveBlockHit — ordem e casos de borda', () => {
     expect(outcome.blockCharge).toEqual(exhausted);
   });
 });
+
+describe('resolveBlockHit — tipo de bloqueio (#686)', () => {
+  it('imune: `immunity`, sem carga consultada', () => {
+    const outcome = resolveBlockHit(baseInput({ immune: true, defense: 30 }), scriptedInteger());
+    expect(outcome.blockType).toBe('immunity');
+    expect(outcome.hadBlockCharge).toBe(false);
+  });
+
+  it('a defesa zerou o golpe: `defense`, com carga', () => {
+    const outcome = resolveBlockHit(
+      baseInput({ rawDamage: 10, defense: 100, armor: 25 }), scriptedInteger(70),
+    );
+    expect(outcome.blockType).toBe('defense');
+    expect(outcome.hadBlockCharge).toBe(true);
+  });
+
+  it('a armadura zerou o golpe: `armor`', () => {
+    const outcome = resolveBlockHit(
+      baseInput({ rawDamage: 10, defense: 10, armor: 25 }), scriptedInteger(5, 12),
+    );
+    expect(outcome.blockType).toBe('armor');
+    expect(outcome.hadBlockCharge).toBe(true);
+  });
+
+  it('sobrou dano: `none` — a mitigação percentual não muda o tipo', () => {
+    const outcome = resolveBlockHit(
+      baseInput({ rawDamage: 100, defense: 10, armor: 25, defenseMitigationPercent: 30 }),
+      scriptedInteger(5, 12),
+    );
+    expect(outcome.blockType).toBe('none');
+    expect(outcome.hadBlockCharge).toBe(true);
+    expect(outcome.mitigationRemoved).toBeGreaterThan(0);
+  });
+
+  it('`rawDamage` 0 com carga e armadura na origem: `armor`, como o `damage <= 0` do Canary', () => {
+    const outcome = resolveBlockHit(
+      baseInput({ rawDamage: 0, blockable: DISTANCE_BLOCK_FLAGS, armor: 0 }), scriptedInteger(),
+    );
+    expect(outcome.blockType).toBe('armor');
+    expect(outcome.hadBlockCharge).toBe(true);
+  });
+
+  it('origem que não bloqueia nada (magia): `none`, sem carga consultada', () => {
+    const outcome = resolveBlockHit(
+      baseInput({ rawDamage: 0, blockable: MAGIC_BLOCK_FLAGS }), scriptedInteger(),
+    );
+    expect(outcome.blockType).toBe('none');
+    expect(outcome.hadBlockCharge).toBe(false);
+  });
+
+  it('sem carga, a armadura zerando ainda marca `armor`, mas `hadBlockCharge` é falso', () => {
+    const exhausted: BlockChargeState = { charges: 0, anchorMs: 500 };
+    const outcome = resolveBlockHit(
+      baseInput({ rawDamage: 10, armor: 25, blockCharge: exhausted, nowMs: 500 }),
+      scriptedInteger(12),
+    );
+    expect(outcome.blockType).toBe('armor');
+    expect(outcome.hadBlockCharge).toBe(false);
+  });
+});

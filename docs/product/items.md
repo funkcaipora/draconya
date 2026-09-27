@@ -92,8 +92,9 @@ TP-03 (M22). Ver `economy.md` e `bot.md`.
 
 | Suprimento | Efeito | `group` | `price` | Arquivo |
 |---|---|---|---|---|
-| `health-potion` | `heal` 80 | `potion` | 45 | `data/supplies/health-potion.json` |
-| `mana-potion` | `mana` 100 | `potion` | 50 | `data/supplies/mana-potion.json` |
+| `small-health-potion` | `heal` 60–90 (Canary id 7876) | `potion` | 20 | `data/supplies/small-health-potion.json` |
+| `health-potion` | `heal` 125–175 (Canary id 266; era 80 fixo até o #690) | `potion` | 45 | `data/supplies/health-potion.json` |
+| `mana-potion` | `mana` 75–125 (Canary id 268; era 100 fixo até o #690) | `potion` | 50 | `data/supplies/mana-potion.json` |
 | `avalanche-rune` | `damage` gelo, BP 45, raio 3, alcance 8, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
 
 As nove poções do Tibia (#524, kit level 200): faixa **fixa** sorteada por uso (`effect.amountRange`,
@@ -112,6 +113,26 @@ de NPC do Tibia (TibiaWiki via tibiascape.com).
 | `ultimate-mana-potion` | `mana` 425–575 | level 130, Sorcerer/Druid | 350 | `data/supplies/ultimate-mana-potion.json` |
 | `great-spirit-potion` | `heal` 250–350 **+** `alsoMana` 100–200 | level 80, Paladin | 225 | `data/supplies/great-spirit-potion.json` |
 | `ultimate-spirit-potion` | `heal` 420–580 **+** `alsoMana` 250–350 | level 130, Paladin | 450 | `data/supplies/ultimate-spirit-potion.json` |
+
+**O sorteio da faixa depende do perfil de combate** (#690, ADR 0031): no `combat-v3` é o
+`normal_random(min, max)` do Canary (`doTargetCombatHealth`/`doTargetCombatMana`), a normal
+truncada de `normalRandomInt` (`sim/combat/weapon-power.ts`) — o meio da faixa sai mais que as
+pontas; no `combat-v1`/`v2` continua uniforme (`rng.integer`), bit a bit. A poção de espírito sorteia
+vida ANTES da mana, a ordem de `potions.lua`. Sem `rng` (fixture), a faixa cai no mínimo. Os preços de
+NPC do Canary (Health 50, Mana 56) são da #574; o Draconya segue com 45 e 50.
+
+**Exaustão de ação compartilhada** (#690): toda poção e toda runa declaram `actionExhaustMs: 1000`
+(o `timeBetweenExActions` do Canary) e travam o MESMO livro, `exhaust:action` (`actionExhaustKey`,
+`sim/casting.ts`) — o `nextPotionAction` que o `Actions::useItem` do Canary inicia para runa **ou**
+poção. Os grupos (`potion`, `attack`, `healing`) continuam livros separados e valem ao mesmo tempo:
+uma poção logo depois de uma runa de ataque espera 1000 ms, e outra runa de ataque espera os 2000 ms
+do grupo. O livro só AVANÇA (grava o maior entre o que falta e o novo prazo, como o
+`setNextPotionAction`), viaja no snapshot em `cooldowns` e é da pessoa que USA, não de quem paga na
+party. O uso durante a exaustão é ADIADO, não perdido: o bot volta no vencimento (`retryInMs`), como o
+`playerUseItemEx` do Canary. Supply sem o campo não trava nem lê o livro (fixtures e, na #576, a
+Magic Shield Potion, que o Canary tira da exaustão). Magia não lê este livro. Consequência: uma regra de
+poção que vale SEMPRE, com o grupo de 1000 ms, ganha todo empate no vencimento e deixa a runa sem vez
+— o mesmo que apertar a poção a cada segundo no Canary.
 
 `effect.alsoMana` (#524) é o mecanismo novo da poção de espírito: repõe vida **e** mana no MESMO uso,
 um único `useSupply`. Fica dentro do `kind: 'heal'` — e não vira um quinto `kind` — para não duplicar
@@ -241,7 +262,7 @@ sword 10, provisório).
 | | quando | forma |
 |---|---|---|
 | entra na sessão | emissão do ticket | as instâncias do personagem viram mochila e equipamento |
-| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto**; e a posição `instanceId → { container, index }` (#160), gravada em `item_instance.container`/`slot_index` — último-escrito-vence, escopada por dono; a linha sem posição volta ao primeiro lugar livre |
+| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto**; e a posição `instanceId → { container, index }` (#160), gravada em `item_instance.container`/`slot_index` — último-escrito-vence, escopada por dono; a linha sem posição volta ao primeiro lugar livre; e o overlay `instanceId → overlay \| null` (#604), gravado em `item_instance.overlay` — ver a seção do overlay abaixo |
 
 **A sessão nunca escreve `item_instance`.** Ela registra onde as coisas ficaram; o `jobs` aplica
 na mesma transação da linha de ledger (invariante 10), e retry não duplica porque a chave
@@ -369,6 +390,38 @@ escolhida: `#persistReceipt`/`#creditUnrestorable` (`host.ts`) escrevem no extra
 (`tickets.ts`/`api/tickets.ts`) levam de volta para o ticket da PRÓXIMA sessão — sem isso, uma
 Strong Health Potion caída do Dragon sumiria no logout mesmo sem ser gasta.
 
+## Estado por instância: o overlay (#604, ADR 0046)
+
+**A exceção nomeada à regra "atributos base são fixos".** O item de CATÁLOGO continua fixo pelo
+id — duas espadas do mesmo id têm os mesmos atributos base, e nada aqui muda isso. O que passa a
+poder divergir é a **entrada de inventário**: `CarriedItem.overlay` (`packages/sim/src/item-overlay.ts`)
+é um objeto de campos opcionais nomeados, e "ausente" é sempre "igual à definição". É o lugar de
+imbuement, e depois do tier da Forja; não é o lugar de rolagem aleatória, que continua proibida.
+
+- **Hoje:** `imbuements: [{ slot, typeId, remainingMs }]` — um por slot ocupado, `slot` 0-based
+  entre os `imbuementSlots` do item. O catálogo de imbuements (#605), o decaimento sob demanda
+  (#606, ADR 0046 d.4) e a aplicação (#607) ainda não existem: esta entrega é só o contrato de
+  dado e a persistência.
+- **Ponto de extensão:** a próxima mecânica acrescenta um campo nomeado ao mesmo objeto —
+  `durationRemainingMs` (#689, o prazo restante do anel, "ausente é cheio") e `tier` (#617, 0–10) —,
+  e o escreve com `Inventory.setOverlay(instanceId, { ...item.overlay, campo })`, sem apagar o
+  dos outros. Banco, extrato e snapshot não mudam: a coluna guarda o objeto inteiro, e a leitura
+  (`readItemOverlay`) **preserva** campo que ela ainda não conhece, para um nó antigo num deploy
+  em rolagem não apagar o que um nó novo gravou (ADR 0014).
+- **Não empilha** (ADR 0046 d.3): `add` e `move` recusam juntar pilha quando qualquer dos dois
+  lados tem overlay; a instância fica no seu lugar próprio. Um overlay vazio (`{ imbuements: [] }`)
+  é normalizado para ausente, então a peça que perdeu o último imbuement volta a ser fungível.
+- **Slots no catálogo:** `imbuementSlots` (1–3, o `imbuementslot` do Canary) é o teto da
+  definição, e `buildContent` o recusa em item que não se veste ou que empilha. Nenhum item
+  autorado o declara ainda; o importador (M34-02) o preenche.
+- **Persistência:** coluna `item_instance.overlay jsonb` (migração `0012`, aditiva, nulável, sem
+  CHECK). O ticket lê defensivamente — overlay torto vira ausente em vez de trancar o login —, o
+  extrato leva `overlays: { instanceId → overlay | null }` de toda instância que a sessão carrega
+  (containers e corpo), e o ledger aplica último-escrito-vence, escopado por dono: `null` apaga,
+  instância fora do extrato não é tocada, e extrato sem o campo (Cidade, nó anterior) não muda
+  nada. Snapshot: campo opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+- **Invariante 6:** o overlay carrega tipo e tempo, nunca `appearanceId`.
+
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
@@ -433,7 +486,8 @@ em zero o item sai do corpo e não vai para a mochila. O golpe é gasto mesmo qu
 para a mensagem `inventory` já existente (opcode 16, sem campo novo — invariante 5): o slot
 destruído aparece vazio. `CarriedItem.charges` é opcional, então snapshot antigo não precisa de
 bump; o `EQUIP_EXPIRE` viaja na fila. **Carga e tempo restante não sobrevivem ao logout** — a
-linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora do escopo da AB-06).
+linha de `item_instance` não tinha coluna. Desde a #604 existe `item_instance.overlay`, e o prazo
+restante do anel entra nele como `durationRemainingMs` na #689; `charges` continua fora dele.
 
 ## O kit level 200 por vocação e o bônus de equipamento (#524, M28)
 
@@ -471,6 +525,17 @@ na CIDADE de quem nunca esteve numa sessão (`createCityRuleset`, mesma guarda d
 sem o quarto ponto, um personagem recém-criado com a bota já no kit (o level 200 do
 `dragon-party`, #526) mostrava a mesma velocidade com ou sem ela até a primeira entrada numa
 hunt.
+
+**Magic level especializado por elemento** (#680). `item.bonuses.specializedMagicLevel` é um
+mapa parcial elemento → pontos, as oito chaves `<elemento>magiclevelpoints` do Canary
+(`item_parse.cpp:915-941`): `physical`, `energy`, `earth`, `fire`, `ice`, `holy`, `death` e
+`healing` (`SPECIALIZED_MAGIC_ELEMENTS`) — `firemagiclevelpoints` vira `fire`, e assim por
+diante; `arcane`/`drown`/`lifedrain`/`manadrain` não têm chave e o schema os recusa.
+`Inventory.specializedMagicLevel` soma por elemento o que está VESTIDO (a varredura de
+`Player::getSpecializedMagicLevel`, `player.cpp:7606-7627`), `undefined` quando nada declara.
+Só o termo de ML da fórmula do MESMO elemento lê o valor (ver `docs/product/combat.md`, "Fórmula
+canônica"). Nenhum item autoral declara o campo: os 46 do `items.xml` chegam pelo importador
+(#573). O gasto de carga por uso (`useCharges`) fica para quando `charges` for consumido.
 
 **Anel com carga**, além do colar (ver "Duração e carga do equipamento", acima): o Might Ring é
 `kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy
@@ -516,6 +581,7 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | Autovenda — tipos configuráveis (Free) | 5 | caminho previsto: `packages/content/economia` (premium) |
 | Autovenda — tipos configuráveis (Premium) | 20 | caminho previsto: `packages/content/economia` (premium) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
+| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); nenhum item autorado declara ainda — o importador (M34-02) preenche | `packages/content/data/items/*.json`, campo `imbuementSlots` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
 | Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
@@ -549,15 +615,18 @@ concordam em peso, `hitChance`, alcance e `attack`.
   (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
   arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
   vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
-- **Serpent Sword e Fire Sword (#520) perdem o componente elemental embutido.** O Tibia real dá
-  `elementearth 8` à Serpent Sword e `elementfire 11` à Fire Sword — dano elemental somado ao
-  físico no MESMO golpe. `weapon.damageType` é um tipo só por arma (CMB-03); `attack` fica com o
-  total, e o componente elemental não aparece. As duas armas continuam batendo o número certo em
-  físico; só o "queima também" some.
-- **Defesa residual de arma de duas mãos (#520) não é copiada.** O Tibia real dá `defense` a
-  Broadsword, Double Axe e Dragon Slayer mesmo sendo de duas mãos; `buildContent` recusa
-  `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — regra
-  de antes da #520, não uma exceção criada para ela. O número simplesmente não entra no item.
+- **Serpent Sword e Fire Sword (#687) têm o elemento em `weapon.element`.** `attack` é só o
+  físico (24 e 18); `elementfire 11` e `elementearth 8` do Canary moram em
+  `weapon.element: { type, attack }`. No `combat-v3` o golpe sorteia sobre `attack + element` e
+  divide o total por truncamento; o elemental não perde para escudo nem armadura. v1/v2 ignoram
+  o campo. Ver `docs/product/combat.md`, "Elemento da arma e arma vestida abaixo do level".
+- **Arma de duas mãos tem defesa (#687).** Broadsword 23, Double Axe 12 e Dragon Slayer 28, como
+  no Canary. `buildContent` aceita `defense` em escudo e em arma corpo a corpo de uma ou duas
+  mãos; bow e wand/rod continuam recusados. Só o `combat-v3` lê a defesa da arma de duas mãos.
+- **`weapon.wieldUnproperly` (#687)** é o `unproperly` do Canary: a arma que ficou na mão abaixo
+  do level exigido bate metade no `combat-v3` em vez de não bater. Declarado em Fire Sword,
+  Double Axe, Dragon Slayer, Dragon Hammer, Dragonbone Staff e Mystic Blade; a Spike Sword não
+  tem.
 - **Dragonbone Staff (#520) é club, não wand/rod.** O nome sugere conjuração, mas o Tibia real a
   modela como arma de club corpo a corpo (`weaponType club`), sem `mana`/`fromDamage`/`toDamage`
   no script de equip — e é assim que o catálogo a declara.

@@ -776,6 +776,27 @@ describe('combat-v3 (#548, M30-01): o pipeline de recebimento do blockHit', () =
     expect(availableBlockCharges(result.blockCharge as BlockChargeState, nowMs)).toBe(0);
   });
 
+  it('#687: o secundário com MAGIC_BLOCK_FLAGS passa pela armadura intacto; sem o campo, herda o do intent', () => {
+    // O elemento da arma (Fire Sword) é `blockHit(…, false, false)` no Canary: nem escudo nem
+    // armadura. O primário corpo a corpo continua bloqueável; o secundário declara as flags.
+    const armored = { armor: 20, dodgeChance: 0 };
+    const elemental: DamageIntent = {
+      ...swing, blockable: MELEE_BLOCK_FLAGS,
+      secondary: { rawDamage: 22, damageType: 'fire', blockable: MAGIC_BLOCK_FLAGS },
+    };
+    const result = resolveDamage(elemental, armored, 'pve', v3, riggedDodge(false, 'v3-element'), 0);
+    expect(result.secondaryOutcome?.afterArmor).toBe(22);
+    expect(result.secondaryOutcome?.armorReduction).toBe(0);
+    expect(result.secondaryOutcome?.resolvedDamage).toBe(22);
+
+    // Sem `blockable` no secundário, o comportamento do #473: herda o MELEE do intent.
+    const inherited: DamageIntent = {
+      ...elemental, secondary: { rawDamage: 22, damageType: 'fire' },
+    };
+    const before = resolveDamage(inherited, armored, 'pve', v3, riggedDodge(false, 'v3-element'), 0);
+    expect(before.secondaryOutcome?.afterArmor).toBeLessThan(22);
+  });
+
   it('combat-v1/v2 continuam bit a bit — o combat-v3 não toca `resolveMitigation`', () => {
     const v1Result = resolveDamage(swing, plate, 'pve', combat, rigged(false), 0);
     expect(v1Result.resolvedDamage).toBe(80);

@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
-import { createHuntSession, levelForXp } from '@draconya/sim';
+import { createHuntSession, Inventory, levelForXp } from '@draconya/sim';
+import type { InventoryState } from '@draconya/sim';
+import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore, type SessionReceipt } from '../receipts.js';
 import { DrizzleGameRepository } from '../db/repository.js';
+import { initialCharacterOf } from '../api/tickets.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
 import { testContent, TEST_HUNT } from '../testing/content.js';
@@ -78,6 +81,7 @@ const progression: Progression = {
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+  rates: NEUTRAL_RATES,
 };
 
 /**
@@ -1086,6 +1090,59 @@ describe.runIf(ready)('a posição dos itens nos containers é liquidada pelo ex
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     expect((await placesOf(database, characterId)).get(a)).toEqual(['backpack', 0]);
     expect((await placesOf(database, characterId)).get(b)).toEqual([null, null]);
+  });
+});
+
+describe.runIf(ready)('o overlay por instância atravessa o banco (#604, ADR 0046)', () => {
+  const imbued = { imbuements: [{ slot: 0, typeId: 'vampirism-basic', remainingMs: 72_000_000 }] };
+  const overlayOf = async (database: NonNullable<typeof db>, id: string) => {
+    const [row] = await database.database.db
+      .select({ overlay: itemInstances.overlay }).from(itemInstances).where(eq(itemInstances.id, id));
+    return row?.overlay;
+  };
+
+  it('extrato → item_instance.overlay → ticket → Inventory: o mesmo overlay volta', async () => {
+    // Mutação que mata: tirar `applyOverlays` do `applyProgression`, esquecer `overlays` na
+    // lista de permissão do `ReceiptStore`, ou o ticket não ler a coluna.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const other = await seedCharacter(database);
+    const repository = new DrizzleGameRepository(database.database.db);
+    const sword = (await repository.createItemInstance({ itemId: 'spike-sword', ownerCharacterId: characterId, origin: 'loot' })).id;
+    const rock = (await repository.createItemInstance({ itemId: 'rock', ownerCharacterId: characterId, origin: 'loot' })).id;
+    const alien = (await repository.createItemInstance({ itemId: 'rock', ownerCharacterId: other, origin: 'loot' })).id;
+    // A linha nasce sem overlay: a migração é aditiva, `null` é "igual à definição".
+    expect(await overlayOf(database, sword)).toBeNull();
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      overlays: { [sword]: imbued, [rock]: null, [alien]: imbued },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect(await overlayOf(database, sword)).toEqual(imbued);
+    expect(await overlayOf(database, rock)).toBeNull();
+    // Escopado por dono: o id alheio no extrato não escreve nada.
+    expect(await overlayOf(database, alien)).toBeNull();
+
+    // E volta pelo ticket até o `Inventory` do `sim`, igual.
+    const character = await repository.getCharacterById(characterId);
+    if (character === null) throw new Error('the seeded character is missing');
+    const initial = initialCharacterOf(character, await repository.listItemInstances(characterId));
+    const inventory = Inventory.fromState(initial.inventory as InventoryState);
+    const carried = [...inventory.items()];
+    expect(carried.find((item) => item.instanceId === sword)?.overlay).toEqual(imbued);
+    expect(carried.find((item) => item.instanceId === rock)).not.toHaveProperty('overlay');
+
+    // Extrato SEM `overlays` (nó anterior, Cidade): nada muda.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect(await overlayOf(database, sword)).toEqual(imbued);
+
+    // `null` apaga: o imbuement venceu na sessão, e a peça volta a ser igual à definição.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3, overlays: { [sword]: null } });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect(await overlayOf(database, sword)).toBeNull();
   });
 });
 
