@@ -19,6 +19,8 @@ import { Inventory } from './inventory.js';
 import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
+import { UNSET_STORAGE_VALUE, readCharacterStorage } from './character-storage.js';
+import type { CharacterStorageMap } from './character-storage.js';
 
 export interface Point {
   readonly x: number;
@@ -105,13 +107,12 @@ export interface CharacterState {
    */
   readonly inventory?: InventoryState;
   /**
-   * O que caiu e NÃO coube na mochila (§21.6, FUN-88).
-   *
-   * Fica aqui, e não fora da sessão, porque o `sim` não faz I/O (invariante 1): a caixa de
-   * verdade é escrita quando a sessão encerra. Entra no snapshot para uma queda de nó não
-   * apagar o que o jogador ganhou — e o custo é uma lista quase sempre vazia.
+   * As instâncias que `sell-items`/`discard-item` destruíram nesta sessão, ainda não drenadas
+   * para um extrato (#724, ADR 0048 d.8). Ausente é nenhuma — o normal —, sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`. Drenada por `drainRemovedInstances`, como `goldDelta` drena para
+   * `aggregates.goldGained`/`goldSpent`.
    */
-  readonly lootBox?: readonly CarriedItem[];
+  readonly removedInstances?: readonly string[];
   /**
    * Quantos itens esta sessão já criou. Vira parte do id da instância.
    *
@@ -149,6 +150,14 @@ export interface CharacterState {
    * `character.ammunition_stock` (jsonb).
    */
   readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
+   * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value` — a semente do motor
+   * de quest, a mesma pergunta do Canary (`player:getStorageValue`). Ausente é NENHUM storage
+   * setado, sem bump de `SNAPSHOT_FORMAT_VERSION` — a mesma degradação de `bestiary`/`ammo`.
+   * Persistido em `character_storage` (uma linha por chave, não uma coluna `jsonb`): ver
+   * `packages/server/src/db/schema.ts`.
+   */
+  readonly storages?: CharacterStorageMap;
   readonly cooldowns: Partial<CooldownState>;
   /**
    * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
@@ -174,6 +183,48 @@ export interface CharacterState {
    * QUENTE para a hunt retomada não perder o contador. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
    */
   readonly attackPractice?: AttackPracticeState;
+  /**
+   * Quanto tempo de regeneração a comida ainda tem (#726, ADR 0049 decisão 5): a
+   * `CONDITION_REGENERATION` do Tibia, em milissegundos, drenada por `drainFedMs`
+   * (`packages/sim/src/food.ts`) pelo tempo LÓGICO de hunt decorrido — nunca por tick
+   * (invariante 2), como a stamina. Ausente é `0` — sem comida, o personagem de sempre; sem
+   * bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`. Só é CONSULTADA
+   * quando `progression.regeneration.requiresFood` está ligada — comer sempre soma o contador,
+   * ligado ou não, mas só a flag decide quem lê.
+   */
+  readonly fedMs?: number;
+  /**
+   * Bênçãos ativas (#726, ADR 0049 decisão 3/consequências — o executor da `blessing-charge`
+   * que a TP-03/M22 esperava): cada carga consumida soma uma, capada em `MAX_BLESSINGS` (5,
+   * como o Tibia). **Ainda não é lida por ninguém** — ligar a bênção à redução de perda de item
+   * na morte é o ADR 0042/TP-03, fora do escopo desta issue; o campo existe para o `use-item`
+   * ter O QUE fazer com a carga, sem inventar comportamento de morte que outra decisão ainda não
+   * tomou. Ausente é `0`, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly blessings?: number;
+  /**
+   * Um `use-item`/`use-item-on` ACEITO mas ADIADO pela exaustão de ação compartilhada (#726,
+   * ADR 0049 decisão 6 — o `setNextActionTask` do Canary): agendado para o vencimento do livro
+   * `exhaust:action`, como um evento `pending-manual-action` da fila (invariante 2). Um segundo
+   * disparo antes do vencimento SUBSTITUI este campo e reagenda — nunca empilha dois. `ref`/
+   * `target` usam a MESMA forma numérico-livre de `UseSlotTarget`/o `ref` de `use-item`
+   * (`packages/sim/src/rulesets/hunt.ts`) — dado puro, sem instância de classe, por isso cabe
+   * aqui sem `rulesets/hunt.ts` importar `character.ts` ao contrário. Ausente é nenhuma ação
+   * pendente; sem bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
+   */
+  readonly pendingManualAction?: PendingManualActionState;
+}
+
+/** Ver `CharacterState.pendingManualAction`. */
+export interface PendingManualActionState {
+  readonly kind: 'item' | 'item-on';
+  readonly ref: { readonly instanceId: string } | { readonly supplyId: string };
+  readonly target?:
+    | { readonly kind: 'monster'; readonly subject: string }
+    | { readonly kind: 'character'; readonly characterId: string }
+    | { readonly kind: 'position'; readonly position: { readonly x: number; readonly y: number; readonly z?: number } }
+    | { readonly kind: 'invalid' };
+  readonly seq: number;
 }
 
 /** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
@@ -185,10 +236,11 @@ export type VocationRefusal = 'level-too-low' | 'already-chosen';
 
 /**
  * Como uma peça do kit inicial acabou (#496). `equipped` vestiu; `in-backpack` coube no
- * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos; `in-loot-box`
- * não coube nem em peso.
+ * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos. Peso nunca
+ * recusa (ADR 0048 decisão 7, `Inventory.forceAdd`): a escolha de vocação não é punida pela
+ * mochila.
  */
-export type VocationPieceStatus = 'equipped' | 'in-backpack' | 'in-loot-box';
+export type VocationPieceStatus = 'equipped' | 'in-backpack';
 
 export interface VocationPieceResult {
   readonly itemId: string;
@@ -198,7 +250,7 @@ export interface VocationPieceResult {
 export type VocationResult =
   | {
       readonly ok: true;
-      readonly weapon: 'equipped' | 'in-backpack' | 'in-loot-box' | 'none';
+      readonly weapon: 'equipped' | 'in-backpack' | 'none';
       /**
        * O destino de cada peça do kit, na ordem do conteúdo (#496). Ausente é a arma legada da
        * #154 — o caminho de `weapon`; o kit completo não o usa.
@@ -250,9 +302,9 @@ export class CharacterRuntime {
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
-  /** O que caiu e não coube. Ver `CharacterState.lootBox`. */
-  lootBox: CarriedItem[];
   lootSeq: number;
+  /** As instâncias destruídas por vender/descartar, ainda não drenadas. Ver `CharacterState.removedInstances`. */
+  removedInstances: string[];
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   /**
@@ -264,6 +316,11 @@ export class CharacterRuntime {
   readonly supplyStock: Map<string, number>;
   /** O estoque de munição do loot (#520). Ver `CharacterState.ammunitionStock`. */
   readonly ammunitionStock: Map<string, number>;
+  /**
+   * Storages por personagem (#731). Só a sessão dona escreve (`setStorageValue`) — a mesma
+   * régua de `ammo`/`supplyStock`. Ver `CharacterState.storages`.
+   */
+  readonly storages: Map<string, number>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
@@ -279,6 +336,12 @@ export class CharacterRuntime {
    * evento do golpe (invariante 9) — ver `CharacterState.attackPractice`.
    */
   attackPractice: AttackPracticeState;
+  /** Comida ativa (#726). Só `drainFedMs`/`feed` (`food.ts`) escrevem — invariante 9. */
+  fedMs: number;
+  /** Bênçãos consumidas (#726). Só o executor da `blessing-charge` escreve. */
+  blessings: number;
+  /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
+  pendingManualAction: PendingManualActionState | null;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -302,17 +365,23 @@ export class CharacterRuntime {
     this.bestiary = Bestiary.fromState(state.bestiary);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
-    this.lootBox = [...(state.lootBox ?? [])];
     this.lootSeq = state.lootSeq ?? 0;
+    this.removedInstances = [...(state.removedInstances ?? [])];
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
     this.ammunitionStock = new Map(Object.entries(state.ammunitionStock ?? {}));
+    // Defensivo, como `readItemOverlay`: uma chave torta (valor não inteiro, ou o `-1` de
+    // ausência gravado por engano) some da leitura em vez de travar a sessão inteira.
+    this.storages = new Map(Object.entries(readCharacterStorage(state.storages) ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
     this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
+    this.fedMs = state.fedMs ?? 0;
+    this.blessings = state.blessings ?? 0;
+    this.pendingManualAction = state.pendingManualAction ?? null;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -337,6 +406,18 @@ export class CharacterRuntime {
   }
 
   /**
+   * Devolve as instâncias destruídas por `sell-items`/`discard-item` e esvazia a lista
+   * (#724, ADR 0048 d.8) — chamado só quando o extrato que as carrega foi aceito, a mesma
+   * disciplina de `settleGoldDelta` (invariante 10): perder a chamada por uma falha de
+   * persistência não é problema, porque o `DELETE` que o `jobs` roda é idempotente por id.
+   */
+  drainRemovedInstances(): string[] {
+    const drained = this.removedInstances;
+    this.removedInstances = [];
+    return drained;
+  }
+
+  /**
    * Escolhe a munição da família dela (#152). Só o level é conferido: a família é da munição,
    * e a arma na mão não precisa existir ainda — o seletor só aparece com o bow, mas a escolha
    * é guardada sempre. Sem gold para ela, o tiro não sai (o ruleset decide isso a cada tiro,
@@ -351,13 +432,33 @@ export class CharacterRuntime {
   }
 
   /**
+   * O valor deste storage, ou `-1` (convenção do Tibia) para quem nunca setou (#731). Nunca
+   * lança: uma quest que ainda não existe consultando uma chave nova só lê "nunca setado".
+   */
+  getStorageValue(key: string): number {
+    return this.storages.get(key) ?? UNSET_STORAGE_VALUE;
+  }
+
+  /**
+   * Seta o storage (#731). `-1` APAGA a chave — é o valor de ausência, guardá-lo seria
+   * indistinguível de "nunca setado" e só infla o extrato e a tabela à toa. Só a sessão dona
+   * chama isto (invariante 9); a `-1` não vencer para pelo teto/piso de `value` cabe a quem
+   * chama (conteúdo de quest), não a este método.
+   */
+  setStorageValue(key: string, value: number): void {
+    if (value === UNSET_STORAGE_VALUE) this.storages.delete(key);
+    else this.storages.set(key, value);
+  }
+
+  /**
    * Escolhe a vocação (#154, ADR 0026 decisão 1) — uma vez, no level da escolha ou depois.
    *
-   * Os itens entram pelos caminhos que já existem: `add` (peso) e `equip` (vocação, level, duas
-   * mãos). A escolha vale MESMO que um item não vista: sem capacidade ele vai para a Caixa de
-   * Loot, com escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso
-   * seria punir a decisão pela mochila. `retarget` NÃO é chamado: a tabela da vocação vale do
-   * próximo level em diante (`progression.ts`), e o ruleset já lê `vocationId` a cada level up.
+   * Os itens entram pelos caminhos que já existem: `forceAdd` (ignora peso — ADR 0048 decisão
+   * 7) e `equip` (vocação, level, duas mãos). A escolha vale MESMO que um item não vista: com
+   * escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso seria punir
+   * a decisão pela mochila, e é por isso que o peso nunca recusa aqui. `retarget` NÃO é
+   * chamado: a tabela da vocação vale do próximo level em diante (`progression.ts`), e o
+   * ruleset já lê `vocationId` a cada level up.
    *
    * Com `kitItems` (#496) é o kit completo que entra: cada peça ganha identidade própria
    * (`${instanceId}:${itemId}` — numa cópia da Cidade o id da sessão é compartilhado, e o id do
@@ -387,19 +488,19 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
-      this.lootBox.push(carried);
-      return { ok: true, weapon: 'in-loot-box' };
-    }
+    // `forceAdd` ignora peso (ADR 0048 decisão 7): sem capacidade nunca é motivo para recusar
+    // a arma da vocação. Só falta catálogo ou pilha grande demais — nenhum dos dois acontece
+    // aqui, porque quem monta `weapon` já leu do mesmo catálogo.
+    this.inventory.forceAdd(carried, options.catalog, options.rules);
     // `equip` troca com o que está na mão: a machete volta para a mochila sozinha.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
     return { ok: true, weapon: equipped.ok ? 'equipped' : 'in-backpack' };
   }
 
   /**
-   * Uma peça do kit (#496): entra pelo peso (`add`), veste pelo slot do item (`equip`), e o que
-   * não veste fica em segurança onde já está. O lugar da mochila NUNCA recusa kit — só o peso
-   * recusa, e a Caixa segura.
+   * Uma peça do kit (#496): entra pelo peso ignorado (`forceAdd`, ADR 0048 decisão 7), veste
+   * pelo slot do item (`equip`), e o que não veste fica em segurança onde já está. Nem o lugar
+   * nem o peso recusam kit — só o slot (duas mãos) decide entre vestir e ficar na mochila.
    */
   #grantKitPiece(item: Item, options: VocationChoiceOptions): VocationPieceStatus {
     const carried: CarriedItem = {
@@ -408,10 +509,7 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
-      this.lootBox.push(carried);
-      return 'in-loot-box';
-    }
+    this.inventory.forceAdd(carried, options.catalog, options.rules);
     // `equip` troca com o que está no slot: a machete volta para a mochila sozinha. A peça
     // impedida pelas duas mãos (o escudo com o bow vestido) fica na mochila, onde já está.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
@@ -439,8 +537,8 @@ export class CharacterRuntime {
       bestiary: this.bestiary.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
-      lootBox: this.lootBox,
       lootSeq: this.lootSeq,
+      ...(this.removedInstances.length === 0 ? {} : { removedInstances: this.removedInstances }),
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       // supplyStock/ammunitionStock NÃO seguem o mesmo `size === 0` do ammo: ammo só cresce
@@ -452,6 +550,11 @@ export class CharacterRuntime {
       // deixar quem grava o extrato decidir se um objeto vazio é "drenado" ou "nunca tocado".
       supplyStock: Object.fromEntries(this.supplyStock),
       ammunitionStock: Object.fromEntries(this.ammunitionStock),
+      // Como `supplyStock`: NÃO gatear por `size === 0`. Um storage setado e depois apagado
+      // NESTA sessão (`setStorageValue(key, -1)`) é um resultado real — "voltou a não estar
+      // setado" —, e omitir a chave faria o extrato não tocar a linha e o valor antigo
+      // ressuscitar no próximo login (a mesma lição da revisão do #536).
+      storages: Object.fromEntries(this.storages),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
@@ -461,6 +564,10 @@ export class CharacterRuntime {
       // O mesmo padrão: omitido enquanto ainda é o inicial (v1/v2 nunca o tocam).
       ...(isInitialAttackPractice(this.attackPractice)
         ? {} : { attackPractice: this.attackPractice }),
+      // Mesmo padrão: omitido em zero, o de quem nunca comeu/nunca consumiu carga (#726).
+      ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
+      ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
+      ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
     };
   }
 

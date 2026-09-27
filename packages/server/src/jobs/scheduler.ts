@@ -1,8 +1,8 @@
 // Processo `jobs` — singleton com lock. Agendador, expirações e reconciliação.
 //
-// ESQUELETO. O laço existe; as tarefas entram depois: Guild War diária, expiração da
-// Caixa de Loot, reset de Prey, expiração de Premium, recuperação de sessão órfã (FUN-28)
-// e reconciliação de pagamento.
+// ESQUELETO. O laço existe; as tarefas entram depois: Guild War diária, reset de Prey,
+// expiração de Premium, recuperação de sessão órfã (FUN-28) e reconciliação de pagamento.
+// (A expiração da Caixa de Loot foi uma dessas — o ADR 0048 a retirou, junto com a caixa.)
 //
 // Desde a FUN-59 o `jobs` tem por onde falar: um `/metrics` próprio, em `JOBS_PORT`, como os
 // outros dois papéis. É a forma que o Prometheus espera, e o que faz o alvo SUMIR quando o
@@ -27,7 +27,6 @@ import { writePendingBotConfigs } from './bot-config.js';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
 import type { SingletonLock } from './lock.js';
-import type { LootBoxStore } from '../loot-box.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
@@ -47,13 +46,6 @@ export interface JobsDependencies {
    * de antes — e o certo para um `jobs` montado à mão em teste, que não tem par para disputar.
    */
   readonly lock?: SingletonLock;
-  /**
-   * A Caixa de Loot da Sessão (FUN-88). O ciclo só a OBSERVA: quem expira é o TTL do Redis.
-   *
-   * Ausente: o `jobs` roda igual, e a gauge fica sem ser escrita — que é o estado honesto de
-   * "ninguém olhou", diferente de "não há nenhuma".
-   */
-  readonly lootBoxes?: LootBoxStore;
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -155,13 +147,6 @@ export function createJobsCycle(
         if (swept.released > 0) {
           logger.info(swept, 'Swept orphaned sessions');
         }
-      }
-
-      // FUN-88: a caixa expira sozinha, por TTL. O que o ciclo faz é CONTAR — uma pilha que só
-      // cresce é jogador ganhando item que não consegue resgatar, e isso não aparece em
-      // lugar nenhum sem alguém publicar o número.
-      if (dependencies.lootBoxes !== undefined) {
-        metrics?.observeLootBoxes(await dependencies.lootBoxes.pending());
       }
 
       metrics?.observeCycle(

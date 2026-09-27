@@ -3,7 +3,9 @@
 // Desde a FUN-119 (ADR 0025) o mapa tem ANDARES: cada um com o bitmap de bloqueio e, quando
 // importado, a velocidade de chão por tile; e `floorChanges` liga um tile a outro andar.
 
-import type { Point, RouteData, TilemapData, TilemapInput } from './schemas.js';
+import type {
+  Point, RouteData, TilemapData, TilemapInput, TilemapInteractable,
+} from './schemas.js';
 
 /**
  * Velocidade de chão de um tile sem velocidade declarada — o valor que o TFS usa quando o
@@ -24,6 +26,15 @@ export interface Floor {
   readonly blocked: Uint8Array;
   /** Velocidade de chão por tile, ou `null` quando o mapa não declara (todo tile é o padrão). */
   readonly speed: Uint16Array | null;
+  /**
+   * Bloqueio de LINHA DE VISÃO (#553): `1` bloqueia projétil/vista, `0` é livre. `null` quando
+   * o mapa não declara a camada `sight` deste andar — nenhum tile bloqueia visão, o mesmo
+   * "sem dado, sem restrição" que `speed` ausente já usa para velocidade de chão. É a camada
+   * que `isSightClear` (`packages/sim/src/line-of-sight.ts`) consulta; bloqueio de PASSO
+   * (`blocked`, acima) e bloqueio de VISTA são flags independentes do pacote de aparências
+   * (`unpass` vs. `unsight`), por isso duas grades separadas, nunca uma derivada da outra.
+   */
+  readonly blocksSight: Uint8Array | null;
 }
 
 export interface Tilemap {
@@ -47,6 +58,12 @@ export interface Tilemap {
    */
   readonly floorChangesByFloor: ReadonlyMap<number, readonly FloorChange[]>;
   readonly source?: TilemapData['source'];
+  /**
+   * Cenário usável (#727, ADR 0050 d.1): o que o importador CLASSIFICOU, geometria e estado no
+   * instante da importação. O MECANISMO que muda de estado por sessão é `TileOverrides` (#728,
+   * `packages/sim/src/tile-overrides.ts`) — este campo é só o conteúdo fixo que o alimenta.
+   */
+  readonly interactables: readonly TilemapInteractable[];
 }
 
 /** Uma escada: `from` está no andar de origem, `to` pode estar em qualquer outro (FUN-119). */
@@ -87,7 +104,9 @@ export const tileKey = (x: number, y: number, z: number): number =>
  * problema de boot.
  */
 export function buildTilemap(data: TilemapInput): Tilemap {
-  const floorData: Array<[number, { grid: readonly string[]; speed?: readonly string[] | undefined }]> = [];
+  const floorData: Array<[number, {
+    grid: readonly string[]; speed?: readonly string[] | undefined; sight?: readonly string[] | undefined;
+  }]> = [];
   if (data.grid !== undefined) floorData.push([data.z, { grid: data.grid }]);
   for (const [z, floor] of Object.entries(data.floors ?? {})) floorData.push([Number(z), floor]);
   if (floorData.length === 0) throw new Error(`mapa "${data.id}" não tem andar nenhum`);
@@ -125,7 +144,17 @@ export function buildTilemap(data: TilemapInput): Tilemap {
         }
       }
     }
-    floors.set(z, { z, blocked, speed });
+    let blocksSight: Uint8Array | null = null;
+    if (floor.sight !== undefined) {
+      blocksSight = new Uint8Array(width * height);
+      for (let y = 0; y < height; y++) {
+        const row = floor.sight[y] ?? '';
+        for (let x = 0; x < width; x++) {
+          if (row[x] === '#') blocksSight[y * width + x] = 1;
+        }
+      }
+    }
+    floors.set(z, { z, blocked, speed, blocksSight });
   }
 
   const base = floors.get(data.z);
@@ -145,6 +174,7 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   return {
     id: data.id, width, height, z: data.z, blocked: base.blocked, floors, floorChanges,
     floorChangesByFloor,
+    interactables: data.interactables ?? [],
     ...(data.entryPoint === undefined
       ? {}
       : { entryPoint: { x: data.entryPoint.x, y: data.entryPoint.y, z: data.entryPoint.z ?? data.z } }),

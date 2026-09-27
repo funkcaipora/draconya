@@ -106,8 +106,9 @@ const rules: ContainerRules = { backpackSlots: 0, satchelSlots: 0, row: 1 };
 
 describe('capacidade é PESO, no paradigma do Tibia (§21.5)', () => {
   it('recusa o que não cabe, e não guarda pela metade', () => {
-    // Recusar em vez de estourar: o item que não cabe vai para a Caixa de Loot da Sessão, que
-    // é issue própria. Guardar parte dele seria inventar meia espada.
+    // Recusar em vez de estourar: quem chama decide o destino de `over-capacity` (hoje, o item
+    // fica no cadáver do monstro — ADR 0048 decisão 7). Guardar parte dele seria inventar meia
+    // espada.
     const inventory = new Inventory();
     const apertado = wearer({ capacity: 100 });
 
@@ -115,6 +116,24 @@ describe('capacidade é PESO, no paradigma do Tibia (§21.5)', () => {
     expect(inventory.add(carried('sword'), catalog, apertado, rules))
       .toEqual({ ok: false, reason: 'over-capacity' });
     expect([...inventory.items()]).toHaveLength(1);
+  });
+
+  it('forceAdd ignora o peso: usado só onde não há cadáver para segurar o excedente (ADR 0048 d.7)', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('armor'), catalog, wearer({ capacity: 100 }), rules);
+
+    expect(inventory.forceAdd(carried('sword'), catalog, rules).ok).toBe(true);
+    expect([...inventory.items()].map((i) => i.itemId)).toEqual(['armor', 'sword']);
+    // O peso passa a estourar a capacidade de propósito — `forceAdd` não confere `Wearer`.
+    expect(inventory.weight(catalog)).toBeGreaterThan(100);
+  });
+
+  it('forceAdd ainda recusa catálogo desconhecido e pilha grande demais — só o peso é ignorado', () => {
+    const inventory = new Inventory();
+    expect(inventory.forceAdd(carried('nope'), catalog, rules))
+      .toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.forceAdd(carried('arrow', 'a', 101), catalog, rules))
+      .toEqual({ ok: false, reason: 'stack-too-large' });
   });
 
   it('o que está EQUIPADO conta no peso', () => {
@@ -863,6 +882,75 @@ describe('mochila e bolsa posicionais (#160, ADR 0026 decisão 6)', () => {
     expect(state.backpack).toHaveLength(20);
     expect(state.satchel).toHaveLength(10);
     expect(Inventory.fromState(state).getState()).toEqual(inventory.getState());
+  });
+});
+
+describe('vender e descartar (#724, ADR 0048 d.8)', () => {
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const gem = define({ id: 'gem', kind: 'other', weight: 1, value: 50 });
+  const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['gem', gem]]);
+  const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
+  const rich = wearer({ capacity: 100_000 });
+
+  const born = (): Inventory => {
+    const inventory = Inventory.fromState({
+      backpack: [], equipped: { back: { instanceId: 'kit:back', itemId: 'backpack', quantity: 1 } },
+    });
+    inventory.ensureContainers(huntera);
+    return inventory;
+  };
+
+  it('vende uma instância ao `value × quantity` do catálogo, e some da mochila', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1', 3), withContainers, rich, huntera);
+    const result = inventory.sellItems(['g1'], withContainers);
+    expect(result).toEqual({ ok: true, removed: [carried('gem', 'g1', 3)], gold: 150 });
+    expect(inventory.findStack('gem')).toBeNull();
+  });
+
+  it('vende N instâncias num lote só, somando o gold de cada uma', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1'), withContainers, rich, huntera);
+    inventory.add(carried('gem', 'g2', 2), withContainers, rich, huntera);
+    const result = inventory.sellItems(['g1', 'g2'], withContainers);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.gold).toBe(50 + 100);
+    expect(inventory.findStack('gem')).toBeNull();
+  });
+
+  it('`value: 0` recusa o LOTE inteiro — "ninguém compra isto" — sem vender parte dele', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1'), withContainers, rich, huntera);
+    inventory.add(carried('rock', 'r1'), withContainers, rich, huntera);
+    const before = inventory.getState();
+    expect(inventory.sellItems(['g1', 'r1'], withContainers)).toEqual({ ok: false, reason: 'not-for-sale' });
+    expect(inventory.getState()).toEqual(before);
+  });
+
+  it('instância que não está carregada recusa sem mutar — inclusive equipada', () => {
+    const inventory = born();
+    inventory.add(carried('sword', 's1'), withContainers, rich, huntera);
+    inventory.equip('s1', rich, withContainers);
+    const before = inventory.getState();
+    expect(inventory.sellItems(['s1'], withContainers)).toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.sellItems(['nunca-existiu'], withContainers)).toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.getState()).toEqual(before);
+  });
+
+  it('descarta um item da mochila/bolsa: destrói, sem gold', () => {
+    const inventory = born();
+    inventory.add(carried('gem', 'g1'), withContainers, rich, huntera);
+    const result = inventory.discardItem('g1');
+    expect(result).toEqual({ ok: true, removed: carried('gem', 'g1') });
+    expect(inventory.findStack('gem')).toBeNull();
+  });
+
+  it('descartar instância inexistente ou equipada recusa', () => {
+    const inventory = born();
+    inventory.add(carried('sword', 's1'), withContainers, rich, huntera);
+    inventory.equip('s1', rich, withContainers);
+    expect(inventory.discardItem('s1')).toEqual({ ok: false, reason: 'not-carried' });
+    expect(inventory.discardItem('nunca-existiu')).toEqual({ ok: false, reason: 'not-carried' });
   });
 });
 

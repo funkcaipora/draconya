@@ -1038,6 +1038,82 @@ describe('a poção do Tibia — faixa fixa, espírito e requisito de vocação 
   });
 });
 
+describe('a poção de BUFF do Tibia — Berserk, Mastermind, Bullseye, Magic Shield (#576)', () => {
+  const berserk: Supply = {
+    id: 'berserk-potion', name: 'Berserk Potion', price: 0, group: 'potion', groupCooldownMs: 1_000,
+    requires: { vocationId: 'knight' },
+    effect: {
+      kind: 'condition',
+      condition: {
+        key: 'berserk-potion', merge: 'refresh', durationMs: 600_000,
+        effect: { kind: 'buff', skillDeltas: { melee: 5, shielding: -10 } },
+      },
+    },
+  };
+  const magicShield: Supply = {
+    id: 'magic-shield-potion', name: 'Magic Shield Potion', price: 0, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 14, vocationId: ['sorcerer', 'druid'] },
+    effect: {
+      kind: 'condition',
+      condition: { key: 'mana-shield', merge: 'refresh', durationMs: 60_000, effect: { kind: 'mana-shield' } },
+    },
+  };
+
+  it('bebe e devolve a condição auto-alvo, com o mesmo usuário como alvo e origem', () => {
+    const cavaleiro = hero({ gold: 0 });
+    cavaleiro.vocationId = 'knight';
+    const result = useSupply(cavaleiro, berserk, null, undefined, undefined, undefined, undefined, cavaleiro, 10_000);
+    expect(result).toMatchObject({
+      ok: true, healed: 0, manaRestored: 0, damage: 0, goldSpent: 0,
+      condition: {
+        key: 'berserk-potion', targetId: 'hero', sourceId: 'hero', expiresAtMs: 610_000,
+        skillDeltas: { melee: 5, shielding: -10 },
+      },
+    });
+  });
+
+  it('recusa por VOCAÇÃO — Berserk é só do Knight, um Sorcerer não bebe', () => {
+    const sorcerer = hero({ gold: 0 });
+    sorcerer.vocationId = 'sorcerer';
+    expect(useSupply(sorcerer, berserk)).toEqual({ ok: false, reason: 'wrong-vocation', retryInMs: 0 });
+  });
+
+  it('recusa por LEVEL — Magic Shield Potion pede 14, quem tem 10 não bebe', () => {
+    const druida = hero({ level: 10, gold: 0 });
+    druida.vocationId = 'druid';
+    expect(useSupply(druida, magicShield)).toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+  });
+
+  it('sem `nowMs` (fixture), a condição conta o prazo a partir de 0, e o cooldown não inicia', () => {
+    const cavaleiro = hero({ gold: 0 });
+    cavaleiro.vocationId = 'knight';
+    const result = useSupply(cavaleiro, berserk);
+    expect(result).toMatchObject({ ok: true, condition: { expiresAtMs: 600_000 } });
+  });
+
+  it('gold: sem saldo é recusado; com saldo, debita e trava o grupo', () => {
+    const pobre = hero({ gold: 0 });
+    pobre.vocationId = 'knight';
+    const paga: Supply = { ...berserk, price: 500 };
+    expect(useSupply(pobre, paga, null, undefined, undefined, undefined, undefined, pobre, 0))
+      .toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+
+    const rico = hero({ gold: 500 });
+    rico.vocationId = 'knight';
+    expect(useSupply(rico, paga, null, undefined, undefined, undefined, undefined, rico, 0).ok).toBe(true);
+    expect(balanceOf(rico)).toBe(0);
+    expect(rico.cooldowns.remainingMs(`group:potion`, 0)).toBe(1_000);
+  });
+
+  it('Magic Shield Potion reaproveita a MESMA chave `mana-shield` da magia (OU-lógica, nunca dois escudos)', () => {
+    const sorcerer = hero({ level: 20, gold: 0 });
+    sorcerer.vocationId = 'sorcerer';
+    const result = useSupply(sorcerer, magicShield);
+    expect(result).toMatchObject({ ok: true, condition: { key: 'mana-shield' } });
+  });
+});
+
 describe('a exaustão de ação compartilhada entre poção e runa (#690)', () => {
   const exhaustingPotion: Supply = { ...potion, actionExhaustMs: 1_000 };
 

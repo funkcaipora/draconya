@@ -196,7 +196,7 @@ boot sem credenciais: a validação do servidor exige WorkOS, e o PostgreSQL exi
 O cliente desenha com o pacote do Tibia (`things/<versão>/`, ADR 0008), e **tudo que o
 Draconya usa sai da própria origem** — nenhum CDN, nenhum servidor de terceiros. O pacote não
 está no Git nem na imagem (`things` está no `.gitignore` e no `.dockerignore`; não é nosso para
-redistribuir): a imagem do `web` leva só o caminho, `VITE_THINGS_URL` (padrão `/things/1332`,
+redistribuir): a imagem do `web` leva só o caminho, `VITE_THINGS_URL` (padrão `/things/1533`,
 fixado no build do cliente), e o nginx serve o que estiver montado em
 `/usr/share/nginx/html/things` (`deploy/nginx.conf`). Em dev, o Vite serve `things/` da raiz do
 repositório no mesmo caminho — ver `packages/client/vite.config.ts`.
@@ -207,7 +207,11 @@ recurso>_things` — em staging, `hzd0uu0cuitkdi4ie0h1mu5g_things`). Ele nasce v
 (menu lateral → Terminal → `localhost`) dá um shell de root no servidor e serve igual.
 
 O caminho mais curto é o servidor baixar o pacote direto da origem, sem passar pela sua
-máquina. Em staging foi feito assim em 2026-09-11 (4 173 arquivos, 81 MB, ~4 min):
+máquina. **Desde 2026-09-26 o pacote é o 15.33** (emenda ao ADR 0008): ele vem do cliente oficial
+instalado numa máquina (`~/Library/Application Support/CipSoft GmbH/Tibia/packages/Tibia.app/Contents/
+Resources/assets/` no macOS), copiado para `things/1533/` e enviado ao servidor pelo `rsync` abaixo.
+O script a seguir é o REGISTRO de como o 13.32 chegou ao staging em 2026-09-11 (4 173 arquivos,
+81 MB, ~4 min) — não serve mais para o 15.33:
 
 ```bash
 cat > /root/fetch-things.sh <<'EOF'
@@ -240,11 +244,11 @@ na aba de rede. Ela sobe pela sua máquina — é a subpasta `maps/` inteira, tr
 versão hoje (1,2 MB na 13.32):
 
 ```bash
-rsync -av things/1332/maps/ root@<servidor>:/root/things/1332/maps/
+rsync -av things/1533/maps/ root@<servidor>:/root/things/1533/maps/
 ```
 
 ```bash
-ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)":/things -v /root/things:/src alpine cp -r /src/1332 /things/'
+ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)":/things -v /root/things:/src alpine cp -r /src/1533 /things/'
 ```
 
 Se a origem sumir, o pacote INTEIRO vem da sua máquina pelo mesmo caminho, com um filtro que
@@ -252,7 +256,7 @@ deixa passar tudo da raiz — `maps/` incluída — e exclui `library/` (o `cp -
 cima):
 
 ```bash
-rsync -av --exclude='library/' things/1332/ root@<servidor>:/root/things/1332/
+rsync -av --exclude='library/' things/1533/ root@<servidor>:/root/things/1533/
 ```
 
 Sem mais nenhum consumidor de `library/` desde #250, o filtro exclui a pasta inteira — ela
@@ -264,8 +268,8 @@ volume:
   `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
 - `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`, `rotworm-caves`; 1,2 MB
   na 13.32) — a pilha de cada tile, saída de `pnpm map:import`. Confira contra a sua máquina, e
-  não só o `200`: `curl -s <APP_ORIGIN>/things/1332/maps/thais.json | shasum -a 256` tem de dar
-  o mesmo hash de `shasum -a 256 things/1332/maps/thais.json`. Um mapa reimportado com outra
+  não só o `200`: `curl -s <APP_ORIGIN>/things/1533/maps/thais.json | shasum -a 256` tem de dar
+  o mesmo hash de `shasum -a 256 things/1533/maps/thais.json`. Um mapa reimportado com outra
   região ou outro OTBM muda de conteúdo no mesmo caminho, e o `Cache-Control` de um ano esconde
   a troca de quem já o tinha — por isso a conferência é pelo hash.
 
@@ -273,7 +277,7 @@ volume:
 Code e continua fora: não é servida nem lida pelo cliente — a casca (painéis, barras, slots)
 não depende de nenhum arquivo do volume desde #250, é CSS puro.
 
-Confira com `curl -sI <APP_ORIGIN>/things/1332/catalog-content.json` — `200` com
+Confira com `curl -sI <APP_ORIGIN>/things/1533/catalog-content.json` — `200` com
 `Cache-Control: immutable`. O hash está no nome de cada folha, então a URL nunca muda de
 conteúdo e o cache de um ano é seguro; trocar de versão do pacote é outro caminho, não outro
 conteúdo no mesmo caminho.
@@ -281,7 +285,7 @@ conteúdo no mesmo caminho.
 **Trocar a versão do pacote é também regenerar o inventário** em
 `packages/content/data/packs/` (`pnpm assets:inventory`, ver `docs/asset-library.md`): é contra
 ele que o boot recusa um id de aparência que o pacote não tem (FUN-21). A versão servida é
-`THINGS_VERSION` no Coolify (padrão `1332`): o compose deriva `VITE_THINGS_URL` dela, e o
+`THINGS_VERSION` no Coolify (padrão `1533`): o compose deriva `VITE_THINGS_URL` dela, e o
 `app` recusa subir se ela não for a versão do inventário contra o qual o conteúdo foi
 conferido — um deploy apontando outro pacote não passa em silêncio.
 

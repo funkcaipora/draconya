@@ -51,6 +51,11 @@ export interface TicketRouteDependencies {
    * acontece num `api` montado sem banco.
    */
   readonly listItemInstances?: GameRepository['listItemInstances'];
+  /**
+   * Os storages do personagem (#731, ADR 0050 d.6 T2), para o ticket carregar — mesma razão e
+   * mesma degradação de `listItemInstances`: ausente é personagem sem storage nenhum setado.
+   */
+  readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
 }
 
 /**
@@ -150,7 +155,11 @@ export function createTicketHandler(
       async (character) => deps.tickets.issue(
         principal.accountId,
         character.id,
-        initialCharacterOf(character, await deps.listItemInstances?.(character.id) ?? []),
+        initialCharacterOf(
+          character,
+          await deps.listItemInstances?.(character.id) ?? [],
+          await deps.listCharacterStorages?.(character.id) ?? [],
+        ),
         resolution.node,
       ),
     );
@@ -181,6 +190,8 @@ export function createTicketHandler(
 export function initialCharacterOf(
   character: CharacterRecord,
   instances: Parameters<typeof inventoryOf>[0],
+  /** Os storages do personagem (#731), como `listCharacterStorages` os devolve. */
+  storages: readonly { readonly storageKey: string; readonly value: number }[] = [],
 ): InitialCharacter {
   return {
     level: character.level,
@@ -207,6 +218,12 @@ export function initialCharacterOf(
     // sempre começaria com estoque zero, mesmo com drop de ontem esperando na linha.
     ...(isStockMap(character.supplyStock) ? { supplyStock: character.supplyStock } : {}),
     ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
+    // E os storages (#731, ADR 0050 d.6 T2): uma linha por chave, não uma coluna — a montagem é
+    // a mesma ideia de `inventoryOf`, reduzindo as linhas do banco a um mapa.
+    ...storagesOf(storages),
+    // Comida ativa (#726, ADR 0049 decisão 5): sem isto, quem comeu antes de deslogar voltaria
+    // em jejum na hunt seguinte.
+    fedMs: character.fedMs,
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
@@ -247,6 +264,20 @@ function outfitColorsOf(stored: unknown): { outfitColors?: OutfitColors } {
  */
 function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
   return isBestiaryState(stored) ? { bestiary: stored } : {};
+}
+
+/**
+ * Reduz as linhas de `character_storage` (#731) a `storageKey → value` — a mesma ideia de
+ * `inventoryOf`, para uma tabela em vez de uma coluna `jsonb`. Vazio é ausente, e não `{}`:
+ * a chave só existe quando há valor, como em `bestiaryOf` (`exactOptionalPropertyTypes`).
+ */
+function storagesOf(
+  rows: readonly { readonly storageKey: string; readonly value: number }[],
+): { storages?: Readonly<Record<string, number>> } {
+  if (rows.length === 0) return {};
+  const storages: Record<string, number> = {};
+  for (const row of rows) storages[row.storageKey] = row.value;
+  return { storages };
 }
 
 /**

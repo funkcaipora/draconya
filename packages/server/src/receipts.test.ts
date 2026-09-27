@@ -142,6 +142,24 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('ammo');
   });
 
+  it('carries removedInstances through Redis and back, and a receipt without one stays without (#724, ADR 0048 d.8)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito real: `parseReceipt` reconstrói campo a
+    // campo, e um campo novo em `SessionReceipt` que não entra ali some no caminho de volta
+    // sem erro nenhum — foi exatamente o que aconteceu aqui na primeira versão desta feature:
+    // `jobs/ledger.ts` recebia sempre `removedInstances: undefined` de volta do Redis, mesmo
+    // com `sell-items`/`discard-item` gravando a lista corretamente na escrita, e o
+    // `item_instance` vendido/descartado nunca era apagado.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { removedInstances: ['s1:0', 's1:1'] }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.removedInstances).toEqual(['s1:0', 's1:1']);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('removedInstances');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um

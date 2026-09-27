@@ -1,0 +1,8 @@
+{
+  "id": "crossbow",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: imbuementSlots: (ausente) → 3; value: 120 → 500.",
+  "patch": {
+    "imbuementSlots": 3,
+    "value": 500
+  }
+}

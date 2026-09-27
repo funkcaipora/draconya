@@ -52,6 +52,31 @@ describe('tilemap', () => {
   });
 });
 
+describe('camada de bloqueio de visão (#553)', () => {
+  it('sem `sight` declarado, `blocksSight` é `null` — nenhum tile bloqueia', () => {
+    const floor = map.floors.get(7);
+    expect(floor?.blocksSight).toBeNull();
+  });
+
+  it('com `sight` declarado, monta o bitmap independente de `grid`', () => {
+    const withSight = buildTilemap({
+      id: 'm2', z: 7,
+      floors: {
+        7: {
+          grid: ['#####', '#...#', '#...#', '#...#', '#####'],
+          // (2,2) bloqueia VISÃO sem bloquear PASSO — decoração com `unsight` sem `unpass`.
+          sight: ['#####', '#...#', '#.#.#', '#...#', '#####'],
+        },
+      },
+    });
+    const floor = withSight.floors.get(7);
+    expect(floor?.blocksSight).not.toBeNull();
+    expect(floor?.blocksSight?.[2 * withSight.width + 2]).toBe(1);
+    expect(floor?.blocksSight?.[1 * withSight.width + 1]).toBe(0);
+    expect(isBlocked(withSight, 2, 2)).toBe(false); // passo continua livre
+  });
+});
+
 describe('rota', () => {
   it('aceita um laço válido e ancora os spawns nos tiles', () => {
     const route = buildRoute(loop, map);

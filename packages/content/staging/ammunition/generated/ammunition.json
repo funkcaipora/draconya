@@ -1,0 +1,241 @@
+[
+  {
+    "id": "bolt",
+    "name": "bolt",
+    "family": "bolt",
+    "attack": 30,
+    "price": 4,
+    "maxHitChance": 87,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "crystalline-arrow",
+    "name": "crystalline arrow",
+    "family": "arrow",
+    "attack": 65,
+    "price": 20,
+    "maxHitChance": 95,
+    "requires": {
+      "level": 90
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "diamond-arrow",
+    "name": "diamond arrow",
+    "family": "arrow",
+    "attack": 37,
+    "price": 130,
+    "maxHitChance": 100,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "drill-bolt",
+    "name": "drill bolt",
+    "family": "bolt",
+    "attack": 56,
+    "price": 12,
+    "maxHitChance": 90,
+    "requires": {
+      "level": 70
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "earth-arrow",
+    "name": "earth arrow",
+    "family": "arrow",
+    "attack": 14,
+    "damageType": "earth",
+    "price": 5,
+    "maxHitChance": 91,
+    "requires": {
+      "level": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "envenomed-arrow",
+    "name": "envenomed arrow",
+    "family": "arrow",
+    "attack": 27,
+    "damageType": "earth",
+    "price": 12,
+    "maxHitChance": 93,
+    "requires": {
+      "level": 70
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "flaming-arrow",
+    "name": "flaming arrow",
+    "family": "arrow",
+    "attack": 14,
+    "damageType": "fire",
+    "price": 5,
+    "maxHitChance": 91,
+    "requires": {
+      "level": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "flash-arrow",
+    "name": "flash arrow",
+    "family": "arrow",
+    "attack": 14,
+    "damageType": "energy",
+    "price": 5,
+    "maxHitChance": 91,
+    "requires": {
+      "level": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "infernal-bolt",
+    "name": "infernal bolt",
+    "family": "bolt",
+    "attack": 72,
+    "price": 13,
+    "maxHitChance": 91,
+    "requires": {
+      "level": 110
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "piercing-bolt",
+    "name": "piercing bolt",
+    "family": "bolt",
+    "attack": 33,
+    "price": 5,
+    "maxHitChance": 87,
+    "requires": {
+      "level": 30
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "prismatic-bolt",
+    "name": "prismatic bolt",
+    "family": "bolt",
+    "attack": 66,
+    "price": 20,
+    "maxHitChance": 90,
+    "requires": {
+      "level": 90
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "shiver-arrow",
+    "name": "shiver arrow",
+    "family": "arrow",
+    "attack": 14,
+    "damageType": "ice",
+    "price": 5,
+    "maxHitChance": 91,
+    "requires": {
+      "level": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "spectral-bolt",
+    "name": "spectral bolt",
+    "family": "bolt",
+    "attack": 78,
+    "price": 70,
+    "maxHitChance": 100,
+    "requires": {
+      "level": 150
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "tarsal-arrow",
+    "name": "tarsal arrow",
+    "family": "arrow",
+    "attack": 33,
+    "price": 6,
+    "maxHitChance": 94,
+    "requires": {
+      "level": 30
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  },
+  {
+    "id": "vortex-bolt",
+    "name": "vortex bolt",
+    "family": "bolt",
+    "attack": 36,
+    "price": 6,
+    "maxHitChance": 89,
+    "requires": {
+      "level": 40
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    }
+  }
+]

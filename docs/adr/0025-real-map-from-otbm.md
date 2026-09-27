@@ -351,3 +351,24 @@ hospeda um personagem só hoje (§14, Fase 3 traz party), então os dois caminho
 NA PRÁTICA — mas "todo lugar que compara alvo confere o andar" só fica verdade com os dois
 corrigidos, e o dia em que a party entrar numa hunt multiandar sem ninguém reabrir esta auditoria
 é exatamente o dia em que o gap deixaria de ser dormant.
+
+## Emenda — 2026-09-27 (#727): o importador preserva `aid`/`uid`/`text`, e o bloqueio deriva das
+flags EXCETO no tile classificado como cenário usável
+
+A decisão 4 desta ADR ("bloqueio deriva das flags, no importador, uma vez") ganha a exceção que a
+ADR 0050 decisão 1 pede (`0050-session-tile-overrides-for-usable-scenery.md`, PR #719 — ainda não
+mesclada nesta branch; `git show origin/docs/adr-0048-0051-playable:docs/adr/0050-session-tile-overrides-for-usable-scenery.md`):
+um tile CLASSIFICADO
+como interativo (porta, capim, stone pile, rope spot, ladder, alavanca) nunca vira `#` na grade,
+mesmo que o item carregue `unpass`. `scripts/otbm.ts` passa a preservar `ATTR_ACTION_ID` (`aid`),
+`ATTR_UNIQUE_ID` (`uid`), `ATTR_TEXT` (`text`) e `ATTR_TELE_DEST` por item — antes descartados
+como qualquer atributo sem tratamento especial —, e `import-map.ts` os usa, mais as tabelas do
+Canary transcritas como dado (`data/scenery/canary-tables.json`, ADR 0019), para classificar cada
+tile em `tilemapSchema.interactables[]`.
+
+Isto NÃO é o mecanismo (ADR 0050 decisões 2–8, a `TileOverrides` da #728, que ainda não existe):
+é só o importador aprendendo a RECONHECER o que já estava no OTBM e descartava. O efeito
+observável imediato é que porta, capim, stone pile, rope spot, ladder e alavanca deixam de
+bloquear na grade estática — inclusive porta trancada, que não tinha como destrancar antes da
+#728 e ficaria impassável para sempre sob a regra antiga. `docs/product/scenery.md` traz os
+números medidos nos quatro mapas.
