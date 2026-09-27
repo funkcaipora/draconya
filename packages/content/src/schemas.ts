@@ -563,6 +563,15 @@ export const weaponSchema = z.strictObject({
    * na mão —, a arma bate METADE em vez de não bater. Só o `combat-v3` lê.
    */
   wieldUnproperly: z.boolean().optional(),
+  /**
+   * O `breakChance` do Canary (#575, `Weapon::executeUseWeapon`, `weapons.cpp:363-367`): só em
+   * arma `distance` SEM `ammoFamily` — o arremessável (spear, throwing star), que É a própria
+   * munição, sem lançador nem seleção por família (ADR 0026 d.3 não se aplica a ele). Cada tiro
+   * rola `breakChance`% de consumir uma unidade do `ammunitionStock` do personagem (por ID do
+   * ITEM, não por família); sem quebrar, "volta ao estoque" — não é decrementado. `buildContent`
+   * exige exatamente um de `ammoFamily`/`breakChance` em toda arma `distance`.
+   */
+  breakChance: z.number().int().min(0).max(100).optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 
@@ -575,6 +584,8 @@ export type Weapon = z.infer<typeof weaponSchema>;
 export type ResolvedWeapon = WeaponProfile & {
   readonly kind: WeaponKind;
   readonly ammoFamily?: AmmoFamily;
+  /** O arremessável (#575) — ver o comentário em `weaponSchema.breakChance`. */
+  readonly breakChance?: number;
 };
 
 /**
@@ -845,6 +856,20 @@ export const itemSchema = z.strictObject({
    * já cobre o `distanceFactor` dela). Só em `kind: 'shield'`, e nunca junto de `spellbook`.
    */
   quiver: z.boolean().default(false),
+  /**
+   * O bônus de PERFECT SHOT da aljava (#575; `Player::getPerfectShotDamage`, Canary
+   * `weapons.cpp:706-718`/`game.cpp:8500-8509`, `perfectshotrange`/`perfectshotdamage` do
+   * `items.xml` — ex. eldritch quiver, id 36666). Soma `damage` ao tiro (munição OU arremessável)
+   * quando a distância de Chebyshev até o alvo é EXATAMENTE `range` — nem mais perto, nem mais
+   * longe. Só em `kind: 'shield'` (a peça que ocupa a mão secundária, como `quiver`/`spellbook`
+   * acima); a maioria dos quivers do Canary não o declara — ausente é a aljava comum, sem bônus.
+   * Não exige `quiver: true`: as duas leituras são independentes (uma é `secondaryShield` na
+   * mitigação, a outra é dano extra no tiro).
+   */
+  perfectShot: z.strictObject({
+    range: z.number().int().positive(),
+    damage: z.number().int().positive(),
+  }).optional(),
   /**
    * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
    *

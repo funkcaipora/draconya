@@ -7539,6 +7539,215 @@ describe('famílias de arma e proficiências (CMB-05, #333)', () => {
   });
 });
 
+describe('munição, arremessável e aljava do Canary (#575)', () => {
+  // `aggroRadius: 0` mantém o rato PARADO no lugar em que o teste o posiciona — sem alvo
+  // aggroado ele não persegue —, o que permite manter a distância de Chebyshev exata durante
+  // toda a janela de combate. `health` enorme e `attack: 0` tiram a morte e o contra-ataque da
+  // conta: o teste mede só os tiros do herói.
+  const tank = {
+    ...rat, health: 1_000_000, attack: 0, aggroRadius: 0, experience: 0,
+    loot: { gold: { chance: 0, min: 1, max: 1 }, items: [] },
+  };
+
+  // A arena pequena do resto do arquivo (6×5, entrada em (1,1)) não tem folga para posicionar o
+  // alvo a 3 tiles de Chebyshev em toda direção sem sair do mapa (`y` negativo). Uma arena maior,
+  // com os MESMOS ids (`arena`/`arena-loop`) — o `start()` deste arquivo hospeda sempre a hunt
+  // `arena` —, com a entrada bem no meio, dá a folga que o teste de alcance exato precisa.
+  const bigGrid = Array.from({ length: 21 }, (_, y) => (
+    y === 0 || y === 20 ? '#'.repeat(21) : `#${'.'.repeat(19)}#`
+  ));
+  const bigMap = { id: 'arena', z: 7, grid: bigGrid };
+  // O perímetro de um quadrado grande: a entrada (tile 0, (2,2)) e o ponto de spawn (tile 32,
+  // (18,18)) ficam a 16 de Chebyshev — bem além do alcance de qualquer arma desta suíte (no
+  // máximo 6). Sem isso, o rato nasceria A UM TILE do herói (ADR do `routeIndex: 0`) e disparava
+  // o primeiro tiro "de contato" (cooldown de ataque não corre no vazio) ANTES do teste
+  // conseguir reposicioná-lo na distância exata — o mesmo golpe contaminado que fez a primeira
+  // versão deste teste medir a distância errada.
+  const perimeterLoop = (x0: number, y0: number, x1: number, y1: number, z: number) => {
+    const tiles: { x: number; y: number; z: number }[] = [];
+    for (let x = x0; x < x1; x += 1) tiles.push({ x, y: y0, z });
+    for (let y = y0; y < y1; y += 1) tiles.push({ x: x1, y, z });
+    for (let x = x1; x > x0; x -= 1) tiles.push({ x, y: y1, z });
+    for (let y = y1; y > y0; y -= 1) tiles.push({ x: x0, y, z });
+    return tiles;
+  };
+  const loopTiles = perimeterLoop(2, 2, 18, 18, 7);
+  const bigRoute = {
+    id: 'arena-loop', mapId: 'arena',
+    tiles: loopTiles,
+    spawnPoints: [{ routeIndex: loopTiles.findIndex((t) => t.x === 18 && t.y === 18), radius: 1 }],
+  };
+  const bigHunt = {
+    id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
+    difficulties: {
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
+    },
+  };
+  const rangeContent = (over: Partial<RawContent> = {}): Content => content({
+    maps: [bigMap], routes: [bigRoute], hunts: [bigHunt], ...over,
+  });
+
+  const spear = {
+    id: 'spear-i', name: 'Spear', kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 25,
+    stackable: true,
+    weapon: { kind: 'distance', family: 'distance', range: 3, breakChance: 30 },
+  };
+  const bow = {
+    id: 'bow-i', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
+    twoHanded: true, weapon: { kind: 'distance', family: 'distance', range: 6, ammoFamily: 'arrow' },
+  };
+  const quiver = {
+    id: 'quiver-i', name: 'Eldritch Quiver', kind: 'shield', slot: 'shield', weight: 1, value: 0,
+    quiver: true, perfectShot: { range: 3, damage: 200 },
+  };
+
+  /** Posiciona o alvo a `tiles` de Chebyshev do herói, UMA vez, e roda o combate. */
+  const shootAt = (
+    itemId: string, tiles: number, inventory: InventoryState, extraItems: readonly Record<string, unknown>[],
+    durationMs = 8_000,
+  ) => {
+    const loaded = rangeContent({ monsters: [tank], items: [...items, ...extraItems] });
+    const { session, hero, ruleset } = start({ loaded, gold: 1_000, inventory });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y - tiles };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    return { session, hero, events };
+  };
+
+  it('arremessável com pilha de 1: quebra o único que sobra destrói a arma, e o herói fica desarmado', () => {
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'i-spear', itemId: 'spear-i', quantity: 1 } },
+    };
+    const loaded = rangeContent({ monsters: [tank], items: [...items, spear] });
+    const { session, hero, ruleset } = start({ loaded, gold: 1_000, inventory });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y - 1 };
+    // Roda até a spear quebrar (breakChance 30%: cai em poucos tiros com folga de sobra).
+    for (let t = 0; t < 60_000 && hero.inventory.getState().equipped['hand'] !== undefined; t += 100) {
+      session.advanceBy(100);
+    }
+    expect(hero.inventory.getState().equipped['hand']).toBeUndefined();
+    expect(hero.inventory.weapon(loaded.items, hero)).toBeNull();
+  });
+
+  it('arremessável com pilha atira, pratica distância e o tiro NÃO passa pelo `#ammoFor`', () => {
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'i-spear', itemId: 'spear-i', quantity: 50 } },
+    };
+    const loaded = rangeContent({ monsters: [tank], items: [...items, spear] });
+    const { session, hero, ruleset } = start({ loaded, gold: 1_000, inventory });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y - 1 };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < 8_000 && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    const shots = events.filter((e) => e.kind === 'shot');
+    expect(shots.length).toBeGreaterThan(0);
+    // A wand/munição por família carregam `ammoId`; o arremessável NÃO — é o próprio item.
+    expect(shots.every((e) => e.kind === 'shot' && e.ammoId === undefined)).toBe(true);
+    expect(hero.skills.getState()['distance']).toBeDefined();
+    // Nenhum gold saiu: o arremessável não debita preço, só consome a própria pilha.
+    expect(session.aggregates.goldSpent).toBe(0);
+  });
+
+  it('a spear quebra ~30% dos tiros (breakChance), e o que sobrevive não é decrementado', () => {
+    const startingStock = 2_000;
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'i-spear', itemId: 'spear-i', quantity: startingStock } },
+    };
+    const loaded = rangeContent({ monsters: [tank], items: [...items, spear] });
+    const { session, hero, ruleset } = start({ loaded, gold: 0, inventory });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y - 1 };
+    let shots = 0;
+    // ~1000 tiros (attackIntervalMs 2000 na fixture): desvio padrão da fração de quebra em
+    // torno de 1,5 ponto percentual — a tolerância de ±5 fica a mais de 3 desvios.
+    for (let t = 0; t < 2_000_000 && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      shots += session.drainEvents().filter((e) => e.kind === 'shot').length;
+    }
+    const remaining = hero.inventory.getState().equipped['hand']?.quantity ?? 0;
+    const broken = startingStock - remaining;
+    expect(shots).toBeGreaterThan(800);
+    // Tolerância generosa (±5 pontos percentuais): é uma rolagem por tiro, não uma conta exata.
+    const brokenFraction = broken / shots;
+    expect(brokenFraction).toBeGreaterThan(0.30 - 0.05);
+    expect(brokenFraction).toBeLessThan(0.30 + 0.05);
+  });
+
+  it('perfect shot soma dano SÓ na distância EXATA do range da aljava — munição por família', () => {
+    const bowInventory: InventoryState = {
+      backpack: [],
+      equipped: {
+        hand: { instanceId: 'i-bow', itemId: 'bow-i', quantity: 1 },
+        shield: { instanceId: 'i-quiver', itemId: 'quiver-i', quantity: 1 },
+      },
+    };
+    const atExactRange = shootAt('bow-i', 3, bowInventory, [bow, quiver], 3_000);
+    const atOneTileOff = shootAt('bow-i', 2, bowInventory, [bow, quiver], 3_000);
+    const hitAt = (events: readonly DomainEvent[]): number => {
+      const hit = events.find((e) => e.kind === 'creature-hit');
+      if (hit?.kind !== 'creature-hit') throw new Error('sem creature-hit');
+      return hit.amount;
+    };
+    // O bônus (200) é grande o bastante para nunca se confundir com a variância normal do dano
+    // da munição (`arrow` attack 25, spread 0 na fixture de família de distância).
+    expect(hitAt(atExactRange.events)).toBeGreaterThan(hitAt(atOneTileOff.events) + 100);
+  });
+
+  it('perfect shot também soma no arremessável, na distância exata do range da aljava', () => {
+    const spearWithQuiver: InventoryState = {
+      backpack: [],
+      equipped: {
+        hand: { instanceId: 'i-spear', itemId: 'spear-i', quantity: 1 },
+        shield: { instanceId: 'i-quiver', itemId: 'quiver-i', quantity: 1 },
+      },
+    };
+    const run3 = (): { session: Session; hero: CharacterRuntime; ruleset: HuntRuleset } => {
+      const loaded = rangeContent({ monsters: [tank], items: [...items, spear, quiver] });
+      const started = start({ loaded, gold: 0, inventory: spearWithQuiver });
+      started.session.advanceBy(50);
+      const target = started.ruleset.monsters[0];
+      if (target !== undefined) {
+        target.position = { ...started.hero.position, y: started.hero.position.y - 3 };
+      }
+      return started;
+    };
+    const run2 = (): { session: Session; hero: CharacterRuntime; ruleset: HuntRuleset } => {
+      const loaded = rangeContent({ monsters: [tank], items: [...items, spear, quiver] });
+      const started = start({ loaded, gold: 0, inventory: spearWithQuiver });
+      started.session.advanceBy(50);
+      const target = started.ruleset.monsters[0];
+      if (target !== undefined) {
+        target.position = { ...started.hero.position, y: started.hero.position.y - 2 };
+      }
+      return started;
+    };
+    const hitAmount = (started: { session: Session }): number => {
+      let amount: number | undefined;
+      for (let t = 0; t < 3_000 && amount === undefined; t += 100) {
+        started.session.advanceBy(100);
+        for (const e of started.session.drainEvents()) {
+          if (e.kind === 'creature-hit' && amount === undefined) amount = e.amount;
+        }
+      }
+      if (amount === undefined) throw new Error('sem creature-hit');
+      return amount;
+    };
+    expect(hitAmount(run3())).toBeGreaterThan(hitAmount(run2()) + 100);
+  });
+});
+
 describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
   const resolver = vi.mocked(resolveDamage);
   // Bloco, e não arrow de expressão: `mockClear` devolve o próprio mock, e o Vitest trataria

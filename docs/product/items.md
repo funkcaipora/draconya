@@ -179,6 +179,39 @@ segue genérico, e não há pilha nem contagem. **A escolha persiste entre sess�
 extrato, o `jobs` grava em `characters.ammo` e ela volta pelo ticket ao entrar — o mesmo caminho
 da vocação.
 
+### Arremessável e aljava com perfect shot (M34-04, #575)
+
+Ao contrário da munição por família (arrow/bolt), o **arremessável** (spear, throwing star, royal
+spear) NÃO tem lançador nem seleção — o item na mão É o próprio projétil, `kind: 'weapon'`,
+`weapon: { kind: 'distance', family: 'distance', range, breakChance }`, sem `ammoFamily`.
+`buildContent` exige exatamente um dos dois campos em toda arma `distance` (`ammoFamily` OU
+`breakChance`, nunca os dois, nunca nenhum). É item **de verdade**, `stackable: true` — ao
+contrário da munição, ele TEM peso, pilha e proveniência de loot, como qualquer item comum.
+
+**A quebra é a única mecânica nova.** A cada tiro, `breakChance`% de chance (sempre rolado —
+ADR 0031, a sequência de RNG não pode depender do valor da chance) consome UMA unidade da pilha
+equipada na mão (`Inventory.consumeStack`, não `ammunitionStock` — aquele é só da munição
+arrow/bolt); sem quebrar, a pilha não muda. A pilha chegando a zero desarma o personagem, como
+tirar a arma pela última vez. Não há preço por tiro (ele já foi pago no loot/mercado, como
+qualquer item), e não há gold envolvido.
+
+**A aljava (quiver)** é o item que ocupa o slot de escudo junto com um bow/crossbow — uma exceção
+explícita ao `hands-full` de duas mãos (`Inventory.equip`), porque a aljava não é escudo de
+verdade. `itemSchema.perfectShot: { range, damage }` é o bônus de "perfect shot" do Canary
+(eldritch quiver, alicorn quiver): soma `damage` ao tiro — munição por família OU arremessável —
+quando a distância de Chebyshev até o alvo é EXATAMENTE `range`, nem mais perto nem mais longe. A
+maioria das aljavas do Canary não declara o bônus (`quiver: true` sozinho, sem `perfectShot`).
+
+O importador (`scripts/catalog/items.ts`) gera os dois a partir do `items.xml`: 11 arremessáveis
+(spear, throwing star, viper/leaf star, glooth/hunting/enchanted spear, assassin star, entre
+outros) e 8 aljavas (2 com `perfectShot`) em `staging/items/generated/{weapons,shields}.json`. Um
+conversor dedicado (`scripts/catalog/ammo.ts`, tipo de catálogo `ammo`) lê a munição
+(`primarytype: "ammunition"`) para `ammunitionSchema` — nunca `itemSchema` —, incluindo munição
+elemental (flash/shiver/flamming/earth/envenomed arrow: o `element<tipo>` do Canary vira
+`damageType`); os 5 slugs autorais (`arrow`, `burst-arrow`, `sniper-arrow`, `onyx-arrow`,
+`power-bolt`) nunca são gerados de novo — o preço deles já é regravado por `npc-prices.ts`
+(#574, `AMMO_CANARY_IDS`).
+
 ## Inventário e equipamento (FUN-82)
 
 **Capacidade é peso**, no paradigma do Tibia (§21.5): a mochila cabe o que o personagem aguenta,
@@ -191,7 +224,7 @@ dobro, e a capacidade deixa de significar o que diz.
 | | |
 |---|---|
 | stack máximo | 100, e pilha cheia começa outra |
-| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item |
+| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item; o arremessável (#575) empilha como qualquer item comum |
 | item que não cabe | **recusado**, e vai para a Caixa de Loot da Sessão (issue própria) |
 
 Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a
@@ -642,9 +675,6 @@ Glacier Amulet manualmente.
   do Canary); todo item gerado sai `value: 0`.
 - **`stackable`** — é um flag de `items.otb`, binário, que este leitor não abre; nunca declarado
   (fica no default `false`).
-- **Munição e arremessável (M34-04)** — "distance weapons" sem `ammotype` (spear, throwing star,
-  royal spear…) é o próprio projétil, não um lançador; fica fora, junto com o catálogo de munição.
-- **Quiver** — contêiner *e* escudo ao mesmo tempo; o `itemSchema` não tem essa combinação.
 - **Arma `fist`** — a família não é declarável (o motor a usa só como fallback desarmado, DT-01).
 - **`skillfist`** — sem skill correspondente no Draconya (só `melee`/`distance`/`shielding`/`magic`).
 
@@ -687,11 +717,13 @@ Glacier Amulet manualmente.
   as seis peças e o slot em que cada uma nasce vestida, e `createCharacter` grava as linhas de
   `item_instance` na **mesma transação** que o personagem (id `<characterId>:kit:<n>`), sem
   passar pelo ledger — o kit não tem preço. Personagem criado antes do #153 continua sem kit.
-- **Royal Spear (#520) não é arma de arremesso.** No Tibia real é `weaponType distance` sem
-  munição — o próprio item é o projétil, consumido ao acertar (`breakChance`). `WEAPON_KINDS`
-  (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
-  arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
-  vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
+- **Royal Spear (#520) agora é arma de arremesso de verdade (#575, M34-04).** No Tibia real é
+  `weaponType distance` sem munição — o próprio item é o projétil, consumido ao acertar
+  (`breakChance`). A #575 deu forma a esse mecanismo (`weapon.breakChance`, `Inventory.
+  consumeStack`), e o Royal Spear foi promovido de `kind: 'other'` (sem `weapon`, só vendável)
+  para `kind: 'weapon'`, `stackable: true`, `weapon: { kind: 'distance', family: 'distance',
+  range: 3, breakChance: 3, wieldUnproperly: true }`, level 25 — os mesmos números do Canary
+  `items.xml` id 7378 que já estavam no `_open` desde a #520/#536, agora com mecanismo.
 - **Serpent Sword e Fire Sword (#687) têm o elemento em `weapon.element`.** `attack` é só o
   físico (24 e 18); `elementfire 11` e `elementearth 8` do Canary moram em
   `weapon.element: { type, attack }`. No `combat-v3` o golpe sorteia sobre `attack + element` e

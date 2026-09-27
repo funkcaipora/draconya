@@ -73,8 +73,15 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="attack" value="10"/>
 		<attribute key="weight" value="50"/>
 		<attribute key="script" value="moveevent;weapon">
+			<attribute key="breakChance" value="10"/>
 			<attribute key="weaponType" value="missile"/>
 		</attribute>
+	</item>
+	<item id="90042" article="a" name="test unrecognized distance weapon">
+		<attribute key="primarytype" value="distance weapons"/>
+		<attribute key="weaponType" value="distance"/>
+		<attribute key="attack" value="5"/>
+		<attribute key="weight" value="50"/>
 	</item>
 	<item id="90006" article="a" name="test wand of testing">
 		<attribute key="weaponType" value="wand"/>
@@ -133,6 +140,18 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="containersize" value="8"/>
 		<attribute key="weight" value="1800"/>
 		<attribute key="script" value="moveevent">
+			<attribute key="slot" value="right-hand"/>
+		</attribute>
+	</item>
+	<item id="90043" article="an" name="test eldritch quiver">
+		<attribute key="primarytype" value="quivers"/>
+		<attribute key="slotType" value="right-hand"/>
+		<attribute key="containersize" value="8"/>
+		<attribute key="weight" value="2200"/>
+		<attribute key="perfectshotdamage" value="20"/>
+		<attribute key="perfectshotrange" value="4"/>
+		<attribute key="script" value="moveevent">
+			<attribute key="level" value="250"/>
 			<attribute key="slot" value="right-hand"/>
 		</attribute>
 	</item>
@@ -280,29 +299,34 @@ function convert(id: string) {
 
 describe('classify', () => {
   it('arma corpo a corpo pelo primarytype', () => {
-    expect(classify('sword weapons', 'sword', undefined, 'hand')).toEqual({ slice: 'weapons', kind: 'weapon' });
+    expect(classify('sword weapons', 'sword', undefined, 'hand', false)).toEqual({ slice: 'weapons', kind: 'weapon' });
   });
 
-  it('distância com ammotype é lançador; sem ammotype é munição/arremessável (M34-04, fora do escopo)', () => {
-    expect(classify('distance weapons', 'distance', 'arrow', undefined)).toEqual({ slice: 'weapons', kind: 'weapon' });
-    const skipped = classify('distance weapons', 'distance', undefined, undefined);
-    expect('skip' in skipped && skipped.skip).toMatch(/M34-04/);
+  it('distância com ammotype é lançador; sem ammotype e sem breakChance fica fora do corte', () => {
+    expect(classify('distance weapons', 'distance', 'arrow', undefined, false)).toEqual({ slice: 'weapons', kind: 'weapon' });
+    const skipped = classify('distance weapons', 'distance', undefined, undefined, false);
+    expect('skip' in skipped && skipped.skip).toMatch(/ammotype.*breakChance/);
+  });
+
+  it('distância sem ammotype MAS com breakChance é arremessável (#575)', () => {
+    expect(classify('distance weapons', 'distance', undefined, undefined, true))
+      .toEqual({ slice: 'weapons', kind: 'weapon' });
   });
 
   it('fist nunca é declarável (DT-01)', () => {
-    const skipped = classify('distance weapons', 'fist', undefined, undefined);
+    const skipped = classify('distance weapons', 'fist', undefined, undefined, false);
     expect('skip' in skipped && skipped.skip).toMatch(/fist/);
   });
 
-  it('quiver fica fora (contêiner + escudo sem forma no schema)', () => {
-    const skipped = classify('quivers', undefined, undefined, 'right-hand');
-    expect('skip' in skipped && skipped.skip).toMatch(/quiver/);
+  it('quiver é item de escudo puro (#575) — sem contêiner, porque a munição não empilha', () => {
+    expect(classify('quivers', undefined, undefined, 'right-hand', false))
+      .toEqual({ slice: 'shields', kind: 'shield', slot: 'shield' });
   });
 
   it('sem primarytype nem weaponType, o slot do script ainda classifica (peça de recompensa, #688)', () => {
-    expect(classify(undefined, undefined, undefined, 'necklace')).toEqual({ slice: 'amulets', kind: 'amulet', slot: 'neck' });
-    expect(classify(undefined, undefined, undefined, 'ring')).toEqual({ slice: 'rings', kind: 'ring', slot: 'finger' });
-    expect(classify(undefined, undefined, undefined, undefined)).toMatchObject({ skip: expect.stringMatching(/sem categoria/) });
+    expect(classify(undefined, undefined, undefined, 'necklace', false)).toEqual({ slice: 'amulets', kind: 'amulet', slot: 'neck' });
+    expect(classify(undefined, undefined, undefined, 'ring', false)).toEqual({ slice: 'rings', kind: 'ring', slot: 'finger' });
+    expect(classify(undefined, undefined, undefined, undefined, false)).toMatchObject({ skip: expect.stringMatching(/sem categoria/) });
   });
 });
 
@@ -348,12 +372,20 @@ describe('convertItem', () => {
     expect(itemSchema.parse(fireSword?.entity)).toBeTruthy();
   });
 
-  it('bow real (com ammotype) vira arma de distância; throwing star sem ammotype fica fora', () => {
+  it('bow real (com ammotype) vira arma de distância; arma de distância sem os dois campos fica fora', () => {
     const bow = convert('90004');
     expect(bow?.blockers).toEqual([]);
     expect(bow?.entity).toMatchObject({ twoHanded: true, weapon: { family: 'distance', ammoFamily: 'arrow', range: 6 } });
+    const unrecognized = convert('90042');
+    expect(unrecognized?.blockers[0]).toMatch(/ammotype.*breakChance/);
+  });
+
+  it('throwing star sem ammotype MAS com breakChance é arremessável (#575): attack próprio, sem ammoFamily', () => {
     const star = convert('90005');
-    expect(star?.blockers[0]).toMatch(/M34-04/);
+    expect(star?.blockers).toEqual([]);
+    expect(star?.entity).toMatchObject({ attack: 10, weapon: { family: 'distance', breakChance: 10 } });
+    expect(star?.entity['weapon']).not.toHaveProperty('ammoFamily');
+    expect(itemSchema.parse(star?.entity)).toBeTruthy();
   });
 
   it('wand sem primarytype ainda entra pelo weaponType (a Wand of Vortex real, id 3074)', () => {
@@ -377,9 +409,21 @@ describe('convertItem', () => {
     expect(spellbook?.entity).toMatchObject({ kind: 'shield', slot: 'shield', spellbook: true });
   });
 
-  it('quiver fica fora do corte', () => {
+  it('quiver comum (#575): kind shield, slot shield, quiver: true, sem perfectShot', () => {
     const quiver = convert('90010');
-    expect(quiver?.blockers[0]).toMatch(/quiver/);
+    expect(quiver?.blockers).toEqual([]);
+    expect(quiver?.entity).toMatchObject({ kind: 'shield', slot: 'shield', quiver: true });
+    expect(quiver?.entity).not.toHaveProperty('perfectShot');
+    expect(itemSchema.parse(quiver?.entity)).toBeTruthy();
+  });
+
+  it('eldritch quiver (#575): perfectShot { range, damage } dos atributos perfectshotrange/perfectshotdamage', () => {
+    const eldritch = convert('90043');
+    expect(eldritch?.blockers).toEqual([]);
+    expect(eldritch?.entity).toMatchObject({
+      kind: 'shield', slot: 'shield', quiver: true, perfectShot: { range: 4, damage: 20 },
+    });
+    expect(itemSchema.parse(eldritch?.entity)).toBeTruthy();
   });
 
   it('helmet/armor/legs/boots pelo primarytype, com o slot correspondente', () => {
@@ -582,8 +626,9 @@ describe('readItemCatalog e reconcileAuthored', () => {
         'amulets', 'armors', 'boots', 'creature-products', 'helmets', 'legs', 'rings', 'shields', 'valuables', 'weapons',
       ]);
       expect(catalog.slices.get('weapons')?.length).toBeGreaterThan(0);
-      expect(catalog.skipped.some((s) => s.reason.includes('quiver'))).toBe(true);
-      expect(catalog.skipped.some((s) => s.reason.includes('M34-04'))).toBe(true);
+      // O quiver (#575) não é mais pulado — vira `shields` como escudo/spellbook.
+      expect(catalog.slices.get('shields')?.some((e) => e['quiver'] === true)).toBe(true);
+      expect(catalog.skipped.some((s) => s.reason.includes('breakChance'))).toBe(true);
       expect(catalog.notes?.some((n) => n.includes('M34-03'))).toBe(true);
       for (const entities of catalog.slices.values()) {
         for (const entity of entities) expect(() => itemSchema.parse(entity)).not.toThrow();
@@ -642,5 +687,37 @@ describe.skipIf(!HAS_REAL_CANARY)('leitor contra o Canary real (CANARY_DIR) — 
     expect(necklace?.entity).toMatchObject({
       kind: 'amulet', slot: 'neck', charges: 200, weight: 6.3, absorb: { fire: { percent: 8 } },
     });
+  });
+
+  it('spear (3277, #575): arremessável — attack 25 próprio, breakChance 3, range 3, sem ammoFamily', () => {
+    const spear = byId('3277');
+    expect(spear?.blockers).toEqual([]);
+    expect(spear?.entity).toMatchObject({
+      attack: 25, weapon: { family: 'distance', range: 3, breakChance: 3 },
+    });
+    expect(spear?.entity['weapon']).not.toHaveProperty('ammoFamily');
+  });
+
+  it('throwing star (3287, #575): arremessável — attack 30, breakChance 10, range 4', () => {
+    const star = byId('3287');
+    expect(star?.blockers).toEqual([]);
+    expect(star?.entity).toMatchObject({
+      attack: 30, weapon: { family: 'distance', range: 4, breakChance: 10 },
+    });
+  });
+
+  it('eldritch quiver (36666, #575): kind shield, quiver true, perfectShot { range: 4, damage: 20 }', () => {
+    const quiver = byId('36666');
+    expect(quiver?.blockers).toEqual([]);
+    expect(quiver?.entity).toMatchObject({
+      kind: 'shield', slot: 'shield', quiver: true, perfectShot: { range: 4, damage: 20 },
+    });
+  });
+
+  it('jungle quiver (35524, #575): kind shield, quiver true, sem perfectShot (a maioria dos quivers)', () => {
+    const quiver = byId('35524');
+    expect(quiver?.blockers).toEqual([]);
+    expect(quiver?.entity).toMatchObject({ kind: 'shield', slot: 'shield', quiver: true });
+    expect(quiver?.entity).not.toHaveProperty('perfectShot');
   });
 });
