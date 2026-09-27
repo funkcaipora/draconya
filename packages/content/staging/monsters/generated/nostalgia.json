@@ -66,6 +66,225 @@
     "outfitId": 919
   },
   {
+    "id": "old-beholder",
+    "name": "Beholder",
+    "health": 260,
+    "experience": 170,
+    "attack": {
+      "min": 0,
+      "max": 5
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.65,
+        "min": 1,
+        "max": 82
+      },
+      "items": [
+        {
+          "itemId": "spellbook",
+          "chance": 0.0465
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0384
+        },
+        {
+          "itemId": "morning-star",
+          "chance": 0.0695
+        },
+        {
+          "itemId": "longsword",
+          "chance": 0.0898
+        },
+        {
+          "itemId": "steel-shield",
+          "chance": 0.04001
+        },
+        {
+          "itemId": "bonelord-eye",
+          "chance": 0.0094
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 5
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 15,
+          "max": 45
+        },
+        "damageType": "energy",
+        "presentation": {
+          "missileKey": "energy"
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 25,
+          "max": 45
+        },
+        "damageType": "fire",
+        "presentation": {
+          "missileKey": "fire"
+        }
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 30,
+          "max": 50
+        },
+        "damageType": "death",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "smallclouds"
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 5,
+          "max": 45
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      },
+      {
+        "id": "deathstrike-2",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 5,
+          "max": 50
+        },
+        "damageType": "death",
+        "presentation": {
+          "missileKey": "death"
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 45
+        },
+        "damageType": "lifedrain",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 5,
+          "max": 35
+        },
+        "damageType": "manadrain"
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/nostalgia/old_bonelord.lua"
+    },
+    "summons": {
+      "max": 6,
+      "entries": [
+        {
+          "monsterId": "skeleton",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 6
+        }
+      ]
+    },
+    "outfitId": 924
+  },
+  {
     "id": "old-bug",
     "name": "Bug",
     "health": 29,
@@ -126,6 +345,202 @@
       "path": "data-otservbr-global/monster/nostalgia/old_bug.lua"
     },
     "outfitId": 920
+  },
+  {
+    "id": "old-giant-spider",
+    "name": "Giant Spider",
+    "health": 1300,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 85
+      },
+      "items": [
+        {
+          "itemId": "poison-arrow",
+          "chance": 0.119,
+          "min": 1,
+          "max": 11
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.07933
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.1001
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.04945
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.03571
+        },
+        {
+          "itemId": "knight-legs",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.005
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 220000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 160,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "poisonfield",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison"
+        },
+        "field": {
+          "id": "old-giant-spider-poisonfield",
+          "durationMs": 248000,
+          "shape": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          },
+          "condition": {
+            "key": "poisoned",
+            "merge": "strongest",
+            "durationMs": 230000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "generated",
+              "totalDamage": 100,
+              "intervalMs": 5000,
+              "damageType": "earth",
+              "startDamage": 5
+            }
+          }
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 40,
+          "max": 70
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 390
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/nostalgia/old_giant_spider.lua"
+    },
+    "outfitId": 910
   },
   {
     "id": "old-pig",
@@ -245,6 +660,89 @@
       "path": "data-otservbr-global/monster/nostalgia/old_spider.lua"
     },
     "outfitId": 922
+  },
+  {
+    "id": "old-wasp",
+    "name": "Wasp",
+    "health": 35,
+    "experience": 24,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1500,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "honeycomb",
+          "chance": 0.03
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1500,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 20
+        },
+        "damageType": "physical",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 80000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 20,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/nostalgia/old_wasp.lua"
+    },
+    "outfitId": 923
   },
   {
     "id": "old-wolf",

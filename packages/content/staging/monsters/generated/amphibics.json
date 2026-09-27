@@ -43,6 +43,23 @@
         }
       ]
     },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 24
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
     "targetChange": {
       "intervalMs": 4000,
       "chance": 0
@@ -175,6 +192,23 @@
         }
       ]
     },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 24
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
     "targetChange": {
       "intervalMs": 4000,
       "chance": 0
@@ -248,6 +282,23 @@
         }
       ]
     },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 24
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
     "targetChange": {
       "intervalMs": 4000,
       "chance": 0
@@ -276,6 +327,258 @@
       "occurrence": 0
     },
     "outfitId": 226
+  },
+  {
+    "id": "deathspawn",
+    "name": "Deathspawn",
+    "health": 225,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 1,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.15,
+        "fire": 0.15,
+        "ice": 0.15,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 102,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 40
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 400,
+          "max": 700
+        },
+        "damageType": "death"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 200,
+          "max": 450
+        },
+        "damageType": "energy"
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/deathspawn.lua"
+    },
+    "outfitId": 226
+  },
+  {
+    "id": "filth-toad",
+    "name": "Filth Toad",
+    "class": "amphibic",
+    "health": 185,
+    "experience": 90,
+    "attack": {
+      "min": 0,
+      "max": 55
+    },
+    "armor": 6,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 1,
+        "max": 21
+      },
+      "items": [
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.005
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.02
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.22
+        },
+        {
+          "itemId": "poisonous-slime",
+          "chance": 0.03
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 55
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 80000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 20,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 8,
+          "max": 34
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "green-rings"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 200
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/filth_toad.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 735,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 1
+    },
+    "outfitId": 222
   },
   {
     "id": "green-frog",
@@ -336,6 +639,127 @@
     "outfitId": 224
   },
   {
+    "id": "infernal-frog",
+    "name": "Infernal Frog",
+    "class": "amphibic",
+    "health": 655,
+    "experience": 190,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 18,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7333,
+        "min": 1,
+        "max": 65
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 20
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 16,
+          "max": 32
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 8000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 400
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 40,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/infernal_frog.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 563,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 224
+  },
+  {
     "id": "orchid-frog",
     "name": "Orchid Frog",
     "class": "amphibic",
@@ -379,6 +803,23 @@
         }
       ]
     },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 24
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
     "targetChange": {
       "intervalMs": 5000,
       "chance": 0.2
@@ -407,5 +848,300 @@
       "occurrence": 0
     },
     "outfitId": 226
+  },
+  {
+    "id": "salamander",
+    "name": "Salamander",
+    "class": "amphibic",
+    "health": 70,
+    "experience": 25,
+    "attack": {
+      "min": 0,
+      "max": 60
+    },
+    "armor": 3,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.13,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.72,
+        "min": 1,
+        "max": 15
+      },
+      "items": [
+        {
+          "itemId": "mace",
+          "chance": 0.0378
+        },
+        {
+          "itemId": "rope",
+          "chance": 0.0519
+        },
+        {
+          "itemId": "bow",
+          "chance": 0.0074
+        },
+        {
+          "itemId": "brass-helmet",
+          "chance": 0.0218
+        },
+        {
+          "itemId": "arrow",
+          "chance": 0.0789,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0148
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.0049
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 60
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 40000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 10,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 6000,
+        "chance": 0.2,
+        "heal": {
+          "min": 0,
+          "max": 4
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/salamander.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 913,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 529
+  },
+  {
+    "id": "toad",
+    "name": "Toad",
+    "class": "amphibic",
+    "health": 135,
+    "experience": 60,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 6,
+    "defense": 6,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "war-hammer",
+          "chance": 0.00148
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.02854
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.2
+        },
+        {
+          "itemId": "poisonous-slime",
+          "chance": 0.04761
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 80000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 20,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 8,
+          "max": 17
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "green-rings"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 200
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/amphibics/toad.lua"
+    },
+    "bestiary": {
+      "class": "amphibic",
+      "race": "amphibic",
+      "raceId": 262,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 222
   }
 ]

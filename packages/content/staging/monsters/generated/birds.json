@@ -68,6 +68,145 @@
     "outfitId": 111
   },
   {
+    "id": "berserker-chicken",
+    "name": "Berserker Chicken",
+    "class": "bird",
+    "health": 465,
+    "experience": 220,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 12,
+    "defense": 12,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "energy": 0.1,
+        "earth": 0.1,
+        "fire": 0.1,
+        "ice": 0.1,
+        "holy": 0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "drown",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1200,
+    "speed": 166,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1200,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "drownstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 41,
+          "max": 70
+        },
+        "damageType": "drown",
+        "presentation": {
+          "impactKey": "explosionarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.4,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 8000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 400
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/berserker_chicken.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 561,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 111
+  },
+  {
     "id": "cave-parrot",
     "name": "Cave Parrot",
     "class": "bird",
@@ -209,6 +348,314 @@
     "outfitId": 111
   },
   {
+    "id": "demon-parrot",
+    "name": "Demon Parrot",
+    "class": "bird",
+    "health": 360,
+    "experience": 225,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 18,
+    "defense": 18,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "drown",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.48,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1200,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8163,
+        "min": 1,
+        "max": 99
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1200,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 1000,
+        "chance": 0.3,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "beam",
+            "length": 5
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "sound-red"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 1000,
+        "chance": 0.3,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 25,
+          "max": 45
+        },
+        "damageType": "lifedrain",
+        "presentation": {
+          "missileKey": "suddendeath"
+        }
+      },
+      {
+        "id": "lifedrainstrike-2",
+        "cadenceMs": 1000,
+        "chance": 0.3,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 15,
+          "max": 45
+        },
+        "damageType": "lifedrain"
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/demon_parrot.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 562,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 217
+  },
+  {
+    "id": "dire-penguin",
+    "name": "Dire Penguin",
+    "class": "bird",
+    "health": 173,
+    "experience": 119,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 16,
+    "defense": 16,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.5,
+        "fire": 0.5,
+        "ice": 0.3
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.59,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 174,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7826,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.1104,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "rainbow-trout",
+          "chance": 0.048
+        },
+        {
+          "itemId": "northern-pike",
+          "chance": 0.059
+        },
+        {
+          "itemId": "green-perch",
+          "chance": 0.062
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 35
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "smallstone",
+          "impactKey": "explosionarea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "poff"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 9000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 310
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/dire_penguin.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 335,
+      "toKill": 5,
+      "firstUnlock": 1,
+      "secondUnlock": 3,
+      "charmsPoints": 30,
+      "stars": 2,
+      "occurrence": 3
+    },
+    "outfitId": 250
+  },
+  {
     "id": "flamingo",
     "name": "Flamingo",
     "class": "bird",
@@ -271,6 +718,330 @@
       "occurrence": 0
     },
     "outfitId": 212
+  },
+  {
+    "id": "jungle-moa",
+    "name": "Jungle Moa",
+    "class": "bird",
+    "health": 1300,
+    "experience": 1200,
+    "attack": {
+      "min": 0,
+      "max": 216
+    },
+    "armor": 30,
+    "defense": 110,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.1,
+        "earth": -0.05,
+        "ice": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 227
+      },
+      "items": [
+        {
+          "itemId": "jungle-moa-claw",
+          "chance": 0.211
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.2014
+        },
+        {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.1141
+        },
+        {
+          "itemId": "jungle-moa-feather",
+          "chance": 0.1048,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.0986,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "jungle-moa-egg",
+          "chance": 0.0835
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.0454
+        },
+        {
+          "itemId": "spellbook-of-enlightenment",
+          "chance": 0.0179
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 216
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.4,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 80,
+          "max": 100
+        },
+        "damageType": "energy",
+        "presentation": {
+          "missileKey": "energy"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 140
+        },
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "wave",
+            "length": 8
+          }
+        },
+        "power": {
+          "min": 130,
+          "max": 170
+        },
+        "damageType": "earth",
+        "presentation": {
+          "impactKey": "purpleenergy"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/jungle_moa.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 2257,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 1534
+  },
+  {
+    "id": "marsh-stalker",
+    "name": "Marsh Stalker",
+    "class": "bird",
+    "health": 100,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 3,
+    "defense": 3,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.05,
+        "ice": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.23,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6409,
+        "min": 1,
+        "max": 23
+      },
+      "items": [
+        {
+          "itemId": "meat",
+          "chance": 0.1995,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.2032,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.1473,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "marsh-stalker-feather",
+          "chance": 0.0865
+        },
+        {
+          "itemId": "longsword",
+          "chance": 0.0756
+        },
+        {
+          "itemId": "marsh-stalker-beak",
+          "chance": 0.0608
+        },
+        {
+          "itemId": "rope",
+          "chance": 0.0483
+        },
+        {
+          "itemId": "seeds",
+          "chance": 0.0011
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical"
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 8
+        },
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "explosion",
+          "impactKey": "explosionarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/birds/marsh_stalker.lua"
+    },
+    "bestiary": {
+      "class": "bird",
+      "race": "bird",
+      "raceId": 914,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 530
   },
   {
     "id": "parrot",
