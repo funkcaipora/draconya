@@ -12,7 +12,7 @@ const baseline: Progression = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
   vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
   startingSpeed: 300, speedPerLevel: 2,
-  regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
@@ -141,13 +141,32 @@ describe('level up', () => {
     expect(grantXp(character, 1000, null, baseline)?.to).toBe(levelForXp(1000, baseline));
   });
 
-  it('dá os pontos, não cura', () => {
-    // Curar no level up faria "subir de level" virar poção grátis, e um bot morando na
-    // fronteira de um level nunca mais morreria.
+  it('sobe de level e enche vida e mana (#678, Canary `addExperience`)', () => {
+    // Até #678 o level up dava os pontos e não curava (10 + healthPerLevel) — divergência do
+    // Tibia sem ADR. O Canary faz `health = healthMax; mana = manaMax` quando o level muda.
     const character = atLevel(1);
     character.health = 10;
+    character.mana = 0;
     grantXp(character, 20, null, baseline);
-    expect(character.health).toBe(10 + baseline.healthPerLevel);
+    expect(character.health).toBe(character.maxHealth);
+    expect(character.mana).toBe(character.maxMana);
+    expect(character.maxMana).toBeGreaterThan(0);
+  });
+
+  it('vários levels num abate curam uma vez, nos máximos FINAIS', () => {
+    const character = atLevel(1);
+    character.health = 1;
+    const change = grantXp(character, 1000, null, baseline);
+    expect(change?.to).toBeGreaterThan(2);
+    expect(character.health).toBe(statsForLevel(change!.to, null, baseline).maxHealth);
+    expect(character.mana).toBe(statsForLevel(change!.to, null, baseline).maxMana);
+  });
+
+  it('XP que não fecha o level não cura', () => {
+    const character = atLevel(1);
+    character.health = 10;
+    expect(grantXp(character, 5, null, baseline)).toBeNull();
+    expect(character.health).toBe(10);
   });
 
   it('segue a vocação do personagem, quando ele tem uma', () => {
@@ -204,6 +223,17 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     const character = atLevel(20);
     expect(applyDeathPenalty(character, { premium: false }, null, baseline).levelChange)
       .toEqual({ from: 20, to: 19 });
+  });
+
+  it('a perda de level NÃO enche vida nem mana (#678): só reduz os máximos, como no Canary', () => {
+    const character = atLevel(20);
+    character.health = 10;
+    character.mana = 3;
+    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline);
+    expect(penalidade.levelChange).toEqual({ from: 20, to: 19 });
+    expect(character.health).toBeLessThan(character.maxHealth);
+    expect(character.health).toBeLessThanOrEqual(10);
+    expect(character.mana).toBeLessThanOrEqual(3);
   });
 
   it('desce um level e para lá, com a curva que está no conteúdo hoje', () => {

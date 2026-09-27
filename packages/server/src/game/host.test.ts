@@ -3410,7 +3410,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
-        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+        ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
       ...(over.monsterCount === undefined
@@ -4158,14 +4158,16 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const hitsWith = ofType(withTable.received(), 'creature-hit')
       .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
     expect(hitsWith.length).toBeGreaterThan(0);
-    expect(withTable.hero().health).toBeLessThan(withTable.maxHealth);
+    // O máximo de AGORA: o herói pode subir de level no meio, e desde #678 o level up enche a
+    // vida — o que conta é o campo ter ferido depois disso.
+    expect(withTable.hero().health).toBeLessThan(withTable.hero().maxHealth);
 
     const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
     withoutTable.runFor(6_000);
     const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
     expect(hitsWithout.length).toBeGreaterThan(0);
-    expect(withoutTable.hero().health).toBeLessThan(withoutTable.maxHealth);
+    expect(withoutTable.hero().health).toBeLessThan(withoutTable.hero().maxHealth);
   });
 });
 
@@ -5706,7 +5708,7 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
       progression: [{
         ...TEST_PROGRESSION,
         startingMana: 200,
-        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+        ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.monsters === false ? { routes: [{ ...TEST_ROUTE, spawnPoints: [] }] } : {}),
       ...(Object.keys(ratOverride).length > 0

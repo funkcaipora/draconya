@@ -215,7 +215,13 @@ export function buildCatalogue(content: Content): Catalogue {
     progression: {
       startingSpeed: content.progression.startingSpeed,
       speedPerLevel: content.progression.speedPerLevel,
-      regen: { ...content.progression.regen },
+      // O conteúdo guarda PULSOS (#678, `amount` a cada `ticksMs`); o contrato de protocolo segue
+      // em pontos por segundo, derivado aqui — o cliente não lê o campo, e mudá-lo seria mudança
+      // sem consumidor.
+      regen: {
+        healthPerSecond: (content.progression.regen.health.amount * 1000) / content.progression.regen.health.ticksMs,
+        manaPerSecond: (content.progression.regen.mana.amount * 1000) / content.progression.regen.mana.ticksMs,
+      },
     },
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a

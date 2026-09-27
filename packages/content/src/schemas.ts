@@ -529,9 +529,9 @@ export type ResolvedWeapon = WeaponProfile & {
  * - `energy-shield`: o Energy Ring. O dano sofrido debita da MANA antes da vida — a MESMA leitura
  *   que a condição `mana-shield` do utamo vita já faz em `applyDamageOutcome`
  *   (`sim/combat/outcome.ts`, CMB-08); as duas convergem no mesmo estágio e não se somam.
- * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o ponto fixo por
- *   vencimento de `progression.regen`, sem nenhum outro bônus, porque hoje não existe nenhum.
- *   `percent: 300` é +300% (quadruplica o ponto por vencimento).
+ * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o `amount` de cada
+ *   pulso de `regen` (#678), sem nenhum outro bônus, porque hoje não existe nenhum.
+ *   `percent: 300` é +300% (quadruplica o pulso: Knight, 1 de vida vira 4 e 2 de mana viram 8).
  */
 export const RING_EFFECT_KINDS = ['energy-shield', 'regen-boost'] as const;
 export type RingEffectKind = (typeof RING_EFFECT_KINDS)[number];
@@ -2079,6 +2079,27 @@ export const startingKitPieceSchema = z.object({
 
 export type StartingKitPiece = z.infer<typeof startingKitPieceSchema>;
 
+/**
+ * Um pulso de regeneração (#678): `amount` pontos a cada `ticksMs` — o `gainhpticks`/
+ * `gainhpamount` (e `gainmanaticks`/`gainmanaamount`) do Canary `vocations.xml`, guardado como
+ * pulso e sem virar taxa. Cada pulso é UM evento da fila da sessão (invariante 2, ADR 0020), que
+ * vence no instante exato: `ticksMs` inteiro, nada de `1000 / taxa` em ponto flutuante — é o que
+ * faz a hunt desanexada a 1 Hz regenerar exatamente o mesmo que a anexada a 10 Hz.
+ *
+ * `amount: 0` é "não regenera" (nenhum evento agendado); `ticksMs` é positivo porque zero seria
+ * um pulso que reagenda a si mesmo no mesmo instante, para sempre.
+ */
+export const regenPulseSchema = z.strictObject({
+  ticksMs: z.number().int().positive(),
+  amount: z.number().int().nonnegative(),
+});
+
+/** A regeneração passiva (#678): um pulso de vida e um de mana, independentes. */
+export const regenSchema = z.strictObject({ health: regenPulseSchema, mana: regenPulseSchema });
+
+export type RegenPulse = z.infer<typeof regenPulseSchema>;
+export type Regen = z.infer<typeof regenSchema>;
+
 export const vocationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -2089,16 +2110,12 @@ export const vocationSchema = z.object({
   spellSkill: z.string().min(1).default('magic'),
   /**
    * Regeneração passiva DESTA vocação (#521, ADR 0037), na mesma forma de `progression.regen`:
-   * pontos por segundo, não por tick (ver o comentário lá). Vem do Canary `vocations.xml`
-   * (`gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — convertidos para taxa:
-   * `amount * 1000 / ticks`), verificado contra o arquivo em `main` de 2026-09-24. Ausente:
-   * quem monta a sessão cai no `regen` da tabela base (sem vocação) — o conteúdo de teste que
-   * não fala de vocação por vocação.
+   * um pulso por recurso (#678, `regenPulseSchema`). Vem do Canary `vocations.xml`
+   * (`gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount`, sem conversão), verificado
+   * contra o arquivo em 47dfd51. Ausente: quem monta a sessão cai no `regen` da tabela base (sem
+   * vocação) — o conteúdo de teste que não fala de vocação por vocação.
    */
-  regen: z.object({
-    healthPerSecond: z.number().nonnegative(),
-    manaPerSecond: z.number().nonnegative(),
-  }).optional(),
+  regen: regenSchema.optional(),
   /**
    * A mitigação percentual do JOGADOR desta vocação (#549, M30-02; `PlayerWheel::
    * calculateMitigation`, Canary `player_wheel.cpp:4072-4124`) — o `<mitigation multiplier
@@ -2278,18 +2295,14 @@ export const progressionSchema = z.object({
   startingSpeed: z.number().int().positive(),
   speedPerLevel: z.number().int().nonnegative(),
   /**
-   * Regeneração passiva, em pontos por segundo (FUN-36, FUN-68).
+   * Regeneração passiva BASE (FUN-36, FUN-68; pulsos desde #678) — a vocação `None` do Canary,
+   * para quem ainda não tem vocação e para o conteúdo de teste que não declara uma.
    *
-   * Por SEGUNDO, e não por tick. Uma taxa de `r` por segundo vira um evento periódico de
-   * `1000 / r` milissegundos na fila da sessão, que vence no instante exato — nada de somar
-   * `taxa * dtMs / 1000` num acumulador fracionário, que derivava: `0,1` dez vezes em ponto
-   * flutuante dá `0,9999…` e some uma unidade a cada dez. É o que faz a hunt desanexada a
-   * 1 Hz regenerar exatamente o mesmo que a anexada a 10 Hz.
+   * Um pulso por recurso (`regenPulseSchema`): `amount` a cada `ticksMs`, cada pulso um evento da
+   * fila que vence no instante exato. Até #678 era uma taxa em pontos por segundo, que virava 1
+   * ponto a cada `1000 / taxa` ms — mesma média, outro ritmo, e divisão em ponto flutuante.
    */
-  regen: z.object({
-    healthPerSecond: z.number().nonnegative(),
-    manaPerSecond: z.number().nonnegative(),
-  }),
+  regen: regenSchema,
   /**
    * A mitigação percentual BASE (#549, M30-02) — a vocação `None` do Canary `vocations.xml`
    * (`<mitigation multiplier="1.3" primaryShield="2.05" secondaryShield="1.25">`), para quem
