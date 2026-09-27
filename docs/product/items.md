@@ -241,7 +241,7 @@ sword 10, provisório).
 | | quando | forma |
 |---|---|---|
 | entra na sessão | emissão do ticket | as instâncias do personagem viram mochila e equipamento |
-| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto**; e a posição `instanceId → { container, index }` (#160), gravada em `item_instance.container`/`slot_index` — último-escrito-vence, escopada por dono; a linha sem posição volta ao primeiro lugar livre |
+| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto**; e a posição `instanceId → { container, index }` (#160), gravada em `item_instance.container`/`slot_index` — último-escrito-vence, escopada por dono; a linha sem posição volta ao primeiro lugar livre; e o overlay `instanceId → overlay \| null` (#604), gravado em `item_instance.overlay` — ver a seção do overlay abaixo |
 
 **A sessão nunca escreve `item_instance`.** Ela registra onde as coisas ficaram; o `jobs` aplica
 na mesma transação da linha de ledger (invariante 10), e retry não duplica porque a chave
@@ -369,6 +369,38 @@ escolhida: `#persistReceipt`/`#creditUnrestorable` (`host.ts`) escrevem no extra
 (`tickets.ts`/`api/tickets.ts`) levam de volta para o ticket da PRÓXIMA sessão — sem isso, uma
 Strong Health Potion caída do Dragon sumiria no logout mesmo sem ser gasta.
 
+## Estado por instância: o overlay (#604, ADR 0046)
+
+**A exceção nomeada à regra "atributos base são fixos".** O item de CATÁLOGO continua fixo pelo
+id — duas espadas do mesmo id têm os mesmos atributos base, e nada aqui muda isso. O que passa a
+poder divergir é a **entrada de inventário**: `CarriedItem.overlay` (`packages/sim/src/item-overlay.ts`)
+é um objeto de campos opcionais nomeados, e "ausente" é sempre "igual à definição". É o lugar de
+imbuement, e depois do tier da Forja; não é o lugar de rolagem aleatória, que continua proibida.
+
+- **Hoje:** `imbuements: [{ slot, typeId, remainingMs }]` — um por slot ocupado, `slot` 0-based
+  entre os `imbuementSlots` do item. O catálogo de imbuements (#605), o decaimento sob demanda
+  (#606, ADR 0046 d.4) e a aplicação (#607) ainda não existem: esta entrega é só o contrato de
+  dado e a persistência.
+- **Ponto de extensão:** a próxima mecânica acrescenta um campo nomeado ao mesmo objeto —
+  `durationRemainingMs` (#689, o prazo restante do anel, "ausente é cheio") e `tier` (#617, 0–10) —,
+  e o escreve com `Inventory.setOverlay(instanceId, { ...item.overlay, campo })`, sem apagar o
+  dos outros. Banco, extrato e snapshot não mudam: a coluna guarda o objeto inteiro, e a leitura
+  (`readItemOverlay`) **preserva** campo que ela ainda não conhece, para um nó antigo num deploy
+  em rolagem não apagar o que um nó novo gravou (ADR 0014).
+- **Não empilha** (ADR 0046 d.3): `add` e `move` recusam juntar pilha quando qualquer dos dois
+  lados tem overlay; a instância fica no seu lugar próprio. Um overlay vazio (`{ imbuements: [] }`)
+  é normalizado para ausente, então a peça que perdeu o último imbuement volta a ser fungível.
+- **Slots no catálogo:** `imbuementSlots` (1–3, o `imbuementslot` do Canary) é o teto da
+  definição, e `buildContent` o recusa em item que não se veste ou que empilha. Nenhum item
+  autorado o declara ainda; o importador (M34-02) o preenche.
+- **Persistência:** coluna `item_instance.overlay jsonb` (migração `0012`, aditiva, nulável, sem
+  CHECK). O ticket lê defensivamente — overlay torto vira ausente em vez de trancar o login —, o
+  extrato leva `overlays: { instanceId → overlay | null }` de toda instância que a sessão carrega
+  (containers e corpo), e o ledger aplica último-escrito-vence, escopado por dono: `null` apaga,
+  instância fora do extrato não é tocada, e extrato sem o campo (Cidade, nó anterior) não muda
+  nada. Snapshot: campo opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+- **Invariante 6:** o overlay carrega tipo e tempo, nunca `appearanceId`.
+
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
@@ -413,7 +445,8 @@ em zero o item sai do corpo e não vai para a mochila. O golpe é gasto mesmo qu
 para a mensagem `inventory` já existente (opcode 16, sem campo novo — invariante 5): o slot
 destruído aparece vazio. `CarriedItem.charges` é opcional, então snapshot antigo não precisa de
 bump; o `EQUIP_EXPIRE` viaja na fila. **Carga e tempo restante não sobrevivem ao logout** — a
-linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora do escopo da AB-06).
+linha de `item_instance` não tinha coluna. Desde a #604 existe `item_instance.overlay`, e o prazo
+restante do anel entra nele como `durationRemainingMs` na #689; `charges` continua fora dele.
 
 ## O kit level 200 por vocação e o bônus de equipamento (#524, M28)
 
@@ -493,6 +526,7 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | Autovenda — tipos configuráveis (Free) | 5 | caminho previsto: `packages/content/economia` (premium) |
 | Autovenda — tipos configuráveis (Premium) | 20 | caminho previsto: `packages/content/economia` (premium) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
+| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); nenhum item autorado declara ainda — o importador (M34-02) preenche | `packages/content/data/items/*.json`, campo `imbuementSlots` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
 | Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { LootTable } from '@draconya/content';
 import { rollLoot } from './loot.js';
 import { Rng } from './rng.js';
@@ -119,5 +119,40 @@ describe('rollLoot', () => {
     expect(result.ammunition[0]?.ammunitionId).toBe('burst-arrow');
     expect(result.ammunition[0]?.quantity).toBeGreaterThanOrEqual(1);
     expect(result.ammunition[0]?.quantity).toBeLessThanOrEqual(10);
+  });
+
+  describe('rate de loot (#691)', () => {
+    const rich = table({
+      gold: { chance: 0.5, min: 1, max: 10 },
+      items: [{ itemId: 'sword', chance: 0.2, min: 1, max: 1 }, { itemId: 'shield', chance: 0.4, min: 1, max: 3 }],
+    });
+
+    it('rate 0 devolve o loot vazio SEM consumir sorteio', () => {
+      const rng = Rng.fromSeed('off');
+      const before = rng.getState();
+      expect(rollLoot(rich, rng, 0)).toEqual({ gold: 0, items: [], supplies: [], ammunition: [] });
+      expect(rng.getState()).toEqual(before);
+    });
+
+    it('rate 1 é o sorteio de hoje, com a mesma semente', () => {
+      const a = Rng.fromSeed('same');
+      const b = Rng.fromSeed('same');
+      for (let i = 0; i < 50; i++) expect(rollLoot(rich, a, 1)).toEqual(rollLoot(rich, b));
+      expect(a.getState()).toEqual(b.getState());
+    });
+
+    it('rate 3 triplica a chance de cada linha, com teto 1', () => {
+      const rng = Rng.fromSeed('triple');
+      const chance = vi.spyOn(rng, 'chance');
+      rollLoot(rich, rng, 3);
+      expect(chance.mock.calls.map(([probability]) => probability)).toEqual([1, 0.2 * 3, 1]);
+    });
+
+    it('rate entre 0 e 1 age como 1 (`max(1, rate)` do Canary)', () => {
+      const rng = Rng.fromSeed('half');
+      const chance = vi.spyOn(rng, 'chance');
+      rollLoot(rich, rng, 0.5);
+      expect(chance.mock.calls.map(([probability]) => probability)).toEqual([0.5, 0.2, 0.4]);
+    });
   });
 });

@@ -28,6 +28,8 @@ import type {
 } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
+import { hasItemOverlay, normalizeItemOverlay } from './item-overlay.js';
+import type { ItemInstanceOverlay } from './item-overlay.js';
 
 /** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */
 export const MAX_STACK = 100;
@@ -51,6 +53,13 @@ export interface CarriedItem {
    * snapshot antigo precisa de bump. Só o colar usa hoje.
    */
   readonly charges?: number;
+  /**
+   * O estado por INSTÂNCIA (ADR 0046, #604): imbuements hoje; o prazo restante do anel (#689) e
+   * o tier da Forja (#617) entram como campos nomeados do mesmo objeto — ver `item-overlay.ts`.
+   * Ausente é "igual à definição", e é o caso de quase todo item. Opcional, então nenhum
+   * snapshot antigo precisa de bump. Item com overlay NÃO empilha (ADR 0046 d.3).
+   */
+  readonly overlay?: ItemInstanceOverlay;
 }
 
 /**
@@ -248,6 +257,35 @@ export class Inventory {
   }
 
   /**
+   * Regrava o overlay da instância ONDE ELA ESTIVER — container ou corpo —, sem mudar lugar,
+   * peso nem chamar o observer (ADR 0046 d.2). `undefined` (ou um overlay vazio) tira o
+   * overlay, e a peça volta a ser igual à definição. Devolve `false` se a instância não está
+   * com ele.
+   *
+   * É o único escritor do overlay dentro do `sim`: aplicar imbuement (#607), decair (#606), o
+   * prazo do anel (#689) e o tier (#617) passam por aqui, cada um mexendo no SEU campo —
+   * `{ ...item.overlay, campo }` —, e nunca apagando o dos outros.
+   */
+  setOverlay(instanceId: string, overlay: ItemInstanceOverlay | undefined): boolean {
+    const normalized = normalizeItemOverlay(overlay);
+    const apply = (item: CarriedItem): CarriedItem => {
+      const { overlay: _previous, ...rest } = item;
+      return normalized === undefined ? rest : { ...rest, overlay: normalized };
+    };
+    const place = this.#placeOf(instanceId);
+    if (place !== null) {
+      this.#set(place, apply(this.#at(place) as CarriedItem));
+      return true;
+    }
+    for (const [slot, item] of this.#equipped) {
+      if (item.instanceId !== instanceId) continue;
+      this.#equipped.set(slot, apply(item));
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * O peso do que ele carrega — containers MAIS equipado.
    *
    * Equipado conta: uma armadura vestida não fica mais leve por estar no corpo, e a alternativa
@@ -283,9 +321,11 @@ export class Inventory {
     const target = this.#equipped.has('back') ? this.#backpack : this.#satchel;
     // Empilhável junta na pilha existente, até o teto. Não empilhável vira lugar novo, sempre:
     // duas espadas são duas identidades, e é essa identidade que carrega a proveniência.
-    if (definition.stackable) {
+    // Item com overlay (ADR 0046 d.3) não é fungível: nem entra numa pilha, nem recebe uma.
+    if (definition.stackable && !hasItemOverlay(item)) {
       const index = target.findIndex(
         (carried) => carried !== null && carried.itemId === item.itemId
+          && !hasItemOverlay(carried)
           && carried.quantity + item.quantity <= MAX_STACK,
       );
       const existing = target[index];
@@ -438,7 +478,7 @@ export class Inventory {
       if (destination !== null) {
         // Só numa pilha compatível com espaço; senão o lugar está ocupado.
         const definition = catalog.get(equipped.itemId);
-        if (definition?.stackable !== true || destination.itemId !== equipped.itemId
+        if (!stacksWith(definition, equipped, destination)
           || destination.quantity + equipped.quantity > MAX_STACK) {
           return { ok: false, reason: 'no-such-place' };
         }
@@ -462,7 +502,7 @@ export class Inventory {
     if (destination === undefined) return { ok: false, reason: 'no-such-place' };
     if (from.container === to.container && from.index === to.index) return OK;
     const definition = catalog.get(source.itemId);
-    if (destination !== null && definition?.stackable === true && destination.itemId === source.itemId) {
+    if (destination !== null && stacksWith(definition, source, destination)) {
       // Empilha até o teto; o que não coube fica na origem. Peso total inalterado.
       const moved = Math.min(source.quantity, MAX_STACK - destination.quantity);
       if (moved > 0) {
@@ -727,6 +767,15 @@ export class Inventory {
       ...(manaLeech === 0 ? {} : { manaLeech: manaLeech / 10_000 }),
     };
   }
+}
+
+/**
+ * `a` pode entrar na pilha `b`? Mesmo id, item empilhável, e NENHUM dos dois com overlay (ADR
+ * 0046 d.3) — somar duas instâncias com estado próprio apagaria o estado de uma delas.
+ */
+function stacksWith(definition: Item | undefined, a: CarriedItem, b: CarriedItem): boolean {
+  return definition?.stackable === true && a.itemId === b.itemId
+    && !hasItemOverlay(a) && !hasItemOverlay(b);
 }
 
 /** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */

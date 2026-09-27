@@ -77,6 +77,13 @@ export const itemInstances = pgTable(
      */
     container: text('container'),
     slotIndex: integer('slot_index'),
+    /**
+     * O estado por INSTÂNCIA (#604, ADR 0046): imbuements hoje; o prazo do anel (#689) e o tier
+     * da Forja (#617) entram como campos nomeados do mesmo objeto (`ItemInstanceOverlay`, `sim`).
+     * `null` é a instância igual à definição. Escrito inteiro pelo extrato, lido defensivamente
+     * no ticket (`readItemOverlay`) — sem CHECK, como os outros `jsonb`.
+     */
+    overlay: jsonb('overlay'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

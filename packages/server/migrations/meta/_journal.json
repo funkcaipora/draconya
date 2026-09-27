@@ -85,6 +85,13 @@
       "when": 1790000000000,
       "tag": "0011_562-huntera-stamina-cap",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0012_604-item-instance-overlay",
+      "breakpoints": true
     }
   ]
 }

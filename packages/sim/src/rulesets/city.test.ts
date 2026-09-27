@@ -1,4 +1,4 @@
-import { buildTilemap, compileItem, itemSchema } from '@draconya/content';
+import { NEUTRAL_RATES, buildTilemap, compileItem, itemSchema } from '@draconya/content';
 import type { Item, Progression } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
@@ -87,6 +87,7 @@ describe('chegar na Cidade (FUN-120)', () => {
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
       skillMultipliers: {},
       mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+      rates: NEUTRAL_RATES,
     };
     const session = new Session({
       id: 'thais', contentVersion: 'v1',
@@ -121,6 +122,7 @@ describe('chegar na Cidade (FUN-120)', () => {
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
       skillMultipliers: {},
       mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+      rates: NEUTRAL_RATES,
     };
     const items = new Map<string, Item>([[
       'boots-of-haste',

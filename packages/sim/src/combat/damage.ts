@@ -20,7 +20,7 @@ import { resolveDefense } from './defense.js';
 import type { DefenseSource } from './defense.js';
 import { FULL_BLOCK_CHARGE, type BlockChargeState } from './block-charge.js';
 import { MELEE_BLOCK_FLAGS, resolveBlockHit } from './blockhit.js';
-import type { BlockFlags } from './blockhit.js';
+import type { BlockFlags, BlockType } from './blockhit.js';
 import type { Rng } from '../rng.js';
 
 /**
@@ -201,6 +201,14 @@ export interface DamageOutcome {
    * de entrada, e a escrita de volta é um no-op). Ausente em `combat-v1`/`v2`.
    */
   readonly blockCharge?: BlockChargeState;
+  /**
+   * O tipo de bloqueio do golpe (#686), o que o ATACANTE vê — ver `BlockType`. Só no
+   * `combat-v3`; ausente em `combat-v1`/`v2`, que não mudam a prática por causa dele. O Dodge e
+   * o piso do Draconya ficam FORA: o tipo é o do `blockHit`, antes deles.
+   */
+  readonly blockType?: BlockType;
+  /** Se havia carga de bloqueio para consumir (#686, o `hasDefense` do Canary). Só no `combat-v3`. */
+  readonly hadBlockCharge?: boolean;
 }
 
 /** Chance de esquiva que de fato vale, dado onde a luta acontece. */
@@ -478,6 +486,8 @@ function resolveBlockHitProfile(
     // O estado que `applyDamageOutcome` grava de volta (invariante 9) tem que refletir o QUE O
     // SECUNDÁRIO ainda gastou por cima do primário — sem isto, o consumo dele nunca persistiria.
     blockCharge: secondaryOutcome?.blockCharge ?? blockHit.blockCharge,
+    blockType: blockHit.blockType,
+    hadBlockCharge: blockHit.hadBlockCharge,
     ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
   };
 }
