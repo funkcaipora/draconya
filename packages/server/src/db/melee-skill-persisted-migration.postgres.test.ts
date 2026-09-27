@@ -128,16 +128,9 @@ async function schemaBeforeMigration0013(url: string) {
     async insertCharacter(
       id: string, accountId: string, skills: Readonly<Record<string, SkillEntry>>,
     ): Promise<void> {
-      // `sql.json(...)`, nunca `JSON.stringify(...)::jsonb` na mão: o `::jsonb` logo depois do
-      // placeholder faz o cliente `postgres` serializar sozinho, e `JSON.stringify` em cima
-      // disso codifica em dobro — a coluna vira uma STRING jsonb contendo o texto escapado, não
-      // um objeto jsonb (achado rodando contra um Postgres real). `sql.json` é o jeito tipado
-      // do driver de marcar o parâmetro como jsonb sem essa armadilha. O `as never` só contorna
-      // o tipo recursivo `JSONValue` do driver, que não reconhece `SkillEntry` como compatível
-      // por não ter assinatura de índice — o valor em si já é JSON simples, sem função nem símbolo.
       await sql`
         insert into character (id, account_id, name, skills)
-        values (${id}, ${accountId}, ${`Hero ${id}`}, ${sql.json(skills as never)})
+        values (${id}, ${accountId}, ${`Hero ${id}`}, ${JSON.stringify(skills)}::jsonb)
       `;
     },
     async skillsOf(id: string): Promise<Record<string, SkillEntry>> {
