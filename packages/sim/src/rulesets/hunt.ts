@@ -47,7 +47,7 @@ import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { reflectedDamageIntent } from '../combat/reflect.js';
 import { cleavePower, cleaveTiles } from '../combat/cleave.js';
-import type { ReflectedDamage } from '../combat/reflect.js';
+import type { ReflectAttacker, ReflectedDamage } from '../combat/reflect.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import {
   combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
@@ -4148,6 +4148,8 @@ const slots = bot.groups.get(group);
       // Life leech (M30-04): o mesmo evento e a mesma base (`healthDamage`) do `#land` — nunca o
       // resolvido, overkill não rende leech. Mana leech repõe em silêncio, como lá.
       this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
+      // Reflexo e cura por elemento do monstro (#683) — o mesmo ponto do `#land`.
+      this.#afterMonsterHit(session, character, monster, outcome);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
   }
@@ -4180,7 +4182,7 @@ const slots = bot.groups.get(group);
       const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
-        this.#collect(monster);
+        this.#collect(character, monster);
       }
       if (this.#spellHits.length === 0) return null;
       this.#aim.distance = 0;
@@ -4190,7 +4192,7 @@ const slots = bot.groups.get(group);
 
     const primary = this.#targetInRange(character, range);
     if (primary === null) return null;
-    this.#collect(primary);
+    this.#collect(character, primary);
 
     if (area !== undefined) {
       this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
@@ -4198,7 +4200,7 @@ const slots = bot.groups.get(group);
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
         if (!keys.has(tileKey(this.#at(monster)))) continue;
-        this.#collect(monster);
+        this.#collect(character, monster);
       }
     }
 
@@ -4429,6 +4431,12 @@ const slots = bot.groups.get(group);
       damageType: intent.damageType,
     });
     this.#emitHealth(session, target);
+    // A cura por elemento (#683) só com um DONO criatura — o `if (attacker)` do Canary: o tique
+    // de condição que um personagem aplicou cura o monstro que cura com aquele tipo; o de campo
+    // (`sourceId` é o id do campo, não de criatura) não cura.
+    if (condition.sourceId !== undefined && this.#conditionTargetOf(session, condition.sourceId) !== null) {
+      this.#healMonsterByElement(session, target, outcome);
+    }
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
   }
 
@@ -4577,7 +4585,7 @@ const slots = bot.groups.get(group);
   }
 
   /** Põe o monstro na mira, com a armadura e a mitigação que o conteúdo dá a ele. */
-  #collect(monster: MonsterRuntime): void {
+  #collect(character: CharacterRuntime, monster: MonsterRuntime): void {
     this.#spellHits.push(monster);
     // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual para
     // magia. Quando esquiva de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
@@ -4587,6 +4595,12 @@ const slots = bot.groups.get(group);
       dodgeChance: 0,
       mitigation: definition?.mitigation,
       defenseMitigation: definition?.defenseMitigation,
+      // A cura por elemento e o reflexo do monstro (#683) valem para magia e runa como para o
+      // golpe — o Canary os resolve em `combatBlockHit`, qualquer que seja a origem.
+      elementHealing: definition?.elementHealing,
+      reflect: definition?.reflect === undefined
+        ? undefined : { reflector: 'monster', table: definition.reflect },
+      attacker: this.#reflectAttackerFor(character, monster),
     });
   }
 
@@ -6002,6 +6016,8 @@ const slots = bot.groups.get(group);
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
     const defender = this.#monsterDefender(monster);
+    // Contra quem o reflexo do monstro volta (#683) — ausente no monstro que não reflete.
+    const reflectAttacker = this.#reflectAttackerFor(character, monster);
 
     if (weapon !== null && how?.kind === 'distance') {
       const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
@@ -6067,6 +6083,7 @@ const slots = bot.groups.get(group);
           // Distância bloqueia por armadura, mas NÃO por escudo no `combat-v3` (#548) —
           // `WeaponDistance` do Canary não seta `blockedByShield`.
           blockable: DISTANCE_BLOCK_FLAGS,
+          ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
         },
         defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
@@ -6101,6 +6118,7 @@ const slots = bot.groups.get(group);
           // Wand/rod não bloqueiam nem por armadura nem por escudo no `combat-v3` (#548) — o
           // `WeaponWand` do Canary não declara nenhum dos dois; é dano MÁGICO.
           blockable: MAGIC_BLOCK_FLAGS,
+          ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
         },
         defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
@@ -6138,6 +6156,7 @@ const slots = bot.groups.get(group);
             },
           }
           : {}),
+        ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
       },
       defender, 'pve', this.#options.combat, session.rng, session.nowMs,
     );
@@ -6386,6 +6405,80 @@ const slots = bot.groups.get(group);
     // O DPS, ao contrário do recorde, soma o APLICADO (#431): overkill e absorção por mana
     // shield não são dano que saiu da barra de ninguém.
     session.creditDamage(character.id, applied.healthDamage);
+    // O reflexo e a cura por elemento do monstro (#683), nesta ordem — a do Canary no fim de
+    // `combatBlockHit`. Ausentes do outcome (v1/v2, ou monstro que não os declara), nada acontece.
+    this.#afterMonsterHit(session, character, monster, outcome);
+  }
+
+  /**
+   * O que o golpe do personagem desencadeia no MONSTRO depois de aplicado (#683): o reflexo dele
+   * contra o personagem e a cura por elemento. Um ponto só, chamado de `#land` e de `#applyHits`
+   * — os dois caminhos em que o personagem acerta um monstro —, para as duas regras não
+   * divergirem entre golpe e magia.
+   */
+  #afterMonsterHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, outcome: DamageOutcome,
+  ): void {
+    if (outcome.reflected !== undefined && character.alive) {
+      this.#reflectOntoCharacter(session, character, monster, outcome.reflected);
+    }
+    this.#healMonsterByElement(session, monster, outcome);
+  }
+
+  /**
+   * A SEGUNDA resolução do reflexo do MONSTRO (#683): o espelho de `#reflectOntoMonster` (#552),
+   * com o mesmo `reflectedDamageIntent` — EXTENSÃO, sem bloqueio por defesa/armadura, sem
+   * crítico, sem leech, nunca reflete de volta. O tipo é o ORIGINAL (refletor `monster`), então a
+   * absorção, a imunidade e a resistência do equipamento do personagem valem contra ele.
+   *
+   * Vem DEPOIS do dano no monstro — a ordem do fluxo da spec —, e por isso sai mesmo quando o
+   * golpe matou o monstro: o reflexo do Canary é decidido no bloqueio, antes de a vida mudar. O
+   * teto de 1 % da vida máxima do personagem faz a morte por reflexo exigir um personagem já no
+   * último 1 %; quando acontece, é resolvida aqui, como em `#applyMonsterHit`.
+   */
+  #reflectOntoCharacter(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
+  ): void {
+    const outcome = resolveDamage(
+      reflectedDamageIntent(reflected), this.#playerDefender(character), 'pve', this.#options.combat,
+      session.rng, session.nowMs,
+    );
+    const applied = applyDamageOutcome(
+      character, outcome, null, character.conditions.damageTakenScale(),
+      this.#hasEnergyShield(character),
+    );
+    recordDamage(character.contribution, monster.subject, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: character.id, attackerId: monster.subject,
+      amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(character),
+      damageType: outcome.damageType,
+    });
+    this.#emitCharacterHealth(session, character);
+    // HP caiu: o mesmo despertar de `#applyMonsterHit` — bot, curandeiros e automações.
+    this.#armBot(session, character.id);
+    this.#armHealersOf(session);
+    this.#armAutomations(session, character.id);
+    if (character.health <= 0) session.kill(character);
+  }
+
+  /**
+   * A cura por elemento (#683, `monster.heals`): depois do dano e do reflexo (`combatBlockHit`
+   * do Canary cura por último), a soma do primário com o secundário — o `damageHeal` único de
+   * lá. Monstro morto não cura: o golpe que mata não gera evento. De vida cheia, zero repôs e
+   * nada é emitido — a mesma regra da defesa de cura (`#onMonsterDefense`).
+   */
+  #healMonsterByElement(session: Session, monster: MonsterRuntime, outcome: DamageOutcome): void {
+    const amount = (outcome.elementHealing ?? 0) + (outcome.secondaryOutcome?.elementHealing ?? 0);
+    if (amount <= 0 || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const healed = monster.heal(definition.health, amount);
+    if (healed <= 0) return;
+    session.emit({
+      kind: 'creature-healed', creatureId: monster.subject, amount: healed, source: 'monster',
+      position: this.#at(monster),
+    });
+    this.#emitHealth(session, monster);
   }
 
   /**
@@ -7394,7 +7487,23 @@ const slots = bot.groups.get(group);
       defenseMitigation: definition?.defenseMitigation,
       defense: { kind: 'monster', defense: definition?.defense ?? 0 },
       blockCharge: monster.blockCharge,
+      // A cura por elemento e o reflexo do monstro (#683): ausentes no monstro que não os
+      // declara — o caso comum, que não paga objeto nenhum. Só o `combat-v3` os lê.
+      ...(definition?.elementHealing === undefined ? {} : { elementHealing: definition.elementHealing }),
+      ...(definition?.reflect === undefined
+        ? {} : { reflect: { reflector: 'monster' as const, table: definition.reflect } }),
     };
+  }
+
+  /**
+   * O ATACANTE que o reflexo do monstro precisa (#683): a vida máxima do personagem (o teto de
+   * 1 %) e a distância dele ao monstro. `undefined` quando o monstro não reflete nada — o intent
+   * de sempre, sem objeto novo por golpe. O reflexo de monstro vale a qualquer distância; a
+   * distância viaja só porque `ReflectAttacker` a exige.
+   */
+  #reflectAttackerFor(character: CharacterRuntime, monster: MonsterRuntime): ReflectAttacker | undefined {
+    if (this.#options.monsters.get(monster.monsterId)?.reflect === undefined) return undefined;
+    return { maxHealth: character.maxHealth, distance: distance(character.position, monster.position) };
   }
 
   /**

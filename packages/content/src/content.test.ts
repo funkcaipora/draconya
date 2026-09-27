@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
-  buildContent, compileMonster, compileReflect, computeVersion, ContentError, placeholderAppearances,
+  buildContent, compileElementHealing, compileMonster, compileReflect, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
 import { monsterSchema, NEUTRAL_RATES, ratesSchema, wallSetOf } from './schemas.js';
@@ -490,6 +490,66 @@ describe('absorção, aumento, reflexo e cleave de item (M30-05, #552)', () => {
   });
 });
 
+describe('elemento no monstro: cura, reflexo e vulnerabilidade até -200 % (#683, M30-G6)', () => {
+  const helmet = {
+    id: 'plain-helmet', name: 'Plain Helmet', kind: 'armor', slot: 'head', weight: 1, value: 0,
+  };
+  const monsterWith = (over: Record<string, unknown>) => base({ monsters: [{ ...rat, ...over }] });
+
+  it('o monstro aceita resistência -2 e recusa -2.01', () => {
+    const monster = buildContent(monsterWith({ mitigation: { resistances: { fire: -2 } } })).monsters.get('rat');
+    expect(monster?.mitigation.resistances.fire).toBe(-2);
+    expect(() => buildContent(monsterWith({ mitigation: { resistances: { fire: -2.01 } } })))
+      .toThrow(ContentError);
+    // O teto continua < 1: 100 % é imunidade explícita, nunca resistência.
+    expect(() => buildContent(monsterWith({ mitigation: { resistances: { fire: 1 } } })))
+      .toThrow(ContentError);
+  });
+
+  it('o item continua em [-1, 1): -1.01 derruba o boot (o schema compartilhado não alargou)', () => {
+    expect(() => buildContent(base({ items: [{ ...helmet, mitigation: { resistances: { fire: -1.01 } } }] })))
+      .toThrow(ContentError);
+    expect(() => buildContent(base({ items: [{ ...helmet, mitigation: { resistances: { fire: -1 } } }] })))
+      .not.toThrow();
+  });
+
+  it('elementHealing e reflect compilam em tabela completa por tipo', () => {
+    const monster = buildContent(monsterWith({
+      elementHealing: { fire: 100, earth: 500 }, reflect: { physical: 50, fire: 200 },
+    })).monsters.get('rat');
+    expect(monster?.elementHealing?.fire).toBe(100);
+    expect(monster?.elementHealing?.earth).toBe(500);
+    expect(monster?.elementHealing?.ice).toBe(0);
+    expect(Object.keys(monster?.elementHealing ?? {})).toHaveLength(11);
+    expect(monster?.reflect?.percent.physical).toBe(50);
+    expect(monster?.reflect?.percent.fire).toBe(200);
+    expect(monster?.reflect?.percent.ice).toBe(0);
+    // O monstro do Canary não tem reflexo flat: a tabela flat é toda zero.
+    expect(Object.values(monster?.reflect?.flat ?? {}).every((value) => value === 0)).toBe(true);
+  });
+
+  it('monstro sem os campos novos não os ganha', () => {
+    const monster = buildContent(base()).monsters.get('rat');
+    expect(monster?.elementHealing).toBeUndefined();
+    expect(monster?.reflect).toBeUndefined();
+    expect(compileElementHealing(undefined)).toBeUndefined();
+    expect(compileElementHealing({})).toBeUndefined();
+  });
+
+  it('elementHealing acima de 500 %, reflect acima de 200 %, fração ou zero derrubam o boot', () => {
+    for (const bad of [
+      { elementHealing: { fire: 600 } },
+      { elementHealing: { fire: 0.5 } },
+      { elementHealing: { fire: 0 } },
+      { reflect: { fire: 250 } },
+      { reflect: { fire: 2.5 } },
+      { reflect: { fire: 0 } },
+    ]) {
+      expect(() => buildContent(monsterWith(bad))).toThrow(ContentError);
+    }
+  });
+});
+
 describe('crítico e leech de item e de monstro (M30-04, #551)', () => {
   const espada = {
     id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
@@ -587,11 +647,12 @@ describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
       .toThrow(ContentError);
   });
 
-  it('recusa resistência fora do intervalo [-1, 1): 1 é ambiguidade com imunidade', () => {
+  it('recusa resistência de MONSTRO fora do intervalo [-2, 1): 1 é ambiguidade com imunidade', () => {
     // Positivo reduz, negativo amplifica; `1` seria imunidade disfarçada (DT-02), e o schema
-    // recusa para a imunidade continuar explícita.
+    // recusa para a imunidade continuar explícita. O piso do monstro é -2 desde o #683 (o
+    // `minElementalResistance` do Canary); o do item continua -1.
     expect(() => buildContent(withMitigation({ resistances: { fire: 1 } }))).toThrow(ContentError);
-    expect(() => buildContent(withMitigation({ resistances: { fire: -1.5 } }))).toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ resistances: { fire: -2.5 } }))).toThrow(ContentError);
     expect(() => buildContent(withMitigation({ resistances: { fire: 1.5 } }))).toThrow(ContentError);
   });
 

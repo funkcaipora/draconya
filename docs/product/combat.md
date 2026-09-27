@@ -214,6 +214,28 @@ no boot porque seria imunidade disfarçada, e imunidade é **explícita** (DT-02
 resistência e imunidade para o mesmo tipo também é recusado. O perfil é compilado no boot para
 uma tabela completa por tipo (lookup O(1)) e um `Set` de imunidade.
 
+**O MONSTRO vai até -200 % (#683, M30-G6).** `monsterMitigationSchema` aceita resistência em
+`[-2, 1)` — o `minElementalResistance` do Canary: `-2` TRIPLICA o dano (`(100 − (−200)) / 100`),
+o que o estágio de resistência já fazia; só o schema barrava. O ITEM continua em `[-1, 1)`. O
+teto `< 1` vale para os dois: `elements ≥ 100` do Canary vira IMUNIDADE no importador (#578),
+nunca resistência de 100 % (DT-02).
+
+**Cura por elemento e reflexo do monstro (#683, só `combat-v3`).** O monstro declara, além da
+mitigação, dois campos por tipo, em PERCENTUAL INTEIRO (a escala do Canary, como o reflexo de
+item do #552):
+
+- `elementHealing.<tipo>` (`monster.heals`, teto 500): o golpe daquele tipo CURA o monstro em
+  `ceil(dano já crítico × p / 100)`, calculado ANTES de qualquer bloqueio — então cura mesmo com
+  o monstro IMUNE ao tipo (`DamageOutcome.elementHealing`). A cura soma primário e secundário e é
+  aplicada DEPOIS do dano e do reflexo (`creature-healed`, `source: 'monster'`); golpe que mata
+  não cura, e de vida cheia nada é emitido. Só com atacante criatura: golpe, magia, runa e tique
+  de condição com dono personagem — o tique de campo não cura;
+- `reflect.<tipo>` (`monster.reflects`, teto 200 — `MAX_DAMAGE_REFLECTION`): o reflexo do #552
+  com refletor `monster` — `floor(dano bloqueado × p / 100)` volta ao personagem com o TIPO
+  original (o equipamento dele absorve, resiste e é imune normalmente), a qualquer distância, com
+  o teto `ceil(1 % da vida máxima do personagem)`, como EXTENSÃO (nunca reflete de volta). Vale
+  para golpe, magia e runa; sai depois do dano no monstro, mesmo no golpe que o mata.
+
 A ordem de mitigação, congelada na emenda do ADR 0031:
 
 1. **uma rolagem de Dodge, sempre consumida, primeiro ato** (posição do RNG é contrato);
@@ -355,7 +377,8 @@ protocolo continua em pontos por segundo, derivado no `server` (`amount × 1000 
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
 | Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `drown`, `lifedrain`, `manadrain`, `arcane`) | 0 `[ABERTO — valor provisório: 0]`; inerte sob `combat-v3` (ver "combat.armorEffectiveness fica INERTE" acima) | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
-| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)`. No ITEM, sob `combat-v3`, é a absorção item a item (×100) | `mitigation.resistances` de monstro e item |
+| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` no item e `[-2, 1)` no monstro (#683). No ITEM, sob `combat-v3`, é a absorção item a item (×100) | `mitigation.resistances` de monstro e item |
+| Cura por elemento / reflexo do MONSTRO (#683) | percentual INTEIRO; tetos 500 e 200; nenhum monstro do catálogo atual declara ainda (no Canary: `heals` em 20 monstros, `reflects` em 18) — quem os preenche é o importador (#578) | `packages/content/src/schemas.ts`, `monster.elementHealing`/`reflect` |
 | Absorção / aumento / reflexo / cleave de ITEM (M30-05, #552) | percentual INTEIRO, a escala do `items.xml` do Canary; nenhum item do catálogo atual declara ainda (os do Canary: `absorbpercent*` ~630 linhas, `reflectdamage` 5 itens, `cleavepercent` 6 itens) | `packages/content/src/schemas.ts`, `item.absorb`/`increase`/`reflect`/`cleavePercent` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary, #521, ADR 0037; pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
@@ -1081,8 +1104,17 @@ tiles leva uma rolagem PRÓPRIA do poder da arma × `cleavePercent / 100` (trunc
 golpe principal, como extensão (sem crítico, leech nem reflexo; o aumento por tipo vale), e
 pratica a skill uma vez. O punho não tem cleave.
 
-**Fora, por enquanto:** reflexo de tique de condição, reflexo do componente secundário, e
-consumo de carga por reflexo/cleave.
+**Reflexo do MONSTRO (#683).** O espelho do de cima: `monster.reflect.<tipo>` (percentual
+inteiro) e o mesmo `resolveReflect` com `reflector: 'monster'` — tipo original, sem a exceção de
+distância. O golpe, a magia e a runa do personagem levam o `attacker` (vida máxima e distância)
+só quando o monstro reflete; a segunda resolução (`#reflectOntoCharacter`) passa pelo
+`#playerDefender` e pelo mana shield, e sai depois do dano no monstro. Ver "Resistência,
+vulnerabilidade e imunidade" acima para a cura por elemento, que mora ao lado.
+
+**Fora, por enquanto:** reflexo de tique de condição, reflexo do componente secundário (o #683
+também o deixou de fora: a conta do Canary usa o valor do PRIMÁRIO com o tipo do secundário, e
+nenhum conteúdo tem secundário contra monstro que reflete), e consumo de carga por
+reflexo/cleave.
 
 ### O que fica para depois
 
