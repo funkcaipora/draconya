@@ -3475,6 +3475,9 @@ export class HuntRuleset implements Ruleset {
       session.scheduleIn(PLAYER_STEP, result.durationMs, {
         priority: EventPriority.Movement, subject: characterId,
       });
+      this.#autoSelectTarget(session, character);
+      this.#armPlayerAttack(session, character);
+      this.#armBot(session, character.id);
     }
     return result;
   }
@@ -3497,6 +3500,13 @@ export class HuntRuleset implements Ruleset {
     if (target === null) {
       this.#runnerOf(characterId).playerAttackReady = true;
       return;
+    }
+
+    if (!this.#isPinned(character)) {
+      const runner = this.#runners.get(characterId);
+      if (runner !== undefined && runner.attackTarget !== target.subject) {
+        this.setAttackTarget(character, target, false);
+      }
     }
 
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
@@ -6564,38 +6574,37 @@ const slots = bot.groups.get(group);
    * expresso — quem já está ao alcance não precisa ser seguido.
    */
   #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
-    const attack = this.#attackTargetOfRunner(character);
-    if (attack !== null) return attack;
-    const candidate = this.#botCandidateOf(character);
-    if (candidate !== null) return candidate;
+    if (this.#isPinned(character)) {
+      const attack = this.#attackTargetOfRunner(character);
+      if (attack !== null) return attack;
+    }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );
   }
 
   /**
-   * Auto-target (#444): sem alvo de ataque válido, seleciona o melhor monstro na TELA — o raio
+   * Auto-target (#444): sem alvo pinado pelo jogador, seleciona o melhor monstro na TELA — o raio
    * de busca, o mesmo de `#approachTarget` — e o guarda. É o que faz um monstro que surge ao
-   * longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva até lá é
-   * `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
+   * alcance virar alvo na hora.
    *
    * A eleição passa por `setAttackTarget(..., pinned: false)` (#480, §42): o bot entra pelo
    * MESMO pipeline do jogador, mas sem pinar — fora do alcance a política reassume. O
    * `botCandidate` continua sendo a mira de tela, e é ele que sobrevive ao cancelamento do
-   * jogador. NÃO sobrepõe o alvo pinado do jogador: com um `attackTarget` vivo e na tela, sai
-   * sem tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e
+   * jogador. NÃO sobrepõe o alvo pinado do jogador: com um `attackTarget` pinado vivo e na tela,
+   * sai sem tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e
    * a chamada seguinte já reavalia para o próximo mais próximo.
    */
   #autoSelectTarget(session: Session, character: CharacterRuntime): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || !character.alive) return;
-    // Valida e limpa os dois campos; com um alvo explícito ou um candidato vivo, nada a fazer.
-    if (this.#attackTargetOfRunner(character) !== null) return;
-    if (this.#botCandidateOf(character) !== null) return;
+    if (this.#isPinned(character)) {
+      if (this.#attackTargetOfRunner(character) !== null) return;
+    }
 
     const best = this.#approachTarget(character);
     const next = best === null ? null : best.subject;
-    if (next === runner.botCandidate) return;
+    if (next === runner.attackTarget) return;
     runner.botCandidate = next;
     // A troca de alvo do bot entra pela porta única (#480): jogador e bot não têm pipelines
     // que divergem. `false` porque é eleição de política, não clique.
