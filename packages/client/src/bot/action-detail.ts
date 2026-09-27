@@ -129,6 +129,8 @@ function areaLabel(area: Area | undefined): string {
       return `${String(side)}x${String(side)}`;
     }
     case 'wave': return `Onda ${String(area.length)}`;
+    // #679: o número é o de fileiras, como a `wave` legada.
+    case 'rows': return `Onda ${String(area.widths.length)}`;
     case 'beam': return `Feixe ${String(area.length)}`;
     case 'cleave': return 'Frontal 3';
     case 'cross': return `Cruz ${String(area.radius)}`;

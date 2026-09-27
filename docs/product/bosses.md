@@ -31,6 +31,13 @@ Ao derrotar o boss, cada jogador recebe uma tela de recompensa individual, na qu
 | Tamanho máximo do grupo | 10 | caminho previsto: `packages/content/bosses` |
 | Tentativas/recompensas por dia (MVP) | 1 | caminho previsto: `packages/content/bosses` |
 | Pity system | inexistente no MVP | caminho previsto: `packages/content/bosses` |
+| Flag de boss do monstro (#691, o `isBoss` do Canary) | `false` por default; nenhum monstro do catálogo declara `true` ainda | `packages/content/data/monsters/*.json`, `boss` |
+| Escala de vida/ataque/defesa de boss (#691) | 1 / 1 / 1 (neutro) — o `rateBossHealth/Attack/Defense` do Canary | `packages/content/data/progression/baseline.json`, `rates.boss` |
+
+O que já existe no motor (#691): o monstro declara `boss: true`, e isso só troca o bloco de
+rates que vale para ele (`progression.rates.boss` no lugar de `rates.monster` — ver
+[`progression.md`](./progression.md), "Rates do servidor"). Instância, sala e recompensa
+continuam não implementadas; raridade e pontos do Bosstiary são o #629.
 
 ## Em aberto
 

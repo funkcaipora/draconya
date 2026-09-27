@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { compileItem, itemSchema } from '@draconya/content';
 import type { Item } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
-import { Inventory, MAX_STACK } from './inventory.js';
+import {
+  equipmentAbsorb, equipmentCleavePercent, equipmentReflect, Inventory, MAX_STACK,
+} from './inventory.js';
 import type { CarriedItem, ContainerRules, Wearer } from './inventory.js';
 
 // A aparência é resolvida por `buildContent` a partir de `appearances/baseline.json` (FUN-94),
@@ -42,11 +44,20 @@ const catalog = new Map<string, Item>([
   // Bônus de equipamento (#524, kit level 200): skill e velocidade, ativos só enquanto vestido.
   ['ml-hat', define({
     id: 'ml-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
-    bonuses: { skill: { skillId: 'magic', amount: 1 } },
+    bonuses: { skills: [{ skillId: 'magic', amount: 1 }] },
   })],
   ['dist-armor', define({
     id: 'dist-armor', kind: 'armor', slot: 'chest', weight: 30, value: 0,
-    bonuses: { skill: { skillId: 'distance', amount: 2 } },
+    bonuses: { skills: [{ skillId: 'distance', amount: 2 }] },
+  })],
+  // Várias skills num item só (#688, o collar of red plasma do Canary soma três) e a supressão
+  // de condição (o Dwarven Ring suprime drunk).
+  ['twin-collar', define({
+    id: 'twin-collar', kind: 'amulet', slot: 'neck', weight: 5, value: 0,
+    bonuses: { skills: [{ skillId: 'melee', amount: 3 }, { skillId: 'distance', amount: 3 }] },
+  })],
+  ['dwarven-ring', define({
+    id: 'dwarven-ring', kind: 'ring', slot: 'finger', weight: 2, bonuses: { suppress: ['drunk'] },
   })],
   ['haste-boots', define({
     id: 'haste-boots', kind: 'armor', slot: 'feet', weight: 5, value: 0,
@@ -61,6 +72,15 @@ const catalog = new Map<string, Item>([
   ['leech-ring', define({
     id: 'leech-ring', kind: 'ring', slot: 'finger', weight: 2, value: 0,
     combatModifiers: { lifeLeech: 1000, manaLeech: 500 },
+  })],
+  // ML especializado por elemento (#680): `firemagiclevelpoints` & cia. do Canary.
+  ['fire-wand', define({
+    id: 'fire-wand', kind: 'weapon', slot: 'hand', weight: 20, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 1 } },
+  })],
+  ['fire-healing-hat', define({
+    id: 'fire-healing-hat', kind: 'armor', slot: 'head', weight: 5, value: 0,
+    bonuses: { specializedMagicLevel: { fire: 2, healing: 1 } },
   })],
   ['crit-armor', define({
     id: 'crit-armor', kind: 'armor', slot: 'chest', weight: 60, value: 0,
@@ -259,6 +279,36 @@ describe('equipar (§21.4)', () => {
     expect(greatSwordInHand.weaponAttack(catalog, wearer({ level: 20 }))).toBe(40);
   });
 
+  it('`heldWeapon()`: abaixo do level, 50 com wieldUnproperly e 0 sem — nunca mão vazia (#687)', () => {
+    // O `playerWeaponCheck` do Canary: a arma que ficou na mão depois de uma perda de level bate
+    // metade (`unproperly`) ou não bate. Ao contrário de `weapon()`, não vira punho.
+    const fireSword = define({
+      id: 'fire-sword', kind: 'weapon', slot: 'hand', weight: 23, attack: 24, defense: 20,
+      requires: { level: 30 },
+      weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+    });
+    const spikeSword = define({
+      id: 'spike-sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24, defense: 10,
+      requires: { level: 30 },
+    });
+    const withThem = new Map([...catalog, ['fire-sword', fireSword], ['spike-sword', spikeSword]]);
+    const holding = (id: string): Inventory => Inventory.fromState({
+      backpack: [], equipped: { hand: carried(id) },
+    });
+
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: fireSword, damagePercent: 50 });
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: spikeSword, damagePercent: 0 });
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    // `weapon()` não muda: abaixo do level continua mão vazia (v1/v2).
+    expect(holding('fire-sword').weapon(withThem, wearer({ level: 20 }))).toBeNull();
+    // Vocação errada e mão vazia continuam `null`.
+    expect(holding('druid-staff').heldWeapon(catalog, wearer())).toBeNull();
+    expect(new Inventory().heldWeapon(catalog, wearer())).toBeNull();
+  });
+
   it('recusa equipar o que ele não tem', () => {
     expect(new Inventory().equip('sword', wearer(), catalog))
       .toEqual({ ok: false, reason: 'not-carried' });
@@ -445,6 +495,31 @@ describe('o que o combate lê', () => {
     expect(inventory.skillBonus(catalog, 'distance')).toBe(2);
   });
 
+  it('skillBonus soma CADA skill de um item com várias (#688), não só a primeira', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('twin-collar'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('dist-armor'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('twin-collar', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'melee')).toBe(3);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(3);
+    expect(inventory.skillBonus(catalog, 'magic')).toBe(0);
+    // Soma entre peças: o colar (+3) e a armadura (+2) na mesma skill.
+    inventory.equip('dist-armor', wearer(), catalog);
+    expect(inventory.skillBonus(catalog, 'distance')).toBe(5);
+  });
+
+  it('suppresses só é verdade enquanto o item que suprime está vestido (#688)', () => {
+    const inventory = new Inventory();
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+    inventory.add(carried('dwarven-ring'), catalog, wearer(), rules);
+    // Carregado na mochila não suprime nada.
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+    inventory.equip('dwarven-ring', wearer(), catalog);
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(true);
+    inventory.unequip('finger', rules);
+    expect(inventory.suppresses(catalog, 'drunk')).toBe(false);
+  });
+
   it('speedBonus soma a velocidade do que está vestido (#524, boots of haste)', () => {
     const inventory = new Inventory();
     expect(inventory.speedBonus(catalog)).toBe(0);
@@ -479,6 +554,21 @@ describe('o que o combate lê', () => {
     });
   });
 
+  it('specializedMagicLevel soma por elemento só o que está vestido (#680)', () => {
+    const inventory = new Inventory();
+    // Nada declara: `undefined`, e a fórmula fica bit a bit.
+    expect(inventory.specializedMagicLevel(catalog)).toBeUndefined();
+    inventory.add(carried('fire-wand'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.add(carried('fire-healing-hat'), catalog, wearer({ capacity: 1_000 }), rules);
+    // Na mochila não conta.
+    expect(inventory.specializedMagicLevel(catalog)).toBeUndefined();
+    inventory.equip('fire-wand', wearer(), catalog);
+    inventory.equip('fire-healing-hat', wearer(), catalog);
+    expect(inventory.specializedMagicLevel(catalog)).toEqual({ fire: 3, healing: 1 });
+    inventory.unequip('head', rules);
+    expect(inventory.specializedMagicLevel(catalog)).toEqual({ fire: 1 });
+  });
+
   it('duas peças de crítico somam pontos-base antes de UMA rolagem só (como o Canary soma itens)', () => {
     const inventory = new Inventory();
     inventory.add(carried('crit-sword'), catalog, wearer({ capacity: 1_000 }), rules);
@@ -489,6 +579,59 @@ describe('o que o combate lê', () => {
     expect(inventory.combatModifiers(catalog)).toEqual({
       critical: { chance: 0.15, multiplier: 1.35 },
     });
+  });
+});
+
+describe('absorção, aumento, reflexo e cleave do equipamento (#552)', () => {
+  const local = new Map<string, Item>([
+    ['glacier', define({
+      id: 'glacier', kind: 'amulet', slot: 'neck', weight: 5, value: 0,
+      mitigation: { resistances: { ice: 0.07 } },
+    })],
+    ['ice-legs', define({
+      id: 'ice-legs', kind: 'armor', slot: 'legs', weight: 5, value: 0,
+      absorb: { ice: { percent: 20, flat: 3 } }, increase: { ice: 10 },
+      reflect: { physical: { flat: 13 } }, cleavePercent: 2,
+    })],
+    ['ice-helmet', define({
+      id: 'ice-helmet', kind: 'armor', slot: 'head', weight: 5, value: 0,
+      absorb: { ice: { flat: 2 } }, increase: { ice: 5 },
+      reflect: { physical: { flat: 29 }, fire: { percent: 10 } }, cleavePercent: 1,
+    })],
+  ]);
+  const dress = (...ids: readonly string[]): Inventory => {
+    const inventory = new Inventory();
+    for (const id of ids) {
+      inventory.add(carried(id), local, wearer({ capacity: 1_000 }), rules);
+      inventory.equip(id, wearer(), local);
+    }
+    return inventory;
+  };
+
+  it('nada vestido que absorva, reflita ou divida: tudo ausente, zero de cleave', () => {
+    const inventory = dress();
+    expect(equipmentAbsorb(inventory, local)).toBeUndefined();
+    expect(equipmentReflect(inventory, local)).toBeUndefined();
+    expect(equipmentCleavePercent(inventory, local)).toBe(0);
+    expect(inventory.combatModifiers(local)).toBeUndefined();
+  });
+
+  it('a absorção percentual é POR ITEM, na ordem de slot do Canary, e a resistência legada entra ×100', () => {
+    // Vestidos fora de ordem: pernas primeiro, colar depois. O Canary varre head → neck → … → legs.
+    const inventory = dress('ice-legs', 'glacier', 'ice-helmet');
+    expect(equipmentAbsorb(inventory, local)).toEqual({
+      items: [{ ice: 7 }, { ice: 20 }],
+      flat: { ice: 5 },
+    });
+  });
+
+  it('reflexo e cleave somam entre os vestidos; o aumento viaja em combatModifiers', () => {
+    const inventory = dress('ice-legs', 'ice-helmet');
+    const reflect = equipmentReflect(inventory, local);
+    expect(reflect?.flat.physical).toBe(42);
+    expect(reflect?.percent.fire).toBe(10);
+    expect(equipmentCleavePercent(inventory, local)).toBe(3);
+    expect(inventory.combatModifiers(local)).toEqual({ increase: { ice: 15 } });
   });
 });
 

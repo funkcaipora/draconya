@@ -15,7 +15,7 @@
 // cadências é o invariante 2; a independência de observador é o 3; a versão fixada na sessão é
 // o 7.
 
-import { buildContent, compileMitigation, placeholderAppearances } from '@draconya/content';
+import { NEUTRAL_RATES, buildContent, compileMitigation, placeholderAppearances } from '@draconya/content';
 import type { Combat, DamageModifiers, RawContent, Spell, Supply } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
@@ -356,11 +356,12 @@ const PROGRESSION: Progression = {
   id: 'baseline', startingHealth: 5_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+  rates: NEUTRAL_RATES,
 };
 
 /** O monstro que compõe o cenário: ability em área, DOT e campo, tudo com número fixo. */

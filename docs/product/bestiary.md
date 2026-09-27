@@ -37,8 +37,9 @@ lista vazia com "+0 %". Os contadores chegam inteiros do servidor (`bestiary`, n
 que um muda); os marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7).
 O cliente não conta nada — o que ele calcula é apresentação do próximo marco e do progresso; se
 divergisse do `sim`, a conta do `sim` é a verdadeira. Desde a SV-20, `catalogue.monsters[]` também
-carrega `class` quando o conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`, hoje só
-`mammal`); é o dado que a `SideList` de categorias da Cyclopedia usa para agrupar.
+carrega `class` quando o conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`: desde o
+#578, as 20 classes do Bestiário do Canary, de `amphibic` a `vermin`); é o dado que a `SideList` de
+categorias da Cyclopedia usa para agrupar.
 
 Desde a #344, o modal ganhou a aba "Itens": a lista de `catalogue.items`, com sprite, nome,
 categoria (derivada de onde o item veste — o mesmo rótulo do painel do set) e peso; Atq/Def só
@@ -58,6 +59,13 @@ uma delas. **Nenhum caminho do `sim`, do `server` nem do cliente lê `entries` a
 decisão do `staticAttack` do monstro (#518) — aceito e persistido, registrado aqui como
 divergência em vez de fingir que a tela de "%" de desbloqueio, estrelas de dificuldade e
 Charms já existe. Quando o Cyclopedia (#321) ganhar essa tela, o dado já está no lugar certo.
+
+**O leitor de monstros do Canary (#578) gera a ficha junto com o monstro.** `scripts/catalog/
+monsters.ts` converte `monster.Bestiary` e `monster.raceId` para a forma de `bestiaryEntrySchema`
+(`raceId` entrou como campo opcional); a ficha fica em `packages/content/staging/monsters/` ao lado
+do monstro até a primeira importação para `data/` (#580) mesclá-la em `entries`. O leitor achou
+no Canary estrelas de 0 (inofensivo, 13 monstros) a 5 (desafiador, 53) — o schema aceitava só 1
+a 4 e passou a aceitar 0 a 5.
 
 ## Regras
 

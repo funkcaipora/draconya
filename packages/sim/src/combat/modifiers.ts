@@ -14,7 +14,7 @@
 // (`Game::calculateLeechAmount`): NÃO é uma divisão simples por `targetsAffected` — ver o
 // comentário de `calculateLeechAmount`.
 
-import type { DamageModifiers, Monster } from '@draconya/content';
+import type { DamageModifiers, DamageType, Monster } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import type { Rng } from '../rng.js';
 
@@ -57,8 +57,17 @@ export function combineCombatModifiers(
   let lifeLeech = 0;
   let manaLeech = 0;
   let anyCritical = false;
+  // O aumento por tipo (#552) soma por tipo, em percentual inteiro, como o `increasePercent` do
+  // Canary acumula as fontes (`setIncreasePercent` faz `+=`).
+  let increase: Partial<Record<DamageType, number>> | undefined;
   for (const source of sources) {
     if (source === undefined) continue;
+    if (source.increase !== undefined) {
+      increase ??= {};
+      for (const [type, value] of Object.entries(source.increase) as [DamageType, number][]) {
+        increase[type] = (increase[type] ?? 0) + value;
+      }
+    }
     if (source.critical !== undefined) {
       anyCritical = true;
       criticalChanceBasisPoints += source.critical.chance * 10_000;
@@ -67,8 +76,9 @@ export function combineCombatModifiers(
     lifeLeech += source.lifeLeech ?? 0;
     manaLeech += source.manaLeech ?? 0;
   }
-  if (!anyCritical && lifeLeech === 0 && manaLeech === 0) return undefined;
+  if (!anyCritical && lifeLeech === 0 && manaLeech === 0 && increase === undefined) return undefined;
   return {
+    ...(increase === undefined ? {} : { increase }),
     ...(anyCritical ? {
       critical: {
         chance: criticalChanceBasisPoints / 10_000,

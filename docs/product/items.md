@@ -92,8 +92,9 @@ TP-03 (M22). Ver `economy.md` e `bot.md`.
 
 | Suprimento | Efeito | `group` | `price` | Arquivo |
 |---|---|---|---|---|
-| `health-potion` | `heal` 80 | `potion` | 45 | `data/supplies/health-potion.json` |
-| `mana-potion` | `mana` 100 | `potion` | 50 | `data/supplies/mana-potion.json` |
+| `small-health-potion` | `heal` 60–90 (Canary id 7876) | `potion` | 20 | `data/supplies/small-health-potion.json` |
+| `health-potion` | `heal` 125–175 (Canary id 266; era 80 fixo até o #690) | `potion` | 45 | `data/supplies/health-potion.json` |
+| `mana-potion` | `mana` 75–125 (Canary id 268; era 100 fixo até o #690) | `potion` | 50 | `data/supplies/mana-potion.json` |
 | `avalanche-rune` | `damage` gelo, BP 45, raio 3, alcance 8, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
 
 As nove poções do Tibia (#524, kit level 200): faixa **fixa** sorteada por uso (`effect.amountRange`,
@@ -112,6 +113,26 @@ de NPC do Tibia (TibiaWiki via tibiascape.com).
 | `ultimate-mana-potion` | `mana` 425–575 | level 130, Sorcerer/Druid | 350 | `data/supplies/ultimate-mana-potion.json` |
 | `great-spirit-potion` | `heal` 250–350 **+** `alsoMana` 100–200 | level 80, Paladin | 225 | `data/supplies/great-spirit-potion.json` |
 | `ultimate-spirit-potion` | `heal` 420–580 **+** `alsoMana` 250–350 | level 130, Paladin | 450 | `data/supplies/ultimate-spirit-potion.json` |
+
+**O sorteio da faixa depende do perfil de combate** (#690, ADR 0031): no `combat-v3` é o
+`normal_random(min, max)` do Canary (`doTargetCombatHealth`/`doTargetCombatMana`), a normal
+truncada de `normalRandomInt` (`sim/combat/weapon-power.ts`) — o meio da faixa sai mais que as
+pontas; no `combat-v1`/`v2` continua uniforme (`rng.integer`), bit a bit. A poção de espírito sorteia
+vida ANTES da mana, a ordem de `potions.lua`. Sem `rng` (fixture), a faixa cai no mínimo. Os preços de
+NPC do Canary (Health 50, Mana 56) são da #574; o Draconya segue com 45 e 50.
+
+**Exaustão de ação compartilhada** (#690): toda poção e toda runa declaram `actionExhaustMs: 1000`
+(o `timeBetweenExActions` do Canary) e travam o MESMO livro, `exhaust:action` (`actionExhaustKey`,
+`sim/casting.ts`) — o `nextPotionAction` que o `Actions::useItem` do Canary inicia para runa **ou**
+poção. Os grupos (`potion`, `attack`, `healing`) continuam livros separados e valem ao mesmo tempo:
+uma poção logo depois de uma runa de ataque espera 1000 ms, e outra runa de ataque espera os 2000 ms
+do grupo. O livro só AVANÇA (grava o maior entre o que falta e o novo prazo, como o
+`setNextPotionAction`), viaja no snapshot em `cooldowns` e é da pessoa que USA, não de quem paga na
+party. O uso durante a exaustão é ADIADO, não perdido: o bot volta no vencimento (`retryInMs`), como o
+`playerUseItemEx` do Canary. Supply sem o campo não trava nem lê o livro (fixtures e, na #576, a
+Magic Shield Potion, que o Canary tira da exaustão). Magia não lê este livro. Consequência: uma regra de
+poção que vale SEMPRE, com o grupo de 1000 ms, ganha todo empate no vencimento e deixa a runa sem vez
+— o mesmo que apertar a poção a cada segundo no Canary.
 
 `effect.alsoMana` (#524) é o mecanismo novo da poção de espírito: repõe vida **e** mana no MESMO uso,
 um único `useSupply`. Fica dentro do `kind: 'heal'` — e não vira um quinto `kind` — para não duplicar
@@ -416,9 +437,29 @@ sempre (3051 e 3052).
 convergem no mesmo lugar (`CharacterRuntime.receiveDamage`) e NÃO se somam: com o anel vestido E
 a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma vez só.
 
-**Life Ring** — +300% da regeneração passiva BASE de vida e mana. "Base" é o ponto fixo por
-vencimento de `progression.regen` (§10.2), sem nenhum outro bônus — hoje não existe nenhum outro
-modificador de regeneração no jogo, então a conta é direta: 1 ponto vira 4.
+**Life Ring** — regeneração PRÓPRIA do item, somada à da vocação (#688): **+2 de vida e +8 de
+mana a cada 6 s**, os números do Canary `items.xml` id 3089 (`healthgain`/`healthticks`,
+`managain`/`manaticks`). Não é `ringEffect`: é `bonuses.regeneration`, o mesmo campo que
+qualquer item com regeneração usa (ring of healing, terran rainbow shield… entram pelo importador,
+#573). No Canary é uma `CONDITION_REGENERATION` presa ao slot; aqui cada ganho é um evento
+`item-regen` da fila, por slot e por recurso (`<characterId>:<slot>:<health|mana>`), no instante
+exato — a 1 Hz desanexada rende o mesmo que a 10 Hz (invariante 2). O primeiro ganho sai 6 s
+DEPOIS de vestir (a condição do Canary acumula o intervalo antes de curar), e trocar Life Ring
+por Life Ring recomeça a contagem. Tirar o anel, ou ele vencer (`EQUIP_EXPIRE` → `destroy` →
+`onUnequip`), cancela os dois eventos. Knight com Life Ring, parado: +3 de vida e +10 de mana a
+cada 6 s (1+2 e 2+8).
+
+Divergência do que existia antes: até o #688 o Life Ring era um `ringEffect` de +300%,
+multiplicando o pulso da vocação (Knight: +4/+8 a cada 6 s). Não tinha fonte no Tibia, e saiu —
+`RING_EFFECT_KINDS` ficou só com `energy-shield`. A duração do anel (1200 s no Canary) e a
+forma ativa/inativa ficam para #689.
+
+**Supressão de condição** (#688) — `bonuses.suppress: ['drunk']` (o Dwarven Ring do Canary,
+`suppressdrunk`): enquanto o item está vestido, a condição `drunk` não entra no personagem
+(`#applyConditionTo` recusa, como `Creature::addCondition`) e a que já estava ativa não desvia
+passo nem consome sorteio (`#drunkTarget`, como o `hasCondition` do Canary, que devolve falso para
+condição suprimida). Só `drunk` por ora (`SUPPRESSIBLE_CONDITIONS`): o Draconya não tem
+afogamento (`suppressdrown`). Monstro não veste item e não suprime nada.
 
 O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
 dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito
@@ -490,8 +531,11 @@ Sorcerer+Druid. Diferente da magia (um arquivo por vocação, `haste-knight.json
 formato pode mudar por vocação (mana, alcance); aqui o item físico é IDÊNTICO nas duas, e
 duplicar o arquivo só para variar `vocationId` divergiria peso/preço no primeiro balanceamento.
 
-**Bônus passivo de equipamento.** `item.bonuses` (§21.2): `skill` (uma skill, um valor — o magic
-level do Tibia É a skill `magic` no Draconya, FUN-92) e `speed` (somado direto a
+**Bônus passivo de equipamento.** `item.bonuses` (§21.2): `skills` (uma LISTA de skill e valor
+desde o #688 — o Canary soma todas as skills de um item, e 54 itens base do `items.xml` têm mais
+de uma, como o collar of red plasma, id 23528, sword/axe/club +4; o boot recusa a mesma skill
+repetida no item; o magic level do Tibia É a skill `magic` no Draconya, FUN-92),
+`regeneration` e `suppress` (ver "Anéis com efeito passivo") e `speed` (somado direto a
 `character.speed`, as boots of haste — 40 desde o #527, a escala TFS clássica do
 `forgottenserver` `items.xml` id 2195, a MESMA de `progression.startingSpeed`; o Canary guarda 20
 porque a base dele também é metade). Lido por `Inventory.skillBonus`/`speedBonus` — a MESMA
@@ -507,9 +551,20 @@ sem o quarto ponto, um personagem recém-criado com a bota já no kit (o level 2
 `dragon-party`, #526) mostrava a mesma velocidade com ou sem ela até a primeira entrada numa
 hunt.
 
+**Magic level especializado por elemento** (#680). `item.bonuses.specializedMagicLevel` é um
+mapa parcial elemento → pontos, as oito chaves `<elemento>magiclevelpoints` do Canary
+(`item_parse.cpp:915-941`): `physical`, `energy`, `earth`, `fire`, `ice`, `holy`, `death` e
+`healing` (`SPECIALIZED_MAGIC_ELEMENTS`) — `firemagiclevelpoints` vira `fire`, e assim por
+diante; `arcane`/`drown`/`lifedrain`/`manadrain` não têm chave e o schema os recusa.
+`Inventory.specializedMagicLevel` soma por elemento o que está VESTIDO (a varredura de
+`Player::getSpecializedMagicLevel`, `player.cpp:7606-7627`), `undefined` quando nada declara.
+Só o termo de ML da fórmula do MESMO elemento lê o valor (ver `docs/product/combat.md`, "Fórmula
+canônica"). Nenhum item autoral declara o campo: os 46 do `items.xml` chegam pelo importador
+(#573). O gasto de carga por uso (`useCharges`) fica para quando `charges` for consumido.
+
 **Anel com carga**, além do colar (ver "Duração e carga do equipamento", acima): o Might Ring é
-`kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy/Life
-Ring (efeito permanente enquanto vestido, sem carga). `#consumeAmuletCharge` foi alargado para
+`kind: 'ring'` com `mitigation`+`charges`, sem `ringEffect` — mecanismo diferente do Energy
+Ring e do Life Ring (efeito permanente enquanto vestido, sem carga). `#consumeAmuletCharge` foi alargado para
 conferir os dois slots (`neck` e `finger`) independente.
 
 **hitChance, só dado.** `weapon.hitChance` (a Royal Crossbow, +3) e `ammunition.maxHitChance` (o
@@ -555,7 +610,7 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
 | Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
-| Bônus de regeneração do Life Ring | +300% da base (fixo, SV-16) | `packages/content/data/items/life-ring.json`, campo `ringEffect.percent` |
+| Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |
 | Suprimentos — `price` / `group` | poção de vida 45 / `potion` `[ABERTO — preço provisório]`; poção de mana 50 / `potion` `[ABERTO — idem]`; avalanche rune 14 / `attack` `[ABERTO — idem]` | `packages/content/data/supplies/*.json` |
 | Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/blessing-charge.json` |
 | Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
@@ -585,15 +640,18 @@ concordam em peso, `hitChance`, alcance e `attack`.
   (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
   arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
   vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
-- **Serpent Sword e Fire Sword (#520) perdem o componente elemental embutido.** O Tibia real dá
-  `elementearth 8` à Serpent Sword e `elementfire 11` à Fire Sword — dano elemental somado ao
-  físico no MESMO golpe. `weapon.damageType` é um tipo só por arma (CMB-03); `attack` fica com o
-  total, e o componente elemental não aparece. As duas armas continuam batendo o número certo em
-  físico; só o "queima também" some.
-- **Defesa residual de arma de duas mãos (#520) não é copiada.** O Tibia real dá `defense` a
-  Broadsword, Double Axe e Dragon Slayer mesmo sendo de duas mãos; `buildContent` recusa
-  `defense > 0` fora de escudo/arma corpo a corpo de UMA mão (CMB-04, emenda do ADR 0031) — regra
-  de antes da #520, não uma exceção criada para ela. O número simplesmente não entra no item.
+- **Serpent Sword e Fire Sword (#687) têm o elemento em `weapon.element`.** `attack` é só o
+  físico (24 e 18); `elementfire 11` e `elementearth 8` do Canary moram em
+  `weapon.element: { type, attack }`. No `combat-v3` o golpe sorteia sobre `attack + element` e
+  divide o total por truncamento; o elemental não perde para escudo nem armadura. v1/v2 ignoram
+  o campo. Ver `docs/product/combat.md`, "Elemento da arma e arma vestida abaixo do level".
+- **Arma de duas mãos tem defesa (#687).** Broadsword 23, Double Axe 12 e Dragon Slayer 28, como
+  no Canary. `buildContent` aceita `defense` em escudo e em arma corpo a corpo de uma ou duas
+  mãos; bow e wand/rod continuam recusados. Só o `combat-v3` lê a defesa da arma de duas mãos.
+- **`weapon.wieldUnproperly` (#687)** é o `unproperly` do Canary: a arma que ficou na mão abaixo
+  do level exigido bate metade no `combat-v3` em vez de não bater. Declarado em Fire Sword,
+  Double Axe, Dragon Slayer, Dragon Hammer, Dragonbone Staff e Mystic Blade; a Spike Sword não
+  tem.
 - **Dragonbone Staff (#520) é club, não wand/rod.** O nome sugere conjuração, mas o Tibia real a
   modela como arma de club corpo a corpo (`weaponType club`), sem `mana`/`fromDamage`/`toDamage`
   no script de equip — e é assim que o catálogo a declara.

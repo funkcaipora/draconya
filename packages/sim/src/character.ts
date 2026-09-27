@@ -5,6 +5,8 @@ import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
 import { FULL_BLOCK_CHARGE, isFullBlockCharge } from './combat/block-charge.js';
 import type { BlockChargeState } from './combat/block-charge.js';
+import { INITIAL_ATTACK_PRACTICE, isInitialAttackPractice } from './combat/attack-practice.js';
+import type { AttackPracticeState } from './combat/attack-practice.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Conditions } from './conditions.js';
@@ -166,6 +168,12 @@ export interface CharacterState {
    * issue. Sem bump de `SNAPSHOT_FORMAT_VERSION`, como `conditions`.
    */
   readonly blockCharge?: BlockChargeState;
+  /**
+   * A prática de ataque e de escudo do `combat-v3` (#686): `combat/attack-practice.ts`. Ausente é
+   * `INITIAL_ATTACK_PRACTICE` — nasce a cada sessão, como no Canary, e só viaja no snapshot
+   * QUENTE para a hunt retomada não perder o contador. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly attackPractice?: AttackPracticeState;
 }
 
 /** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
@@ -266,6 +274,11 @@ export class CharacterRuntime {
    * invariante 9) — ver `CharacterState.blockCharge`.
    */
   blockCharge: BlockChargeState;
+  /**
+   * A prática de ataque e de escudo do `combat-v3` (#686). Só o ruleset da hunt escreve, no
+   * evento do golpe (invariante 9) — ver `CharacterState.attackPractice`.
+   */
+  attackPractice: AttackPracticeState;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -299,6 +312,7 @@ export class CharacterRuntime {
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
+    this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -444,6 +458,9 @@ export class CharacterRuntime {
       // Como `conditions`: omitido quando ainda vale `FULL_BLOCK_CHARGE` (nunca bloqueou), para
       // não inflar todo snapshot existente com dois zeros que o construtor já repõe sozinho.
       ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
+      // O mesmo padrão: omitido enquanto ainda é o inicial (v1/v2 nunca o tocam).
+      ...(isInitialAttackPractice(this.attackPractice)
+        ? {} : { attackPractice: this.attackPractice }),
     };
   }
 

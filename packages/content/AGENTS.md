@@ -27,6 +27,13 @@ estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 ## O catálogo importado (ADR 0038, #572)
 
+**`staging/monsters/` não é conteúdo carregado** (#578): é onde `pnpm catalog:import monsters`
+escreve enquanto o monstro gerado não passa no boot — o loot aponta item por slug de nome, e o
+catálogo de itens (#573) e as linhas de aparência ainda não existem. Cada entidade de lá é a forma
+do `monsterSchema` mais dois campos que o #580 separa ao mover para `data/`: `bestiary` (vai para
+`bestiary/baseline.json`, `entries`) e `outfitId` (vai para `appearances/baseline.json`). `load.ts`
+não lê `staging/`, e nada do jogo deve ler.
+
 Qualquer `data/<tipo>/` (hoje `items/`, mais tarde `monsters/`) aceita, além do arquivo autoral
 direto na pasta, duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em
 `content.ts`:
@@ -195,8 +202,8 @@ faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
 `monsterAbilitySchema.chance` é OPCIONAL e sem default preenchido de propósito — não
 `z.number().default(1)` — porque a diferença entre "ausente" e "declarado como 1" é observável
 no `sim` (ausente não rola sorteio, declarado rola sempre). `monsterAbilityTargetSchema.area`
-aceita `circle`, `wave` e `beam` (`buildContent` recusa o resto); `wave`/`beam` saem do monstro
-na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
+aceita `circle`, `wave`, `rows` e `beam` (`buildContent` recusa o resto; o catálogo usa `rows`,
+#679); `wave`/`rows`/`beam` saem do monstro na direção do alvo, recalculada no `sim` — o schema não guarda direção nenhuma. `monster.defenses`
 (cura própria) é normalizado no boot como `abilities` (`normalizeMonsterDefenses`, ausente vira
 lista VAZIA — nunca `undefined` — para o `sim` iterar sem `?? []`), mas sem básica a sintetizar:
 nenhum monstro cura sozinho por padrão. `monster.targetChange`/`runOnHealth`/`staticAttack` são
@@ -465,5 +472,18 @@ entre arquivos resolvem.
   lida" está respondida: não é). Nenhum item ou monstro do catálogo real declara os campos novos
   ainda — os quatro monstros do bestiário (rat, rotworm, dragon, dragon lord) ficam no default
   `critChance: 0`, a identidade; só 6 bosses do Canary declaram, fora do recorte hoje.
+- **`item.absorb`/`increase`/`reflect`/`cleavePercent` são PERCENTUAL INTEIRO** (M30-05, #552),
+  a escala do `items.xml` do Canary — diferente de `mitigation.resistances` (fração) e de
+  `combatModifiers` (pontos-base). O `combat-v3` aplica a absorção item a item com arredondamento,
+  e a conta inteira é a do Canary. `mitigation.resistances` de ITEM e `absorb.<tipo>.percent` são
+  o MESMO `absorbpercent*`: o schema recusa os dois no mesmo tipo. O reflexo compila no boot
+  (`compileReflect`, tabela completa por tipo, ausente quando nada reflete) — é a forma que o
+  reflexo de monstro (#683) reusa.
+- **O monstro tem schema de mitigação PRÓPRIO** (#683): `monsterMitigationSchema` aceita
+  resistência em `[-2, 1)` (o `minElementalResistance` do Canary); o `mitigationSchema` do item
+  continua `[-1, 1)`. Os dois são `mitigationSchemaWith(piso)` — alargar o compartilhado mudaria o
+  item sem pedido. `monster.elementHealing` (teto 500) e `monster.reflect` (teto 200) são
+  PERCENTUAL INTEIRO, como o reflexo de item, e compilam no boot (`compileElementHealing`,
+  `compileReflect` com `flat` zero); ausentes no monstro compilado quando nada cura/reflete.
 
 Issue: FUN-8.

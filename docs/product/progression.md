@@ -76,9 +76,14 @@ comentário do arquivo), sem laço e sem função: um `UPDATE` só, por personag
 teste, um personagem level 9 na metade do level que continua level 9 na metade depois da
 migração, só que na curva nova.
 
-**Subir de level dá os pontos, não cura.** O máximo de HP e mana sobe, e o atual sobe junto na
-mesma quantidade. Curar no level up faria "subir de level" virar poção grátis, e um bot bem
-configurado morando na fronteira de um level nunca mais morreria.
+**Subir de level enche vida e mana (#678, ADR 0037).** É o Canary `Player::addExperience`:
+quando o level muda para cima, `health = healthMax; mana = manaMax`. Vários levels num abate
+curam uma vez, nos máximos finais. A **perda** de level na penalidade de morte não cura nada: só
+reduz os máximos (e o atual, se passar deles), como no Canary.
+
+Até #678 o level up só somava o delta dos máximos ("dá os pontos, não cura"), com o argumento de
+que o bot morando na fronteira de um level nunca morreria. Era uma divergência do Tibia sem ADR,
+contra o ADR 0037 — e esse bot na fronteira é o Tibia.
 
 **O level up é autoritativo sobre os stats.** Ele recalcula `maxHealth` e `maxMana` pela tabela,
 o que significa que qualquer valor inventado na criação do personagem some no primeiro level up.
@@ -154,6 +159,56 @@ conta inteira por uma falha de ledger — o valor ali só é exibido, nada é cr
 Na lista, liquida-se depois de listar (os ids só se conhecem listando) e relê-se só quando algo
 foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma consulta a mais.
 
+## Rates do servidor (#691, M44-G15)
+
+Todo servidor do Tibia tem rates, e o Draconya também: o bloco `progression.rates` em
+`packages/content/data/progression/baseline.json` (`ratesSchema`, `packages/content/src/schemas.ts`)
+é o `rateExp`/`rateSkill`/`rateMagic`/`rateLoot`, os stages de `data/stages.lua` e os
+`rateMonster*`/`rateBoss*` do `config.lua` do Canary. O rate mora no **conteúdo versionado**, e
+não em variável de ambiente do servidor (invariante 7): entra no `computeVersion`, uma sessão
+termina no rate da versão em que começou, e mudar o rate é deploy de conteúdo.
+
+```jsonc
+"rates": {
+  "experience": 1, "skill": 1, "magic": 1,
+  "loot": 1,                 // inteiro; 0 desliga o loot
+  "useStages": false,        // o `rateUseStages` do Canary
+  "experienceStages": [],    // [{ "minLevel": 1, "maxLevel": 8, "multiplier": 7 }, …]
+  "skillStages": [], "magicLevelStages": [],
+  "monster": { "health": 1, "attack": 1, "defense": 1 },
+  "boss":    { "health": 1, "attack": 1, "defense": 1 }
+}
+```
+
+**O default é neutro, e o conteúdo real não declara o bloco:** o Tibia com rate 1. Com tudo em 1,
+cada aplicação curto-circuita e nenhum número muda — nem um arredondamento a mais.
+
+| Rate | Onde se aplica | Como |
+|---|---|---|
+| `experience` / `experienceStages` | abate (`#grantPartyXp`) | `floor(xp × rate)`, **depois** do bônus do Bestiário, por membro e pelo level de cada um (o `baseRate` do Canary) |
+| `skill` / `skillStages` | prática (`#gainSkills`) | pontos × rate, sem arredondar; o stage é o do nível **base** da skill |
+| `magic` / `magicLevelStages` | prática da skill `magic` | igual, pelo ML base (o `getBaseMagicLevel()` do Canary ignora bônus de item) |
+| `loot` | sorteio (`rollLoot`) | chance de cada linha × `max(1, loot)`, teto 1; `0` devolve loot vazio **sem consumir sorteio** |
+| `monster` / `boss` `.health` | compilação do monstro (`compileMonster`) | `trunc(vida × mult)`, piso 1 |
+| `monster` / `boss` `.defense` | compilação do monstro | `defense` e `armor` × mult truncados; `defenseMitigation` × mult em ponto flutuante |
+| `monster` / `boss` `.attack` | golpe do monstro | `trunc(dano sorteado × mult)` — o sorteio é o mesmo, e a sequência do `Rng` não muda |
+
+`monster.boss: true` (o `MonsterType::isBoss` do Canary) escolhe o bloco `boss`; ausente é
+`false`. Só a flag: raridade e pontos do Bosstiary são o #629.
+
+Com `useStages`, a primeira faixa que contém o level vence (`getRateFromTable`), e sem faixa
+vale o rate simples. `buildContent` recusa faixa sem `maxLevel` que não seja a última, faixa com
+`minLevel > maxLevel` e faixas sobrepostas — no Canary a segunda seria letra morta.
+
+**Fronteira com o bônus de level baixo:** o `lowLevelBonusExp` do Canary **não** é um rate aqui.
+O ADR 0043 (emenda de 2026-09-25) escolheu a forma por faixa do Huntera, que é o
+`progression.experienceBonusByLevel` do #563 (na `main`; ainda não nesta linha). Quando os dois
+se encontrarem, o rate de XP multiplica **depois** da soma de percentuais de bônus — a ordem do
+Canary (`exp × (1 + bônus%) × stamina × baseRate`).
+
+Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspondente), os
+`SCHEDULE_*_RATE` de evento, VIP e boosted creature, e a exibição dos rates ao jogador.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -177,8 +232,8 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Curva de XP | a cúbica do Tibia, `(L³ − 6L² + 17L − 12) / 6 × 100` (#521, ADR 0037 — ver seção acima) | `packages/content/data/progression/baseline.json`, `xp: { kind: 'tibia' }` |
 | Bônus de XP de level baixo | `[ABERTO]` — forma decidida (ADR 0043, emenda 2026-09-25): multiplicador decrescente `levelBonusPercent` (Huntera: L1 +200 %, L2 +199 %, L3 +197 %, L7 +192 %), não o `lowLevelBonusExp = 50` aditivo fixo do TFS/Canary; curva exata ajustada a esses quatro pontos, provisória; bloqueava M32-02/#563 | caminho previsto: `packages/content/data/progression/baseline.json` |
 | Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
-| Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary: `gainhpticks` 12000, `gainmanaticks` 6000 — #521, ADR 0037; substitui o 1/1 provisório) | `packages/content/data/progression/baseline.json`, `regen` |
-| Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | 0,1667/0,3333 · 0,125/0,5 · 0,0833/0,6667 · 0,0833/0,6667 HP/mana por segundo (`gainhpticks`/`gainmanaticks` de cada vocação no Canary, #521, ADR 0037) | `packages/content/data/vocations/*.json`, `regen` |
+| Regeneração de vida/mana — sem vocação (levels 1–7) | pulsos: 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary: `gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — #521, ADR 0037; em pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen.health` / `regen.mana` (`ticksMs`, `amount`) |
+| Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | vida/mana, `amount` a cada `ticksMs`: Knight 1/6 000 e 2/6 000 · Paladin 1/8 000 e 2/4 000 · Sorcerer e Druid 1/12 000 e 2/3 000 (o `vocations.xml` do Canary, #521, #678) | `packages/content/data/vocations/*.json`, `regen` |
 | Multiplicador de skill/ML por vocação — Knight | melee 1,1 / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
 | Multiplicador de skill/ML por vocação — Paladin | melee 1,2 / distância 1,1 / escudo 1,1 / magia 1,4 | `packages/content/data/vocations/paladin.json`, `skillMultipliers` |
 | Multiplicador de skill/ML por vocação — Sorcerer | melee 2,0 / distância 2,0 / escudo 1,5 / magia 1,1 | `packages/content/data/vocations/sorcerer.json`, `skillMultipliers` |
@@ -188,6 +243,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Penalidade de morte — limiar da fórmula cúbica | level 24 (o Tibia) | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
 | Penalidade de morte — redução de quem está abençoado (`premium`) | 56 % (sete bênçãos × 8 % do Tibia — mapeia o `premium` que o repo já tinha) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
 | Penalidade de morte — piso de level | 8 — **sem equivalente no Tibia** (decisão de produto do Draconya, ver "Divergências do PRD") | `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor` |
+| Rates do servidor (XP, skill, magia, loot, stages, monstro, boss) | todos 1, stages desligados — o Tibia com rate 1 (#691; ver "Rates do servidor") | `packages/content/data/progression/baseline.json`, `rates` (ausente = neutro) |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Corpo a Corpo — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do club/sword/axe no Canary, #521, ADR 0037; `factor` por vocação, ver acima) | `packages/content/data/skills/melee.json` |
 | Magia (ML) — início, curva (base), dano por nível | 0 / 1600 / +3% `[ABERTO — dano por nível provisório]` (base = `getReqMana` do Canary — o custo do ML1 é sempre a base cheia, o expoente zera; `factor` = `manamultiplier`, por vocação, ver acima; #521, ADR 0037) | `packages/content/data/skills/magic.json` |
@@ -279,7 +335,7 @@ todos **conteúdo**, em `packages/content/data/skills/`.
 | Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
 | Distância | cada tiro de arma de distância (#152) | multiplica o poder do tiro |
 | Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
-| Escudo | cada ataque físico elegível recebido (CMB-04) | multiplica a defesa do escudo ou da arma de uma mão |
+| Escudo | cada ataque físico elegível recebido (CMB-04); no `combat-v3`, só o bloqueado com escudo (#686) | multiplica a defesa do escudo ou da arma de uma mão |
 
 **Shielding sobe por bloqueio, não por ser atacado.** A prática é do evento elegível — o
 defensor tem escudo ou arma de uma mão e o ataque é de um tipo aprovado —, e não depende de o
@@ -287,6 +343,35 @@ bloqueio ter acontecido nem de quanto HP foi perdido: um bloqueio total ainda tr
 ataque elemental não treina. O rato parado, sem atacar, também não move a skill (não é por
 tick). A fórmula e a posição do sorteio estão em
 [`combat.md`](./combat.md) e na emenda do ADR 0031.
+
+### No `combat-v3`, o try depende do tipo de bloqueio (#686)
+
+Com o perfil `combat-v3` (ADR 0040), as três práticas acima seguem a regra do Canary
+(`combat/attack-practice.ts`). O alvo devolve o **tipo de bloqueio** do golpe
+(`resolveBlockHit`, antes da mitigação percentual): `none` (tirou sangue), `defense` (a defesa
+zerou), `armor` (a armadura zerou) ou `immunity`. O personagem guarda quatro campos em
+`CharacterRuntime.attackPractice`, zerados a cada sessão e nunca salvos no banco (só no snapshot
+quente, omitidos quando iniciais):
+
+| Evento | Efeito |
+|---|---|
+| golpe `none` | treina; `bloodHitCount` e `shieldBlockCount` voltam a 30 |
+| golpe `defense`/`armor` | treina só se `bloodHitCount > 0`, e gasta um — 30 bloqueados seguidos no máximo |
+| golpe `immunity` | não treina; contadores intactos |
+
+| Skill | Tries por golpe no `combat-v3` |
+|---|---|
+| Corpo a Corpo (e punho) | 1 se o golpe treina e não foi imune, senão 0 |
+| Distância | 2 no tiro limpo, 1 no bloqueado, 0 no imune ou sem sangue; o tiro **errado** usa o estado do tiro anterior |
+| Escudo | 1 quando o golpe RECEBIDO foi bloqueado (`defense`/`armor`) com carga de `blockCount`, `shieldBlockCount > 0` e **escudo** na mão — arma de uma mão não treina; o contador cai mesmo sem escudo |
+
+Magia, runa e wand também passam pelo tipo do alvo: um acerto limpo recarrega os contadores, mas
+não rende try de arma (a wand continua praticando magia por mana). Com secundário, a última
+chamada vence (o secundário). O primeiro golpe da sessão que for bloqueado, e o primeiro tiro
+errado, rendem 0 — nada nasce carregado. `30` e `2/1/0` são constantes do `sim`
+(`BLOOD_HIT_RECHARGE`, `distanceTries`), não conteúdo. `combat-v1`/`v2` seguem a regra de
+cima, bit a bit. O tique de condição do próprio personagem ainda não recarrega os contadores
+(no Canary ele passa pelo `blockHit`): fica para issue própria.
 
 ### O ritmo de cada skill é por VOCAÇÃO (#521, ADR 0037)
 

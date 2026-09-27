@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { createHuntSession, Inventory, levelForXp } from '@draconya/sim';
 import type { InventoryState } from '@draconya/sim';
+import { NEUTRAL_RATES } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
@@ -74,12 +75,13 @@ const progression: Progression = {
   id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   satchelInitialSlots: 10, containerRow: 5,
-  startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   startingKit: [],
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
+  rates: NEUTRAL_RATES,
 };
 
 /**

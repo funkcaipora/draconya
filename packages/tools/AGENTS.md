@@ -16,8 +16,25 @@ generated/*.json`, nunca `packages/tools`. `scripts/catalog/xml.ts` (XML → ár
 MIT, JS puro, sem binário nativo, ADR 0013) e `enums.ts` (enum C++ → `Map<string, number>`, para
 resolver `COMBAT_*`/`BESTY_RACE_*`/`CONST_ME_*`) são as três peças que um importador de `<tipo>`
 novo usa; `registry.ts` é onde ele se registra (`registerCatalogType`) para o comando aceitar o
-nome. Nenhum `<tipo>` está registrado ainda nesta issue (#572) — é infraestrutura pura, os
-importadores de verdade (itens em #573, monstros em M35) entram depois. Limite de licença sem
+nome. O primeiro `<tipo>` registrado é `monsters` (#578, `scripts/catalog/monsters.ts`): lê
+`data-otservbr-global/monster/**/*.lua` (sem `familiars/`, `trainers/`, `traps/`) e escreve em
+`packages/content/staging/monsters/generated/` — **não** em `data/monsters/generated/`, porque o
+monstro gerado ainda não passa no boot (loot por slug de item sem o catálogo do #573, e sem linha na
+tabela de aparências); a primeira importação para `data/` é o #580. Ataque, defesa e invocação
+passam pelos mapeadores por NOME de `scripts/catalog/monster-abilities.ts` (#579): `melee`,
+`combat` (dano com forma, e cura própria em `defenses`), `speed`, `condition` (total fixo),
+`drunk`, `firefield`/`poisonfield`/`energyfield` e `monster.summon`; `outfit`, `effect` e
+`strength` são descartados porque o Canary não faz nada mecânico com eles. Um nome sem mapeador
+(`invisible` até o #559, as magias com nome próprio em script Lua, a `condition` de total
+sorteado) tira o monstro do catálogo, e quem invoca um monstro que não foi gerado sai junto. Dois
+campos saem CONDICIONADOS ao schema da base: `kind` (#682) e a onda de monstro em `rows` (#679,
+sem ele a onda sai na `wave` antiga — TODO). O que ficou fora vai para
+`docs/reference/catalog/monsters-report.md` com o motivo; o que foi lido e não coube (moeda
+extra, fraqueza abaixo de −100 %, campo ignorado, nome sem mapeador com a contagem de monstros,
+cobertura e a meta revista, chaves de apresentação com o id do Canary) vai para a seção "Notas"
+do mesmo relatório.
+A velocidade é a do TFS quando `FORGOTTENSERVER_DIR` tem o mesmo monstro, senão Canary × 2 (ADR
+0037 d.4) — sem o checkout do TFS, todo monstro cai no × 2, e a nota do relatório diz isso. Limite de licença sem
 exceção (ADR 0019/0038): o que sai do Canary é NÚMERO e FATO, nunca uma linha de Lua ou C++
 reproduzida — `lua-table.ts` só AVALIA expressão literal, nunca executa Lua de verdade.
 

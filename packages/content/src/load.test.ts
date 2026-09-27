@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { floorChangeAt, isBlocked } from './map.js';
-import { BOT_CATEGORIES } from './schemas.js';
+import { BOT_CATEGORIES, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -238,6 +238,12 @@ describe('loadContent', () => {
     expect(content.items.get('leather-armor')?.weight).toBe(60);
   });
 
+  it('o conteúdo real não declara rates: o default é o Tibia com rate 1 (#691)', () => {
+    const raw = JSON.parse(readFileSync(join(DATA, 'progression', 'baseline.json'), 'utf8')) as Record<string, unknown>;
+    expect(raw).not.toHaveProperty('rates');
+    expect(loadContent(DATA).progression.rates).toEqual(NEUTRAL_RATES);
+  });
+
   it('todo personagem nasce vestido com o kit do ADR 0026: seis peças, uma por slot, sem exigir nada (#153)', () => {
     // O kit é conteúdo (`progression.startingKit`), e o que se prende aqui é o que o jogador
     // encontra na primeira entrada. Mutação que mata: tirar uma peça do JSON, ou trocar o slot.
@@ -451,11 +457,35 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const content = loadContent(DATA);
     expect(content.supplies.get('health-potion')).toMatchObject({
       id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
-      effect: { kind: 'heal', amount: 80 }, requires: {},
+      effect: { kind: 'heal', amountRange: { min: 125, max: 175 } }, requires: {},
     });
     expect(content.supplies.get('avalanche-rune')?.group).toBe('attack');
+    expect(content.supplies.get('mana-potion')?.effect).toMatchObject({
+      kind: 'mana', amountRange: { min: 75, max: 125 },
+    });
+    // O Canary cura FAIXA, não número fixo (#690): o `amount` de antes não pode sobreviver.
+    expect(content.supplies.get('health-potion')?.effect).not.toHaveProperty('amount');
+    expect(content.supplies.get('mana-potion')?.effect).not.toHaveProperty('amount');
     // A bênção não é supply: é o único consumível que ainda é item.
     expect(content.supplies.has('blessing-charge')).toBe(false);
+  });
+
+  it('carrega a Small Health Potion do Canary, com efeito de aparência (#690)', () => {
+    const content = loadContent(DATA);
+    expect(content.supplies.get('small-health-potion')).toMatchObject({
+      id: 'small-health-potion', price: 20, group: 'potion', groupCooldownMs: 1000,
+      actionExhaustMs: 1000, requires: {},
+      effect: { kind: 'heal', amountRange: { min: 60, max: 90 } },
+    });
+    expect(content.appearances?.supplies['small-health-potion']).toEqual({ effect: 14 });
+  });
+
+  it('toda poção e toda runa travam a exaustão de ação compartilhada de 1000 ms (#690)', () => {
+    // `timeBetweenExActions` do Canary: poção e runa dividem o MESMO relógio.
+    const content = loadContent(DATA);
+    for (const [id, supply] of content.supplies) {
+      expect(supply.actionExhaustMs, id).toBe(1000);
+    }
   });
 
   it('appearances.supplies É conferido contra o catálogo abstrato, de um lado só (FUN-109)', () => {
@@ -757,6 +787,39 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     }
   });
 
+  it('a skill da fórmula transcreve o callback do Canary: LEVELMAGIC declara `magic` (#677)', () => {
+    // `CALLBACK_PARAM_LEVELMAGICVALUE` em `data/scripts/spells/attack/<nome>.lua` (lido em
+    // 2026-09-26). Em Druid/Sorcerer `spellSkill` já é `magic` e o campo não muda número; no
+    // Paladin, Divine Caldera e Divine Missile passam a ler o ML em vez da distance.
+    const LEVEL_MAGIC = [
+      'apprentices-strike-druid', 'chill-out', 'energy-strike-druid', 'eternal-winter',
+      'flame-strike-druid', 'ice-strike-druid', 'ice-wave', 'mud-attack', 'physical-strike',
+      'strong-ice-strike', 'strong-ice-wave', 'strong-terra-strike', 'terra-strike-druid',
+      'terra-wave', 'wrath-of-nature',
+      'apprentices-strike-sorcerer', 'buzz', 'death-strike', 'energy-beam', 'energy-strike-sorcerer',
+      'energy-wave', 'fire-wave', 'flame-strike-sorcerer', 'great-death-beam', 'great-energy-beam',
+      'great-fire-wave', 'hells-core', 'ice-strike-sorcerer', 'lightning', 'rage-of-the-skies',
+      'scorch', 'strong-energy-strike', 'strong-flame-strike', 'terra-strike-sorcerer',
+      'ultimate-energy-strike',
+      'divine-caldera', 'divine-missile',
+    ];
+    // `CALLBACK_PARAM_SKILLVALUE`: a skill da vocação (e o ataque da arma), sem `scaling`.
+    const SKILL_VALUE = [
+      'berserk', 'brutal-strike', 'fierce-berserk', 'front-sweep', 'groundshaker',
+      'lesser-front-sweep', 'whirlwind-throw',
+      'ethereal-spear', 'lesser-ethereal-spear', 'strong-ethereal-spear',
+    ];
+    expect(LEVEL_MAGIC).toHaveLength(37);
+    const declared: string[] = [];
+    const undeclared: string[] = [];
+    for (const spell of content.spells.values()) {
+      if (spell.effect.kind !== 'damage' || spell.effect.formula === undefined) continue;
+      (spell.effect.formula.scaling === 'magic' ? declared : undeclared).push(spell.id);
+    }
+    expect(declared.sort()).toEqual([...LEVEL_MAGIC].sort());
+    expect(undeclared.sort()).toEqual([...SKILL_VALUE].sort());
+  });
+
   it('a allowlist do que NÃO vem do Canary não cresce sem ninguém notar', () => {
     // As três genéricas pré-vocação (nunca tiveram vocationId nem BP do TibiaWiki) e as três
     // inventadas (têm vocationId e basePower, mas nome sem correspondente em
@@ -999,5 +1062,50 @@ describe('loadContent — generated/ e overrides/ (ADR 0038)', () => {
         expect(backpack?.value).toBe(222);
       },
     );
+  });
+});
+
+// #679: a área de onda e feixe é a contagem por fileira da `AREA_*` do Canary, com a fileira do
+// `3` — que o motor ancora um passo à frente (`spells.cpp:337`) e atinge (`combat.cpp:2309`).
+// Falha antes da correção: `energy-beam` era `beam 4`, `fire-wave` era `wave 3`.
+describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => {
+  const content = loadContent(DATA);
+
+  it('each spell has the area of its AREA_*, counting the row of the 3', () => {
+    const expected: Record<string, unknown> = {
+      'energy-beam': { shape: 'beam', length: 5 },
+      'great-energy-beam': { shape: 'beam', length: 8 },
+      'great-death-beam': { shape: 'beam', length: 6 },
+      'fire-wave': { shape: 'rows', widths: [1, 3, 3, 5] },
+      'ice-wave': { shape: 'rows', widths: [1, 3, 3, 5] },
+      'chill-out': { shape: 'rows', widths: [1, 3, 3, 5] },
+      scorch: { shape: 'rows', widths: [1, 3, 3, 5] },
+      'great-fire-wave': { shape: 'rows', widths: [1, 3, 3, 5, 5] },
+      'strong-ice-wave': { shape: 'rows', widths: [1, 3, 3] },
+      'terra-wave': { shape: 'rows', widths: [1, 1, 3, 3, 3] },
+      'energy-wave': { shape: 'rows', widths: [1, 1, 3, 3, 3] },
+    };
+    for (const [id, area] of Object.entries(expected)) {
+      const effect = content.spells.get(id)?.effect;
+      expect(effect?.kind, id).toBe('damage');
+      if (effect?.kind === 'damage') expect(effect.area, id).toEqual(area);
+    }
+  });
+
+  it('the dragon and dragon lord firewave is the Canary setupArea(8, 3): 26 tiles', () => {
+    for (const id of ['dragon', 'dragon-lord']) {
+      const ability = content.monsters.get(id)?.abilities.find((a) => a.id === 'firewave');
+      expect(ability?.target.area, id).toEqual({ shape: 'rows', widths: [1, 1, 3, 3, 3, 5, 5, 5] });
+    }
+  });
+
+  it('no spell, supply or monster ability of the catalogue uses the `wave` approximation', () => {
+    const catalogue = [
+      ...content.spells.values(), ...content.supplies.values(), ...content.monsters.values(),
+    ];
+    expect(catalogue.length).toBeGreaterThan(0);
+    for (const entry of catalogue) {
+      expect(JSON.stringify(entry), entry.id).not.toMatch(/"shape":"wave"/);
+    }
   });
 });

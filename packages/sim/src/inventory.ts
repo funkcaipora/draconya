@@ -23,13 +23,24 @@
 
 import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot, Progression,
-  RingEffect,
+  CompiledMitigation, CompiledReflect, DamageModifiers, DamageType, Item, ItemOrigin, ItemSlot,
+  Progression, RingEffect, SpecializedMagicElement, SuppressibleCondition,
 } from '@draconya/content';
+import type { SpecializedMagicLevels } from './casting.js';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
 import { hasItemOverlay, normalizeItemOverlay } from './item-overlay.js';
 import type { ItemInstanceOverlay } from './item-overlay.js';
+import type { DefenderAbsorb } from './combat/damage.js';
+
+/**
+ * A ordem em que o Canary varre os slots vestidos (`CONST_SLOT_FIRST..CONST_SLOT_LAST`: head,
+ * necklace, backpack, armor, right, left, legs, feet, ring, ammo) — a de `Player::blockHit`
+ * (#552). Importa porque a absorção percentual arredonda item a item: a ordem muda o número.
+ */
+const CANARY_SLOT_ORDER: readonly ItemSlot[] = [
+  'head', 'neck', 'back', 'chest', 'hand', 'shield', 'legs', 'feet', 'finger', 'ammo',
+];
 
 /** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */
 export const MAX_STACK = 100;
@@ -148,6 +159,15 @@ export interface Wearer {
 
 /** O que `requires` de um item confere: level e vocação. É o que `weapon()` lê do portador. */
 export type Requirements = Pick<Wearer, 'level' | 'vocationId'>;
+
+/**
+ * A arma na mão e a porcentagem do golpe (#687): `100` no level, `50` abaixo dele com
+ * `wieldUnproperly`, `0` abaixo dele sem — o `damageModifier` do `playerWeaponCheck` do Canary.
+ */
+export interface HeldWeapon {
+  readonly item: Item;
+  readonly damagePercent: 100 | 50 | 0;
+}
 
 export class Inventory {
   #backpack: (CarriedItem | null)[] = [];
@@ -574,6 +594,27 @@ export class Inventory {
   }
 
   /**
+   * A arma na mão com o quanto ela bate (#687, só o `combat-v3` lê) — o `playerWeaponCheck` do
+   * Canary. Irmã de `weapon()`, com UMA diferença: a arma vestida abaixo do level exigido não
+   * vira mão vazia. O level cai com a arma na mão (penalidade de morte), e aí ela bate metade
+   * com `wieldUnproperly` ou não bate (`0`: o chamador não emite golpe, nem de punho).
+   *
+   * Vocação errada continua mão vazia (`null`), como em `weapon()`: `equip` recusa, e o que
+   * chega por `fromState` sem passar por ela não pode virar golpe.
+   */
+  heldWeapon(catalog: ReadonlyMap<string, Item>, wearer: Requirements): HeldWeapon | null {
+    const carried = this.#equipped.get('hand');
+    if (carried === undefined) return null;
+    const item = catalog.get(carried.itemId);
+    if (item === undefined) return null;
+    if (!matchesVocationRequirement(item.requires.vocationId, wearer.vocationId)) return null;
+    if (item.requires.level !== undefined && wearer.level < item.requires.level) {
+      return { item, damagePercent: item.weapon?.wieldUnproperly === true ? 50 : 0 };
+    }
+    return { item, damagePercent: 100 };
+  }
+
+  /**
    * A DEFINIÇÃO do que está no slot de escudo (mão secundária), ou `null` sem nada lá (#549,
    * M30-02) — escudo, spellbook ou quiver, as três peças que só existem nesse slot. Irmã de
    * `weapon()`: mesma checagem de requisito, mesma leitura de "não veste" para snapshot antigo
@@ -683,18 +724,32 @@ export class Inventory {
   }
 
   /**
-   * O bônus de UMA skill do que está vestido, somado (#524): o Hat of the Mad soma na `magic`
-   * (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`. Molde de `armor()`: uma
-   * varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
-   * limitado e não depende do catálogo.
+   * O bônus de UMA skill do que está vestido, somado (#524, #688): o Hat of the Mad soma na
+   * `magic` (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`, e um item com
+   * várias skills soma em cada uma delas — o laço de `setVarSkill` do Canary. Molde de `armor()`:
+   * uma varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
+   * limitado e não depende do catálogo. O boot garante uma entrada por skill por item.
    */
   skillBonus(catalog: ReadonlyMap<string, Item>, skillId: string): number {
     let total = 0;
     for (const carried of this.#equipped.values()) {
-      const bonus = catalog.get(carried.itemId)?.bonuses?.skill;
-      if (bonus !== undefined && bonus.skillId === skillId) total += bonus.amount;
+      for (const bonus of catalog.get(carried.itemId)?.bonuses?.skills ?? []) {
+        if (bonus.skillId === skillId) total += bonus.amount;
+      }
     }
     return total;
+  }
+
+  /**
+   * Se algo vestido suprime `condition` (#688, `suppress*` do Canary): o Dwarven Ring suprime
+   * `drunk`. Como `Creature::addCondition`/`hasCondition` do Canary, quem consulta isto recusa a
+   * condição nova e ignora a que já estava ativa enquanto o item estiver vestido.
+   */
+  suppresses(catalog: ReadonlyMap<string, Item>, condition: SuppressibleCondition): boolean {
+    for (const carried of this.#equipped.values()) {
+      if (catalog.get(carried.itemId)?.bonuses?.suppress?.includes(condition) === true) return true;
+    }
+    return false;
   }
 
   /**
@@ -705,6 +760,26 @@ export class Inventory {
     let total = 0;
     for (const carried of this.#equipped.values()) {
       total += catalog.get(carried.itemId)?.bonuses?.speed ?? 0;
+    }
+    return total;
+  }
+
+  /**
+   * O MAGIC LEVEL ESPECIALIZADO do que está vestido, somado POR ELEMENTO (#680). O Canary
+   * (`Player::getSpecializedMagicLevel`, `player.cpp:7606-7627`) varre os itens equipados na
+   * hora do cálculo — nada é aplicado no equip —, e é o que isto faz: molde de
+   * `combatModifiers()`. `undefined` quando NADA vestido declara o campo, o caso de todo o
+   * conteúdo hoje, e é o que mantém a fórmula bit a bit sem o chamador conferir por fora.
+   */
+  specializedMagicLevel(catalog: ReadonlyMap<string, Item>): SpecializedMagicLevels | undefined {
+    let total: Partial<Record<SpecializedMagicElement, number>> | undefined;
+    for (const carried of this.#equipped.values()) {
+      const points = catalog.get(carried.itemId)?.bonuses?.specializedMagicLevel;
+      if (points === undefined) continue;
+      total ??= {};
+      for (const [element, amount] of Object.entries(points) as [SpecializedMagicElement, number | undefined][]) {
+        if (amount !== undefined) total[element] = (total[element] ?? 0) + amount;
+      }
     }
     return total;
   }
@@ -726,16 +801,30 @@ export class Inventory {
     let criticalDamage = 0;
     let lifeLeech = 0;
     let manaLeech = 0;
+    let increase: Partial<Record<DamageType, number>> | undefined;
     for (const carried of this.#equipped.values()) {
-      const modifiers = catalog.get(carried.itemId)?.combatModifiers;
+      const item = catalog.get(carried.itemId);
+      // O aumento por tipo (#552) é outro campo do item, mas o mesmo lado do golpe (o ATACANTE),
+      // e viaja no mesmo `DamageModifiers` para chegar a golpe, magia e runa sem outro parâmetro.
+      if (item?.increase !== undefined) {
+        increase ??= {};
+        for (const type of DAMAGE_TYPES) {
+          const value = item.increase[type];
+          if (value !== undefined) increase[type] = (increase[type] ?? 0) + value;
+        }
+      }
+      const modifiers = item?.combatModifiers;
       if (modifiers === undefined) continue;
       criticalChance += modifiers.criticalChance ?? 0;
       criticalDamage += modifiers.criticalDamage ?? 0;
       lifeLeech += modifiers.lifeLeech ?? 0;
       manaLeech += modifiers.manaLeech ?? 0;
     }
-    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0) return undefined;
+    if (criticalChance === 0 && lifeLeech === 0 && manaLeech === 0 && increase === undefined) {
+      return undefined;
+    }
     return {
+      ...(increase === undefined ? {} : { increase }),
       ...(criticalChance === 0 ? {} : {
         critical: { chance: criticalChance / 10_000, multiplier: 1 + criticalDamage / 10_000 },
       }),
@@ -753,6 +842,90 @@ function stacksWith(definition: Item | undefined, a: CarriedItem, b: CarriedItem
   return definition?.stackable === true && a.itemId === b.itemId
     && !hasItemOverlay(a) && !hasItemOverlay(b);
 }
+
+/**
+ * A absorção do EQUIPAMENTO para o `combat-v3` (#552), na forma de `DefenderAbsorb`: a
+ * percentual de CADA item na ordem de slot do Canary — `absorb.percent` e a fração de
+ * `mitigation.resistances` (o mesmo `absorbpercent*`, ×100) — e a flat somada. `undefined`
+ * quando nada vestido absorve, o caso comum, sem alocação.
+ */
+export function equipmentAbsorb(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): DefenderAbsorb | undefined {
+  let items: Partial<Record<DamageType, number>>[] | undefined;
+  let flat: Partial<Record<DamageType, number>> | undefined;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    if (carried === null) continue;
+    const item = catalog.get(carried.itemId);
+    if (item === undefined) continue;
+    let percents: Partial<Record<DamageType, number>> | undefined;
+    for (const type of DAMAGE_TYPES) {
+      // A fração legada vira percentual limpo: `0,07 × 100` é `7,000000000000001` em ponto
+      // flutuante, e o arredondamento por item herdaria o resto.
+      const resistance = Math.round(item.mitigation.resistances[type] * 10_000) / 100;
+      const percent = (item.absorb?.[type]?.percent ?? 0) + resistance;
+      if (percent !== 0) (percents ??= {})[type] = percent;
+      const absorbFlat = item.absorb?.[type]?.flat ?? 0;
+      if (absorbFlat !== 0) {
+        flat ??= {};
+        flat[type] = (flat[type] ?? 0) + absorbFlat;
+      }
+    }
+    if (percents !== undefined) (items ??= []).push(percents);
+  }
+  if (items === undefined && flat === undefined) return undefined;
+  return { items: items ?? [], flat: flat ?? {} };
+}
+
+/**
+ * O reflexo do EQUIPAMENTO (#552): as tabelas compiladas dos itens vestidos, somadas (o
+ * `Player::getReflectPercent`/`getReflectFlat` do Canary soma todos os equipados).
+ * `undefined` quando nada vestido reflete.
+ */
+export function equipmentReflect(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): CompiledReflect | undefined {
+  let total: { percent: Record<DamageType, number>; flat: Record<DamageType, number> } | undefined;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    const reflect = carried === null ? undefined : catalog.get(carried.itemId)?.reflect;
+    if (reflect === undefined) continue;
+    total ??= { percent: { ...ZERO_BY_TYPE }, flat: { ...ZERO_BY_TYPE } };
+    for (const type of DAMAGE_TYPES) {
+      total.percent[type] += reflect.percent[type];
+      total.flat[type] += reflect.flat[type];
+    }
+  }
+  return total;
+}
+
+/** O `cleavepercent` somado do que está vestido (#552, `Player::getCleavePercent`). Zero é nada. */
+export function equipmentCleavePercent(
+  inventory: Inventory, catalog: ReadonlyMap<string, Item>,
+): number {
+  let total = 0;
+  for (const slot of CANARY_SLOT_ORDER) {
+    const carried = inventory.equippedAt(slot);
+    if (carried !== null) total += catalog.get(carried.itemId)?.cleavePercent ?? 0;
+  }
+  return total;
+}
+
+/**
+ * A mitigação do equipamento SEM a resistência (#552): no `combat-v3` a resistência do item é
+ * absorção item a item (`equipmentAbsorb`), e só as imunidades continuam no estágio de
+ * `mitigation`. Sem imunidade nenhuma, o objeto neutro de sempre — nenhuma alocação.
+ */
+export function immunitiesOnly(mitigation: CompiledMitigation): CompiledMitigation {
+  if (mitigation.immunities.size === 0) return NEUTRAL_MITIGATION;
+  return { resistances: NEUTRAL_MITIGATION.resistances, immunities: mitigation.immunities };
+}
+
+const ZERO_BY_TYPE: Readonly<Record<DamageType, number>> = {
+  physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+  drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+};
 
 /** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */
 const NEUTRAL_MITIGATION: CompiledMitigation = {

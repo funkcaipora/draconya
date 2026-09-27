@@ -30,6 +30,16 @@ export const DAMAGE_TYPES = [
 export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /**
+ * Os elementos que têm MAGIC LEVEL ESPECIALIZADO no Canary (#680): as oito chaves
+ * `<elemento>magiclevelpoints` de `item_parse.cpp:915-941`. `healing` é o da cura; `drown`,
+ * `lifedrain`, `manadrain` e `arcane` não têm chave lá, e por isso não têm aqui.
+ */
+export const SPECIALIZED_MAGIC_ELEMENTS = [
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'healing',
+] as const;
+export type SpecializedMagicElement = (typeof SPECIALIZED_MAGIC_ELEMENTS)[number];
+
+/**
  * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
  * engine, commit e arquivo do Canary/TFS o número saiu — o mesmo `CatalogSource` que
  * `scripts/catalog/generated-writer.ts` grava por entidade em `<tipo>/generated/*.json`, e o
@@ -59,10 +69,13 @@ export const catalogSourceSchema = z.object({
  * Imutável e compilado no boot: o caminho quente faz `resistances[tipo]` (lookup) e
  * `immunities.has(tipo)` (Set), nunca uma varredura por golpe.
  */
-export const mitigationSchema = z.object({
-  resistances: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().gte(-1).lt(1)).default({}),
-  immunities: z.array(z.enum(DAMAGE_TYPES)).default([]),
-}).superRefine((mitigation, context) => {
+function refineMitigation(
+  mitigation: {
+    readonly resistances: Partial<Record<DamageType, number>>;
+    readonly immunities: readonly DamageType[];
+  },
+  context: z.RefinementCtx,
+): void {
   const seen = new Set<DamageType>();
   for (const type of mitigation.immunities) {
     // Duplicata é dado ambíguo: não se sabe se é engano ou ênfase, e o boot é o lugar de
@@ -80,7 +93,27 @@ export const mitigationSchema = z.object({
       });
     }
   }
-});
+}
+
+/** O mesmo perfil com o piso de resistência parametrizado: item e monstro diferem só nele (#683). */
+function mitigationSchemaWith(minResistance: number) {
+  return z.object({
+    resistances: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().gte(minResistance).lt(1)).default({}),
+    immunities: z.array(z.enum(DAMAGE_TYPES)).default([]),
+  }).superRefine(refineMitigation);
+}
+
+export const mitigationSchema = mitigationSchemaWith(-1);
+
+/**
+ * O perfil de mitigação do MONSTRO (#683, M30-G6): o mesmo de `mitigationSchema`, mas a
+ * vulnerabilidade vai até `-2` (-200 %, o `minElementalResistance` do Canary,
+ * `config.lua.dist`) — `-2` triplica o dano, o `(100 − (−200)) / 100` de `Monster::blockHit`.
+ * O teto continua `< 1`: `elements ≥ 100` do Canary é IMUNIDADE explícita (DT-02 do ADR 0031),
+ * nunca resistência de 100 %. O item continua em `[-1, 1)` — o Canary não dá esse recorte ao
+ * item, e alargar o schema compartilhado mudaria o item sem pedido (DT-03 do #683).
+ */
+export const monsterMitigationSchema = mitigationSchemaWith(-2);
 
 export type MitigationProfile = z.infer<typeof mitigationSchema>;
 
@@ -354,7 +387,24 @@ const lootRollSchema = z.object({
  * (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo existente que só declara
  * `itemId` continua válido sem mudar uma vírgula.
  */
+/**
+ * Os modelos de rolagem de loot (#685). Só um além do padrão: `canary`, o `generateLootRoll` do
+ * Canary (`monstertype.lua`) — fator 95–105 % por linha, rolagem inteira em `[0, 100000]` e a
+ * quantidade da MESMA rolagem. O padrão (campo ausente) não tem nome aqui de propósito: é o
+ * FUN-63, e toda semente já gravada depende de ele continuar sendo o que o ausente significa.
+ */
+export const LOOT_ROLL_MODELS = ['canary'] as const;
+export type LootRollModel = (typeof LOOT_ROLL_MODELS)[number];
+
 export const lootTableSchema = z.object({
+  /**
+   * Como a tabela é sorteada (#685). AUSENTE é o modelo FUN-63 (preserva toda semente gravada);
+   * `canary` é o `generateLootRoll` do Canary. O leitor de monstros (#578) grava `canary` em toda
+   * tabela gerada; os monstros autorais não o declaram e rendem bit a bit o de antes
+   * (invariante 7). Numa tabela `canary`, linha `itemId` com `max > 1` exige item `stackable` —
+   * o Canary daria 1 —, e `buildContent` recusa a que não empilha.
+   */
+  rollModel: z.enum(LOOT_ROLL_MODELS).optional(),
   gold: lootRollSchema.optional(),
   /**
    * Itens de verdade, supply OU munição. `buildContent` confere cada `itemId`/`supplyId`/
@@ -464,6 +514,10 @@ export interface WeaponProfile {
   readonly fixedDamage?: { readonly min: number; readonly max: number };
   /** O `hitChance` da arma (#524), só dado — ver o comentário em `weaponSchema`. */
   readonly hitChance?: number;
+  /** O componente elemental do golpe (#687), só corpo a corpo e só no `combat-v3`. */
+  readonly element?: { readonly type: DamageType; readonly attack: number };
+  /** Abaixo do level exigido bate metade em vez de não bater (#687, `combat-v3`). */
+  readonly wieldUnproperly?: boolean;
 }
 
 export const weaponSchema = z.strictObject({
@@ -494,6 +548,21 @@ export const weaponSchema = z.strictObject({
    * (`chance de acerto à distância`); este campo carrega o número para quando ela existir.
    */
   hitChance: z.number().int().min(-100).max(100).optional(),
+  /**
+   * O componente elemental da arma (#687) — o `element<tipo>` do Canary (`elementfire 11` da
+   * Fire Sword). `attack` do item continua só o FÍSICO; este é o ataque elemental somado a ele
+   * no sorteio do golpe e dividido de volta por truncamento. Só o `combat-v3` lê; v1/v2 ignoram
+   * (ADR 0031). Só em arma corpo a corpo — munição elemental é a #575.
+   */
+  element: z.strictObject({
+    type: z.enum(DAMAGE_TYPES).refine((t) => t !== 'physical', 'elemento não pode ser physical'),
+    attack: z.number().int().positive(),
+  }).optional(),
+  /**
+   * O `unproperly` do Canary (#687): vestida abaixo do level exigido — o level caiu com a arma
+   * na mão —, a arma bate METADE em vez de não bater. Só o `combat-v3` lê.
+   */
+  wieldUnproperly: z.boolean().optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 
@@ -518,18 +587,26 @@ export type ResolvedWeapon = WeaponProfile & {
  * - `energy-shield`: o Energy Ring. O dano sofrido debita da MANA antes da vida — a MESMA leitura
  *   que a condição `mana-shield` do utamo vita já faz em `applyDamageOutcome`
  *   (`sim/combat/outcome.ts`, CMB-08); as duas convergem no mesmo estágio e não se somam.
- * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o ponto fixo por
- *   vencimento de `progression.regen`, sem nenhum outro bônus, porque hoje não existe nenhum.
- *   `percent: 300` é +300% (quadruplica o ponto por vencimento).
+ *
+ * O Life Ring NÃO é `ringEffect`: a regeneração dele é `bonuses.regeneration`, a do Canary
+ * (`healthgain`/`manaticks`…), somada à da vocação (#688). O antigo `ringEffect` que
+ * multiplicava o pulso da vocação (+300%) não tinha fonte no Tibia e saiu.
  */
-export const RING_EFFECT_KINDS = ['energy-shield', 'regen-boost'] as const;
+export const RING_EFFECT_KINDS = ['energy-shield'] as const;
 export type RingEffectKind = (typeof RING_EFFECT_KINDS)[number];
 
 export const ringEffectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('energy-shield') }),
-  z.strictObject({ kind: z.literal('regen-boost'), percent: z.number().int().positive() }),
 ]);
 export type RingEffect = z.infer<typeof ringEffectSchema>;
+
+/**
+ * Condições que um item suprime enquanto vestido (`suppress*` do Canary, `MoveEvent::EquipItem`
+ * → `addConditionSuppressions`). Só `drunk` por ora: o Draconya não tem afogamento
+ * (`suppressdrown`), e o enum cresce junto com a condição que ele suprime.
+ */
+export const SUPPRESSIBLE_CONDITIONS = ['drunk'] as const;
+export type SuppressibleCondition = (typeof SUPPRESSIBLE_CONDITIONS)[number];
 
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 /**
@@ -627,6 +704,44 @@ export const itemCombatModifiersSchema = z.strictObject({
   manaLeech: z.number().int().min(0).optional(),
 });
 export type ItemCombatModifiers = z.infer<typeof itemCombatModifiersSchema>;
+
+/**
+ * A absorção por tipo do item (M30-05, #552). **Percentual INTEIRO**, a escala do Canary
+ * (`absorbpercent*` em `data/items/items.xml`: `8` é 8 %) — não a fração de
+ * `mitigation.resistances`, porque o `combat-v3` aplica cada item em SEQUÊNCIA com arredondamento
+ * (`damage -= round(damage × p / 100)`, `Player::blockHit`, `player.cpp:3938-3962`), e a conta
+ * inteira é a que o Canary faz.
+ *
+ * `percent` é o `absorbpercent*`; negativo é o item que AUMENTA o dano recebido daquele tipo. É o
+ * MESMO atributo que `mitigation.resistances` já carregava nos itens do kit (o `_open` de cada um
+ * cita o `absorbpercent*` de origem): o `combat-v3` lê os dois como absorção do item, e por isso
+ * o item recusa declarar os dois no mesmo tipo (`itemSchema`). `flat` é o `absorbFlat` do
+ * `Creature` do Canary: subtraído ANTES da imunidade e da defesa, sem piso abaixo de zero.
+ */
+export const itemAbsorbSchema = z.strictObject({
+  percent: z.number().int().gte(-100).lt(100).optional(),
+  flat: z.number().int().positive().optional(),
+});
+
+/**
+ * O reflexo por tipo (M30-05, #552): `percent` INTEIRO do dano bloqueado e `flat` em pontos,
+ * devolvidos ao ATACANTE com o teto `ceil(1 % da vida máxima dele)` (`game.cpp:7957-7981`). O
+ * `reflectdamage` do Canary (5 itens) é `flat` de `physical` (`item_parse.cpp:971`).
+ */
+export const reflectSchema = z.strictObject({
+  percent: z.number().int().positive().max(200).optional(),
+  flat: z.number().int().positive().optional(),
+});
+
+/**
+ * O reflexo COMPILADO (#552): as duas tabelas completas por tipo, zero onde nada reflete. É a
+ * forma que o `Defender.reflect` do `sim` lê, e a que o reflexo de MONSTRO (#683) reusa — a fonte
+ * muda, o mecanismo não.
+ */
+export interface CompiledReflect {
+  readonly percent: Readonly<Record<DamageType, number>>;
+  readonly flat: Readonly<Record<DamageType, number>>;
+}
 
 /**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
@@ -754,24 +869,49 @@ export const itemSchema = z.strictObject({
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
   /**
-   * Bônus PASSIVO enquanto o item está equipado (#524, kit level 200): skill (inclusive magic
-   * level — que aqui é a skill `magic`, FUN-92) e velocidade. Ausente é o item comum de sempre,
-   * sem bônus nenhum. Mora num objeto só, como `ringEffect`, porque os dois são "efeito de estar
-   * vestido" — ao contrário de `charges`/`durationMs`, que são consumo.
+   * Bônus PASSIVO enquanto o item está equipado (#524, kit level 200; #688): skills (inclusive
+   * magic level — que aqui é a skill `magic`, FUN-92), velocidade, regeneração própria e
+   * supressão de condição — o que o Canary aplica em `MoveEvent::EquipItem`. Ausente é o item
+   * comum de sempre, sem bônus nenhum. Mora num objeto só, como `ringEffect`, porque os dois são
+   * "efeito de estar vestido" — ao contrário de `charges`/`durationMs`, que são consumo.
    *
-   * Um item só declara UM bônus de skill (o Hat of the Mad soma magic level; a Paladin Armor
-   * soma distância) — o Canary também nunca soma dois `skillboost`/`*points` no mesmo item base
-   * (o que teria dois é imbuement, que o catálogo ainda não modela, `docs/product/items.md`
-   * "Em aberto"). Lista viraria generalidade sem exemplo — o mesmo motivo do `itemSchema` inteiro
-   * ser enxuto de propósito.
+   * Um item pode declarar VÁRIAS skills: o Canary soma todas (`setVarSkill` num laço por skill),
+   * e 54 itens base do `items.xml` têm mais de uma (collar of red plasma, id 23528: sword, axe e
+   * club +4). Os `skillboost` dentro de `imbuementslot` não contam — aquilo é a lista de
+   * imbuements permitidos, não bônus.
    */
   bonuses: z.object({
-    skill: z.object({
+    /**
+     * As skills do item (`skill*`/`magiclevelpoints` do Canary). Uma entrada por skill: o boot
+     * recusa skillId repetido no mesmo item (`buildContent`).
+     */
+    skills: z.array(z.strictObject({
       skillId: z.string().min(1),
       amount: z.number().int().positive(),
-    }).optional(),
+    })).min(1).optional(),
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
+    /**
+     * MAGIC LEVEL ESPECIALIZADO por elemento enquanto vestido (#680): as chaves
+     * `<elemento>magiclevelpoints` do Canary (`firemagiclevelpoints` → `fire`). Soma no ML só da
+     * fórmula de magia/runa do MESMO elemento (`combat.cpp:1979`), nunca no requisito de ML.
+     */
+    specializedMagicLevel: z.partialRecord(
+      z.enum(SPECIALIZED_MAGIC_ELEMENTS), z.number().int().positive(),
+    ).optional(),
+    /**
+     * Regeneração PRÓPRIA do item (`healthgain`/`healthticks`/`managain`/`manaticks`), somada à
+     * da vocação. O primeiro ganho sai `*TicksMs` depois de vestir, como na
+     * `ConditionRegeneration` do Canary, que acumula o intervalo antes de curar.
+     */
+    regeneration: z.strictObject({
+      healthGain: z.number().int().nonnegative(),
+      healthTicksMs: z.number().int().positive(),
+      manaGain: z.number().int().nonnegative(),
+      manaTicksMs: z.number().int().positive(),
+    }).refine((r) => r.healthGain > 0 || r.manaGain > 0, 'regeneração sem ganho').optional(),
+    /** Condições que o item suprime enquanto vestido (`suppress*` do Canary). */
+    suppress: z.array(z.enum(SUPPRESSIBLE_CONDITIONS)).min(1).optional(),
   }).optional(),
   /**
    * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
@@ -790,6 +930,25 @@ export const itemSchema = z.strictObject({
    * defensor (ver `Inventory.mitigation`).
    */
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * Absorção por tipo (M30-05, #552) — ver `itemAbsorbSchema`. Só o `combat-v3` lê; ausente é o
+   * item de sempre.
+   */
+  absorb: z.partialRecord(z.enum(DAMAGE_TYPES), itemAbsorbSchema).optional(),
+  /**
+   * Aumento do dano CAUSADO por tipo, em percentual INTEIRO (M30-05, #552): o `increasePercent`
+   * do atacante em `applyAbsorbDamageModifications` (`creature.cpp:935-940`), somado entre os
+   * equipados. Só o `combat-v3` lê.
+   */
+  increase: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().int().gt(-100).lte(100)).optional(),
+  /** Reflexo por tipo (M30-05, #552) — ver `reflectSchema`. Só o `combat-v3` lê. */
+  reflect: z.partialRecord(z.enum(DAMAGE_TYPES), reflectSchema).optional(),
+  /**
+   * O `cleavepercent` do Canary (M30-05, #552; 6 itens em `items.xml`): o golpe CORPO A CORPO com
+   * arma também acerta os dois tiles que flanqueiam o alvo, com esta fração INTEIRA de uma rolagem
+   * própria de dano (`WeaponMelee::useWeapon`, `weapons.cpp:531-589`). Soma entre os equipados.
+   */
+  cleavePercent: z.number().int().positive().max(100).optional(),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
   /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
@@ -805,14 +964,25 @@ export const itemSchema = z.strictObject({
   } else if (item.effect !== undefined) {
     ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `effect`' });
   }
+  // `mitigation.resistances` e `absorb.percent` são o MESMO `absorbpercent*` do Canary (#552): os
+  // dois no mesmo tipo seria somar o atributo duas vezes, ou deixar a regra depender da ordem de
+  // leitura. Escolha um.
+  for (const type of DAMAGE_TYPES) {
+    if (item.absorb?.[type]?.percent !== undefined && item.mitigation.resistances[type] !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `"${type}" declara \`mitigation.resistances\` e \`absorb.percent\` ao mesmo tempo — escolha um`,
+      });
+    }
+  }
 });
 
 /** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
 /**
- * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
- * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `rows`, `wave`, `cleave` e `beam`
+ * saem do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
  * exige alvo nem alcance; `cross` (Explosion) é centrado no alvo, sem direção.
  *
  * Mora aqui, antes de supply, porque o efeito de CURA do supply a referencia (#475) e porque a
@@ -833,8 +1003,25 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
   }),
   /** Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles. */
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
-  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  /**
+   * LEGADO DE FIXTURE (#679): cone à frente com a fileira k (1..length) de largura 2·⌊k/2⌋+1 →
+   * 1, 3, 3, 5, 5. É a aproximação do #523, que contou as `AREA_WAVEn` sem a fileira do `3` e
+   * errou uma fileira em toda onda — e `AREA_SQUAREWAVE5` e a onda de monstro nem cabem nesta
+   * fórmula. O catálogo usa `rows`, e `load.test.ts` proíbe `wave` em `data/`; fica no schema só
+   * porque fixtures de teste o usam, bit a bit iguais.
+   */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /**
+   * Fileiras à frente, uma largura cada (#679). A fileira i está a i + 1 tiles: a 0 é o `3`
+   * do Canary, ancorado um passo à frente (`getCasterPosition`). Transcreve a CONTAGEM por
+   * fileira da `AREA_*`, nunca a matriz (ADR 0019).
+   */
+  z.object({
+    shape: z.literal('rows'),
+    widths: z.array(z.number().int().positive().refine((w) => w % 2 === 1, {
+      message: 'largura de fileira é ímpar (centrada na linha da frente)',
+    })).min(1),
+  }),
   /**
    * Os três tiles imediatamente à frente (Front Sweep, Lesser Front Sweep). O Canary
    * (`AREA_WAVE6`, `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
@@ -845,7 +1032,11 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
    * lançador lendo só a matriz local, sem a âncora do motor — revertido numa revisão.
    */
   z.object({ shape: z.literal('cleave') }),
-  /** Linha reta de `length` tiles à frente, largura 1. */
+  /**
+   * Linha reta de `length` tiles à frente, largura 1: `beam n` é exatamente a `AREA_BEAMn` do
+   * Canary, contando o `3` — ancorado um passo à frente (`spells.cpp` `getCasterPosition`) e
+   * atingido como qualquer valor não-zero (`AreaCombat::getList`, #679).
+   */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
 ]);
 
@@ -863,9 +1054,11 @@ export type SpellArea = z.infer<typeof spellAreaSchema>;
  * ```
  *
  * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência). Na magia de DANO o `skill` é
- * a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no Paladin, `melee` no
- * Knight); na magia e na runa de CURA é sempre o MAGIC LEVEL. Sem `formula`, o efeito continua no
- * caminho provisório de `basePower` × `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ * o que `scaling` declara (#677): o MAGIC LEVEL em `magic` (o `CALLBACK_PARAM_LEVELMAGICVALUE` do
+ * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no
+ * Paladin, `melee` no Knight — o que a `SKILLVALUE` lê); na magia e na runa de CURA é sempre o
+ * MAGIC LEVEL. Sem `formula`, o efeito continua no caminho provisório de `basePower` ×
+ * `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
  */
 export const spellFormulaSchema = z.object({
   /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
@@ -893,6 +1086,20 @@ export const spellFormulaSchema = z.object({
   attackMax: z.number().optional(),
   skillAttackMin: z.number().optional(),
   skillAttackMax: z.number().optional(),
+  /**
+   * QUAL skill entra no termo `skill` (#677). `magic` = `CALLBACK_PARAM_LEVELMAGICVALUE` do
+   * Canary (magic level em qualquer vocação); `vocation` = `spellSkill`, o que a SKILLVALUE lê.
+   * AUSENTE = `vocation`, bit a bit (ADR 0031). Sem efeito em cura e runa (sempre ML).
+   * `optional()` e não `default()`: as fixtures de `sim` montam `SpellFormula` (tipo de SAÍDA)
+   * à mão (`casting.test.ts`), e um default tornaria o campo obrigatório nelas.
+   */
+  scaling: z.enum(['vocation', 'magic']).optional(),
+  /**
+   * Se o termo de ML soma o MAGIC LEVEL ESPECIALIZADO do elemento (#680). AUSENTE = `true`: é o
+   * `getMagicLevelSkill` do Canary (`combat.cpp:1979`). `false` = o script lê `getMagicLevel()`
+   * cru (Mass Healing, `mass_healing.lua`, TARGETCREATURE). Só vale onde o termo é o ML.
+   */
+  includeSpecializedMagicLevel: z.boolean().optional(),
 });
 
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;
@@ -951,6 +1158,13 @@ export const supplySchema = z.object({
    * respeitava; a runa de `attack` declara o dela para se alinhar às magias de ataque.
    */
   groupCooldownMs: z.number().int().positive().default(1_000),
+  /**
+   * A exaustão de AÇÃO compartilhada (`nextPotionAction` do Canary, `timeBetweenExActions`,
+   * #690): todo supply que a declara trava o MESMO livro, poção ou runa — uma poção logo depois
+   * de uma runa de ataque espera, apesar de os grupos serem livros separados. Ausente não trava
+   * (fixture e a Magic Shield Potion, #576, que o Canary tira da exaustão).
+   */
+  actionExhaustMs: z.number().int().positive().optional(),
   effect: z.discriminatedUnion('kind', [
     /**
      * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). QUATRO mecanismos —
@@ -1092,7 +1306,7 @@ export type Ammunition = AmmunitionDefinition & {
  * saber que existe uma tabela, e a entidade sem aparência morre na montagem do conteúdo — não
  * no primeiro jogador que abrir a mochila.
  */
-export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
+export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation' | 'reflect'> & {
   readonly appearanceId: number;
   /** A forma ativa enquanto vestido (`appearances.equippedItems`, #689). Ausente: `appearanceId`. */
   readonly equippedAppearanceId?: number;
@@ -1100,6 +1314,8 @@ export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
   readonly weapon?: ResolvedWeapon;
   /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
   readonly mitigation: CompiledMitigation;
+  /** O reflexo compilado (#552). Ausente em item que não reflete nada — o caso comum. */
+  readonly reflect?: CompiledReflect;
 };
 
 // `spellAreaSchema`/`SpellArea` foram movidos para antes de `supplySchema`: o efeito de cura do
@@ -1501,6 +1717,14 @@ export const monsterAbilitySchema = z.strictObject({
   /** O tipo de dano da ability (CMB-03). Ausente é `physical`, o default que preserva o v1. */
   damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /**
+   * Se a ability é o ataque `melee` ou um `combat` do Canary (#682) — é o que decide o
+   * bloqueio no `combat-v3` (`Monsters::deserializeSpell`, `monsters.cpp:105-120`): `melee`
+   * bloqueia defesa e armadura; `combat` FÍSICO só armadura, em qualquer alcance ou área;
+   * `combat` de outro tipo, nada. Ausente: decide a forma (`isMeleeAbility`), o comportamento
+   * de antes — o conteúdo escrito à mão e a ability básica do boot não mudam.
+   */
+  kind: z.enum(['melee', 'combat']).optional(),
+  /**
    * As chaves SEMÂNTICAS de apresentação (CMB-06): o host as resolve em ids de aparência na
    * tabela versionada (`appearances.abilities`). Chave sem linha é MUDA, nunca erro.
    */
@@ -1520,7 +1744,12 @@ export const monsterAbilitySchema = z.strictObject({
    */
   field: fieldSpecSchema.optional(),
   _open: z.string().optional(),
-});
+}).refine(
+  // O Canary fixa `COMBAT_PHYSICALDAMAGE` no `melee` (#682): um `melee` de fogo é conteúdo
+  // que o motor de referência não tem como produzir.
+  (ability) => ability.kind !== 'melee' || ability.damageType === 'physical',
+  { message: "kind 'melee' exige damageType 'physical'", path: ['kind'] },
+);
 
 export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
 
@@ -1536,6 +1765,11 @@ export interface MonsterAbility {
   readonly target: { readonly range: number; readonly area?: SpellArea };
   readonly power: MonsterAbilityPower;
   readonly damageType: DamageType;
+  /**
+   * `melee` ou `combat` do Canary (#682): decide as flags de bloqueio no `combat-v3`
+   * (`abilityBlockFlags`, `sim`). Ausente: a forma decide o corpo a corpo.
+   */
+  readonly kind?: 'melee' | 'combat';
   readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
   /** A condição que a ability aplica a quem acerta (CMB-07). Ausente: só o golpe. */
   readonly condition?: ConditionSpec;
@@ -1545,12 +1779,13 @@ export interface MonsterAbility {
 
 /**
  * As classes de monstro que a Cyclopedia usa para agrupar o Bestiário (SV-20, ADR 0030,
- * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO e
- * crescido por monstro real: hoje `rat` (mammal) e `rotworm` (vermin) existem em
- * `packages/content/data/monsters/` — a segunda classe entra na mesma PR que cria o primeiro
- * monstro dela, como a primeira entrou (§1 de `docs/kit-fidelity-plan.md`: nenhum dado de
- * mentira vira constante — pré-popular as onze categorias do `data.js` do kit sem nenhum
- * monstro real de oito delas seria exatamente isso).
+ * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO: as
+ * 20 classes do `monster.Bestiary.class` do Canary (M35-01, #578), no slug em inglês — o leitor
+ * de monstros (`scripts/catalog/monsters.ts`, `BESTIARY_CLASS_MAP`) converte `"Extra
+ * Dimensional"` em `extra-dimensional` e o resto em minúsculas. Antes do catálogo importado o
+ * vocabulário crescia por monstro real (`mammal`, `vermin`, `dragon`, nessa ordem); as três
+ * continuam na frente para a ordem de quem já as lia não mudar, e as outras dezessete seguem em
+ * ordem alfabética. A contagem por classe no Canary (47dfd51) vai de Humanoid (90) a Amphibic (11).
  *
  * Identificador em inglês, valor de exibição em português fica para quem desenhar a `SideList`
  * (RC-08/#321) — o mesmo desenho de `HUNT_DIFFICULTY_NAMES`/`cautious` (traduzido para
@@ -1558,7 +1793,11 @@ export interface MonsterAbility {
  * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
  * Ver Decisão técnica DT-02.
  */
-export const MONSTER_CLASSES = ['mammal', 'vermin', 'dragon'] as const;
+export const MONSTER_CLASSES = [
+  'mammal', 'vermin', 'dragon',
+  'amphibic', 'aquatic', 'bird', 'construct', 'demon', 'elemental', 'extra-dimensional', 'fey',
+  'giant', 'human', 'humanoid', 'lycanthrope', 'magical', 'plant', 'reptile', 'slime', 'undead',
+] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
@@ -1732,7 +1971,12 @@ export const monsterSchema = z.strictObject({
    * entradas" na tela (nenhuma categoria própria ainda).
    */
   class: z.enum(MONSTER_CLASSES).optional(),
-  recommendedLevel: z.number().int().positive(),
+  /**
+   * Level sugerido, só informativo — nenhum sistema lê o do MONSTRO (a hunt tem o próprio). O
+   * Canary não tem esse campo, e o leitor de monstros (#578) não inventa um número: ausente no
+   * monstro importado, declarado nos quatro autorais de sempre.
+   */
+  recommendedLevel: z.number().int().positive().optional(),
   health: z.number().int().positive(),
   experience: z.number().int().nonnegative(),
   /**
@@ -1763,7 +2007,25 @@ export const monsterSchema = z.strictObject({
    * O que o monstro RESISTE e ao que é IMUNE (CMB-03). Ausente é o monstro neutro, e o default
    * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
    */
-  mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  mitigation: monsterMitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * A cura por elemento (#683, M30-G6; `monster.heals` do Canary): por tipo, o PERCENTUAL
+   * INTEIRO do dano que o atinge — já crítico, ANTES de qualquer bloqueio, resistência ou
+   * imunidade — que CURA o monstro (`ceil(dano × p / 100)`, `Game::combatBlockHit`). Sai mesmo
+   * com o monstro imune ao tipo. Só com atacante (golpe, magia, runa, tique com dono) e só no
+   * `combat-v3`. Inteiro, e não fração, pela mesma razão do reflexo abaixo: a escala do Canary e
+   * uma conta sem erro de ponto flutuante dentro do `ceil`. Teto 500 (Maxxenius, o maior do
+   * Canary local).
+   */
+  elementHealing: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().int().positive().max(500)).optional(),
+  /**
+   * O reflexo do monstro (#683, M30-G6; `monster.reflects` do Canary): por tipo, o PERCENTUAL
+   * INTEIRO do dano bloqueado devolvido ao atacante, com o TIPO original e o teto
+   * `ceil(1 % da vida máxima do atacante)` — o mecanismo do #552 (`combat/reflect.ts`, refletor
+   * `monster`), na mesma escala do `reflectSchema` do item. Teto 200 (`MAX_DAMAGE_REFLECTION`).
+   * Sem reflexo `flat`: o monstro do Canary não declara. Só o `combat-v3` lê.
+   */
+  reflect: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().int().positive().max(200)).optional(),
   /**
    * A mitigação PERCENTUAL do `combat-v3` (#548, `Monster::getMitigation`/`monster.defenses.
    * mitigation` do Canary — nome DISTINTO de `mitigation` acima de propósito: aquele é
@@ -1871,6 +2133,12 @@ export const monsterSchema = z.strictObject({
    * padrão passa a ser o do Tibia, monstro por monstro.
    */
   blockable: z.boolean().default(false),
+  /**
+   * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
+   * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
+   * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.
+   */
+  boss: z.boolean().default(false),
   loot: lootTableSchema.default({ items: [] }),
   /**
    * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
@@ -2009,6 +2277,27 @@ export const startingKitPieceSchema = z.object({
 
 export type StartingKitPiece = z.infer<typeof startingKitPieceSchema>;
 
+/**
+ * Um pulso de regeneração (#678): `amount` pontos a cada `ticksMs` — o `gainhpticks`/
+ * `gainhpamount` (e `gainmanaticks`/`gainmanaamount`) do Canary `vocations.xml`, guardado como
+ * pulso e sem virar taxa. Cada pulso é UM evento da fila da sessão (invariante 2, ADR 0020), que
+ * vence no instante exato: `ticksMs` inteiro, nada de `1000 / taxa` em ponto flutuante — é o que
+ * faz a hunt desanexada a 1 Hz regenerar exatamente o mesmo que a anexada a 10 Hz.
+ *
+ * `amount: 0` é "não regenera" (nenhum evento agendado); `ticksMs` é positivo porque zero seria
+ * um pulso que reagenda a si mesmo no mesmo instante, para sempre.
+ */
+export const regenPulseSchema = z.strictObject({
+  ticksMs: z.number().int().positive(),
+  amount: z.number().int().nonnegative(),
+});
+
+/** A regeneração passiva (#678): um pulso de vida e um de mana, independentes. */
+export const regenSchema = z.strictObject({ health: regenPulseSchema, mana: regenPulseSchema });
+
+export type RegenPulse = z.infer<typeof regenPulseSchema>;
+export type Regen = z.infer<typeof regenSchema>;
+
 export const vocationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -2019,16 +2308,12 @@ export const vocationSchema = z.object({
   spellSkill: z.string().min(1).default('magic'),
   /**
    * Regeneração passiva DESTA vocação (#521, ADR 0037), na mesma forma de `progression.regen`:
-   * pontos por segundo, não por tick (ver o comentário lá). Vem do Canary `vocations.xml`
-   * (`gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — convertidos para taxa:
-   * `amount * 1000 / ticks`), verificado contra o arquivo em `main` de 2026-09-24. Ausente:
-   * quem monta a sessão cai no `regen` da tabela base (sem vocação) — o conteúdo de teste que
-   * não fala de vocação por vocação.
+   * um pulso por recurso (#678, `regenPulseSchema`). Vem do Canary `vocations.xml`
+   * (`gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount`, sem conversão), verificado
+   * contra o arquivo em 47dfd51. Ausente: quem monta a sessão cai no `regen` da tabela base (sem
+   * vocação) — o conteúdo de teste que não fala de vocação por vocação.
    */
-  regen: z.object({
-    healthPerSecond: z.number().nonnegative(),
-    manaPerSecond: z.number().nonnegative(),
-  }).optional(),
+  regen: regenSchema.optional(),
   /**
    * A mitigação percentual do JOGADOR desta vocação (#549, M30-02; `PlayerWheel::
    * calculateMitigation`, Canary `player_wheel.cpp:4072-4124`) — o `<mitigation multiplier
@@ -2093,6 +2378,94 @@ export const vocationSchema = z.object({
 });
 
 /**
+ * Uma faixa de rate por level (#691), o `{ minlevel, maxlevel, multiplier }` de `data/stages.lua`
+ * do Canary. `maxLevel` é INCLUSIVO; ausente é infinito, e só a ÚLTIMA faixa pode omiti-lo.
+ */
+const rateStageSchema = z.strictObject({
+  minLevel: z.number().int().nonnegative(),
+  maxLevel: z.number().int().positive().optional(),
+  multiplier: z.number().positive(),
+}).refine(
+  (stage) => stage.maxLevel === undefined || stage.minLevel <= stage.maxLevel,
+  'faixa de rate com minLevel acima de maxLevel',
+);
+
+/**
+ * Recusa faixa aberta que não seja a última e faixas sobrepostas (#691), a mesma forma da
+ * checagem do `experienceBonusByLevel` (#563). Sobreposição não seria erro no Canary — a
+ * primeira faixa vence (`getRateFromTable`) —, mas aqui a segunda faixa seria letra morta, e
+ * número que não vale nada é erro de digitação à espera de virar bug de balanceamento.
+ */
+const rateStagesSchema = z.array(rateStageSchema).superRefine((stages, context) => {
+  for (let index = 0; index < stages.length; index += 1) {
+    const stage = stages[index];
+    if (stage === undefined) continue;
+    if (stage.maxLevel === undefined && index !== stages.length - 1) {
+      context.addIssue({ code: 'custom', message: `faixa de rate sem maxLevel em ${index} não é a última` });
+      return;
+    }
+    for (let other = 0; other < index; other += 1) {
+      const previous = stages[other];
+      if (previous === undefined) continue;
+      const previousMax = previous.maxLevel ?? Number.POSITIVE_INFINITY;
+      const stageMax = stage.maxLevel ?? Number.POSITIVE_INFINITY;
+      if (stage.minLevel <= previousMax && previous.minLevel <= stageMax) {
+        context.addIssue({ code: 'custom', message: `faixas de rate sobrepostas em ${other} e ${index}` });
+        return;
+      }
+    }
+  }
+});
+
+/**
+ * O escalonamento de monstro ou de boss (#691): `rateMonsterHealth/Attack/Defense` e
+ * `rateBossHealth/Attack/Defense` do `config.lua` do Canary.
+ */
+const creatureRatesSchema = z.strictObject({
+  health: z.number().positive().default(1),
+  attack: z.number().positive().default(1),
+  defense: z.number().positive().default(1),
+});
+
+/**
+ * Os rates do servidor (#691, M44-G15): o `rateExp`/`rateSkill`/`rateMagic`/`rateLoot`, os
+ * stages de `data/stages.lua` e os multiplicadores de monstro e boss do Canary. Moram no
+ * conteúdo versionado, e não em variável de ambiente, pelo invariante 7: um rate fora do
+ * conteúdo mudaria o resultado no meio de uma sessão. Mudar o rate é deploy de conteúdo.
+ *
+ * O default é NEUTRO (tudo 1, stages desligados), o Tibia com rate 1 — e com ele nenhum
+ * número muda: o `sim` curto-circuita cada aplicação em 1. O `lowLevelBonusExp` do Canary NÃO
+ * mora aqui (ADR 0043, emenda): é o `experienceBonusByLevel` do #563, e o rate de XP multiplica
+ * DEPOIS da soma de bônus, na ordem do Canary.
+ */
+export const ratesSchema = z.strictObject({
+  experience: z.number().positive().default(1),
+  skill: z.number().positive().default(1),
+  magic: z.number().positive().default(1),
+  /**
+   * Inteiro, como o `rateLoot` do Canary. `0` desliga o loot (sem sorteio nenhum); a chance de
+   * cada linha é multiplicada por `max(1, loot)`, com teto 1.
+   */
+  loot: z.number().int().nonnegative().default(1),
+  /** O `rateUseStages` do Canary: desligado, as tabelas abaixo são ignoradas. */
+  useStages: z.boolean().default(false),
+  experienceStages: rateStagesSchema.default([]),
+  skillStages: rateStagesSchema.default([]),
+  magicLevelStages: rateStagesSchema.default([]),
+  /** Para monstro sem `boss`. Vida e defesa na compilação; ataque no golpe (`sim`). */
+  monster: creatureRatesSchema.default(() => ({ health: 1, attack: 1, defense: 1 })),
+  /** Para monstro com `boss: true` (`MonsterType::isBoss` do Canary). */
+  boss: creatureRatesSchema.default(() => ({ health: 1, attack: 1, defense: 1 })),
+});
+
+export type Rates = z.infer<typeof ratesSchema>;
+export type RateStage = Rates['experienceStages'][number];
+export type CreatureRates = Rates['monster'];
+
+/** Os rates neutros (#691): o que o conteúdo sem `progression.rates` recebe. */
+export const NEUTRAL_RATES: Rates = ratesSchema.parse({});
+
+/**
  * A tabela base de progressão: onde o personagem começa, e como cresce ENQUANTO NÃO TEM
  * vocação (§7.4 — ela é escolhida no level 8).
  *
@@ -2120,18 +2493,14 @@ export const progressionSchema = z.object({
   startingSpeed: z.number().int().positive(),
   speedPerLevel: z.number().int().nonnegative(),
   /**
-   * Regeneração passiva, em pontos por segundo (FUN-36, FUN-68).
+   * Regeneração passiva BASE (FUN-36, FUN-68; pulsos desde #678) — a vocação `None` do Canary,
+   * para quem ainda não tem vocação e para o conteúdo de teste que não declara uma.
    *
-   * Por SEGUNDO, e não por tick. Uma taxa de `r` por segundo vira um evento periódico de
-   * `1000 / r` milissegundos na fila da sessão, que vence no instante exato — nada de somar
-   * `taxa * dtMs / 1000` num acumulador fracionário, que derivava: `0,1` dez vezes em ponto
-   * flutuante dá `0,9999…` e some uma unidade a cada dez. É o que faz a hunt desanexada a
-   * 1 Hz regenerar exatamente o mesmo que a anexada a 10 Hz.
+   * Um pulso por recurso (`regenPulseSchema`): `amount` a cada `ticksMs`, cada pulso um evento da
+   * fila que vence no instante exato. Até #678 era uma taxa em pontos por segundo, que virava 1
+   * ponto a cada `1000 / taxa` ms — mesma média, outro ritmo, e divisão em ponto flutuante.
    */
-  regen: z.object({
-    healthPerSecond: z.number().nonnegative(),
-    manaPerSecond: z.number().nonnegative(),
-  }),
+  regen: regenSchema,
   /**
    * A mitigação percentual BASE (#549, M30-02) — a vocação `None` do Canary `vocations.xml`
    * (`<mitigation multiplier="1.3" primaryShield="2.05" secondaryShield="1.25">`), para quem
@@ -2222,6 +2591,11 @@ export const progressionSchema = z.object({
    * próprio conteúdo da skill.
    */
   skillMultipliers: z.record(z.string(), z.number().min(1)).default({}),
+  /**
+   * Os rates do servidor (#691): ver `ratesSchema`. Ausente é o neutro — o conteúdo real
+   * (`baseline.json`) não declara, porque o default É o Tibia com rate 1.
+   */
+  rates: ratesSchema.default(() => ratesSchema.parse({})),
   _open: z.string().optional(),
 });
 
@@ -2289,8 +2663,8 @@ export const COMBAT_V2: CombatCompatibilityProfile = {
  * o Tibia nega o golpe inteiro ANTES do `blockHit` — a mesma posição que o Draconya já usa), e
  * `player-always-hit-melee` não muda (a chance de acerto ofensivo é FORA do escopo do #548).
  *
- * Absorção/aumento por tipo (`applyAbsorbDamageModifications`) e reflexo ficam de fora — são o
- * M30-05 (ADR 0040). Defesa e mitigação do JOGADOR continuam os números atuais (o que muda é só
+ * Absorção/aumento por tipo (`applyAbsorbDamageModifications` e o `absorbpercent*` de item),
+ * reflexo e cleave entraram como emenda no M30-05 (#552, ADR 0040). Defesa e mitigação do JOGADOR continuam os números atuais (o que muda é só
  * o MECANISMO que os consome): a fórmula própria do 13.x é o M30-02.
  */
 export const COMBAT_V3: CombatCompatibilityProfile = {
@@ -2322,6 +2696,13 @@ export interface DamageModifiers {
   readonly critical?: { readonly chance: number; readonly multiplier: number } | undefined;
   readonly lifeLeech?: number | undefined;
   readonly manaLeech?: number | undefined;
+  /**
+   * O aumento do dano causado por tipo (M30-05, #552) — o `increasePercent` do atacante, em
+   * percentual INTEIRO como no Canary (diferente dos campos acima, que são fração): aplicado no
+   * estágio de absorção do `combat-v3` (`damage += round(damage × p / 100)`), para o primário E o
+   * secundário, sem sorteio. `combat-v1`/`v2` o ignoram.
+   */
+  readonly increase?: Readonly<Partial<Record<DamageType, number>>> | undefined;
 }
 
 /**
@@ -2659,6 +3040,12 @@ export type PartyConfig = z.infer<typeof partySchema>;
 export const bestiaryEntrySchema = z.strictObject({
   class: z.enum(MONSTER_CLASSES),
   race: z.string().min(1),
+  /**
+   * O `monster.raceId` do Canary — o id do monstro no Bestiário/Cyclopedia do cliente Tibia (34
+   * para o Dragon). Opcional: só entrada importada (#578) o traz; é dado à espera de consumidor,
+   * como o resto da ficha.
+   */
+  raceId: z.number().int().positive().optional(),
   /** Abates para a ficha completa (Canary `toKill`, TFS `mastery`). */
   toKill: z.number().int().positive(),
   /** Abates para o primeiro desbloqueio — a ficha básica (Canary `FirstUnlock`, TFS `prowess`). */
@@ -2667,8 +3054,12 @@ export const bestiaryEntrySchema = z.strictObject({
   secondUnlock: z.number().int().positive(),
   /** Pontos de Charm ganhos ao completar a ficha (Canary `CharmsPoints`, TFS `charmPoints`). */
   charmsPoints: z.number().int().nonnegative(),
-  /** Estrelas de dificuldade do Cyclopedia, 1 a 4 (Canary `Stars`). */
-  stars: z.number().int().min(1).max(4),
+  /**
+   * Estrelas de dificuldade do Cyclopedia (Canary `Stars`): 0 (inofensivo) a 5 (desafiador). Era
+   * 1 a 4 antes do leitor de monstros (#578), que achou os dois extremos no Canary (47dfd51): 13
+   * monstros com 0 estrela (o Northern Pike, por exemplo) e 53 com 5.
+   */
+  stars: z.number().int().min(0).max(5),
   /** Raridade de encontro do Cyclopedia: 0 comum … 3 muito raro (Canary `Occurrence`). */
   occurrence: z.number().int().min(0).max(3),
   _open: z.string().optional(),
@@ -3500,12 +3891,21 @@ export type Spell = z.infer<typeof spellSchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities' | 'defenses'> & {
+export type Monster = Omit<
+  MonsterDefinition, 'mitigation' | 'abilities' | 'defenses' | 'elementHealing' | 'reflect'
+> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
   /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
   readonly mitigation: CompiledMitigation;
+  /**
+   * A cura por elemento compilada (#683): a tabela COMPLETA por tipo, em percentual inteiro,
+   * zero onde não cura. Ausente no monstro que não cura com tipo nenhum — o caso comum.
+   */
+  readonly elementHealing?: Readonly<Record<DamageType, number>>;
+  /** O reflexo compilado (#683), na forma do item (#552). Ausente no monstro que não reflete. */
+  readonly reflect?: CompiledReflect;
   /**
    * As abilities JÁ NORMALIZADAS (CMB-06): nunca vazio — ausência vira a básica do boot. É o
    * que o `sim` lê, e é por isso que ele não conhece o par `attack`/`attackIntervalMs`.

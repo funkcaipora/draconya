@@ -9,7 +9,7 @@
 import type { Combat, WeaponProfile } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
-import { normalRandomInt, resolveWeaponPower } from './weapon-power.js';
+import { normalRandomInt, resolveWeaponHit, resolveWeaponPower } from './weapon-power.js';
 
 const rng = (): Rng => Rng.fromSeed('weapon-power');
 
@@ -336,5 +336,67 @@ describe('resolveWeaponPower — combat-v2: wand/rod sorteiam pela normal trunca
     );
     expect(Math.min(...v1Values)).toBeLessThan(100);
     expect(Math.max(...v1Values)).toBeGreaterThan(900);
+  });
+});
+
+// --- #687: o elemento da arma e o `damagePercent` do `unproperly` (combat-v3) ------------------
+
+describe('resolveWeaponHit — elemento dividido e unproperly (#687)', () => {
+  const combatV3 = (): Combat => ({ ...combatV2(), compatibilityProfile: 'combat-v3' });
+  /** A Fire Sword do Canary: 24 físico + 11 de fogo. */
+  const fireSword: WeaponProfile = { ...melee(24), element: { type: 'fire', attack: 11 } };
+
+  it('v3: sorteia sobre attack + element e divide o total por truncamento', () => {
+    let sawRemainder = false;
+    for (let i = 0; i < 200; i += 1) {
+      // O total é o sorteio da MESMA fórmula com attack 35, a mesma semente.
+      const total = resolveWeaponPower(melee(35), 60, 90, Rng.fromSeed(`split-${i}`), combatV3());
+      const hit = resolveWeaponHit(fireSword, 60, 90, Rng.fromSeed(`split-${i}`), combatV3(), 1, 100);
+      expect(hit.physical).toBe(Math.trunc(total * (24 / 35)));
+      expect(hit.elemental).toBe(Math.trunc(total * (11 / 35)));
+      if (hit.physical + hit.elemental < total) sawRemainder = true;
+    }
+    // Truncar POR PARTE perde um ponto em parte das amostras — `round` não perderia.
+    expect(sawRemainder).toBe(true);
+  });
+
+  it('v3: o total de 70 na Fire Sword vira 48 físico e 22 de fogo', () => {
+    expect(Math.trunc(70 * (24 / 35))).toBe(48);
+    expect(Math.trunc(70 * (11 / 35))).toBe(22);
+  });
+
+  it('v3: damagePercent 50 corta o TOTAL antes do split', () => {
+    for (let i = 0; i < 50; i += 1) {
+      const total = resolveWeaponPower(melee(35), 60, 90, Rng.fromSeed(`half-${i}`), combatV3());
+      const half = Math.trunc((total * 50) / 100);
+      const hit = resolveWeaponHit(fireSword, 60, 90, Rng.fromSeed(`half-${i}`), combatV3(), 1, 50);
+      expect(hit).toEqual({
+        physical: Math.trunc(half * (24 / 35)), elemental: Math.trunc(half * (11 / 35)),
+      });
+    }
+  });
+
+  it('v3 sem elemento: a chamada de sempre, com damagePercent aplicado', () => {
+    const plain = resolveWeaponPower(melee(24), 60, 90, Rng.fromSeed('plain'), combatV3());
+    expect(resolveWeaponHit(melee(24), 60, 90, Rng.fromSeed('plain'), combatV3(), 1, 100))
+      .toEqual({ physical: plain, elemental: 0 });
+    expect(resolveWeaponHit(melee(24), 60, 90, Rng.fromSeed('plain'), combatV3(), 1, 50))
+      .toEqual({ physical: Math.trunc(plain / 2), elemental: 0 });
+  });
+
+  it('combat-v2 com element: mesmo número e mesma sequência de resolveWeaponPower', () => {
+    const a = Rng.fromSeed('v2-element');
+    const b = Rng.fromSeed('v2-element');
+    const power = resolveWeaponPower(fireSword, 60, 90, a, combatV2());
+    const hit = resolveWeaponHit(fireSword, 60, 90, b, combatV2(), 1, 100);
+    expect(hit).toEqual({ physical: power, elemental: 0 });
+    expect(b.getState()).toEqual(a.getState());
+  });
+
+  it('combat-v1 com element: o valor fracionário do v1 passa intacto', () => {
+    const v1: WeaponProfile = { ...scaled({ levelFactor: 0.013 }), element: { type: 'fire', attack: 11 } };
+    const power = resolveWeaponPower(v1, 7, 10, rng());
+    expect(Number.isInteger(power)).toBe(false);
+    expect(resolveWeaponHit(v1, 7, 10, rng(), undefined, 1, 100)).toEqual({ physical: power, elemental: 0 });
   });
 });
