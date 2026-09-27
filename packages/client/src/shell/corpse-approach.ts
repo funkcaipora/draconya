@@ -9,7 +9,7 @@
 
 import { sendIntent } from '../net/current.js';
 import { world } from '../state/world.js';
-import { decideCorpseApproach } from '../world/corpse-approach.js';
+import { corpseApproachDeadline, decideCorpseApproach } from '../world/corpse-approach.js';
 import type { PendingCorpseOpen } from '../world/corpse-approach.js';
 
 let pending: PendingCorpseOpen | null = null;
@@ -17,12 +17,16 @@ let pending: PendingCorpseOpen | null = null;
 /**
  * O clique no cadáver (`Viewport.tsx`): manda `walk-to` na hora e guarda o pedido. Se o
  * personagem já está ao alcance, `tick` (chamado logo em seguida) manda `open-corpse` direto,
- * sem esperar o próximo ciclo do laço.
+ * sem esperar o próximo ciclo do laço. O prazo (#763) já sai PROPORCIONAL à distância conhecida
+ * agora — `corpseApproachDeadline` lê a posição própria do `world` (ADR 0007) uma única vez,
+ * aqui, e o pedido não a reconsulta depois.
  */
 export function requestCorpseApproach(
   groundItemId: number, position: PendingCorpseOpen['position'], nowMs: number,
 ): void {
-  pending = { groundItemId, position, requestedAtMs: nowMs };
+  const selfId = world.selfId;
+  const selfPosition = selfId === null ? null : (world.creatures.get(selfId)?.position ?? null);
+  pending = { groundItemId, position, deadlineMs: corpseApproachDeadline(selfPosition, position, nowMs) };
   sendIntent({ type: 'walk-to', destination: position });
   tick(nowMs);
 }

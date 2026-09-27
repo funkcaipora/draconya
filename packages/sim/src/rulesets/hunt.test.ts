@@ -14,6 +14,7 @@ import { resolveDeath } from '../death.js';
 import { huntListings } from '../hunt/catalogue.js';
 import { FORWARD } from '../area.js';
 import { MonsterRuntime, monsterSubject } from '../monster/monster.js';
+import { distance } from '../monster/step.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
@@ -1571,6 +1572,109 @@ describe('walk-to distante na hunt: caminho no servidor e pausa do bot (#763)', 
     // O bot segue vivo: um passo comum ainda funciona depois da recusa.
     run(session, 1_000, 50);
     expect(session.ended).toBeNull();
+  });
+
+  // Achado de QA ao vivo (Darashia Dragon Lair, Sorcerer level 200): um `walk-to` para um
+  // cadáver a onze tiles parava logo no início e só retomava minutos depois — o combate-stop de
+  // sempre (`#playerStep`) segurava o personagem no primeiro dragão ao alcance, e como o dragão
+  // nunca morre nem sai de alcance numa masmorra cheia, o caminho manual nunca tinha chance de
+  // continuar. Um corredor de TRÊS tiles de largura (em vez do de um só, acima) deixa o monstro
+  // parado AO LADO da rota — no alcance, mas nunca bloqueando o passo.
+  const wideMap = {
+    id: 'wide-corridor', z: 7,
+    grid: [
+      '############',
+      '#..........#',
+      '#..........#',
+      '#..........#',
+      '############',
+    ],
+  };
+  const wideRoute = {
+    id: 'wide-corridor-loop', mapId: 'wide-corridor',
+    tiles: [{ x: 1, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }],
+    spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  };
+  const wideHunt = {
+    ...hunt, id: 'wide-corridor', mapId: 'wide-corridor', routeId: 'wide-corridor-loop',
+    difficulties: {
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'dragon', weight: 1 }], respawnDelayMs: 1_000_000 },
+    },
+  };
+  // Vida absurda, sem ataque: este monstro nunca morre e nunca machuca o herói — o teste é sobre
+  // ANDAR, não sobre combate. `blockable: true` como o `rat` de sempre.
+  const dragon = { ...rat, id: 'dragon', name: 'Dragon', health: 999_999_999, attack: 0 };
+
+  const startWide = () => {
+    const loaded = buildContent(raw({
+      monsters: [rat, dragon], maps: [wideMap], routes: [wideRoute], hunts: [wideHunt],
+    }));
+    const session = createHuntSession({
+      content: loaded, id: 'walk-to-dragon', huntId: 'wide-corridor', difficulty: 'cautious', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 2, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      capacity: stats.capacity,
+    });
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('walk-to distante com monstro ao alcance no caminho inteiro: anda sem parar (STALL)', () => {
+    const { session, hero, ruleset } = startWide();
+    session.advanceBy(50);
+    const dragonMonster = ruleset.monsters[0];
+    expect(dragonMonster).toBeDefined();
+    if (dragonMonster === undefined) return;
+    // O dragão nasce adjacente ao início da rota (raio 1 do spawn) — o herói entra no alcance
+    // da arma já no PRIMEIRO passo, exatamente o cenário que travava antes desta correção.
+    expect(distance(hero.position, dragonMonster.position)).toBeLessThanOrEqual(1);
+
+    const destino = { x: 9, y: 2, z: 7 };
+    const walk = ruleset.requestMove(session, hero.id, destino);
+    expect(walk.ok).toBe(true);
+
+    // Corre a simulação em pequenos saltos, contando quantos deles produziram passo de verdade
+    // — a prova de que o personagem andou repetidamente, nunca "uma vez e travado" como no QA.
+    let steps = 0;
+    for (let elapsed = 0; elapsed < 6_000 && hero.position.x < destino.x; elapsed += 100) {
+      session.advanceBy(100);
+      if (session.drainEvents().some((e) => e.kind === 'creature-moved' && e.creatureId === hero.id)) steps += 1;
+    }
+    expect(hero.position).toEqual(destino);
+    expect(steps).toBeGreaterThanOrEqual(8);
+  });
+
+  it('openCorpse abre a janela de pausa mesmo sem walk-to antes (HOLD, achado de QA ao vivo)', () => {
+    // O QA chegou ao cadáver, abriu a janela, e dois segundos depois o `take-loot` foi recusado
+    // com "você está longe demais": o bot já tinha levado o personagem embora, porque nenhuma
+    // pausa nunca tinha sido armada — só um `walk-to` a armava antes desta correção. Aqui o
+    // herói já nasce ADJACENTE ao cadáver (sem NUNCA chamar `requestMove`), e o teste prova que
+    // `openCorpse` sozinho já seguraria o bot.
+    const { session, hero, ruleset } = startFar();
+    run(session, 60_000, 100);
+    const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0);
+    expect(corpse).toBeDefined();
+    if (corpse === undefined) return;
+    // Sem NUNCA ter chamado `requestMove`: `manualWalkTo` e a janela de pausa começam do zero.
+    hero.position = { ...corpse.position };
+
+    const opened = ruleset.openCorpse(session, hero.id, corpse.id);
+    expect(opened.ok).toBe(true);
+
+    // Três segundos de bot rodando — tempo de sobra para a rota tentar retomar, se a pausa não
+    // tivesse sido armada.
+    run(session, 3_000, 100);
+    expect(hero.position).toEqual(corpse.position);
+
+    const taken = ruleset.takeLoot(session, hero.id, corpse.id, null);
+    expect(taken.ok).toBe(true);
   });
 });
 

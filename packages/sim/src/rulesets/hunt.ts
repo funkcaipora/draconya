@@ -652,10 +652,12 @@ const MANUAL_WALK_PATHFIND_RADIUS = 30;
 
 /**
  * Quanto tempo o bot fica PAUSADO depois que o personagem chega ao destino de um `walk-to`
- * distante (#763): a janela para o jogador agir — abrir o cadáver, pegar o loot, usar um item —
- * antes de a rota retomar sozinha. Renovada por qualquer intenção manual (`#renewManualWalkHold`)
- * enquanto durar; dez segundos é generoso para um clique duplo humano e curto o bastante para
- * não prender a hunt inteira quando o jogador só clicou e foi embora.
+ * distante (#763), OU depois de qualquer intenção manual (abrir cadáver, pegar loot, usar item,
+ * usar no mapa) mesmo sem `walk-to` nenhum antes — achado de QA ao vivo: um cadáver já
+ * adjacente abria a janela do `open-corpse` normalmente, mas o bot seguia andando embora, e o
+ * `take-loot` dois segundos depois batia em `too-far-away`. `#armManualWalkHold` (RE)INICIA a
+ * janela a cada uma dessas intenções — dez segundos é generoso para um clique duplo humano e
+ * curto o bastante para não prender a hunt inteira quando o jogador só clicou e foi embora.
  */
 const MANUAL_WALK_HOLD_MS = 10_000;
 
@@ -1396,16 +1398,20 @@ interface Runner {
    * Precisa sobreviver a um snapshot (a hunt é idle-first, invariante 3: fechar o navegador no
    * meio do caminho não pode apagá-lo), então é OPCIONAL no `RunnerState`, ao contrário do cache
    * do follow. Enquanto existe, `#playerStep` consome um tile por vencimento em vez de andar
-   * pela rota ou perseguir o alvo do bot (RF-02 da spec) — `destination` é só para comparar com
-   * um pedido novo, que substitui em vez de acumular.
+   * pela rota ou perseguir o alvo do bot (RF-02 da spec), com PRIORIDADE ACIMA do combate-stop
+   * (achado de QA ao vivo: um destino distante numa masmorra cheia de monstros nunca terminava
+   * de andar, porque o combate-stop de sempre segurava o personagem no primeiro alvo ao alcance
+   * e nunca soltava) — `destination` é só para comparar com um pedido novo, que substitui em vez
+   * de acumular.
    */
   manualWalkTo: { readonly destination: FloorPoint; readonly path: readonly GridPoint[] } | null;
   /**
-   * Até QUANDO o bot fica pausado depois de CHEGAR ao destino de um `walk-to` distante (#763,
-   * `MANUAL_WALK_HOLD_MS`) — renovada por uma intenção manual (`#renewManualWalkHold`:
-   * `open-corpse`, `take-loot`, `use-item`/`use-item-on`, `use-on-map`). `null` fora da janela;
-   * precisa sobreviver ao snapshot pela mesma razão de `manualWalkTo` — sem isto, uma hunt
-   * retomada bem no meio da janela perderia a pausa e a rota atropelaria o jogador que acabou de
+   * Até QUANDO o bot fica pausado — depois de CHEGAR ao destino de um `walk-to` distante, OU
+   * (RE)INICIADA do zero por qualquer intenção manual mesmo sem `walk-to` nenhum antes (#763,
+   * `MANUAL_WALK_HOLD_MS`, `#armManualWalkHold`: `open-corpse`, `take-loot`,
+   * `use-item`/`use-item-on`, `use-on-map`). `null` fora da janela; precisa sobreviver ao
+   * snapshot pela mesma razão de `manualWalkTo` — sem isto, uma hunt retomada bem no meio da
+   * janela perderia a pausa e a rota atropelaria o jogador que acabou de
    * chegar.
    */
   manualWalkHoldUntilMs: number | null;
@@ -1788,9 +1794,9 @@ export class HuntRuleset implements Ruleset {
   ): UseItemOutcome {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return refuseItem('not-carried', 0);
-    // Intenção manual (#763): renova a janela de pausa de um `walk-to` em curso, mesmo quando a
-    // ação em si é ADIADA pela exaustão (abaixo) — o clique já aconteceu.
-    this.#renewManualWalkHold(characterId, session.nowMs);
+    // Intenção manual (#763): (re)inicia a janela de pausa do bot, mesmo sem `walk-to` antes e
+    // mesmo quando a ação em si é ADIADA pela exaustão (abaixo) — o clique já aconteceu.
+    this.#armManualWalkHold(characterId, session.nowMs);
 
     // A exaustão de ação (#690/ADR 0049 d.6): cooldown de GRUPO/individual continua recusa
     // imediata (não muda com esta issue); só `exhaust:action` sozinha é ADIADA.
@@ -2096,9 +2102,9 @@ export class HuntRuleset implements Ruleset {
     ) {
       return { ok: false, reason: 'out-of-range' };
     }
-    // Intenção manual (#763): renova a pausa de um `walk-to` em curso, mesmo quando o tile
-    // não tem nada de usável (abaixo) — o clique em si já é a intenção.
-    this.#renewManualWalkHold(characterId, session.nowMs);
+    // Intenção manual (#763): (re)inicia a pausa do bot, mesmo sem `walk-to` antes e mesmo
+    // quando o tile não tem nada de usável (abaixo) — o clique em si já é a intenção.
+    this.#armManualWalkHold(characterId, session.nowMs);
     const current = this.#tileOverrides.at(position);
     if (current === null) return { ok: false, reason: 'nothing-there' };
     // Baú (#733, ADR 0050 d.6 T2): NUNCA passa por `isToggleable`/`#useInteractable` — não tem
@@ -3565,12 +3571,25 @@ export class HuntRuleset implements Ruleset {
   /** O corpo do passo do personagem; devolve o passo dado, ou `null` quando ficou parado. */
   #playerStep(session: Session, character: CharacterRuntime): MoveResult | null {
 
+    const runner = this.#runnerOf(character.id);
+
+    // `walk-to` distante em curso (#763, achado de QA ao vivo na Darashia Dragon Lair): PRIORIDADE
+    // MÁXIMA, ACIMA do combate-stop logo abaixo. Um clique para um cadáver longe, com dragões no
+    // alcance o caminho INTEIRO, empacava para sempre no combate-stop de sempre — o alvo nunca
+    // morre e nunca sai de alcance numa masmorra cheia, então o personagem nunca voltava a tentar
+    // o próximo tile. O jogador que clicou um destino distante já expressou a intenção de IR até
+    // lá; `#armPlayerAttack` continua batendo em quem estiver ao alcance NO CAMINHO (a mesma
+    // postura do `#holdFollow` — "atacar de onde está é aceitável" —, só não GRUDA para lutar).
+    if (runner.manualWalkTo !== null) {
+      this.#armPlayerAttack(session, character);
+      return this.#advanceManualWalk(session, character);
+    }
+
     // Para para lutar, e retoma DEPOIS no mesmo índice (FUN-42). Como ele para assim que há
     // monstro ao alcance, nunca pisa no tile de um: o combate começa antes do passo.
     //
     // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
     // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
-    const runner = this.#runnerOf(character.id);
     // **Exceto quando quem seguir está em OUTRO andar (#527).** Monstro ao alcance nunca falta
     // perto de um spawn — é raro um seguidor chegar num andar novo sem NENHUM por perto — e
     // parar para lutar aqui significa NUNCA reavaliar `#holdFollow` de novo, porque esta
@@ -3580,6 +3599,9 @@ export class HuntRuleset implements Ruleset {
     // brigar sempre vencia da tentativa de voltar. Reunir a party pesa mais que uma luta que
     // pode esperar; `#holdFollow` continua deixando `#armPlayerAttack` bater em quem estiver
     // ao alcance da arma NO CAMINHO até a escada (ADR 0035 d.9) — isto só recusa GRUDAR ali.
+    // **Continua valendo cheio durante a janela de espera do `walk-to` (abaixo)**: chegado o
+    // destino, um dragão ao alcance segura o personagem ali para lutar, como o QA relatou aceitar
+    // ("atacar de onde está é aceitável") — só ANDAR é que o caminho manual em curso suprime.
     if (
       this.#attackTarget(character) !== null && !this.#luring(runner, character, session.nowMs)
       && !this.#mustCrossFloorToFollow(session, runner, character)
@@ -3589,14 +3611,10 @@ export class HuntRuleset implements Ruleset {
       return null;
     }
 
-    // `walk-to` distante em curso (#763, RF-02): suprime rota E perseguição enquanto durar — o
-    // combate já rodou acima, e continua tendo prioridade sobre um destino clicado, como já tem
-    // sobre o follow logo abaixo. Chegado o destino, a MESMA checagem segura o personagem pela
-    // janela curta de `MANUAL_WALK_HOLD_MS`, para o jogador agir antes da rota retomar.
-    if (runner.manualWalkTo !== null) {
-      this.#armPlayerAttack(session, character);
-      return this.#advanceManualWalk(session, character);
-    }
+    // A janela de espera depois de CHEGAR a um `walk-to` distante, ou aberta direto por uma
+    // intenção manual sem caminho nenhum (#763, `#armManualWalkHold`): suprime rota E
+    // perseguição enquanto durar, para o jogador ter tempo de agir (abrir o cadáver, pegar o
+    // loot) antes do bot retomar sozinho pelo tile mais próximo.
     if (runner.manualWalkHoldUntilMs !== null) {
       if (session.nowMs < runner.manualWalkHoldUntilMs) {
         this.#armPlayerAttack(session, character);
@@ -4227,17 +4245,19 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Renova a janela de pausa do bot depois de um `walk-to` distante (#763, `MANUAL_WALK_HOLD_MS`)
-   * — chamada por toda intenção manual que a spec lista: `openCorpse`, `takeLoot`,
-   * `#useItemLike` (`useItem`/`useItemOn`) e `useOnMap`. SÓ renova quando já existe uma janela
-   * aberta (`manualWalkHoldUntilMs !== null`): um clique de abrir cadáver que não veio de um
-   * `walk-to` (o personagem já estava adjacente, sem nunca ter caminho manual) não tem por que
-   * criar uma pausa do nada — a intenção que abre a janela é sempre a chegada de
-   * `#advanceManualWalk`, nunca esta função.
+   * (Re)inicia a janela de pausa do bot (#763, `MANUAL_WALK_HOLD_MS`) — chamada por toda
+   * intenção manual que a spec lista: `openCorpse`, `takeLoot`, `#useItemLike`
+   * (`useItem`/`useItemOn`) e `useOnMap`. SEMPRE (re)inicia, mesmo sem um caminho manual
+   * anterior — achado de QA ao vivo: um cadáver já adjacente (sem nunca ter passado por
+   * `requestMove`) abria a janela do `open-corpse` normalmente, mas o bot seguia livre para
+   * andar embora ATRÁS do jogador porque nenhuma pausa nunca tinha sido armada; dois segundos
+   * depois o `take-loot` batia em `too-far-away`, porque o bot já tinha levado o personagem para
+   * a rota. A intenção manual em SI — abrir o cadáver, usar o item — já é o que deveria segurar
+   * o bot, com ou sem `walk-to` antes dela.
    */
-  #renewManualWalkHold(characterId: string, nowMs: number): void {
+  #armManualWalkHold(characterId: string, nowMs: number): void {
     const runner = this.#runners.get(characterId);
-    if (runner === undefined || runner.manualWalkHoldUntilMs === null) return;
+    if (runner === undefined) return;
     runner.manualWalkHoldUntilMs = nowMs + MANUAL_WALK_HOLD_MS;
   }
 
@@ -8569,8 +8589,10 @@ const slots = bot.groups.get(group);
    * Abrir a janela do cadáver (#722, ADR 0048 d.4): confere dono/elegibilidade e distância
    * (≤ 1, mesmo andar — o `areInRange<1,1,0>`/`Actions::canUse` do Canary, ver §5 da spec da
    * issue) e devolve o que ainda está lá. PURA quanto a JOGO — abrir não é coletar (invariante
-   * 3), ao contrário de `takeLoot` — mas renova a janela de pausa de um `walk-to` distante em
-   * curso (#763, `#renewManualWalkHold`): bookkeeping do `Runner`, não estado de jogo, como
+   * 3) — mas (RE)INICIA a janela de pausa do bot (#763, `#armManualWalkHold`), COM ou SEM
+   * `walk-to` antes: achado de QA ao vivo — um cadáver já adjacente abria a janela normalmente,
+   * o bot seguia andando embora sem NUNCA ter tido uma pausa armada, e o `take-loot` dois
+   * segundos depois batia em `too-far-away`. Bookkeeping do `Runner`, não estado de jogo, como
    * `routeBlockedWarned` já é em outro lugar.
    */
   openCorpse(session: Session, characterId: string, groundItemId: number): OpenCorpseResult {
@@ -8585,7 +8607,7 @@ const slots = bot.groups.get(group);
     ) {
       return { ok: false, reason: 'too-far-away' };
     }
-    this.#renewManualWalkHold(characterId, session.nowMs);
+    this.#armManualWalkHold(characterId, session.nowMs);
     return { ok: true, corpse };
   }
 
@@ -8612,7 +8634,7 @@ const slots = bot.groups.get(group);
     ) {
       return { ok: false, reason: 'too-far-away' };
     }
-    this.#renewManualWalkHold(characterId, session.nowMs);
+    this.#armManualWalkHold(characterId, session.nowMs);
 
     if (instanceId === null) {
       this.#collectFromCorpse(session, corpse, character);
