@@ -3511,6 +3511,75 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     expect(retomado.participants[0]?.skills.getState()['shielding'])
       .toEqual(session.participants[0]?.skills.getState()['shielding']);
   });
+
+  describe('combat-v3: de onde vem cada try (#686)', () => {
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+    const immuneRat = { ...rat, mitigation: { resistances: {}, immunities: ['physical'] } };
+    const meleeOf = (hero: CharacterRuntime) => hero.skills.getState()['melee'] ?? null;
+    const comEspada: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 } },
+    };
+
+    it('corpo a corpo contra monstro imune: a skill NÃO sobe (v2 sobe)', () => {
+      const v3 = start({
+        loaded: defenseContent({ monsters: [immuneRat], combat: [combatV3] }),
+        difficulty: 'bold', health: 5_000,
+      });
+      run(v3.session, 30_000, 100);
+      expect(meleeOf(v3.hero)).toBeNull();
+      expect(v3.hero.attackPractice.lastBlockType).toBe('immunity');
+
+      const v2 = start({
+        loaded: defenseContent({ monsters: [immuneRat], combat: [combatV2] }),
+        difficulty: 'bold', health: 5_000,
+      });
+      run(v2.session, 30_000, 100);
+      expect(meleeOf(v2.hero)).not.toBeNull();
+    });
+
+    it('corpo a corpo contra monstro comum: o golpe limpo treina e recarrega os contadores', () => {
+      const { session, hero } = start({
+        loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      });
+      run(session, 30_000, 100);
+      expect(meleeOf(hero)).not.toBeNull();
+      expect(hero.attackPractice.addAttackSkill).toBe(true);
+    });
+
+    it('arma de uma mão sem escudo, apanhando: shielding NÃO sobe (v2 sobe)', () => {
+      const v3 = start({
+        loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+        inventory: comEspada,
+      });
+      run(v3.session, 30_000, 100);
+      expect(shieldingOf(v3.hero)).toBeNull();
+
+      const v2 = start({
+        loaded: defenseContent({ combat: [combatV2] }), difficulty: 'bold', health: 5_000,
+        inventory: comEspada,
+      });
+      run(v2.session, 30_000, 100);
+      expect(shieldingOf(v2.hero)).not.toBeNull();
+    });
+
+    it('o estado de prática atravessa o snapshot', () => {
+      const loaded = defenseContent({ combat: [combatV3] });
+      const { session, hero } = start({ loaded, difficulty: 'bold', health: 5_000 });
+      run(session, 10_000, 100);
+      expect(hero.attackPractice.bloodHitCount).toBeGreaterThan(0);
+
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const retomado = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+      );
+      expect(retomado.participants[0]?.attackPractice).toEqual(hero.attackPractice);
+    });
+  });
 });
 
 describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () => {

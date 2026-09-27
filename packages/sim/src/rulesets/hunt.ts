@@ -57,6 +57,9 @@ import { playerArmor, playerDefense, playerMitigation } from '../combat/player-d
 import type { PlayerMitigationVocation } from '../combat/player-defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { rollDistanceHit } from '../combat/distance-hit.js';
+import {
+  afterAttackBlock, afterShieldBlock, distanceTries, meleeTries,
+} from '../combat/attack-practice.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
@@ -4071,6 +4074,10 @@ const slots = bot.groups.get(group);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe. Um
       // `manadrain` sai daqui com `healthDamage: 0` sempre — a vida do monstro nunca se move.
       const applied = applyDamageOutcome(monster, outcome, character, 1, false, targetsAffected);
+      // Magia e runa também passam pelo `blockHit` do alvo no Canary: um acerto limpo recarrega
+      // os contadores de sangue e de escudo (#686). Não rendem try de ARMA — a prática delas é
+      // de magia, por mana.
+      this.#noteAttackBlock(character, outcome);
       // O bypass de campo (M29-05, TFS/Canary `Monster::drainHealth`): levar dano ESTANDO preso
       // (`lastStepBlocked`) concede UMA passagem pelo campo que o prendia — nunca de graça, e
       // nunca ao andar livre. Zero de dano (`chance: 0`/overkill de mira que já matou) não arma.
@@ -5395,23 +5402,24 @@ const slots = bot.groups.get(group);
       damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
-    // Shielding sobe pelo USO (CMB-04): uma vez por ataque ELEGÍVEL recebido — há fonte de
-    // defesa e o golpe é do tipo que a defesa aprova. Nunca por tick, nunca por dano aplicado:
-    // um bloqueio total (ou um golpe de 0) ainda é um bloqueio praticado.
+    // Shielding sobe pelo USO (CMB-04). Em `combat-v1`/`v2`: uma vez por ataque ELEGÍVEL
+    // recebido — há fonte de defesa e o golpe é do TIPO que a defesa aprova
+    // (`combat.defense.blockTypes`). Nunca por tick, nunca por dano aplicado.
     //
-    // Em `combat-v1`/`v2` "aprova" é por TIPO de dano (`combat.defense.blockTypes`) — a única
-    // coisa que existia antes do `combat-v3`. No `combat-v3` (#548, achado da revisão do PR
-    // #642) a elegibilidade do dano em si já não é por tipo: é por ORIGEM (`blockable.shield`,
-    // a mesma flag que `resolveBlockHit` usa — corpo a corpo bloqueia, magia/distância pura não).
-    // Continuar checando `blockTypes` aqui destreinaria (ou treinaria errado) no dia em que o
-    // catálogo tiver uma ability corpo a corpo elemental — hoje nenhuma tem, então as duas regras
-    // ainda concordam, mas por coincidência do catálogo, não por desenho.
-    const shieldEligible = this.#options.combat.compatibilityProfile === 'combat-v3'
-      ? (outcome.intent.blockable?.shield ?? MELEE_BLOCK_FLAGS.shield)
-      : (this.#options.combat.defense?.blockTypes.includes(ability.damageType) ?? false);
-    if (this.#options.combat.defense !== undefined
+    // No `combat-v3` (#686) a regra é a do Canary (`Player::onBlockHit`), e substitui a
+    // elegibilidade por origem que o #548 tinha posto aqui: o escudo só treina quando o golpe
+    // recebido FOI bloqueado (defesa ou armadura) com carga de bloqueio, ainda há bloqueios de
+    // escudo guardados (`shieldBlockCount`, recarregado pelo golpe limpo do PRÓPRIO personagem)
+    // e é ESCUDO na mão — arma de uma mão não treina shielding. Apanhar, por si só, não treina.
+    if (this.#isV3()) {
+      const shield = afterShieldBlock(
+        character.attackPractice, outcome, defender.defense?.kind === 'shield',
+      );
+      character.attackPractice = shield.state;
+      if (shield.tries > 0) this.#gainSkills(session, character, 'shield-block', shield.tries);
+    } else if (this.#options.combat.defense !== undefined
       && defender.defense !== undefined && defender.defense.kind !== 'none'
-      && shieldEligible) {
+      && this.#options.combat.defense.blockTypes.includes(ability.damageType)) {
       this.#gainSkills(session, character, 'shield-block', 1);
     }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
@@ -5824,10 +5832,15 @@ const slots = bot.groups.get(group);
       // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
       // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
       const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
-      // A prática é do TIRO, não do acerto (CMB-05): imunidade, bloqueio e agora o erro de
-      // pontaria não impedem a skill de subir — ela sai do gatilho da família, nunca do dano.
-      this.#practice(session, character, how.family, 1);
+      // `combat-v1`/`v2`: a prática é do TIRO, não do acerto (CMB-05) — imunidade, bloqueio e
+      // o erro de pontaria não impedem a skill de subir. No `combat-v3` (#686) quantos tries o
+      // tiro rende vem do tipo de bloqueio (`distanceTries`): 2 limpo, 1 bloqueado, 0 imune.
+      if (!this.#isV3()) this.#practice(session, character, how.family, 1);
       if (!hit) {
+        // O tiro errado não passa pelo `blockHit` do alvo — vale o estado do tiro ANTERIOR.
+        if (this.#isV3()) {
+          this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+        }
         // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
         // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
         return;
@@ -5854,6 +5867,9 @@ const slots = bot.groups.get(group);
         defender, 'pve', this.#options.combat, session.rng, session.nowMs,
       );
       this.#land(session, character, monster, result, 'melee');
+      if (this.#isV3()) {
+        this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+      }
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
       // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
       return;
@@ -5906,9 +5922,11 @@ const slots = bot.groups.get(group);
       defender, 'pve', this.#options.combat, session.rng, session.nowMs,
     );
     this.#land(session, character, monster, result, 'melee');
-    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
-    // alvo seja imune ou já esteja morto — praticar não depende do dano final (CMB-05).
-    this.#practice(session, character, profile.family, 1);
+    // `combat-v1`/`v2`: o golpe ACONTECEU, conta como uso, tenha ele acertado forte ou de
+    // raspão, e mesmo que o alvo seja imune ou já esteja morto (CMB-05). No `combat-v3` (#686)
+    // é o tipo de bloqueio que decide: 1 try, ou 0 contra imune e bloqueado sem sangue.
+    this.#practice(session, character, profile.family,
+      this.#isV3() ? meleeTries(character.attackPractice) : 1);
   }
 
   /**
@@ -6020,6 +6038,24 @@ const slots = bot.groups.get(group);
     this.#gainSkills(session, character, skill.gain.on, amount);
   }
 
+  /**
+   * `onAttackedCreatureBlockHit` do Canary (#686): o personagem vê o tipo de bloqueio do golpe
+   * que desferiu — o primário, depois o secundário, e a última chamada vence (`combatBlockHit`).
+   * `combat-v1`/`v2` não produzem tipo, e aqui nada muda.
+   */
+  #noteAttackBlock(character: CharacterRuntime, outcome: DamageOutcome): void {
+    if (outcome.blockType === undefined) return;
+    let state = afterAttackBlock(character.attackPractice, outcome.blockType);
+    const secondary = outcome.secondaryOutcome?.blockType;
+    if (secondary !== undefined) state = afterAttackBlock(state, secondary);
+    character.attackPractice = state;
+  }
+
+  /** O perfil `combat-v3` (#548, ADR 0040) — congelado na sessão pelo conteúdo (invariante 7). */
+  #isV3(): boolean {
+    return this.#options.combat.compatibilityProfile === 'combat-v3';
+  }
+
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
   #land(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
@@ -6029,6 +6065,7 @@ const slots = bot.groups.get(group);
     // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
     const applied = applyDamageOutcome(monster, outcome, character);
+    this.#noteAttackBlock(character, outcome);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
     // O bypass de campo (M29-05) — ver o comentário gêmeo em `#applyHits`, o mesmo mecanismo
     // pelo caminho de golpe corpo a corpo/wand.

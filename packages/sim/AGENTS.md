@@ -382,7 +382,9 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   perfil delas não tem `power` — e por isso não ganham multiplicador de weapon skill (DT-02).
   **Wand sem mana não bate**: o golpe fica agendado para o intervalo seguinte, sem gastar mana nem
   praticar. A prática é UMA por golpe e não depende do dano final: imune, resistente ou morto no
-  impacto ainda pratica. O tiro emite `shot` ANTES do `creature-hit`; o projétil é da tabela,
+  impacto ainda pratica — em `combat-v1`/`v2`; no `combat-v3` (#686) quantos tries o golpe rende
+  vem do tipo de bloqueio (`combat/attack-practice.ts`, estado em
+  `CharacterRuntime.attackPractice`). O tiro emite `shot` ANTES do `creature-hit`; o projétil é da tabela,
   resolvido no hospedeiro (invariante 6). `hands-full`: bow com escudo, ou escudo com bow, é
   recusado — nunca trocado.
 - **A defesa é da PEÇA, e a fonte é do `Inventory`** (CMB-04, emenda do ADR 0031).
@@ -394,7 +396,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   consumido mesmo com `defense` 0, para a sequência não depender do valor da peça. O piso é
   calculado sobre o poder BRUTO: o bloqueio nunca zera o golpe. Shielding sobe uma vez por
   ataque físico elegível RECEBIDO (`#onMonsterAttack`), nunca por tick, nunca por HP perdido e
-  nunca em elemental. Não há fight mode, opcode nem UI (DT-03).
+  nunca em elemental. No `combat-v3` (#686), só quando o golpe recebido foi BLOQUEADO, com escudo
+  na mão (`afterShieldBlock`). Não há fight mode, opcode nem UI (DT-03).
 - **Condição é evento, não acumulador; a direção é do `#step`; cooldown tem três livros** (#155).
   Haste, postura, magic shield e cura ao longo do tempo são `ConditionState` no personagem
   (`conditions.ts`, uma por tipo, relançar substitui) com `expiresAtMs` LÓGICO, e o vencimento
