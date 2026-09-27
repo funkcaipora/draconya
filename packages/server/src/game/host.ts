@@ -211,6 +211,7 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
   'backpack-not-empty': 'Esvazie a mochila antes de tirá-la.',
   'no-such-place': 'Esse lugar não existe.',
   'empty-place': 'Não há nada nesse lugar.',
+  'not-for-sale': 'Ninguém compra isto.',
 };
 
 const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
@@ -1444,6 +1445,16 @@ export class SessionHost {
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
+      case 'sell-items':
+        // INTENÇÃO (invariante 4): o cliente diz QUAIS instâncias; existir, estar carregada e
+        // ter `value` do catálogo maior que zero é conferido pelo servidor (#724, ADR 0048 d.8).
+        this.#requestSellItems(viewer, message.instanceIds);
+        return;
+      case 'discard-item':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL instância; a confirmação já foi dada por
+        // ele mesmo antes de mandar (#724, ADR 0048 d.8).
+        this.#requestDiscardItem(viewer, message.instanceId);
+        return;
       case 'bot-config':
         // INTENÇÃO (invariante 4): o jogador manda as REGRAS, e quem decide se elas valem —
         // vocabulário, slots, catálogo e gate de level — é o servidor.
@@ -1594,6 +1605,49 @@ export class SessionHost {
     }
     const result = character.inventory.unequip(slot as ItemSlot, this.#containerRules(character));
     if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
+  }
+
+  /**
+   * Vende N itens da mochila/bolsa ao `value` do catálogo (#724, ADR 0048 d.8 — a
+   * generalização do "Despachar loot" do ADR 0032 d.12). Processado NA CHEGADA, como equipar.
+   *
+   * O gold entra do MESMO jeito que o loot credita (`hunt.ts`): `character.goldDelta` E o
+   * agregado da sessão, quando ela é PRIVADA (hunt) — o extrato de fim de sessão já soma
+   * `aggregatesOf`. Numa Cidade (shard, `ruleset.shared`), o agregado da sessão é CUMULATIVO
+   * entre vários extratos de estado (#154) e nunca é zerado por flush; somar ali faria o
+   * segundo logout re-creditar a venda do primeiro. Lá o gold vai só por `goldDelta`, que
+   * `#saveDurableReceipt` drena e liquida a cada extrato — a mesma disciplina de
+   * `settleGoldDelta`.
+   */
+  #requestSellItems(viewer: Viewer, instanceIds: readonly string[]): void {
+    const character = this.#ownerOf(viewer.characterId);
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (character === undefined || hosted === undefined) return;
+    const result = character.inventory.sellItems(instanceIds, this.#options.itemCatalog ?? EMPTY_ITEMS);
+    if (result.ok) {
+      character.goldDelta += result.gold;
+      if (hosted.session.ruleset.shared !== true) {
+        hosted.session.credit(viewer.characterId, 'goldGained', result.gold);
+      }
+      character.removedInstances.push(...result.removed.map((item) => item.instanceId));
+      this.#markDirty(viewer.characterId);
+    }
+    this.#answerInventory(viewer, result);
+  }
+
+  /**
+   * Descarta um item da mochila/bolsa: destrói, sem gold (#724, ADR 0048 d.8). A confirmação
+   * ("tem certeza?") já foi dada pelo cliente antes de mandar a intenção.
+   */
+  #requestDiscardItem(viewer: Viewer, instanceId: string): void {
+    const character = this.#ownerOf(viewer.characterId);
+    if (character === undefined) return;
+    const result = character.inventory.discardItem(instanceId);
+    if (result.ok) {
+      character.removedInstances.push(result.removed.instanceId);
+      this.#markDirty(viewer.characterId);
+    }
     this.#answerInventory(viewer, result);
   }
 
@@ -3642,6 +3696,9 @@ export class SessionHost {
       seq: receipt.seq,
       aggregates: receipt.aggregates,
       notableEvents: receipt.notableEvents,
+      // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
+      // na MESMA transação da linha de ledger. Drenado por `#receiptFor` (invariante 9/10).
+      ...(receipt.removedInstances.length === 0 ? {} : { removedInstances: receipt.removedInstances }),
       ...(owner?.staminaMs === undefined || owner.staminaMs === null
         ? {}
         : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
@@ -3719,7 +3776,16 @@ export class SessionHost {
       accountId,
       reason,
       seq: hosted.session.ledgerSeq,
-      aggregates: EMPTY_AGGREGATES,
+      // A Cidade não credita progresso (ADR 0023) — mas #724/ADR 0048 d.8 abriu a primeira
+      // exceção: vender na praça move gold pelo MESMO ledger que a hunt usa. `goldDelta` é o
+      // delta AINDA NÃO liquidado (zero em todo extrato que só mexeu em vocação/equipamento,
+      // como sempre) — nunca `session.aggregatesOf`, que é cumulativo entre vários extratos
+      // deste shard e re-creditaria a mesma venda no próximo logout.
+      aggregates: owner.goldDelta === 0 ? EMPTY_AGGREGATES : {
+        ...EMPTY_AGGREGATES,
+        goldGained: Math.max(owner.goldDelta, 0),
+        goldSpent: Math.max(-owner.goldDelta, 0),
+      },
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -3727,8 +3793,15 @@ export class SessionHost {
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
+      // As instâncias vendidas/descartadas na praça (#724, ADR 0048 d.8) — mesmo mecanismo do
+      // extrato de hunt, drenado aqui em vez de `#receiptFor` porque o shard nunca passa pelo
+      // `Receipt` do `sim` (ADR 0023: a Cidade não gera extrato de progresso).
+      ...(owner.removedInstances.length === 0 ? {} : { removedInstances: owner.drainRemovedInstances() }),
     });
     hosted.dirty.delete(characterId);
+    // Como `#persistReceipt`: incorpora o delta à base ANTES do próximo extrato reencontrar uma
+    // base antiga mais uma variação já liquidada no ledger.
+    if (owner.goldDelta !== 0) owner.settleGoldDelta();
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */

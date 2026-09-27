@@ -4506,6 +4506,116 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     });
   });
 
+  describe('vender e descartar pelo socket (#724, ADR 0048 d.8)', () => {
+    const gem = {
+      ...compileItem(itemSchema.parse({ id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 30 })),
+      appearanceId: 3,
+    };
+    const rock = {
+      ...compileItem(itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5, value: 0 })),
+      appearanceId: 4,
+    };
+    const sellCatalog = new Map([[gem.id, gem], [rock.id, rock]]);
+    const mensagens = (socket: FakeSocket) =>
+      socket.received().filter((m) => m.type === 'system-message');
+
+    it('vende: credita goldDelta E o agregado da hunt, some da mochila, e o extrato leva removedInstances', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 2 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(60);
+      expect(hero.inventory.findStack('gem')).toBeNull();
+
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ removedInstances: ['g1'] });
+      expect((saved[0] as { aggregates: { goldGained: number } }).aggregates.goldGained).toBe(60);
+    });
+
+    it('`value: 0` recusa o lote inteiro com "Ninguém compra isto.", sem mexer no gold nem na mochila', () => {
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog });
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'r1', itemId: 'rock', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['r1'] });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(0);
+      expect(hero.inventory.findStack('rock')).not.toBeNull();
+      expect(mensagens(socket).map((m) => m.type === 'system-message' && m.text))
+        .toEqual(['Ninguém compra isto.']);
+    });
+
+    it('descarta: destrói sem gold, e a instância entra em `removedInstances`', () => {
+      const { ruleset } = countingRuleset();
+      const { host, sessions } = buildHost(ruleset, { itemCatalog: sellCatalog });
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'discard-item', instanceId: 'g1' });
+      host.flush();
+
+      expect(hero.goldDelta).toBe(0);
+      expect(hero.inventory.findStack('gem')).toBeNull();
+      expect(hero.removedInstances).toEqual(['g1']);
+    });
+
+    it('na Cidade: vender credita goldDelta e o extrato durável leva goldGained e removedInstances', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const shard: Ruleset = {
+        type: 'city', shared: true, hz: () => 0,
+        onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+      };
+      const { host, sessions } = buildHost(shard, { itemCatalog: sellCatalog, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = 1_000;
+      hero.inventory.add(
+        { instanceId: 'g1', itemId: 'gem', quantity: 1 }, sellCatalog, hero,
+        { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      );
+
+      host.handle(viewer, { type: 'sell-items', instanceIds: ['g1'] });
+      host.flush();
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ removedInstances: ['g1'] });
+      expect((saved[0] as { aggregates: { goldGained: number } }).aggregates.goldGained).toBe(30);
+      // Liquidado: a próxima sessão do mesmo shard começa do saldo já incorporado, como o
+      // `#persistReceipt` da hunt já faz — nunca reencontra um `goldDelta` pendente duas vezes.
+      expect(hero.goldDelta).toBe(0);
+    });
+  });
+
   describe('o kit completo da vocação (#496)', () => {
     const shield = {
       ...compileItem(itemSchema.parse({

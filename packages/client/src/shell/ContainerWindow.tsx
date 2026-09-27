@@ -9,18 +9,43 @@
 // **Fixa e minimizável, nunca removida.** O clique veste (o caminho do celular); arrastar move
 // entre lugares ou para o corpo. A decisão de qual intenção sai é `drag-intent.ts`, puro; o
 // DnD nativo só carrega o LUGAR de origem — nunca o item.
+//
+// **Clique direito abre "Vender · Descartar"** (#724, ADR 0048 d.8). As duas são INTENÇÃO
+// (invariante 4): o cliente manda `sell-items`/`discard-item` com o `instanceId`, e quem decide
+// se o item existe, se vale a pena vender (`value > 0`) e credita o gold é o servidor —
+// "Vender" fica desabilitado quando o catálogo já diz `value` ausente ou zero, só para não
+// oferecer um clique que o servidor vai recusar, nunca como a regra de verdade. "Descartar"
+// pede confirmação num `Modal`: é a única das duas que destrói sem dar nada em troca.
 
-import type { DragEvent } from 'react';
+import type { DragEvent, MouseEvent } from 'react';
+import { useState } from 'react';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import type { Inventory } from '../state/hud.js';
 import { clickIntent, dropIntent, parsePlace, serializePlace } from './drag-intent.js';
 import type { DragPlace } from './drag-intent.js';
 import { ItemSprite } from './ItemSprite.js';
+import { ContextMenu } from './ui/ContextMenu.js';
+import type { ContextMenuAction } from './ui/ContextMenu.js';
+import { Modal } from './ui/Modal.js';
+import { Button } from './ui/Button.js';
 import { Panel } from './ui/Panel.js';
 import { Slot } from './ui/Slot.js';
 
 const TITLE: Readonly<Record<'backpack' | 'satchel', string>> = { backpack: 'Mochila', satchel: 'Bolsa' };
+
+/** Uma instância carregada, como a mensagem `inventory` a traz — nunca `null` (lugar vazio). */
+type CarriedItem = NonNullable<Inventory['backpack'][number]>;
+
+/** Vender N instâncias ao `value` do catálogo (#724, ADR 0048 d.8). Aqui, sempre uma por vez. */
+function sellItem(instanceId: string): void {
+  sendIntent({ type: 'sell-items', instanceIds: [instanceId] });
+}
+
+/** Descartar: destrói, sem gold (#724, ADR 0048 d.8). A confirmação já aconteceu no `Modal`. */
+function discardItem(instanceId: string): void {
+  sendIntent({ type: 'discard-item', instanceId });
+}
 
 /** Solta o que o `dataTransfer` trouxe num lugar, e manda a intenção que couber. */
 export function dropOn(to: DragPlace, event: DragEvent, inventory: Inventory): void {
@@ -44,6 +69,12 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
   const title = TITLE[container];
   const panelProps = onToggle === undefined ? {} : { onToggle };
 
+  // O menu aberto no clique direito (posição de TELA + o item que ele aponta), e o item em
+  // confirmação de descarte — dois estados distintos porque o menu fecha ao clicar "Descartar",
+  // mas a confirmação continua aberta por cima dele até o jogador decidir.
+  const [menu, setMenu] = useState<{ x: number; y: number; item: CarriedItem } | null>(null);
+  const [confirming, setConfirming] = useState<CarriedItem | null>(null);
+
   if (inventory === null || catalogue === null) {
     return (
       <Panel dock title={title} className="container-window" collapsed={collapsed} {...panelProps}>
@@ -55,6 +86,30 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
   const byId = new Map(catalogue.items.map((item) => [item.id, item]));
   const places = inventory[container];
   const used = places.filter((place) => place !== null).length;
+
+  const nameOf = (item: CarriedItem): string => byId.get(item.itemId)?.name ?? item.itemId;
+  const openMenu = (item: CarriedItem, event: MouseEvent): void => {
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, item });
+  };
+  const menuActions = (item: CarriedItem): ContextMenuAction[] => {
+    const value = byId.get(item.itemId)?.value;
+    const notForSale = value === undefined || value <= 0;
+    return [
+      {
+        label: 'Vender',
+        disabled: notForSale,
+        onSelect: () => { sellItem(item.instanceId); },
+        // `exactOptionalPropertyTypes`: só entra a prop quando há de fato um motivo a mostrar.
+        ...(notForSale ? { title: 'Ninguém compra isto.' } : {}),
+      },
+      {
+        label: 'Descartar',
+        danger: true,
+        onSelect: () => { setConfirming(item); },
+      },
+    ];
+  };
 
   return (
     <Panel
@@ -90,6 +145,7 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                   key={item.instanceId}
                   onDragOver={(event) => { event.preventDefault(); }}
                   onDrop={(event) => { dropOn(place, event, inventory); }}
+                  onContextMenu={(event) => { openMenu(item, event); }}
                 >
                   <Slot
                     size={26}
@@ -113,6 +169,39 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
             })}
           </ul>
         )}
+      {menu !== null && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          actions={menuActions(menu.item)}
+          onClose={() => { setMenu(null); }}
+        />
+      )}
+      <Modal
+        open={confirming !== null}
+        onClose={() => { setConfirming(null); }}
+        title="Descartar item"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => { setConfirming(null); }}>Cancelar</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (confirming !== null) discardItem(confirming.instanceId);
+                setConfirming(null);
+              }}
+            >
+              Descartar
+            </Button>
+          </>
+        )}
+      >
+        <p>
+          Descartar {confirming === null ? '' : nameOf(confirming)}
+          {confirming !== null && confirming.quantity > 1 ? ` (${String(confirming.quantity)})` : ''}
+          ? Isto destrói o item — não há gold nem como desfazer.
+        </p>
+      </Modal>
     </Panel>
   );
 }

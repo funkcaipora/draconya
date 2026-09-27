@@ -257,6 +257,18 @@ export const C2S_SCHEMAS = {
    */
   'party-end-vote': z.object({ approve: z.boolean() }),
   /**
+   * Vender N itens da mochila/bolsa (#724, ADR 0048 d.8). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; quem decide se existem, se estão carregadas (nunca equipadas) e se `value` do
+   * catálogo é maior que zero é o servidor (invariante 4). `value: 0` recusa o LOTE inteiro —
+   * "ninguém compra isto" — sem vender parte dele.
+   */
+  'sell-items': z.object({ instanceIds: z.array(z.string().min(1)).min(1) }),
+  /**
+   * Descartar um item da mochila/bolsa (#724, ADR 0048 d.8): destrói, sem gold. A confirmação
+   * ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   */
+  'discard-item': z.object({ instanceId: z.string().min(1) }),
+  /**
    * Abrir a janela do cadáver (#722, ADR 0048 d.4). INTENÇÃO: só o id do item do chão; dono,
    * elegibilidade e distância (≤ 1, mesmo andar) são do servidor (invariante 4). Sucesso é
    * `corpse-contents`; recusa é `system-message`.

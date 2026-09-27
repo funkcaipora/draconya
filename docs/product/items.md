@@ -290,6 +290,18 @@ limpar por omissão desequiparia o personagem sem ninguém ter pedido.
 Item **não muda de dono** dentro da sessão: não há troca nem venda na hunt. O que muda é onde ele
 está, e é só isso que atravessa.
 
+**Exceção nomeada (#724, ADR 0048 d.8): vender e descartar mudam a EXISTÊNCIA do item, não o
+dono.** `sell-items { instanceIds[] }` vende N instâncias da mochila/bolsa (nunca equipadas) ao
+`value` do catálogo — `value: 0` recusa o LOTE inteiro, "ninguém compra isto"; o gold entra pelo
+mesmo par `character.goldDelta` + `session.credit(id, 'goldGained', …)` do loot. `discard-item {
+instanceId }` destrói sem gold, com a confirmação já dada pelo cliente. As duas rodam dentro da
+sessão dona (hunt ou Cidade; invariante 9) e o extrato ganha `removedInstances: string[]`: o
+`jobs` apaga as linhas de `item_instance` correspondentes NA MESMA transação do ledger — a
+primeira vez que uma sessão faz uma linha de item deixar de existir. Na Cidade, o mecanismo do
+#154 (extrato de ESTADO por `dirty`, gravado só no `release`/drenagem) passou a também refletir
+`goldDelta` em `aggregates` — antes sempre zerado, porque equipar e escolher vocação nunca
+mexiam em gold.
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no

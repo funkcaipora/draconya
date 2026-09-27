@@ -107,6 +107,13 @@ export interface CharacterState {
    */
   readonly inventory?: InventoryState;
   /**
+   * As instâncias que `sell-items`/`discard-item` destruíram nesta sessão, ainda não drenadas
+   * para um extrato (#724, ADR 0048 d.8). Ausente é nenhuma — o normal —, sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`. Drenada por `drainRemovedInstances`, como `goldDelta` drena para
+   * `aggregates.goldGained`/`goldSpent`.
+   */
+  readonly removedInstances?: readonly string[];
+  /**
    * Quantos itens esta sessão já criou. Vira parte do id da instância.
    *
    * Precisa do snapshot: sem ele, uma sessão retomada recomeçaria a contagem e geraria o mesmo
@@ -254,6 +261,8 @@ export class CharacterRuntime {
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
   lootSeq: number;
+  /** As instâncias destruídas por vender/descartar, ainda não drenadas. Ver `CharacterState.removedInstances`. */
+  removedInstances: string[];
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   /**
@@ -309,6 +318,7 @@ export class CharacterRuntime {
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootSeq = state.lootSeq ?? 0;
+    this.removedInstances = [...(state.removedInstances ?? [])];
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
@@ -342,6 +352,18 @@ export class CharacterRuntime {
   settleGoldDelta(): void {
     this.#gold += this.goldDelta;
     this.goldDelta = 0;
+  }
+
+  /**
+   * Devolve as instâncias destruídas por `sell-items`/`discard-item` e esvazia a lista
+   * (#724, ADR 0048 d.8) — chamado só quando o extrato que as carrega foi aceito, a mesma
+   * disciplina de `settleGoldDelta` (invariante 10): perder a chamada por uma falha de
+   * persistência não é problema, porque o `DELETE` que o `jobs` roda é idempotente por id.
+   */
+  drainRemovedInstances(): string[] {
+    const drained = this.removedInstances;
+    this.removedInstances = [];
+    return drained;
   }
 
   /**
@@ -465,6 +487,7 @@ export class CharacterRuntime {
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootSeq: this.lootSeq,
+      ...(this.removedInstances.length === 0 ? {} : { removedInstances: this.removedInstances }),
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       // supplyStock/ammunitionStock NÃO seguem o mesmo `size === 0` do ammo: ammo só cresce
