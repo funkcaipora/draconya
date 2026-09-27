@@ -145,9 +145,13 @@ export interface LevelChange {
 /**
  * Credita XP e sobe de level se couber. Devolve a mudança, ou `null` se o level não mudou.
  *
- * Subir de level aumenta o máximo E o atual na mesma quantidade — o personagem ganha os
- * pontos, não é curado. Curar no level up faria "subir de level" virar poção grátis, e um bot
- * bem configurado morando na fronteira de um level nunca mais morreria.
+ * Subir de level ENCHE vida e mana (#678, ADR 0037) — Canary `Player::addExperience`
+ * (`player.cpp`): `if (prevLevel != level) { health = healthMax; mana = manaMax; }`. Vários
+ * levels num abate curam uma vez, nos máximos finais. A descida da penalidade de morte passa
+ * por `retarget` e NÃO cura: ela só reduz os máximos, como no Canary.
+ *
+ * Até #678 o level up só somava o delta dos máximos ("dá os pontos, não cura"), uma divergência
+ * do Tibia sem ADR. O "bot morando na fronteira de um level" que ela evitava é o Tibia.
  */
 export function grantXp(
   character: CharacterRuntime,
@@ -157,7 +161,12 @@ export function grantXp(
 ): LevelChange | null {
   if (amount === 0) return null;
   character.xp = Math.max(0, character.xp + amount);
-  return retarget(character, vocation, progression);
+  const change = retarget(character, vocation, progression);
+  if (change !== null && change.to > change.from) {
+    character.health = character.maxHealth;
+    character.mana = character.maxMana;
+  }
+  return change;
 }
 
 export interface DeathPenalty {

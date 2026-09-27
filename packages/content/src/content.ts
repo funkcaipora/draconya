@@ -10,6 +10,7 @@ import {
   BASIC_ABILITY_ID,
   COMBAT_PROFILES,
   DAMAGE_TYPES,
+  NEUTRAL_RATES,
   abilityPower,
   ammunitionSchema,
   appearancesSchema,
@@ -22,7 +23,7 @@ import {
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
   DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
-  MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
+  MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
@@ -196,11 +197,28 @@ export function compileMitigation(profile: MitigationProfile | undefined): Compi
   return { resistances, immunities: new Set(profile?.immunities ?? []) };
 }
 
-/** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
-export function compileMonster(monster: MonsterDefinition): CompiledMonster {
+/**
+ * O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão.
+ *
+ * Os rates de monstro/boss (#691) entram AQUI, na definição compilada — a §15 da referência
+ * (MonsterDefinition vs MonsterRuntime) —, como o Canary faz na instanciação
+ * (`monsters.cpp:332-342`, `isBoss() ? RATE_BOSS_* : RATE_MONSTER_*`): vida × `health` (piso 1:
+ * vida 0 nasceria morto), defesa e armadura × `defense` truncadas, e a mitigação percentual ×
+ * `defense` em ponto flutuante (`monster.cpp:1391`). O ATAQUE não entra aqui: o Canary
+ * multiplica o dano sorteado, e escalar a faixa arredondaria diferente — é o `sim` quem o
+ * aplica no golpe. Multiplicador 1 não toca o campo: o conteúdo de hoje sai bit a bit.
+ */
+export function compileMonster(monster: MonsterDefinition, rates: Rates = NEUTRAL_RATES): CompiledMonster {
   const { mitigation: _rawMitigation, abilities: _rawAbilities, defenses: _rawDefenses, ...rest } = monster;
+  const scale = monster.boss ? rates.boss : rates.monster;
   return {
     ...rest,
+    ...(scale.health === 1 ? {} : { health: Math.max(1, Math.trunc(monster.health * scale.health)) }),
+    ...(scale.defense === 1 ? {} : {
+      defense: Math.trunc(monster.defense * scale.defense),
+      armor: Math.trunc(monster.armor * scale.defense),
+      defenseMitigation: monster.defenseMitigation * scale.defense,
+    }),
     abilities: normalizeMonsterAbilities(monster),
     defenses: normalizeMonsterDefenses(monster),
     mitigation: compileMitigation(monster.mitigation),
@@ -231,6 +249,8 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
       },
       power: abilityPower(ability.power),
       damageType: ability.damageType,
+      // O tipo de ataque (#682) passa direto; ausente continua ausente — a forma decide.
+      ...(ability.kind === undefined ? {} : { kind: ability.kind }),
       ...(ability.presentation === undefined ? {} : {
         presentation: {
           ...(ability.presentation.missileKey === undefined
@@ -280,10 +300,10 @@ export function normalizeMonsterDefenses(monster: MonsterDefinition): readonly M
 
 /** Compila a mitigação de cada monstro no boot (CMB-03). */
 function compileMonsters(
-  definitions: ReadonlyMap<string, MonsterDefinition>,
+  definitions: ReadonlyMap<string, MonsterDefinition>, rates: Rates,
 ): Map<string, CompiledMonster> {
   const compiled = new Map<string, CompiledMonster>();
-  for (const [id, monster] of definitions) compiled.set(id, compileMonster(monster));
+  for (const [id, monster] of definitions) compiled.set(id, compileMonster(monster, rates));
   return compiled;
 }
 
@@ -388,6 +408,9 @@ export function compileItem(
           : {}),
         // O `hitChance` da arma (#524) é só dado — a chance de acerto à distância é a #522.
         ...(raw.hitChance === undefined ? {} : { hitChance: raw.hitChance }),
+        // Elemento e `unproperly` (#687): só dado aqui; só o `combat-v3` os lê no `sim`.
+        ...(raw.element === undefined ? {} : { element: raw.element }),
+        ...(raw.wieldUnproperly === undefined ? {} : { wieldUnproperly: raw.wieldUnproperly }),
       };
     }
   }
@@ -448,7 +471,6 @@ export function buildContent(raw: RawContent): Content {
   const problems: string[] = [];
 
   const rawMonsterDefinitions = parseAll('monster', raw.monsters, monsterSchema, problems);
-  const monsterDefinitions = compileMonsters(rawMonsterDefinitions);
   const hunts = parseAll('hunt', raw.hunts, huntSchema, problems);
   const vocations = parseAll('vocation', raw.vocations, vocationSchema, problems);
   const progressions = parseAll('progression', raw.progression ?? [], progressionSchema, problems);
@@ -459,6 +481,9 @@ export function buildContent(raw: RawContent): Content {
   if (progression === undefined) {
     problems.push('progression/baseline.json ausente: sem ele não há stats de level 1');
   }
+  // Os rates de monstro/boss (#691) escalam a definição COMPILADA, então a compilação espera a
+  // progressão. Sem ela o boot já vai recusar; o neutro só evita erro em cascata até lá.
+  const monsterDefinitions = compileMonsters(rawMonsterDefinitions, progression?.rates ?? NEUTRAL_RATES);
   const combats = parseAll('combat', raw.combat ?? [], combatSchema, problems);
   const combat = combats.get('baseline');
   // Mesma razão da base de progressão: sem coeficiente não há como resolver dano, e um
@@ -749,6 +774,10 @@ export function buildContent(raw: RawContent): Content {
       if (weapon.damage !== undefined && weapon.damage.min > weapon.damage.max) {
         problems.push(`item "${item.id}": damage.min maior que damage.max`);
       }
+      // O elemento da arma (#687) só entra no golpe corpo a corpo; munição elemental é a #575.
+      if (weapon.element !== undefined && weapon.kind !== 'melee') {
+        problems.push(`item "${item.id}": element só vale em arma corpo a corpo`);
+      }
     }
     if (item.kind === 'container' && item.slot !== 'back') {
       problems.push(`item "${item.id}": container tem de ter slot "back" — é a mochila`);
@@ -759,14 +788,15 @@ export function buildContent(raw: RawContent): Content {
     if (item.twoHanded && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": twoHanded só faz sentido em arma`);
     }
-    // Defesa (CMB-04) só nas combinações aprovadas: escudo, ou arma corpo a corpo de UMA mão.
-    // Bow/twoHanded e wand/rod não têm defesa residual, e a arma de duas mãos não deixa escudo
-    // de sobra — o `Inventory` já recusa as duas juntas, e aqui a recusa é sobre o dado.
-    const meleeOneHanded = item.kind === 'weapon' && !item.twoHanded
-      && (item.weapon?.kind ?? 'melee') === 'melee';
-    if (item.defense > 0 && item.kind !== 'shield' && !meleeOneHanded) {
+    // Defesa (CMB-04) só nas combinações aprovadas: escudo, ou arma corpo a corpo — de uma ou
+    // de duas mãos (#687: o `Player::getDefense` do Canary conta a `defense` de qualquer arma que
+    // não seja escudo, e a Broadsword tem 23). Bow e wand/rod não têm defesa residual. Só o
+    // `combat-v3` lê a defesa da arma de duas mãos (`#playerDefenseV3`); o `defenseSource` do
+    // v1/v2 continua ignorando-a, bit a bit (ADR 0031).
+    const melee = item.kind === 'weapon' && (item.weapon?.kind ?? 'melee') === 'melee';
+    if (item.defense > 0 && item.kind !== 'shield' && !melee) {
       problems.push(
-        `item "${item.id}": defense só vale em escudo ou arma corpo a corpo de uma mão`,
+        `item "${item.id}": defense só vale em escudo ou arma corpo a corpo`,
       );
     }
     // extraDefense/spellbook/quiver (#549, M30-02): a mesma disciplina do `defense` acima —
@@ -821,6 +851,12 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.kind !== 'container' && item.initialSlots !== undefined) {
       problems.push(`item "${item.id}": initialSlots só vale em kind "container"`);
+    }
+    // Slot de imbuement (#604, ADR 0046) só em peça que se VESTE e não empilha: o imbuement é
+    // estado da instância, e instância com overlay não empilha (d.3) — num item empilhável o
+    // slot seria um número que nenhuma pilha poderia usar.
+    if (item.imbuementSlots !== undefined && (item.slot === undefined || item.stackable)) {
+      problems.push(`item "${item.id}": imbuementSlots só vale em item que se veste e não empilha`);
     }
   }
   for (const piece of progression?.startingKit ?? []) {
@@ -1154,11 +1190,11 @@ export function buildContent(raw: RawContent): Content {
 
   // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
   // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
-  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave` e
-  // `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
+  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave`, `rows`
+  // (#679) e `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
   // — o monstro não guarda direção entre golpes); `cross`/`cleave` continuam fora porque nenhum
   // monstro do recorte precisa deles ainda.
-  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'beam']);
+  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'rows', 'beam']);
   for (const monster of rawMonsterDefinitions.values()) {
     const seenAbilities = new Set<string>();
     for (const ability of monster.abilities ?? []) {
@@ -1173,7 +1209,7 @@ export function buildContent(raw: RawContent): Content {
       if (area !== undefined && !MONSTER_ABILITY_AREA_SHAPES.has(area.shape)) {
         problems.push(
           `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
-            'monstro só lança `circle`, `wave` ou `beam`',
+            'monstro só lança `circle`, `wave`, `rows` ou `beam`',
         );
       }
       // O campo (CMB-07) segue a regra ANTERIOR da área: só `circle`. `wave`/`beam` são da

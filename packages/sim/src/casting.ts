@@ -24,6 +24,7 @@ import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { DamageOutcome } from './combat/damage.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
+import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
 import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
@@ -163,6 +164,15 @@ export function supplyCooldownKey(supplyId: string): string {
   return `supply:${supplyId}`;
 }
 
+/**
+ * O livro da exaustão de AÇÃO compartilhada (#690): o `nextPotionAction` do Canary, que poção e
+ * runa travam JUNTAS (`Actions::useItem`, `timeBetweenExActions`). Atravessa os grupos — por
+ * isso não é `group:<g>` — e só o supply que declara `actionExhaustMs` o trava ou o lê.
+ */
+export function actionExhaustKey(): string {
+  return 'exhaust:action';
+}
+
 export function secondaryCooldownKey(name: string): string {
   return `secondary:${name}`;
 }
@@ -266,7 +276,8 @@ function formulaSkill(effect: PowerEffect, formula: SpellFormula, scaling: Spell
  *
  * A magia que declara `formula` (#474) entra pela fórmula canônica; a que não declara continua
  * exatamente no caminho do `basePower` × `combat.spellPower`, bit a bit (ADR 0031). Os dois
- * caminhos consomem UM `rng.integer`, então a ordem de sorteio não muda para ninguém.
+ * caminhos consomem UM sorteio de valor (`rollCombatValue`), então a ordem de sorteio não muda
+ * para ninguém — uniforme até o `combat-v2`, a normal truncada do Canary no `combat-v3` (#681).
  *
  * O `skill` da fórmula é o MAGIC LEVEL na CURA (#475) e na magia de DANO que declara
  * `scaling: 'magic'` (#677, o `LEVELMAGICVALUE` do Canary); na de dano sem `scaling`, é a skill
@@ -282,7 +293,7 @@ function powerOf(
       effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
       scaling.weaponAttack ?? 0,
     );
-    return rng.integer(min, max);
+    return rollCombatValue(rng, min, max, combat);
   }
   if (effect.basePower !== undefined) {
     // O caminho provisório do `basePower` (ADR 0026 d.5) NÃO muda (#475): a skill é a da
@@ -291,7 +302,7 @@ function powerOf(
     const { min, max } = evaluateSpellPower(
       undefined, effect.basePower, caster.level, scaling.skillLevel, combat.spellPower,
     );
-    return rng.integer(min, max);
+    return rollCombatValue(rng, min, max, combat);
   }
   return Math.round((effect.power ?? effect.amount ?? 0) * scaling.powerScale);
 }
@@ -536,8 +547,10 @@ function fixedAmount(
   amount: number | undefined,
   range: { readonly min: number; readonly max: number } | undefined,
   rng: Rng | undefined,
+  /** O perfil escolhe a distribuição (#681): normal truncada no `combat-v3`, uniforme antes. */
+  combat: Pick<Combat, 'compatibilityProfile'> | undefined,
 ): number {
-  if (range !== undefined) return rng === undefined ? range.min : rng.integer(range.min, range.max);
+  if (range !== undefined) return rng === undefined ? range.min : rollCombatValue(rng, range.min, range.max, combat);
   return amount ?? 0;
 }
 
@@ -623,7 +636,8 @@ export function useSupply(
       const target = aim.targets[i] as SpellTarget;
       // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia. A fórmula
       // canônica (#476) VENCE o `basePower`; sem ela, o caminho do BP provisório continua bit a
-      // bit (ADR 0031), porque os dois consomem exatamente UM `rng.integer`.
+      // bit (ADR 0031), porque os dois consomem exatamente UM sorteio de valor (`rollCombatValue`
+      // — uniforme até o `combat-v2`, a normal truncada no `combat-v3`, #681).
       // A runa lê o ML (`skillLevel` aqui É o ML, `#runeScaling`); a fórmula canônica soma o
       // especializado do elemento da runa (#680). Sem fórmula, o BP provisório fica bit a bit.
       const runeSkill = supply.effect.formula === undefined
@@ -633,7 +647,7 @@ export function useSupply(
         supply.effect.formula, supply.effect.basePower ?? 0, user.level, runeSkill,
         combat.spellPower,
       );
-      const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
+      const power = Math.round(rollCombatValue(rng, min, max, combat) * user.conditions.damageDealtScale('spell'));
       const result = resolveDamage(
         {
           rawDamage: power, source: 'rune', damageType: supply.effect.damageType,
@@ -698,15 +712,16 @@ export function useSupply(
     const paidFromStockPotion = hasStockHeal && spendStock(user, supply.id);
     if (!paidFromStockPotion) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
-    // Poção: `amount` fixo OU `amountRange` sorteado (#524), sem contexto de combate — a runa
-    // de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
-    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava.
+    // Poção: `amount` fixo OU `amountRange` sorteado (#524; pela normal truncada no `combat-v3`,
+    // #681), sem passar por `executeHealing` — a runa de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
+    // espírito) repõe mana no MESMO uso — o `manaRestored` que `CastSuccess` já carregava. A vida
+    // sorteia ANTES da mana (a ordem das propriedades), a de `potions.lua` — a ordem do sorteio é contrato (#690).
     return {
       ok: true,
-      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng)),
+      healed: restore(recipient, 'health', fixedAmount(effect.amount, effect.amountRange, rng, combat)),
       manaRestored: effect.alsoMana === undefined
         ? 0
-        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng)),
+        : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng, combat)),
       damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
     };
   }
@@ -732,7 +747,7 @@ export function useSupply(
   return {
     ok: true,
     healed: 0,
-    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng)),
+    manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng, combat)),
     damage: 0,
     hits: NO_HITS,
     goldSpent: paidFromStockMana ? 0 : supply.price,
@@ -747,6 +762,13 @@ export function useSupply(
 function startSupplyCooldown(user: CharacterRuntime, supply: Supply, nowMs: number | undefined): void {
   if (nowMs === undefined) return;
   user.cooldowns.start(groupCooldownKey(supply.group), nowMs, supply.groupCooldownMs);
+  // A exaustão de ação compartilhada (#690) só AVANÇA, como o `setNextPotionAction` do Canary:
+  // `Cooldowns.start` sobrescreve o prazo, então só se grava quando o novo é MAIOR que o que
+  // falta — um supply de exaustão curta nunca encurta a de outro.
+  if (supply.actionExhaustMs !== undefined
+    && user.cooldowns.remainingMs(actionExhaustKey(), nowMs) < supply.actionExhaustMs) {
+    user.cooldowns.start(actionExhaustKey(), nowMs, supply.actionExhaustMs);
+  }
 }
 
 /**

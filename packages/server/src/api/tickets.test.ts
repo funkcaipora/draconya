@@ -267,9 +267,12 @@ describe('POST /api/tickets', () => {
   it('reconstrói os containers pela posição gravada; a linha sem posição entra no primeiro lugar livre (#160)', async () => {
     // Mutação que mata: ignorar `container`/`slotIndex` (tudo cairia na lista plana), ou
     // perder a linha antiga em vez de encaixá-la.
-    const row = (id: string, slot: string | null, container: string | null, slotIndex: number | null) => ({
+    const row = (
+      id: string, slot: string | null, container: string | null, slotIndex: number | null,
+      overlay: unknown = null,
+    ) => ({
       id, itemId: 'rock', ownerCharacterId: 'p1', quantity: 1, origin: 'loot', equippedSlot: slot,
-      container, slotIndex, createdAt: new Date(0),
+      container, slotIndex, overlay, createdAt: new Date(0),
     });
     const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
     const response = await post(build({
@@ -279,14 +282,20 @@ describe('POST /api/tickets', () => {
         row('b', null, 'satchel', 0),
         row('old', null, null, null),
         row('dup', null, 'backpack', 3),
-        row('worn', 'hand', null, null),
+        // O overlay por instância (#604): válido atravessa; torto vira ausente, sem trancar o login.
+        row('worn', 'hand', null, null, { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] }),
+        row('bad', null, 'satchel', 1, { imbuements: 'torto' }),
       ],
     }), { characterId: 'p1' });
     expect(response.statusCode).toBe(200);
     const inventory = (issue.mock.calls[0]?.[2] as { inventory: { backpack: unknown[]; satchel: unknown[]; equipped: Record<string, unknown> } }).inventory;
     expect(inventory.backpack[3]).toMatchObject({ instanceId: 'a' });
     expect(inventory.satchel[0]).toMatchObject({ instanceId: 'b' });
-    expect(inventory.equipped['hand']).toMatchObject({ instanceId: 'worn' });
+    expect(inventory.equipped['hand']).toMatchObject({
+      instanceId: 'worn', overlay: { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] },
+    });
+    expect(inventory.satchel[1]).toEqual({ instanceId: 'bad', itemId: 'rock', quantity: 1 });
+    expect(inventory.satchel[0]).not.toHaveProperty('overlay');
     // As duas sem lugar — a antiga e a que colidiu — entram nos primeiros vazios da mochila.
     expect(inventory.backpack[0]).toMatchObject({ instanceId: 'old' });
     expect(inventory.backpack[1]).toMatchObject({ instanceId: 'dup' });

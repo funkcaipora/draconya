@@ -10,6 +10,8 @@
 
 import type { MonsterAbility } from '@draconya/content';
 import { areaTiles, facingDirection, tileKey } from '../area.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS, MELEE_BLOCK_FLAGS } from '../combat/blockhit.js';
+import type { BlockFlags } from '../combat/blockhit.js';
 import type { WorldPoint } from '../movement.js';
 import { sameFloor } from './step.js';
 import type { FloorPoint } from './step.js';
@@ -22,6 +24,20 @@ import type { FloorPoint } from './step.js';
  */
 export function isMeleeAbility(ability: MonsterAbility): boolean {
   return ability.target.range <= 1 && ability.target.area === undefined;
+}
+
+/**
+ * As flags de bloqueio de uma ability no `combat-v3` (#682): a regra de
+ * `Monsters::deserializeSpell` do Canary. O corpo a corpo é o `kind` declarado; sem ele, a
+ * FORMA (`isMeleeAbility`). Fora do corpo a corpo, o TIPO decide: físico passa pela armadura
+ * (`BLOCKARMOR`, origem `ranged`), qualquer outro é magia. Ignorado em `combat-v1`/`v2`.
+ *
+ * Devolve as constantes compartilhadas de `blockhit.ts` — nenhuma alocação no caminho quente.
+ */
+export function abilityBlockFlags(ability: MonsterAbility): BlockFlags {
+  const melee = ability.kind === undefined ? isMeleeAbility(ability) : ability.kind === 'melee';
+  if (melee) return MELEE_BLOCK_FLAGS;
+  return ability.damageType === 'physical' ? DISTANCE_BLOCK_FLAGS : MAGIC_BLOCK_FLAGS;
 }
 
 /**

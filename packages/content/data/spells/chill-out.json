@@ -12,8 +12,8 @@
     "kind": "damage",
     "basePower": 10,
     "area": {
-      "shape": "wave",
-      "length": 3
+      "shape": "rows",
+      "widths": [1, 3, 3, 5]
     },
     "damageType": "ice",
     "formula": {
@@ -25,5 +25,5 @@
       "scaling": "magic"
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula e área do Canary (`data/scripts/spells/attack/chill_out.lua`, main, 2026-09-24): AREA_WAVE4 tem 3 fileiras (como Ice Wave/Fire Wave), não 2."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula e área do Canary (`data/scripts/spells/attack/chill_out.lua`, main, 2026-09-24): AREA_WAVE4 tem 4 fileiras (como Ice Wave/Fire Wave), larguras 1,3,3,5 contando a do `3` (#679)."
 }

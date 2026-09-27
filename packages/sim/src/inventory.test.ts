@@ -268,6 +268,36 @@ describe('equipar (§21.4)', () => {
     expect(greatSwordInHand.weaponAttack(catalog, wearer({ level: 20 }))).toBe(40);
   });
 
+  it('`heldWeapon()`: abaixo do level, 50 com wieldUnproperly e 0 sem — nunca mão vazia (#687)', () => {
+    // O `playerWeaponCheck` do Canary: a arma que ficou na mão depois de uma perda de level bate
+    // metade (`unproperly`) ou não bate. Ao contrário de `weapon()`, não vira punho.
+    const fireSword = define({
+      id: 'fire-sword', kind: 'weapon', slot: 'hand', weight: 23, attack: 24, defense: 20,
+      requires: { level: 30 },
+      weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+    });
+    const spikeSword = define({
+      id: 'spike-sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24, defense: 10,
+      requires: { level: 30 },
+    });
+    const withThem = new Map([...catalog, ['fire-sword', fireSword], ['spike-sword', spikeSword]]);
+    const holding = (id: string): Inventory => Inventory.fromState({
+      backpack: [], equipped: { hand: carried(id) },
+    });
+
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: fireSword, damagePercent: 50 });
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 20 })))
+      .toEqual({ item: spikeSword, damagePercent: 0 });
+    expect(holding('fire-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    expect(holding('spike-sword').heldWeapon(withThem, wearer({ level: 30 }))?.damagePercent).toBe(100);
+    // `weapon()` não muda: abaixo do level continua mão vazia (v1/v2).
+    expect(holding('fire-sword').weapon(withThem, wearer({ level: 20 }))).toBeNull();
+    // Vocação errada e mão vazia continuam `null`.
+    expect(holding('druid-staff').heldWeapon(catalog, wearer())).toBeNull();
+    expect(new Inventory().heldWeapon(catalog, wearer())).toBeNull();
+  });
+
   it('recusa equipar o que ele não tem', () => {
     expect(new Inventory().equip('sword', wearer(), catalog))
       .toEqual({ ok: false, reason: 'not-carried' });
@@ -715,5 +745,78 @@ describe('mochila e bolsa posicionais (#160, ADR 0026 decisão 6)', () => {
     expect(state.backpack).toHaveLength(20);
     expect(state.satchel).toHaveLength(10);
     expect(Inventory.fromState(state).getState()).toEqual(inventory.getState());
+  });
+});
+
+describe('overlay por instância: imbuements (#604, ADR 0046)', () => {
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const cheese = define({ id: 'cheese', kind: 'other', weight: 1, value: 0, stackable: true });
+  const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['cheese', cheese]]);
+  const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
+  const rich = wearer({ capacity: 100_000 });
+  const born = (): Inventory => {
+    const inventory = Inventory.fromState({
+      backpack: [], equipped: { back: { instanceId: 'kit:back', itemId: 'backpack', quantity: 1 } },
+    });
+    inventory.ensureContainers(huntera);
+    return inventory;
+  };
+  const imbued = { imbuements: [{ slot: 0, typeId: 'vampirism-basic', remainingMs: 72_000_000 }] };
+
+  it('item com overlay não entra numa pilha, e a pilha não entra nele', () => {
+    // Mutação que mata: `add` juntar pela regra antiga (mesmo id, empilhável) e apagar o
+    // estado de uma das instâncias na soma.
+    const inventory = born();
+    inventory.add({ ...carried('cheese', 'c1', 3), overlay: imbued }, withContainers, rich, huntera);
+    inventory.add(carried('cheese', 'c2', 4), withContainers, rich, huntera);
+    inventory.add({ ...carried('cheese', 'c3', 2), overlay: imbued }, withContainers, rich, huntera);
+    expect(inventory.backpack[0]).toMatchObject({ instanceId: 'c1', quantity: 3, overlay: imbued });
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'c2', quantity: 4 });
+    expect(inventory.backpack[2]).toMatchObject({ instanceId: 'c3', quantity: 2, overlay: imbued });
+    // Sem overlay continua empilhando como sempre.
+    inventory.add(carried('cheese', 'c4', 1), withContainers, rich, huntera);
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'c2', quantity: 5 });
+  });
+
+  it('mover uma instância com overlay sobre a pilha do mesmo id TROCA, não empilha', () => {
+    const inventory = born();
+    inventory.add({ ...carried('cheese', 'c1', 3), overlay: imbued }, withContainers, rich, huntera);
+    inventory.add(carried('cheese', 'c2', 4), withContainers, rich, huntera);
+    expect(inventory.move(
+      { container: 'backpack', index: 0 }, { container: 'backpack', index: 1 }, withContainers, rich, huntera,
+    ).ok).toBe(true);
+    expect(inventory.backpack[0]).toMatchObject({ instanceId: 'c2', quantity: 4 });
+    expect(inventory.backpack[1]).toMatchObject({ instanceId: 'c1', quantity: 3, overlay: imbued });
+  });
+
+  it('setOverlay regrava a instância onde ela estiver, sem mudar lugar nem peso', () => {
+    const inventory = born();
+    inventory.add(carried('sword', 's1'), withContainers, rich, huntera);
+    inventory.add(carried('armor', 'a1'), withContainers, rich, huntera);
+    inventory.equip('a1', rich, withContainers);
+    const weight = inventory.weight(withContainers);
+
+    expect(inventory.setOverlay('s1', imbued)).toBe(true);
+    expect(inventory.setOverlay('a1', imbued)).toBe(true);
+    expect(inventory.backpack[0]).toEqual({ ...carried('sword', 's1'), overlay: imbued });
+    expect(inventory.equippedAt('chest')).toEqual({ ...carried('armor', 'a1'), overlay: imbued });
+    expect(inventory.weight(withContainers)).toBe(weight);
+
+    // Overlay vazio TIRA o overlay: a peça volta a ser igual à definição.
+    expect(inventory.setOverlay('s1', { imbuements: [] })).toBe(true);
+    expect(inventory.backpack[0]).toEqual(carried('sword', 's1'));
+    expect(inventory.setOverlay('nope', imbued)).toBe(false);
+  });
+
+  it('o overlay atravessa o snapshot (JSON) e volta igual, equipado ou no container', () => {
+    const inventory = born();
+    inventory.add({ ...carried('sword', 's1'), overlay: imbued }, withContainers, rich, huntera);
+    inventory.add({ ...carried('armor', 'a1'), overlay: imbued }, withContainers, rich, huntera);
+    inventory.equip('a1', rich, withContainers);
+    const state = JSON.parse(JSON.stringify(inventory.getState())) as ReturnType<Inventory['getState']>;
+    const back = Inventory.fromState(state);
+    expect(back.getState()).toEqual(inventory.getState());
+    expect(back.backpack[0]?.overlay).toEqual(imbued);
+    expect(back.equippedAt('chest')?.overlay).toEqual(imbued);
   });
 });

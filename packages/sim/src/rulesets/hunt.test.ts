@@ -3,6 +3,10 @@ import type { Content, FieldSpec, Item, Progression, RawContent } from '@dracony
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
+import type { DamageOutcome } from '../combat/damage.js';
+import { DISTANCE_BLOCK_FLAGS, MAGIC_BLOCK_FLAGS } from '../combat/blockhit.js';
+import { rollCombatValue } from '../combat/combat-value.js';
+import { normalRandomInt } from '../combat/weapon-power.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
@@ -26,6 +30,13 @@ import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 vi.mock('../combat/damage.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../combat/damage.js')>();
   return { ...actual, resolveDamage: vi.fn(actual.resolveDamage) };
+});
+
+// O sorteio de valor (#681) é ENVOLVIDO pelo mesmo motivo: delega para o real, e o bloco do
+// Dragon sob `combat-v3` prova que a ability e a cura do monstro passam por ele.
+vi.mock('../combat/combat-value.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../combat/combat-value.js')>();
+  return { ...actual, rollCombatValue: vi.fn(actual.rollCombatValue) };
 });
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
@@ -90,7 +101,7 @@ const progression = {
   id: 'baseline', startingHealth: 500_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
@@ -578,10 +589,10 @@ describe('regeneração (FUN-36)', () => {
 
     run(session, 30_000, 100);
 
-    // 1 HP/s no conteúdo de teste: trinta segundos são trinta pontos, mais um do primeiro
-    // tick — os cooldowns começam PRONTOS (FUN-25), a mesma regra que faz o personagem dar o
-    // primeiro passo da rota sem esperar meio segundo parado.
-    expect(hero.health).toBe(131);
+    // 1 ponto a cada 1 000 ms no conteúdo de teste: trinta segundos são trinta pulsos. O
+    // primeiro vence em `ticksMs` depois da entrada, não nela (#678): o contador do Canary
+    // começa em 0, e entrar na hunt não é poção — até #678 eram 31, com um pulso imediato.
+    expect(hero.health).toBe(130);
   });
 
   it('rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
@@ -598,7 +609,7 @@ describe('regeneração (FUN-36)', () => {
     expect(at(20)).toBe(at(10));
   });
 
-  it('o Life Ring quadruplica a regeneração passiva (224 HP em 30s em vez de 131)', () => {
+  it('o Life Ring quadruplica a regeneração passiva (220 HP em 30s em vez de 130)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({
       loaded: semSpawn, health: 100,
@@ -610,9 +621,9 @@ describe('regeneração (FUN-36)', () => {
 
     run(session, 30_000, 100);
 
-    // Bônus de +300% (SV-16): 1 ponto vira 4 a cada vencimento. Em 30 segundos são
-    // 31 vencimentos × 4 = 124 pontos somados aos 100 iniciais.
-    expect(hero.health).toBe(224);
+    // Bônus de +300% (SV-16) sobre o PULSO (#678): 1 ponto vira 4 a cada vencimento. Em 30
+    // segundos são 30 vencimentos × 4 = 120 pontos somados aos 100 iniciais.
+    expect(hero.health).toBe(220);
   });
 
   it('o Life Ring rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
@@ -654,19 +665,92 @@ describe('regeneração (FUN-36)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({ loaded: semSpawn, health: 100, staminaMs: 0 });
     run(session, 30_000, 100);
-    expect(hero.health).toBe(131);
+    expect(hero.health).toBe(130);
   });
 
-  it('taxa zero não regenera, e não trava o laço de recuperação', () => {
-    // Taxa zero não é intervalo infinito: é "não regenera". Sem a saída explícita, o
-    // intervalo viraria `Infinity` e o catch-up rodaria até o teto a cada tick.
+  it('`amount` zero não regenera, e não agenda evento nenhum', () => {
+    // `amount: 0` é "não regenera" (#678): nenhum pulso entra na fila, em vez de um evento
+    // periódico que vence para não fazer nada a hunt inteira.
     const parado = content({
       routes: [{ ...route, spawnPoints: [] }],
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     });
     const { session, hero } = start({ loaded: parado, health: 100 });
+    // `cancelEvent` devolve quantos havia na fila: zero é "nenhum pulso agendado".
+    expect(session.cancelEvent('health-regen', hero.id)).toBe(0);
+    expect(session.cancelEvent('mana-regen', hero.id)).toBe(0);
     run(session, 30_000, 100);
     expect(hero.health).toBe(100);
+  });
+
+  // Os números do Knight no Canary `vocations.xml` (#678): `gainhpticks=6000 gainhpamount=1`,
+  // `gainmanaticks=6000 gainmanaamount=2`. A mesma média da taxa antiga (1/6 e 1/3 por segundo),
+  // mas em PULSOS: até #678 a mana entrava 1 ponto a cada 3 s, e não 2 a cada 6 s.
+  const knightRegen = {
+    id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+    regen: { health: { ticksMs: 6000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+  };
+  const withKnightRegen = content({
+    routes: [{ ...route, spawnPoints: [] }], vocations: [knightRegen],
+  });
+  const lifeRing: InventoryState = {
+    backpack: [],
+    equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+  };
+  /** Um Knight parado, com vida E mana longe do máximo, entrando na hunt no instante 0. */
+  const knightIn = (inventory?: InventoryState): Started => {
+    const session = createHuntSession({
+      id: 'session-1', content: withKnightRegen, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const hero = character({ health: 100, ...(inventory === undefined ? {} : { inventory }) });
+    // Antes do `enter`: é na entrada que a vocação escolhe o ritmo dos pulsos.
+    hero.vocationId = 'knight';
+    hero.maxMana = 1_000;
+    hero.mana = 0;
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('Knight regenera em pulsos: +1 vida e +2 mana a cada 6 s, o primeiro só aos 6 000 ms', () => {
+    const { session, hero } = knightIn();
+    session.advanceBy(5_999);
+    expect(hero.health).toBe(100);
+    expect(hero.mana).toBe(0);
+    session.advanceBy(1);
+    expect(hero.health).toBe(101);
+    expect(hero.mana).toBe(2);
+    // Mutação que mata: mana de 1 ponto a cada 3 s — aos 9 s seria 3, e não 2.
+    session.advanceBy(3_000);
+    expect(hero.mana).toBe(2);
+  });
+
+  it('Knight parado 60 s: +10 vida (10 pulsos × 1) e +20 mana (10 pulsos × 2)', () => {
+    const { session, hero } = knightIn();
+    run(session, 60_000, 100);
+    expect(hero.health).toBe(110);
+    expect(hero.mana).toBe(20);
+  });
+
+  it('Knight com Life Ring: o anel multiplica o PULSO — +4 vida e +8 mana a cada 6 s', () => {
+    const { session, hero } = knightIn(lifeRing);
+    session.advanceBy(6_000);
+    expect(hero.health).toBe(104);
+    expect(hero.mana).toBe(8);
+    run(session, 54_000, 100);
+    expect(hero.health).toBe(140);
+    expect(hero.mana).toBe(80);
+  });
+
+  it('Knight, com e sem Life Ring, rende exatamente o mesmo a 1 Hz e a 10 Hz', () => {
+    const at = (hz: number, inventory?: InventoryState): readonly [number, number] => {
+      const { session, hero } = knightIn(inventory);
+      run(session, 600_000, 1000 / hz);
+      return [hero.health, hero.mana];
+    };
+    expect(at(1)).toEqual(at(10));
+    expect(at(1, lifeRing)).toEqual(at(10, lifeRing));
+    expect(at(10)).toEqual([200, 200]);
   });
 });
 
@@ -1038,9 +1122,15 @@ describe('taxa de avanço', () => {
     // eventos que VENCEM, e é mais barato que o laço que ele substituiu.
     //
     // Sem regeneração NESTE cenário, e é decisão: a comparação é sobre granularidade, e um
-    // personagem que se cura enquanto apanha mede as duas coisas somadas.
+    // personagem que se cura enquanto apanha mede as duas coisas somadas. Pelo mesmo motivo,
+    // sem level up: desde #678 subir de level ENCHE a vida, e um level no último abate zeraria
+    // o dano medido — daí a curva de XP que não fecha nenhum level em dez minutos.
     const semRegen = content({
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{
+        ...progression,
+        regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+        xp: { kind: 'power', base: 1_000_000, exponent: 2 },
+      }],
     });
     const dano = (hz: number): number => {
       const { hero } = tenMinutesAt(hz, 'cautious', semRegen);
@@ -1611,7 +1701,7 @@ describe('cura em área — Mass Healing (#475, RF-05)', () => {
   it('cura o conjurador e os aliados no 3x3, e NÃO quem está fora da área', () => {
     const loaded = buildContent(raw({
       progression: [{
-        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+        ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
       }],
       routes: [{ ...route, spawnPoints: [] }],
       spells: [...spells, massHealing],
@@ -1742,7 +1832,7 @@ const withSpells = (
   // da regeneração é o bloco dela, onde ela é o assunto.
   const loaded = buildContent(raw({
     progression: [{
-      ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
     ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
@@ -2122,7 +2212,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     // Mutação que mata: `amount: result.damage` no golpe do monstro em `#onMonsterAction` —
     // o número passa a 10, maior que a vida que o herói tinha.
     const semRegen = content({
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     });
     const { session, hero } = start({ loaded: semRegen, difficulty: 'bold', health: 3 });
     run(session, 20_000, 100);
@@ -2152,7 +2242,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     // do herói volta a ser a do golpe do rato, com o máximo do level 1 (ou nenhuma).
     const umLevelPorRato = content({
       monsters: [{ ...rat, experience: 20 }],
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     });
     const { session, hero } = start({ loaded: umLevelPorRato, inventory: comEspada });
     run(session, 15_000, 100);
@@ -2312,18 +2402,19 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     // produzir um evento por segundo para dizer isso.
     //
     // Mutação que mata: chamar `#emitHealed` na regeneração — aparece um `creature-healed`.
-    // Emitir a barra sem o `> 0` mata pela segunda metade: de vida cheia, quatro eventos.
+    // Emitir a barra sem o `> 0` mata pela segunda metade: de vida cheia, três eventos.
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({ loaded: semSpawn, health: 100 });
     run(session, 3_000, 100);
     const events = session.drainEvents();
 
-    // 1 HP/s: vence em 0, 1 000, 2 000 e 3 000 — quatro barras, a última com a vida final.
+    // 1 ponto a cada 1 000 ms: vence em 1 000, 2 000 e 3 000 — o primeiro pulso só depois de
+    // `ticksMs` (#678) —, três barras, a última com a vida final.
     const barras = ofKind(events, 'creature-health-changed');
-    expect(barras).toHaveLength(4);
+    expect(barras).toHaveLength(3);
     expect(barras.every((b) => b.creatureId === 'hero')).toBe(true);
     expect(barras.at(-1)?.health).toBe(hero.health);
-    expect(hero.health).toBe(104);
+    expect(hero.health).toBe(103);
     expect(ofKind(events, 'creature-healed')).toHaveLength(0);
     expect(ofKind(events, 'creature-hit')).toHaveLength(0);
 
@@ -2626,7 +2717,7 @@ const withExit = (
 ) => {
   const loaded = buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...(over.exitDelayMs !== undefined ? { hunts: [{ ...hunt, exitDelayMs: over.exitDelayMs }] } : {}),
   }));
   const session = createHuntSession({
@@ -3016,7 +3107,7 @@ describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
     const loaded = buildContent(raw({
       progression: [{
         ...progression, startingHealth: 1_000, startingMana: 200,
-        regen: { healthPerSecond: 0, manaPerSecond: 0 },
+        regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
       }],
     }));
     const session = createHuntSession({
@@ -3124,7 +3215,7 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
     const loaded = buildContent(raw({
       routes: [{ ...route, spawnPoints: [] }],
       progression: [{
-        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+        ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
       }],
     }));
     const session = createHuntSession({
@@ -3176,6 +3267,82 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
     run(session, 5_000, 100);
 
     expect(session.ended).toBeNull();
+  });
+});
+
+// --- rates do servidor (#691) ----------------------------------------------------------------
+
+describe('rates do servidor (#691)', () => {
+  const withRates = (rates: Record<string, unknown>, over: Partial<RawContent> = {}): Content =>
+    content({ progression: [{ ...progression, rates }], ...over });
+
+  it('experience 2 dobra a XP DEPOIS do Bestiário: rato de 5 XP rende 10', () => {
+    const { session, hero } = start({ loaded: withRates({ experience: 2 }) });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience * 2);
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('com useStages, o stage do level decide; o rate simples é ignorado', () => {
+    const { session, hero } = start({
+      loaded: withRates({ experience: 2, useStages: true, experienceStages: [{ minLevel: 1, maxLevel: 1, multiplier: 3 }] }),
+    });
+    session.advanceBy(100);
+    while (session.aggregates.kills === 0) session.advanceBy(100);
+    // O primeiro abate é pago no level 1: stage × 3, não o `experience` 2.
+    expect(hero.xp).toBe(rat.experience * 3);
+  });
+
+  it('monster.attack 2 dobra o rawDamage do monstro, com a mesma semente e o mesmo sorteio', () => {
+    const biter = { ...rat, attack: { min: 0, max: 8 }, health: 100_000 };
+    const hitsOf = (rates: Record<string, unknown>): number[] => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({ loaded: withRates(rates, { monsters: [biter] }) });
+      run(session, 20_000, 100);
+      return vi.mocked(resolveDamage).mock.calls
+        .filter(([intent]) => intent.source === 'monster-attack')
+        .map(([intent]) => intent.rawDamage);
+    };
+    const neutral = hitsOf({});
+    const doubled = hitsOf({ monster: { attack: 2 } });
+    expect(neutral.length).toBeGreaterThan(3);
+    expect(new Set(neutral).size).toBeGreaterThan(1);
+    expect(doubled).toEqual(neutral.map((damage) => damage * 2));
+    // O bloco `boss` não vale para monstro comum.
+    expect(hitsOf({ boss: { attack: 2 } })).toEqual(neutral);
+  });
+
+  it('boss usa o bloco boss para o ataque', () => {
+    const boss = { ...rat, attack: { min: 0, max: 8 }, health: 100_000, boss: true };
+    const hitsOf = (rates: Record<string, unknown>): number[] => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({ loaded: withRates(rates, { monsters: [boss] }) });
+      run(session, 20_000, 100);
+      return vi.mocked(resolveDamage).mock.calls
+        .filter(([intent]) => intent.source === 'monster-attack')
+        .map(([intent]) => intent.rawDamage);
+    };
+    const neutral = hitsOf({});
+    expect(hitsOf({ boss: { attack: 3 } })).toEqual(neutral.map((damage) => damage * 3));
+    expect(hitsOf({ monster: { attack: 3 } })).toEqual(neutral);
+  });
+
+  it('loot 0 desliga o gold do abate', () => {
+    const { session, hero } = start({ loaded: withRates({ loot: 0 }) });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.goldGained).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('skill 2 sobe o corpo a corpo mais rápido no mesmo tempo', () => {
+    const levelOf = (rates: Record<string, unknown>): number => {
+      const { session, hero } = start({ difficulty: 'bold', loaded: withRates(rates) });
+      run(session, 30_000, 100);
+      return hero.skills.getState()['melee']?.level ?? 0;
+    };
+    expect(levelOf({ skill: 2 })).toBeGreaterThan(levelOf({}));
   });
 });
 
@@ -3380,6 +3547,77 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
   });
 
+  describe('#682: a ability física que não é corpo a corpo passa pela armadura, não pelo escudo', () => {
+    // O Stone Golem/Hunter do Canary: um `combat` FÍSICO de alcance 7. Antes do #682 ia ao
+    // `blockHit` como magia (`MAGIC_BLOCK_FLAGS`) e a armadura não tirava nada.
+    const stoneRat = {
+      ...rat,
+      abilities: [{
+        id: 'stone', cadenceMs: 2_000, power: { min: 40, max: 60 }, damageType: 'physical',
+        target: { range: 7 },
+      }],
+    };
+    const comEscudoEArmadura: InventoryState = {
+      backpack: [],
+      equipped: {
+        shield: { instanceId: 's1', itemId: 'shield', quantity: 1 },
+        chest: { instanceId: 'p1', itemId: 'plate', quantity: 1 },
+      },
+    };
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const abilityHits = () => vi.mocked(resolveDamage).mock.calls
+      .map((args, i) => ({ args, outcome: vi.mocked(resolveDamage).mock.results[i]?.value as DamageOutcome }))
+      .filter(({ args: [intent] }) => intent.source === 'monster-attack');
+
+    it('sob combat-v3: armadura em faixa, escudo não bloqueia e shielding não treina', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session, hero } = start({
+        loaded: defenseContent({ monsters: [stoneRat], combat: [combatV3] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender], outcome } of hits) {
+        expect(intent.blockable).toEqual(DISTANCE_BLOCK_FLAGS);
+        // O escudo não tira nada: a defesa é a identidade.
+        expect(outcome.afterDefense).toBe(intent.rawDamage);
+        // Armadura > 3 é faixa `[armor/2, armor - (armor%2 + 1)]`, nunca 0.
+        expect(defender.armor).toBeGreaterThan(3);
+        expect(outcome.armorReduction).toBeGreaterThan(0);
+      }
+      // O `hunt.ts` treina shielding por `blockable.shield` sob v3 — a pedra não é bloqueio.
+      expect(shieldingOf(hero)?.level ?? 10).toBe(10);
+    });
+
+    it('sob combat-v1: `blockable` é ignorado — o resultado é o mesmo com as flags de antes', () => {
+      vi.mocked(resolveDamage).mockClear();
+      const { session } = start({
+        loaded: defenseContent({ monsters: [stoneRat] }), difficulty: 'bold',
+        health: 5_000, inventory: comEscudoEArmadura,
+      });
+      run(session, 30_000, 100);
+
+      const hits = abilityHits();
+      expect(hits.length).toBeGreaterThan(0);
+      for (const { args: [intent, defender, context, combatDef, , nowMs] } of hits) {
+        // Reexecuta o golpe com as flags de ANTES do #682 e as de agora, na mesma semente.
+        const before = resolveDamage(
+          { ...intent, blockable: MAGIC_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        const after = resolveDamage(
+          { ...intent, blockable: DISTANCE_BLOCK_FLAGS }, defender, context, combatDef, Rng.fromSeed('v1'), nowMs,
+        );
+        expect({ ...after, intent: null }).toEqual({ ...before, intent: null });
+      }
+    });
+  });
+
   it('#549 (achado de revisão): wand/rod sem escudo usa skill ZERO na defesa — o piso do Canary (1), não a fórmula com defenseValue zerado (0)', () => {
     // Um Sorcerer/Druid com só a wand na mão e sem escudo (o caso comum antes do nível 50, ou
     // de quem simplesmente não veste um spellbook): `Player::getWeaponSkill` do Canary devolve
@@ -3480,7 +3718,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     // Piso zero e defesa acima do ataque do rato: ele não tira vida, e a skill sobe do mesmo
     // jeito — a prática é do evento elegível, não do dano aplicado. Regeneração desligada e
     // dificuldade `cautious` para a vida não subir sozinha e não haver level up.
-    const semRegen = { ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } };
+    const semRegen = { ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } };
     const { session, hero } = start({
       loaded: defenseContent({
         progression: [semRegen],
@@ -3510,6 +3748,75 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
 
     expect(retomado.participants[0]?.skills.getState()['shielding'])
       .toEqual(session.participants[0]?.skills.getState()['shielding']);
+  });
+
+  describe('combat-v3: de onde vem cada try (#686)', () => {
+    const combatV3 = {
+      ...combat, compatibilityProfile: 'combat-v3', defense,
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+    const immuneRat = { ...rat, mitigation: { resistances: {}, immunities: ['physical'] } };
+    const meleeOf = (hero: CharacterRuntime) => hero.skills.getState()['melee'] ?? null;
+    const comEspada: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 } },
+    };
+
+    it('corpo a corpo contra monstro imune: a skill NÃO sobe (v2 sobe)', () => {
+      const v3 = start({
+        loaded: defenseContent({ monsters: [immuneRat], combat: [combatV3] }),
+        difficulty: 'bold', health: 5_000,
+      });
+      run(v3.session, 30_000, 100);
+      expect(meleeOf(v3.hero)).toBeNull();
+      expect(v3.hero.attackPractice.lastBlockType).toBe('immunity');
+
+      const v2 = start({
+        loaded: defenseContent({ monsters: [immuneRat], combat: [combatV2] }),
+        difficulty: 'bold', health: 5_000,
+      });
+      run(v2.session, 30_000, 100);
+      expect(meleeOf(v2.hero)).not.toBeNull();
+    });
+
+    it('corpo a corpo contra monstro comum: o golpe limpo treina e recarrega os contadores', () => {
+      const { session, hero } = start({
+        loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+      });
+      run(session, 30_000, 100);
+      expect(meleeOf(hero)).not.toBeNull();
+      expect(hero.attackPractice.addAttackSkill).toBe(true);
+    });
+
+    it('arma de uma mão sem escudo, apanhando: shielding NÃO sobe (v2 sobe)', () => {
+      const v3 = start({
+        loaded: defenseContent({ combat: [combatV3] }), difficulty: 'bold', health: 5_000,
+        inventory: comEspada,
+      });
+      run(v3.session, 30_000, 100);
+      expect(shieldingOf(v3.hero)).toBeNull();
+
+      const v2 = start({
+        loaded: defenseContent({ combat: [combatV2] }), difficulty: 'bold', health: 5_000,
+        inventory: comEspada,
+      });
+      run(v2.session, 30_000, 100);
+      expect(shieldingOf(v2.hero)).not.toBeNull();
+    });
+
+    it('o estado de prática atravessa o snapshot', () => {
+      const loaded = defenseContent({ combat: [combatV3] });
+      const { session, hero } = start({ loaded, difficulty: 'bold', health: 5_000 });
+      run(session, 10_000, 100);
+      expect(hero.attackPractice.bloodHitCount).toBeGreaterThan(0);
+
+      const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+      const retomado = Session.fromSnapshot(
+        snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed(snapshot.id),
+      );
+      expect(retomado.participants[0]?.attackPractice).toEqual(hero.attackPractice);
+    });
   });
 });
 
@@ -4464,7 +4771,7 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
   const anelProgression = {
     ...progression, startingHealth: 1_000, startingMana: 200, startingCapacity: 1_000,
     healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
-    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+    regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   } as Progression;
 
   const anelContent = (): Content => buildContent(raw({
@@ -4673,7 +4980,7 @@ describe('Energy Ring no combate (SV-16, #352)', () => {
     ...progression,
     startingHealth: 100, startingMana: 200, startingCapacity: 1_000,
     healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
-    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+    regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   } as Progression;
 
   const ringCombatContent = (): Content => buildContent(raw({
@@ -4809,8 +5116,8 @@ describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
     expect(first.targets.length).toBeGreaterThan(0);
     // Sem monstro nos tiles a onda NÃO sai: cada lançamento tem pelo menos um alvo.
     expect(casts.every((c) => c.kind === 'spell-cast' && c.targets.length > 0)).toBe(true);
-    // (A mana não é conferida em absoluto: subir de level devolve mana — `retarget`.)
-    expect(hero.mana).toBeLessThan(200);
+    // (A mana não é conferida: subir de level ENCHE a mana desde #678 — `grantXp` —, e o
+    // abate da onda sobe de level. Os lançamentos acima já provam que ela saiu.)
     expect(session.aggregates.kills).toBeGreaterThan(0);
   });
 
@@ -4955,6 +5262,77 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
     expect(session.aggregates.suppliesUsed).toBe(0);
     expect(session.aggregates.goldSpent).toBe(0);
     expect(session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(0);
+  });
+});
+
+// --- a exaustão de ação compartilhada entre poção e runa (#690) --------------------------------
+
+describe('poção e runa dividem UM relógio de exaustão de ação (#690, `nextPotionAction` do Canary)', () => {
+  const attackRune = (exhaust: boolean) => ({
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack', groupCooldownMs: 2_000,
+    ...(exhaust ? { actionExhaustMs: 1_000 } : {}),
+    requires: { level: 30, magicLevel: 0 },
+    effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  });
+  // O grupo da poção a 1500 ms, e não 1000, é o que deixa a runa ENTRAR: com a regra "sempre" e
+  // o grupo igual à exaustão, a poção vence todo empate no vencimento (a fila é FIFO) e a runa
+  // espera para sempre — o mesmo que um jogador que aperta a poção a cada segundo no Canary.
+  const potion = (exhaust: boolean) => ({
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_500,
+    ...(exhaust ? { actionExhaustMs: 1_000 } : {}),
+    effect: { kind: 'heal', amount: 80 },
+  });
+
+  /** Os instantes lógicos de cada uso, a passo de 1 ms: a espera é conferida ao milissegundo. */
+  const uses = (exhaust: boolean) => {
+    const { session, hero } = withSpells(botConfig({
+      potion: [supplyRule('health-potion')],
+      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    }), { gold: 100_000, supplies: [potion(exhaust), attackRune(exhaust)], health: 5_000 }, 'bold');
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+    const out: { at: number; supplyId: string }[] = [];
+    // O que vence no instante 0 (o bot armado na entrada) sai no primeiro passo: o instante do
+    // uso é o INÍCIO do passo nesse caso, e o fim dele em todos os outros.
+    let first = true;
+    for (let t = 0; t < 15_000 && session.ended === null; t += 1) {
+      session.advanceBy(1);
+      for (const event of session.drainEvents()) {
+        if (event.kind === 'supply-used') out.push({ at: first ? 0 : session.nowMs, supplyId: event.supplyId });
+      }
+      first = false;
+    }
+    return out;
+  };
+
+  it('a poção depois de uma runa de ataque só sai 1000 ms depois dela, e vice-versa', () => {
+    const timeline = uses(true);
+    // Os dois tipos saíram — sem isso, a asserção de espaçamento passaria com um só.
+    const runes = timeline.filter((use) => use.supplyId === 'avalanche-rune');
+    expect(runes.length).toBeGreaterThan(0);
+    expect(timeline.some((use) => use.supplyId === 'health-potion')).toBe(true);
+    // Um relógio só: NENHUM par de usos consecutivos, poção ou runa, a menos de 1000 ms.
+    for (let i = 1; i < timeline.length; i += 1) {
+      const gap = (timeline[i]?.at ?? 0) - (timeline[i - 1]?.at ?? 0);
+      expect(gap, JSON.stringify(timeline.slice(i - 1, i + 1))).toBeGreaterThanOrEqual(1_000);
+    }
+    // A primeira poção depois de uma runa sai EXATAMENTE no vencimento: adiada, não perdida.
+    const firstRune = runes[0]?.at ?? 0;
+    const next = timeline.find((use) => use.at > firstRune);
+    expect(next?.at).toBe(firstRune + 1_000);
+    // A runa continua com o cooldown do PRÓPRIO grupo: 2000 ms entre duas runas.
+    for (let i = 1; i < runes.length; i += 1) {
+      expect((runes[i]?.at ?? 0) - (runes[i - 1]?.at ?? 0)).toBeGreaterThanOrEqual(2_000);
+    }
+  });
+
+  it('supply sem `actionExhaustMs` não espera: os livros continuam independentes (fixture)', () => {
+    const timeline = uses(false);
+    const firstRune = timeline.find((use) => use.supplyId === 'avalanche-rune')?.at;
+    expect(firstRune).toBeDefined();
+    // A poção bebe a cada 1000 ms desde t=0, sem desviar da runa: algum par fica a menos de 1 s.
+    const close = timeline.some((use, i) => i > 0 && use.at - (timeline[i - 1]?.at ?? 0) < 1_000);
+    expect(close).toBe(true);
   });
 });
 
@@ -5162,7 +5540,7 @@ describe('follow de membro (§D10, #398)', () => {
   // cancelado da fila (`stand`) — quem o seguidor persegue é um membro que não anda.
   const followContent = (over: Partial<RawContent> = {}): Content => buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
 
@@ -5780,7 +6158,7 @@ const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword, cheese],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
   const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
@@ -6263,7 +6641,7 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
   const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
@@ -6392,7 +6770,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
   const member = (
@@ -6498,7 +6876,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     const tank = { ...rat, health: 1_000_000, attack: 0, experience: 0, loot: { gold: { chance: 0, min: 1, max: 1 }, items: [] } };
     const ammoContent = buildContent(raw({
       monsters: [tank], items: [...items, bow], ammunition: arrows,
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     }));
     const armed: InventoryState = { backpack: [], equipped: { hand: { instanceId: 'i-bow', itemId: 'bow', quantity: 1 } } };
     const shooter = member('u', { gold: 1_000, inventory: armed, ammo: { arrow: 'sniper-arrow' } });
@@ -7879,6 +8257,50 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     expect(meleeHits).toBeGreaterThan(casts('firewave') * 3);
   });
 
+  it('#681: sob combat-v3, a ability e a cura do Dragon sorteiam pela normal truncada do Canary', async () => {
+    // `combat.cpp:189` (`getCombatValues` → `normal_random`) e `monster.cpp:2218`: o valor da
+    // ability e da cura própria do monstro saem da normal, não do `rng.integer` uniforme. Cada
+    // sorteio é conferido contra `normalRandomInt` sobre um CLONE do `Rng` no estado de antes.
+    const actual = await vi.importActual<typeof import('../combat/combat-value.js')>('../combat/combat-value.js');
+    const v3 = {
+      ...pacifist, compatibilityProfile: 'combat-v3',
+      weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+      distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    };
+    const loaded = buildContent(raw({ monsters: [dragon], hunts: [dragonHunt], combat: [v3] }));
+    const draws: { min: number; max: number; profile: string | undefined; value: number; expected: number }[] = [];
+    vi.mocked(rollCombatValue).mockImplementation((rng, min, max, profile) => {
+      const expected = normalRandomInt(new Rng(rng.getState()), min, max);
+      const value = actual.rollCombatValue(rng, min, max, profile);
+      draws.push({ min, max, profile: profile?.compatibilityProfile, value, expected });
+      return value;
+    });
+    try {
+      const session = createHuntSession({
+        id: 'dragon-v3', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      });
+      session.enter(heroLevel200());
+      session.advanceBy(100);
+      const target = (session.ruleset as HuntRuleset).monsters[0];
+      if (target === undefined) throw new Error('sem monstro nesta cena');
+      target.receiveDamage(50_000); // ferido: a cura tem o que repor.
+      for (let t = 0; t < 400_000 && session.ended === null; t += 100) session.advanceBy(100);
+    } finally {
+      vi.mocked(rollCombatValue).mockImplementation(actual.rollCombatValue);
+    }
+
+    const melee = draws.filter((d) => d.min === 0 && d.max === 120);
+    const heals = draws.filter((d) => d.min === 40 && d.max === 70);
+    expect(melee.length).toBeGreaterThan(100);
+    expect(heals.length).toBeGreaterThan(10);
+    for (const draw of [...melee, ...heals]) {
+      expect(draw.profile).toBe('combat-v3');
+      expect(draw.value).toBe(draw.expected);
+    }
+    // A cauda: a uniforme poria ~10,7 % dos golpes em [0,12]; a normal truncada, ~3,4 %.
+    expect(melee.filter((d) => d.value <= 12).length / melee.length).toBeLessThan(0.07);
+  });
+
   it('fogo não causa dano (imune) e gelo causa +10 % (vulnerável) — a mitigação do Dragon', () => {
     // Sem `defenses`: a cura própria do Dragon (15 % a cada 2 s) contaminaria a leitura de UM
     // golpe se rolasse no meio da janela — este teste é sobre o TIPO de dano, não sobre a cura,
@@ -8694,7 +9116,7 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     const snapshot = session.snapshot();
     const loaded = buildContent(raw({
       spells: [poison], combat: [pacifist],
-      progression: [{ ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     }));
     const resumed = Session.fromSnapshot(
       snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('spell-session'),
@@ -9056,7 +9478,7 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
   const loaded = (over: Partial<RawContent> = {}): Content => content({
     spells: [...spells, friendHeal],
     progression: [{
-      ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
     routes: [{ ...route, spawnPoints: [] }],
     ...over,
@@ -9274,7 +9696,7 @@ describe('encerrar a hunt para todos exige o sim de todos (#432, ADR 0032 d.14)'
   // meio da janela de 60 s — o que encerraria a sessão por morte e não pela votação.
   const quiet = content({
     routes: [{ ...route, spawnPoints: [] }],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
   });
   const member = (id: string) => {
     const stats = statsForLevel(1, null, progression as Progression);
@@ -10435,5 +10857,85 @@ describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
     monster.conditions.apply({ key: 'drunk', expiresAtMs: 1_000_000_000 });
     run(sessionB, 20_000, 200);
     expect(withDrunk.drunkRolls).toBeGreaterThan(0);
+  });
+});
+
+describe('arma vestida abaixo do level e elemento da arma no combat-v3 (#687)', () => {
+  // O level caiu com a arma na mão (penalidade de morte): o personagem de level 1 segurando
+  // arma de level 30 é o mesmo estado, sem precisar morrer para chegar nele.
+  const spikeSword = {
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon', slot: 'hand',
+    weight: 50, value: 0, attack: 24, defense: 10, requires: { level: 30 },
+  };
+  const fireSword = {
+    id: 'fire-sword', name: 'Fire Sword', kind: 'weapon', slot: 'hand',
+    weight: 23, value: 0, attack: 24, defense: 20, requires: { level: 30 },
+    weapon: { kind: 'melee', element: { type: 'fire', attack: 11 }, wieldUnproperly: true },
+  };
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+  const combatV2 = { ...combatV3, compatibilityProfile: 'combat-v2' };
+  const holding = (itemId: string): InventoryState => ({
+    backpack: [], equipped: { hand: { instanceId: 'h1', itemId, quantity: 1 } },
+  });
+  const loaded = (combatProfile: object): Content =>
+    content({ items: [...items, spikeSword, fireSword], combat: [combatProfile] });
+
+  it('v3: sem wieldUnproperly a arma não bate — nem golpe de punho, nem prática', () => {
+    const { session, hero } = start({
+      loaded: loaded(combatV3), difficulty: 'bold', health: 5_000, inventory: holding('spike-sword'),
+    });
+    const before = hero.skills.getState()['melee'] ?? null;
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero')).toHaveLength(0);
+    expect(hero.skills.getState()['melee'] ?? null).toEqual(before);
+    expect(session.notableEvents.filter((e) => e.type === 'skill-up')).toHaveLength(0);
+  });
+
+  it('v2: a mesma arma abaixo do level segue virando punho (bit a bit)', () => {
+    const { session } = start({
+      loaded: loaded(combatV2), difficulty: 'bold', health: 5_000, inventory: holding('spike-sword'),
+    });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero').length)
+      .toBeGreaterThan(0);
+  });
+
+  it('v3: com wieldUnproperly bate, e o elemento vai como secundário sem escudo nem armadura', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session } = start({
+      loaded: loaded(combatV3), difficulty: 'bold', health: 5_000, inventory: holding('fire-sword'),
+    });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+    expect(ofKind(events, 'creature-hit').filter((h) => h.attackerId === 'hero').length)
+      .toBeGreaterThan(0);
+    const swings = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'basic-attack');
+    const elemental = swings.filter(([intent]) => intent.secondary !== undefined);
+    expect(elemental.length).toBeGreaterThan(0);
+    for (const [intent] of elemental) {
+      expect(intent.secondary?.damageType).toBe('fire');
+      expect(intent.secondary?.blockable).toEqual({ armor: false, shield: false });
+      expect(intent.secondary?.rawDamage).toBeGreaterThan(0);
+    }
+  });
+
+  it('v2: o elemento é ignorado — nenhum golpe leva secundário', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session, hero } = start({
+      loaded: loaded(combatV2), difficulty: 'bold', health: 5_000, inventory: holding('fire-sword'),
+    });
+    hero.level = 30;
+    run(session, 20_000, 100);
+    const swings = vi.mocked(resolveDamage).mock.calls
+      .filter(([intent]) => intent.source === 'basic-attack');
+    expect(swings.length).toBeGreaterThan(0);
+    expect(swings.every(([intent]) => intent.secondary === undefined)).toBe(true);
   });
 });

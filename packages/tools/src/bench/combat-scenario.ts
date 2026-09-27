@@ -125,7 +125,7 @@ function rawCombatContent(): RawContent {
       // nada e fazem o µs/tick despencar para zero. O balanceamento não é o assunto aqui.
       id: 'baseline', startingHealth: 1_000_000, startingMana: 500, startingCapacity: 1_000,
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-      startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
       xp: { kind: 'power', base: 20, exponent: 2 },
       deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
     }],

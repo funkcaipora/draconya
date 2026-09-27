@@ -133,6 +133,34 @@ describe('areaTiles', () => {
     expect(isSelfOrigin({ shape: 'wave', length: 3 })).toBe(true);
     expect(isSelfOrigin({ shape: 'cleave' })).toBe(true);
     expect(isSelfOrigin({ shape: 'beam', length: 5 })).toBe(true);
+    expect(isSelfOrigin({ shape: 'rows', widths: [1] })).toBe(true);
+  });
+});
+
+// #679: a onda do catálogo é `rows`, a contagem por fileira da `AREA_*` do Canary com a fileira
+// do `3` (ancorada um passo à frente, e atingida). Ancorar a fileira 0 no lançador reprova aqui.
+describe('areaTiles — rows (#679)', () => {
+  it('rows [1,3,3,5] to the north is 12 tiles, row 0 one step ahead', () => {
+    const tiles = areaTiles({ shape: 'rows', widths: [1, 3, 3, 5] }, origin, 'north');
+    expect(tiles).toHaveLength(12);
+    expect(keys(tiles.slice(0, 1))).toEqual(['10,9,7']);
+    expect(keys(tiles.slice(1, 4))).toEqual(['9,8,7', '10,8,7', '11,8,7']);
+    expect(keys(tiles.slice(4, 7))).toEqual(['9,7,7', '10,7,7', '11,7,7']);
+    expect(keys(tiles.slice(7, 12))).toEqual(['8,6,7', '9,6,7', '10,6,7', '11,6,7', '12,6,7']);
+  });
+
+  it('the monster firewave rows [1,1,3,3,3,5,5,5] to the east is 26 tiles opening along y', () => {
+    const tiles = areaTiles({ shape: 'rows', widths: [1, 1, 3, 3, 3, 5, 5, 5] }, origin, 'east');
+    expect(tiles).toHaveLength(26);
+    expect(keys(tiles.slice(0, 2))).toEqual(['11,10,7', '12,10,7']);
+    expect(keys(tiles.slice(2, 5))).toEqual(['13,9,7', '13,10,7', '13,11,7']);
+    expect(keys(tiles.slice(21, 26))).toEqual(['18,8,7', '18,9,7', '18,10,7', '18,11,7', '18,12,7']);
+    expect(tiles.every((t) => t.x > origin.x)).toBe(true);
+  });
+
+  it('matches the legacy wave where the widths coincide', () => {
+    expect(areaTiles({ shape: 'rows', widths: [1, 3, 3, 5, 5] }, origin, 'south'))
+      .toEqual(areaTiles({ shape: 'wave', length: 5 }, origin, 'south'));
   });
 });
 
