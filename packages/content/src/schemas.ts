@@ -4013,6 +4013,14 @@ const point = z.object({
 const floorSchema = z.object({
   grid: z.array(z.string().min(1)).min(1),
   speed: z.array(z.string().min(1)).optional(),
+  /**
+   * Bloqueio de LINHA DE VISÃO (#553): `#` bloqueia projétil/vista, o resto é livre — a mesma
+   * convenção de `grid`, em camada SEPARADA porque bloquear passo e bloquear vista são flags
+   * distintas do pacote de aparências (`unpass` vs. `unsight`): uma peça de decoração pode ter
+   * uma sem a outra. Ausente: nada bloqueia visão neste andar (mapa autorado à mão, ou ainda
+   * não reimportado com a camada nova).
+   */
+  sight: z.array(z.string().min(1)).optional(),
 });
 
 export const tilemapSchema = z.object({
