@@ -112,6 +112,12 @@ export type { DamageType };
 export interface SecondaryDamage {
   readonly rawDamage: number;
   readonly damageType: DamageType;
+  /**
+   * Ausente herda o `blockable` do intent (comportamento do #473). O elemento de uma arma
+   * (#687) passa `MAGIC_BLOCK_FLAGS`: como o `blockHit(…, false, false)` do Canary, o secundário
+   * não perde para escudo nem armadura — só para resistência.
+   */
+  readonly blockable?: BlockFlags | undefined;
 }
 
 /** O que o atacante entrega ao resolver. A entrada fica preservada no outcome. */
@@ -442,6 +448,7 @@ function resolveBlockHitProfile(
   // nunca tivesse consumido nada, e uma carga extra seria descontada em memória sem nunca voltar
   // ao dono — `applyDamageOutcome` só lê o `blockCharge` de NÍVEL SUPERIOR do outcome (ver
   // abaixo), então o consumo do secundário tem que terminar ali.
+  const secondaryBlockable = intent.secondary?.blockable ?? intent.blockable;
   const secondaryOutcome = intent.secondary === undefined
     ? undefined
     : resolveDamage(
@@ -449,7 +456,7 @@ function resolveBlockHitProfile(
         rawDamage: intent.secondary.rawDamage,
         source: intent.source,
         damageType: intent.secondary.damageType,
-        ...(intent.blockable === undefined ? {} : { blockable: intent.blockable }),
+        ...(secondaryBlockable === undefined ? {} : { blockable: secondaryBlockable }),
       },
       { ...defender, blockCharge: blockHit.blockCharge }, context, combat, rng, nowMs,
     );

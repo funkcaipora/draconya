@@ -659,14 +659,50 @@ damage    = normalRandomInt(minDamage, maxDamage)
   rejeição — Box-Muller com duas frações do `Rng` da sessão por tentativa —, escalada para
   `[min, max]` e arredondada. Roda SEMPRE, mesmo com `min === max`: a sequência de sorteios não
   pode depender do VALOR do intervalo, a mesma regra do `blockChance` (ADR 0031).
-- **Simplificação deliberada**: o Canary soma `physicalAttack + elementalAttack +
-  weaponProficiency` num único termo antes de multiplicar pela skill
-  (`WeaponMelee::getWeaponDamage`/`WeaponDistance::getWeaponDamage`). O Draconya não tem ataque
-  elemental nem proficiência de arma como sub-atributos separados no catálogo — um elemento vira
-  um ITEM diferente com seu próprio `damageType` (CMB-03), nunca um bônus somado ao físico da
-  mesma arma —, então `attack` (`formula.base`) é o único termo de poder que entra na fórmula.
-  Fica para o dia em que o catálogo precisar de arma com dano misto físico+elemental na mesma
-  peça; até lá, uma espada com bônus de fogo simplesmente não existe como conceito.
+- O Canary soma `physicalAttack + elementalAttack + weaponProficiency` num único termo antes de
+  multiplicar pela skill (`WeaponMelee::getWeaponDamage`/`WeaponDistance::getWeaponDamage`).
+  No `combat-v2`, `attack` (`formula.base`) é o único termo: o elemento da arma é ignorado. No
+  `combat-v3` o elemento entra (#687, abaixo). Proficiência de arma não existe no catálogo.
+
+### Elemento da arma e arma vestida abaixo do level (#687, só `combat-v3`)
+
+A arma corpo a corpo pode declarar `weapon.element: { type, attack }` — o `element<tipo>` do
+Canary (Fire Sword: `attack` 24 físico + `element` fogo 11; Serpent Sword: 18 + terra 8). O
+`attack` do item continua só o FÍSICO. `resolveWeaponHit` (`combat/weapon-power.ts`) reproduz o
+`internalUseWeapon` do Canary:
+
+```text
+total     = trunc(normalRandomInt(min, max com attack + element) × damagePercent / 100)
+physical  = trunc(total × attack / (attack + element))
+elemental = trunc(total × element / (attack + element))
+```
+
+- O mínimo continua `⌊level/5⌋` só com `attack` físico > 0. O truncamento é POR PARTE, como o
+  `static_cast<int32_t>` do Canary, então a soma pode perder 1 ponto (total 70 na Fire Sword →
+  48 + 22).
+- O elemental é o componente `secondary` do golpe (#473), com `MAGIC_BLOCK_FLAGS`: como o
+  `blockHit(…, false, false)` do Canary, não perde para escudo nem armadura, só para resistência
+  e imunidade. Sem elemento, ou com total 0, não há secundário nem sorteio extra.
+- A postura do Draconya (`damageDealtScale('melee')`) vale para as duas partes, cada uma
+  arredondada.
+- O crítico ainda não multiplica o secundário (o Canary multiplica os dois): fica para a revisão
+  do crítico do M30-04.
+- `buildContent` recusa `element` fora de `weapon.kind === 'melee'` (munição elemental é a #575)
+  e `type: physical`.
+
+**Arma vestida abaixo do level** (`playerWeaponCheck` do Canary). `Inventory.equip` recusa
+equipar abaixo do level, como o `MoveEvent::EquipItem` do Canary; o caso que sobra é a arma que
+já estava na mão quando o level caiu (penalidade de morte). `Inventory.heldWeapon` devolve
+`damagePercent`: `100` no level, `50` abaixo dele com `weapon.wieldUnproperly` (o `unproperly`
+do Canary: Fire Sword, Double Axe, Dragon Slayer, Dragon Hammer, Dragonbone Staff, Mystic
+Blade), `0` sem. Com `0` o golpe NÃO sai — nem de punho, nem prática —, como o `useWeapon` do
+Canary que devolve `false`; o ataque segue agendado. Vocação errada continua mão vazia. v1/v2
+leem `weapon()` e a arma abaixo do level segue virando punho (ADR 0031).
+
+**Defesa de arma de duas mãos.** `buildContent` aceita `defense` em arma corpo a corpo de duas
+mãos (Broadsword 23, Double Axe 12, Dragon Slayer 28), como o `Player::getDefense` do Canary.
+Só o `combat-v3` a lê (`#playerDefenseV3`); o `defenseSource` do v1/v2 continua ignorando arma
+de duas mãos. A defesa da arma abaixo do level segue fora da conta no v3 (o Canary conta).
 
 Wand/rod **mudam a distribuição, não a faixa**: continuam com o `min`/`max` fixo do item, sem
 coeficiente nem `attackFactor` — isso já era o modelo do Canary (DT-02 do CMB-05). O que muda sob

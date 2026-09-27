@@ -135,6 +135,15 @@ export interface Wearer {
 /** O que `requires` de um item confere: level e vocação. É o que `weapon()` lê do portador. */
 export type Requirements = Pick<Wearer, 'level' | 'vocationId'>;
 
+/**
+ * A arma na mão e a porcentagem do golpe (#687): `100` no level, `50` abaixo dele com
+ * `wieldUnproperly`, `0` abaixo dele sem — o `damageModifier` do `playerWeaponCheck` do Canary.
+ */
+export interface HeldWeapon {
+  readonly item: Item;
+  readonly damagePercent: 100 | 50 | 0;
+}
+
 export class Inventory {
   #backpack: (CarriedItem | null)[] = [];
   #satchel: (CarriedItem | null)[] = [];
@@ -525,6 +534,27 @@ export class Inventory {
     if (definition === undefined) return null;
     if (!this.#meets(definition, wearer)) return null;
     return definition;
+  }
+
+  /**
+   * A arma na mão com o quanto ela bate (#687, só o `combat-v3` lê) — o `playerWeaponCheck` do
+   * Canary. Irmã de `weapon()`, com UMA diferença: a arma vestida abaixo do level exigido não
+   * vira mão vazia. O level cai com a arma na mão (penalidade de morte), e aí ela bate metade
+   * com `wieldUnproperly` ou não bate (`0`: o chamador não emite golpe, nem de punho).
+   *
+   * Vocação errada continua mão vazia (`null`), como em `weapon()`: `equip` recusa, e o que
+   * chega por `fromState` sem passar por ela não pode virar golpe.
+   */
+  heldWeapon(catalog: ReadonlyMap<string, Item>, wearer: Requirements): HeldWeapon | null {
+    const carried = this.#equipped.get('hand');
+    if (carried === undefined) return null;
+    const item = catalog.get(carried.itemId);
+    if (item === undefined) return null;
+    if (!matchesVocationRequirement(item.requires.vocationId, wearer.vocationId)) return null;
+    if (item.requires.level !== undefined && wearer.level < item.requires.level) {
+      return { item, damagePercent: item.weapon?.wieldUnproperly === true ? 50 : 0 };
+    }
+    return { item, damagePercent: 100 };
   }
 
   /**
