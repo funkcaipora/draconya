@@ -30,6 +30,16 @@ export const DAMAGE_TYPES = [
 export type DamageType = (typeof DAMAGE_TYPES)[number];
 
 /**
+ * Os elementos que têm MAGIC LEVEL ESPECIALIZADO no Canary (#680): as oito chaves
+ * `<elemento>magiclevelpoints` de `item_parse.cpp:915-941`. `healing` é o da cura; `drown`,
+ * `lifedrain`, `manadrain` e `arcane` não têm chave lá, e por isso não têm aqui.
+ */
+export const SPECIALIZED_MAGIC_ELEMENTS = [
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'healing',
+] as const;
+export type SpecializedMagicElement = (typeof SPECIALIZED_MAGIC_ELEMENTS)[number];
+
+/**
  * Proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2): de qual
  * engine, commit e arquivo do Canary/TFS o número saiu — o mesmo `CatalogSource` que
  * `scripts/catalog/generated-writer.ts` grava por entidade em `<tipo>/generated/*.json`, e o
@@ -782,6 +792,14 @@ export const itemSchema = z.strictObject({
     }).optional(),
     /** Velocidade somada direto a `character.speed` enquanto vestido (boots of haste). */
     speed: z.number().int().positive().optional(),
+    /**
+     * MAGIC LEVEL ESPECIALIZADO por elemento enquanto vestido (#680): as chaves
+     * `<elemento>magiclevelpoints` do Canary (`firemagiclevelpoints` → `fire`). Soma no ML só da
+     * fórmula de magia/runa do MESMO elemento (`combat.cpp:1979`), nunca no requisito de ML.
+     */
+    specializedMagicLevel: z.partialRecord(
+      z.enum(SPECIALIZED_MAGIC_ELEMENTS), z.number().int().positive(),
+    ).optional(),
   }).optional(),
   /**
    * Quantos imbuements a peça aceita (ADR 0046, #604) — o `imbuementslot` do Canary
@@ -934,6 +952,12 @@ export const spellFormulaSchema = z.object({
    * à mão (`casting.test.ts`), e um default tornaria o campo obrigatório nelas.
    */
   scaling: z.enum(['vocation', 'magic']).optional(),
+  /**
+   * Se o termo de ML soma o MAGIC LEVEL ESPECIALIZADO do elemento (#680). AUSENTE = `true`: é o
+   * `getMagicLevelSkill` do Canary (`combat.cpp:1979`). `false` = o script lê `getMagicLevel()`
+   * cru (Mass Healing, `mass_healing.lua`, TARGETCREATURE). Só vale onde o termo é o ML.
+   */
+  includeSpecializedMagicLevel: z.boolean().optional(),
 });
 
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;

@@ -14,9 +14,10 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import { matchesVocationRequirement } from '@draconya/content';
+import { matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS } from '@draconya/content';
 import type {
-  Combat, CompiledMitigation, DamageModifiers, Spell, SpellFormula, Supply,
+  Combat, CompiledMitigation, DamageModifiers, DamageType, SpecializedMagicElement, Spell,
+  SpellFormula, Supply,
 } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -202,7 +203,16 @@ export interface SpellScaling {
    * `skillAttackMax` lê este campo.
    */
   readonly weaponAttack?: number;
+  /**
+   * O MAGIC LEVEL ESPECIALIZADO do que está vestido, por elemento (#680,
+   * `Inventory.specializedMagicLevel`). Só a fórmula que lê o ML soma — e só o do elemento do
+   * efeito (`specializedFor`). Ausente = nenhum item declara: o resultado de antes, bit a bit.
+   */
+  readonly specializedMagicLevel?: SpecializedMagicLevels | undefined;
 }
+
+/** Pontos de ML especializado por elemento (#680); elemento ausente = 0. */
+export type SpecializedMagicLevels = Readonly<Partial<Record<SpecializedMagicElement, number>>>;
 
 const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
 
@@ -214,12 +224,49 @@ export interface HealEffect {
   readonly formula?: SpellFormula | undefined;
 }
 
+/** O efeito que `powerOf` resolve: magia, supply ou cura. `damageType` só existe no de dano. */
+interface PowerEffect {
+  readonly kind: string;
+  readonly basePower?: number | undefined;
+  readonly power?: number | undefined;
+  readonly amount?: number | undefined;
+  readonly formula?: SpellFormula | undefined;
+  readonly damageType?: DamageType | undefined;
+}
+
+const SPECIALIZED_ELEMENTS: ReadonlySet<string> = new Set(SPECIALIZED_MAGIC_ELEMENTS);
+
+function isSpecializedElement(element: string): element is SpecializedMagicElement {
+  return SPECIALIZED_ELEMENTS.has(element);
+}
+
+/**
+ * O ML especializado do elemento do efeito (#680): `healing` na cura, o `damageType` no dano —
+ * o `damage.primary.type` que `getSpecializedMagicLevel` recebe no Canary (`combat.cpp:1979`).
+ * Elemento sem chave no Canary (`arcane`, `drown`…) é 0.
+ */
+function specializedFor(
+  effect: { readonly kind: string; readonly damageType?: DamageType | undefined },
+  scaling: SpellScaling,
+): number {
+  const element = effect.kind === 'heal' ? 'healing' : effect.damageType;
+  if (element === undefined || !isSpecializedElement(element)) return 0;
+  return scaling.specializedMagicLevel?.[element] ?? 0;
+}
+
 /**
  * A skill da fórmula (#677): cura e `scaling: 'magic'` leem o ML; ausente (= `vocation`) é a skill
  * da vocação, bit a bit o caminho de antes. `?? skillLevel` é o fallback de fixture sem ML.
+ *
+ * O ML ganha o ESPECIALIZADO do elemento (#680): `getMagicLevelSkill` do Canary só o soma no caso
+ * LEVELMAGIC (`combat.cpp:1979`); a SKILLVALUE não. `includeSpecializedMagicLevel: false` é o
+ * script que lê `getMagicLevel()` cru (Mass Healing).
  */
-function formulaSkill(kind: string, formula: SpellFormula, scaling: SpellScaling): number {
-  if (kind === 'heal' || formula.scaling === 'magic') return scaling.magicLevel ?? scaling.skillLevel;
+function formulaSkill(effect: PowerEffect, formula: SpellFormula, scaling: SpellScaling): number {
+  if (effect.kind === 'heal' || formula.scaling === 'magic') {
+    const magic = scaling.magicLevel ?? scaling.skillLevel;
+    return formula.includeSpecializedMagicLevel === false ? magic : magic + specializedFor(effect, scaling);
+  }
   return scaling.skillLevel;
 }
 
@@ -237,17 +284,11 @@ function formulaSkill(kind: string, formula: SpellFormula, scaling: SpellScaling
  * da vocação (`SKILLVALUE`). Ver `formulaSkill`.
  */
 function powerOf(
-  effect: {
-    readonly kind: string;
-    readonly basePower?: number | undefined;
-    readonly power?: number | undefined;
-    readonly amount?: number | undefined;
-    readonly formula?: SpellFormula | undefined;
-  },
+  effect: PowerEffect,
   caster: CharacterRuntime, scaling: SpellScaling, combat: Combat, rng: Rng,
 ): number {
   if (effect.formula !== undefined) {
-    const skill = formulaSkill(effect.kind, effect.formula, scaling);
+    const skill = formulaSkill(effect, effect.formula, scaling);
     const { min, max } = evaluateSpellPower(
       effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
       scaling.weaponAttack ?? 0,
@@ -597,8 +638,13 @@ export function useSupply(
       // canônica (#476) VENCE o `basePower`; sem ela, o caminho do BP provisório continua bit a
       // bit (ADR 0031), porque os dois consomem exatamente UM sorteio de valor (`rollCombatValue`
       // — uniforme até o `combat-v2`, a normal truncada no `combat-v3`, #681).
+      // A runa lê o ML (`skillLevel` aqui É o ML, `#runeScaling`); a fórmula canônica soma o
+      // especializado do elemento da runa (#680). Sem fórmula, o BP provisório fica bit a bit.
+      const runeSkill = supply.effect.formula === undefined
+        ? scaling.skillLevel
+        : scaling.skillLevel + specializedFor(supply.effect, scaling);
       const { min, max } = evaluateSpellPower(
-        supply.effect.formula, supply.effect.basePower ?? 0, user.level, scaling.skillLevel,
+        supply.effect.formula, supply.effect.basePower ?? 0, user.level, runeSkill,
         combat.spellPower,
       );
       const power = Math.round(rollCombatValue(rng, min, max, combat) * user.conditions.damageDealtScale('spell'));
