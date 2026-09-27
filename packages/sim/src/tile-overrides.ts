@@ -56,35 +56,47 @@ export function interactableIdOf(at: { readonly x: number; readonly y: number; r
 }
 
 /**
+ * A chave de storage que marca "este personagem já esvaziou este baú" (#733, ADR 0050 d.6 T2) —
+ * `chest:<uid>`, pelo MESMO `uid` que classifica o baú (`ATTR_UNIQUE_ID`, único por mapa). Cada
+ * baú é uma chave PRÓPRIA: dois baús lado a lado nunca compartilham storage, e o mesmo baú é
+ * independente por PERSONAGEM (é `CharacterRuntime.storages` quem guarda o valor, não o baú).
+ */
+export function chestStorageKeyOf(uid: number): string {
+  return `chest:${String(uid)}`;
+}
+
+/**
  * Estados BLOQUEANTES por `kind` (T1, #728 — porta comum, capim, stone pile; T2, #732 — porta
- * de level e de chave; ver `docs/adr/0050-*.md` d.6 para os três grupos). `level-door` bloqueia
- * só `closed` — igual à porta comum, o requisito é conferido no MOMENTO de usar (`useOnMap`),
- * não aqui. `locked-door` bloqueia `locked` E `closed`: a porta de chave nasce trancada (só abre
- * com a chave certa, `requires.tool: 'key'` + `requires.keyId`) e, uma vez destrancada, passa a
- * se comportar como uma porta comum (fecha/abre sem chave nunca mais — o mesmo `key_door.lua` do
- * Canary, que só confere a chave contra o estado `locked`). `quest-door` fica de fora de
- * propósito: sem storage por personagem ainda (#733), o requisito nunca seria satisfeito e a
- * porta ficaria bloqueada para sempre — pior que a situação de hoje, em que ela não bloqueia
- * nada (ver `packages/content/CLAUDE.md`, "até a #728 pousar"). `rope-spot`/`ladder`/`lever`/
- * `chest`/`sign`/`teleport` nunca bloqueiam por si (usar não impede pisar).
+ * de level e de chave; #733 — porta de quest; ver `docs/adr/0050-*.md` d.6 para os três grupos).
+ * `level-door`/`quest-door` bloqueiam só `closed` — igual à porta comum, o requisito (nível ou
+ * storage) é conferido no MOMENTO de usar (`useOnMap`), não aqui. `locked-door` bloqueia
+ * `locked` E `closed`: a porta de chave nasce trancada (só abre com a chave certa,
+ * `requires.tool: 'key'` + `requires.keyId`) e, uma vez destrancada, passa a se comportar como
+ * uma porta comum (fecha/abre sem chave nunca mais — o mesmo `key_door.lua` do Canary, que só
+ * confere a chave contra o estado `locked`). `chest` fica de fora de propósito: não é uma porta
+ * — usar não impede pisar, e o mecanismo dela (#733) é entregar item, não alternar estado (ver
+ * `HuntRuleset#useChest`). `rope-spot`/`ladder`/`lever`/`sign`/`teleport` nunca bloqueiam por si.
  */
 const BLOCKING_STATES: Partial<Record<InteractableKind, ReadonlySet<string>>> = {
   door: new Set(['closed']),
   'level-door': new Set(['closed']),
   'locked-door': new Set(['locked', 'closed']),
+  'quest-door': new Set(['closed']),
   grass: new Set(['uncut']),
   'stone-pile': new Set(['pile']),
 };
 
 /**
  * O par de estados que um `kind` alterna ao ser usado (T1/T2). `null` para quem não tem um
- * "outro lado" neste escopo (rope-spot/ladder são um passo, não uma troca de estado; baú/placa/
- * teleporte nem chegam a ter `state` mutável).
+ * "outro lado" neste escopo (rope-spot/ladder são um passo, não uma troca de estado; `chest`
+ * nunca alterna — entrega item uma vez, sem par de estados; placa/teleporte nem chegam a ter
+ * `state` mutável).
  */
 const TOGGLE_PAIR: Partial<Record<InteractableKind, readonly [string, string]>> = {
   door: ['closed', 'open'],
   'level-door': ['closed', 'open'],
   'locked-door': ['closed', 'open'],
+  'quest-door': ['closed', 'open'],
   grass: ['uncut', 'cut'],
   'stone-pile': ['pile', 'hole'],
   lever: ['down', 'up'],
@@ -248,14 +260,16 @@ export class TileOverrides {
   closeDoorIfVacant(x: number, y: number, z: number, stillOccupied: boolean): void {
     if (stillOccupied) return;
     const current = this.at({ x, y, z });
-    // Porta comum, de level e de chave fecham sozinhas ao esvaziar (#732: `level-door`/
-    // `locked-door` entram no mesmo mecanismo — nenhuma das duas tem prazo próprio de
-    // fechamento; `closing_door.lua` do Canary fecha a de level no STEP-OUT, que aqui é o
-    // MESMO instante do `vacate`, porque a porta é um tile só). `quest-door` fica de fora
-    // (#733, sem storage ainda).
+    // Porta comum, de level, de chave e de quest fecham sozinhas ao esvaziar (#732: `level-door`/
+    // `locked-door`; #733: `quest-door` entra no MESMO mecanismo — nenhuma das quatro tem prazo
+    // próprio de fechamento; `closing_door.lua` do Canary fecha a de level/quest no STEP-OUT, que
+    // aqui é o MESMO instante do `vacate`, porque a porta é um tile só).
     if (
       current === null || current.state !== 'open'
-      || (current.kind !== 'door' && current.kind !== 'level-door' && current.kind !== 'locked-door')
+      || (
+        current.kind !== 'door' && current.kind !== 'level-door' && current.kind !== 'locked-door'
+        && current.kind !== 'quest-door'
+      )
     ) return;
     const at = this.#atOf.get(current.interactableId);
     if (at === undefined) return;

@@ -30,7 +30,7 @@ import { readCatalog } from '../packages/client/src/assets/catalog.js';
 import { Reader, WIRE_LENGTH, WIRE_VARINT } from '../packages/client/src/assets/protobuf.js';
 import { DEFAULT_GROUND_SPEED } from '../packages/content/src/map.js';
 import { tilemapSchema } from '../packages/content/src/schemas.js';
-import type { TilemapInput } from '../packages/content/src/schemas.js';
+import type { Point, TilemapInput } from '../packages/content/src/schemas.js';
 import { readOtbmTiles } from './otbm.js';
 import type { OtbmItem, OtbmTile, Region } from './otbm.js';
 import { buildSceneryIndex, classifyByAttributes } from './scenery.js';
@@ -626,7 +626,12 @@ export function checkMaps(
     }
     // Cenário (#727): a mesma ordenação nos dois lados — `interactables` não tem ordem
     // garantida por si só, só a ordem em que o OTBM entrega os tiles.
-    const sortKey = (i: (typeof committed.interactables)[number]): string =>
+    //
+    // A assinatura é ESTRUTURAL (`at`/`kind` só), não `(typeof committed.interactables)[number]`
+    // — `committed` (parseado, `reward.quantity` sempre presente quando há `reward`, #733) e
+    // `regenerated.content` (bruto, o importador nunca gera `reward`) são tipos ligeiramente
+    // diferentes, e esta função só lê os dois campos que ordenam.
+    const sortKey = (i: { readonly at: Point; readonly kind: string }): string =>
       `${i.at.z}.${i.at.y}.${i.at.x}.${i.kind}`;
     const committedInteractables = JSON.stringify([...committed.interactables].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
     const regeneratedInteractables = JSON.stringify([...regenerated.content.interactables ?? []].sort((a, b) => sortKey(a).localeCompare(sortKey(b))));

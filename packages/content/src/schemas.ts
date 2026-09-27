@@ -4113,6 +4113,23 @@ export const tilemapSchema = z.object({
     revertMs: z.number().int().positive().optional(),
     /** Destino de um teleporte. */
     target: point.optional(),
+    /**
+     * O que um baú de quest dá (#733, ADR 0050 d.6 T2) — só faz sentido em `kind: 'chest'`
+     * (`superRefine` abaixo recusa a combinação errada, o mesmo padrão de `itemSchema.use.keyId`
+     * só em `tool: 'key'`). `itemId` pode apontar um item fora do catálogo carregado — o `sim`
+     * recusa em runtime (`unknown-item`), nunca no boot: o mapa é importado antes do catálogo de
+     * itens estar completo (#573/#754), e o boot não pode depender da ordem das duas coisas.
+     */
+    reward: z.object({
+      itemId: z.string().min(1),
+      quantity: z.number().int().positive().default(1),
+    }).optional(),
+  }).superRefine((interactable, ctx) => {
+    // `reward` só em `chest` (#733) — declará-lo em porta/capim/placa seria um item que
+    // nada entrega, e pareceria decisão de conteúdo sem ser.
+    if (interactable.reward !== undefined && interactable.kind !== 'chest') {
+      ctx.addIssue({ code: 'custom', message: '`reward` só em `kind: "chest"`' });
+    }
   })).default([]),
   /** De onde um mapa importado veio (ADR 0025). Ausente em mapa autorado à mão. */
   source: z.object({

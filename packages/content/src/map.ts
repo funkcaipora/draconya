@@ -151,7 +151,17 @@ export function buildTilemap(data: TilemapInput): Tilemap {
   return {
     id: data.id, width, height, z: data.z, blocked: base.blocked, floors, floorChanges,
     floorChangesByFloor,
-    interactables: data.interactables ?? [],
+    // `reward.quantity` tem default no schema (#733) — `data` aqui é `TilemapInput` (o formato
+    // de ARQUIVO, antes do default aplicado), então um `reward` sem `quantity` precisa do MESMO
+    // 1 que `tilemapSchema.parse` aplicaria, ou o tipo de saída (`TilemapInteractable`, pós-
+    // default) diverge do que este objeto realmente carrega.
+    interactables: (data.interactables ?? []).map((interactable): TilemapInteractable => {
+      const { reward, ...rest } = interactable;
+      return {
+        ...rest,
+        ...(reward === undefined ? {} : { reward: { itemId: reward.itemId, quantity: reward.quantity ?? 1 } }),
+      };
+    }),
     ...(data.entryPoint === undefined
       ? {}
       : { entryPoint: { x: data.entryPoint.x, y: data.entryPoint.y, z: data.entryPoint.z ?? data.z } }),

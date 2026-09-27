@@ -1,7 +1,8 @@
 # Quests
 
 **Status:** parcial — a semente do motor (storages por personagem, #731, ADR 0050 d.6 T2)
-implementada; quest de verdade (objetivo, mapa instanciado, checkpoints) ainda não
+implementada, e consumida por porta de quest e baú com `uid` no cenário (#733, ADR 0050 d.6 T2);
+quest de verdade (objetivo, mapa instanciado, checkpoints) ainda não
 **PRD:** §28
 **Épico:** E11
 
@@ -58,10 +59,15 @@ transação da progressão — não por um ledger próprio, porque storage não 
 precisa de `(session_id, seq)` dedicado; a idempotência que ele herda é a do `writeReceipts` que
 já envolve toda a transação (invariante 10).
 
-**O que este sistema NÃO faz ainda:** nenhum interativo do mundo lê ou escreve um storage —
-`use-on-map` de porta/baú (T2 do ADR 0050) e o motor de objetivo de quest de verdade (mapa
-instanciado, checkpoints) ficam para issues seguintes, que consomem `getStorageValue`/
-`setStorageValue` sem precisar tocar este mecanismo de novo.
+**Desde a #733, dois interativos do mundo já leem/escrevem um storage** (`docs/product/
+scenery.md`, "Porta de quest e baú com `uid`"): a porta de quest confere
+`getStorageValue(requires.storageKey) >= 1` no momento de usar; o baú com `uid` entrega um item
+uma vez por personagem e marca `chestStorageKeyOf(uid) = 1` — sem tocar este mecanismo de novo,
+como previsto. **O que ainda NÃO existe:** o motor de OBJETIVO de quest de verdade (mapa
+instanciado, checkpoints, o que de fato marca um storage como "concluído") — os dois interativos
+acima consomem `getStorageValue`/`setStorageValue`, mas nenhum conteúdo real ainda os SETA
+(`requires.storageKey` real das portas e `reward` real dos baús de Thais ficam de fora da #733,
+sem OTBM de origem nem quest desenhada — `docs/product/scenery.md`, "Em aberto").
 
 ## Parâmetros de balanceamento
 

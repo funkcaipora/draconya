@@ -22,6 +22,7 @@ import {
   huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
+import { chestStorageKeyOf } from '../tile-overrides.js';
 
 // O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
 // implementação real, então todo o resto do arquivo roda idêntico — e o bloco do pipeline no
@@ -11932,5 +11933,154 @@ describe('useOnMap — porta de level e porta de chave (T2, #732, ADR 0050 d.6)'
         position: { x: 6, y: 2, z: 7 }, appearanceKey: 'key-door-1', fromState: 'open', toState: 'closed',
       }],
     });
+  });
+});
+
+describe('useOnMap — porta de quest (T2 completo, #733, ADR 0050 d.6)', () => {
+  // `appearanceKey`/`initialState` são os valores REAIS de uma das 3 quest-doors de
+  // `packages/content/data/maps/thais.json` (#727) — só a POSIÇÃO foi trazida para esta arena
+  // pequena (o teste precisa de um mapa pequeno o bastante para conferir a olho, spec da #733
+  // seção 10). `requires.storageKey` não existe no arquivo real (DT-04 da spec — sem OTBM de
+  // origem nem quest desenhada, o wiring real fica de fora); aqui ele é acrescentado só para
+  // exercitar o MECANISMO contra a classificação real do mapa.
+  const doorMap = {
+    ...map,
+    id: 'quest-door-arena-733',
+    interactables: [
+      {
+        at: { x: 4, y: 2, z: 7 }, kind: 'quest-door', initialState: 'closed',
+        appearanceKey: 'quest-door-6258', requires: { storageKey: 'thais:quest-door-1' },
+      },
+    ],
+  };
+  const doorRoute = { ...route, id: 'door-loop-733', mapId: 'quest-door-arena-733' };
+  const doorHunt = { ...hunt, mapId: 'quest-door-arena-733', routeId: 'door-loop-733' };
+  const loaded = () => content({ maps: [doorMap], routes: [doorRoute], hunts: [doorHunt] });
+
+  it('recusa quest-incomplete sem o storage, e não abre a porta', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 }; // adjacente à porta de quest em (4,2,7)
+    expect(hero.getStorageValue('thais:quest-door-1')).toBe(-1); // UNSET_STORAGE_VALUE
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'quest-incomplete' });
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'quest-door')).toMatchObject({ state: 'closed' });
+  });
+
+  it('recusa quest-incomplete com o storage em 0 — "aceitou mas não concluiu" não abre (DT-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    hero.setStorageValue('thais:quest-door-1', 0);
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'quest-incomplete' });
+  });
+
+  it('abre a porta de quest com o storage em 1 (RF-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    hero.setStorageValue('thais:quest-door-1', 1);
+    const result = ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(result).toEqual({
+      ok: true,
+      changes: [{
+        position: { x: 4, y: 2, z: 7 }, appearanceKey: 'quest-door-6258', fromState: 'closed', toState: 'open',
+      }],
+    });
+  });
+
+  // O fechamento sozinho ao esvaziar (RF-02) é o MESMO `TileOverrides.closeDoorIfVacant` de
+  // porta comum/level/chave — coberto isoladamente em `tile-overrides.test.ts` ("porta de quest
+  // fechada bloqueia, alterna para `open`, e fecha sozinha ao esvaziar"). Repetir aqui via
+  // `session.advanceBy` exigiria a porta no CAMINHO da rota (como o teste do walker do #728
+  // faz para a porta comum); o mecanismo em si já está provado, e o gate de storage — o que
+  // esta issue acrescenta — está nos quatro testes acima.
+});
+
+describe('useOnMap — baú de quest com uid (T2 completo, #733, ADR 0050 d.6)', () => {
+  // `appearanceKey`/`uid` são os valores REAIS de um dos 3 chests com `uid` de
+  // `packages/content/data/maps/thais.json` (#727) — a mesma ressalva de posição do bloco
+  // acima. `reward` não existe no arquivo real (DT-04): aqui só para exercitar o mecanismo.
+  const chestMap = {
+    ...map,
+    id: 'chest-arena-733',
+    interactables: [
+      {
+        at: { x: 4, y: 2, z: 7 }, kind: 'chest', initialState: 'default', appearanceKey: 'chest-2433',
+        uid: 9274, reward: { itemId: 'test-reward-733', quantity: 2 },
+      },
+    ],
+  };
+  const chestRoute = { ...route, id: 'chest-loop-733', mapId: 'chest-arena-733' };
+  const chestHunt = { ...hunt, mapId: 'chest-arena-733', routeId: 'chest-loop-733' };
+  const testReward = {
+    id: 'test-reward-733', name: 'Test Reward', kind: 'other' as const, weight: 1, value: 0,
+  };
+  // Peso maior que a capacidade inteira do herói de teste (1000, `character()` acima) — cabe
+  // em NENHUM inventário, sem precisar encher a mochila primeiro (RF-04).
+  const heavyReward = {
+    id: 'test-heavy-reward-733', name: 'Heavy Reward', kind: 'other' as const, weight: 2_000, value: 0,
+  };
+  const loaded = (extraItems: readonly (typeof testReward)[] = [testReward]) => content({
+    maps: [chestMap], routes: [chestRoute], hunts: [chestHunt], items: [...items, ...extraItems],
+  });
+
+  it('entrega o item, marca o storage e credita itemsLooted (RF-03)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 }; // adjacente ao baú em (4,2,7)
+    const result = ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(result).toEqual({ ok: true, changes: [] });
+    const carried = [...hero.inventory.items()].find((item) => item.itemId === 'test-reward-733');
+    expect(carried?.quantity).toBe(2);
+    expect(hero.getStorageValue(chestStorageKeyOf(9274))).toBe(1);
+    expect(session.aggregates.itemsLooted).toBe(2);
+  });
+
+  it('recusa already-looted na segunda tentativa do MESMO personagem, sem duplicar o item (RF-03)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    const second = ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(second).toEqual({ ok: false, reason: 'already-looted' });
+    const carried = [...hero.inventory.items()].filter((item) => item.itemId === 'test-reward-733');
+    expect(carried).toHaveLength(1);
+  });
+
+  it('recusa no-capacity sem mochila para o prêmio, e NÃO marca o storage (RF-04)', () => {
+    const heavyMap = { ...chestMap, interactables: [{ ...chestMap.interactables[0], reward: { itemId: 'test-heavy-reward-733', quantity: 1 } }] };
+    const heavyLoaded = content({
+      maps: [heavyMap], routes: [{ ...chestRoute, mapId: 'chest-arena-733' }],
+      hunts: [chestHunt], items: [...items, heavyReward],
+    });
+    const { session, ruleset, hero } = start({ loaded: heavyLoaded });
+    hero.position = { x: 4, y: 1, z: 7 };
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'no-capacity' });
+    expect(hero.getStorageValue(chestStorageKeyOf(9274))).toBe(-1); // UNSET_STORAGE_VALUE
+    expect([...hero.inventory.items()]).toHaveLength(0);
+  });
+
+  it('recusa unknown-item quando o catálogo carregado não tem o item do baú, e registra (RF-05)', () => {
+    const bareLoaded = content({ maps: [chestMap], routes: [chestRoute], hunts: [chestHunt] }); // sem testReward
+    const { session, ruleset, hero } = start({ loaded: bareLoaded });
+    hero.position = { x: 4, y: 1, z: 7 };
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'unknown-item' });
+    expect(hero.getStorageValue(chestStorageKeyOf(9274))).toBe(-1);
+  });
+
+  it('dois personagens diferentes coletam o MESMO baú, cada um uma vez (RF-06)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    const other = new CharacterRuntime({ ...character().getState(), id: 'other' });
+    session.enter(other);
+    // `session.enter` coloca o segundo no tile livre mais próximo do início da rota (#203) —
+    // reposicionado À MÃO depois, como `hero.position` acima, para ficar adjacente ao baú.
+    other.position = { x: 4, y: 3, z: 7 };
+
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 })).toEqual({ ok: true, changes: [] });
+    expect(ruleset.useOnMap(session, other.id, { x: 4, y: 2, z: 7 })).toEqual({ ok: true, changes: [] });
+
+    expect(hero.getStorageValue(chestStorageKeyOf(9274))).toBe(1);
+    expect(other.getStorageValue(chestStorageKeyOf(9274))).toBe(1);
+    expect([...other.inventory.items()].find((item) => item.itemId === 'test-reward-733')?.quantity).toBe(2);
   });
 });
