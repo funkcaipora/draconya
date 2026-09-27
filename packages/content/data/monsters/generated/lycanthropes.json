@@ -1,0 +1,1041 @@
+[
+  {
+    "id": "cunning-werepanther",
+    "name": "Cunning Werepanther",
+    "class": "lycanthrope",
+    "health": 4300,
+    "experience": 3620,
+    "attack": {
+      "min": 75,
+      "max": 540
+    },
+    "armor": 72,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.25,
+        "fire": -0.15,
+        "ice": 0.2,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.05,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "werepanther-claw",
+          "chance": 0.1278
+        },
+        {
+          "itemId": "golden-sickle",
+          "chance": 0.0512
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.055,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.0255
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0513
+        },
+        {
+          "itemId": "lightning-headband",
+          "chance": 0.072
+        },
+        {
+          "itemId": "ripper-lance",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0177
+        },
+        {
+          "itemId": "lightning-pendant",
+          "chance": 0.0471
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0262
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 75,
+          "max": 540
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energyball",
+        "cadenceMs": 3300,
+        "chance": 0.2,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 175,
+          "max": 350
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyarea"
+        }
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 2300,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 425
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyarea"
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2700,
+        "chance": 0.2,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 225,
+          "max": 350
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock",
+          "impactKey": "yellowsmoke"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 3700,
+        "chance": 0.35,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 375
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "stone-storm"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/lycanthropes/cunning_werepanther.lua"
+    }
+  },
+  {
+    "id": "werebear",
+    "name": "Werebear",
+    "class": "lycanthrope",
+    "health": 2400,
+    "experience": 2100,
+    "attack": {
+      "min": 0,
+      "max": 485
+    },
+    "armor": 38,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": 0.15,
+        "earth": 0.5,
+        "fire": -0.05,
+        "ice": 0.1,
+        "holy": -0.05,
+        "death": 0.45
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.97,
+        "min": 1,
+        "max": 242
+      },
+      "items": [
+        {
+          "itemId": "bear-paw",
+          "chance": 0.008
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.019,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "honeycomb",
+          "chance": 0.0045
+        },
+        {
+          "itemId": "werebear-fur",
+          "chance": 0.0058
+        },
+        {
+          "itemId": "werebear-skull",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0043
+        },
+        {
+          "itemId": "dreaded-cleaver",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.003
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.004
+        },
+        {
+          "itemId": "werewolf-amulet",
+          "chance": 0.001
+        },
+        {
+          "itemId": "relic-sword",
+          "chance": 0.002
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 0.003
+        },
+        {
+          "itemId": "time-ring",
+          "chance": 0.004
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.002
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 485
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 4000,
+        "chance": 0.2,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "poff"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": 0
+          }
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 65,
+          "max": 335
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 275,
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/lycanthropes/werebear.lua"
+    }
+  },
+  {
+    "id": "werecrocodile",
+    "name": "Werecrocodile",
+    "class": "lycanthrope",
+    "health": 5280,
+    "experience": 4140,
+    "attack": {
+      "min": 100,
+      "max": 575
+    },
+    "armor": 82,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": -0.05,
+        "earth": 0.05,
+        "fire": 0.25,
+        "ice": -0.25,
+        "holy": -0.15,
+        "death": 0.25
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.28,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "werecrocodile-tongue",
+          "chance": 0.108
+        },
+        {
+          "itemId": "serpent-sword",
+          "chance": 0.0591
+        },
+        {
+          "itemId": "crocodile-boots",
+          "chance": 0.0853
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.055,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.03
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0512
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.028
+        },
+        {
+          "itemId": "bonebreaker",
+          "chance": 0.005
+        },
+        {
+          "itemId": "glorious-axe",
+          "chance": 0.0219
+        },
+        {
+          "itemId": "golden-sun-coin",
+          "chance": 0.0177
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 100,
+          "max": 575
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2700,
+        "chance": 0.37,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 175,
+          "max": 325
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "big-scratch"
+        }
+      },
+      {
+        "id": "deathwave",
+        "cadenceMs": 3300,
+        "chance": 0.2,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 375
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blacksmoke"
+        }
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 3700,
+        "chance": 0.25,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 400
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/lycanthropes/werecrocodile.lua"
+    }
+  },
+  {
+    "id": "werelioness",
+    "name": "Werelioness",
+    "class": "lycanthrope",
+    "health": 3000,
+    "experience": 2300,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 38,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.4,
+        "fire": 0.35,
+        "ice": -0.25,
+        "holy": -0.05,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "ham",
+          "chance": 0.05,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.05,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "crystal-sword",
+          "chance": 0.05
+        },
+        {
+          "itemId": "serpent-sword",
+          "chance": 0.05
+        },
+        {
+          "itemId": "rapier",
+          "chance": 0.05
+        },
+        {
+          "itemId": "lightning-headband",
+          "chance": 0.015
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.015
+        },
+        {
+          "itemId": "doublet",
+          "chance": 0.015
+        },
+        {
+          "itemId": "ivory-carving",
+          "chance": 0.015
+        },
+        {
+          "itemId": "magma-legs",
+          "chance": 0.005
+        },
+        {
+          "itemId": "crown-helmet",
+          "chance": 0.005
+        },
+        {
+          "itemId": "lion-figurine",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "holystrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 300,
+          "max": 410
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "holystrike-2",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 170,
+          "max": 350
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "holy"
+        }
+      },
+      {
+        "id": "firebeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 300
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 100,
+          "max": 150
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.2
+    },
+    "runOnHealth": 5,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/lycanthropes/werelioness.lua"
+    }
+  },
+  {
+    "id": "werepanther",
+    "name": "Werepanther",
+    "class": "lycanthrope",
+    "health": 4200,
+    "experience": 3550,
+    "attack": {
+      "min": 75,
+      "max": 525
+    },
+    "armor": 72,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.1,
+        "fire": 0.2,
+        "ice": -0.15,
+        "holy": -0.25,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2.05,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "golden-sickle",
+          "chance": 0.0672
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.055,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "moonlight-crystals",
+          "chance": 0.0255
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0124
+        },
+        {
+          "itemId": "magma-monocle",
+          "chance": 0.0308
+        },
+        {
+          "itemId": "ripper-lance",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "gemmed-figurine",
+          "chance": 0.0177
+        },
+        {
+          "itemId": "magma-amulet",
+          "chance": 0.0277
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.0262
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 75,
+          "max": 525
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 3700,
+        "chance": 0.4,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 265,
+          "max": 400
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "fireattack"
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2700,
+        "chance": 0.2,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 275,
+          "max": 375
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "groundshaker"
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 2300,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 375
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "yellowsmoke"
+        }
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 3300,
+        "chance": 0.15,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 175,
+          "max": 300
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/lycanthropes/werepanther.lua"
+    }
+  }
+]

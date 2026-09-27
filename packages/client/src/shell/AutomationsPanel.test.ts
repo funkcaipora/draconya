@@ -209,3 +209,42 @@ describe('AutomationsPanel — Follow de membro (#406, ADR 0035 d.9/§24-25.1)',
     expect(await render()).not.toContain('Follow interrompido');
   });
 });
+
+describe('AutomationsPanel — aba/bloco Loot (#722, ADR 0048 d.2/d.4)', () => {
+  it('desenha o Select do filtro e uma linha por item do catálogo', async () => {
+    const html = await render();
+    expect(html).toContain('Loot');
+    expect(html).toContain('Pegar tudo, exceto…');
+    expect(html).toContain('Pegar só…');
+    // Um checkbox de `itemIds` por item do catálogo — quatro itens na fixture.
+    expect((html.match(/type="checkbox"/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('o filtro do rascunho decide a opção selecionada do Select', async () => {
+    edit((draft) => ({ ...draft, loot: { filter: 'accept', itemIds: [], autoSell: [] } }));
+    expect(await render()).toMatch(/<option[^>]*value="accept"[^>]*selected/);
+
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: [], autoSell: [] } }));
+    expect(await render()).toMatch(/<option[^>]*value="skip"[^>]*selected/);
+  });
+
+  it('item marcado em itemIds aparece com o checkbox ligado, e só ele', async () => {
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: [], autoSell: [] } }));
+    expect((await render()).match(/checked=""/g) ?? []).toHaveLength(0);
+
+    edit((draft) => ({ ...draft, loot: { filter: 'skip', itemIds: ['spike-sword'], autoSell: [] } }));
+    expect((await render()).match(/checked=""/g) ?? []).toHaveLength(1);
+  });
+
+  it('item sem `value` no catálogo não ganha checkbox de autovenda', async () => {
+    // A fixture não declara `value` em nenhum item: nenhuma linha "Autovenda" aparece.
+    expect(await render()).not.toContain('Autovenda');
+  });
+
+  it('item COM value > 0 ganha o checkbox de autovenda — por fonte, e a fiação chama toggleAutoSellItem/toggleLootItem', async () => {
+    const source = await readFile(new URL('./AutomationsPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('toggleLootItem(item.id)');
+    expect(source).toContain('toggleAutoSellItem(item.id)');
+    expect(source).toContain("item.value !== undefined && item.value > 0");
+  });
+});

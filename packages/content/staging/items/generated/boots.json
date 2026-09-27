@@ -29,7 +29,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 40592
   },
   {
     "id": "badger-boots",
@@ -50,7 +51,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22086
   },
   {
     "id": "boots-of-enlightenment",
@@ -68,7 +70,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50267
   },
   {
     "id": "boots-of-haste",
@@ -85,7 +88,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3079
   },
   {
     "id": "boots-of-homecoming",
@@ -102,7 +106,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22773
   },
   {
     "id": "broken-iks-sandals",
@@ -116,7 +121,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 40534
   },
   {
     "id": "bunnyslippers",
@@ -130,7 +136,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3553
   },
   {
     "id": "cobra-boots",
@@ -157,7 +164,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 30394
   },
   {
     "id": "coconut-shoes",
@@ -171,7 +179,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9017
   },
   {
     "id": "crocodile-boots",
@@ -186,7 +195,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3556
   },
   {
     "id": "crystal-boots",
@@ -216,7 +226,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 10200
   },
   {
     "id": "depth-calcei",
@@ -240,7 +251,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 13997
   },
   {
     "id": "dragon-scale-boots",
@@ -270,7 +282,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 10201
   },
   {
     "id": "draken-boots",
@@ -295,7 +308,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 4033
   },
   {
     "id": "eldritch-monk-boots",
@@ -327,7 +341,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50266
   },
   {
     "id": "feverbloom-boots",
@@ -360,7 +375,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39161
   },
   {
     "id": "filthy-bunnyslippers",
@@ -373,7 +389,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 24409
   },
   {
     "id": "firewalker-boots",
@@ -391,7 +408,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9018
   },
   {
     "id": "fish-tail",
@@ -404,7 +422,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 11542
   },
   {
     "id": "frostflower-boots",
@@ -431,7 +450,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39158
   },
   {
     "id": "fur-boots",
@@ -446,7 +466,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 7457
   },
   {
     "id": "glacier-shoes",
@@ -476,7 +497,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 819
   },
   {
     "id": "gnomish-footwraps",
@@ -503,7 +525,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50290
   },
   {
     "id": "golden-boots",
@@ -518,7 +541,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3555
   },
   {
     "id": "green-demon-slippers",
@@ -532,7 +556,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 37610
   },
   {
     "id": "guardian-boots",
@@ -562,7 +587,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 10323
   },
   {
     "id": "iks-footwraps",
@@ -586,7 +612,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50291
   },
   {
     "id": "leather-boots",
@@ -601,7 +628,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3552
   },
   {
     "id": "lightning-boots",
@@ -631,7 +659,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 820
   },
   {
     "id": "magma-boots",
@@ -661,7 +690,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 818
   },
   {
     "id": "make-do-boots",
@@ -693,7 +723,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35520
   },
   {
     "id": "makeshift-boots",
@@ -725,7 +756,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35519
   },
   {
     "id": "metal-spats",
@@ -752,7 +784,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 21169
   },
   {
     "id": "mutant-bone-boots",
@@ -784,7 +817,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 40593
   },
   {
     "id": "norcferatu-fangstompers",
@@ -817,7 +851,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 51269
   },
   {
     "id": "norcferatu-goretrampers",
@@ -847,7 +882,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 51268
   },
   {
     "id": "oriental-shoes",
@@ -872,7 +908,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 21981
   },
   {
     "id": "pair-of-dreamwalkers",
@@ -907,7 +944,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 29424
   },
   {
     "id": "pair-of-nightmare-boots",
@@ -942,7 +980,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 32619
   },
   {
     "id": "pair-of-soft-boots",
@@ -964,7 +1003,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3549
   },
   {
     "id": "pair-of-soulstalkers",
@@ -997,7 +1037,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 34098
   },
   {
     "id": "pair-of-soulwalkers",
@@ -1033,7 +1074,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 34097
   },
   {
     "id": "patched-boots",
@@ -1048,7 +1090,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3550
   },
   {
     "id": "pirate-boots",
@@ -1063,7 +1106,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 5461
   },
   {
     "id": "prismatic-boots",
@@ -1090,7 +1134,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 16112
   },
   {
     "id": "sandals",
@@ -1104,7 +1149,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3551
   },
   {
     "id": "sanguine-boots",
@@ -1143,7 +1189,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 43884
   },
   {
     "id": "sanguine-galoshes",
@@ -1182,7 +1229,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 43887
   },
   {
     "id": "soulsoles",
@@ -1209,7 +1257,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50240
   },
   {
     "id": "steel-boots",
@@ -1224,7 +1273,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3554
   },
   {
     "id": "stoic-iks-boots",
@@ -1252,7 +1302,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 44648
   },
   {
     "id": "stoic-iks-sandals",
@@ -1284,7 +1335,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 44649
   },
   {
     "id": "terra-boots",
@@ -1314,7 +1366,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 813
   },
   {
     "id": "traditional-leather-shoes",
@@ -1327,7 +1380,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 32098
   },
   {
     "id": "treader-of-torment",
@@ -1342,7 +1396,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22756
   },
   {
     "id": "vampire-silk-slippers",
@@ -1356,7 +1411,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 19374
   },
   {
     "id": "void-boots",
@@ -1388,7 +1444,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23476
   },
   {
     "id": "winged-boots",
@@ -1421,7 +1478,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 31617
   },
   {
     "id": "yalahari-footwraps",
@@ -1448,7 +1506,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50289
   },
   {
     "id": "yetislippers",
@@ -1461,7 +1520,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 30196
   },
   {
     "id": "zaoan-shoes",
@@ -1479,6 +1539,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 10386
   }
 ]

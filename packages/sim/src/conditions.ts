@@ -118,6 +118,14 @@ export interface ConditionState {
   readonly speedPercent?: number;
   readonly damageDealtPercent?: DamagePercentBySource;
   readonly damageTakenPercent?: number;
+  /**
+   * Bônus/malus FLAT numa skill pelo id do catálogo (#576: Berserk soma 5 em `melee` e tira 10
+   * de `shielding`). Somado por `Conditions.skillBonus`, do MESMO jeito que
+   * `Inventory.skillBonus` soma o bônus de equipamento — as duas fontes se somam porque quem lê
+   * (`#skillLevelOf`/`#spellScaling`/`#defenseSourceOf` em `hunt.ts`) soma as duas, nunca escolhe
+   * uma.
+   */
+  readonly skillDeltas?: Readonly<Record<string, number>>;
   /** Tique periódico: `amount` a cada `intervalMs`, até `expiresAtMs`. */
   readonly tick?: ConditionTick;
 }
@@ -210,6 +218,11 @@ function strengthOf(condition: ConditionState): number {
   const dealt = condition.damageDealtPercent;
   if (dealt !== undefined) {
     return Math.abs(dealt.melee ?? 0) + Math.abs(dealt.distance ?? 0) + Math.abs(dealt.spell ?? 0);
+  }
+  if (condition.skillDeltas !== undefined) {
+    let total = 0;
+    for (const delta of Object.values(condition.skillDeltas)) total += Math.abs(delta);
+    return total;
   }
   return 0;
 }
@@ -327,6 +340,7 @@ export function conditionFromSpec(
         ...base,
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
         ...(effect.damageTakenPercent === undefined ? {} : { damageTakenPercent: effect.damageTakenPercent }),
+        ...(effect.skillDeltas === undefined ? {} : { skillDeltas: effect.skillDeltas }),
       };
     case 'mana-shield':
       return { ...base };
@@ -444,6 +458,18 @@ export class Conditions {
    * `hasManaShield` — nenhum campo do estado distingue as duas condições sem tique. */
   hasDrunk(): boolean {
     return this.#active.has('drunk');
+  }
+
+  /**
+   * O bônus/malus FLAT somado numa skill pelas condições ativas (#576: Berserk soma 5 em
+   * `melee`, tira 10 de `shielding`). Molde de `Inventory.skillBonus` — soma simples pelas
+   * poucas condições ativas, nunca uma tabela por skill —, e as DUAS fontes se somam em quem lê
+   * (equipamento E poção contam juntos).
+   */
+  skillBonus(skillId: string): number {
+    let total = 0;
+    for (const condition of this.#active.values()) total += condition.skillDeltas?.[skillId] ?? 0;
+    return total;
   }
 }
 

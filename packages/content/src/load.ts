@@ -42,6 +42,13 @@ export function loadContent(dir: string): Content {
     weaponFamilies: readJsonDir(join(dir, 'weapon-families')),
     // A tabela de aparências (FUN-94). Uma pasta como as outras, com um `baseline.json` dentro:
     // trocar de pacote de assets é editar ESTE arquivo, e não todo arquivo de conteúdo.
+    //
+    // `appearances/generated/scenery.json` (#727, ADR 0050 d.1), escrito por `pnpm map:import` —
+    // nunca à mão —, já entra sozinho: `readJsonDir` (acima) lê `generated/` de toda pasta desde
+    // o importador de catálogo (ADR 0038); somar `readJsonDir(…, 'generated')` aqui por cima
+    // leria `scenery.json` DUAS vezes e `parseAll` recusaria por "duplicado". `buildContent`
+    // mescla a seção `scenery` das duas tabelas (`baseline` e `scenery`) pela CHAVE, em
+    // `content.ts`.
     appearances: readJsonDir(join(dir, 'appearances')),
     // O inventário de cada pacote (FUN-21): `packs/<pack>.json`, gerado por
     // `pnpm assets:inventory`. É contra ele que a tabela acima é conferida.

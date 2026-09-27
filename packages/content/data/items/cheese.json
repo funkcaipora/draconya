@@ -1,9 +1,10 @@
 {
   "id": "cheese",
   "name": "Cheese",
-  "kind": "other",
+  "kind": "consumable",
   "weight": 4,
   "value": 0,
   "stackable": true,
-  "_open": "O drop do rato do Tibia (39,4 %), só para a mochila e o extrato: comida ainda não faz nada — §20 do PRD não decide regeneração por comida. value: Comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
+  "effect": { "kind": "food", "durationMs": 108000 },
+  "_open": "O drop do rato do Tibia (39,4 %). Vira comida executável na #726 (ADR 0049 d.5): durationMs = 9 × 12 s (foods.lua do Canary, item 3607, valor 9) em ms. value: Comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
 }

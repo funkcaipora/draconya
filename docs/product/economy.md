@@ -1,6 +1,6 @@
 # Economia, consumíveis e Market
 
-**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e loot de item com Caixa de Loot da Sessão (FUN-88) implementados; autovenda, Market e Coins não implementados
+**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e o cadáver com loot e filtro de Quick Loot por personagem, com autovenda individual e de party (FUN-88, ADR 0048) implementados; Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
 **Épico:** E5 (consumível, ledger); E13 (Market, Coins por gold)
 
@@ -83,8 +83,14 @@ ser altamente auditável e consistente.
   instante do abate: é **regra de runtime**, calculada a cada drop, não um campo novo em
   `itemSchema` — `value` continua sendo o único campo do catálogo usado pela venda. A venda
   (automática ou settlement) divide cada entrada entre `eligible ∩ presentes`; `value: 0` não se
-  vende e vai para o líder. É a primeira venda ao NPC do jogo, e usa o mesmo campo que a autovenda
-  (§22.1) vai usar. Ver `party.md`.
+  vende e vai para o líder. É a primeira venda ao NPC do jogo. Ver `party.md`.
+- **A autovenda individual (§22.1) existe desde o ADR 0048.** Fora de party (ou com `splitLoot`
+  desligado), o filtro de Quick Loot de cada personagem (`botConfig.loot`, ver `bot.md`) tem sua
+  própria lista `autoSell`: ao coletar o item do cadáver, se ele está na lista e `value > 0`,
+  vende na hora ao `value` do catálogo — mesmo campo que a venda de party usa — e o gold vira
+  `goldDelta`/`goldGained` direto, sem passar pela mochila. O limite de tipos (5 Free, 20
+  Premium) é o mesmo `party.autoSellItemTypes` da venda de party, mas lido do Premium do
+  **próprio personagem**, nunca do líder.
 
 ## Parâmetros de balanceamento
 
@@ -133,11 +139,24 @@ O que vale do desenho original:
   **uma** linha (`supply-unaffordable`) no extrato, não uma por tentativa. A regra de saída "sair
   quando o gold acabar" é da FUN-86.
 
+### O estoque abstrato agora é VISÍVEL (#726, ADR 0049 decisão 4)
+
+Desde o #520 `useSupply` já gastava do estoque de loot (`supplyStock`/`ammunitionStock`) antes do
+gold — mas o jogador não via o número. A #726 expõe os dois: `inventory.supplies`/`ammunition`
+(`[{ id, quantity }]`, opcionais, `default([])`) levam o estoque inteiro a cada `inventory`
+reenviado, e o cliente já desenha a seção "Suprimentos" sob a mochila
+(`ContainerWindow.tsx`): nome (resolvido em `catalogue.bot.supplies`) e contagem por linha,
+clicar usa direto (`use-item`) e o clique direito abre "Usar"/"Usar com…" — o mesmo
+`ContextMenu` do item consumível. **Sem sprite**: `catalogue.bot.supplies` não carrega
+`appearanceId` — só item de verdade tem essa coluna (FUN-94) —, e dar ícone ao suprimento
+abstrato fica para quando isso for decidido; a linha hoje é texto.
+
 ## Divergências do PRD
 
-~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
-catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
-Sessão se não. Ver [`items.md`](./items.md).
+~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88; ADR 0048):**
+existe catálogo, `loot.items` é conferido contra ele, e o item cai no cadáver — mochila se o
+filtro de Quick Loot aceitar e couber, senão fica no cadáver até ele decair. Ver
+[`items.md`](./items.md).
 
 **O §20.1 está de volta.** O PRD tratava o supply como abstração que debitava gold por uso, e é o
 que a implementação faz hoje: poção, runa e munição não são itens físicos; usar um supply

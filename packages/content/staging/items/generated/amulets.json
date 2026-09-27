@@ -10,7 +10,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35609
   },
   {
     "id": "amulet-of-loss",
@@ -24,7 +25,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3057
   },
   {
     "id": "ancient-amulet",
@@ -37,7 +39,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3025
   },
   {
     "id": "beetle-necklace",
@@ -53,7 +56,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 10457
   },
   {
     "id": "bonfire-amulet",
@@ -78,7 +82,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9301
   },
   {
     "id": "broken-amulet",
@@ -91,7 +96,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3080
   },
   {
     "id": "bronze-amulet",
@@ -110,7 +116,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3056
   },
   {
     "id": "bronze-medal",
@@ -123,7 +130,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9217
   },
   {
     "id": "bronze-necklace",
@@ -136,7 +144,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3009
   },
   {
     "id": "candy-necklace",
@@ -164,7 +173,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 45641
   },
   {
     "id": "cobra-amulet",
@@ -186,7 +196,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 31631
   },
   {
     "id": "collar-of-blue-plasma",
@@ -216,7 +227,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23526
   },
   {
     "id": "collar-of-green-plasma",
@@ -251,7 +263,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23527
   },
   {
     "id": "collar-of-orange-plasma",
@@ -277,7 +290,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50153
   },
   {
     "id": "collar-of-red-plasma",
@@ -308,7 +322,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23528
   },
   {
     "id": "crystal-necklace",
@@ -321,7 +336,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3008
   },
   {
     "id": "demonbone-amulet",
@@ -334,7 +350,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3019
   },
   {
     "id": "diamond-necklace",
@@ -347,7 +364,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35607
   },
   {
     "id": "dragon-necklace",
@@ -366,7 +384,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3085
   },
   {
     "id": "elven-amulet",
@@ -403,7 +422,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3082
   },
   {
     "id": "emerald-necklace",
@@ -416,7 +436,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35605
   },
   {
     "id": "enchanted-merudri-brooch",
@@ -433,7 +454,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50154
   },
   {
     "id": "enchanted-pendulet",
@@ -450,7 +472,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 30344
   },
   {
     "id": "enchanted-sleep-shawl",
@@ -467,7 +490,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 30342
   },
   {
     "id": "enchanted-theurgic-amulet",
@@ -505,7 +529,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 30402
   },
   {
     "id": "enchanted-turtle-amulet",
@@ -522,7 +547,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39233
   },
   {
     "id": "enchanted-werewolf-amulet",
@@ -535,7 +561,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22061
   },
   {
     "id": "exotic-amulet",
@@ -559,7 +586,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35523
   },
   {
     "id": "ferumbras-amulet",
@@ -576,7 +604,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22767
   },
   {
     "id": "foxtail-amulet",
@@ -598,7 +627,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 27565
   },
   {
     "id": "friendship-amulet",
@@ -611,7 +641,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9802
   },
   {
     "id": "garlic-necklace",
@@ -630,7 +661,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3083
   },
   {
     "id": "garnet-necklace",
@@ -643,7 +675,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35606
   },
   {
     "id": "gearwheel-chain",
@@ -660,7 +693,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 21170
   },
   {
     "id": "gill-necklace",
@@ -685,7 +719,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 16108
   },
   {
     "id": "glacier-amulet",
@@ -710,7 +745,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 815
   },
   {
     "id": "glooth-amulet",
@@ -754,7 +790,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 21183
   },
   {
     "id": "glowing-rubbish-amulet",
@@ -767,7 +804,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 25297
   },
   {
     "id": "gold-medal",
@@ -780,7 +818,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9215
   },
   {
     "id": "golden-amulet",
@@ -793,7 +832,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3013
   },
   {
     "id": "golden-hyaena-pendant",
@@ -806,7 +846,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 12543
   },
   {
     "id": "golden-scorpion-pendant",
@@ -819,7 +860,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 12542
   },
   {
     "id": "harmony-amulet",
@@ -837,7 +879,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50195
   },
   {
     "id": "jade-amulet",
@@ -850,7 +893,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 20342
   },
   {
     "id": "kosheis-ancient-amulet",
@@ -871,7 +915,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 7532
   },
   {
     "id": "leviathans-amulet",
@@ -896,7 +941,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9303
   },
   {
     "id": "lightning-pendant",
@@ -921,7 +967,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 816
   },
   {
     "id": "lion-amulet",
@@ -946,7 +993,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 34158
   },
   {
     "id": "lucky-clover-amulet",
@@ -959,7 +1007,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 10476
   },
   {
     "id": "magma-amulet",
@@ -984,7 +1033,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 817
   },
   {
     "id": "merudri-brooch",
@@ -1001,7 +1051,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50156
   },
   {
     "id": "necklace-of-the-deep",
@@ -1023,7 +1074,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 13990
   },
   {
     "id": "note-about-two-souls",
@@ -1036,7 +1088,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 31676
   },
   {
     "id": "onyx-pendant",
@@ -1058,7 +1111,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22195
   },
   {
     "id": "ornamented-brooch",
@@ -1072,7 +1126,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 11468
   },
   {
     "id": "paw-amulet",
@@ -1085,7 +1140,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3102
   },
   {
     "id": "pendulet",
@@ -1102,7 +1158,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 29429
   },
   {
     "id": "platinum-amulet",
@@ -1116,7 +1173,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3055
   },
   {
     "id": "prismatic-necklace",
@@ -1141,7 +1199,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 16113
   },
   {
     "id": "protection-amulet",
@@ -1160,7 +1219,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3084
   },
   {
     "id": "rainbow-amulet",
@@ -1188,7 +1248,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 31556
   },
   {
     "id": "rainbow-necklace",
@@ -1216,7 +1277,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 30323
   },
   {
     "id": "rhodolith-necklace",
@@ -1229,7 +1291,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35608
   },
   {
     "id": "rubbish-amulet",
@@ -1242,7 +1305,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 25296
   },
   {
     "id": "ruby-necklace",
@@ -1255,7 +1319,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3016
   },
   {
     "id": "sacred-tree-amulet",
@@ -1280,7 +1345,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9302
   },
   {
     "id": "sapphire-amulet",
@@ -1293,7 +1359,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3021
   },
   {
     "id": "sapphire-necklace",
@@ -1306,7 +1373,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 35604
   },
   {
     "id": "scarab-amulet",
@@ -1319,7 +1387,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3018
   },
   {
     "id": "scarf",
@@ -1333,7 +1402,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3572
   },
   {
     "id": "shockwave-amulet",
@@ -1358,7 +1428,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9304
   },
   {
     "id": "shrunken-head-necklace",
@@ -1377,7 +1448,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 19357
   },
   {
     "id": "silver-amulet",
@@ -1396,7 +1468,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3054
   },
   {
     "id": "silver-medal",
@@ -1409,7 +1482,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9216
   },
   {
     "id": "silver-necklace",
@@ -1422,7 +1496,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3015
   },
   {
     "id": "sleep-shawl",
@@ -1439,7 +1514,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 29428
   },
   {
     "id": "star-amulet",
@@ -1452,7 +1528,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3014
   },
   {
     "id": "stone-skin-amulet",
@@ -1474,7 +1551,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3081
   },
   {
     "id": "strange-amulet",
@@ -1487,7 +1565,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 21379
   },
   {
     "id": "strange-talisman",
@@ -1506,7 +1585,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3045
   },
   {
     "id": "suspicious-device",
@@ -1519,7 +1599,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 27653
   },
   {
     "id": "terra-amulet",
@@ -1544,7 +1625,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 814
   },
   {
     "id": "traditional-gamsbart-hat",
@@ -1557,7 +1639,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 32100
   },
   {
     "id": "traditional-neckerchief",
@@ -1570,7 +1653,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 32101
   },
   {
     "id": "turtle-amulet",
@@ -1587,7 +1671,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39235
   },
   {
     "id": "werewolf-amulet",
@@ -1600,7 +1685,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 22060
   },
   {
     "id": "wolf-tooth-chain",
@@ -1613,6 +1699,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3012
   }
 ]

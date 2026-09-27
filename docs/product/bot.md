@@ -58,6 +58,11 @@ hunt sem gold para pagar o próximo supply e pode morrer.
   id de monstro; postura `stand` (padrão), `follow`, `keep-distance`.
 - Regras de saída: `hp-below`, `out-of-gold`, `party-member-lost`, `out-of-capacity`, com teto de
   4 slots em `bot/baseline.json`.
+- **O filtro de Quick Loot** (`loot`, ADR 0048 decisão 2): `filter` (`'accept'` ou `'skip'`,
+  padrão `'skip'`), `itemIds` (padrão vazia — com `skip` e lista vazia, aceita tudo, o
+  comportamento de antes deste ADR) e `autoSell` (vende ao coletar, cortado pelo limite do
+  PRÓPRIO Premium — 5 tipos Free, 20 Premium, o mesmo `party.autoSellItemTypes`). Campo novo com
+  default, como `follow`: config salva antes deste ADR volta pegando tudo, sem venda automática.
 - Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
   garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.
@@ -659,6 +664,38 @@ A configuração v1 salva é convertida para v2 de forma **determinística e ide
 Uma config já na v2 volta apenas parseada (idempotência). A detecção de "já é v2" é compartilhada
 com o `server`, que precisa dela para saber se o que veio no ticket é dado novo a persistir.
 
+## Uso manual de item/suprimento fora da barra (#726, ADR 0049 decisão 3/6)
+
+`use-item`/`use-item-on` (C2S 25/26; `use-result`, S2C 37 — o 36 é `corpse-contents`, #722) usam um item da mochila/bolsa
+(`ref: { instanceId }`) OU uma unidade do estoque de suprimento (`ref: { supplyId }`) **sem
+passar pela barra** — o `HuntRuleset` resolve pelo catálogo: `supplyId` reaproveita
+`#useSupply`/`useSupply` (`casting.ts`) por inteiro, o MESMO caminho de `use-slot`; comida soma
+`fedMs`; a carga de bênção consome e soma `blessings`. `target` é a MESMA mira opcional de
+`use-slot` (decisão 2) — obrigatória em `use-item-on`, o "usar com…" do menu de contexto contra
+"usar". Só HUNT: a Cidade recusa `not-in-hunt` para as duas (o subconjunto de container/look da
+decisão 8 não passa por aqui — mochila/equipamento já têm caminho próprio em `move-item`/`equip`).
+
+**A exaustão de ação compartilhada (`exhaust:action`, #690) é ADIADA para o manual, não
+recusada** (decisão 6, o `setNextActionTask` do Canary) — ao contrário do cooldown de
+GRUPO/individual da runa/poção usada, que continua recusa IMEDIATA como sempre. Um `use-item`/
+`use-item-on` que chega com `exhaust:action` ainda trancado vira `pendingManualAction` no
+personagem (evento `pending-manual-action` na fila, invariante 2), reagendado para o
+vencimento do livro; um segundo disparo antes disso SUBSTITUI o primeiro. O jogador recebe
+`use-result { ok: true }` na hora — aceito, não necessariamente já executado — e só recebe uma
+SEGUNDA mensagem (`manual-action-result` → `use-result` de novo, com o MESMO `seq`) se a ação
+adiada, na hora de rodar, afinal não coube. Sucesso não gera segunda mensagem (decisão 7): o
+`inventory`/`player-stats`/`creature-hit` de sempre é a confirmação.
+
+**O menu de contexto da mochila** (`ContainerWindow.tsx`) abre no clique direito de um item
+`kind: 'consumable'`: "Usar" manda `use-item` na hora (`shell/use-item-intent.ts`, a decisão
+pura, no molde de `drag-intent.ts`); "Usar com…" arma a mira (`state/aim.ts`,
+`startAimForItem`) e o PRÓXIMO clique no mundo/Batalha resolve com `use-item-on` — a MESMA
+máquina de mira do `use-slot` (decisão 2), generalizada para carregar um `ItemRef` em vez de um
+`set`/`slot`. O `ContextMenu` (`shell/ui/ContextMenu.tsx`) é o MESMO componente que a #741/#724
+("Vender/Descartar") introduziu — trazido de lá para a tela nunca ter dois menus de contexto
+diferentes. A seção **Suprimentos** — ver `economy.md` — lista `inventory.supplies` por nome e
+contagem, sem sprite (o catálogo não carrega `appearanceId` para suprimento abstrato hoje).
+
 ## A tela (AB-10…AB-13)
 
 **A barra de ações 2 × 12 é a configuração E a superfície de disparo manual** — um só
@@ -674,21 +711,44 @@ mensagem de erro.
 **Nada de estado do bot é calculado no cliente**: o cooldown e o bloqueio vêm do `slot-state`, e a
 recusa da tecla do `slot-result`. A munição selecionada vem do `player-stats.ammo`.
 
-**O clique simples abre o `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da
-imagem do "Configurar ação" do cliente Tibia em vez do kit de três `Select` do #426: abas
-**Magias / Runas / Itens** (magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`;
-item é o resto), uma lista à esquerda ordenada por level exigido e um painel de detalhe à
-direita — título, `Lv. X+` (e `ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/
-Cura/Efeito, Custo, Cooldown e Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente
-por `spellPowerRange` (`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic
-level do personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de
-verdade continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior
-à #436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
-`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. **Shift+clique desliga o
-automático** (`auto: false`) — o atalho continua manual. O
-`AutomationsPanel` lista uma linha por automação do rascunho (interruptor, nome, resumo dos
-parâmetros, ⚙ e ×), com "+ Adicionar" abrindo o catálogo de modelos; os modais
-`AddAutomationModal`/`AutomationConfigModal` editam. O `ExitRulesPopover` grava a lista `exit`.
+**O clique esquerdo DISPARA o slot; o clique direito CONFIGURA** (#725, ADR 0049 decisão 1) — o
+gesto do Tibia, emendando o ADR 0032 d.3 (que fazia o clique simples abrir a configuração). Slot
+vazio não tem o que disparar: o clique — esquerdo ou direito — continua abrindo o
+`ActionConfigModal`, único jeito de chegar lá sem um ⚙ na barra. **Shift+clique continua
+desligando o automático** (`auto: false`), sem disparar nem configurar — o atalho continua manual.
+Slot sem tecla é configuração válida desde sempre (DT-02, ADR 0032): ele só não responde a
+teclado, o clique basta. `BOT_HOTKEYS` ganhou as 10 combinações `shift+1…shift+0`/`shift+F1…
+shift+F12` (32 teclas para 24 slots — ADR 0049 decisão 1 emenda o DT-02, que deixava dois slots
+sem tecla própria); `Shift` sozinho compõe a tecla no teclado, sem armar mira nenhuma — mirar um
+aliado específico é gesto de clique, não de atalho.
+
+**Uma ação de ALIADO (`targets: 'friend'` no catálogo — cura, suporte) precisa de MIRA** (ADR
+0049 decisão 2): o clique nesse slot arma o modo de mira em vez de disparar sem alvo, e o
+PRÓXIMO clique no mundo (Viewport) ou na Batalha (`BattlePanel`) completa a intenção com
+`use-slot.target: { creatureId }` — o mesmo id numérico que `select-target` já usa. O estado de
+mira mora em `state/aim.ts`, ao lado do `targetTracker` (mesmo padrão, mesmo motivo: `apply.ts`
+zera os dois no `session-state`); Esc cancela sem mandar nada. Toda outra ação (ataque, runa,
+self) dispara direto, com o alvo default de sempre — fixado se houver, senão o candidato do bot;
+mirar um monstro específico por clique e mirar um tile vazio (`target.position`, para runa de
+área) o protocolo e o `sim` já aceitam, mas nenhum caminho do cliente os envia ainda — fica para
+quando houver pedido concreto. O servidor confere alcance (`effect.range`) e devolve `out-of-
+range`/`no-target` em palavras no `slot-result`, como toda recusa; linha de visão é a #553,
+paralela a esta issue.
+
+**O `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da imagem do "Configurar
+ação" do cliente Tibia em vez do kit de três `Select` do #426: abas **Magias / Runas / Itens**
+(magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`; item é o resto), uma lista
+à esquerda ordenada por level exigido e um painel de detalhe à direita — título, `Lv. X+` (e
+`ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/Cura/Efeito, Custo, Cooldown e
+Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente por `spellPowerRange`
+(`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic level do
+personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de verdade
+continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior à
+#436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
+`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. O `AutomationsPanel`
+lista uma linha por automação do rascunho (interruptor, nome, resumo dos parâmetros, ⚙ e ×), com
+"+ Adicionar" abrindo o catálogo de modelos; os modais `AddAutomationModal`/`AutomationConfigModal`
+editam. O `ExitRulesPopover` grava a lista `exit`.
 
 **O interruptor salva sozinho.** Não há botão "Salvar" na barra: mudar o conjunto, o alvo, uma
 regra ou uma automação agenda um `bot-config` com **debounce de 300 ms** (ADR 0028); o Salvar do

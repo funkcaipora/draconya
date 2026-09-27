@@ -33,7 +33,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39182
   },
   {
     "id": "arboreal-ring",
@@ -69,7 +70,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39188
   },
   {
     "id": "arcanomancer-sigil",
@@ -106,7 +108,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39185
   },
   {
     "id": "axe-ring",
@@ -119,7 +122,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3092
   },
   {
     "id": "blister-ring",
@@ -135,7 +139,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 31621
   },
   {
     "id": "broken-wedding-ring",
@@ -148,7 +153,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9593
   },
   {
     "id": "butterfly-ring",
@@ -170,7 +176,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 25698
   },
   {
     "id": "charged-alicorn-ring",
@@ -187,7 +194,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39180
   },
   {
     "id": "charged-arboreal-ring",
@@ -204,7 +212,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39186
   },
   {
     "id": "charged-arcanomancer-sigil",
@@ -221,7 +230,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39183
   },
   {
     "id": "charged-ethereal-ring",
@@ -238,7 +248,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50147
   },
   {
     "id": "charged-spiritthorn-ring",
@@ -255,7 +266,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39177
   },
   {
     "id": "club-ring",
@@ -268,7 +280,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3093
   },
   {
     "id": "crystal-ring",
@@ -281,7 +294,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3007
   },
   {
     "id": "death-ring",
@@ -300,7 +314,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 6299
   },
   {
     "id": "dwarven-ring",
@@ -313,7 +328,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3097
   },
   {
     "id": "enchanted-blister-ring",
@@ -329,7 +345,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 31557
   },
   {
     "id": "enchanted-ring-of-souls",
@@ -354,7 +371,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 32635
   },
   {
     "id": "energy-ring",
@@ -373,7 +391,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3051
   },
   {
     "id": "engraved-wedding-ring",
@@ -386,7 +405,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 9585
   },
   {
     "id": "ethereal-ring",
@@ -420,7 +440,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50149
   },
   {
     "id": "family-signet-ring",
@@ -433,7 +454,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 406
   },
   {
     "id": "gold-ring",
@@ -446,7 +468,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3063
   },
   {
     "id": "horn",
@@ -460,7 +483,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 19359
   },
   {
     "id": "life-ring",
@@ -473,7 +497,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3052
   },
   {
     "id": "lion-ring",
@@ -486,7 +511,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 34080
   },
   {
     "id": "might-ring",
@@ -523,7 +549,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3048
   },
   {
     "id": "power-ring",
@@ -536,7 +563,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3050
   },
   {
     "id": "prismatic-ring",
@@ -560,7 +588,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 16114
   },
   {
     "id": "ring-of-blue-plasma",
@@ -590,7 +619,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23530
   },
   {
     "id": "ring-of-green-plasma",
@@ -625,7 +655,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23532
   },
   {
     "id": "ring-of-healing",
@@ -647,7 +678,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3100
   },
   {
     "id": "ring-of-orange-plasma",
@@ -678,7 +710,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 50151
   },
   {
     "id": "ring-of-red-plasma",
@@ -709,7 +742,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 23534
   },
   {
     "id": "ring-of-temptation",
@@ -731,7 +765,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 45642
   },
   {
     "id": "shapeshifter-ring",
@@ -745,7 +780,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 907
   },
   {
     "id": "spiritthorn-ring",
@@ -779,7 +815,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 39179
   },
   {
     "id": "star-ring",
@@ -792,7 +829,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 12669
   },
   {
     "id": "stealth-ring",
@@ -805,7 +843,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3049
   },
   {
     "id": "suspicious-signet-ring",
@@ -818,7 +857,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 349
   },
   {
     "id": "sweetheart-ring",
@@ -831,7 +871,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 21955
   },
   {
     "id": "sword-ring",
@@ -844,7 +885,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3091
   },
   {
     "id": "time-ring",
@@ -857,7 +899,8 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3053
   },
   {
     "id": "wedding-ring",
@@ -870,6 +913,7 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data/items/items.xml"
-    }
+    },
+    "appearanceId": 3004
   }
 ]

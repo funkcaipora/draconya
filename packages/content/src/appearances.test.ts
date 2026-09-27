@@ -24,7 +24,7 @@ function filesRecursively(dir: string): string[] {
 // A auditoria de apresentação de combate (#242, CMB-09): o contrato que o host usa para
 // transformar o que o `sim` emite em `effect`/`missile` no fio é a tabela de aparências, e a
 // tabela só vale se cada id EXISTIR no pacote citado. O `buildContent` já recusa o id fora do
-// inventário versionado (`packs/tibia-1332.json`, FUN-21); este arquivo prende o mesmo de forma
+// inventário versionado (`packs/tibia-1533.json`, FUN-21); este arquivo prende o mesmo de forma
 // independente, e acrescenta a metade que depende da biblioteca local — sem transformar
 // `things/` (fora do Git) em dependência da suíte.
 //
@@ -129,7 +129,7 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
   it('a tabela real tem pacote e inventário, e toda referência cai nas faixas dele', () => {
     // O `buildContent` já reprova id fora do pacote; isto é a checagem independente, para a
     // auditoria não depender de o boot estar ligado. Mutação que mata: trocar um id em
-    // `appearances/baseline.json` por um número que o pacote 1332 não tem.
+    // `appearances/baseline.json` por um número que o pacote 1533 não tem.
     expect(appearances, 'o conteúdo real tem tabela de aparências').toBeDefined();
     expect(pack, 'o conteúdo real tem inventário do pacote').toBeDefined();
     if (appearances === undefined || pack === undefined) return;
@@ -207,7 +207,7 @@ describe('apresentação de combate: os ids existem no inventário versionado (#
 // bloco PULA — a suíte roda no CI sem pacote de arte, e o que segura lá é o inventário
 // versionado, acima. Com a biblioteca presente, o id tem que existir no ÍNDICE dela (não só no
 // inventário de faixas), e o PNG do primeiro sprite é a evidência quando ele existe.
-const LIBRARY_VERSION = '1332';
+const LIBRARY_VERSION = '1533';
 const LIBRARY_DIR = join(THINGS_DIR, LIBRARY_VERSION, 'library');
 const MANIFEST_PATH = join(LIBRARY_DIR, 'manifest.json');
 const hasLibrary = existsSync(MANIFEST_PATH);

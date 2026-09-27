@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, characters, friends, itemInstances } from './schema.js';
+import {
+  accounts, characterStorages, characters, friends, itemInstances,
+} from './schema.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -52,6 +54,8 @@ export interface CharacterRecord {
   readonly supplyStock: unknown;
   /** O estoque de munição do loot (#520), pela mesma razão do `supplyStock`. */
   readonly ammunitionStock: unknown;
+  /** Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos. `0` é ninguém comeu. */
+  readonly fedMs: number;
   readonly createdAt: Date;
 }
 
@@ -80,6 +84,15 @@ export interface ItemInstanceRecord {
   readonly slotIndex: number | null;
   /** O overlay por instância (#604, ADR 0046), cru da coluna `jsonb`; `null` é sem overlay. */
   readonly overlay: unknown;
+  readonly createdAt: Date;
+}
+
+/** Uma linha de `character_storage` (#731, ADR 0050 d.6 T2). `value` nunca é `-1`: ver o schema. */
+export interface CharacterStorageRecord {
+  readonly id: string;
+  readonly characterId: string;
+  readonly storageKey: string;
+  readonly value: number;
   readonly createdAt: Date;
 }
 
@@ -173,6 +186,12 @@ export interface GameRepository {
   }): Promise<ItemInstanceRecord>;
   /** O que este personagem tem. É a consulta que o índice por dono existe para servir. */
   listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]>;
+  /**
+   * Os storages deste personagem (#731), para o ticket carregar — a mesma razão de
+   * `listItemInstances`: o `game` não fala com o Postgres, e roda uma vez por emissão de
+   * ticket, nunca no caminho de tick.
+   */
+  listCharacterStorages(characterId: string): Promise<readonly CharacterStorageRecord[]>;
   /**
    * Aplica o layout de equipamento que a sessão registrou (FUN-82).
    *
@@ -396,6 +415,15 @@ export class DrizzleGameRepository implements GameRepository {
       .orderBy(asc(itemInstances.createdAt), asc(itemInstances.id));
   }
 
+  async listCharacterStorages(characterId: string): Promise<readonly CharacterStorageRecord[]> {
+    return this.#db
+      .select()
+      .from(characterStorages)
+      .where(eq(characterStorages.characterId, characterId))
+      // Ordem estável, pela mesma razão de `listItemInstances`.
+      .orderBy(asc(characterStorages.createdAt), asc(characterStorages.id));
+  }
+
   async applyEquipment(
     characterId: string, equipped: Readonly<Record<string, string>>,
   ): Promise<void> {
@@ -514,7 +542,7 @@ function toAccount(row: typeof accounts.$inferSelect): AccountRecord {
 function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
   // O domínio usa number. Um bigint fora do intervalo seguro não pode virar progresso
   // arredondado silenciosamente ao atravessar a fronteira Postgres → TypeScript.
-  for (const value of [row.xp, row.gold, row.staminaMs]) {
+  for (const value of [row.xp, row.gold, row.staminaMs, row.fedMs]) {
     if (!Number.isSafeInteger(value)) throw new Error('character value exceeds safe integer range');
   }
   return {
@@ -538,6 +566,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     ammo: row.ammo,
     supplyStock: row.supplyStock,
     ammunitionStock: row.ammunitionStock,
+    fedMs: row.fedMs,
     createdAt: row.createdAt,
   };
 }

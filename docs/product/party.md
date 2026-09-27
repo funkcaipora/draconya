@@ -297,7 +297,10 @@ null`; `null` = tudo) e **o que vender automaticamente** (`autoSell`), com um li
 Premium do **personagem líder**:
 
 - `collect` filtra **depois** de `rollLoot` (zero RNG a mais): item fora da lista **não é
-  coletado** — fica no cadáver e não conta `itemsLooted`. Gold nunca é item: entra sempre.
+  coletado** — fica no cadáver e não conta `itemsLooted`. Desde o ADR 0048 isso é LITERAL: o
+  cadáver do monstro carrega o item de verdade, até decair (`corpseTtlMs`) — antes deste ADR a
+  frase descrevia um item que simplesmente desaparecia, porque o cadáver ainda não guardava
+  nada. Gold nunca é item: entra sempre (com `splitLoot` ligado, direto na bolsa).
 - `autoSell` é subconjunto lógico da coleta: item na lista efetiva **não entra na bolsa** — vira
   `value × quantity` gold na hora, dividido entre os elegíveis com `splitEqually` (resto na ordem
   de entrada), creditado em `goldDelta`/`goldGained` de cada um. Emite `party-settlement` com

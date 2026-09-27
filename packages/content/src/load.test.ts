@@ -146,14 +146,16 @@ describe('loadContent', () => {
     expect(hunt?.corpseTtlMs).toBe(30000);
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
-    // packages/content/data/monsters/rat.json — números do Huntera (docs/reference/
-    // huntera-observed.md Parte V §32, 2026-09-22), não mais o provisório da FUN-123.
-    expect(rat?.attack).toEqual({ min: 3, max: 4 });
+    // packages/content/data/monsters/generated/mammals.json — regenerado pelo importador do
+    // Canary (#581; era o provisório do Huntera, docs/reference/huntera-observed.md Parte V
+    // §32). `data-otservbr-global/monster/mammals/rat.lua` (Canary local 47dfd51): attack
+    // 0-8, defense 5, os quatro resistances abaixo (o resto vira 0 na normalização), speed 134.
+    expect(rat?.attack).toEqual({ min: 0, max: 8 });
     expect(rat?.mitigation.resistances).toEqual({
-      physical: 0, energy: 0, earth: -0.2, fire: 0, ice: 0.1, holy: -0.2, death: 0.1,
+      physical: 0, energy: 0, earth: 0.2, fire: 0, ice: -0.1, holy: 0.2, death: -0.1,
       drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
     });
-    expect(rat?.speed).toBe(172);
+    expect(rat?.speed).toBe(134);
     expect(rat?.corpseAppearanceId).toBe(5964);
     expect(rat?.loot.items.map((i) => i.itemId)).toEqual(['cheese']);
     expect(content.items.get('cheese')?.appearanceId).toBe(3607);
@@ -175,8 +177,10 @@ describe('loadContent', () => {
     expect(route?.tiles.every((t) => t.x < 80)).toBe(true);
     const rotworm = content.monsters.get('rotworm');
     expect(rotworm?.class).toBe('vermin');
-    expect(rotworm?.attack).toEqual({ min: 24, max: 30 });
-    expect(rotworm?.speed).toBe(180);
+    // data-otservbr-global/monster/vermins/rotworm.lua (Canary local 47dfd51): attack 0-40,
+    // speed 116 — regenerado pelo importador (#581; era o provisório do Huntera).
+    expect(rotworm?.attack).toEqual({ min: 0, max: 40 });
+    expect(rotworm?.speed).toBe(116);
     expect(rotworm?.corpseAppearanceId).toBe(5967);
     expect(rotworm?.loot.items.map((i) => i.itemId).sort()).toEqual(
       ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
@@ -286,7 +290,8 @@ describe('loadContent', () => {
     const content = loadContent(DATA);
     const weapon = (id: string) => content.items.get(id)?.weapon;
     // A família é DADO (CMB-05): a arma declara a sua, e a fórmula traz a contribuição da skill
-    // apontada (`damagePerLevel` 0,02 da `melee`/`distance`, a partir do nível 10).
+    // apontada (`damagePerLevel` 0,02 de `fist`/`club`/`sword`/`axe`/`distance`, a partir do
+    // nível 10 — as quatro corpo a corpo eram uma skill só, `melee`, até o #567).
     const scaled = (base: number, skillFactor = 0.02, skillStartingLevel = 10) =>
       ({ base, levelFactor: 0, skillFactor, skillStartingLevel, spread: 0 });
     expect(weapon('machete')).toEqual({
@@ -462,14 +467,21 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
-  it('blessing-charge é o ÚNICO item consumable: não-empilhável, sem group nem restock (ADR 0026 d.3)', () => {
+  it('blessing-charge é o ÚNICO item consumable NÃO-EMPILHÁVEL, sem group nem restock (ADR 0026 d.3)', () => {
     const content = loadContent(DATA);
     const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
-    expect(consumables.map((item) => item.id)).toEqual(['blessing-charge']);
+    // A comida (#726, ADR 0049 d.5) entrou como `consumable` também — cheese, ham, meat,
+    // dragon-ham, green-mushroom —, mas EMPILHÁVEL, ao contrário da carga de bênção.
+    expect(consumables.map((item) => item.id).sort()).toEqual(
+      ['blessing-charge', 'cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
+    );
     const blessing = content.items.get('blessing-charge');
     expect(blessing?.stackable).toBe(false);
     expect(blessing?.effect).toEqual({ kind: 'blessing' });
     expect(blessing?.weight).toBeGreaterThan(0);
+    const cheese = content.items.get('cheese');
+    expect(cheese?.stackable).toBe(true);
+    expect(cheese?.effect).toEqual({ kind: 'food', durationMs: 108_000 });
   });
 
   it('content.supplies é o catálogo ABSTRATO, com price e group de cooldown (ADR 0026 d.3)', () => {
@@ -499,10 +511,18 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     expect(content.appearances?.supplies['small-health-potion']).toEqual({ effect: 14 });
   });
 
-  it('toda poção e toda runa travam a exaustão de ação compartilhada de 1000 ms (#690)', () => {
-    // `timeBetweenExActions` do Canary: poção e runa dividem o MESMO relógio.
+  it('toda poção e toda runa travam a exaustão de ação compartilhada de 1000 ms, exceto a exceção documentada (#690, #576)', () => {
+    // `timeBetweenExActions` do Canary: poção e runa dividem o MESMO relógio. A ÚNICA exceção é
+    // a Magic Shield Potion (#576): o `func = magicshield` do `potions.lua` só chama
+    // `player:addCondition` da mana shield — nenhuma chamada do arquivo aplica a `exhaust` de
+    // módulo (`CONDITION_PARAM_TICKS = 500`) a um jogador —, e é o que
+    // `supplySchema.actionExhaustMs` já documentava ANTES desta issue chegar aqui.
     const content = loadContent(DATA);
     for (const [id, supply] of content.supplies) {
+      if (id === 'magic-shield-potion') {
+        expect(supply.actionExhaustMs, id).toBeUndefined();
+        continue;
+      }
       expect(supply.actionExhaustMs, id).toBe(1000);
     }
   });
@@ -551,7 +571,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // O teste acima prende que o arquivo existe; este prende que `load.ts` o LÊ. Sem ele,
     // apagar a linha `packs:` do carregador deixaria a suíte verde com a conferência
     // desligada — a mutação que sobreviveu na revisão. O conteúdo real é copiado e um id
-    // que o pacote 1332 não tem entra na tabela; o resto do repositório fica como está.
+    // que o pacote 1533 não tem entra na tabela; o resto do repositório fica como está.
     const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
     try {
       cpSync(DATA, copy, { recursive: true });
@@ -560,7 +580,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       expect(text).toMatch(/"rat": 21/);
       writeFileSync(table, text.replace('"rat": 21', '"rat": 999999'));
       expect(() => loadContent(copy))
-        .toThrow('appearances.monsters.rat: outfit 999999 não existe no pacote tibia-1332');
+        .toThrow('appearances.monsters.rat: outfit 999999 não existe no pacote tibia-1533');
     } finally {
       rmSync(copy, { recursive: true, force: true });
     }
@@ -877,10 +897,52 @@ describe('the vocation spell catalogues (#156–#159)', () => {
   });
 
   it('the Knight scales spells by the weapon skill and the Paladin by distance; the mages by magic', () => {
-    expect(content.vocations.get('knight')?.spellSkill).toBe('melee');
+    // #567: `melee` virou quatro skills (fist/club/sword/axe), e o Knight não tem mais uma
+    // fixa — `SPELL_SKILL_WEAPON` ("weapon") é a sentinela que o `sim` resolve pela arma na mão.
+    expect(content.vocations.get('knight')?.spellSkill).toBe('weapon');
     expect(content.vocations.get('paladin')?.spellSkill).toBe('distance');
     expect(content.vocations.get('sorcerer')?.spellSkill).toBe('magic');
     expect(content.vocations.get('druid')?.spellSkill).toBe('magic');
+  });
+
+  it('a skill corpo a corpo virou quatro, uma por tipo de arma (#567)', () => {
+    // Base 50 e startingLevel 10 são a `skillBase` do Canary para os quatro tipos (fist/club/
+    // sword/axe); só o fallback SEM vocação difere — fist é 1.5, os outros três são 2.0 (o
+    // `<skill id multiplier>` da vocação `None` do Canary `vocations.xml`).
+    for (const id of ['fist', 'club', 'sword', 'axe']) {
+      const skill = content.skills.get(id);
+      expect(skill?.startingLevel, id).toBe(10);
+      expect(skill?.curve.base, id).toBe(50);
+      expect(skill?.gain).toEqual({ on: 'melee-hit', points: 1 });
+    }
+    expect(content.skills.get('fist')?.curve.factor).toBe(1.5);
+    expect(content.skills.get('club')?.curve.factor).toBe(2.0);
+    expect(content.skills.get('sword')?.curve.factor).toBe(2.0);
+    expect(content.skills.get('axe')?.curve.factor).toBe(2.0);
+    expect(content.skills.has('melee')).toBe(false);
+    // Cada família de arma treina a SUA skill, não mais uma `melee` compartilhada.
+    expect(content.weaponFamilies.get('fist')?.skillId).toBe('fist');
+    expect(content.weaponFamilies.get('sword')?.skillId).toBe('sword');
+    expect(content.weaponFamilies.get('axe')?.skillId).toBe('axe');
+    expect(content.weaponFamilies.get('club')?.skillId).toBe('club');
+    // O multiplicador por vocação (Canary `vocations.xml`, verificado em `main` 2026-09-26):
+    // Knight uniforme (1.1); Sorcerer/Druid/None distinguem fist (1.5) do resto (2.0/1.8);
+    // Paladin uniforme (1.2).
+    expect(content.vocations.get('knight')?.skillMultipliers).toMatchObject({
+      fist: 1.1, club: 1.1, sword: 1.1, axe: 1.1,
+    });
+    expect(content.vocations.get('sorcerer')?.skillMultipliers).toMatchObject({
+      fist: 1.5, club: 2.0, sword: 2.0, axe: 2.0,
+    });
+    expect(content.vocations.get('druid')?.skillMultipliers).toMatchObject({
+      fist: 1.5, club: 1.8, sword: 1.8, axe: 1.8,
+    });
+    expect(content.vocations.get('paladin')?.skillMultipliers).toMatchObject({
+      fist: 1.2, club: 1.2, sword: 1.2, axe: 1.2,
+    });
+    expect(content.progression.skillMultipliers).toMatchObject({
+      fist: 1.5, club: 2.0, sword: 2.0, axe: 2.0,
+    });
   });
 });
 

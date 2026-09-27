@@ -1,9 +1,11 @@
 import { buildTilemap } from '@draconya/content';
+import type { TilemapInteractable } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import {
   TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
+import { TileOverrides } from './tile-overrides.js';
 
 // Uma sala de 4×3 com uma parede no meio. Pequena de propósito: num mapa assim dá para dizer,
 // olhando, o que cada caso significa.
@@ -516,5 +518,55 @@ describe('placeReachable (FUN-120)', () => {
     place(world, at(1, 1), to(1, 1));
     const chegando = at(1, 1);
     expect(placeReachable(world, chegando, to(1, 1), 100)).toBe('tile-occupied');
+  });
+});
+
+describe('TileOccupancy.overrides — o overlay de cenário usável (#728, ADR 0050 d.2)', () => {
+  const door: TilemapInteractable = {
+    at: { x: 3, y: 1, z: 7 }, kind: 'door', initialState: 'closed', appearanceKey: 'door-1',
+  };
+
+  it('uma porta fechada bloqueia como parede — para o passo guloso, o monstro e o follow', () => {
+    const overrides = TileOverrides.fromInteractables([door]);
+    const w = new TileOccupancy(map, { overrides });
+    w.reset([at(1, 1)]);
+    expect(w.blockedAt(3, 1, 7)).toBe(true);
+    const hero = at(2, 1);
+    expect(canOccupy(w, hero, to(3, 1))).toBe('tile-blocked');
+  });
+
+  it('abrir o overlay (o que #useOnMap faria) deixa `move` passar, sem tocar na geometria do mapa', () => {
+    const overrides = TileOverrides.fromInteractables([door]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    overrides.toggle('3,1,7', 0);
+    expect(canOccupy(w, hero, to(3, 1))).toBeNull();
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true });
+    // A geometria do `Tilemap` nunca mudou (invariante 7): outra sessão do MESMO mapa, sem
+    // overlay, ainda vê o tile como livre — porque ele SEMPRE foi `.` na grade (ADR 0050 d.1).
+    expect(w.map.blocked[1 * w.map.width + 3]).toBe(0);
+  });
+
+  it('a porta fecha sozinha quando o tile esvazia (`vacate`), nunca por prazo', () => {
+    const overrides = TileOverrides.fromInteractables([door]);
+    const w = new TileOccupancy(map, { overrides });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    overrides.toggle('3,1,7', 0);
+    move(w, hero, to(3, 1)); // hero agora EM CIMA da porta — aberta, ocupada
+    expect(overrides.get('3,1,7')?.state).toBe('open');
+    move(w, hero, to(4, 1)); // sai do tile: o `vacate` da porta fecha sozinho
+    expect(overrides.get('3,1,7')?.state).toBe('closed');
+    expect(w.blockedAt(3, 1, 7)).toBe(true);
+  });
+
+  it('sem overlay nenhum, `blockedAt`/`floorChangeAt` são exatamente a geometria de sempre', () => {
+    // O regime da Cidade (`CityRuleset`) não constrói `TileOverrides` nenhum — este teste prova
+    // que `TileOccupancy` continua funcionando IGUAL sem o segundo argumento.
+    const w = new TileOccupancy(map);
+    expect(w.blockedAt(2, 2, 7)).toBe(true); // a parede do meio da sala
+    expect(w.blockedAt(1, 1, 7)).toBe(false);
+    expect(w.floorChangeAt(1, 1, 7)).toBeNull();
   });
 });

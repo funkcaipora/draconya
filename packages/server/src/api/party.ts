@@ -36,6 +36,8 @@ export interface PartyRouteDependencies {
   /** Por chave primária (DT-07): o nome do convidador de um convite social. */
   readonly getCharacterById: GameRepository['getCharacterById'];
   readonly listItemInstances?: GameRepository['listItemInstances'];
+  /** Os storages de cada membro (#731), pela mesma razão de `listItemInstances`. */
+  readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
   readonly settleProgress: (characterId: string) => Promise<SettlementResult>;
   /**
    * O snapshot de sessão de CADA personagem (#527, ADR 0010): um nó que reiniciou no meio de
@@ -295,7 +297,11 @@ async function joinRunningParty(
     huntId: party.huntId, difficulty: party.difficulty, join: true,
     members: [{
       characterId: me.characterId, accountId: me.accountId,
-      initialCharacter: initialCharacterOf(candidate, await deps.listItemInstances?.(me.characterId) ?? []),
+      initialCharacter: initialCharacterOf(
+        candidate,
+        await deps.listItemInstances?.(me.characterId) ?? [],
+        await deps.listCharacterStorages?.(me.characterId) ?? [],
+      ),
     }],
   };
   const issued = await deps.tickets.issue(
@@ -826,7 +832,11 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       if (accountId === undefined || character === null) return reply.code(409).send({ error: 'member-gone', characterId });
       members.push({
         characterId, accountId,
-        initialCharacter: initialCharacterOf(character, await deps.listItemInstances?.(characterId) ?? []),
+        initialCharacter: initialCharacterOf(
+          character,
+          await deps.listItemInstances?.(characterId) ?? [],
+          await deps.listCharacterStorages?.(characterId) ?? [],
+        ),
       });
     }
 

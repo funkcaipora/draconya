@@ -313,7 +313,15 @@ export function convertItem(
     weight: weight === undefined ? 0 : weight / 100,
     value: sellObservation?.amount ?? 0,
   };
-  const slot = classification.slot ?? (scriptSlot === undefined ? undefined : SLOT_MAP[scriptSlot]);
+  // Toda arma do catálogo autoral veste no slot `hand` — de uma mão ou de duas (`sword`,
+  // `bow`, `wand-of-vortex`: os 22 itens `kind: 'weapon'` de `data/items/*.json` concordam,
+  // twoHanded ou não). O Canary raramente declara `<attribute key="slot" value="hand">` no
+  // `<script>` de arma (só a exceção confirma — a maioria não), e sem isso `imbuementSlots`
+  // reprovava no boot (`content.ts`: "só vale em item que se veste") mesmo a arma sendo
+  // vestível de verdade. `hand` é o default de TODA arma, não só de uma mão — twoHanded já
+  // diz que ocupa as duas (#152).
+  const slot = classification.slot ?? (scriptSlot === undefined ? undefined : SLOT_MAP[scriptSlot])
+    ?? (classification.kind === 'weapon' ? 'hand' : undefined);
   if (slot !== undefined) entity['slot'] = slot;
 
   const twoHanded = value(attrs, 'slotType') === 'two-handed' || value(attrs, 'slottype') === 'two-handed';
@@ -323,8 +331,16 @@ export function convertItem(
   if (attack !== undefined && attack > 0) entity['attack'] = attack;
   const armorValue = numberValue(attrs, 'armor');
   if (armorValue !== undefined && armorValue > 0) entity['armor'] = armorValue;
+  // `defense` só vale em escudo ou arma corpo a corpo (`content.ts`, CMB-04) — a MESMA regra
+  // que o Canary já expressa ao classificar por `primarytype`: "rusted shield"/"heavily rusted
+  // shield" (id 8900-8902) e "broken macuahuitl" (id 40530) têm `weaponType shield`/`sword` no
+  // XML, mas o Canary os classifica como `valuables`/`creature products` — curiosidade de
+  // quest, não equipamento de combate de verdade (a descrição confirma: "remove the rust...").
+  // Copiar `defense` para um item que o PRÓPRIO Canary não trata como escudo/arma reprovaria
+  // no boot; a classificação por `primarytype` já é a decisão do Canary, e `kind: 'other'`
+  // segue ela.
   const defense = numberValue(attrs, 'defense');
-  if (defense !== undefined && defense > 0) entity['defense'] = defense;
+  if (defense !== undefined && defense > 0 && classification.kind !== 'other') entity['defense'] = defense;
   const extradef = numberValue(attrs, 'extradef');
   if (extradef !== undefined && extradef > 0) entity['extraDefense'] = extradef;
 
@@ -474,6 +490,16 @@ export function convertItem(
     if ((family === 'wand' || family === 'rod') && (weapon['manaPerHit'] === undefined || weapon['damage'] === undefined)) {
       blockers.push('wand/rod sem mana ou faixa de dano completa (script;weapon incompleto)');
     }
+    // Rede de segurança contra o `primarytype` MENTIROSO do Canary: "broken Iks spear" (id
+    // 40535) é `primarytype="axe weapons"` (por isso `classify()` já devolveu `kind: 'weapon'`
+    // antes de olhar `weaponType`), mas `weaponType="distance"` sem `ammotype` — um arremessável
+    // sem lançador, exatamente o caso que `classify()` já pula quando o `primarytype` É
+    // "distance weapons" (M34-04). Sem esta segunda checagem, a mesma arma escaparia pela
+    // classificação por `primarytype` e reprovaria no boot ("arma de distância precisa de
+    // ammoFamily", `content.ts`) em vez de ser contada no relatório como fora do escopo.
+    if (family === 'distance' && weapon['ammoFamily'] === undefined) {
+      blockers.push('arremessável/munição sem lançador (M34-04, fora do escopo)');
+    }
     entity['weapon'] = weapon;
   } else if (classification.kind === 'shield' && slot === 'shield') {
     if (primarytype === 'spellbooks') entity['spellbook'] = true;
@@ -493,6 +519,13 @@ export function convertItem(
   }
 
   entity['source'] = source;
+  // Aparência (#748, ADR 0038 decisão 2, o MESMO recurso que `outfitId` já usa em `monsters.ts`):
+  // o `id` do `<item>` do Canary É o `appearanceId` (o clientid do OTB) — conferido em
+  // `sword`/3264, o autoral existente. Staging carrega o número; `promote-items.ts` o extrai para
+  // `appearances/baseline.json.items` e o remove antes de escrever `data/items/generated/`, porque
+  // `itemSchema` não declara este campo.
+  if (Number.isFinite(canaryId) && canaryId > 0) entity['appearanceId'] = canaryId;
+  else blockers.push(`"id" do Canary não é um número de aparência válido: "${id}"`);
   return { id: slug, slice: classification.slice, entity: entity as CatalogEntity, blockers, ignoredFields };
 }
 
