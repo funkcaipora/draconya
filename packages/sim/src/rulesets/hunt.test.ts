@@ -8722,6 +8722,84 @@ describe('auto-target na tela e runa à distância (#444)', () => {
       .map((event) => (event as { creatureId: string }).creatureId);
     expect(hits).toContain(far.subject);
   });
+
+  it('seleciona monstro no alcance da arma como alvo de ataque sem clique manual', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 1, y: hero.position.y };
+    b.position = { x: hero.position.x + 15, y: hero.position.y };
+    c.position = { x: hero.position.x + 16, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
+  });
+
+  it('monstro mais próximo toma precedência sobre alvo distante quando não está pinado', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x + 8, y: hero.position.y };
+    c.position = { x: hero.position.x + 9, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(b.subject);
+    expect(chosenOf(ruleset, hero.id)).toBe(b.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(b.subject);
+  });
+
+  it('alvo pinado manualmente é preservado mesmo se outro monstro surgir mais perto', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 6, y: hero.position.y };
+    c.position = { x: hero.position.x + 7, y: hero.position.y };
+
+    ruleset.setAttackTarget(hero, a);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+  });
+
+  it('requestMove adquire o monstro próximo como alvo e arma o ataque ao dar um passo', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    expect(hero.position).toEqual({ x: 2, y: 1, z: 7 });
+
+    // Afasta outros monstros
+    b.position = { x: 30, y: 30, z: 7 };
+    c.position = { x: 31, y: 31, z: 7 };
+
+    // Coloca 'a' a 2 tiles de distância (em 2, 3)
+    a.position = { x: 2, y: 3, z: 7 };
+    // Hero anda um passo para o sul (2, 2), ficando adjacente a 'a' (2, 3)
+    const res = ruleset.requestMove(session, hero.id, { x: 2, y: 2 });
+    expect(res.ok).toBe(true);
+    expect(hero.position).toEqual({ x: 2, y: 2, z: 7 });
+
+    // Agora 'a' está no alcance da arma (Chebyshev 1)
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+  });
 });
 
 // --- o cooldown do supply e o aviso limitado das automações (#420) ---------------------------

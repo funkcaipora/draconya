@@ -13,6 +13,7 @@
 // Quem lê isto é o laço de render do canvas (FUN-23), a cada quadro, direto. Nunca por prop.
 
 import type { OutfitColors, S2CProps, DamageType } from '@draconya/protocol';
+import type { TileWindow } from '../world/camera.js';
 import {
   FLOATING_TEXT_MERGE_WINDOW_MS, mergeFloatingText,
 } from '../world/effects.js';
@@ -142,6 +143,8 @@ export interface World {
    * precisa saber que um cadáver caiu sem varrer o mapa a cada quadro.
    */
   groundItemsVersion: number;
+  /** A janela de tiles visíveis na tela agora (FUN-23, #254). Atualizada pelo viewport. */
+  visibleWindow: TileWindow | null;
   readonly effects: Effect[];
   readonly missiles: Missile[];
   readonly texts: FloatingText[];
@@ -161,6 +164,7 @@ export const world: World = {
   groundItems: new Map(),
   groundItemsVersion: 0,
   selfId: null,
+  visibleWindow: null,
   creatures: new Map(),
   effects: [],
   missiles: [],

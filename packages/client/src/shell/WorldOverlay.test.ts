@@ -129,6 +129,17 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
     expect(html).toContain('1 criaturas no alcance');
   });
 
+  it('only counts creatures that are ON SCREEN (#254, #348)', async () => {
+    world.selfId = 1;
+    world.creatures.set(1, creature(1, { name: 'você', position: { x: 10, y: 10, z: 7 } }));
+    world.creatures.set(2, creature(2, { name: 'Rotworm 1 (near)', position: { x: 11, y: 10, z: 7 } }));
+    world.creatures.set(3, creature(3, { name: 'Rotworm 2 (far)', position: { x: 60, y: 60, z: 7 } }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+
+    expect(html).toContain('1 criaturas no alcance');
+  });
+
   it('never invents a hunt name or difficulty', async () => {
     const html = await render(createElement(WorldOverlay, { hunting: true }));
 

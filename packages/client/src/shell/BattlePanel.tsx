@@ -23,6 +23,9 @@ import { sendIntent } from '../net/current.js';
 import { targetTracker } from '../state/target.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
+import type { Creature, Point } from '../state/world.js';
+import { visibleTiles, VIEW_HEIGHT, VIEW_WIDTH } from '../world/camera.js';
+import type { TileWindow } from '../world/camera.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
 import { Panel } from './ui/Panel.js';
 import { IconButton } from './ui/IconButton.js';
@@ -46,27 +49,44 @@ export function battleTone(percent: number): 'ok' | 'warn' | 'danger' {
 }
 
 /**
- * As criaturas visíveis, fora o próprio personagem e a party (DT-01). `world.creatures` é lido
- * DIRETO (ADR 0007): esta função não assina nada, e quem decide quando chamá-la de novo é o
+ * Confere se a criatura está na tela (no mesmo andar e dentro da janela visível do viewport).
+ * Se `window` for `null` (como em testes unitários ou antes do viewport montar), usa a janela
+ * padrão centrada na posição própria com `VIEW_WIDTH` e `VIEW_HEIGHT`.
+ */
+export function isCreatureOnScreen(
+  creature: Creature,
+  ownPosition: Point,
+  window: TileWindow | null,
+): boolean {
+  if (creature.position.z !== ownPosition.z) return false;
+  const win = window ?? visibleTiles(ownPosition, { widthTiles: VIEW_WIDTH, heightTiles: VIEW_HEIGHT });
+  const at = creature.step?.to ?? creature.position;
+  return (
+    (creature.position.x >= win.minX && creature.position.x <= win.maxX &&
+      creature.position.y >= win.minY && creature.position.y <= win.maxY) ||
+    (at.x >= win.minX && at.x <= win.maxX &&
+      at.y >= win.minY && at.y <= win.maxY)
+  );
+}
+
+/**
+ * As criaturas visíveis NA TELA, fora o próprio personagem e a party (DT-01). `world.creatures` é
+ * lido DIRETO (ADR 0007): esta função não assina nada, e quem decide quando chamá-la de novo é o
  * `setInterval` de `BattlePanel`.
  *
- * **Só o ANDAR do próprio personagem** (#527). Numa hunt privada não existe AOI (FUN-33) — o
- * hospedeiro manda TODOS os monstros vivos da instância pelo `session-state`/`creature-appear`,
- * dos três andares da Darashia Dragon Lair inclusive, porque o mundo espacial precisa deles para
- * desenhar o que se vê através de escada e vão (ADR 0034). A lista de batalha não é o mundo: no
- * Tibia a battle list só mostra quem está no MESMO andar (o monstro de outro andar não é um alvo
- * possível), e sem este filtro ela mostrava dragões de z11/z12 para quem estava em z10 — e o
- * bot conta "quantos ao alcance" (`countTargets`, `packages/sim/src/targeting.ts`) já filtrando
- * por andar havia tempo; só a APRESENTAÇÃO estava errada. `world.selfId` ausente (antes do
- * `session-state` chegar) não filtra nada — não há andar próprio para comparar ainda.
+ * **Só o ANDAR e o RETÂNGULO VISÍVEL do próprio personagem** (#527). Numa hunt privada não existe
+ * AOI (FUN-33) — o hospedeiro manda TODOS os monstros vivos da instância pelo `session-state`/
+ * `creature-appear`, dos três andares da Darashia Dragon Lair inclusive, porque o mundo espacial
+ * precisa deles para desenhar o que se vê através de escada e vão (ADR 0034). A lista de batalha
+ * não é o mundo: só mostra quem está no MESMO andar e dentro da tela.
  */
 export function battleRows(partyNames: ReadonlySet<string>): BattleRow[] {
-  const ownFloor = world.selfId === null ? undefined : world.creatures.get(world.selfId)?.position.z;
+  const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
   const rows: BattleRow[] = [];
   for (const creature of world.creatures.values()) {
     if (creature.id === world.selfId) continue;
     if (partyNames.has(creature.name)) continue;
-    if (ownFloor !== undefined && creature.position.z !== ownFloor) continue;
+    if (self !== undefined && !isCreatureOnScreen(creature, self.position, world.visibleWindow)) continue;
     const percent = creature.maxHealth <= 0 || creature.health <= 0
       ? 0
       : Math.max(0, Math.min(100, Math.round((creature.health / creature.maxHealth) * 100)));
