@@ -1,9 +1,12 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   buildContent, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
 import { wallSetOf } from './schemas.js';
+import { loadContent } from './load.js';
 
 const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
@@ -24,7 +27,7 @@ const baseline = {
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
   vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
 };
@@ -250,6 +253,41 @@ describe('progression baseline', () => {
     const content = buildContent(base());
     expect(content.progression.startingHealth).toBe(150);
     expect(content.progression.vocationLevel).toBe(8);
+  });
+});
+
+describe('regeneração em pulsos (#678)', () => {
+  const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
+
+  it('as 4 vocações e a base batem com o Canary `vocations.xml` (gain*ticks/gain*amount)', () => {
+    // Canary 47dfd51, `data/XML/vocations.xml`: None 12000/1 e 6000/2; Sorcerer e Druid 12000/1
+    // e 3000/2; Paladin 8000/1 e 4000/2; Knight 6000/1 e 6000/2. Pulso, não taxa.
+    const content = loadContent(DATA);
+    const pulse = (ht: number, ha: number, mt: number, ma: number) => ({
+      health: { ticksMs: ht, amount: ha }, mana: { ticksMs: mt, amount: ma },
+    });
+    expect(content.progression.regen).toEqual(pulse(12_000, 1, 6_000, 2));
+    expect(content.vocations.get('knight')?.regen).toEqual(pulse(6_000, 1, 6_000, 2));
+    expect(content.vocations.get('paladin')?.regen).toEqual(pulse(8_000, 1, 4_000, 2));
+    expect(content.vocations.get('sorcerer')?.regen).toEqual(pulse(12_000, 1, 3_000, 2));
+    expect(content.vocations.get('druid')?.regen).toEqual(pulse(12_000, 1, 3_000, 2));
+  });
+
+  it('recusa `ticksMs: 0` — um pulso que reagenda a si mesmo no mesmo instante, para sempre', () => {
+    const zero = { ...baseline, regen: { ...baseline.regen, mana: { ticksMs: 0, amount: 1 } } };
+    expect(() => buildContent(base({ progression: [zero] }))).toThrow(ContentError);
+    const knightZero = { ...knight, regen: { health: { ticksMs: 0, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } } };
+    expect(() => buildContent(base({ vocations: [knightZero] }))).toThrow(ContentError);
+  });
+
+  it('recusa a forma antiga em taxa (`healthPerSecond`)', () => {
+    const antiga = { ...baseline, regen: { healthPerSecond: 1, manaPerSecond: 1 } };
+    expect(() => buildContent(base({ progression: [antiga] }))).toThrow(ContentError);
+  });
+
+  it('aceita `amount: 0` — "não regenera"', () => {
+    const parado = { ...baseline, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } };
+    expect(buildContent(base({ progression: [parado] })).progression.regen.health.amount).toBe(0);
   });
 });
 

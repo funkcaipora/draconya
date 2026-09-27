@@ -18,8 +18,8 @@
     }
   ],
   "regen": {
-    "healthPerSecond": 0.16666666666666666,
-    "manaPerSecond": 0.3333333333333333
+    "health": { "ticksMs": 6000, "amount": 1 },
+    "mana": { "ticksMs": 6000, "amount": 2 }
   },
   "skillMultipliers": {
     "melee": 1.1,

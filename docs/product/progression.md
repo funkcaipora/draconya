@@ -76,9 +76,14 @@ comentário do arquivo), sem laço e sem função: um `UPDATE` só, por personag
 teste, um personagem level 9 na metade do level que continua level 9 na metade depois da
 migração, só que na curva nova.
 
-**Subir de level dá os pontos, não cura.** O máximo de HP e mana sobe, e o atual sobe junto na
-mesma quantidade. Curar no level up faria "subir de level" virar poção grátis, e um bot bem
-configurado morando na fronteira de um level nunca mais morreria.
+**Subir de level enche vida e mana (#678, ADR 0037).** É o Canary `Player::addExperience`:
+quando o level muda para cima, `health = healthMax; mana = manaMax`. Vários levels num abate
+curam uma vez, nos máximos finais. A **perda** de level na penalidade de morte não cura nada: só
+reduz os máximos (e o atual, se passar deles), como no Canary.
+
+Até #678 o level up só somava o delta dos máximos ("dá os pontos, não cura"), com o argumento de
+que o bot morando na fronteira de um level nunca morreria. Era uma divergência do Tibia sem ADR,
+contra o ADR 0037 — e esse bot na fronteira é o Tibia.
 
 **O level up é autoritativo sobre os stats.** Ele recalcula `maxHealth` e `maxMana` pela tabela,
 o que significa que qualquer valor inventado na criação do personagem some no primeiro level up.
@@ -177,8 +182,8 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Curva de XP | a cúbica do Tibia, `(L³ − 6L² + 17L − 12) / 6 × 100` (#521, ADR 0037 — ver seção acima) | `packages/content/data/progression/baseline.json`, `xp: { kind: 'tibia' }` |
 | Bônus de XP de level baixo | `[ABERTO]` — forma decidida (ADR 0043, emenda 2026-09-25): multiplicador decrescente `levelBonusPercent` (Huntera: L1 +200 %, L2 +199 %, L3 +197 %, L7 +192 %), não o `lowLevelBonusExp = 50` aditivo fixo do TFS/Canary; curva exata ajustada a esses quatro pontos, provisória; bloqueava M32-02/#563 | caminho previsto: `packages/content/data/progression/baseline.json` |
 | Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
-| Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary: `gainhpticks` 12000, `gainmanaticks` 6000 — #521, ADR 0037; substitui o 1/1 provisório) | `packages/content/data/progression/baseline.json`, `regen` |
-| Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | 0,1667/0,3333 · 0,125/0,5 · 0,0833/0,6667 · 0,0833/0,6667 HP/mana por segundo (`gainhpticks`/`gainmanaticks` de cada vocação no Canary, #521, ADR 0037) | `packages/content/data/vocations/*.json`, `regen` |
+| Regeneração de vida/mana — sem vocação (levels 1–7) | pulsos: 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary: `gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — #521, ADR 0037; em pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen.health` / `regen.mana` (`ticksMs`, `amount`) |
+| Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | vida/mana, `amount` a cada `ticksMs`: Knight 1/6 000 e 2/6 000 · Paladin 1/8 000 e 2/4 000 · Sorcerer e Druid 1/12 000 e 2/3 000 (o `vocations.xml` do Canary, #521, #678) | `packages/content/data/vocations/*.json`, `regen` |
 | Multiplicador de skill/ML por vocação — Knight | melee 1,1 / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
 | Multiplicador de skill/ML por vocação — Paladin | melee 1,2 / distância 1,1 / escudo 1,1 / magia 1,4 | `packages/content/data/vocations/paladin.json`, `skillMultipliers` |
 | Multiplicador de skill/ML por vocação — Sorcerer | melee 2,0 / distância 2,0 / escudo 1,5 / magia 1,1 | `packages/content/data/vocations/sorcerer.json`, `skillMultipliers` |

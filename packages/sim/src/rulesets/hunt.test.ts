@@ -90,7 +90,7 @@ const progression = {
   id: 'baseline', startingHealth: 500_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   startingSpeed: 300, speedPerLevel: 0,
-  regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
   deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
   skillMultipliers: {},
@@ -578,10 +578,10 @@ describe('regeneração (FUN-36)', () => {
 
     run(session, 30_000, 100);
 
-    // 1 HP/s no conteúdo de teste: trinta segundos são trinta pontos, mais um do primeiro
-    // tick — os cooldowns começam PRONTOS (FUN-25), a mesma regra que faz o personagem dar o
-    // primeiro passo da rota sem esperar meio segundo parado.
-    expect(hero.health).toBe(131);
+    // 1 ponto a cada 1 000 ms no conteúdo de teste: trinta segundos são trinta pulsos. O
+    // primeiro vence em `ticksMs` depois da entrada, não nela (#678): o contador do Canary
+    // começa em 0, e entrar na hunt não é poção — até #678 eram 31, com um pulso imediato.
+    expect(hero.health).toBe(130);
   });
 
   it('rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
@@ -598,7 +598,7 @@ describe('regeneração (FUN-36)', () => {
     expect(at(20)).toBe(at(10));
   });
 
-  it('o Life Ring quadruplica a regeneração passiva (224 HP em 30s em vez de 131)', () => {
+  it('o Life Ring quadruplica a regeneração passiva (220 HP em 30s em vez de 130)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({
       loaded: semSpawn, health: 100,
@@ -610,9 +610,9 @@ describe('regeneração (FUN-36)', () => {
 
     run(session, 30_000, 100);
 
-    // Bônus de +300% (SV-16): 1 ponto vira 4 a cada vencimento. Em 30 segundos são
-    // 31 vencimentos × 4 = 124 pontos somados aos 100 iniciais.
-    expect(hero.health).toBe(224);
+    // Bônus de +300% (SV-16) sobre o PULSO (#678): 1 ponto vira 4 a cada vencimento. Em 30
+    // segundos são 30 vencimentos × 4 = 120 pontos somados aos 100 iniciais.
+    expect(hero.health).toBe(220);
   });
 
   it('o Life Ring rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
@@ -654,19 +654,92 @@ describe('regeneração (FUN-36)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({ loaded: semSpawn, health: 100, staminaMs: 0 });
     run(session, 30_000, 100);
-    expect(hero.health).toBe(131);
+    expect(hero.health).toBe(130);
   });
 
-  it('taxa zero não regenera, e não trava o laço de recuperação', () => {
-    // Taxa zero não é intervalo infinito: é "não regenera". Sem a saída explícita, o
-    // intervalo viraria `Infinity` e o catch-up rodaria até o teto a cada tick.
+  it('`amount` zero não regenera, e não agenda evento nenhum', () => {
+    // `amount: 0` é "não regenera" (#678): nenhum pulso entra na fila, em vez de um evento
+    // periódico que vence para não fazer nada a hunt inteira.
     const parado = content({
       routes: [{ ...route, spawnPoints: [] }],
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     });
     const { session, hero } = start({ loaded: parado, health: 100 });
+    // `cancelEvent` devolve quantos havia na fila: zero é "nenhum pulso agendado".
+    expect(session.cancelEvent('health-regen', hero.id)).toBe(0);
+    expect(session.cancelEvent('mana-regen', hero.id)).toBe(0);
     run(session, 30_000, 100);
     expect(hero.health).toBe(100);
+  });
+
+  // Os números do Knight no Canary `vocations.xml` (#678): `gainhpticks=6000 gainhpamount=1`,
+  // `gainmanaticks=6000 gainmanaamount=2`. A mesma média da taxa antiga (1/6 e 1/3 por segundo),
+  // mas em PULSOS: até #678 a mana entrava 1 ponto a cada 3 s, e não 2 a cada 6 s.
+  const knightRegen = {
+    id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+    regen: { health: { ticksMs: 6000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+  };
+  const withKnightRegen = content({
+    routes: [{ ...route, spawnPoints: [] }], vocations: [knightRegen],
+  });
+  const lifeRing: InventoryState = {
+    backpack: [],
+    equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+  };
+  /** Um Knight parado, com vida E mana longe do máximo, entrando na hunt no instante 0. */
+  const knightIn = (inventory?: InventoryState): Started => {
+    const session = createHuntSession({
+      id: 'session-1', content: withKnightRegen, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const hero = character({ health: 100, ...(inventory === undefined ? {} : { inventory }) });
+    // Antes do `enter`: é na entrada que a vocação escolhe o ritmo dos pulsos.
+    hero.vocationId = 'knight';
+    hero.maxMana = 1_000;
+    hero.mana = 0;
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('Knight regenera em pulsos: +1 vida e +2 mana a cada 6 s, o primeiro só aos 6 000 ms', () => {
+    const { session, hero } = knightIn();
+    session.advanceBy(5_999);
+    expect(hero.health).toBe(100);
+    expect(hero.mana).toBe(0);
+    session.advanceBy(1);
+    expect(hero.health).toBe(101);
+    expect(hero.mana).toBe(2);
+    // Mutação que mata: mana de 1 ponto a cada 3 s — aos 9 s seria 3, e não 2.
+    session.advanceBy(3_000);
+    expect(hero.mana).toBe(2);
+  });
+
+  it('Knight parado 60 s: +10 vida (10 pulsos × 1) e +20 mana (10 pulsos × 2)', () => {
+    const { session, hero } = knightIn();
+    run(session, 60_000, 100);
+    expect(hero.health).toBe(110);
+    expect(hero.mana).toBe(20);
+  });
+
+  it('Knight com Life Ring: o anel multiplica o PULSO — +4 vida e +8 mana a cada 6 s', () => {
+    const { session, hero } = knightIn(lifeRing);
+    session.advanceBy(6_000);
+    expect(hero.health).toBe(104);
+    expect(hero.mana).toBe(8);
+    run(session, 54_000, 100);
+    expect(hero.health).toBe(140);
+    expect(hero.mana).toBe(80);
+  });
+
+  it('Knight, com e sem Life Ring, rende exatamente o mesmo a 1 Hz e a 10 Hz', () => {
+    const at = (hz: number, inventory?: InventoryState): readonly [number, number] => {
+      const { session, hero } = knightIn(inventory);
+      run(session, 600_000, 1000 / hz);
+      return [hero.health, hero.mana];
+    };
+    expect(at(1)).toEqual(at(10));
+    expect(at(1, lifeRing)).toEqual(at(10, lifeRing));
+    expect(at(10)).toEqual([200, 200]);
   });
 });
 
@@ -1038,9 +1111,15 @@ describe('taxa de avanço', () => {
     // eventos que VENCEM, e é mais barato que o laço que ele substituiu.
     //
     // Sem regeneração NESTE cenário, e é decisão: a comparação é sobre granularidade, e um
-    // personagem que se cura enquanto apanha mede as duas coisas somadas.
+    // personagem que se cura enquanto apanha mede as duas coisas somadas. Pelo mesmo motivo,
+    // sem level up: desde #678 subir de level ENCHE a vida, e um level no último abate zeraria
+    // o dano medido — daí a curva de XP que não fecha nenhum level em dez minutos.
     const semRegen = content({
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{
+        ...progression,
+        regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+        xp: { kind: 'power', base: 1_000_000, exponent: 2 },
+      }],
     });
     const dano = (hz: number): number => {
       const { hero } = tenMinutesAt(hz, 'cautious', semRegen);
@@ -1611,7 +1690,7 @@ describe('cura em área — Mass Healing (#475, RF-05)', () => {
   it('cura o conjurador e os aliados no 3x3, e NÃO quem está fora da área', () => {
     const loaded = buildContent(raw({
       progression: [{
-        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+        ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
       }],
       routes: [{ ...route, spawnPoints: [] }],
       spells: [...spells, massHealing],
@@ -1742,7 +1821,7 @@ const withSpells = (
   // da regeneração é o bloco dela, onde ela é o assunto.
   const loaded = buildContent(raw({
     progression: [{
-      ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
     ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
@@ -2122,7 +2201,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     // Mutação que mata: `amount: result.damage` no golpe do monstro em `#onMonsterAction` —
     // o número passa a 10, maior que a vida que o herói tinha.
     const semRegen = content({
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     });
     const { session, hero } = start({ loaded: semRegen, difficulty: 'bold', health: 3 });
     run(session, 20_000, 100);
@@ -2152,7 +2231,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     // do herói volta a ser a do golpe do rato, com o máximo do level 1 (ou nenhuma).
     const umLevelPorRato = content({
       monsters: [{ ...rat, experience: 20 }],
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     });
     const { session, hero } = start({ loaded: umLevelPorRato, inventory: comEspada });
     run(session, 15_000, 100);
@@ -2312,18 +2391,19 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     // produzir um evento por segundo para dizer isso.
     //
     // Mutação que mata: chamar `#emitHealed` na regeneração — aparece um `creature-healed`.
-    // Emitir a barra sem o `> 0` mata pela segunda metade: de vida cheia, quatro eventos.
+    // Emitir a barra sem o `> 0` mata pela segunda metade: de vida cheia, três eventos.
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const { session, hero } = start({ loaded: semSpawn, health: 100 });
     run(session, 3_000, 100);
     const events = session.drainEvents();
 
-    // 1 HP/s: vence em 0, 1 000, 2 000 e 3 000 — quatro barras, a última com a vida final.
+    // 1 ponto a cada 1 000 ms: vence em 1 000, 2 000 e 3 000 — o primeiro pulso só depois de
+    // `ticksMs` (#678) —, três barras, a última com a vida final.
     const barras = ofKind(events, 'creature-health-changed');
-    expect(barras).toHaveLength(4);
+    expect(barras).toHaveLength(3);
     expect(barras.every((b) => b.creatureId === 'hero')).toBe(true);
     expect(barras.at(-1)?.health).toBe(hero.health);
-    expect(hero.health).toBe(104);
+    expect(hero.health).toBe(103);
     expect(ofKind(events, 'creature-healed')).toHaveLength(0);
     expect(ofKind(events, 'creature-hit')).toHaveLength(0);
 
@@ -2626,7 +2706,7 @@ const withExit = (
 ) => {
   const loaded = buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...(over.exitDelayMs !== undefined ? { hunts: [{ ...hunt, exitDelayMs: over.exitDelayMs }] } : {}),
   }));
   const session = createHuntSession({
@@ -3016,7 +3096,7 @@ describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
     const loaded = buildContent(raw({
       progression: [{
         ...progression, startingHealth: 1_000, startingMana: 200,
-        regen: { healthPerSecond: 0, manaPerSecond: 0 },
+        regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
       }],
     }));
     const session = createHuntSession({
@@ -3124,7 +3204,7 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
     const loaded = buildContent(raw({
       routes: [{ ...route, spawnPoints: [] }],
       progression: [{
-        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+        ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
       }],
     }));
     const session = createHuntSession({
@@ -3480,7 +3560,7 @@ describe('defesa, escudo e prática de shielding (CMB-04)', () => {
     // Piso zero e defesa acima do ataque do rato: ele não tira vida, e a skill sobe do mesmo
     // jeito — a prática é do evento elegível, não do dano aplicado. Regeneração desligada e
     // dificuldade `cautious` para a vida não subir sozinha e não haver level up.
-    const semRegen = { ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } };
+    const semRegen = { ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } };
     const { session, hero } = start({
       loaded: defenseContent({
         progression: [semRegen],
@@ -4464,7 +4544,7 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
   const anelProgression = {
     ...progression, startingHealth: 1_000, startingMana: 200, startingCapacity: 1_000,
     healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
-    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+    regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   } as Progression;
 
   const anelContent = (): Content => buildContent(raw({
@@ -4673,7 +4753,7 @@ describe('Energy Ring no combate (SV-16, #352)', () => {
     ...progression,
     startingHealth: 100, startingMana: 200, startingCapacity: 1_000,
     healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
-    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+    regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   } as Progression;
 
   const ringCombatContent = (): Content => buildContent(raw({
@@ -4809,8 +4889,8 @@ describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
     expect(first.targets.length).toBeGreaterThan(0);
     // Sem monstro nos tiles a onda NÃO sai: cada lançamento tem pelo menos um alvo.
     expect(casts.every((c) => c.kind === 'spell-cast' && c.targets.length > 0)).toBe(true);
-    // (A mana não é conferida em absoluto: subir de level devolve mana — `retarget`.)
-    expect(hero.mana).toBeLessThan(200);
+    // (A mana não é conferida: subir de level ENCHE a mana desde #678 — `grantXp` —, e o
+    // abate da onda sobe de level. Os lançamentos acima já provam que ela saiu.)
     expect(session.aggregates.kills).toBeGreaterThan(0);
   });
 
@@ -5117,7 +5197,7 @@ describe('follow de membro (§D10, #398)', () => {
   // cancelado da fila (`stand`) — quem o seguidor persegue é um membro que não anda.
   const followContent = (over: Partial<RawContent> = {}): Content => buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
 
@@ -5735,7 +5815,7 @@ const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword, cheese],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
   const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
@@ -6218,7 +6298,7 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
   const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
@@ -6347,7 +6427,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
   };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     ...over,
   }));
   const member = (
@@ -6453,7 +6533,7 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     const tank = { ...rat, health: 1_000_000, attack: 0, experience: 0, loot: { gold: { chance: 0, min: 1, max: 1 }, items: [] } };
     const ammoContent = buildContent(raw({
       monsters: [tank], items: [...items, bow], ammunition: arrows,
-      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     }));
     const armed: InventoryState = { backpack: [], equipped: { hand: { instanceId: 'i-bow', itemId: 'bow', quantity: 1 } } };
     const shooter = member('u', { gold: 1_000, inventory: armed, ammo: { arrow: 'sniper-arrow' } });
@@ -8649,7 +8729,7 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     const snapshot = session.snapshot();
     const loaded = buildContent(raw({
       spells: [poison], combat: [pacifist],
-      progression: [{ ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+      progression: [{ ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
     }));
     const resumed = Session.fromSnapshot(
       snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('spell-session'),
@@ -9011,7 +9091,7 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
   const loaded = (over: Partial<RawContent> = {}): Content => content({
     spells: [...spells, friendHeal],
     progression: [{
-      ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      ...progression, startingMana: 200, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
     routes: [{ ...route, spawnPoints: [] }],
     ...over,
@@ -9229,7 +9309,7 @@ describe('encerrar a hunt para todos exige o sim de todos (#432, ADR 0032 d.14)'
   // meio da janela de 60 s — o que encerraria a sessão por morte e não pela votação.
   const quiet = content({
     routes: [{ ...route, spawnPoints: [] }],
-    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    progression: [{ ...progression, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } }],
   });
   const member = (id: string) => {
     const stats = statsForLevel(1, null, progression as Progression);

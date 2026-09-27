@@ -47,8 +47,8 @@
     "levelFloor": 8
   },
   "regen": {
-    "healthPerSecond": 0.08333333333333333,
-    "manaPerSecond": 0.3333333333333333
+    "health": { "ticksMs": 12000, "amount": 1 },
+    "mana": { "ticksMs": 6000, "amount": 2 }
   },
   "skillMultipliers": {
     "melee": 2.0,

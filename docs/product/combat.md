@@ -303,7 +303,8 @@ O terceiro não ganhou mecanismo próprio, e isso foi uma correção: uma taxa d
 **é** uma ação periódica de `1000 / r` milissegundos. O caminho que parecia natural — somar
 `r × dtMs / 1000` num acumulador fracionário — é pior: somar `0,1` dez vezes em ponto flutuante
 dá `0,9999…`, e some uma unidade a cada dez. Numa hunt de oito horas isso é regeneração faltando
-sem nada explicando. Em milissegundos a conta é exata.
+sem nada explicando. Em milissegundos a conta é exata. (A regeneração nem chega a ser taxa desde
+#678: o conteúdo guarda o pulso do Canary, `amount` a cada `ticksMs` — ver adiante.)
 
 ## Regeneração
 
@@ -314,13 +315,23 @@ personagem continua podendo morrer, não que ele passa a morrer mais rápido.
 Morto não regenera — sem essa linha, quem caiu voltaria sozinho na hunt em que morreu, e a morte
 deixaria de encerrar coisa nenhuma.
 
-**A taxa é do Tibia, e é por VOCAÇÃO (#521, ADR 0037).** Antes da #521 era 1 HP/s e 1 mana/s
-para todo mundo, provisório; agora é `gainhpticks`/`gainmanaticks` do Canary `vocations.xml`
-por vocação (Knight regenera vida mais rápido que Mago, Mago regenera mana mais rápido que
-Knight), e quem ainda não escolheu vocação (levels 1–7) usa a taxa da vocação `None` — cerca de
-12× mais lenta em vida que o 1 HP/s de antes. É o balanceamento que as poções (e a cura
-automática do bot) vão reequilibrar — no Tibia real, sustentar uma hunt sem poção não é a
-expectativa.
+**O ritmo é do Tibia, e é por VOCAÇÃO (#521, ADR 0037).** Antes da #521 era 1 HP/s e 1 mana/s
+para todo mundo, provisório; agora é `gainhpticks`/`gainhpamount` e `gainmanaticks`/
+`gainmanaamount` do Canary `vocations.xml` por vocação (Knight regenera vida mais rápido que
+Mago, Mago regenera mana mais rápido que Knight), e quem ainda não escolheu vocação (levels 1–7)
+usa a vocação `None` — cerca de 12× mais lenta em vida que o 1 HP/s de antes. É o balanceamento
+que as poções (e a cura automática do bot) vão reequilibrar — no Tibia real, sustentar uma hunt
+sem poção não é a expectativa.
+
+**Em PULSOS, não em taxa (#678).** O conteúdo guarda `amount` a cada `ticksMs`, como o Canary
+(`ConditionRegeneration` soma o intervalo num contador e, ao passar de `ticks`, aplica o
+`amount` de uma vez). Cada pulso é um evento da fila (`health-regen`/`mana-regen`) que vence no
+instante exato: Knight ganha 1 de vida e 2 de mana a cada 6 s — até #678 eram 1 ponto a cada
+`1000 / taxa` ms (a mana do Knight, 1 a cada 3 s): mesma média, outro ritmo, e divisão em ponto
+flutuante. O primeiro pulso vence `ticksMs` DEPOIS da entrada na hunt (o contador do Canary
+começa em 0; entrar na hunt não é poção), e `amount: 0` não agenda evento nenhum. Um pulso com
+o recurso cheio se perde, e o próximo segue agendado. O `catalogue.progression.regen` do
+protocolo continua em pontos por segundo, derivado no `server` (`amount × 1000 / ticksMs`).
 
 ## Regras
 
@@ -345,7 +356,7 @@ expectativa.
 | Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
 | Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `drown`, `lifedrain`, `manadrain`, `arcane`) | 0 `[ABERTO — valor provisório: 0]`; inerte sob `combat-v3` (ver "combat.armorEffectiveness fica INERTE" acima) | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
 | Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
-| Regeneração de vida/mana — sem vocação (levels 1–7) | 0,0833 HP/s / 0,3333 mana/s (a vocação `None` do Canary, #521, ADR 0037) | `packages/content/data/progression/baseline.json`, `regen` |
+| Regeneração de vida/mana — sem vocação (levels 1–7) | 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary, #521, ADR 0037; pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen` |
 | Regeneração de vida/mana — por vocação (Knight/Paladin/Sorcerer/Druid) | ver `docs/product/progression.md` §Parâmetros | `packages/content/data/vocations/*.json`, `regen` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
 | Chance de bloqueio (`blockChance`) | 0,6 `[ABERTO — valor provisório: 0,6]` | `packages/content/data/combat/baseline.json`, `defense.blockChance` |
