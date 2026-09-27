@@ -264,6 +264,9 @@ export function characterFromTicket(
         ? {} : { supplyStock: initialCharacter.supplyStock }),
       ...(initialCharacter.ammunitionStock === undefined
         ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
+      // Comida ativa (#726, ADR 0049 decisão 5): ausente, a sessão parte sem — ninguém comeu
+      // ainda, o de sempre.
+      ...(initialCharacter.fedMs === undefined ? {} : { fedMs: initialCharacter.fedMs }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)

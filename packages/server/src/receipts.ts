@@ -83,6 +83,13 @@ export interface SessionReceipt {
    */
   readonly ammunitionStock?: Readonly<Record<string, number>>;
   /**
+   * Comida ativa no fim da sessão (#726, ADR 0049 decisão 5): `fedMs` restante, em
+   * milissegundos. Valor ABSOLUTO, sem guarda de instante — ao contrário da stamina, não
+   * recupera fora de hunt (a Cidade não anda), então não há "de agora" a calcular na leitura:
+   * o número que a sessão tinha ao encerrar é o número que vale até a próxima.
+   */
+  readonly fedMs?: number;
+  /**
    * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
    * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
    * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
@@ -325,6 +332,8 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['ammunitionStock'] === 'object' && value['ammunitionStock'] !== null
       ? { ammunitionStock: value['ammunitionStock'] as Record<string, number> }
       : {}),
+    // Comida ativa (#726): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['fedMs'] === 'number' ? { fedMs: value['fedMs'] } : {}),
     // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }

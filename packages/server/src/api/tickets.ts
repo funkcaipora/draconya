@@ -207,6 +207,9 @@ export function initialCharacterOf(
     // sempre começaria com estoque zero, mesmo com drop de ontem esperando na linha.
     ...(isStockMap(character.supplyStock) ? { supplyStock: character.supplyStock } : {}),
     ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
+    // Comida ativa (#726, ADR 0049 decisão 5): sem isto, quem comeu antes de deslogar voltaria
+    // em jejum na hunt seguinte.
+    fedMs: character.fedMs,
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,

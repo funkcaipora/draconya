@@ -1113,6 +1113,8 @@ describe('o inventário (FUN-90)', () => {
     // para a tela achar a definição.
     equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },
     capacity: { used: 130, total: 400 },
+    supplies: [],
+    ammunition: [],
     ...over,
   } as S2CMessage);
 

@@ -254,6 +254,7 @@ Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspond
 | Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | pulsos: 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary: `gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — #521, ADR 0037; em pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen.health` / `regen.mana` (`ticksMs`, `amount`) |
 | Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | vida/mana, `amount` a cada `ticksMs`: Knight 1/6 000 e 2/6 000 · Paladin 1/8 000 e 2/4 000 · Sorcerer e Druid 1/12 000 e 2/3 000 (o `vocations.xml` do Canary, #521, #678) | `packages/content/data/vocations/*.json`, `regen` |
+| Regeneração exige comida? | `false` (o Huntera — ADR 0043 emenda de 2026-09-25: regenera sempre em hunt, sem comida) | `packages/content/data/progression/baseline.json`, `regeneration.requiresFood` |
 | Multiplicador de skill/ML por vocação — Knight | melee 1,1 / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
 | Multiplicador de skill/ML por vocação — Paladin | melee 1,2 / distância 1,1 / escudo 1,1 / magia 1,4 | `packages/content/data/vocations/paladin.json`, `skillMultipliers` |
 | Multiplicador de skill/ML por vocação — Sorcerer | melee 2,0 / distância 2,0 / escudo 1,5 / magia 1,1 | `packages/content/data/vocations/sorcerer.json`, `skillMultipliers` |
@@ -302,6 +303,13 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
   multiplicador `levelBonusPercent`, decrescente por level, medido em quatro pontos no Huntera
   (L1 +200 %, L2 +199 %, L3 +197 %, L7 +192 %) — ver a linha na tabela de parâmetros acima e a
   emenda do ADR 0043. A fórmula exata da curva e o level em que ela zera continuam `[ABERTO]`.
+- **Regeneração só com comida (#726, ADR 0049 decisão 5):** a emenda do ADR 0043 de
+  2026-09-25 tinha REVERTIDO a regeneração por comida (o Huntera regenera sempre em hunt, sem
+  condição de comida observada). O ADR 0049 reabre essa porta como FLAG de conteúdo
+  (`progression.regeneration.requiresFood`, default `false` — o Huntera continua valendo) em
+  vez de decisão de arquitetura: o dono pode ligar a regra do Tibia (regenerar só com
+  `fedMs > 0`, dado por comida) editando conteúdo, sem deploy de lógica nova. `fedMs` é rastreado
+  desde já (comer sempre soma o contador), mesmo com a flag desligada.
 
 ## Decidido na implementação: a vocação não é retroativa
 

@@ -122,6 +122,8 @@ export async function settleSnapshotAsReceipt(
     // só cobre snapshot anterior à correção, sem a chave gravada.
     ...(owner === undefined ? {} : { supplyStock: owner.supplyStock ?? {} }),
     ...(owner === undefined ? {} : { ammunitionStock: owner.ammunitionStock ?? {} }),
+    // Comida ativa (#726, ADR 0049 decisão 5), pela mesma regra do estoque acima.
+    ...(owner === undefined ? {} : { fedMs: owner.fedMs ?? 0 }),
     // Vocação e o que a sessão criou (#154): sem isto, um item equipado numa sessão liquidada
     // por fora se perdia, e a arma de vocação com ele.
     ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),

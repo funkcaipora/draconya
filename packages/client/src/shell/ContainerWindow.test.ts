@@ -27,6 +27,8 @@ const inventory = (over: Partial<Inventory> = {}): Inventory => ({
   satchel: Array<null>(10).fill(null),
   equipped: { back: { instanceId: 'b1', itemId: 'backpack', quantity: 1 } },
   capacity: { used: 10, total: 400 },
+  supplies: [],
+  ammunition: [],
   ...over,
 });
 

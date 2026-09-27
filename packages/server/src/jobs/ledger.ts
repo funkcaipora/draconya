@@ -221,6 +221,10 @@ async function applyProgression(
   const ammunitionStock = receipt.ammunitionStock === undefined
     ? {} : { ammunitionStock: receipt.ammunitionStock };
 
+  // Comida ativa (#726, ADR 0049 decisão 5): ABSOLUTA e última-escrita-vence, como o estoque
+  // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
+  const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -273,6 +277,7 @@ async function applyProgression(
       ...ammo,
       ...supplyStock,
       ...ammunitionStock,
+      ...fedMs,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

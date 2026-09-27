@@ -113,6 +113,7 @@ import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
+import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS, MAX_BLESSINGS } from '../food.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -194,6 +195,23 @@ const END_VOTE_EXPIRE = 'end-vote-expire';
 const END_VOTE_SUBJECT = 'end-vote';
 /** A janela de aprovação, em tempo LÓGICO (ADR 0032 d.14). Conteúdo pode mudar sem ADR. */
 export const END_VOTE_WINDOW_MS = 60_000;
+
+/**
+ * O disparo manual ACEITO mas ADIADO pela exaustão de ação compartilhada (#726, ADR 0049
+ * decisão 6): agenda no vencimento do livro `exhaust:action`, e um segundo disparo antes disso
+ * SUBSTITUI o primeiro — `character.pendingManualAction` guarda qual, e o subject é o
+ * `characterId` (nunca dois pendentes do mesmo personagem ao mesmo tempo).
+ */
+const PENDING_MANUAL_ACTION = 'pending-manual-action';
+
+/**
+ * A exaustão de ação de um item da mochila/carga/comida que não declara `actionExhaustMs`
+ * próprio (comida, carga de bênção — só o SUPPLY do catálogo declara o campo, #690): o
+ * `timeBetweenExActions` do Canary/TFS (`configmanager.cpp`, default 1000 — distinto do
+ * `timeBetweenActions` de 200 usado por passo/ataque comuns). `use-item`/`use-item-on` são as
+ * "Ex actions" do Tibia (`playerUseItemEx`), e são elas que essa constante regula.
+ */
+const MANUAL_ITEM_EXHAUST_MS = 1_000;
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -289,6 +307,32 @@ export type UseSlotTarget =
   | { readonly kind: 'invalid' };
 
 /**
+ * A referência a UM item/suprimento de um `use-item`/`use-item-on` (#726, ADR 0049 decisão 3):
+ * `instanceId` é uma unidade concreta na mochila/bolsa; `supplyId` é uma unidade do ESTOQUE
+ * abstrato (poção, runa, munição — ADR 0026 d.8/ADR 0044), sem instância própria — o MESMO
+ * caminho de `useSlot`/`#useSupply`, só que sem passar pela barra. Discriminada por qual CHAVE
+ * está presente — a mesma forma do `ref` do protocolo (`itemRefSchema`) e de
+ * `CharacterState.pendingManualAction.ref` — para viajar sem tradução entre os três.
+ */
+export type ItemRef =
+  | { readonly instanceId: string }
+  | { readonly supplyId: string };
+
+/**
+ * Por que `use-item`/`use-item-on` não aconteceu (#726, ADR 0049 decisão 3/7): as mesmas do
+ * slot, mais as três que só um item da mochila/estoque pode devolver — `not-carried` (a
+ * instância não está com o personagem), `not-usable` (o item existe, mas não tem `effect`
+ * executável hoje — ferramenta, ADR 0050, ainda não implementada) e `you-are-full` (comida no
+ * teto de `fedMs`, "You are full").
+ */
+export type UseItemRefusal = SlotRefusal | 'not-carried' | 'not-usable' | 'you-are-full';
+
+/** O resultado de `use-item`/`use-item-on`: sucesso — inclusive ACEITO e ADIADO (decisão 6) — ou recusa tipada. */
+export type UseItemOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: UseItemRefusal; readonly retryInMs: number };
+
+/**
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
  * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
  *
@@ -346,6 +390,11 @@ function refusalOf(result: CastRefused): SlotRefusal {
 
 /** A recusa do manual, montada num lugar só. */
 function refuse(reason: SlotRefusal, retryInMs: number): SlotOutcome {
+  return { ok: false, reason, retryInMs };
+}
+
+/** A recusa de `use-item`/`use-item-on` (#726), pelo mesmo molde de `refuse`. */
+function refuseItem(reason: UseItemRefusal, retryInMs: number): UseItemOutcome {
   return { ok: false, reason, retryInMs };
 }
 
@@ -1501,6 +1550,178 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * Usa um item da mochila/bolsa OU uma unidade do estoque de suprimento — comida, carga de
+   * bênção, poção ou runa (#726, ADR 0049 decisão 3). SEM passar pela barra: qualquer
+   * suprimento em estoque é usável direto, e o `target` (opcional aqui) é a mesma mira do
+   * `use-slot` — vale para runa/poção de dano ou cura miráveis; item sem alvo mirável a ignora.
+   *
+   * Exaustão compartilhada (#690, ADR 0049 decisão 6): cooldown de GRUPO continua recusa
+   * IMEDIATA, como sempre; só a exaustão de AÇÃO (`exhaust:action`) é ADIADA — `pendingManualAction`
+   * agenda o reenvio para o vencimento do livro, e o jogador recebe `ok: true` na hora (a
+   * aceitação, não a execução).
+   */
+  useItem(
+    session: Session, characterId: string, ref: ItemRef, seq: number, target?: UseSlotTarget,
+  ): UseItemOutcome {
+    return this.#useItemLike(session, characterId, 'item', ref, seq, target);
+  }
+
+  /**
+   * Usa um item/suprimento COM alvo (#726, ADR 0049 decisão 3) — a diferença entre "usar" e
+   * "usar com…" do menu de contexto da mochila. Mesma resolução de `useItem`, com `target`
+   * OBRIGATÓRIO em vez de opcional.
+   */
+  useItemOn(
+    session: Session, characterId: string, ref: ItemRef, seq: number, target: UseSlotTarget,
+  ): UseItemOutcome {
+    return this.#useItemLike(session, characterId, 'item-on', ref, seq, target);
+  }
+
+  #useItemLike(
+    session: Session, characterId: string, kind: 'item' | 'item-on', ref: ItemRef, seq: number,
+    target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const character = findById(session.participants, characterId);
+    if (character === null || !character.alive) return refuseItem('not-carried', 0);
+
+    // A exaustão de ação (#690/ADR 0049 d.6): cooldown de GRUPO/individual continua recusa
+    // imediata (não muda com esta issue); só `exhaust:action` sozinha é ADIADA.
+    const groupWait = this.#groupOrIndividualWaitOf(character, ref, session.nowMs);
+    if (groupWait !== null && groupWait.ms > 0) return refuse(groupWait.reason, groupWait.ms);
+
+    const actionExhaustWait = character.cooldowns.remainingMs(actionExhaustKey(), session.nowMs);
+    if (actionExhaustWait > 0) {
+      // Substitui qualquer pendência anterior — "um segundo disparo antes do vencimento
+      // substitui o primeiro" (decisão 6, o `setNextActionTask` do Canary).
+      session.cancelEvent(PENDING_MANUAL_ACTION, characterId);
+      character.pendingManualAction = { kind, ref, seq, ...(target === undefined ? {} : { target }) };
+      session.scheduleIn(PENDING_MANUAL_ACTION, actionExhaustWait, {
+        priority: EventPriority.Housekeeping, subject: characterId,
+      });
+      return { ok: true };
+    }
+
+    return this.#performItemUse(session, character, ref, target);
+  }
+
+  /**
+   * O vencimento de um `use-item`/`use-item-on` adiado (#726, ADR 0049 decisão 6). Se ninguém o
+   * substituiu no meio do caminho (`pendingManualAction` ainda é ESTE), executa de verdade —
+   * SEM adiar de novo, mesmo que algo tenha reiniciado a exaustão nesse meio-tempo (o Canary
+   * também só tenta uma vez o `nextActionTask`). Falha aqui SÓ ENTÃO vira `use-result`: o
+   * sucesso não precisa de segunda mensagem (decisão 7), e quem pediu já foi avisado com
+   * `ok: true` no ato do clique.
+   */
+  #onPendingManualAction(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    const pending = character?.pendingManualAction;
+    if (character === null || pending === undefined || pending === null) return;
+    character.pendingManualAction = null;
+    const ref: ItemRef = pending.ref;
+    const target: UseSlotTarget | undefined = pending.target;
+    const outcome = this.#performItemUse(session, character, ref, target);
+    if (!outcome.ok) {
+      session.emit({
+        kind: 'manual-action-result', characterId, seq: pending.seq, ok: false, reason: outcome.reason,
+      });
+    }
+  }
+
+  /**
+   * A exaustão de GRUPO/individual de um `ItemRef` (#726) — a parte que continua RECUSA
+   * IMEDIATA da decisão 6. `null`: a referência não resolve para um supply conhecido (o host já
+   * vai recusar `not-carried`/`not-in-catalog` mais adiante) ou é uma instância (comida/bênção
+   * não têm livro de grupo — só `exhaust:action`, comum a todos, se aplica a elas).
+   */
+  #groupOrIndividualWaitOf(
+    character: CharacterRuntime, ref: ItemRef, nowMs: number,
+  ): { readonly ms: number; readonly reason: SlotRefusal } | null {
+    if (!('supplyId' in ref)) return null;
+    const supply = this.#options.supplies.get(ref.supplyId);
+    if (supply === undefined) return null;
+    const groupWait = character.cooldowns.remainingMs(groupCooldownKey(supply.group), nowMs);
+    if (groupWait > 0) return { ms: groupWait, reason: 'group-cooldown' };
+    const individualWait = character.cooldowns.remainingMs(supplyCooldownKey(supply.id), nowMs);
+    if (individualWait > 0) return { ms: individualWait, reason: 'on-cooldown' };
+    return null;
+  }
+
+  /**
+   * A execução DE VERDADE de `use-item`/`use-item-on`, sem checar exaustão (o chamador já
+   * checou, ou é o vencimento do adiamento). Resolve `ref` pelo catálogo — `supply` reaproveita
+   * `#useSupply`/`casting.ts` por inteiro (ADR 0049 decisão 3: "o mesmo caminho do slot, sem
+   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5) ou a carga de
+   * bênção (consome, soma `blessings` — o executor que a TP-03/M22 esperava; ligar a bênção à
+   * redução de perda de item na morte é o ADR 0042, fora do escopo desta issue).
+   */
+  #performItemUse(
+    session: Session, character: CharacterRuntime, ref: ItemRef, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    if ('supplyId' in ref) return this.#performSupplyRef(session, character, ref.supplyId, target);
+    return this.#performInstanceRef(session, character, ref.instanceId, target);
+  }
+
+  #performSupplyRef(
+    session: Session, character: CharacterRuntime, supplyId: string, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const supply = this.#options.supplies.get(supplyId);
+    if (supply === undefined) return refuseItem('not-carried', 0);
+    // Sem estoque e sem gold: `#useSupply`/`useSupply` (`casting.ts`) já recusam
+    // `not-enough-gold` na ordem certa (requisitos antes do gold) — nada a checar aqui antes.
+    const resolved = this.#resolveManualTarget(
+      session, character, { kind: 'supply', supplyId } as BotAction, target,
+    );
+    if (resolved !== null && !resolved.ok) return refuseItem(resolved.reason, 0);
+    const recipient = resolved?.ok === true && resolved.recipient !== undefined
+      ? resolved.recipient : character;
+    const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+
+    const result = this.#useSupply(session, character, supplyId, recipient, explicit);
+    if (!result.ok) return refuseItem(refusalOf(result), result.retryInMs);
+    character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+    return { ok: true };
+  }
+
+  #performInstanceRef(
+    session: Session, character: CharacterRuntime, instanceId: string, target: UseSlotTarget | undefined,
+  ): UseItemOutcome {
+    const carried = [...character.inventory.backpack, ...character.inventory.satchel]
+      .find((item) => item?.instanceId === instanceId);
+    if (carried === undefined || carried === null) return refuseItem('not-carried', 0);
+    const item = this.#options.items.get(carried.itemId);
+    // `Item.effect` é opcional na forma (só `kind: 'consumable'` o declara — `buildContent`
+    // confere isso no boot, não o tipo): o schema não dá o discriminante de graça ao TS.
+    if (item === undefined || item.kind !== 'consumable' || item.effect === undefined) {
+      return refuseItem('not-usable', 0);
+    }
+
+    if (item.effect.kind === 'food') {
+      const fed = feedCharacter(character, item.effect.durationMs);
+      if (!fed.ok) return refuseItem('you-are-full', 0);
+      character.inventory.consumeOne(instanceId);
+      // A confirmação é o `inventory` reenviado (decisão 7: sucesso não vira mensagem própria).
+      // "Munch." etc. do Canary, e o `fedMs` novo em si, ficam fora — nenhum dos dois tem campo
+      // de protocolo hoje (`player-stats`/`session-state` não expõem `fedMs`); ver desvios da
+      // spec desta issue.
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+    if (item.effect.kind === 'blessing') {
+      if (character.blessings >= MAX_BLESSINGS) return refuseItem('not-usable', 0);
+      character.inventory.consumeOne(instanceId);
+      character.blessings += 1;
+      session.emit({ kind: 'equipment-changed', characterId: character.id });
+      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
+      return { ok: true };
+    }
+    // `heal`/`mana`/`damage` num item de mochila não têm executor hoje: nenhum item real do
+    // catálogo declara isso (só a runa/poção do ESTOQUE, via `'supplyId' in ref`, executa
+    // dano/cura) — chegar aqui é conteúdo futuro sem mecanismo ainda, e a recusa é a certa.
+    return refuseItem('not-usable', 0);
+  }
+
+  /**
    * O estado dos slots do conjunto ATIVO (AB-09), para o `slot-state`. PURO: não muta nada e
    * não consome RNG — é a apresentação da mesma elegibilidade que `useSlot` executaria.
    */
@@ -2144,6 +2365,7 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
+      case PENDING_MANUAL_ACTION: return this.#onPendingManualAction(session, event.subject);
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
@@ -2183,6 +2405,10 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       if (!character.alive) continue;
       const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
+      // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
+      // calculado aqui evita um segundo acumulador para a mesma grandeza contínua.
+      drainFedMs(character, dtMs);
       const runner = this.#runners.get(character.id);
       if (!exhausted || runner === undefined || runner.warnedExhausted) continue;
       runner.warnedExhausted = true;
@@ -2211,6 +2437,19 @@ export class HuntRuleset implements Ruleset {
 
     const pulse = this.#regenOf(character)[what];
     if (pulse.amount <= 0) return;
+    // A flag de conteúdo (#726, ADR 0049 decisão 5, emenda ao ADR 0043): default `false`
+    // preserva o Huntera ("regenera sempre em hunt"); ligada, exige `fedMs > 0` — a
+    // `CONDITION_REGENERATION` do Tibia, dada por comida. Sem comida, o pulso NÃO aplica nada
+    // desta vez, mas CONTINUA reagendando — a flag pode ligar no meio da hunt sem reconstruir a
+    // fila, e comer no meio do jejum é atendido no PRÓXIMO vencimento, sem precisar de evento
+    // novo (o `amount <= 0` acima é o único caso em que o evento de fato morre).
+    const requiresFood = this.#options.progression.regeneration?.requiresFood ?? false;
+    if (requiresFood && character.fedMs <= 0) {
+      session.scheduleIn(what === 'health' ? HEALTH_REGEN : MANA_REGEN, pulse.ticksMs, {
+        priority: EventPriority.Upkeep, subject: characterId,
+      });
+      return;
+    }
     // Só a vocação: o Life Ring regenera pelos PRÓPRIOS eventos (`ITEM_REGEN`, #688), somados
     // a este pulso, e nunca o multiplica.
     const { amount } = pulse;

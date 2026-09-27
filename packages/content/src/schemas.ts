@@ -673,6 +673,15 @@ export const consumableEffectSchema = z.discriminatedUnion('kind', [
     damageType: z.enum(DAMAGE_TYPES).default('arcane'),
   }),
   z.object({ kind: z.literal('blessing') }),
+  /**
+   * Comida (#726, ADR 0049 decisão 5, emenda ao ADR 0043): `durationMs` é `value × 12` segundos
+   * em milissegundos, o mecanismo do Canary (`foods.lua`: `itemFood[1] * 12`, teto de 1200 s —
+   * "You are full") — soma a `CharacterRuntime.fedMs`, capado em `FOOD_CAP_MS`
+   * (`packages/sim/src/food.ts`). O efeito em si (regeneração) só é lido quando
+   * `progression.regeneration.requiresFood` está ligado; comer sempre soma o contador, ligado
+   * ou não, porque é assim que o Tibia também funciona (a flag decide quem LÊ, não quem ESCREVE).
+   */
+  z.object({ kind: z.literal('food'), durationMs: z.number().int().positive() }),
 ]);
 export type ConsumableEffect = z.infer<typeof consumableEffectSchema>;
 
@@ -2501,6 +2510,17 @@ export const progressionSchema = z.object({
    * ponto a cada `1000 / taxa` ms — mesma média, outro ritmo, e divisão em ponto flutuante.
    */
   regen: regenSchema,
+  /**
+   * A regeneração exige comida? (#726, ADR 0049 decisão 5, emenda ao ADR 0043). O ADR 0043
+   * (emenda de 2026-09-25, Huntera) tinha decidido regeneração ligada só a "estar em hunt", sem
+   * comida — e ESTA é a decisão que continua valendo por padrão: `requiresFood: false`. A flag
+   * existe para o dono poder ligar a regra do Tibia (regenerar só com `fedMs > 0`) editando
+   * CONTEÚDO, sem deploy de lógica — o motor (`#onRegen`, `packages/sim`) já sabe consultar os
+   * dois casos; só o número aqui decide qual vale.
+   */
+  regeneration: z.object({
+    requiresFood: z.boolean().default(false),
+  }).default(() => ({ requiresFood: false })),
   /**
    * A mitigação percentual BASE (#549, M30-02) — a vocação `None` do Canary `vocations.xml`
    * (`<mitigation multiplier="1.3" primaryShield="2.05" secondaryShield="1.25">`), para quem

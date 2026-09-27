@@ -14,8 +14,8 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, MemberLeft, PartyEvent, PresenceEvent,
-  Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
+  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, ManualActionResult, MemberLeft,
+  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -26,8 +26,8 @@ import type {
 import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
-  InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, UseSlotTarget, VocationRefusal,
+  InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, UseItemRefusal, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -250,6 +250,17 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
+};
+
+/**
+ * A recusa de `use-item`/`use-item-on` em palavras (#726, ADR 0049 decisão 3/7): as mesmas do
+ * slot, mais as três que só o item da mochila/estoque pode devolver.
+ */
+const USE_ITEM_REFUSAL: Readonly<Record<UseItemRefusal, string>> = {
+  ...SLOT_REFUSAL,
+  'not-carried': 'Você não está com esse item.',
+  'not-usable': 'Esse item não pode ser usado assim.',
+  'you-are-full': 'Você está satisfeito.',
 };
 
 /** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */
@@ -1438,6 +1449,15 @@ export class SessionHost {
         // o alvo e confirma/recusa é o servidor (#470).
         this.#requestSelectTarget(viewer, message.creatureId, message.seq);
         return;
+      case 'use-item':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL item/suprimento e QUEM/ONDE mirou (mesma
+        // mira do `use-slot`); catálogo, exaustão, estoque e efeito são do servidor (#726, ADR
+        // 0049 decisão 3).
+        this.#requestUseItem(viewer, message.ref, message.seq, message.target, false);
+        return;
+      case 'use-item-on':
+        this.#requestUseItem(viewer, message.ref, message.seq, message.target, true);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -1644,6 +1664,49 @@ export class SessionHost {
     // Supply e magia não tocam o inventário (o modelo abstrato debita gold no uso): o que muda
     // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
     // `equipment-changed` como caminho próprio.
+    const character = this.#participantOf(hosted, viewer.characterId);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(viewer.characterId, stats);
+    this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
+  }
+
+  /**
+   * `use-item`/`use-item-on` (#726, ADR 0049 decisão 3). Processado NA CHEGADA, como
+   * `use-slot`, e pela MESMA razão fora de hunt: "não estou numa caçada" é a resposta, nunca
+   * silêncio — o menu de contexto da mochila existe na Cidade também.
+   *
+   * `target` é a mesma mira do `use-slot`, ainda no vocabulário do FIO — `#resolveUseSlotTarget`
+   * a traduz ANTES de chamar `useItem`/`useItemOn`. `mandatory` distingue as duas mensagens:
+   * `use-item-on` sempre manda `target`; `use-item` só quando o clique carregava um.
+   */
+  #requestUseItem(
+    viewer: Viewer, ref: Extract<C2SMessage, { type: 'use-item' }>['ref'], seq: number,
+    target: Extract<C2SMessage, { type: 'use-slot' }>['target'] | undefined, mandatory: boolean,
+  ): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    const resolvedTarget = hosted === undefined || target === undefined
+      ? undefined
+      : this.#resolveUseSlotTarget(hosted, target);
+    const outcome = hosted === undefined
+      ? undefined
+      : mandatory
+        ? (resolvedTarget === undefined
+          ? undefined
+          : ruleset?.useItemOn?.(hosted.session, viewer.characterId, ref, seq, resolvedTarget))
+        : ruleset?.useItem?.(hosted.session, viewer.characterId, ref, seq, resolvedTarget);
+    if (outcome === undefined) {
+      viewer.send({ type: 'use-result', seq, ok: false, reason: 'Você não está numa caçada.' });
+      return;
+    }
+    viewer.send({
+      type: 'use-result', seq, ok: outcome.ok,
+      ...(outcome.ok ? {} : { reason: USE_ITEM_REFUSAL[outcome.reason] }),
+    });
+    // Sucesso não vira mensagem própria (decisão 7): supply muda mana/vida/gold — o
+    // `player-stats` abaixo —, e comida/bênção mudam o `inventory` pelo `equipment-changed`
+    // que o `sim` já emite (drenado no próximo ciclo de `#presentMoves`, como sempre).
+    if (!outcome.ok || hosted === undefined) return;
     const character = this.#participantOf(hosted, viewer.characterId);
     const stats = this.#statsOf(character);
     hosted.sentStats.set(viewer.characterId, stats);
@@ -1932,6 +1995,10 @@ export class SessionHost {
       satchel: (state.satchel ?? []).map(place),
       equipped,
       capacity: { used: character.inventory.weight(catalog), total: character.capacity },
+      // O estoque abstrato (#520, ADR 0049 decisão 4): agora VISÍVEL — o jogador vê o que o
+      // loot lhe deu antes de gastar gold pela mesma runa/poção/munição.
+      supplies: [...character.supplyStock].map(([id, quantity]) => ({ id, quantity })),
+      ammunition: [...character.ammunitionStock].map(([id, quantity]) => ({ id, quantity })),
     });
   }
 
@@ -2267,6 +2334,11 @@ export class SessionHost {
           // alguém para os companheiros sem que ele tenha pedido isso — o mesmo motivo de
           // `player-stats` (FUN-109) e `active-conditions` serem por personagem.
           this.#presentFollow(hosted, event);
+          continue;
+        case 'manual-action-result':
+          // POR PERSONAGEM, pela mesma razão do Follow acima: só quem mandou o `use-item`/
+          // `use-item-on` adiado precisa saber que ele, afinal, não coube (#726, ADR 0049 d.6).
+          this.#presentManualActionResult(hosted, event);
           continue;
         case 'member-left':
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
@@ -2825,6 +2897,18 @@ export class SessionHost {
   }
 
   /**
+   * O `use-item`/`use-item-on` adiado (#726, ADR 0049 decisão 6) terminou de executar e não
+   * coube — a SEGUNDA resposta, depois do `ok: true` que aceitou o clique. `reason` chega em
+   * palavras (FUN-73), como toda recusa tipada do `sim`.
+   */
+  #presentManualActionResult(hosted: HostedSession, event: ManualActionResult): void {
+    this.#sendToViewersOf(hosted, event.characterId, {
+      type: 'use-result', seq: event.seq, ok: false,
+      reason: USE_ITEM_REFUSAL[event.reason as UseItemRefusal] ?? event.reason,
+    });
+  }
+
+  /**
    * A party no fio (#196): os eventos do `sim` viram as mensagens, para TODOS os visualizadores
    * da sessão — a party é privada como a hunt, e todo membro vê a bolsa, o settlement e a
    * votação de encerrar. O HP dos companheiros vai só no `party-state` (attach e mudança de
@@ -2872,6 +2956,10 @@ export class SessionHost {
       case 'follow-state':
         // POR PERSONAGEM (#401): `#presentMoves` o intercepta antes e chama `#presentFollow` —
         // nunca este broadcast. O caso existe só para a união `PartyEvent` ficar fechada.
+        return;
+      case 'manual-action-result':
+        // POR PERSONAGEM (#726), pela mesma razão do `follow-state` acima: `#presentMoves` já
+        // chamou `#presentManualActionResult` antes de chegar aqui.
         return;
     }
     for (const viewer of hosted.viewers) viewer.send(message);
@@ -3602,6 +3690,10 @@ export class SessionHost {
       // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
       ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
       ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+      // Comida ativa (#726, ADR 0049 decisão 5): mesma regra do estoque acima — DRENA dentro da
+      // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
+      // o personagem participou.
+      ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é

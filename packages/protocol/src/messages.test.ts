@@ -131,6 +131,8 @@ describe('the inventory message (FUN-90, FUN-108)', () => {
     satchel: [],
     equipped: { hand: sword },
     capacity: { used: 130, total: 400 },
+    supplies: [],
+    ammunition: [],
   };
 
   it('round trips the equipped item WHOLE: id, item and quantity, like a backpack entry', () => {

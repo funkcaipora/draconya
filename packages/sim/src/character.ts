@@ -174,6 +174,48 @@ export interface CharacterState {
    * QUENTE para a hunt retomada não perder o contador. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
    */
   readonly attackPractice?: AttackPracticeState;
+  /**
+   * Quanto tempo de regeneração a comida ainda tem (#726, ADR 0049 decisão 5): a
+   * `CONDITION_REGENERATION` do Tibia, em milissegundos, drenada por `drainFedMs`
+   * (`packages/sim/src/food.ts`) pelo tempo LÓGICO de hunt decorrido — nunca por tick
+   * (invariante 2), como a stamina. Ausente é `0` — sem comida, o personagem de sempre; sem
+   * bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`. Só é CONSULTADA
+   * quando `progression.regeneration.requiresFood` está ligada — comer sempre soma o contador,
+   * ligado ou não, mas só a flag decide quem lê.
+   */
+  readonly fedMs?: number;
+  /**
+   * Bênçãos ativas (#726, ADR 0049 decisão 3/consequências — o executor da `blessing-charge`
+   * que a TP-03/M22 esperava): cada carga consumida soma uma, capada em `MAX_BLESSINGS` (5,
+   * como o Tibia). **Ainda não é lida por ninguém** — ligar a bênção à redução de perda de item
+   * na morte é o ADR 0042/TP-03, fora do escopo desta issue; o campo existe para o `use-item`
+   * ter O QUE fazer com a carga, sem inventar comportamento de morte que outra decisão ainda não
+   * tomou. Ausente é `0`, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly blessings?: number;
+  /**
+   * Um `use-item`/`use-item-on` ACEITO mas ADIADO pela exaustão de ação compartilhada (#726,
+   * ADR 0049 decisão 6 — o `setNextActionTask` do Canary): agendado para o vencimento do livro
+   * `exhaust:action`, como um evento `pending-manual-action` da fila (invariante 2). Um segundo
+   * disparo antes do vencimento SUBSTITUI este campo e reagenda — nunca empilha dois. `ref`/
+   * `target` usam a MESMA forma numérico-livre de `UseSlotTarget`/o `ref` de `use-item`
+   * (`packages/sim/src/rulesets/hunt.ts`) — dado puro, sem instância de classe, por isso cabe
+   * aqui sem `rulesets/hunt.ts` importar `character.ts` ao contrário. Ausente é nenhuma ação
+   * pendente; sem bump de `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
+   */
+  readonly pendingManualAction?: PendingManualActionState;
+}
+
+/** Ver `CharacterState.pendingManualAction`. */
+export interface PendingManualActionState {
+  readonly kind: 'item' | 'item-on';
+  readonly ref: { readonly instanceId: string } | { readonly supplyId: string };
+  readonly target?:
+    | { readonly kind: 'monster'; readonly subject: string }
+    | { readonly kind: 'character'; readonly characterId: string }
+    | { readonly kind: 'position'; readonly position: { readonly x: number; readonly y: number; readonly z?: number } }
+    | { readonly kind: 'invalid' };
+  readonly seq: number;
 }
 
 /** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
@@ -279,6 +321,12 @@ export class CharacterRuntime {
    * evento do golpe (invariante 9) — ver `CharacterState.attackPractice`.
    */
   attackPractice: AttackPracticeState;
+  /** Comida ativa (#726). Só `drainFedMs`/`feed` (`food.ts`) escrevem — invariante 9. */
+  fedMs: number;
+  /** Bênçãos consumidas (#726). Só o executor da `blessing-charge` escreve. */
+  blessings: number;
+  /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
+  pendingManualAction: PendingManualActionState | null;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -313,6 +361,9 @@ export class CharacterRuntime {
     this.conditions = Conditions.fromState(state.conditions);
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
     this.attackPractice = state.attackPractice ?? INITIAL_ATTACK_PRACTICE;
+    this.fedMs = state.fedMs ?? 0;
+    this.blessings = state.blessings ?? 0;
+    this.pendingManualAction = state.pendingManualAction ?? null;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -461,6 +512,10 @@ export class CharacterRuntime {
       // O mesmo padrão: omitido enquanto ainda é o inicial (v1/v2 nunca o tocam).
       ...(isInitialAttackPractice(this.attackPractice)
         ? {} : { attackPractice: this.attackPractice }),
+      // Mesmo padrão: omitido em zero, o de quem nunca comeu/nunca consumiu carga (#726).
+      ...(this.fedMs === 0 ? {} : { fedMs: this.fedMs }),
+      ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
+      ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
     };
   }
 

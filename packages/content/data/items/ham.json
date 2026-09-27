@@ -1,9 +1,10 @@
 {
   "id": "ham",
   "name": "Ham",
-  "kind": "other",
+  "kind": "consumable",
   "weight": 20,
   "value": 0,
   "stackable": true,
-  "_open": "Loot do Rotworm (TibiaWiki: 20 oz), comida/curiosidade sem NPC comprador, como o cheese: regeneração por comida ainda não existe (§20 do PRD não decide). value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
+  "effect": { "kind": "food", "durationMs": 360000 },
+  "_open": "Loot do Rotworm (TibiaWiki: 20 oz). Vira comida executável na #726 (ADR 0049 d.5): durationMs = 30 × 12 s (foods.lua do Canary, item 3582, valor 30) em ms. value 0: comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
 }

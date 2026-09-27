@@ -61,6 +61,30 @@ export const CLIENT_TO_SERVER = {
    * 20: o 19 é do `party-settings`.
    */
   'party-end-vote': 20,
+  // 21/22 são reservados pela PR #741 (#724, "sell-items"/"discard-item") e 23/24 por outra
+  // issue em voo (#722) — nenhuma delas mesclada em `tibia-parity` na base desta branch
+  // (`725-action-bar-click-fire-aim`). Não estão aqui porque o CÓDIGO delas não está: esta
+  // branch não implementa `sell-items`/`discard-item`, só reserva o número seguinte livre.
+  /**
+   * Usar um item da mochila/bolsa/equipado, OU uma unidade do estoque de suprimento — comida,
+   * carga de bênção, poção ou runa (#726, ADR 0049 decisão 3). INTENÇÃO: o cliente diz QUAL
+   * `ref` (`{ instanceId }` ou `{ supplyId }`) e, quando o efeito precisa (runa/poção de dano
+   * ou cura), o MESMO `target` opcional de `use-slot` (decisão 2) — mira de aliado, monstro ou
+   * posição. O catálogo, a exaustão, o estoque e o efeito são do servidor (invariante 4); a
+   * resposta é `use-result`, tipada como `slot-result` (FUN-73).
+   *
+   * 25: o maior opcode reservado até aqui é o 24 (#722, ainda sem código nesta branch).
+   */
+  'use-item': 25,
+  /**
+   * Usar um item/suprimento COM alvo obrigatório — a runa/poção de dano ou cura mirada. A
+   * ferramenta (machete, pá…) sobre um tile fica de fora (ADR 0050, issue própria, ainda não
+   * implementada): recusa `not-usable` até lá. Mesma forma de `use-item`, com `target`
+   * obrigatório em vez de opcional (#726, ADR 0049 decisão 3).
+   *
+   * 26: o 25 é do `use-item`.
+   */
+  'use-item-on': 26,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -209,6 +233,17 @@ export const SERVER_TO_CLIENT = {
    * 35: o 34 é do `target-changed`.
    */
   'target-cancel': 35,
+  /**
+   * A resposta ao `use-item`/`use-item-on` (#726, ADR 0049 decisão 3), tipada como
+   * `slot-result` (FUN-73): `ok: false` carrega o motivo em palavras. `ok: true` também sai
+   * quando a ação foi ACEITA mas ADIADA pela exaustão compartilhada (decisão 6) — o jogador não
+   * vê erro nenhum, e o efeito de verdade chega depois pelo `inventory`/`player-stats`/
+   * `creature-hit` de sempre, quando a ação de fato executa.
+   *
+   * 36: o 35 é do `target-cancel`. Nenhuma das PRs abertas na base desta branch (#741, #742,
+   * #743) reserva o 36 — conferido no diff das três antes de escolher o número.
+   */
+  'use-result': 36,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

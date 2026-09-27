@@ -5412,6 +5412,182 @@ describe('poção e runa dividem UM relógio de exaustão de ação (#690, `next
   });
 });
 
+// --- use-item / use-item-on: o mesmo caminho do slot, sem passar pela barra (#726, ADR 0049) --
+
+describe('useItem/useItemOn (#726, ADR 0049 decisão 3)', () => {
+  const healthPotion = {
+    id: 'health-potion-726', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_500,
+    effect: { kind: 'heal' as const, amount: 80 },
+  };
+  const foodItem = {
+    id: 'cheese-726', name: 'Cheese', kind: 'consumable' as const, weight: 4, value: 0,
+    stackable: true, effect: { kind: 'food' as const, durationMs: 108_000 },
+  };
+  const blessingItem = {
+    id: 'blessing-726', name: 'Carga de Bênção', kind: 'consumable' as const, weight: 1, value: 0,
+    stackable: false, effect: { kind: 'blessing' as const },
+  };
+  const swordItem = { id: 'sword-726', name: 'Sword', kind: 'weapon' as const, slot: 'hand' as const, weight: 10, value: 0, attack: 5 };
+
+  it('use-item com ref.supplyId gasta o ESTOQUE antes do gold, como o slot (RF-01)', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfig({}), { gold: 1_000, supplies: [healthPotion], health: 500, monsters: false },
+    );
+    hero.health = 400;
+    hero.supplyStock.set('health-potion-726', 3);
+    const outcome = ruleset.useItem(session, 'hero', { supplyId: 'health-potion-726' }, 1);
+    expect(outcome).toEqual({ ok: true });
+    expect(hero.health).toBe(480);
+    expect(hero.supplyStock.get('health-potion-726')).toBe(2);
+    expect(hero.goldDelta).toBe(0); // pagou do estoque, não do gold
+  });
+
+  it('use-item com ref.instanceId de COMIDA soma fedMs e consome uma unidade da pilha (RF-02)', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({}), {
+      items: [foodItem], monsters: false,
+      inventory: {
+        backpack: [{ instanceId: 'i1', itemId: 'cheese-726', quantity: 3 }],
+        satchel: [], equipped: {},
+      },
+    });
+    const outcome = ruleset.useItem(session, 'hero', { instanceId: 'i1' }, 1);
+    expect(outcome).toEqual({ ok: true });
+    expect(hero.fedMs).toBe(108_000);
+    expect(hero.inventory.backpack.find((it) => it?.instanceId === 'i1')?.quantity).toBe(2);
+  });
+
+  it('comer no teto de fedMs recusa `you-are-full` SEM consumir o item', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({}), {
+      items: [foodItem], monsters: false,
+      inventory: {
+        backpack: [{ instanceId: 'i1', itemId: 'cheese-726', quantity: 1 }],
+        satchel: [], equipped: {},
+      },
+    });
+    hero.fedMs = 1_200_000 - 1000;
+    const outcome = ruleset.useItem(session, 'hero', { instanceId: 'i1' }, 1);
+    expect(outcome).toEqual({ ok: false, reason: 'you-are-full', retryInMs: 0 });
+    expect(hero.inventory.backpack.find((it) => it?.instanceId === 'i1')?.quantity).toBe(1);
+  });
+
+  it('use-item numa carga de bênção soma `blessings`, capado em 5 (RF-06)', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({}), {
+      items: [blessingItem], monsters: false,
+      inventory: {
+        backpack: [
+          { instanceId: 'b1', itemId: 'blessing-726', quantity: 1 },
+          { instanceId: 'b2', itemId: 'blessing-726', quantity: 1 },
+        ],
+        satchel: [], equipped: {},
+      },
+    });
+    hero.blessings = 5;
+    const capped = ruleset.useItem(session, 'hero', { instanceId: 'b1' }, 1);
+    expect(capped).toEqual({ ok: false, reason: 'not-usable', retryInMs: 0 });
+    expect(hero.blessings).toBe(5);
+    hero.blessings = 4;
+    const ok = ruleset.useItem(session, 'hero', { instanceId: 'b2' }, 2);
+    expect(ok).toEqual({ ok: true });
+    expect(hero.blessings).toBe(5);
+  });
+
+  it('instância desconhecida recusa `not-carried`; item não-consumível recusa `not-usable`', () => {
+    const { session, ruleset } = withSpells(botConfig({}), { items: [swordItem], monsters: false });
+    expect(ruleset.useItem(session, 'hero', { instanceId: 'nope' }, 1))
+      .toEqual({ ok: false, reason: 'not-carried', retryInMs: 0 });
+
+    const { session: s2, ruleset: r2 } = withSpells(botConfig({}), {
+      items: [swordItem], monsters: false,
+      inventory: { backpack: [{ instanceId: 's1', itemId: 'sword-726', quantity: 1 }], satchel: [], equipped: {} },
+    });
+    expect(r2.useItem(s2, 'hero', { instanceId: 's1' }, 1))
+      .toEqual({ ok: false, reason: 'not-usable', retryInMs: 0 });
+  });
+
+  it('a exaustão de ação ADIA o use-item, e um segundo clique SUBSTITUI o primeiro (RF-04)', () => {
+    const withExhaust = {
+      ...healthPotion, actionExhaustMs: 1_000,
+    };
+    const { session, hero, ruleset } = withSpells(
+      botConfig({}), { gold: 1_000, supplies: [withExhaust], health: 500, monsters: false },
+    );
+    hero.health = 100;
+    // Já travado por um uso anterior (simulando o clique de uma runa/poção momentos antes).
+    hero.cooldowns.start('exhaust:action', session.nowMs, 1_000);
+
+    const first = ruleset.useItem(session, 'hero', { supplyId: 'health-potion-726' }, 1);
+    expect(first).toEqual({ ok: true }); // aceito, mas ADIADO — não executou ainda.
+    expect(hero.health).toBe(100);
+    expect(hero.pendingManualAction).not.toBeNull();
+
+    // Um segundo clique ANTES do vencimento substitui o primeiro (seq 2, não 1).
+    const second = ruleset.useItem(session, 'hero', { supplyId: 'health-potion-726' }, 2);
+    expect(second).toEqual({ ok: true });
+    expect(hero.pendingManualAction?.seq).toBe(2);
+
+    session.advanceBy(1_000);
+    expect(hero.health).toBe(180); // o adiado (seq 2) executou de verdade no vencimento.
+  });
+
+  it('cooldown de GRUPO/individual da runa/poção continua recusa IMEDIATA (RF-05)', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfig({}), { gold: 1_000, supplies: [healthPotion], health: 500, monsters: false },
+    );
+    hero.cooldowns.start('group:potion', session.nowMs, 5_000);
+    const outcome = ruleset.useItem(session, 'hero', { supplyId: 'health-potion-726' }, 1);
+    expect(outcome).toEqual({ ok: false, reason: 'group-cooldown', retryInMs: 5_000 });
+  });
+
+  it('use-item-on mira o alvo explícito, como o use-slot (reaproveita #resolveManualTarget)', () => {
+    const attackRuneOn = {
+      id: 'attack-rune-726', name: 'Rune', price: 10, group: 'attack', groupCooldownMs: 2_000,
+      requires: {},
+      effect: {
+        kind: 'damage' as const, basePower: 100, range: 4,
+        area: { shape: 'circle' as const, radius: 1, centered: 'target' as const },
+      },
+    };
+    const { session, hero, ruleset } = withSpells(
+      botConfig({}), { gold: 1_000, supplies: [attackRuneOn], mana: 200 },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const before = monster.health;
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'attack-rune-726' }, 1, target);
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.health).toBeLessThan(before);
+    void hero;
+  });
+
+  it('regeneração exige `fedMs > 0` só quando `progression.regeneration.requiresFood` está ligada (RF-03)', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 0,
+        regen: { health: { ticksMs: 1_000, amount: 5 }, mana: { ticksMs: 1_000, amount: 0 } },
+        regeneration: { requiresFood: true },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+    }));
+    const session = createHuntSession({
+      id: 'food-regen', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig({}),
+    });
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 1_000, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    session.advanceBy(1_000);
+    // Sem comida, o pulso não repõe nada — mesmo com `amount: 5` declarado no conteúdo.
+    expect(hero.health).toBe(100);
+    hero.fedMs = 60_000;
+    session.advanceBy(1_000);
+    expect(hero.health).toBe(105);
+  });
+});
+
 describe('o ML especializado do item vestido soma na runa do MESMO elemento (#680)', () => {
   // Coeficiente enorme e sem termo de level: o sorteio da runa é `integer(1000×ML', 1000×ML')`,
   // e ML' = ML (0 no herói) + o especializado de fogo. Com fire +2 a faixa vira [2000, 2000].

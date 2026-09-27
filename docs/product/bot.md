@@ -659,6 +659,32 @@ A configuração v1 salva é convertida para v2 de forma **determinística e ide
 Uma config já na v2 volta apenas parseada (idempotência). A detecção de "já é v2" é compartilhada
 com o `server`, que precisa dela para saber se o que veio no ticket é dado novo a persistir.
 
+## Uso manual de item/suprimento fora da barra (#726, ADR 0049 decisão 3/6)
+
+`use-item`/`use-item-on` (C2S 25/26; `use-result`, S2C 36) usam um item da mochila/bolsa
+(`ref: { instanceId }`) OU uma unidade do estoque de suprimento (`ref: { supplyId }`) **sem
+passar pela barra** — o `HuntRuleset` resolve pelo catálogo: `supplyId` reaproveita
+`#useSupply`/`useSupply` (`casting.ts`) por inteiro, o MESMO caminho de `use-slot`; comida soma
+`fedMs`; a carga de bênção consome e soma `blessings`. `target` é a MESMA mira opcional de
+`use-slot` (decisão 2) — obrigatória em `use-item-on`, o "usar com…" do menu de contexto contra
+"usar". Só HUNT: a Cidade recusa `not-in-hunt` para as duas (o subconjunto de container/look da
+decisão 8 não passa por aqui — mochila/equipamento já têm caminho próprio em `move-item`/`equip`).
+
+**A exaustão de ação compartilhada (`exhaust:action`, #690) é ADIADA para o manual, não
+recusada** (decisão 6, o `setNextActionTask` do Canary) — ao contrário do cooldown de
+GRUPO/individual da runa/poção usada, que continua recusa IMEDIATA como sempre. Um `use-item`/
+`use-item-on` que chega com `exhaust:action` ainda trancado vira `pendingManualAction` no
+personagem (evento `pending-manual-action` na fila, invariante 2), reagendado para o
+vencimento do livro; um segundo disparo antes disso SUBSTITUI o primeiro. O jogador recebe
+`use-result { ok: true }` na hora — aceito, não necessariamente já executado — e só recebe uma
+SEGUNDA mensagem (`manual-action-result` → `use-result` de novo, com o MESMO `seq`) se a ação
+adiada, na hora de rodar, afinal não coube. Sucesso não gera segunda mensagem (decisão 7): o
+`inventory`/`player-stats`/`creature-hit` de sempre é a confirmação.
+
+O menu de contexto da mochila (Usar/Usar com…) e a seção **Suprimentos** — ver `economy.md` —
+não estão implementados nesta entrega: o protocolo e o motor já aceitam as duas mensagens, e o
+gatilho de UI fica para uma PR seguinte.
+
 ## A tela (AB-10…AB-13)
 
 **A barra de ações 2 × 12 é a configuração E a superfície de disparo manual** — um só

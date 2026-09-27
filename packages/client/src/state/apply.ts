@@ -275,6 +275,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           satchel: message.satchel,
           equipped: message.equipped,
           capacity: message.capacity,
+          // O estoque abstrato visível (#726, ADR 0049 decisão 4): `default([])` no protocolo.
+          supplies: message.supplies,
+          ammunition: message.ammunition,
         },
       }));
       return;
@@ -498,6 +501,22 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       });
       return;
     }
+
+    // `use-result` (#726, ADR 0049 decisão 3/7): a resposta a `use-item`/`use-item-on`.
+    // `ok: true` não faz nada aqui — sucesso é o `inventory`/`player-stats`/`creature-hit` de
+    // sempre (decisão 7), inclusive quando a ação foi adiada pela exaustão (decisão 6) e só
+    // executou depois. `ok: false` vira o mesmo toast curto do `system-message`, sobre a
+    // mochila — o menu de contexto/seção Suprimentos que o dispara fica para uma entrega
+    // seguinte (ver desvios da spec desta issue); a MENSAGEM já chega tipada e traduzida hoje.
+    case 'use-result':
+      if (message.ok) return;
+      hud.set((state) => ({
+        ...state,
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'warning', text: message.reason ?? '', atMs: nowMs,
+        }),
+      }));
+      return;
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
