@@ -51,6 +51,37 @@
     "appearanceId": 40594
   },
   {
+    "id": "alicorn-quiver",
+    "name": "alicorn quiver",
+    "kind": "shield",
+    "weight": 20,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 400,
+      "vocationId": "paladin"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "magic",
+          "amount": 1
+        }
+      ]
+    },
+    "quiver": true,
+    "perfectShot": {
+      "range": 3,
+      "damage": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39150
+  },
+  {
     "id": "amazon-shield",
     "name": "amazon shield",
     "kind": "shield",
@@ -254,6 +285,24 @@
     "appearanceId": 3423
   },
   {
+    "id": "blue-quiver",
+    "name": "blue quiver",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 35848
+  },
+  {
     "id": "bone-shield",
     "name": "bone shield",
     "kind": "shield",
@@ -380,6 +429,30 @@
       "path": "data/items/items.xml"
     },
     "appearanceId": 21401
+  },
+  {
+    "id": "candy-coated-quiver",
+    "name": "candy-coated quiver",
+    "kind": "shield",
+    "weight": 18,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 200,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "fire": {
+        "percent": 2
+      }
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 45644
   },
   {
     "id": "carapace-shield",
@@ -775,6 +848,29 @@
     "appearanceId": 36672
   },
   {
+    "id": "eldritch-quiver",
+    "name": "eldritch quiver",
+    "kind": "shield",
+    "weight": 22,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "perfectShot": {
+      "range": 4,
+      "damage": 20
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 36666
+  },
+  {
     "id": "eldritch-shield",
     "name": "eldritch shield",
     "kind": "shield",
@@ -1099,6 +1195,25 @@
     "appearanceId": 28887
   },
   {
+    "id": "jungle-quiver",
+    "name": "jungle quiver",
+    "kind": "shield",
+    "weight": 18,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 150,
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 35524
+  },
+  {
     "id": "lion-shield",
     "name": "lion shield",
     "kind": "shield",
@@ -1242,6 +1357,30 @@
       "path": "data/items/items.xml"
     },
     "appearanceId": 21175
+  },
+  {
+    "id": "naga-quiver",
+    "name": "naga quiver",
+    "kind": "shield",
+    "weight": 19,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "level": 250,
+      "vocationId": "paladin"
+    },
+    "absorb": {
+      "ice": {
+        "percent": 2
+      }
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 39160
   },
   {
     "id": "necromancer-shield",
@@ -1410,6 +1549,24 @@
     "appearanceId": 16116
   },
   {
+    "id": "quiver",
+    "name": "quiver",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 35562
+  },
+  {
     "id": "rainbow-shield",
     "name": "rainbow shield",
     "kind": "shield",
@@ -1441,6 +1598,24 @@
       "path": "data/items/items.xml"
     },
     "appearanceId": 22650
+  },
+  {
+    "id": "red-quiver",
+    "name": "red quiver",
+    "kind": "shield",
+    "weight": 17,
+    "value": 0,
+    "slot": "shield",
+    "requires": {
+      "vocationId": "paladin"
+    },
+    "quiver": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/items/items.xml"
+    },
+    "appearanceId": 35849
   },
   {
     "id": "rift-shield",

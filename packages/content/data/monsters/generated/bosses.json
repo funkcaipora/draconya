@@ -5694,6 +5694,10 @@
           "chance": 0.0021
         },
         {
+          "itemId": "eldritch-quiver",
+          "chance": 0.0025
+        },
+        {
           "itemId": "eldritch-claymore",
           "chance": 0.0013
         },

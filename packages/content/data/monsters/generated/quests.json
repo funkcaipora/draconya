@@ -28960,6 +28960,10 @@
           "chance": 0.001
         },
         {
+          "itemId": "alicorn-quiver",
+          "chance": 0.001
+        },
+        {
           "itemId": "arcanomancer-regalia",
           "chance": 0.001
         },
@@ -30002,6 +30006,10 @@
         },
         {
           "itemId": "jungle-bow",
+          "chance": 0.0089
+        },
+        {
+          "itemId": "jungle-quiver",
           "chance": 0.0089
         },
         {

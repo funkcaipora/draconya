@@ -2,7 +2,7 @@
 
 capacidade (FUN-82), o **cadáver com loot e o filtro de Quick Loot por personagem** (FUN-88,
 FUN-123, ADR 0048 — substitui a Caixa de Loot da Sessão) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; o **importador de itens do Canary** (M34-02, #573): 1946 itens de caça gerados em `packages/content/staging/items/generated/` (10 fatias — a "broken Iks spear", id 40535, saiu do corte por ser arremessável sem lançador apesar do `primarytype` mentir "axe weapons"), 28 dos 73 itens autorais reconciliados por override (ADR 0014); e a **promoção do catálogo de itens para `data/`** (#748): 1887 dos 1946 promovidos para `packages/content/data/items/generated/` — 59 excluídos por colidir com item autoral (o autoral vence, ADR 0014), 0 por `appearanceId` fora do inventário do pacote conferido (a checagem lê o pacote que `appearances/baseline.json.pack` DECLARA, não um nome fixo — com o pacote 15.33 já adotado na integração, #720, os 139 que ficariam de fora do 13.32 entraram), 0 por violar regra de conteúdo (a arma sem `slot` ganha `hand` por default — a mesma convenção dos 22 itens autorais — e `defense` de curiosidade classificada `valuables`/`creature products` deixou de ser copiado) — todos contados em `docs/reference/catalog/items-promotion-report.md`, nunca em silêncio. Loot de monstro (`pnpm catalog:promote-monsters`) recuperou daí: das 7049 linhas de `loot.items` com `itemId`, a fração descartada por item ausente do catálogo caiu de 6173 para 2485 (`docs/reference/catalog/monsters-promotion-report.md`); a autovenda individual e de party existem, a janela do cadáver para quem está olhando é W3/#722
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; o **importador de itens do Canary** (M34-02, #573): 1954 itens de caça gerados em `packages/content/staging/items/generated/` (10 fatias — o **arremessável e a aljava** (#575) somam-se aqui: spear/throwing star viram `stackable` como qualquer item comum, e o `ammoFamily` da munição por família ganha a aljava como fonte alternativa), 28 dos 73 itens autorais reconciliados por override (ADR 0014); e a **promoção do catálogo de itens para `data/`** (#748): 1895 dos 1954 promovidos para `packages/content/data/items/generated/` — 59 excluídos por colidir com item autoral (o autoral vence, ADR 0014), 0 por `appearanceId` fora do inventário do pacote conferido (a checagem lê o pacote que `appearances/baseline.json.pack` DECLARA, não um nome fixo — com o pacote 15.33 já adotado na integração, #720, os itens que ficariam de fora do 13.32 entraram), 0 por violar regra de conteúdo (a arma sem `slot` ganha `hand` por default — a mesma convenção dos 22 itens autorais — e `defense` de curiosidade classificada `valuables`/`creature products` deixou de ser copiado) — todos contados em `docs/reference/catalog/items-promotion-report.md`, nunca em silêncio. Loot de monstro (`pnpm catalog:promote-monsters`) recuperou daí: das 7049 linhas de `loot.items` com `itemId`, a fração descartada por item ausente do catálogo caiu de 6173 para 2482 (`docs/reference/catalog/monsters-promotion-report.md`); a autovenda individual e de party existem, a janela do cadáver para quem está olhando é W3/#722
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, cadáver e Quick Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário); E2 (kit level 200, M28); E18 · Jogável (ADR 0048)
 
@@ -226,6 +226,39 @@ segue genérico, e não há pilha nem contagem. **A escolha persiste entre sess�
 extrato, o `jobs` grava em `characters.ammo` e ela volta pelo ticket ao entrar — o mesmo caminho
 da vocação.
 
+### Arremessável e aljava com perfect shot (M34-04, #575)
+
+Ao contrário da munição por família (arrow/bolt), o **arremessável** (spear, throwing star, royal
+spear) NÃO tem lançador nem seleção — o item na mão É o próprio projétil, `kind: 'weapon'`,
+`weapon: { kind: 'distance', family: 'distance', range, breakChance }`, sem `ammoFamily`.
+`buildContent` exige exatamente um dos dois campos em toda arma `distance` (`ammoFamily` OU
+`breakChance`, nunca os dois, nunca nenhum). É item **de verdade**, `stackable: true` — ao
+contrário da munição, ele TEM peso, pilha e proveniência de loot, como qualquer item comum.
+
+**A quebra é a única mecânica nova.** A cada tiro, `breakChance`% de chance (sempre rolado —
+ADR 0031, a sequência de RNG não pode depender do valor da chance) consome UMA unidade da pilha
+equipada na mão (`Inventory.consumeStack`, não `ammunitionStock` — aquele é só da munição
+arrow/bolt); sem quebrar, a pilha não muda. A pilha chegando a zero desarma o personagem, como
+tirar a arma pela última vez. Não há preço por tiro (ele já foi pago no loot/mercado, como
+qualquer item), e não há gold envolvido.
+
+**A aljava (quiver)** é o item que ocupa o slot de escudo junto com um bow/crossbow — uma exceção
+explícita ao `hands-full` de duas mãos (`Inventory.equip`), porque a aljava não é escudo de
+verdade. `itemSchema.perfectShot: { range, damage }` é o bônus de "perfect shot" do Canary
+(eldritch quiver, alicorn quiver): soma `damage` ao tiro — munição por família OU arremessável —
+quando a distância de Chebyshev até o alvo é EXATAMENTE `range`, nem mais perto nem mais longe. A
+maioria das aljavas do Canary não declara o bônus (`quiver: true` sozinho, sem `perfectShot`).
+
+O importador (`scripts/catalog/items.ts`) gera os dois a partir do `items.xml`: 11 arremessáveis
+(spear, throwing star, viper/leaf star, glooth/hunting/enchanted spear, assassin star, entre
+outros) e 8 aljavas (2 com `perfectShot`) em `staging/items/generated/{weapons,shields}.json`. Um
+conversor dedicado (`scripts/catalog/ammo.ts`, tipo de catálogo `ammo`) lê a munição
+(`primarytype: "ammunition"`) para `ammunitionSchema` — nunca `itemSchema` —, incluindo munição
+elemental (flash/shiver/flamming/earth/envenomed arrow: o `element<tipo>` do Canary vira
+`damageType`); os 5 slugs autorais (`arrow`, `burst-arrow`, `sniper-arrow`, `onyx-arrow`,
+`power-bolt`) nunca são gerados de novo — o preço deles já é regravado por `npc-prices.ts`
+(#574, `AMMO_CANARY_IDS`).
+
 ## Inventário e equipamento (FUN-82)
 
 **Capacidade é peso**, no paradigma do Tibia (§21.5): a mochila cabe o que o personagem aguenta,
@@ -238,7 +271,7 @@ dobro, e a capacidade deixa de significar o que diz.
 | | |
 |---|---|
 | stack máximo | 100, e pilha cheia começa outra |
-| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item |
+| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item; o arremessável (#575) empilha como qualquer item comum |
 | item que não cabe | **recusado**, e fica no cadáver do monstro até ele decair (ADR 0048) |
 
 Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a
@@ -752,9 +785,6 @@ Glacier Amulet manualmente.
   do Canary); todo item gerado sai `value: 0`.
 - **`stackable`** — é um flag de `items.otb`, binário, que este leitor não abre; nunca declarado
   (fica no default `false`).
-- **Munição e arremessável (M34-04)** — "distance weapons" sem `ammotype` (spear, throwing star,
-  royal spear…) é o próprio projétil, não um lançador; fica fora, junto com o catálogo de munição.
-- **Quiver** — contêiner *e* escudo ao mesmo tempo; o `itemSchema` não tem essa combinação.
 - **Arma `fist`** — a família não é declarável (o motor a usa só como fallback desarmado, DT-01).
 - **`skillfist`** — sem skill correspondente no Draconya (só `melee`/`distance`/`shielding`/`magic`).
 
@@ -797,11 +827,13 @@ Glacier Amulet manualmente.
   as seis peças e o slot em que cada uma nasce vestida, e `createCharacter` grava as linhas de
   `item_instance` na **mesma transação** que o personagem (id `<characterId>:kit:<n>`), sem
   passar pelo ledger — o kit não tem preço. Personagem criado antes do #153 continua sem kit.
-- **Royal Spear (#520) não é arma de arremesso.** No Tibia real é `weaponType distance` sem
-  munição — o próprio item é o projétil, consumido ao acertar (`breakChance`). `WEAPON_KINDS`
-  (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
-  arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
-  vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
+- **Royal Spear (#520) agora é arma de arremesso de verdade (#575, M34-04).** No Tibia real é
+  `weaponType distance` sem munição — o próprio item é o projétil, consumido ao acertar
+  (`breakChance`). A #575 deu forma a esse mecanismo (`weapon.breakChance`, `Inventory.
+  consumeStack`), e o Royal Spear foi promovido de `kind: 'other'` (sem `weapon`, só vendável)
+  para `kind: 'weapon'`, `stackable: true`, `weapon: { kind: 'distance', family: 'distance',
+  range: 3, breakChance: 3, wieldUnproperly: true }`, level 25 — os mesmos números do Canary
+  `items.xml` id 7378 que já estavam no `_open` desde a #520/#536, agora com mecanismo.
 - **Serpent Sword e Fire Sword (#687) têm o elemento em `weapon.element`.** `attack` é só o
   físico (24 e 18); `elementfire 11` e `elementearth 8` do Canary moram em
   `weapon.element: { type, attack }`. No `combat-v3` o golpe sorteia sobre `attack + element` e

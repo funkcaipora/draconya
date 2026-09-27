@@ -25,6 +25,7 @@ import { getCatalogType, listCatalogTypes } from './registry.js';
 // entra no comando — uma linha por tipo.
 import './items.js';
 import './monsters.js';
+import './ammo.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 

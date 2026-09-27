@@ -23,9 +23,11 @@
 // à mão (o comentário do `_open` seria a próxima fonte de verdade errada).
 //
 // **O que fica de fora, e aparece no relatório** (`docs/reference/catalog/items-report.md`):
-// munição/arremessável (M34-04), spellbook/varinha sem elemento reconhecido, quiver (contêiner
-// + escudo, sem forma no schema), arma `fist` (família não declarável) e todo atributo lido sem
-// campo correspondente no schema desta base.
+// spellbook/varinha sem elemento reconhecido, arma `fist` (família não declarável) e todo
+// atributo lido sem campo correspondente no schema desta base. Munição, arremessável e quiver
+// (M34-04, #575) são gerados: munição vai para o tipo de catálogo `ammo` (`ammo.ts`, schema
+// próprio); arremessável e quiver entram AQUI, na fatia `weapons`/`shields`, porque os dois já
+// cabem no `itemSchema` (`weapon.breakChance`, `perfectShot`).
 //
 // **Preço (`value`, M34-03/#574)**: `items.xml` não carrega preço — vem de
 // `data-otservbr-global/npc/*.lua`, lido por `npc-prices.ts` (`readNpcShopPrices`) e passado
@@ -76,10 +78,15 @@ function numberValue(attrs: ReadonlyMap<string, XmlElement>, key: string): numbe
 // ---------------------------------------------------------------------------------------------
 // Vocabulário do Canary → vocabulário do Draconya.
 
-/** `script.slot` do Canary → `ITEM_SLOTS` do Draconya. `right-hand` é o de quiver (skip). */
+/**
+ * `script.slot` do Canary → `ITEM_SLOTS` do Draconya. `right-hand` é o do quiver (#575): o
+ * carcás que ocupa a mão secundária, mapeado para `shield` — o mesmo slot de escudo/spellbook
+ * (ADR 0026; `itemSchema.quiver`/`perfectShot`, `content/AGENTS.md` "Munição").
+ */
 const SLOT_MAP: Readonly<Record<string, string>> = {
   head: 'head', body: 'chest', armor: 'chest', legs: 'legs', feet: 'feet',
   ring: 'finger', necklace: 'neck', shield: 'shield', ammo: 'ammo', backpack: 'back', hand: 'hand',
+  'right-hand': 'shield',
 };
 
 /** `wandType` (rod/wand) → `DamageType`. Sem `holy`/`physical`: nenhuma wand/rod do Canary os usa. */
@@ -87,8 +94,8 @@ const WAND_TYPE_TO_DAMAGE: Readonly<Record<string, string>> = {
   death: 'death', earth: 'earth', energy: 'energy', fire: 'fire', ice: 'ice',
 };
 
-/** `element<tipo>` (arma corpo a corpo) → `DamageType`. */
-const ELEMENT_ATTR_TO_DAMAGE: ReadonlyMap<string, string> = new Map([
+/** `element<tipo>` (arma corpo a corpo, e a munição elemental do #575 em `ammo.ts`) → `DamageType`. */
+export const ELEMENT_ATTR_TO_DAMAGE: ReadonlyMap<string, string> = new Map([
   ['elementdeath', 'death'], ['elementearth', 'earth'], ['elementenergy', 'energy'],
   ['elementfire', 'fire'], ['elementice', 'ice'], ['elementholy', 'holy'], ['elementphysical', 'physical'],
 ]);
@@ -159,10 +166,18 @@ function hasBonusAttribute(attrs: ReadonlyMap<string, XmlElement>): boolean {
   return false;
 }
 
-/** Classifica UM `<item>`, ou devolve o motivo pelo qual ele fica fora do corte desta issue. */
+/**
+ * Classifica UM `<item>`, ou devolve o motivo pelo qual ele fica fora do corte desta issue.
+ *
+ * `hasBreakChance` (#575) é o `<script><attribute key="breakChance">` do item — SÓ existe nos
+ * arremessáveis do Canary (spear, throwing star, viper/leaf star); um `weaponType: "distance"`
+ * sem `ammotype` E sem `breakChance` continua fora do corte (a família "fist" já cobre o caso
+ * de weaponType inexistente/desconhecido; nenhum item real do `items.xml` cai nesse terceiro
+ * caso hoje, mas o schema recusaria o gerado sem um dos dois campos).
+ */
 export function classify(
   primarytype: string | undefined, weaponType: string | undefined, ammotype: string | undefined,
-  scriptSlot: string | undefined,
+  scriptSlot: string | undefined, hasBreakChance: boolean,
 ): Classification | { readonly skip: string } {
   switch (primarytype) {
     case 'sword weapons': return { slice: 'weapons', kind: 'weapon' };
@@ -170,12 +185,16 @@ export function classify(
     case 'club weapons': return { slice: 'weapons', kind: 'weapon' };
     case 'distance weapons':
       if (weaponType === 'fist') return { skip: 'família "fist" não é declarável (fallback do motor, DT-01)' };
-      return ammotype === undefined
-        ? { skip: 'arremessável/munição sem lançador (M34-04, fora do escopo)' }
-        : { slice: 'weapons', kind: 'weapon' };
+      if (ammotype !== undefined) return { slice: 'weapons', kind: 'weapon' };
+      return hasBreakChance
+        ? { slice: 'weapons', kind: 'weapon' }
+        : { skip: 'arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável)' };
     case 'wands': case 'rods': return { slice: 'weapons', kind: 'weapon' };
     case 'shields': case 'spellbooks': return { slice: 'shields', kind: 'shield', slot: 'shield' };
-    case 'quivers': return { skip: 'quiver: contêiner + escudo, sem combinação no schema (fora do escopo)' };
+    // O quiver (#575) é item de `kind: 'shield'` puro — sem contêiner, porque a munição do
+    // Draconya não tem pilha física a guardar (ADR 0026 d.3). `SLOT_MAP['right-hand']` já
+    // resolve o slot; aqui só falta a classificação em si.
+    case 'quivers': return { slice: 'shields', kind: 'shield', slot: 'shield' };
     case 'helmets': case 'helmet': return { slice: 'helmets', kind: 'armor', slot: 'head' };
     case 'armors': return { slice: 'armors', kind: 'armor', slot: 'chest' };
     case 'legs': return { slice: 'legs', kind: 'armor', slot: 'legs' };
@@ -193,9 +212,10 @@ export function classify(
     return { slice: 'weapons', kind: 'weapon' };
   }
   if (weaponType === 'distance') {
-    return ammotype === undefined
-      ? { skip: 'arremessável/munição sem lançador (M34-04, fora do escopo)' }
-      : { slice: 'weapons', kind: 'weapon' };
+    if (ammotype !== undefined) return { slice: 'weapons', kind: 'weapon' };
+    return hasBreakChance
+      ? { slice: 'weapons', kind: 'weapon' }
+      : { skip: 'arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável)' };
   }
   // Peça de recompensa sem `primarytype` (#688): entra pelo SLOT + algum atributo de bônus real.
   const mapped = scriptSlot === undefined ? undefined : SLOT_MAP[scriptSlot];
@@ -226,6 +246,10 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
   'lifeleechamount', 'manaleechamount', 'reflectdamage', 'cleavepercent', 'hitchance', 'hitChance',
   'magiclevelpoints', 'skillsword', 'skillaxe', 'skillclub', 'skilldist', 'skillshield', 'ammotype',
   'description', 'script',
+  // O quiver (#575): `perfectshotrange`/`perfectshotdamage` viram `item.perfectShot`;
+  // `containersize` é IGNORADO de propósito — o Draconya não guarda pilha física de munição
+  // (ADR 0026 d.3), então o quiver entra como `kind: 'shield'` puro, nunca `kind: 'container'`.
+  'perfectshotrange', 'perfectshotdamage', 'containersize',
   ...ELEMENT_ATTR_TO_DAMAGE.keys(), ...ABSORB_ATTR_TO_DAMAGE.keys(), ...SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.keys(),
 ]);
 
@@ -258,7 +282,10 @@ export function convertItem(
   // id 3074, é exatamente este caso) ainda entra pelo `weaponType`.
   if (primarytype === undefined && !recognizedWeaponType && !hasBonusAttribute(attrs)) return undefined;
 
-  const classification = classify(primarytype, weaponType, ammotype, scriptSlot);
+  // O arremessável (#575): `breakChance` está no `<script>`, como `level`/`vocation`/`mana` —
+  // nunca no topo do `<item>` (spear id 3277, throwing star id 3287, ambos conferidos).
+  const breakChance = numberValue(scriptAttrs, 'breakChance');
+  const classification = classify(primarytype, weaponType, ammotype, scriptSlot, breakChance !== undefined);
   const source: CatalogSource = { engine: 'canary', commit, path };
   const slug = slugify(name);
   if ('skip' in classification) {
@@ -436,6 +463,11 @@ export function convertItem(
     const range = numberValue(attrs, 'range');
     if (range !== undefined) weapon['range'] = range;
     if (family === 'distance' && ammotype !== undefined) weapon['ammoFamily'] = ammotype;
+    // O arremessável (#575): SEM `ammotype` (nenhum lançador) — o `breakChance` do `<script>`,
+    // já lido acima para a classificação, entra aqui como o dado da arma.
+    if (family === 'distance' && ammotype === undefined && breakChance !== undefined) {
+      weapon['breakChance'] = breakChance;
+    }
     if (damageType !== undefined) weapon['damageType'] = damageType;
     const mana = numberValue(scriptAttrs, 'mana');
     if (mana !== undefined && mana > 0) weapon['manaPerHit'] = mana;
@@ -471,6 +503,19 @@ export function convertItem(
     entity['weapon'] = weapon;
   } else if (classification.kind === 'shield' && slot === 'shield') {
     if (primarytype === 'spellbooks') entity['spellbook'] = true;
+    // O quiver (#575): `quiver: true` para TODO item de `primarytype: "quivers"` (o `right-hand`
+    // do Canary — `secondaryShield` na mitigação do jogador, #549); `perfectShot` só nos poucos
+    // que declaram `perfectshotrange`/`perfectshotdamage` (eldritch quiver id 36666, alicorn
+    // quiver id 39150) — a maioria dos quivers do Canary não tem o bônus.
+    if (primarytype === 'quivers') {
+      entity['quiver'] = true;
+      const perfectShotRange = numberValue(attrs, 'perfectshotrange');
+      const perfectShotDamage = numberValue(attrs, 'perfectshotdamage');
+      if (perfectShotRange !== undefined && perfectShotRange > 0
+        && perfectShotDamage !== undefined && perfectShotDamage > 0) {
+        entity['perfectShot'] = { range: perfectShotRange, damage: perfectShotDamage };
+      }
+    }
   }
 
   entity['source'] = source;

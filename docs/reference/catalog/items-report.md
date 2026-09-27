@@ -2,7 +2,7 @@
 
 Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 
-1946 entidade(s) geradas em 10 fatia(s):
+1954 entidade(s) geradas em 10 fatia(s):
 
 - `amulets.json`: 87
 - `armors.json`: 164
@@ -11,19 +11,19 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 - `helmets.json`: 131
 - `legs.json`: 66
 - `rings.json`: 44
-- `shields.json`: 109
+- `shields.json`: 117
 - `valuables.json`: 164
 - `weapons.json`: 489
 
 ## Notas
 
-- 7420 `<item>` lidos das categorias de caça; 5474 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
+- 7420 `<item>` lidos das categorias de caça; 5466 fora do corte, 75 por slug duplicado (nome repetido — desambiguação de id fica para quando o primeiro conflito real aparecer).
 - Reconciliação (ADR 0014): 37 item(ns) autoral(is) com override gravado em `packages/content/data/items/overrides/` — o id nunca muda, só a correção.
 - Preço (`value`, M34-03/#574): o maior `sell` de `data-otservbr-global/npc/*.lua` por `id` do Canary (exceto o Nah'Bob, ver `npc-prices.ts`); `0` quando nenhum NPC vende, ou quando o importador rodou sem `prices`.
 - `stackable` nunca declarado (sempre o default `false`): a pilha é um flag de `items.otb`, binário, que este leitor não abre — só `items.xml`.
-- Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), augments (75), showduration (73), shootType (67), decayTo (64), loottype (47), skillfist (47), mantra (38), transformdeequipto (28), stopduration (27), showCharges (22), showattributes (20), transformequipto (18), lifeleechchance (16), manaleechchance (16), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), magicshieldCapacityflat (4), magicshieldCapacitypercent (4), containersize (2), decayto (2), fluidsource (2), perfectshotrange (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectshotdamage (1), perfectShotDamage (1), wrapableto (1).
+- Campos lidos e ignorados (sem campo no schema desta base ou fora do escopo): showCount (115), showAttributes (91), shootType (79), augments (75), showduration (73), decayTo (64), loottype (47), skillfist (47), mantra (38), transformdeequipto (28), stopduration (27), showattributes (24), showCharges (22), transformequipto (18), lifeleechchance (16), manaleechchance (16), maxhitchance (11), transformDeEquipTo (11), transformEquipTo (10), maxtextlen (6), writeable (6), magicshieldCapacityflat (4), magicshieldCapacitypercent (4), decayto (2), fluidsource (2), fieldabsorbpercentfire (1), invisible (1), manashield (1), perfectShotDamage (1), wrapableto (1).
 
-## Fora do corte (5474)
+## Fora do corte (5466)
 
 O pacote de arte 13.32 não desenha, ou o `sim` ainda não executa a mecânica (ADR 0038 decisão 5).
 Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
@@ -72,7 +72,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | alchemistic-table | alchemistic table | sem categoria de caça (primarytype "furniture") | `data/items/items.xml` |
 | alga | alga | sem categoria de caça (primarytype "flora and minerals") | `data/items/items.xml` |
 | alga | alga | sem categoria de caça (primarytype "flora and minerals") | `data/items/items.xml` |
-| alicorn-quiver | alicorn quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | all-knowing-sausages | all knowing sausages | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | all-seeing-tapestry | all-seeing tapestry | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | amazon-disguise-kit | amazon disguise kit | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
@@ -515,7 +514,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | blue-pollen | blue pollen | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | blue-powder | blue powder | sem categoria de caça (primarytype "rubbish") | `data/items/items.xml` |
 | blue-present-kit | blue present kit | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
-| blue-quiver | blue quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | blue-rose | blue rose | sem categoria de caça (primarytype "plants and herbs") | `data/items/items.xml` |
 | blue-round-cushion | blue round cushion | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | blue-shark-trophy | blue shark trophy | sem categoria de caça (primarytype "trophies") | `data/items/items.xml` |
@@ -740,7 +738,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | candy | candy | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
 | candy-cane | candy cane | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
 | candy-canes | candy canes | sem categoria de caça (primarytype "tools (objects)") | `data/items/items.xml` |
-| candy-coated-quiver | candy-coated quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | candy-floss | candy floss | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
 | candy-floss | candy floss | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
 | candy-floss-elemental-soul-core | candy floss elemental soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
@@ -1451,7 +1448,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | elder-mummy-soul-core | elder mummy soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | elder-wyrm-soul-core | elder wyrm soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | eldritch-crescent-moon-spade | eldritch crescent moon spade | família "fist" não é declarável (fallback do motor, DT-01) | `data/items/items.xml` |
-| eldritch-quiver | eldritch quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | elemental-carpet | elemental carpet | sem categoria de caça (primarytype "floor decorations") | `data/items/items.xml` |
 | elemental-carpet | elemental carpet | sem categoria de caça (primarytype "floor decorations") | `data/items/items.xml` |
 | elemental-crystal | elemental crystal | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
@@ -2563,7 +2559,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | jungle-grass | jungle grass | sem categoria de caça (primarytype "grass") | `data/items/items.xml` |
 | jungle-moa-nest | jungle moa nest | sem categoria de caça (primarytype "natural products") | `data/items/items.xml` |
 | jungle-moa-soul-core | jungle moa soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
-| jungle-quiver | jungle quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | jungle-rose | jungle rose | sem categoria de caça (primarytype "flowers") | `data/items/items.xml` |
 | juniper-tree | juniper tree | sem categoria de caça (primarytype "trees") | `data/items/items.xml` |
 | juvenile-bashmu-soul-core | juvenile bashmu soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
@@ -3150,7 +3145,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | naga-archer-soul-core | naga archer soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | naga-basin | naga basin | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | naga-katar | naga katar | família "fist" não é declarável (fallback do motor, DT-01) | `data/items/items.xml` |
-| naga-quiver | naga quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | naga-warrior-soul-core | naga warrior soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | nail | nail | sem categoria de caça (primarytype "metals") | `data/items/items.xml` |
 | nail-case | nail case | sem categoria de caça (primarytype "taming items") | `data/items/items.xml` |
@@ -3381,9 +3375,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | ornate-canopic-jar | ornate canopic jar | sem categoria de caça (primarytype "quest objects") | `data/items/items.xml` |
 | ornate-carving-axe | ornate carving axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-carving-blade | ornate carving blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| ornate-carving-bow | ornate carving bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| ornate-carving-bow | ornate carving bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | ornate-carving-chopper | ornate carving chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| ornate-carving-crossbow | ornate carving crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| ornate-carving-crossbow | ornate carving crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | ornate-carving-hammer | ornate carving hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-carving-mace | ornate carving mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-carving-rod | ornate carving rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -3397,9 +3391,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | ornate-mailbox | ornate mailbox | sem categoria de caça (primarytype "furniture") | `data/items/items.xml` |
 | ornate-mayhem-axe | ornate mayhem axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-mayhem-blade | ornate mayhem blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| ornate-mayhem-bow | ornate mayhem bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| ornate-mayhem-bow | ornate mayhem bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | ornate-mayhem-chopper | ornate mayhem chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| ornate-mayhem-crossbow | ornate mayhem crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| ornate-mayhem-crossbow | ornate mayhem crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | ornate-mayhem-hammer | ornate mayhem hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-mayhem-mace | ornate mayhem mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-mayhem-rod | ornate mayhem rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -3407,9 +3401,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | ornate-mayhem-wand | ornate mayhem wand | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-remedy-axe | ornate remedy axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-remedy-blade | ornate remedy blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| ornate-remedy-bow | ornate remedy bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| ornate-remedy-bow | ornate remedy bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | ornate-remedy-chopper | ornate remedy chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| ornate-remedy-crossbow | ornate remedy crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| ornate-remedy-crossbow | ornate remedy crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | ornate-remedy-hammer | ornate remedy hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-remedy-mace | ornate remedy mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | ornate-remedy-rod | ornate remedy rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -3610,9 +3604,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | plaguesmith-soul-core | plaguesmith soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | plain-carving-axe | plain carving axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-carving-blade | plain carving blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| plain-carving-bow | plain carving bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| plain-carving-bow | plain carving bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | plain-carving-chopper | plain carving chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| plain-carving-crossbow | plain carving crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| plain-carving-crossbow | plain carving crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | plain-carving-hammer | plain carving hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-carving-mace | plain carving mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-carving-rod | plain carving rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -3620,9 +3614,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | plain-carving-wand | plain carving wand | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-mayhem-axe | plain mayhem axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-mayhem-blade | plain mayhem blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| plain-mayhem-bow | plain mayhem bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| plain-mayhem-bow | plain mayhem bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | plain-mayhem-chopper | plain mayhem chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| plain-mayhem-crossbow | plain mayhem crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| plain-mayhem-crossbow | plain mayhem crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | plain-mayhem-hammer | plain mayhem hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-mayhem-mace | plain mayhem mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-mayhem-rod | plain mayhem rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -3630,9 +3624,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | plain-mayhem-wand | plain mayhem wand | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-remedy-axe | plain remedy axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-remedy-blade | plain remedy blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| plain-remedy-bow | plain remedy bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| plain-remedy-bow | plain remedy bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | plain-remedy-chopper | plain remedy chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| plain-remedy-crossbow | plain remedy crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| plain-remedy-crossbow | plain remedy crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | plain-remedy-hammer | plain remedy hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-remedy-mace | plain remedy mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | plain-remedy-rod | plain remedy rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -3770,7 +3764,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | quara-raider-soul-core | quara raider soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | queen-eloise-bust | Queen Eloise bust | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | queen-eloise-bust | Queen Eloise bust | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
-| quiver | quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | rabbit-soul-core | rabbit soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | rabid-wolf-soul-core | rabid wolf soul core | sem categoria de caça (primarytype "soul cores") | `data/items/items.xml` |
 | raccoon-backpack | raccoon backpack | sem categoria de caça (primarytype "containers") | `data/items/items.xml` |
@@ -3849,7 +3842,6 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | red-powder | red powder | sem categoria de caça (primarytype "rubbish") | `data/items/items.xml` |
 | red-power-core | red power core | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | red-present-kit | red present kit | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
-| red-quiver | red quiver | quiver: contêiner + escudo, sem combinação no schema (fora do escopo) | `data/items/items.xml` |
 | red-rose | red rose | sem categoria de caça (primarytype "plants and herbs") | `data/items/items.xml` |
 | red-roses | red roses | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | red-shrine-stone | red shrine stone | sem categoria de caça (primarytype "rocks") | `data/items/items.xml` |
@@ -4014,7 +4006,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | royal-fanfare | royal fanfare | sem categoria de caça (primarytype "musical instruments") | `data/items/items.xml` |
 | royal-medal | royal medal | sem categoria de caça (primarytype "contest prizes") | `data/items/items.xml` |
 | royal-spear | royal spear | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
-| royal-star | royal star | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| royal-star | royal star | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | royal-tapestry | royal tapestry | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | rubble | rubble | sem categoria de caça (primarytype "rocks") | `data/items/items.xml` |
 | ruby-fire-stone | ruby fire stone | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
@@ -4439,7 +4431,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | snow-flake-tapestry | snow flake tapestry | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | snow-globe | snow globe | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | snow-heap | snow heap | sem categoria de caça (primarytype "natural products") | `data/items/items.xml` |
-| snowball | snowball | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| snowball | snowball | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | snowbash-figurine | snowbash figurine | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | snowman | snowman | sem categoria de caça (primarytype "statues") | `data/items/items.xml` |
 | snowman | snowman | sem categoria de caça (primarytype "statues") | `data/items/items.xml` |
@@ -4907,10 +4899,10 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | thread-tree | thread tree | sem categoria de caça (primarytype "trees") | `data/items/items.xml` |
 | three-cans | three cans | sem categoria de caça (primarytype "tools (objects)") | `data/items/items.xml` |
 | throatslitter | throatslitter | sem categoria de caça (primarytype "trees") | `data/items/items.xml` |
-| throwing-cake | throwing cake | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| throwing-cake | throwing cake | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | throwing-knife | throwing knife | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
 | throwing-star | throwing star | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
-| throwing-star-of-sula | throwing star of Sula | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| throwing-star-of-sula | throwing star of Sula | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | thunderstorm-rune | thunderstorm rune | sem categoria de caça (primarytype "attack runes") | `data/items/items.xml` |
 | tibiacity-encyclopedia | Tibiacity Encyclopedia | sem categoria de caça (primarytype "books") | `data/items/items.xml` |
 | tibiacity-encyclopedia | Tibiacity Encyclopedia | sem categoria de caça (primarytype "books") | `data/items/items.xml` |
@@ -5079,7 +5071,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | ultimate-spirit-keg | ultimate spirit keg | sem categoria de caça (primarytype "liquids") | `data/items/items.xml` |
 | ultimate-spirit-potion | ultimate spirit potion | sem categoria de caça (primarytype "liquids") | `data/items/items.xml` |
 | umbral-katar | umbral katar | família "fist" não é declarável (fallback do motor, DT-01) | `data/items/items.xml` |
-| umbral-master-bow-test | umbral master bow TEST | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| umbral-master-bow-test | umbral master bow TEST | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | umbral-master-katar | umbral master katar | família "fist" não é declarável (fallback do motor, DT-01) | `data/items/items.xml` |
 | unholy-book | unholy book | sem categoria de caça (primarytype "books") | `data/items/items.xml` |
 | unicorn-weisswurst | unicorn weisswurst | sem categoria de caça (primarytype "food") | `data/items/items.xml` |
@@ -5098,9 +5090,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | v-belt | v-belt | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | valuable-carving-axe | valuable carving axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-carving-blade | valuable carving blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| valuable-carving-bow | valuable carving bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| valuable-carving-bow | valuable carving bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | valuable-carving-chopper | valuable carving chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| valuable-carving-crossbow | valuable carving crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| valuable-carving-crossbow | valuable carving crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | valuable-carving-hammer | valuable carving hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-carving-mace | valuable carving mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-carving-rod | valuable carving rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -5108,9 +5100,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | valuable-carving-wand | valuable carving wand | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-mayhem-axe | valuable mayhem axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-mayhem-blade | valuable mayhem blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| valuable-mayhem-bow | valuable mayhem bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| valuable-mayhem-bow | valuable mayhem bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | valuable-mayhem-chopper | valuable mayhem chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| valuable-mayhem-crossbow | valuable mayhem crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| valuable-mayhem-crossbow | valuable mayhem crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | valuable-mayhem-hammer | valuable mayhem hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-mayhem-mace | valuable mayhem mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-mayhem-rod | valuable mayhem rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -5118,9 +5110,9 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | valuable-mayhem-wand | valuable mayhem wand | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-remedy-axe | valuable remedy axe | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-remedy-blade | valuable remedy blade | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| valuable-remedy-bow | valuable remedy bow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| valuable-remedy-bow | valuable remedy bow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | valuable-remedy-chopper | valuable remedy chopper | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
-| valuable-remedy-crossbow | valuable remedy crossbow | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| valuable-remedy-crossbow | valuable remedy crossbow | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | valuable-remedy-hammer | valuable remedy hammer | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-remedy-mace | valuable remedy mace | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
 | valuable-remedy-rod | valuable remedy rod | wand/rod sem mana ou faixa de dano completa (script;weapon incompleto) | `data/items/items.xml` |
@@ -5193,7 +5185,7 @@ Reimportar recupera automaticamente o que um schema futuro passar a aceitar.
 | violet-memory-shard | violet memory shard | sem categoria de caça (primarytype "quest items") | `data/items/items.xml` |
 | violet-round-cushion | violet round cushion | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
 | violet-square-cushion | violet square cushion | sem categoria de caça (primarytype "decoration") | `data/items/items.xml` |
-| viper-star | viper star | arremessável/munição sem lançador (M34-04, fora do escopo) | `data/items/items.xml` |
+| viper-star | viper star | arma de distância sem "ammotype" (lançador) nem "breakChance" (arremessável) | `data/items/items.xml` |
 | void-boots | void boots | id duplicado (outro item já gerou este slug) | `data/items/items.xml` |
 | void-carpet | void carpet | sem categoria de caça (primarytype "floor decorations") | `data/items/items.xml` |
 | volcanic-chair | volcanic chair | sem categoria de caça (primarytype "furniture") | `data/items/items.xml` |

@@ -6656,9 +6656,17 @@ const slots = bot.groups.get(group);
     if (weapon !== null && how?.kind === 'distance') {
       // Sem visão livre até o alvo (#553), o tiro NÃO sai — como sem munição, antes de gastar
       // nada. O alvo continua sendo o mesmo (a escolha ignora visão): o próximo vencimento
-      // reavalia, e acerta assim que a linha abrir.
+      // reavalia, e acerta assim que a linha abrir. Vale para o arremessável (#575) também —
+      // ele só troca a fonte do projétil, nunca a exigência de linha de visão.
       if (!isSightClear(this.#world.map, character.position, monster.position)) return;
-      const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
+      // O arremessável (#575): sem `ammoFamily`, o item na mão É o próprio projétil — não há
+      // seleção por família nem lançador (ADR 0026 d.3 não se aplica a ele). `buildContent` já
+      // garante que toda arma `distance` tem exatamente um dos dois campos.
+      if (how.ammoFamily === undefined) {
+        this.#throwWeapon(session, character, monster, weapon, how, damagePercent, defender, reflectAttacker);
+        return;
+      }
+      const ammo = this.#ammoFor(character, how.ammoFamily);
       // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
@@ -6714,7 +6722,8 @@ const slots = bot.groups.get(group);
       };
       const result = resolveDamage(
         {
-          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical,
+          rawDamage: this.#weaponPower(session, character, profile, damagePercent).physical
+            + this.#perfectShotBonus(character, monster),
           source: 'basic-attack',
           damageType: profile.damageType,
           modifiers: this.#attackerModifiers(character),
@@ -6971,6 +6980,83 @@ const slots = bot.groups.get(group);
     return rollDistanceHit(
       tiles, skillLevel, table, session.rng, ammo.maxHitChance, ammo.hitChance, how.hitChance,
     );
+  }
+
+  /**
+   * O arremessável (#575, ADR 0026 d.3 NÃO se aplica): sem `ammoFamily`, o item na mão É o
+   * próprio projétil — não há seleção por família nem lançador, e não é munição abstrata: é um
+   * item de verdade, `stackable: true` (spear, throwing star — como o `royal-spear.json`
+   * autoral já declarava, à espera desta issue), looteado e empilhado como qualquer item comum.
+   * `weapon !== null` já garante `quantity >= 1` (`equip` nunca deixa pilha vazia no corpo), então
+   * não há "sem estoque" a conferir aqui — só a QUEBRA, que consome uma unidade da PILHA
+   * (`Inventory.consumeStack`), nunca `ammunitionStock` (isso é só da munição arrow/bolt).
+   */
+  #throwWeapon(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, weapon: Item,
+    how: ResolvedWeapon, damagePercent: number, defender: Defender,
+    reflectAttacker: ReflectAttacker | undefined,
+  ): void {
+    session.emit({
+      kind: 'shot', attackerId: character.id, targetId: monster.subject,
+      weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+    });
+    const hit = this.#rollThrowHit(session, character, monster, how);
+    if (!this.#isV3()) this.#practice(session, character, how.family, 1);
+    // A quebra é rolagem SEMPRE consumida (ADR 0031): a sequência de RNG não pode depender do
+    // valor de `breakChance` — a mesma regra do bloqueio e do crítico.
+    if (session.rng.chance((how.breakChance ?? 0) / 100)) {
+      character.inventory.consumeStack('hand');
+    }
+    if (!hit) {
+      if (this.#isV3()) this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+      return;
+    }
+    const power = this.#weaponPower(session, character, how, damagePercent);
+    const result = resolveDamage(
+      {
+        rawDamage: power.physical + this.#perfectShotBonus(character, monster),
+        source: 'basic-attack',
+        damageType: how.damageType,
+        modifiers: this.#attackerModifiers(character),
+        // Como a munição por família (#548): bloqueia por armadura, nunca por escudo.
+        blockable: DISTANCE_BLOCK_FLAGS,
+        ...(reflectAttacker === undefined ? {} : { attacker: reflectAttacker }),
+      },
+      defender, 'pve', this.#options.combat, session.rng, session.nowMs,
+    );
+    this.#land(session, character, monster, result, 'melee');
+    if (this.#isV3()) this.#practice(session, character, how.family, distanceTries(character.attackPractice));
+  }
+
+  /**
+   * A chance de acerto do arremessável (#575): o CAMINHO FIXO de `distance-hit.ts` — o próprio
+   * `how.hitChance` da arma (viper star 80%, leaf star 90%) faz o papel do `ammunition.hitChance`
+   * direto do Canary (`it.hitChance != 0` ANTES da tabela/balde), porque não há munição separada
+   * cujo campo pudesse carregar isso. Sem tabela de `combat.distanceHitChance` (v1), sempre acerta.
+   */
+  #rollThrowHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, how: ResolvedWeapon,
+  ): boolean {
+    const table = this.#options.combat.distanceHitChance;
+    if (table === undefined) return true;
+    const family = this.#options.weaponFamilies.get('distance');
+    const skillLevel = this.#skillLevelOf(character, family);
+    const tiles = distance(character.position, monster.position);
+    return rollDistanceHit(tiles, skillLevel, table, session.rng, undefined, how.hitChance ?? 0, undefined);
+  }
+
+  /**
+   * O bônus de perfect shot (#575; `Player::getPerfectShotDamage`, Canary `weapons.cpp:706-718`/
+   * `game.cpp:8500-8509`): soma quando a distância de Chebyshev até o alvo é EXATAMENTE o
+   * `perfectShot.range` da peça no slot de escudo (a aljava) — nem mais perto, nem mais longe.
+   * Vale para os dois caminhos de tiro (munição por família E arremessável), porque o Canary lê a
+   * MESMA peça nos dois. Sem aljava, ou aljava sem `perfectShot`, o bônus é zero.
+   */
+  #perfectShotBonus(character: CharacterRuntime, monster: MonsterRuntime): number {
+    const shield = character.inventory.shield(this.#options.items, character);
+    const perfectShot = shield?.perfectShot;
+    if (perfectShot === undefined) return 0;
+    return distance(character.position, monster.position) === perfectShot.range ? perfectShot.damage : 0;
   }
 
   /**

@@ -42,11 +42,11 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2485)
+## Linhas de loot removidas (2482)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
-547 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
+544 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
 
 | item | ocorrências | motivo (da primeira ocorrência) |
 |---|---|---|
@@ -54,7 +54,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | abominations-tail | 1 | item ausente do catálogo (packages/content/data/items) |
 | abominations-tongue | 1 | item ausente do catálogo (packages/content/data/items) |
 | afflicted-strider-worms | 1 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
-| alicorn-quiver | 1 | item ausente do catálogo (packages/content/data/items) |
 | amber | 4 | item ausente do catálogo (packages/content/data/items) |
 | amber-with-a-bug | 1 | item ausente do catálogo (packages/content/data/items) |
 | amber-with-a-dragonfly | 5 | item ausente do catálogo (packages/content/data/items) |
@@ -188,7 +187,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | egg-of-the-many | 1 | item ausente do catálogo (packages/content/data/items) |
 | eggs-of-a-sacred-snake | 1 | item ausente do catálogo (packages/content/data/items) |
 | eldritch-crescent-moon-spade | 1 | item ausente do catálogo (packages/content/data/items) |
-| eldritch-quiver | 1 | item ausente do catálogo (packages/content/data/items) |
 | empty-goldfish-bowl | 1 | item ausente do catálogo (packages/content/data/items) |
 | energy-ball | 2 | max 4 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | energy-bar | 8 | item ausente do catálogo (packages/content/data/items) |
@@ -304,7 +302,6 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | jewel-case | 1 | item ausente do catálogo (packages/content/data/items) |
 | jewelled-backpack | 2 | item ausente do catálogo (packages/content/data/items) |
 | jungle-moa-feather | 1 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
-| jungle-quiver | 1 | item ausente do catálogo (packages/content/data/items) |
 | knowledgeable-book | 1 | item ausente do catálogo (packages/content/data/items) |
 | kongras-shoulderpad | 2 | item ausente do catálogo (packages/content/data/items) |
 | lamassu-horn | 1 | max 5 pede pilha, e o item não empilha (rollModel "canary" daria 1) |

@@ -280,6 +280,27 @@ export class Inventory {
     return left;
   }
 
+  /**
+   * Gasta UMA unidade da PILHA do item equipado no slot (o arremessável, #575 — spear, throwing
+   * star: `stackable: true`, o item em si é o projétil) e devolve o que sobrou; `0` é a pilha
+   * inteira consumida — o slot esvazia, o mesmo desenho de `consumeCharge`. Diferente de
+   * `charges` (durabilidade da INSTÂNCIA, #421): `quantity` é a contagem real da pilha, o mesmo
+   * campo que `add`/`move` já mantêm — arremessável não usa `ammunitionStock` nem seleção por
+   * família (ADR 0026 d.3 não se aplica a ele, só à munição arrow/bolt).
+   */
+  consumeStack(slot: ItemSlot): number {
+    const equipped = this.#equipped.get(slot);
+    if (equipped === undefined) return 0;
+    const left = equipped.quantity - 1;
+    if (left <= 0) {
+      this.#equipped.delete(slot);
+      this.#observer?.onUnequip(slot, equipped);
+      return 0;
+    }
+    this.#equipped.set(slot, { ...equipped, quantity: left });
+    return left;
+  }
+
   /** Some com o item do slot sem passar por container (esgotou). Devolve o que saiu. */
   destroy(slot: ItemSlot): CarriedItem | null {
     const equipped = this.#equipped.get(slot);
@@ -526,12 +547,24 @@ export class Inventory {
     // As duas mãos (#152, ADR 0026): o bow ocupa também o escudo. Vestir um com o outro no
     // lugar é recusado, e não trocado — tirar o escudo por conta própria seria decidir pelo
     // jogador o que ele queria fora do corpo.
+    //
+    // A ÚNICA exceção (#575): a aljava (`quiver: true`) convive com um bow/crossbow — a peça
+    // não é "escudo" de verdade, é o carcás que segura munição na mão secundária (o mesmo
+    // `right-hand` do Canary, que não conta contra as duas mãos do lançador). Sem a exceção, o
+    // `perfectShot` da aljava (schemas.ts) nunca teria como ser equipado junto de uma arma de
+    // distância, e ficaria morto por construção.
     if (definition.twoHanded && this.#equipped.has('shield')) {
-      return { ok: false, reason: 'hands-full' };
+      const shieldItem = catalog.get(this.#equipped.get('shield')?.itemId ?? '');
+      const quiverWithDistance = definition.kind === 'weapon' && definition.weapon?.kind === 'distance'
+        && shieldItem?.kind === 'shield' && shieldItem.quiver;
+      if (!quiverWithDistance) return { ok: false, reason: 'hands-full' };
     }
     if (definition.slot === 'shield') {
       const inHand = this.#equipped.get('hand');
-      if (inHand !== undefined && catalog.get(inHand.itemId)?.twoHanded) {
+      const inHandItem = inHand === undefined ? undefined : catalog.get(inHand.itemId);
+      const quiverWithDistance = definition.kind === 'shield' && definition.quiver
+        && inHandItem?.kind === 'weapon' && inHandItem.weapon?.kind === 'distance';
+      if (inHandItem?.twoHanded && !quiverWithDistance) {
         return { ok: false, reason: 'hands-full' };
       }
     }
