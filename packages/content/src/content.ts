@@ -1156,11 +1156,11 @@ export function buildContent(raw: RawContent): Content {
 
   // As abilities DECLARADAS (CMB-06, área estendida em #518), conferidas no arquivo CRU — o
   // compilado já tem a básica sintetizada, e validá-lo reprovaria todo monstro legado pelo id
-  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave` e
-  // `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
+  // reservado. O `basic` é do BOOT; a duplicata tornaria a escolha por id ambígua. `wave`, `rows`
+  // (#679) e `beam` saem da DIREÇÃO do lançador para o alvo (`facingDirection`, recalculada a cada golpe
   // — o monstro não guarda direção entre golpes); `cross`/`cleave` continuam fora porque nenhum
   // monstro do recorte precisa deles ainda.
-  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'beam']);
+  const MONSTER_ABILITY_AREA_SHAPES = new Set(['circle', 'wave', 'rows', 'beam']);
   for (const monster of rawMonsterDefinitions.values()) {
     const seenAbilities = new Set<string>();
     for (const ability of monster.abilities ?? []) {
@@ -1175,7 +1175,7 @@ export function buildContent(raw: RawContent): Content {
       if (area !== undefined && !MONSTER_ABILITY_AREA_SHAPES.has(area.shape)) {
         problems.push(
           `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
-            'monstro só lança `circle`, `wave` ou `beam`',
+            'monstro só lança `circle`, `wave`, `rows` ou `beam`',
         );
       }
       // O campo (CMB-07) segue a regra ANTERIOR da área: só `circle`. `wave`/`beam` são da

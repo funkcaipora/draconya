@@ -234,6 +234,17 @@ describe('actionDetail — a tabela da spec §6', () => {
     expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Onda 5' });
   });
 
+  it('área rows vira "Onda N", N = número de fileiras (#679)', () => {
+    const entry: ActionEntry = {
+      kind: 'spell',
+      spell: spell({
+        id: 'fire-wave', name: 'Fire Wave', effect: 'damage',
+        detail: { basePower: 10, area: { shape: 'rows', widths: [1, 3, 3, 5] } },
+      }),
+    };
+    expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Onda 4' });
+  });
+
   it('área beam vira "Feixe N"', () => {
     const entry: ActionEntry = {
       kind: 'spell',

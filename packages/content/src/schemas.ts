@@ -793,8 +793,8 @@ export const itemSchema = z.strictObject({
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
 /**
- * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
- * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `rows`, `wave`, `cleave` e `beam`
+ * saem do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
  * exige alvo nem alcance; `cross` (Explosion) é centrado no alvo, sem direção.
  *
  * Mora aqui, antes de supply, porque o efeito de CURA do supply a referencia (#475) e porque a
@@ -815,8 +815,25 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
   }),
   /** Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles. */
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
-  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  /**
+   * LEGADO DE FIXTURE (#679): cone à frente com a fileira k (1..length) de largura 2·⌊k/2⌋+1 →
+   * 1, 3, 3, 5, 5. É a aproximação do #523, que contou as `AREA_WAVEn` sem a fileira do `3` e
+   * errou uma fileira em toda onda — e `AREA_SQUAREWAVE5` e a onda de monstro nem cabem nesta
+   * fórmula. O catálogo usa `rows`, e `load.test.ts` proíbe `wave` em `data/`; fica no schema só
+   * porque fixtures de teste o usam, bit a bit iguais.
+   */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /**
+   * Fileiras à frente, uma largura cada (#679). A fileira i está a i + 1 tiles: a 0 é o `3`
+   * do Canary, ancorado um passo à frente (`getCasterPosition`). Transcreve a CONTAGEM por
+   * fileira da `AREA_*`, nunca a matriz (ADR 0019).
+   */
+  z.object({
+    shape: z.literal('rows'),
+    widths: z.array(z.number().int().positive().refine((w) => w % 2 === 1, {
+      message: 'largura de fileira é ímpar (centrada na linha da frente)',
+    })).min(1),
+  }),
   /**
    * Os três tiles imediatamente à frente (Front Sweep, Lesser Front Sweep). O Canary
    * (`AREA_WAVE6`, `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
@@ -827,7 +844,11 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
    * lançador lendo só a matriz local, sem a âncora do motor — revertido numa revisão.
    */
   z.object({ shape: z.literal('cleave') }),
-  /** Linha reta de `length` tiles à frente, largura 1. */
+  /**
+   * Linha reta de `length` tiles à frente, largura 1: `beam n` é exatamente a `AREA_BEAMn` do
+   * Canary, contando o `3` — ancorado um passo à frente (`spells.cpp` `getCasterPosition`) e
+   * atingido como qualquer valor não-zero (`AreaCombat::getList`, #679).
+   */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
 ]);
 

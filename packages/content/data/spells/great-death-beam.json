@@ -17,7 +17,7 @@
     "basePower": 155,
     "area": {
       "shape": "beam",
-      "length": 5
+      "length": 6
     },
     "damageType": "death",
     "formula": {
