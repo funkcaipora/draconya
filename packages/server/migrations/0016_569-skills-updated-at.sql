@@ -1,0 +1,12 @@
+-- #569: skill deixou de ser monotônica quando a penalidade de morte passou a derrubar tries
+-- (o mesmo percentual que já tirava XP). O ledger fundia `skills` pelo MAIOR de cada uma
+-- (`Skills.merge`) por acreditar que skill só sobe; com a morte podendo baixar, um extrato
+-- mais antigo processado fora de ordem depois de um mais novo reergueria a perda.
+--
+-- A correção troca o merge por escrita ABSOLUTA guardada por instante, como `stamina_updated_at`
+-- já faz (FUN-101): esta coluna guarda o `endedAtMs` da sessão que escreveu `skills` pela
+-- última vez, e o ledger só grava por cima quando o extrato novo é da sessão mais recente.
+--
+-- Aditiva por construção (ADR 0014): coluna nova com `defaultNow()`, como as demais colunas de
+-- instante desta tabela — quem já tem `skills` gravado passa a valer a partir de agora.
+ALTER TABLE character ADD COLUMN skills_updated_at timestamptz NOT NULL DEFAULT now();

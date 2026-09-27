@@ -66,9 +66,15 @@ custo cheio do nível novo antes de descontar o resto, exatamente como o Tibia f
 `startingLevel` de CADA skill: 10 para as corpo a corpo (fist/club/sword/axe, #567/#568) e 0 para
 `magic` — o mesmo "não desce mais" do Tibia, sem precisar de um caso especial para magia.
 
-**A skill nunca desce fora da morte.** `Skills.merge` (usado para reconciliar extratos)
-continua assumindo que skill só sobe, e a morte quebra essa monotonicidade de propósito — a
-mesma janela que já existia para XP (que também cai na morte sem passar por merge nenhum).
+**A morte quebra a monotonicidade que `Skills.merge` assumia, e o caminho durável foi corrigido
+para não depender mais dela.** `packages/server/src/jobs/ledger.ts` fundia `skills` pelo MAIOR de
+cada uma, por acreditar que skill só sobe; com a morte podendo derrubar tries, um extrato mais
+antigo processado fora de ordem depois de um mais novo reergueria a perda. A correção grava o
+valor ABSOLUTO da sessão, guardado por instante (`characters.skills_updated_at`, migração 0016)
+— a mesma solução que a stamina já usa (FUN-101) e que a XP já tinha por outra via (delta
+aditivo, que não depende de ordem por construção). `Skills.merge` continua existindo como
+utilidade pura para grandezas genuinamente monotônicas (o Bestiário, por exemplo), só deixou de
+ser a peça que protege skill no ledger.
 
 ## Sem piso de level (#569)
 

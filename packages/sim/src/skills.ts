@@ -178,12 +178,11 @@ export class Skills {
    * resto negativo escondido. No piso, a perda que sobra é descartada: não existe nível abaixo
    * dele para "emprestar" pontos.
    *
-   * **Nunca merge chama isto.** `Skills.merge` continua assumindo que skill só sobe — é o que
-   * a resolve de extrato fora de ordem depende —, e a morte quebra essa monotonicidade de
-   * propósito. Um extrato de ANTES da morte, mesclado DEPOIS, reergueria a skill que a morte
-   * baixou; é a mesma janela que já existe para XP (`character.xp` também pode cair na morte
-   * e não passa por merge nenhum) — skill morava do lado "nunca desce" só porque nada a
-   * derrubava ainda.
+   * **`Skills.merge` (fundir pelo maior) não protege mais o caminho durável do extrato.** A
+   * morte quebra a monotonicidade que o merge assumia, e o ledger (#569,
+   * `packages/server/src/jobs/ledger.ts`) passou a gravar o valor ABSOLUTO da sessão, guardado
+   * por instante — a mesma solução que a XP já tinha por outra via (delta aditivo, que não
+   * depende de ordem) e que a stamina já tinha por instante explícito.
    */
   lose(definition: Skill, amount: number, factor?: number): SkillLevelChange | null {
     if (amount <= 0) return null;
@@ -207,10 +206,17 @@ export class Skills {
   /**
    * Absorve o estado de outro, ficando com o MAIOR de cada skill.
    *
-   * Skill nunca desce, e é isso que torna o `max` a fusão certa — não uma escolha conservadora.
-   * Existe para o extrato: um extrato antigo, processado fora de ordem, não pode rebaixar uma
-   * skill que já subiu. É a mesma preocupação da guarda de instante da stamina, resolvida sem
-   * precisar de instante nenhum porque a grandeza é monotônica.
+   * **Não é mais usado pelo caminho durável do extrato** (`packages/server/src/jobs/ledger.ts`)
+   * desde o #569: a penalidade de morte pode DERRUBAR tries, e fundir pelo MAIOR reergueria a
+   * perda se um extrato mais antigo chegasse depois de um mais novo já aplicado. O ledger
+   * passou a gravar o valor ABSOLUTO da sessão, guardado por instante (`endedAtMs`), como a
+   * stamina já fazia — não porque skill deixou de precisar de proteção contra extrato fora de
+   * ordem, mas porque a proteção certa agora é "qual sessão terminou por último", não "qual
+   * valor é maior".
+   *
+   * Continua existindo como utilidade pura: fundir pelo maior é a operação certa sempre que se
+   * sabe, de antemão, que a grandeza só sobe (o Bestiário, por exemplo — `Bestiary.merge` — que
+   * abate nunca desce). Para skill especificamente, essa premissa não vale mais.
    */
   static merge(current: SkillsState | undefined, incoming: SkillsState): SkillsState {
     const merged: Record<string, SkillState> = { ...(current ?? {}) };

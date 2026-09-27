@@ -111,6 +111,17 @@ export const characters = pgTable(
     level: integer('level').notNull().default(1),
     xp: bigint('xp', { mode: 'number' }).notNull().default(0),
     skills: jsonb('skills').notNull().default({}),
+    /**
+     * O instante da SESSÃO que escreveu `skills` pela última vez (#569). Guarda contra o
+     * mesmo problema que `stamina_updated_at` já resolve: skill deixou de ser monotônica
+     * quando a penalidade de morte passou a derrubar tries (#569), então fundir pelo MAIOR de
+     * cada uma reergueria a perda se um extrato mais antigo chegasse depois de um mais novo já
+     * aplicado. `endedAtMs` do extrato é o relógio da SESSÃO, e como o personagem só está em
+     * uma sessão de cada vez (invariante 8), as sessões dele terminam em ordem cronológica
+     * real — comparar contra o instante já gravado decide sozinho qual dos dois é mais
+     * recente, sem precisar saber se a skill subiu ou desceu.
+     */
+    skillsUpdatedAt: timestamp('skills_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
     gold: bigint('gold', { mode: 'number' }).notNull().default(0),
     capacity: integer('capacity').notNull().default(400),
