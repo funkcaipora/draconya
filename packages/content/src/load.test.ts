@@ -1034,3 +1034,48 @@ describe('loadContent — generated/ e overrides/ (ADR 0038)', () => {
     );
   });
 });
+
+// #679: a área de onda e feixe é a contagem por fileira da `AREA_*` do Canary, com a fileira do
+// `3` — que o motor ancora um passo à frente (`spells.cpp:337`) e atinge (`combat.cpp:2309`).
+// Falha antes da correção: `energy-beam` era `beam 4`, `fire-wave` era `wave 3`.
+describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => {
+  const content = loadContent(DATA);
+
+  it('each spell has the area of its AREA_*, counting the row of the 3', () => {
+    const expected: Record<string, unknown> = {
+      'energy-beam': { shape: 'beam', length: 5 },
+      'great-energy-beam': { shape: 'beam', length: 8 },
+      'great-death-beam': { shape: 'beam', length: 6 },
+      'fire-wave': { shape: 'rows', widths: [1, 3, 3, 5] },
+      'ice-wave': { shape: 'rows', widths: [1, 3, 3, 5] },
+      'chill-out': { shape: 'rows', widths: [1, 3, 3, 5] },
+      scorch: { shape: 'rows', widths: [1, 3, 3, 5] },
+      'great-fire-wave': { shape: 'rows', widths: [1, 3, 3, 5, 5] },
+      'strong-ice-wave': { shape: 'rows', widths: [1, 3, 3] },
+      'terra-wave': { shape: 'rows', widths: [1, 1, 3, 3, 3] },
+      'energy-wave': { shape: 'rows', widths: [1, 1, 3, 3, 3] },
+    };
+    for (const [id, area] of Object.entries(expected)) {
+      const effect = content.spells.get(id)?.effect;
+      expect(effect?.kind, id).toBe('damage');
+      if (effect?.kind === 'damage') expect(effect.area, id).toEqual(area);
+    }
+  });
+
+  it('the dragon and dragon lord firewave is the Canary setupArea(8, 3): 26 tiles', () => {
+    for (const id of ['dragon', 'dragon-lord']) {
+      const ability = content.monsters.get(id)?.abilities.find((a) => a.id === 'firewave');
+      expect(ability?.target.area, id).toEqual({ shape: 'rows', widths: [1, 1, 3, 3, 3, 5, 5, 5] });
+    }
+  });
+
+  it('no spell, supply or monster ability of the catalogue uses the `wave` approximation', () => {
+    const catalogue = [
+      ...content.spells.values(), ...content.supplies.values(), ...content.monsters.values(),
+    ];
+    expect(catalogue.length).toBeGreaterThan(0);
+    for (const entry of catalogue) {
+      expect(JSON.stringify(entry), entry.id).not.toMatch(/"shape":"wave"/);
+    }
+  });
+});

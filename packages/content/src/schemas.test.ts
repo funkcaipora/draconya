@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   ammunitionSchema, appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema,
-  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, spellFormulaSchema,
+  botTargetPolicySchema, huntSchema, itemSchema, monsterSchema, spellAreaSchema, spellFormulaSchema,
 } from './schemas.js';
+
+describe('spellAreaSchema — rows (#679)', () => {
+  it('accepts odd widths, one per row', () => {
+    expect(spellAreaSchema.parse({ shape: 'rows', widths: [1, 1, 3, 3, 3] }))
+      .toEqual({ shape: 'rows', widths: [1, 1, 3, 3, 3] });
+  });
+
+  it('rejects an empty list, an even width and a zero width', () => {
+    // Largura par não tem centro na linha da frente: o tile sairia deslocado para um lado.
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [] })).toThrow();
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [2] })).toThrow();
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [0] })).toThrow();
+    expect(() => spellAreaSchema.parse({ shape: 'rows', widths: [1, 4, 5] })).toThrow();
+  });
+});
 
 describe('spellFormulaSchema — a fórmula canônica do #474', () => {
   it('aplica o default do levelFactor (1/5) e os bases 0', () => {
