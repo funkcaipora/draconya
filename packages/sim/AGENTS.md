@@ -454,6 +454,16 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   (`applyDamageOutcome`) e a magia em área (`HuntRuleset#applyHits`, que NÃO passava por
   `applyDamageOutcome` — o leech ali é aplicado directo sobre o `healthDamage` de cada alvo, com
   o MESMO `targetsAffected` para todos os alvos da mira).
+- **Absorção de item, reflexo e cleave são do `combat-v3` e ficam fora de `resolveMitigation`**
+  (M30-05, #552). A resistência do ITEM, sob v3, é absorção ITEM A ITEM depois da armadura
+  (`equipmentAbsorb`, ordem de slot do Canary) — `#playerDefender` passa `immunitiesOnly` como
+  `mitigation`; somar a resistência de novo ali a aplicaria duas vezes. O reflexo é calculado no
+  resolver (`DamageOutcome.reflected`) e a SEGUNDA resolução é do ruleset
+  (`#reflectOntoMonster`), com `reflectedDamageIntent` marcado `extension` — é essa marca, e não
+  um contador, que impede reflexo sobre reflexo. O mecanismo é por fonte (`DefenderReflect.
+  reflector`): o reflexo de monstro (#683) reusa `resolveReflect`, não escreve outro. O cleave rola
+  o poder de CADA vítima antes do golpe principal — a rolagem extra só existe com `cleavePercent`
+  vestido, o que mantém o resto bit a bit.
 - **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,
   #336). `combat/conformance.test.ts` prende fórmula, ordem de RNG e arredondamento com dados
   escritos à mão, cada caso a 100 ms, a 1000 ms e com snapshot/retomada; o `RngState` é

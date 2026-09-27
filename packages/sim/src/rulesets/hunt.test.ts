@@ -8948,6 +8948,98 @@ describe('outcomes avançados na hunt (CMB-08)', () => {
     expect(healed.every((e) => e.amount === 32)).toBe(true);
   });
 });
+describe('reflexo e cleave do equipamento (#552, M30-05)', () => {
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+  // O golpe desarmado do herói zerado: o único dano que chega ao rato é o que o teste mede.
+  const passiveHeroV3 = [{ ...combatV3, player: { ...combatV3.player, attackPower: 0 } }];
+  // O `reflectdamage` do Canary (Spiritthorn Helmet, 13): reflexo FLAT de físico, aqui 42.
+  const thornHelmet = {
+    id: 'thorn-helmet', name: 'Thorn Helmet', kind: 'armor', slot: 'head',
+    weight: 1, value: 0, reflect: { physical: { flat: 42 } },
+  };
+  const withHelmet: InventoryState = {
+    backpack: [], equipped: { head: { instanceId: 'h1', itemId: 'thorn-helmet', quantity: 1 } },
+  };
+
+  it('o rato que bate no herói leva de volta o reflexo, com o teto de 1 % da vida dele', () => {
+    const { session } = withSpells(botConfig(), {
+      health: 10_000, items: [...items, thornHelmet], inventory: withHelmet,
+      combat: passiveHeroV3, monstersRaw: [{ ...rat, health: 500 }],
+    });
+    const events: DomainEvent[] = [];
+    run(session, 10_000, 100);
+    events.push(...session.drainEvents());
+    const ratHits = ofKind(events, 'creature-hit').filter((e) => e.creatureId === 'hero');
+    const reflected = ofKind(events, 'creature-hit')
+      .filter((e) => e.attackerId === 'hero' && e.amount > 0);
+    expect(ratHits.length).toBeGreaterThan(0);
+    // 42 flat, mas o teto é ceil(500 × 1 %) = 5 — um reflexo por golpe do rato, todos de 5.
+    expect(reflected.length).toBe(ratHits.length);
+    expect(reflected.every((e) => e.amount === 5)).toBe(true);
+  });
+
+  it('o reflexo que mata o rato resolve a morte (abate, sem golpe do herói)', () => {
+    const { session } = withSpells(botConfig(), {
+      health: 10_000, items: [...items, thornHelmet], inventory: withHelmet,
+      combat: passiveHeroV3, monstersRaw: [{ ...rat, health: 1 }],
+    });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+  });
+
+  it('sem o combat-v3, o mesmo capacete não reflete nada', () => {
+    const { session } = withSpells(botConfig(), {
+      health: 10_000, items: [...items, thornHelmet], inventory: withHelmet,
+      combat: [{ ...combat, player: { ...combat.player, attackPower: 0 } }],
+      monstersRaw: [{ ...rat, health: 500 }],
+    });
+    run(session, 10_000, 100);
+    const reflected = ofKind(session.drainEvents(), 'creature-hit')
+      .filter((e) => e.attackerId === 'hero' && e.amount > 0);
+    expect(reflected).toHaveLength(0);
+  });
+
+  it('o cleave acerta o monstro no tile que flanqueia o alvo, com a fração da rolagem própria', () => {
+    const cleaveSword = {
+      id: 'cleave-sword', name: 'Cleave Sword', kind: 'weapon', slot: 'hand',
+      weight: 1, value: 0, attack: 200, cleavePercent: 50,
+    };
+    const withSword: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 's1', itemId: 'cleave-sword', quantity: 1 } },
+    };
+    const { session, hero, ruleset } = withSpells(botConfig(), {
+      health: 10_000, items: [...items, cleaveSword], inventory: withSword,
+      combat: [combatV3],
+      monstersRaw: [{ ...rat, attack: 0, aggroRadius: 0, health: 1_000_000 }],
+    }, 'bold');
+    session.advanceBy(50);
+    const [a, b, c] = ruleset.monsters;
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // Herói em (1, 1): `a` a leste é o alvo, `b` em (2, 2) é o tile ao SUL do alvo — o que o
+    // cleave de um alvo na mesma linha acerta. `c` longe, fora de tudo.
+    hero.position = { x: 1, y: 1, z: hero.position.z };
+    a.position = { x: 2, y: 1 };
+    b.position = { x: 2, y: 2 };
+    c.position = { x: 4, y: 3 };
+    vi.mocked(resolveDamage).mockClear();
+    run(session, 4_000, 100);
+
+    const calls = vi.mocked(resolveDamage).mock.calls;
+    const cleaves = calls.filter(([intent]) => intent.extension === true && intent.source === 'basic-attack');
+    const mains = calls.filter(([intent]) => intent.extension !== true && intent.source === 'basic-attack');
+    expect(cleaves.length).toBeGreaterThan(0);
+    expect(cleaves.length).toBe(mains.length);
+    // Extensão: sem crítico e sem leech (nenhum `modifiers` declarado sem aumento por tipo).
+    expect(cleaves.every(([intent]) => intent.modifiers === undefined)).toBe(true);
+    const hitRats = new Set(ofKind(session.drainEvents(), 'creature-hit')
+      .filter((e) => e.attackerId === 'hero').map((e) => e.creatureId));
+    expect(hitRats).toEqual(new Set([a.subject, b.subject]));
+  });
+});
 describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {
   it('huntId e difficulty refletem a hunt e a dificuldade da instância', () => {
     const { ruleset } = start({ difficulty: 'bold' });

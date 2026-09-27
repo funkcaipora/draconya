@@ -21,7 +21,7 @@ import {
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
-  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
+  CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
   WeaponPowerFormula, WeaponProfile,
@@ -194,6 +194,31 @@ export function compileMitigation(profile: MitigationProfile | undefined): Compi
     }
   }
   return { resistances, immunities: new Set(profile?.immunities ?? []) };
+}
+
+/**
+ * Compila o reflexo declarado por tipo (#552) nas duas tabelas completas que o `sim` lê
+ * (`Defender.reflect`): zero onde nada reflete. `undefined` quando NADA reflete — o item comum,
+ * que não paga objeto nenhum no caminho quente. O reflexo de monstro (#683) usa a mesma forma.
+ */
+export function compileReflect(
+  reflect: Partial<Record<DamageType, { percent?: number | undefined; flat?: number | undefined }>> | undefined,
+): CompiledReflect | undefined {
+  if (reflect === undefined) return undefined;
+  const percent: Record<DamageType, number> = {
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0,
+    drown: 0, lifedrain: 0, manadrain: 0, arcane: 0,
+  };
+  const flat: Record<DamageType, number> = { ...percent };
+  let any = false;
+  for (const type of DAMAGE_TYPES) {
+    const entry = reflect[type];
+    if (entry === undefined) continue;
+    percent[type] = entry.percent ?? 0;
+    flat[type] = entry.flat ?? 0;
+    if (percent[type] > 0 || flat[type] > 0) any = true;
+  }
+  return any ? { percent, flat } : undefined;
 }
 
 /** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
@@ -391,11 +416,13 @@ export function compileItem(
       };
     }
   }
-  const { weapon: _rawWeapon, mitigation: _rawMitigation, ...rest } = item;
+  const { weapon: _rawWeapon, mitigation: _rawMitigation, reflect: _rawReflect, ...rest } = item;
+  const reflect = compileReflect(item.reflect);
   return {
     ...rest,
     mitigation: compileMitigation(item.mitigation),
     ...(weapon === undefined ? {} : { weapon }),
+    ...(reflect === undefined ? {} : { reflect }),
   };
 }
 
