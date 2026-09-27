@@ -4151,5 +4151,11 @@ export const routeSchema = z.object({
 export type TilemapData = z.infer<typeof tilemapSchema>;
 /** O que se ESCREVE num arquivo de mapa — `floorChanges` opcional, antes do default. */
 export type TilemapInput = z.input<typeof tilemapSchema>;
+/**
+ * Um item de `tilemapSchema.interactables[]`, já resolvido (#728, ADR 0050 d.1-d.2). O `sim`
+ * lê esta forma para montar o overlay de estado por sessão (`TileOverrides`) — antes da #728
+ * ninguém a lia, e `interactables` só existia para o importador escrever.
+ */
+export type TilemapInteractable = TilemapData['interactables'][number];
 export type RouteData = z.infer<typeof routeSchema>;
 export type Point = z.infer<typeof point>;

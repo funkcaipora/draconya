@@ -2,8 +2,9 @@
 
 **Status:** parcial — o importador **classifica** porta, capim, stone pile, rope spot, ladder,
 alavanca, baú, placa e teleporte a partir do OTBM real (#727, ADR 0050 d.1); o mecanismo que muda
-de estado por sessão (`TileOverrides`, abrir/fechar, cortar/crescer, o walker usando e pisando) é
-a #728, que ainda não existe — hoje o `sim` não lê `interactables` nenhum.
+de estado por sessão (`TileOverrides`, #728, ADR 0050 d.2-d.5, d.8) existe para o T1 (porta comum,
+capim, stone pile, alavanca) — rope spot/ladder como passo de andar, e T2/T3 (porta de chave/
+level/quest, baú, teleporte, placa de pressão) continuam em aberto.
 **PRD:** cenário e uso de item no mapa (não numerado no PRD original; nasceu do pedido "cenário,
 itens usáveis do cenário como alavancas, portas, matos... tudo 100%")
 **Épico:** E18 (Jogável ponta a ponta)
@@ -37,11 +38,20 @@ O reconhecimento vem de duas fontes:
 **O tile de um interativo nunca é `#` na grade de bloqueio**, mesmo fechado ou trancado — a troca
 central do ADR 0050 decisão 1. Antes, uma porta comum fechada virava parede permanente porque o
 importador derivava bloqueio das flags UMA vez; agora quem sabe "dá para pisar aqui agora?" é o
-interativo, e essa pergunta só ganha resposta de verdade quando a #728 (`TileOverrides`) existir.
-Até lá, o comportamento observável é: **nenhum interativo bloqueia**, nem os T2 (porta de chave,
-de level, de quest) que ainda não têm mecanismo de destrancar. É a troca deliberada — a
-alternativa (manter `#` para sempre) prendia o bot atrás de toda porta de Thais sem meio de abrir
-nenhum dia.
+`TileOverrides` da sessão (`packages/sim/src/tile-overrides.ts`, #728): um overlay pequeno, por
+tile, que combina com o `Tilemap` imutável em `MovementWorld.blockedAt`/`floorChangeAt` — nenhuma
+cópia do mapa por sessão (invariante 7). Porta comum (T1) bloqueia **fechada** e o walker a abre
+sozinho, sem ferramenta, quando ela está no caminho da rota (ADR 0050 d.4); capim e stone pile
+bloqueiam **intactos**, exigem ferramenta (`use.tool` do item — hoje só um item de teste declara,
+a machete/pá reais são a #573) e decaem sozinhos de volta em `revertMs` (evento `TILE_REVERT` na
+fila, invariante 2 — nada por tique); a stone pile virada buraco desce um andar
+(`floorChange`). Alavanca nunca bloqueia — o walker não a aciona sozinho, só `#useOnMap` (#729,
+protocolo, fora do escopo da #728) —, mas já alterna `down`↔`up` e liga interativos por `aid`
+(`links`) quando usada. Porta comum FECHA sozinha quando o tile esvazia e ninguém está nele
+(`TileOccupancy.vacate` → `TileOverrides.closeDoorIfVacant`), nunca por prazo. O overlay entra no
+snapshot (`HuntRulesetState.tileOverrides`, opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`).
+T2 (porta de chave/level/quest, baú) continua fora: sem requisito satisfazível (level/storage por
+personagem), classificá-las como bloqueantes as prenderia para sempre — pior que hoje.
 
 `appearances.scenery` — gerado em `data/appearances/generated/scenery.json`, nunca à mão — guarda
 só as `appearanceKey` que algum mapa importado realmente usa (não a tabela do Canary inteira, que
@@ -88,4 +98,9 @@ número de TILES com essa classificação, não de portas fisicamente distintas.
   personagem, que `docs/product/quests.md` ainda não tem — ADR 0050 grupo 3.
 - `[ABERTO]` T3 (teleporte de fato, placa de pressão, livro com texto por página) — ADR 0050,
   escopo três camadas.
-- `[ABERTO]` O mecanismo (`TileOverrides`, abrir/fechar, walker usando e pisando) é a #728.
+- `[ABERTO]` Rope spot e ladder como passo de andar (o walker atravessando, `floorChange` por
+  `use`) — o plano original das W8-W10 os lista no T1, mas o pedido desta issue (#728) restringiu
+  o escopo a porta/capim/stone-pile/alavanca; ficou para uma issue de acompanhamento.
+- `[ABERTO]` `use-on-map`/`look`/`tile-update` (protocolo e cliente) — #729. Sem eles, a alavanca
+  só é acionável por automação futura do bot, nunca pelo jogador — e o cliente não vê a porta
+  abrir (a arte da pilha por tile continua estática até a #729 patchear).
