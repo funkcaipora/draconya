@@ -974,6 +974,15 @@ export const itemSchema = z.strictObject({
    */
   use: z.object({
     tool: z.enum(['machete', 'rope', 'shovel', 'pick', 'key']),
+    /**
+     * Só quando `tool === 'key'` (#732, ADR 0050 d.6 T2): o id que precisa bater com o
+     * `requires.keyId` da porta de chave (`tilemapSchema.interactables[]`) — o mesmo
+     * `item.actionid` que o Canary compara entre a chave e a porta (`key_door.lua`:
+     * `item.actionid == target.actionid`, "The key does not match." quando diverge). Uma
+     * ferramenta que NÃO é chave nunca precisa de um id específico — machete corta qualquer
+     * capim —, e é por isso que só `key` declara este campo.
+     */
+    keyId: z.number().int().positive().optional(),
   }).optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
@@ -994,6 +1003,11 @@ export const itemSchema = z.strictObject({
         message: `"${type}" declara \`mitigation.resistances\` e \`absorb.percent\` ao mesmo tempo — escolha um`,
       });
     }
+  }
+  // `keyId` só faz sentido para a ferramenta `key` (#732) — declará-lo em `machete`/`rope`/
+  // `shovel`/`pick` seria um número que nada lê, e pareceria decisão de conteúdo sem ser.
+  if (item.use?.keyId !== undefined && item.use.tool !== 'key') {
+    ctx.addIssue({ code: 'custom', message: '`use.keyId` só em `use.tool: "key"`' });
   }
 });
 

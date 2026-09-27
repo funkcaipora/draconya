@@ -254,15 +254,22 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
 };
 
 /**
- * A recusa de `use-on-map` em palavras (#729, ADR 0050 d.7). `not-usable` cobre tanto "nada
- * usável ali" quanto um `kind` fora do T1 (`locked-door`, `chest`, `sign`…) — a mesma decisão
- * de `UseOnMapRejection`, para não inventar um texto de requisito que o T2/T3 ainda não tem.
+ * A recusa de `use-on-map` em palavras (#729, ADR 0050 d.7; `level-too-low` desde #732, ADR 0050
+ * d.6 T2). `not-usable` cobre tanto "nada usável ali" quanto um `kind` fora do T1/T2
+ * (`quest-door`, `chest`, `sign`…) — a mesma decisão de `UseOnMapRejection`, para não inventar
+ * um texto de requisito que o T3 ainda não tem. `missing-tool` também cobre a porta de chave sem
+ * a chave certa — o Draconya não distingue "sem chave nenhuma" de "chave errada" (DT, spec da
+ * #732): as duas soam a mesma frase do Canary ("The key does not match." é só para quem já tem
+ * ALGUMA chave na mão, e aqui a mochila decide sozinha, sem gesto de arrastar item). O idioma
+ * segue a convenção já em vigor aqui (DT-02 da #729/#758): português, como o resto de
+ * `USE_ON_MAP_REFUSAL` — o ADR cita o Tibia como MECANISMO, não como padrão de string.
  */
 const USE_ON_MAP_REFUSAL: Readonly<Record<UseOnMapRejection, string>> = {
   'out-of-range': 'Está longe demais.',
   'nothing-there': 'Não há nada para usar aqui.',
   'not-usable': 'Isso não pode ser usado assim.',
   'missing-tool': 'Você precisa da ferramenta certa para isso.',
+  'level-too-low': 'Você não tem nível suficiente para isso.',
 };
 
 /** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */

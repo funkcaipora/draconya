@@ -28,6 +28,15 @@ const linkedDoor: TilemapInteractable = {
 const chest: TilemapInteractable = {
   at: { x: 11, y: 2, z: 7 }, kind: 'chest', initialState: 'default', appearanceKey: 'chest-1', uid: 5,
 };
+// T2 (#732, ADR 0050 d.6): porta de level e porta de chave.
+const levelDoor: TilemapInteractable = {
+  at: { x: 13, y: 2, z: 7 }, kind: 'level-door', initialState: 'closed', appearanceKey: 'level-door-1',
+  aid: 1010, requires: { level: 10 },
+};
+const keyDoor: TilemapInteractable = {
+  at: { x: 15, y: 2, z: 7 }, kind: 'locked-door', initialState: 'locked', appearanceKey: 'key-door-1',
+  aid: 42, requires: { tool: 'key', keyId: 42 },
+};
 
 describe('overrideFromInteractable — o estado inicial vem do conteúdo', () => {
   it('porta comum fechada bloqueia', () => {
@@ -55,6 +64,29 @@ describe('overrideFromInteractable — o estado inicial vem do conteúdo', () =>
     expect(overrideFromInteractable(chest).blocked).toBe(false);
     expect(isToggleable('chest')).toBe(false);
     expect(otherState('chest', 'default')).toBeNull();
+  });
+
+  it('porta de level fechada bloqueia; porta de chave TRANCADA e FECHADA bloqueiam (#732)', () => {
+    expect(overrideFromInteractable(levelDoor).blocked).toBe(true);
+    expect(overrideFromInteractable(keyDoor).blocked).toBe(true);
+    expect(overrideFromInteractable({ ...keyDoor, initialState: 'closed' }).blocked).toBe(true);
+    expect(overrideFromInteractable({ ...keyDoor, initialState: 'open' }).blocked).toBe(false);
+  });
+});
+
+describe('otherState — a porta de chave alterna `locked` direto para `open` (#732)', () => {
+  it('`locked` sempre vira `open`, para qualquer kind com esse estado', () => {
+    expect(otherState('locked-door', 'locked')).toBe('open');
+  });
+
+  it('destrancada, a porta de chave alterna `closed`/`open` como uma porta comum', () => {
+    expect(otherState('locked-door', 'closed')).toBe('open');
+    expect(otherState('locked-door', 'open')).toBe('closed');
+  });
+
+  it('porta de level alterna `closed`/`open`, sem estado `locked`', () => {
+    expect(otherState('level-door', 'closed')).toBe('open');
+    expect(otherState('level-door', 'open')).toBe('closed');
   });
 });
 
@@ -163,5 +195,38 @@ describe('TileOverrides — o índice por tile (ADR 0050 d.1: no máximo um por 
     ]);
     expect(overrides.get('nunca-existiu')).toBeNull();
     expect(overrides.blockedAt(3, 2, 7)).toBe(true);
+  });
+
+  it('toggle da porta de chave: `locked` vira `open` DIRETO — nunca passa por `closed` (#732)', () => {
+    const overrides = TileOverrides.fromInteractables([keyDoor]);
+    const id = interactableIdOf(keyDoor.at);
+    const opened = overrides.toggle(id, 0);
+    expect(opened).toEqual({
+      interactableId: id, kind: 'locked-door', state: 'open', blocked: false, floorChange: null,
+    });
+    // Destrancada, alterna como uma porta comum — sem prazo de reversão.
+    const closed = overrides.toggle(id, 1000);
+    expect(closed?.state).toBe('closed');
+    expect(closed?.blocked).toBe(true);
+    expect(closed?.revertAtMs).toBeUndefined();
+  });
+
+  it('porta de level fecha sozinha ao esvaziar, como a porta comum (#732)', () => {
+    const overrides = TileOverrides.fromInteractables([levelDoor]);
+    const id = interactableIdOf(levelDoor.at);
+    overrides.toggle(id, 0);
+    expect(overrides.get(id)?.state).toBe('open');
+    overrides.closeDoorIfVacant(13, 2, 7, false);
+    expect(overrides.get(id)).toEqual({
+      interactableId: id, kind: 'level-door', state: 'closed', blocked: true, floorChange: null,
+    });
+  });
+
+  it('porta de chave ABERTA também fecha sozinha ao esvaziar (#732)', () => {
+    const overrides = TileOverrides.fromInteractables([keyDoor]);
+    const id = interactableIdOf(keyDoor.at);
+    overrides.toggle(id, 0); // locked → open
+    overrides.closeDoorIfVacant(15, 2, 7, false);
+    expect(overrides.get(id)?.state).toBe('closed');
   });
 });

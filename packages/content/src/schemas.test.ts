@@ -144,6 +144,29 @@ describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)',
   });
 });
 
+describe('itemSchema — `use.keyId` só em `use.tool: "key"` (#732, ADR 0050 d.6 T2)', () => {
+  const key = {
+    id: 'brass-key', name: 'Brass Key', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'key' as const, keyId: 42 },
+  };
+
+  it('aceita a chave com `keyId`', () => {
+    const parsed = itemSchema.parse(key);
+    expect(parsed.use).toEqual({ tool: 'key', keyId: 42 });
+  });
+
+  it('aceita `use.tool: "key"` sem `keyId` (chave que não se pode ligar a uma porta específica)', () => {
+    const { use: _use, ...rest } = key;
+    const parsed = itemSchema.parse({ ...rest, use: { tool: 'key' } });
+    expect(parsed.use).toEqual({ tool: 'key' });
+  });
+
+  it('recusa `keyId` numa ferramenta que não é chave — machete não precisa de id nenhum', () => {
+    const { use: _use, ...rest } = key;
+    expect(() => itemSchema.parse({ ...rest, use: { tool: 'machete', keyId: 1 } })).toThrow(/keyId/);
+  });
+});
+
 // A proveniência de uma entidade GERADA pelo importador de catálogo (ADR 0038 decisão 2, #572):
 // `itemSchema`/`monsterSchema`/`ammunitionSchema` são `z.strictObject` — sem um `source` EXPLÍCITO,
 // a primeira entidade que #573 (itens) ou M35 (monstros) gerar derrubaria o boot inteiro.

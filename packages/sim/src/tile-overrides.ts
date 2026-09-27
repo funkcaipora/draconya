@@ -56,33 +56,50 @@ export function interactableIdOf(at: { readonly x: number; readonly y: number; r
 }
 
 /**
- * Estados BLOQUEANTES por `kind`, no T1 (#728 — porta comum, capim, stone pile; ver
- * `docs/adr/0050-*.md` d.6 para os três grupos). `locked-door`/`level-door`/`quest-door` ficam
- * de fora de propósito: sem storage/level por personagem ainda (T2), o requisito nunca seria
- * satisfeito e a porta ficaria bloqueada para sempre — pior que a situação de hoje, em que ela
- * não bloqueia nada (ver `packages/content/CLAUDE.md`, "até a #728 pousar"). `rope-spot`/
- * `ladder`/`lever`/`chest`/`sign`/`teleport` nunca bloqueiam por si (usar não impede pisar).
+ * Estados BLOQUEANTES por `kind` (T1, #728 — porta comum, capim, stone pile; T2, #732 — porta
+ * de level e de chave; ver `docs/adr/0050-*.md` d.6 para os três grupos). `level-door` bloqueia
+ * só `closed` — igual à porta comum, o requisito é conferido no MOMENTO de usar (`useOnMap`),
+ * não aqui. `locked-door` bloqueia `locked` E `closed`: a porta de chave nasce trancada (só abre
+ * com a chave certa, `requires.tool: 'key'` + `requires.keyId`) e, uma vez destrancada, passa a
+ * se comportar como uma porta comum (fecha/abre sem chave nunca mais — o mesmo `key_door.lua` do
+ * Canary, que só confere a chave contra o estado `locked`). `quest-door` fica de fora de
+ * propósito: sem storage por personagem ainda (#733), o requisito nunca seria satisfeito e a
+ * porta ficaria bloqueada para sempre — pior que a situação de hoje, em que ela não bloqueia
+ * nada (ver `packages/content/CLAUDE.md`, "até a #728 pousar"). `rope-spot`/`ladder`/`lever`/
+ * `chest`/`sign`/`teleport` nunca bloqueiam por si (usar não impede pisar).
  */
 const BLOCKING_STATES: Partial<Record<InteractableKind, ReadonlySet<string>>> = {
   door: new Set(['closed']),
+  'level-door': new Set(['closed']),
+  'locked-door': new Set(['locked', 'closed']),
   grass: new Set(['uncut']),
   'stone-pile': new Set(['pile']),
 };
 
 /**
- * O par de estados que um `kind` alterna ao ser usado (T1). `null` para quem não tem um "outro
- * lado" neste escopo (rope-spot/ladder são um passo, não uma troca de estado; baú/placa/
+ * O par de estados que um `kind` alterna ao ser usado (T1/T2). `null` para quem não tem um
+ * "outro lado" neste escopo (rope-spot/ladder são um passo, não uma troca de estado; baú/placa/
  * teleporte nem chegam a ter `state` mutável).
  */
 const TOGGLE_PAIR: Partial<Record<InteractableKind, readonly [string, string]>> = {
   door: ['closed', 'open'],
+  'level-door': ['closed', 'open'],
+  'locked-door': ['closed', 'open'],
   grass: ['uncut', 'cut'],
   'stone-pile': ['pile', 'hole'],
   lever: ['down', 'up'],
 };
 
-/** O outro estado do par, ou `null` quando este `kind` não alterna (T1). */
+/**
+ * O outro estado do par, ou `null` quando este `kind` não alterna. `locked` (#732) é um terceiro
+ * estado FORA do par declarado em `TOGGLE_PAIR` — só a porta de chave o usa, como estado
+ * INICIAL — e alterna sempre para `open` DIRETO (nunca para `closed`): o mesmo `key_door.lua` do
+ * Canary, que transforma a porta trancada direto em `openDoor` quando a chave bate, sem passar
+ * por `closedDoor`. Daí em diante o par declarado (`closed`/`open`) volta a valer — a porta
+ * destrancada não tem mais estado `locked` para alternar de volta.
+ */
 export function otherState(kind: InteractableKind, state: string): string | null {
+  if (state === 'locked') return 'open';
   const pair = TOGGLE_PAIR[kind];
   if (pair === undefined) return null;
   const [a, b] = pair;
@@ -231,11 +248,19 @@ export class TileOverrides {
   closeDoorIfVacant(x: number, y: number, z: number, stillOccupied: boolean): void {
     if (stillOccupied) return;
     const current = this.at({ x, y, z });
-    if (current === null || current.kind !== 'door' || current.state !== 'open') return;
+    // Porta comum, de level e de chave fecham sozinhas ao esvaziar (#732: `level-door`/
+    // `locked-door` entram no mesmo mecanismo — nenhuma das duas tem prazo próprio de
+    // fechamento; `closing_door.lua` do Canary fecha a de level no STEP-OUT, que aqui é o
+    // MESMO instante do `vacate`, porque a porta é um tile só). `quest-door` fica de fora
+    // (#733, sem storage ainda).
+    if (
+      current === null || current.state !== 'open'
+      || (current.kind !== 'door' && current.kind !== 'level-door' && current.kind !== 'locked-door')
+    ) return;
     const at = this.#atOf.get(current.interactableId);
     if (at === undefined) return;
     this.#index({
-      interactableId: current.interactableId, kind: 'door', state: 'closed', blocked: true, floorChange: null,
+      interactableId: current.interactableId, kind: current.kind, state: 'closed', blocked: true, floorChange: null,
     });
   }
 

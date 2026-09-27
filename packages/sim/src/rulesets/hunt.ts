@@ -300,12 +300,15 @@ export type SlotOutcome =
   | { readonly ok: false; readonly reason: SlotRefusal; readonly retryInMs: number };
 
 /**
- * Por que `useOnMap` recusou (#729, ADR 0050 d.7). `not-usable` cobre tanto "nada usável aqui"
- * quanto um `kind` fora do T1 (`locked-door`, `chest`, `sign`…) — o mesmo motivo que
- * `isToggleable` já unifica, para não inventar comportamento de requisito que o T2/T3 ainda não
- * tem (spec da #729, "não invente").
+ * Por que `useOnMap` recusou (#729, ADR 0050 d.7; `level-too-low` desde #732, ADR 0050 d.6 T2).
+ * `not-usable` cobre tanto "nada usável aqui" quanto um `kind` fora do T1/T2 (`quest-door`,
+ * `chest`, `sign`…) — o mesmo motivo que `isToggleable` já unifica, para não inventar
+ * comportamento de requisito que o T3 ainda não tem (spec da #729, "não invente"). `missing-tool`
+ * cobre a porta de chave sem a chave certa na mochila — uma chave É uma ferramenta
+ * (`use.tool: 'key'`), e `#hasTool` confere o `keyId` quando o `tool` pedido é `'key'`.
  */
-export type UseOnMapRejection = 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool';
+export type UseOnMapRejection =
+  | 'out-of-range' | 'nothing-there' | 'not-usable' | 'missing-tool' | 'level-too-low';
 
 /**
  * UM tile cujo id de aparência muda (#729, ADR 0050 d.7): o par `{ fromState, toState }` do
@@ -348,6 +351,21 @@ const SCENERY_LOOK_TEXT: Partial<Record<InteractableKind, string>> = {
   sign: 'Uma placa.',
   teleport: 'Algo estranho.',
 };
+
+/**
+ * A ferramenta exigida NESTE estado, ou `undefined` (#732). Para todo `kind` do T1 (`grass`/
+ * `stone-pile`/`rope-spot`) a ferramenta vale sempre — só existe UMA transição que o jogador
+ * aciona. `locked-door` é diferente: a chave só tranca a transição `locked → open`
+ * (`key_door.lua` do Canary só confere `item.actionid` contra a porta TRANCADA); uma vez
+ * destrancada, ela alterna `closed`↔`open` livremente, como uma porta comum — do contrário toda
+ * reabertura pediria a chave de novo, e o Canary não faz isso.
+ */
+function toolRequiredNow(
+  kind: InteractableKind, state: string, requires: { readonly tool?: InteractableTool } | undefined,
+): InteractableTool | undefined {
+  if (kind === 'locked-door' && state !== 'locked') return undefined;
+  return requires?.tool;
+}
 
 /**
  * O estado de UM slot do conjunto ativo (AB-09, UC-BAR-003). É APRESENTAÇÃO: espelha a mesma
@@ -1692,8 +1710,22 @@ export class HuntRuleset implements Ruleset {
     const current = this.#tileOverrides.at(position);
     if (current === null) return { ok: false, reason: 'nothing-there' };
     if (!isToggleable(current.kind)) return { ok: false, reason: 'not-usable' };
-    const tool = this.#tileOverrides.contentOf(current.interactableId)?.requires?.tool;
-    if (tool !== undefined && !this.#hasTool(character, tool)) return { ok: false, reason: 'missing-tool' };
+    const content = this.#tileOverrides.contentOf(current.interactableId);
+    const requires = content?.requires;
+    // Porta de level (#732, ADR 0050 d.6 T2): `player:getLevel() >= item.actionid - 1000` do
+    // Canary (`level_door.lua`) — conferido no MOMENTO de usar, e só quando o estado ainda é
+    // `closed` (a mesma porta reaberta por outro personagem confere de novo, como no Canary; uma
+    // vez ABERTA ela é só um tile livre até fechar sozinha no `vacate`).
+    if (
+      current.kind === 'level-door' && current.state === 'closed'
+      && requires?.level !== undefined && character.level < requires.level
+    ) {
+      return { ok: false, reason: 'level-too-low' };
+    }
+    const tool = toolRequiredNow(current.kind, current.state, requires);
+    if (tool !== undefined && !this.#hasTool(character, tool, requires?.keyId)) {
+      return { ok: false, reason: 'missing-tool' };
+    }
     const changes = this.#useInteractable(session, character, current.interactableId);
     if (changes === null) return { ok: false, reason: 'not-usable' };
     return { ok: true, changes };
@@ -1713,10 +1745,12 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Tenta usar UM interativo — abrir a porta, cortar o capim, cavar a pile, puxar a alavanca
-   * (ADR 0050 d.4-d.5). Devolve as mudanças de aparência (o próprio + os linkados que também
-   * alternaram, #729) quando o estado mudou; `null` sem tocar em nada — kind sem par de estados
-   * (T2/T3, fora do escopo desta issue), ou ferramenta exigida que este personagem não carrega.
+   * Tenta usar UM interativo — abrir a porta (comum, de level, de chave), cortar o capim, cavar
+   * a pile, puxar a alavanca (ADR 0050 d.4-d.5, T2 desde #732). Devolve as mudanças de aparência
+   * (o próprio + os linkados que também alternaram, #729) quando o estado mudou; `null` sem
+   * tocar em nada — kind sem par de estados (`quest-door`/`chest`/T3, fora do escopo), level
+   * insuficiente para uma porta de level, ou ferramenta exigida (inclusive a chave certa) que
+   * este personagem não carrega.
    *
    * Agenda `TILE_REVERT` quando o NOVO estado tem `revertMs` (capim/stone pile); alavanca liga a
    * quem está em `links` (ADR 0050 d.1) e alterna cada um também — sem re-entrar no MESMO id,
@@ -1728,8 +1762,16 @@ export class HuntRuleset implements Ruleset {
     const current = this.#tileOverrides.get(interactableId);
     if (current === null || !isToggleable(current.kind)) return null;
     const content = this.#tileOverrides.contentOf(interactableId);
-    const tool = content?.requires?.tool;
-    if (tool !== undefined && !this.#hasTool(character, tool)) return null;
+    const requires = content?.requires;
+    // Porta de level (#732): a MESMA conferência de `useOnMap`, para o walker (que chama esta
+    // função direto, sem passar por `useOnMap`) nunca abrir uma porta que o personagem não
+    // cumpre — as duas leem o MESMO `#tileOverrides`/conteúdo, então nunca divergem.
+    if (
+      current.kind === 'level-door' && current.state === 'closed'
+      && requires?.level !== undefined && character.level < requires.level
+    ) return null;
+    const tool = toolRequiredNow(current.kind, current.state, requires);
+    if (tool !== undefined && !this.#hasTool(character, tool, requires?.keyId)) return null;
 
     const next = this.#tileOverrides.toggle(interactableId, session.nowMs);
     if (next === null) return null;
@@ -1777,14 +1819,27 @@ export class HuntRuleset implements Ruleset {
     return changes;
   }
 
-  /** Este personagem carrega uma ferramenta que serve para `tool` — equipada ou na mochila. */
-  #hasTool(character: CharacterRuntime, tool: InteractableTool): boolean {
+  /**
+   * Este personagem carrega uma ferramenta que serve para `tool` — equipada ou na mochila.
+   *
+   * `keyId` (#732) é só para `tool === 'key'`: a porta de chave exige a chave CERTA
+   * (`key_door.lua` do Canary: `item.actionid == target.actionid`, "The key does not match."
+   * quando diverge) — qualquer chave do inventário NÃO serve, ao contrário da machete, que corta
+   * qualquer capim. Sem `keyId` (chamado de fora de uma porta de chave), a ferramenta serve por
+   * tipo só, como sempre.
+   */
+  #hasTool(character: CharacterRuntime, tool: InteractableTool, keyId?: number): boolean {
+    const matches = (itemId: string): boolean => {
+      const use = this.#options.items.get(itemId)?.use;
+      if (use?.tool !== tool) return false;
+      return keyId === undefined || use?.keyId === keyId;
+    };
     for (const item of character.inventory.items()) {
-      if (this.#options.items.get(item.itemId)?.use?.tool === tool) return true;
+      if (matches(item.itemId)) return true;
     }
     for (const slot of ITEM_SLOTS) {
       const equipped = character.inventory.equippedAt(slot);
-      if (equipped !== null && this.#options.items.get(equipped.itemId)?.use?.tool === tool) return true;
+      if (equipped !== null && matches(equipped.itemId)) return true;
     }
     return false;
   }
@@ -3066,8 +3121,9 @@ export class HuntRuleset implements Ruleset {
       if (this.#useInteractable(session, character, blockingHere.interactableId) !== null) {
         runner.routeBlockedWarned = false;
       } else {
-        // Sem ferramenta (T2/T3, fora do escopo desta issue) ou kind sem par de estados: segura
-        // como faria com parede, e registra UMA vez — não uma linha por vencimento parado.
+        // Sem ferramenta (a chave certa, incluída, #732) ou level insuficiente (level-door),
+        // ou kind sem par de estados (`quest-door`/T3, fora do escopo): segura como faria com
+        // parede, e registra UMA vez — não uma linha por vencimento parado.
         runner.walker.hold();
         if (!runner.routeBlockedWarned) {
           runner.routeBlockedWarned = true;
