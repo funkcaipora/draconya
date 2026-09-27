@@ -5,6 +5,7 @@
   "price": 450,
   "group": "potion",
   "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
   "effect": {
     "kind": "heal",
     "amountRange": { "min": 420, "max": 580 },

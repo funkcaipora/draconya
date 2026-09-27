@@ -31,7 +31,7 @@ import type {
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
-import { settleSnapshotAsReceipt } from '../snapshot-settlement.js';
+import { overlaysOfState, settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
@@ -3572,6 +3572,8 @@ export class SessionHost {
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
       // E onde cada item está dentro dos containers (#160).
       ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
+      // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
+      ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
       // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`, o que não
       // coube vira Caixa de Loot da Sessão.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
@@ -3632,6 +3634,7 @@ export class SessionHost {
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
+      overlays: overlaysOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
       ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
     });

@@ -3,6 +3,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
+import { readItemOverlay } from '@draconya/sim';
 import type { BestiaryState } from '@draconya/sim';
 import { isAmmoSelection, isBestiaryState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
@@ -257,7 +258,7 @@ function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
  */
 function inventoryOf(instances: readonly {
   id: string; itemId: string; quantity: number; equippedSlot: string | null;
-  container?: string | null; slotIndex?: number | null;
+  container?: string | null; slotIndex?: number | null; overlay?: unknown;
 }[]): { backpack: unknown[]; satchel: unknown[]; equipped: Record<string, unknown> } {
   // Posicional (#160): cada linha volta ao lugar gravado; a linha sem posição (anterior a
   // #160, ou duas na mesma posição por banco tocado à mão) entra no primeiro lugar livre da
@@ -267,7 +268,13 @@ function inventoryOf(instances: readonly {
   const equipped: Record<string, unknown> = {};
   const unplaced: unknown[] = [];
   for (const row of instances) {
-    const carried = { instanceId: row.id, itemId: row.itemId, quantity: row.quantity };
+    // O overlay por instância (#604, ADR 0046), lido na régua do Bestiário: torto vira ausente
+    // — a instância volta a ser igual à definição — em vez de trancar o login.
+    const overlay = readItemOverlay(row.overlay);
+    const carried = {
+      instanceId: row.id, itemId: row.itemId, quantity: row.quantity,
+      ...(overlay === undefined ? {} : { overlay }),
+    };
     if (row.equippedSlot !== null) { equipped[row.equippedSlot] = carried; continue; }
     const target = row.container === 'backpack' ? backpack : row.container === 'satchel' ? satchel : null;
     const index = row.slotIndex ?? null;

@@ -3410,7 +3410,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
-        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+        ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
       ...(over.monsterCount === undefined
@@ -4158,14 +4158,16 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const hitsWith = ofType(withTable.received(), 'creature-hit')
       .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
     expect(hitsWith.length).toBeGreaterThan(0);
-    expect(withTable.hero().health).toBeLessThan(withTable.maxHealth);
+    // O máximo de AGORA: o herói pode subir de level no meio, e desde #678 o level up enche a
+    // vida — o que conta é o campo ter ferido depois disso.
+    expect(withTable.hero().health).toBeLessThan(withTable.hero().maxHealth);
 
     const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
     withoutTable.runFor(6_000);
     const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
     expect(hitsWithout.length).toBeGreaterThan(0);
-    expect(withoutTable.hero().health).toBeLessThan(withoutTable.maxHealth);
+    expect(withoutTable.hero().health).toBeLessThan(withoutTable.hero().maxHealth);
   });
 });
 
@@ -4544,6 +4546,25 @@ describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
     host.handle(viewer, { type: 'move-item', from: { container: 'satchel', index: 0 }, to: { container: 'satchel', index: 9 } });
     await host.release('p1', 1000, 'logout');
     expect(saved[0]).toMatchObject({ layout: { r1: { container: 'satchel', index: 9 } }, equipment: {} });
+  });
+
+  it('o extrato leva o overlay por instância; `null` é a instância igual à definição (#604)', async () => {
+    // Mutação que mata: esquecer `overlays` no extrato do fim de sessão — o imbuement aplicado
+    // (ou vencido) na hunt morreria no logout.
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(countingRuleset().ruleset, { itemCatalog, progression, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    const rules = { backpackSlots: 0, satchelSlots: 10, row: 5 };
+    hero.inventory.ensureContainers(rules);
+    hero.inventory.add({ instanceId: 'r1', itemId: 'rock', quantity: 1 }, itemCatalog, hero, rules);
+    hero.inventory.add({ instanceId: 'r2', itemId: 'rock', quantity: 1 }, itemCatalog, hero, rules);
+    const imbued = { imbuements: [{ slot: 0, typeId: 'strike-basic', remainingMs: 1000 }] };
+    hero.inventory.setOverlay('r1', imbued);
+    await host.release('p1', 1000, 'logout');
+    expect(saved[0]).toMatchObject({ overlays: { r1: imbued, r2: null } });
   });
 });
 
@@ -5687,7 +5708,7 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
       progression: [{
         ...TEST_PROGRESSION,
         startingMana: 200,
-        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+        ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.monsters === false ? { routes: [{ ...TEST_ROUTE, spawnPoints: [] }] } : {}),
       ...(Object.keys(ratOverride).length > 0

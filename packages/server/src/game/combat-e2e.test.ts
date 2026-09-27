@@ -103,7 +103,7 @@ function hunt(options: {
     skills: SKILLS,
     progression: [{
       ...TEST_PROGRESSION, startingMana: 2_000,
-      regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
     }],
     monsters: (raw.monsters as Array<Record<string, unknown>>).map((monster) =>
       monster['id'] === 'rat' ? { ...monster, attack: 0, health: options.ratHealth ?? 100_000 } : monster),

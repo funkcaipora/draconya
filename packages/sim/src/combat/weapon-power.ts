@@ -96,11 +96,12 @@ function resolveWeaponPowerV1(
  * `getSkillLevel(SKILL_DISTANCE)`), e um personagem nasce com skill 10, não 0.
  *
  * `attack` é `formula.base` — o `attack` do item, ou da munição no tiro (o mesmo campo que o v1
- * já usa); não existe ataque elemental nem proficiência de arma como sub-atributo separado no
- * catálogo do Draconya, então `attack` é o único termo de poder da arma — o Canary soma
- * `physicalAttack + elementalAttack + weaponProficiency` num único termo antes de multiplicar
- * pela skill, e o Draconya colapsa os três num só. Documentado como simplificação deliberada em
- * `docs/product/combat.md`, seção "Dano de arma e chance de acerto à distância".
+ * já usa). O Canary soma `physicalAttack + elementalAttack + weaponProficiency` num único termo
+ * antes de multiplicar pela skill; `attackBonus` é o `elementalAttack` (#687), que só o
+ * `resolveWeaponHit` do `combat-v3` passa — v2 e v3 sem elemento chamam com `0` e a conta não
+ * muda. O `minDamage` continua testando só o `attack` FÍSICO (`physicalAttack > 0 ? level/5 :
+ * 0` do Canary). Proficiência não existe no catálogo. Ver `docs/product/combat.md`, seção
+ * "Dano de arma e chance de acerto à distância".
  *
  * `vocationMultiplier` trunca em ORDEM DIFERENTE por família — reproduzindo uma ASSIMETRIA real
  * do Canary, não um capricho do Draconya: `WeaponMelee::getWeaponDamage` (`weapons.cpp:655`)
@@ -116,7 +117,7 @@ function resolveWeaponPowerV1(
 function resolveWeaponPowerV2(
   formula: NonNullable<WeaponProfile['power']>, isDistance: boolean, level: number,
   skillLevel: number, rng: Rng, weaponDamage: NonNullable<Combat['weaponDamage']>,
-  vocationMultiplier: number,
+  vocationMultiplier: number, attackBonus = 0,
 ): number {
   const attack = formula.base;
   const coefficient = isDistance ? weaponDamage.distanceCoefficient : weaponDamage.meleeCoefficient;
@@ -125,7 +126,9 @@ function resolveWeaponPowerV2(
   // distância não tem esse portão — a munição sem `attack` ainda rola o termo de level.
   const maxRounded = !isDistance && attack <= 0
     ? 0
-    : Math.round(coefficient * weaponDamage.attackFactor * attack * skillLevel + levelTerm);
+    : Math.round(
+      coefficient * weaponDamage.attackFactor * (attack + attackBonus) * skillLevel + levelTerm,
+    );
   // A assimetria do Canary (ver o comentário da função): corpo a corpo multiplica e trunca o
   // PRODUTO; distância trunca o MULTIPLICADOR antes de multiplicar — dois `static_cast<int32_t>`
   // em posições diferentes do código-fonte, não a mesma conta escrita duas vezes.
@@ -181,4 +184,53 @@ export function resolveWeaponPower(
     );
   }
   return resolveWeaponPowerV1(formula, level, skillLevel, rng);
+}
+
+/** O golpe de arma dividido (#687): a parte física e a elemental, já com `damagePercent`. */
+export interface WeaponHit {
+  readonly physical: number;
+  readonly elemental: number;
+}
+
+/**
+ * O golpe de arma com o componente elemental e o `damagePercent` do `unproperly` (#687) —
+ * `internalUseWeapon`/`WeaponMelee::getWeaponDamage` do Canary, só o mecanismo (ADR 0019):
+ *
+ * ```text
+ * total     = trunc(getWeaponDamage(attack + element) × damagePercent / 100)
+ * physical  = trunc(total × attack / (attack + element))
+ * elemental = trunc(total × element / (attack + element))
+ * ```
+ *
+ * Só o `combat-v3` com arma que declara `element` entra no ramo novo. Qualquer outro caso —
+ * v1, v2, v3 sem elemento, wand — faz exatamente a chamada de sempre ao `resolveWeaponPower`,
+ * com os mesmos sorteios (ADR 0031), e aplica `damagePercent` (100 é identidade: `trunc` de um
+ * inteiro). A postura do Draconya é do chamador e vale para as duas partes.
+ */
+export function resolveWeaponHit(
+  profile: WeaponProfile, level: number, skillLevel: number, rng: Rng,
+  combat: Combat | undefined, vocationMultiplier: number, damagePercent: number,
+): WeaponHit {
+  const element = profile.element;
+  if (combat?.compatibilityProfile !== 'combat-v3' || element === undefined
+    || profile.power === undefined || combat.weaponDamage === undefined) {
+    const power = resolveWeaponPower(profile, level, skillLevel, rng, combat, vocationMultiplier);
+    // `damagePercent` 100 devolve o poder intacto — inclusive o valor FRACIONÁRIO do v1, que
+    // um `trunc` mudaria.
+    return {
+      physical: damagePercent === 100 ? power : Math.trunc((power * damagePercent) / 100),
+      elemental: 0,
+    };
+  }
+  const physicalAttack = profile.power.base;
+  const total = Math.trunc((resolveWeaponPowerV2(
+    profile.power, false, level, skillLevel, rng, combat.weaponDamage, vocationMultiplier,
+    element.attack,
+  ) * damagePercent) / 100);
+  const combined = physicalAttack + element.attack;
+  // `static_cast<int32_t>` por parte, como no Canary: a soma pode perder 1 ponto.
+  return {
+    physical: Math.trunc(total * (physicalAttack / combined)),
+    elemental: Math.trunc(total * (element.attack / combined)),
+  };
 }

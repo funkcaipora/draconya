@@ -17,7 +17,7 @@
 // É só a metade "vira extrato" — quem chama decide se apaga o snapshot depois (`game/host.ts`
 // só apaga se isto NÃO lançar; o `--reset` faz o mesmo). Ver `docs/product/party.md`.
 
-import type { CarriedItem, InventoryState, SessionSnapshot } from '@draconya/sim';
+import type { CarriedItem, InventoryState, ItemInstanceOverlay, SessionSnapshot } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 import type { ReceiptStore } from './receipts.js';
 
@@ -44,6 +44,22 @@ function layoutOfState(
   inventory.backpack.forEach((item, index) => { if (item !== null) layout[item.instanceId] = { container: 'backpack', index }; });
   (inventory.satchel ?? []).forEach((item, index) => { if (item !== null) layout[item.instanceId] = { container: 'satchel', index }; });
   return layout;
+}
+
+/**
+ * O overlay de cada instância que ele carrega (#604, ADR 0046): `instanceId → overlay`, `null`
+ * para a instância sem overlay — containers E corpo, porque imbuement mora em peça vestida. É
+ * o mesmo extrato para o fim normal da sessão (`game/host.ts`) e para esta liquidação.
+ */
+export function overlaysOfState(inventory: InventoryState): Record<string, ItemInstanceOverlay | null> {
+  const overlays: Record<string, ItemInstanceOverlay | null> = {};
+  const note = (item: CarriedItem | null | undefined): void => {
+    if (item !== null && item !== undefined) overlays[item.instanceId] = item.overlay ?? null;
+  };
+  inventory.backpack.forEach(note);
+  (inventory.satchel ?? []).forEach(note);
+  Object.values(inventory.equipped).forEach(note);
+  return overlays;
 }
 
 /**
@@ -112,6 +128,7 @@ export async function settleSnapshotAsReceipt(
     ...(owner?.inventory === undefined ? {} : {
       equipment: equipmentOfState(owner.inventory),
       layout: layoutOfState(owner.inventory),
+      overlays: overlaysOfState(owner.inventory),
       acquired: acquiredByState(owner.inventory, snapshot.id),
     }),
     ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),

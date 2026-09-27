@@ -254,6 +254,57 @@ reverteu — com o contexto completo, a posição do M30-01 não sobrevive à co
   monstro por `Monster.critChance`) são registradas em `docs/product/combat.md`, não aqui — não
   mudam nada da ORDEM de `blockHit` que este ADR decide.
 
+## Emenda — 2026-09-26: a ability de monstro decide pelo TIPO DE ATAQUE, não pela forma (#682)
+
+A emenda do M30-01 acima dizia que "uma ability de monstro decide pela FORMA (`isMeleeAbility`)
+[…] — não um campo novo". A forma não basta, e esta emenda a substitui. No Canary a flag vem do
+NOME do ataque e do TIPO de dano (`Monsters::deserializeSpell`, `monsters.cpp:105-120`): `melee`
+seta `BLOCKARMOR` e `BLOCKSHIELD`; `combat` com `COMBAT_PHYSICALDAMAGE` seta só `BLOCKARMOR`
+(origem `ranged`), em qualquer alcance ou área; `combat` de outro tipo, nenhum. Pela forma, a
+pedra do Stone Golem e a lança do Hunter (físicas, alcance > 1) chegavam ao `blockHit` como
+magia, e a armadura não tirava nada.
+
+- **O conteúdo diz o que o ataque É; a engine decide o bloqueio.** `monsterAbilitySchema` ganha
+  `kind?: 'melee' | 'combat'` — um campo semântico, não as flags cruas: a parte da emenda do
+  M30-01 que diz "as flags são do MECANISMO, não do conteúdo" continua valendo. `kind: 'melee'`
+  exige `damageType: 'physical'` (o Canary fixa o tipo no `melee`); o boot recusa o resto.
+- **`abilityBlockFlags` (`packages/sim/src/monster/ability.ts`)** é a regra: corpo a corpo é o
+  `kind` declarado, ou, ausente, a forma (`isMeleeAbility`) — o conteúdo escrito à mão e a
+  ability básica do boot não mudam. Fora do corpo a corpo, físico → `DISTANCE_BLOCK_FLAGS`,
+  qualquer outro tipo → `MAGIC_BLOCK_FLAGS`. O campo existe porque 30 `combat` físicos do Canary
+  têm alcance 1 sem área e a forma os confundiria com `melee` (escudo indevido).
+- **Emenda do `combat-v3`, sem perfil novo.** O v3 não chegou à `main` (decisão 3), e
+  `blockable` já é ignorado em `combat-v1`/`v2` — os dois ficam bit a bit sem ramo de perfil.
+  Nenhum número do catálogo atual muda: rat, rotworm, dragon e dragon-lord só têm físico em
+  `melee` de alcance 1.
+- **A apresentação continua pela forma.** `isMeleeAbility` segue decidindo o `source` do
+  `creature-hit`; trocar isso pela regra nova seria uma mudança visual que ninguém pediu.
+- **Nota sobre a carga de bloqueio.** Como `Creature::blockHit` do Canary, a carga
+  (`blockCount`) é gasta sempre que UMA das flags vale — um `combat` físico gasta carga pela
+  armadura mesmo sem o escudo rolar nada (`resolveBlockHit`, inalterado).
+
+## Emenda — 2026-09-26: magia, runa, poção e ataque/cura de monstro pela normal truncada (#681)
+
+O `combat-v3` ainda não chegou na `main`, então esta é uma emenda dele pela decisão 3 — não um
+`combat-v4`. O Canary sorteia todo valor de dano e cura que não é de arma por `normal_random`
+(`combat.cpp:189`/`:195`/`:2046`, `global_functions.cpp:372`/`:455`); o Draconya já fazia isso para
+arma desde o `combat-v2` (#522), mas magia, runa, poção e a ability/cura de monstro seguiam no
+`rng.integer` uniforme.
+
+- **Um helper por perfil, `rollCombatValue`** (`combat/combat-value.ts`): `normalRandomInt` no
+  `combat-v3`, `rng.integer` no `combat-v1`/`v2` e para quem chama sem `combat` (fixture). Os seis
+  pontos de sorteio (`powerOf` nos dois caminhos, `fixedAmount`, a runa de ataque, a ability e a
+  defesa de cura do monstro) passam por ele. Uma regra só: o dia em que um perfil novo mudar a
+  distribuição, muda um lugar.
+- **A contagem de sorteios não muda de forma, o consumo muda de tamanho.** Cada ponto continua
+  sendo UM sorteio de valor, na mesma posição da ordem de RNG; no `combat-v3` esse sorteio custa
+  ~2,1 frações do `Rng` em vez de uma, como a arma já custa. A normal roda mesmo com
+  `min === max` (a mesma regra do `blockChance`).
+- **Dano de condição e velocidade continuam uniformes** — o Canary usa `uniform_random` ali
+  (`condition.cpp:1908`, `:2547`). Defesa/armadura (`Creature::blockHit`) idem.
+- `combat-v1`/`v2` bit a bit: os traces de `combat/traces/` (perfil `combat-v1`) passam sem
+  edição. Os pontos e a distribuição de cada um estão em `docs/product/combat.md`.
+
 ## Emenda — 2026-09-26: absorção, aumento, reflexo e cleave (M30-05, #552)
 
 O `combat-v3` ainda não está na `main`, então o M30-05 é emenda deste perfil, não um `combat-v4`.
