@@ -639,6 +639,33 @@ describe('abilities de monstro (CMB-06)', () => {
   });
 });
 
+describe('o tipo de ataque da ability (`kind`, #682)', () => {
+  it('aceita `melee` e `combat`, e a normalização os copia', () => {
+    const bite = { id: 'bite', cadenceMs: 2_000, power: 5, kind: 'melee' };
+    const stone = { id: 'stone', cadenceMs: 2_000, power: 5, kind: 'combat', target: { range: 7 } };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [bite, stone] }] }));
+    const abilities = content.monsters.get('rat')?.abilities;
+    expect(abilities?.find((a) => a.id === 'bite')?.kind).toBe('melee');
+    expect(abilities?.find((a) => a.id === 'stone')?.kind).toBe('combat');
+  });
+
+  it('ausente continua ausente — a básica do boot e o conteúdo antigo não declaram', () => {
+    const plain = { id: 'plain', cadenceMs: 2_000, power: 5 };
+    const declared = buildContent(base({ monsters: [{ ...rat, abilities: [plain] }] }));
+    expect(declared.monsters.get('rat')?.abilities[0]).not.toHaveProperty('kind');
+    expect(buildContent(base()).monsters.get('rat')?.abilities[0]).not.toHaveProperty('kind');
+  });
+
+  it('recusa `melee` que não é físico: o Canary fixa `COMBAT_PHYSICALDAMAGE` no `melee`', () => {
+    const fireMelee = { id: 'burn', cadenceMs: 2_000, power: 5, kind: 'melee', damageType: 'fire' };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [fireMelee] }] })))
+      .toThrow(ContentError);
+    const fireCombat = { ...fireMelee, kind: 'combat' };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [fireCombat] }] })))
+      .not.toThrow();
+  });
+});
+
 describe('a estratégia ponderada de alvo (`monster.targetStrategy`, #541)', () => {
   it('ausente é `undefined` — o comportamento de sempre, sem sorteio de critério', () => {
     const content = buildContent(base());

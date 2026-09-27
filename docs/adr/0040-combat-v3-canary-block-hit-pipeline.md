@@ -253,3 +253,32 @@ reverteu — com o contexto completo, a posição do M30-01 não sobrevive à co
   `targetsAffected`) e a fonte dos modificadores (item somado por `Inventory.combatModifiers`,
   monstro por `Monster.critChance`) são registradas em `docs/product/combat.md`, não aqui — não
   mudam nada da ORDEM de `blockHit` que este ADR decide.
+
+## Emenda — 2026-09-26: a ability de monstro decide pelo TIPO DE ATAQUE, não pela forma (#682)
+
+A emenda do M30-01 acima dizia que "uma ability de monstro decide pela FORMA (`isMeleeAbility`)
+[…] — não um campo novo". A forma não basta, e esta emenda a substitui. No Canary a flag vem do
+NOME do ataque e do TIPO de dano (`Monsters::deserializeSpell`, `monsters.cpp:105-120`): `melee`
+seta `BLOCKARMOR` e `BLOCKSHIELD`; `combat` com `COMBAT_PHYSICALDAMAGE` seta só `BLOCKARMOR`
+(origem `ranged`), em qualquer alcance ou área; `combat` de outro tipo, nenhum. Pela forma, a
+pedra do Stone Golem e a lança do Hunter (físicas, alcance > 1) chegavam ao `blockHit` como
+magia, e a armadura não tirava nada.
+
+- **O conteúdo diz o que o ataque É; a engine decide o bloqueio.** `monsterAbilitySchema` ganha
+  `kind?: 'melee' | 'combat'` — um campo semântico, não as flags cruas: a parte da emenda do
+  M30-01 que diz "as flags são do MECANISMO, não do conteúdo" continua valendo. `kind: 'melee'`
+  exige `damageType: 'physical'` (o Canary fixa o tipo no `melee`); o boot recusa o resto.
+- **`abilityBlockFlags` (`packages/sim/src/monster/ability.ts`)** é a regra: corpo a corpo é o
+  `kind` declarado, ou, ausente, a forma (`isMeleeAbility`) — o conteúdo escrito à mão e a
+  ability básica do boot não mudam. Fora do corpo a corpo, físico → `DISTANCE_BLOCK_FLAGS`,
+  qualquer outro tipo → `MAGIC_BLOCK_FLAGS`. O campo existe porque 30 `combat` físicos do Canary
+  têm alcance 1 sem área e a forma os confundiria com `melee` (escudo indevido).
+- **Emenda do `combat-v3`, sem perfil novo.** O v3 não chegou à `main` (decisão 3), e
+  `blockable` já é ignorado em `combat-v1`/`v2` — os dois ficam bit a bit sem ramo de perfil.
+  Nenhum número do catálogo atual muda: rat, rotworm, dragon e dragon-lord só têm físico em
+  `melee` de alcance 1.
+- **A apresentação continua pela forma.** `isMeleeAbility` segue decidindo o `source` do
+  `creature-hit`; trocar isso pela regra nova seria uma mudança visual que ninguém pediu.
+- **Nota sobre a carga de bloqueio.** Como `Creature::blockHit` do Canary, a carga
+  (`blockCount`) é gasta sempre que UMA das flags vale — um `combat` físico gasta carga pela
+  armadura mesmo sem o escudo rolar nada (`resolveBlockHit`, inalterado).
