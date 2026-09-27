@@ -2229,6 +2229,29 @@ export const monsterSchema = z.strictObject({
    */
   blockable: z.boolean().default(false),
   /**
+   * O monstro pode ser EMPURRADO por outro que declare `canPushCreatures` (M29-08, TFS/Canary
+   * `Monster::isPushable`, `monster.cpp:276`: `pushable && baseSpeed != 0`). A segunda metade
+   * não precisa de campo aqui: `speed` é `positive()` neste schema (nunca zero), então
+   * `pushable` sozinho decide. Ausente é `true` — o default do Canary e de 1.598/1.655 do
+   * bestiário real; rato, rotworm, Dragon e Dragon Lord não declaram (preservam `true`).
+   */
+  pushable: z.boolean().default(true),
+  /**
+   * Empurra CRIATURAS empurráveis que bloqueiam o próprio passo, em vez de tratá-las como
+   * parede (M29-08, TFS/Canary `Monster::canPushCreatures`, `monsters.hpp:138`). Ausente é
+   * `false` — o default do Canary; rato, rotworm, Dragon e Dragon Lord não declaram
+   * (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), então nenhum monstro de hoje
+   * muda de comportamento por este campo existir.
+   */
+  canPushCreatures: z.boolean().default(false),
+  /**
+   * Empurra ITENS móveis do tile de destino (TFS/Canary `Monster::canPushItems`,
+   * `monsters.hpp:137`). Aceito e validado, mas SEM EFEITO no Draconya: não existe item móvel
+   * no chão — o cadáver é só visual (ADR 0048) — então não há o que empurrar. Ausente é
+   * `false`, o default do Canary.
+   */
+  canPushItems: z.boolean().default(false),
+  /**
    * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
    * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
    * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.

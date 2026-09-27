@@ -148,6 +148,20 @@ não existe aqui: este motor não faz o monstro "andar à toa" sem alvo (§ acim
 alvo"), então essa metade da condição do Canary nunca fica satisfeita, não por escolha, mas
 porque a situação que ela descreve não ocorre neste motor.
 
+**Ele empurra quem bloqueia o passo, em vez de tratar todo tile ocupado como parede (M29-08,
+TFS/Canary `Monster::pushCreatures`).** `canPushCreatures`, `pushable` e `canPushItems` são
+booleanos por monstro; ausentes são, respectivamente, `false`, `true` e `false` — os defaults do
+Canary, que preservam rato, rotworm, Dragon e Dragon Lord idênticos a antes desta issue (nenhum
+dos quatro declara `canPushCreatures`). Um monstro `canPushCreatures` que encontra o próprio
+caminho ocupado por outro monstro `pushable` o empurra para um tile CARDINAL livre (nunca
+diagonal), sorteado sem reposição pelo `Rng` da sessão — a mesma ordem embaralhada do Canary
+(`{norte, oeste, leste, sul}`). Sem nenhum cardinal livre, o empurrado morre no lugar, sem
+atacante: não paga XP a ninguém, e o loot segue a regra de "sem dono" que já vale para um abate
+cujo matador sumiu. `canPushItems` está no schema, validado, mas SEM EFEITO — não existe item
+móvel no chão (o cadáver é só visual, ADR 0048), então não há o que empurrar. **O jogador nunca é
+empurrado nem esmagado** — a checagem só considera outros monstros; um monstro parado no tile de
+um jogador continua bloqueando exatamente como antes.
+
 ### Custo medido
 
 `pnpm bench:monster`, com 48 monstros, 4 jogadores e paredes espalhadas para exercitar o desvio:
