@@ -189,8 +189,9 @@ avançar, parar, retomar, dar a volta.
 Desde a FUN-69 **ninguém escreve posição de criatura fora de `packages/sim/src/movement.ts`**, e
 o `pnpm source-policy` reprova quem tentar. Bot, monstro e o `walk` do socket passam pelo mesmo
 caminho — `canOccupy` → `move` — e recebem a **mesma razão de recusa**: `out-of-bounds`,
-`tile-blocked`, `tile-occupied`, `not-adjacent` ou `same-tile`. É o padrão do §8 do documento
-de referência OpenTibia, e é conceitual: *validar → commit atômico → evento*.
+`tile-blocked`, `tile-occupied`, `not-adjacent`, `same-tile` ou `unreachable` (#763, só de um
+`walk-to` distante — ver abaixo). É o padrão do §8 do documento de referência OpenTibia, e é
+conceitual: *validar → commit atômico → evento*.
 
 Três consequências que o jogador sente:
 
@@ -202,6 +203,45 @@ Três consequências que o jogador sente:
   `creature-move` — um por passo, com origem, destino e duração, e o cliente interpola. A hunt
   desanexada produz exatamente os mesmos eventos e não serializa nenhum. Antes disto a hunt
   **não transmitia mundo**: os 42,8 bytes/s medidos na FUN-45 eram handshake e `ping`.
+
+#### `walk-to` distante: caminho no servidor e pausa do bot (#763)
+
+Até a #763, `requestMove` só aceitava um tile ADJACENTE — clicar num cadáver a mais de um tile
+mandava um único `walk-to` com o destino final (o cliente, que só manda intenção, espera o
+personagem chegar sozinho: `corpse-approach.ts`/`tile-approach.ts`) e o servidor recusava
+`not-adjacent` na hora; o personagem nunca chegava, e "selecionar quais itens pegar do loot"
+não funcionava na prática.
+
+Um `to` NÃO-adjacente agora calcula um caminho com o mesmo BFS limitado do follow do bot (#527,
+`boundedPath`, `packages/sim/src/route/pathfind.ts`) — a mesma legalidade de
+`canOccupy`/`MovementWorld`, com a exceção de uma porta FECHADA do overlay de cenário (#728):
+o caminho a trata como passável, porque o personagem a abre sozinho ao encontrá-la, a mesma
+automação que já existe para a rota autorada. Sem caminho dentro do raio (parede genuína, fora
+do raio, ou um interativo que não é porta), a recusa é `unreachable` — tipada, para o cliente
+nunca ficar esperando uma resposta que não vem.
+
+Enquanto o caminho está em curso, o personagem consome um tile por vencimento (invariante 2) e
+**não anda pela rota nem persegue alvo — com PRIORIDADE ACIMA do combate-stop de sempre**
+(achado de QA ao vivo na Darashia Dragon Lair, Sorcerer level 200): um destino distante numa
+masmorra cheia de dragões nunca terminava de andar, porque o combate-stop de sempre segurava o
+personagem no primeiro dragão ao alcance e nunca soltava, já que o alvo nunca morria nem saía de
+alcance. O personagem que clicou um destino distante já expressou a intenção de IR até lá; ele
+continua batendo em quem estiver ao alcance NO CAMINHO (`#armPlayerAttack`), só não gruda para
+lutar. Ao chegar — ou direto de qualquer intenção manual, mesmo sem `walk-to` nenhum antes (outro
+achado de QA ao vivo: abrir um cadáver já adjacente não armava pausa nenhuma, e o bot levava o
+personagem embora antes do `take-loot` seguinte) —, o bot fica PAUSADO por dez segundos,
+RE-INICIADOS por qualquer intenção manual nova (abrir cadáver, pegar loot, usar item, usar no
+mapa); combate continua valendo cheio durante a pausa — "atacar de onde está" é aceitável, só
+ANDAR é suprimido. É a janela para o jogador agir antes de a rota retomar sozinha, pelo tile mais
+próximo (o mecanismo que já existe). Um pedido de passo adjacente novo (seta, ou outro clique a
+um tile) cancela um caminho em curso — é intenção nova, sobrepõe a anterior.
+
+O CLIENTE (`corpse-approach.ts`/`tile-approach.ts`) desiste depois de um prazo se o personagem
+nunca chegar — mas o prazo FIXO de dez segundos expirava antes de terminar de andar até um
+cadáver realmente distante (onze tiles, no mesmo QA). O prazo agora é PROPORCIONAL à distância
+conhecida no instante do clique: dez segundos de base mais um segundo por tile
+(`corpseApproachDeadline`/`tileApproachDeadline`, `packages/client/src/world/`), resolvido uma
+vez no pedido e nunca recalculado depois.
 
 A colocação inicial passa pela mesma legalidade. O personagem nasce no `entryPoint` do mapa da
 Cidade — conteúdo, validado no boot contra `isBlocked` — e não mais no literal `(0,0)`, que é

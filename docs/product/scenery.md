@@ -47,7 +47,10 @@ importador derivava bloqueio das flags UMA vez; agora quem sabe "dá para pisar 
 `TileOverrides` da sessão (`packages/sim/src/tile-overrides.ts`, #728): um overlay pequeno, por
 tile, que combina com o `Tilemap` imutável em `MovementWorld.blockedAt`/`floorChangeAt` — nenhuma
 cópia do mapa por sessão (invariante 7). Porta comum (T1) bloqueia **fechada** e o walker a abre
-sozinho, sem ferramenta, quando ela está no caminho da rota (ADR 0050 d.4); capim e stone pile
+sozinho, sem ferramenta, quando ela está no caminho da rota (ADR 0050 d.4) — a mesma automação
+vale para o caminho de um `walk-to` DISTANTE na hunt (#763, `docs/product/hunt.md`
+"`walk-to` distante"): o BFS trata a porta como passável, e o passo que a atravessa a abre.
+Capim e stone pile
 bloqueiam **intactos**, exigem ferramenta (`use.tool` do item — hoje só um item de teste declara,
 a machete/pá reais são a #573) e decaem sozinhos de volta em `revertMs` (evento `TILE_REVERT` na
 fila, invariante 2 — nada por tique); a stone pile virada buraco desce um andar

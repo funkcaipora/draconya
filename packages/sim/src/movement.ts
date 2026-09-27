@@ -29,7 +29,14 @@ export type MoveRejection =
   | 'tile-blocked'
   | 'tile-occupied'
   | 'not-adjacent'
-  | 'same-tile';
+  | 'same-tile'
+  /**
+   * Só de `HuntRuleset.requestMove` (#763): um `walk-to` para um destino DISTANTE cujo BFS
+   * limitado (`boundedPath`, o mesmo do follow) não achou caminho dentro do raio — parede
+   * genuína, fora do raio, ou um interativo bloqueante que não é porta. NUNCA de `canOccupy`:
+   * ele só compara tile ADJACENTE, e não sabe o que é "inalcançável" — só "não é vizinho".
+   */
+  | 'unreachable';
 
 /** Ponto de mundo, com o andar. O `z` vem do MAPA — é a única fonte de verdade sobre ele. */
 export interface WorldPoint {

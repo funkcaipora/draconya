@@ -9,7 +9,7 @@
 
 import { sendIntent } from '../net/current.js';
 import { world } from '../state/world.js';
-import { decideTileApproach } from '../world/tile-approach.js';
+import { decideTileApproach, tileApproachDeadline } from '../world/tile-approach.js';
 import type { PendingTileUse } from '../world/tile-approach.js';
 
 let pending: PendingTileUse | null = null;
@@ -17,10 +17,13 @@ let pending: PendingTileUse | null = null;
 /**
  * O duplo-clique num tile (`Viewport.tsx`): manda `walk-to` na hora e guarda o pedido. Se o
  * personagem já está ao alcance, `tick` (chamado logo em seguida) manda `use-on-map` direto,
- * sem esperar o próximo ciclo do laço.
+ * sem esperar o próximo ciclo do laço. O prazo (#763) já sai PROPORCIONAL à distância conhecida
+ * agora — ver `corpse-approach.ts`, mesmo mecanismo.
  */
 export function requestTileUse(position: PendingTileUse['position'], nowMs: number): void {
-  pending = { position, requestedAtMs: nowMs };
+  const selfId = world.selfId;
+  const selfPosition = selfId === null ? null : (world.creatures.get(selfId)?.position ?? null);
+  pending = { position, deadlineMs: tileApproachDeadline(selfPosition, position, nowMs) };
   sendIntent({ type: 'walk-to', destination: position });
   tick(nowMs);
 }

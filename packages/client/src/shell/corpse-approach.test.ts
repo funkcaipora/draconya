@@ -30,9 +30,25 @@ describe('requestCorpseApproach (#722)', () => {
     requestCorpseApproach(7, { x: 10, y: 10, z: 7 }, 1_000);
 
     expect(sent).toEqual([{ type: 'walk-to', destination: { x: 10, y: 10, z: 7 } }]);
+    // Sem posição própria conhecida ainda (`world.selfId` null no `beforeEach`): o prazo (#763)
+    // é só a base, sem bônus de distância.
     expect(pendingCorpseApproach()).toEqual({
-      groundItemId: 7, position: { x: 10, y: 10, z: 7 }, requestedAtMs: 1_000,
+      groundItemId: 7, position: { x: 10, y: 10, z: 7 }, deadlineMs: 11_000,
     });
+  });
+
+  it('com posição própria conhecida, o prazo já sai maior — proporcional à distância (#763)', () => {
+    world.selfId = 1;
+    world.creatures.set(1, {
+      id: 1, appearanceId: 1, name: 'hero', health: 1, maxHealth: 1,
+      position: { x: 0, y: 0, z: 7 }, step: null,
+    });
+    world.groundItems.set(7, { id: 7, position: { x: 11, y: 0, z: 7 }, appearanceId: 1 });
+
+    requestCorpseApproach(7, { x: 11, y: 0, z: 7 }, 1_000);
+
+    // 11 tiles de distância — o cenário do QA ao vivo na Darashia Dragon Lair.
+    expect(pendingCorpseApproach()?.deadlineMs).toBe(1_000 + 10_000 + 11 * 1_000);
   });
 
   it('já adjacente: manda open-corpse na hora, sem esperar o próximo tick', () => {
