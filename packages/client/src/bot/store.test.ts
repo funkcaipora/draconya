@@ -4,8 +4,8 @@ import type { BotAutomation, BotConfigV2, BotSlot } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig,
   putAutomation, removeAutomation, setActiveSet, setConfigSender, setExitHpBelowPercent, setExitRule,
-  setFollow, setIgnore, setLure, setPosture, setPrioritize, setSlot, setSlotAuto,
-  setTargetingPolicy, toggleAutomation, toConfig,
+  setFollow, setIgnore, setLootFilter, setLure, setPosture, setPrioritize, setSlot, setSlotAuto,
+  setTargetingPolicy, toggleAutoSellItem, toggleAutomation, toggleLootItem, toConfig,
 } from './store.js';
 import type { BotDraft } from './store.js';
 
@@ -445,5 +445,63 @@ describe('as automações salvam e mandam bot-config (AB-12, #427)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('o filtro de Quick Loot (#722, ADR 0048 d.2/d.4)', () => {
+  const sent: BotConfigV2[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('emptyDraft nasce com o default do schema: skip, listas vazias', () => {
+    expect(emptyDraft().loot).toEqual({ filter: 'skip', itemIds: [], autoSell: [] });
+  });
+
+  it('setLootFilter troca accept/skip e salva com debounce', () => {
+    setLootFilter('accept');
+    expect(bot.get().draft.loot?.filter).toBe('accept');
+    expect(sent).toHaveLength(0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.loot.filter).toBe('accept');
+  });
+
+  it('toggleLootItem liga e desliga o mesmo id — não duplica na segunda marcação', () => {
+    toggleLootItem('sword');
+    expect(bot.get().draft.loot?.itemIds).toEqual(['sword']);
+    toggleLootItem('gem');
+    expect(bot.get().draft.loot?.itemIds).toEqual(['sword', 'gem']);
+    toggleLootItem('sword');
+    expect(bot.get().draft.loot?.itemIds).toEqual(['gem']);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent.at(-1)?.loot.itemIds).toEqual(['gem']);
+  });
+
+  it('toggleAutoSellItem edita autoSell, INDEPENDENTE de itemIds', () => {
+    toggleLootItem('sword');
+    toggleAutoSellItem('gem');
+    expect(bot.get().draft.loot).toEqual({ filter: 'skip', itemIds: ['sword'], autoSell: ['gem'] });
+    toggleAutoSellItem('gem');
+    expect(bot.get().draft.loot?.autoSell).toEqual([]);
+  });
+
+  it('draftFrom/toConfig levam loot na volta inteira', () => {
+    const loot = { filter: 'accept' as const, itemIds: ['sword'], autoSell: ['gem'] };
+    const draft = draftFrom({ ...toConfig(emptyDraft()), loot });
+    expect(draft.loot).toEqual(loot);
+    expect(toConfig(draft).loot).toEqual(loot);
+  });
+
+  it('toConfig SEMPRE manda loot, mesmo num rascunho sem o campo (config anterior ao ADR 0048)', () => {
+    const { loot: _loot, ...withoutLoot } = emptyDraft();
+    expect(toConfig(withoutLoot).loot).toEqual({ filter: 'skip', itemIds: [], autoSell: [] });
   });
 });

@@ -1,0 +1,3843 @@
+[
+  {
+    "id": "abyssal-calamary",
+    "name": "Abyssal Calamary",
+    "class": "aquatic",
+    "health": 300,
+    "experience": 200,
+    "attack": 0,
+    "armor": 12,
+    "defense": 13,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "black-pearl",
+          "chance": 0.015
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0083
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0025,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 89,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/abyssal_calamary.lua"
+    }
+  },
+  {
+    "id": "blood-crab",
+    "name": "Blood Crab",
+    "class": "aquatic",
+    "health": 290,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 28,
+    "defense": 28,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "fire": -0.1
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8575,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "bloody-pincers",
+          "chance": 0.0619
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0524
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.0212
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0053
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/blood_crab.lua"
+    }
+  },
+  {
+    "id": "calamary",
+    "name": "Calamary",
+    "class": "aquatic",
+    "health": 75,
+    "experience": 0,
+    "attack": 0,
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 75,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/calamary.lua"
+    }
+  },
+  {
+    "id": "crab",
+    "name": "Crab",
+    "class": "aquatic",
+    "health": 55,
+    "experience": 30,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 28,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "drown",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.78,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "crab-pincers",
+          "chance": 0.2
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 20
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/crab.lua"
+    }
+  },
+  {
+    "id": "crustacea-gigantica",
+    "name": "Crustacea Gigantica",
+    "class": "aquatic",
+    "health": 1600,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 600
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "energy": -0.05,
+        "death": 0.1
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.96,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.03
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 600
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/crustacea_gigantica.lua"
+    }
+  },
+  {
+    "id": "deathling-scout",
+    "name": "Deathling Scout",
+    "class": "aquatic",
+    "health": 7200,
+    "experience": 6300,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 72,
+    "defense": 72,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 310,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "deepling-warts",
+          "chance": 0.2028
+        },
+        {
+          "itemId": "deeptags",
+          "chance": 0.151
+        },
+        {
+          "itemId": "deepling-ridge",
+          "chance": 0.1124
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0662
+        },
+        {
+          "itemId": "warriors-shield",
+          "chance": 0.0363
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.0347
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.03
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0092
+        },
+        {
+          "itemId": "necklace-of-the-deep",
+          "chance": 0.0044
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 200,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "huntingspear"
+        }
+      },
+      {
+        "id": "physicalstrike-2",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 150,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 4000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 350,
+          "max": 550
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poff"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deathling_scout.lua"
+    }
+  },
+  {
+    "id": "deathling-spellsinger",
+    "name": "Deathling Spellsinger",
+    "class": "aquatic",
+    "health": 7200,
+    "experience": 6400,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 72,
+    "defense": 72,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.88,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 310,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.86,
+        "min": 100,
+        "max": 1400
+      },
+      "items": [
+        {
+          "itemId": "deeptags",
+          "chance": 0.1247
+        },
+        {
+          "itemId": "deepling-ridge",
+          "chance": 0.0884
+        },
+        {
+          "itemId": "deepling-warts",
+          "chance": 0.0854
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0412
+        },
+        {
+          "itemId": "warriors-shield",
+          "chance": 0.0309
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0299
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.0295
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.0201
+        },
+        {
+          "itemId": "necklace-of-the-deep",
+          "chance": 0.002
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 200,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "huntingspear"
+        }
+      },
+      {
+        "id": "physicalstrike-2",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 150,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      },
+      {
+        "id": "holybeam",
+        "cadenceMs": 2000,
+        "chance": 0.14,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 700
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "holyarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.6,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deathling_spellsinger.lua"
+    }
+  },
+  {
+    "id": "deepling-brawler",
+    "name": "Deepling Brawler",
+    "class": "aquatic",
+    "health": 380,
+    "experience": 260,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 18,
+    "defense": 18,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.72,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.96,
+        "min": 1,
+        "max": 44
+      },
+      "items": [
+        {
+          "itemId": "deepling-scales",
+          "chance": 0.145
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0272
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0068
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "drownstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 60,
+          "max": 120
+        },
+        "damageType": "drown",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear",
+          "impactKey": "loseenergy"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 40,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_brawler.lua"
+    }
+  },
+  {
+    "id": "deepling-elite",
+    "name": "Deepling Elite",
+    "class": "aquatic",
+    "health": 3200,
+    "experience": 3000,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 45,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.37,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 330,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "deepling-warts",
+          "chance": 0.244
+        },
+        {
+          "itemId": "deeptags",
+          "chance": 0.206
+        },
+        {
+          "itemId": "deepling-ridge",
+          "chance": 0.195
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.0536
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0368
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.023
+        },
+        {
+          "itemId": "warriors-shield",
+          "chance": 0.01534
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.0082
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 290
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "largerock"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 150,
+          "max": 200
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_elite.lua"
+    }
+  },
+  {
+    "id": "deepling-guard",
+    "name": "Deepling Guard",
+    "class": "aquatic",
+    "health": 1900,
+    "experience": 2100,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 53,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.57,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 270,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 90
+      },
+      "items": [
+        {
+          "itemId": "deepling-breaktime-snack",
+          "chance": 0.16666
+        },
+        {
+          "itemId": "deepling-guard-belt-buckle",
+          "chance": 0.125
+        },
+        {
+          "itemId": "deepling-claw",
+          "chance": 0.0909
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0289,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.01694
+        },
+        {
+          "itemId": "guardian-axe",
+          "chance": 0.00925
+        },
+        {
+          "itemId": "deepling-squelcher",
+          "chance": 0.00751
+        },
+        {
+          "itemId": "ornate-crossbow",
+          "chance": 0.00362
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        }
+      },
+      {
+        "id": "drownstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 100,
+          "max": 150
+        },
+        "damageType": "drown",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear",
+          "impactKey": "loseenergy"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 100,
+          "max": 200
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_guard.lua"
+    }
+  },
+  {
+    "id": "deepling-scout",
+    "name": "Deepling Scout",
+    "class": "aquatic",
+    "health": 240,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 105
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 130,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 1,
+        "max": 50
+      },
+      "items": [
+        {
+          "itemId": "life-ring",
+          "chance": 0.02127
+        },
+        {
+          "itemId": "rusted-armor",
+          "chance": 0.00925
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.00505
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0031
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.00121
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 105
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "drownstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "drown",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear",
+          "impactKey": "loseenergy"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 50,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_scout.lua"
+    }
+  },
+  {
+    "id": "deepling-tyrant",
+    "name": "Deepling Tyrant",
+    "class": "aquatic",
+    "health": 4500,
+    "experience": 4200,
+    "attack": {
+      "min": 0,
+      "max": 501
+    },
+    "armor": 54,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.65,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 310,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "deepling-breaktime-snack",
+          "chance": 0.3552
+        },
+        {
+          "itemId": "deepling-claw",
+          "chance": 0.2996
+        },
+        {
+          "itemId": "deepling-guard-belt-buckle",
+          "chance": 0.237
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0941,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0353
+        },
+        {
+          "itemId": "deepling-squelcher",
+          "chance": 0.0144
+        },
+        {
+          "itemId": "guardian-axe",
+          "chance": 0.0134
+        },
+        {
+          "itemId": "ornate-crossbow",
+          "chance": 0.0119
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 501
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 375
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        }
+      },
+      {
+        "id": "drownstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 180,
+          "max": 215
+        },
+        "damageType": "drown",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "spear",
+          "impactKey": "loseenergy"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 200,
+          "max": 400
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.7,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_tyrant.lua"
+    }
+  },
+  {
+    "id": "deepling-warrior",
+    "name": "Deepling Warrior",
+    "class": "aquatic",
+    "health": 1600,
+    "experience": 1500,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 40,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "death": 0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.26,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "deeptags",
+          "chance": 0.14975
+        },
+        {
+          "itemId": "deepling-ridge",
+          "chance": 0.11111
+        },
+        {
+          "itemId": "deepling-warts",
+          "chance": 0.1004
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.03104
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.03001
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.00999
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0087
+        },
+        {
+          "itemId": "warriors-shield",
+          "chance": 0.0061
+        },
+        {
+          "itemId": "warriors-axe",
+          "chance": 0.0051
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 290
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindaxe"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 50,
+          "max": 150
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_warrior.lua"
+    }
+  },
+  {
+    "id": "deepling-worker",
+    "name": "Deepling Worker",
+    "class": "aquatic",
+    "health": 190,
+    "experience": 130,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 130,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 1,
+        "max": 25
+      },
+      "items": [
+        {
+          "itemId": "deepling-scales",
+          "chance": 0.0695
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0051
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0035
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0011
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_worker.lua"
+    }
+  },
+  {
+    "id": "deepsea-blood-crab",
+    "name": "Deepsea Blood Crab",
+    "class": "aquatic",
+    "health": 320,
+    "experience": 180,
+    "attack": {
+      "min": 0,
+      "max": 115
+    },
+    "armor": 28,
+    "defense": 28,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "fire": -0.1
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 380,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.87,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "bloody-pincers",
+          "chance": 0.0698
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0502
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.0272
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0062
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 115
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepsea_blood_crab.lua"
+    }
+  },
+  {
+    "id": "fish",
+    "name": "Fish",
+    "class": "aquatic",
+    "health": 25,
+    "experience": 0,
+    "attack": 0,
+    "armor": 9,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/fish.lua"
+    }
+  },
+  {
+    "id": "manta-ray",
+    "name": "Manta Ray",
+    "class": "aquatic",
+    "health": 680,
+    "experience": 125,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 42,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "ice": 0.25
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 1.37,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 168,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.63,
+        "min": 1,
+        "max": 39
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 200000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 120,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 75,
+          "max": 90
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "energybeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 50,
+          "max": 110
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.95,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/manta_ray.lua"
+    }
+  },
+  {
+    "id": "northern-pike",
+    "name": "Northern Pike",
+    "class": "aquatic",
+    "health": 95,
+    "experience": 0,
+    "attack": 0,
+    "armor": 9,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 95,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/northern_pike.lua"
+    }
+  },
+  {
+    "id": "quara-constrictor-scout",
+    "name": "Quara Constrictor Scout",
+    "class": "aquatic",
+    "health": 450,
+    "experience": 200,
+    "attack": {
+      "min": 0,
+      "max": 135
+    },
+    "armor": 14,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.86,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8762,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "quara-tentacle",
+          "chance": 0.1462
+        },
+        {
+          "itemId": "longsword",
+          "chance": 0.0691
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.0481
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.0306
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0049
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 135
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 45,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_constrictor_scout.lua"
+    }
+  },
+  {
+    "id": "quara-hydromancer",
+    "name": "Quara Hydromancer",
+    "class": "aquatic",
+    "health": 1100,
+    "experience": 950,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 30,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 490,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "quara-eye",
+          "chance": 0.1593
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0525
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.0315
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0141
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.01218
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0023
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 184000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 100,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "icebeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 180
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bubbles"
+        }
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 90,
+          "max": 150
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bubbles"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 170,
+          "max": 240
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 170
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 100,
+          "max": 120
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_hydromancer.lua"
+    }
+  },
+  {
+    "id": "quara-hydromancer-scout",
+    "name": "Quara Hydromancer Scout",
+    "class": "aquatic",
+    "health": 1100,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 30,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.4,
+        "min": 1,
+        "max": 90
+      },
+      "items": [
+        {
+          "itemId": "quara-eye",
+          "chance": 0.1272
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.029
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.0265
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0209
+        },
+        {
+          "itemId": "obsidian-lance",
+          "chance": 0.0153
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.0094
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0091
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0052
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 80
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 184000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 100,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "icebeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 180
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      },
+      {
+        "id": "iceburst",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 90,
+          "max": 150
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bubbles"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 170,
+          "max": 240
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bubbles"
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 170
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 100,
+          "max": 120
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_hydromancer_scout.lua"
+    }
+  },
+  {
+    "id": "quara-mantassin-scout",
+    "name": "Quara Mantassin Scout",
+    "class": "aquatic",
+    "health": 220,
+    "experience": 100,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 7,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.94,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "mantassin-tail",
+          "chance": 0.0778
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.05061
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0081
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0036
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 110
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_mantassin_scout.lua"
+    }
+  },
+  {
+    "id": "quara-pincher",
+    "name": "Quara Pincher",
+    "class": "aquatic",
+    "health": 1800,
+    "experience": 1500,
+    "attack": {
+      "min": 0,
+      "max": 342
+    },
+    "armor": 85,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 396,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "quara-pincers",
+          "chance": 0.14285
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.06861
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.016
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0146
+        },
+        {
+          "itemId": "crown-armor",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.0012
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 342
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_pincher.lua"
+    }
+  },
+  {
+    "id": "quara-pincher-scout",
+    "name": "Quara Pincher Scout",
+    "class": "aquatic",
+    "health": 775,
+    "experience": 600,
+    "attack": {
+      "min": 0,
+      "max": 240
+    },
+    "armor": 70,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.49,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "quara-pincers",
+          "chance": 0.0994
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0417
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.0344
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0207
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.008
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.0079
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 240
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_pincher_scout.lua"
+    }
+  },
+  {
+    "id": "quara-predator",
+    "name": "Quara Predator",
+    "class": "aquatic",
+    "health": 2200,
+    "experience": 1850,
+    "attack": {
+      "min": 0,
+      "max": 473
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.46,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 450,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.28,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "quara-bone",
+          "chance": 0.0986
+        },
+        {
+          "itemId": "royal-spear",
+          "chance": 0.0924,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.053,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.03011
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0192
+        },
+        {
+          "itemId": "relic-sword",
+          "chance": 0.0067
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.0044
+        },
+        {
+          "itemId": "skull-helmet",
+          "chance": 0.0039
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 473
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 270
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 25,
+          "max": 75
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_predator.lua"
+    }
+  },
+  {
+    "id": "quara-predator-scout",
+    "name": "Quara Predator Scout",
+    "class": "aquatic",
+    "health": 890,
+    "experience": 400,
+    "attack": {
+      "min": 0,
+      "max": 193
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "quara-bone",
+          "chance": 0.1015
+        },
+        {
+          "itemId": "scale-armor",
+          "chance": 0.0896
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.0577
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0502,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0301
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0108
+        },
+        {
+          "itemId": "northwind-rod",
+          "chance": 0.0096
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 193
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_predator_scout.lua"
+    }
+  },
+  {
+    "id": "renegade-quara-hydromancer",
+    "name": "Renegade Quara Hydromancer",
+    "class": "aquatic",
+    "health": 2000,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 540
+    },
+    "armor": 30,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 490,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.78,
+        "min": 100,
+        "max": 400
+      },
+      "items": [
+        {
+          "itemId": "quara-eye",
+          "chance": 0.2016
+        },
+        {
+          "itemId": "spirit-cloak",
+          "chance": 0.0565
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.03
+        },
+        {
+          "itemId": "life-ring",
+          "chance": 0.0219
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0138
+        },
+        {
+          "itemId": "wand-of-cosmic-energy",
+          "chance": 0.0115
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0046
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0046
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 540
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 5,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -350
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 100,
+          "max": 120
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/renegade_quara_hydromancer.lua"
+    }
+  },
+  {
+    "id": "renegade-quara-pincher",
+    "name": "Renegade Quara Pincher",
+    "class": "aquatic",
+    "health": 2800,
+    "experience": 2200,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 85,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.26,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 396,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 100,
+        "max": 500
+      },
+      "items": [
+        {
+          "itemId": "quara-pincers",
+          "chance": 0.188
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0706,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0512
+        },
+        {
+          "itemId": "warrior-helmet",
+          "chance": 0.0143
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0092
+        },
+        {
+          "itemId": "crown-armor",
+          "chance": 0.00611
+        },
+        {
+          "itemId": "time-ring",
+          "chance": 0.0041
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.002
+        },
+        {
+          "itemId": "twiceslicer",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 1
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -300
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/renegade_quara_pincher.lua"
+    }
+  },
+  {
+    "id": "renegade-quara-predator",
+    "name": "Renegade Quara Predator",
+    "class": "aquatic",
+    "health": 3250,
+    "experience": 2700,
+    "attack": {
+      "min": 0,
+      "max": 452
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 1.46,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 450,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 100,
+        "max": 400
+      },
+      "items": [
+        {
+          "itemId": "quara-bone",
+          "chance": 0.1
+        },
+        {
+          "itemId": "royal-spear",
+          "chance": 0.08,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0314,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.02101
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0129
+        },
+        {
+          "itemId": "relic-sword",
+          "chance": 0.01051
+        },
+        {
+          "itemId": "skull-helmet",
+          "chance": 0.0056
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.004
+        },
+        {
+          "itemId": "abyss-hammer",
+          "chance": 0.0032
+        },
+        {
+          "itemId": "frozen-plate",
+          "chance": 0.0016
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 452
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 30
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/renegade_quara_predator.lua"
+    }
+  },
+  {
+    "id": "shark",
+    "name": "Shark",
+    "class": "aquatic",
+    "health": 1200,
+    "experience": 700,
+    "attack": {
+      "min": 0,
+      "max": 175
+    },
+    "armor": 32,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "earth": 0.2,
+        "fire": 0.55,
+        "ice": 0.1
+      },
+      "immunities": [
+        "drown"
+      ]
+    },
+    "defenseMitigation": 0.43,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "deepling-scales",
+          "chance": 0.0962
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0109
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.00161
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 175
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/shark.lua"
+    }
+  }
+]

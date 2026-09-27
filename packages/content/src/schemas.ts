@@ -236,6 +236,15 @@ export const appearancesSchema = z.object({
    */
   corpses: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `appearanceKey → { estado → id }` do cenário usável (#727, ADR 0050 d.1): a mesma
+   * indireção de `corpses` para porta, capim, stone pile, rope spot, ladder, alavanca. GERADO
+   * por `pnpm map:import` em `appearances/generated/scenery.json` — nunca escrito à mão —,
+   * porque quem sabe quais ids formam um par fechado/aberto é a tabela do Canary transcrita
+   * como dado, não um humano copiando do OTBM. Chave sem uso é vocabulário à espera (mesma
+   * regra de `abilities`); `tilemapSchema.interactables[].appearanceKey` aponta para cá.
+   */
+  scenery: z.record(z.string().min(1), z.record(z.string().min(1), appearanceId)).default({}),
+  /**
    * Outfits de PERSONAGEM (FUN-103). `default` é o que todo jogador veste enquanto ninguém
    * escolhe o seu (§7.4 pendente): `CharacterRuntime` não tem outfit e o ticket não carrega
    * um. Mora aqui, e não numa constante no servidor, porque é arte (invariante 6).
@@ -382,8 +391,7 @@ const lootRollSchema = z.object({
  * catálogo de item — sem isso, um Burst Arrow ou uma Strong Health Potion no loot de monstro
  * não tinham como ser declarados. `supplyId`/`ammunitionId` creditam o ESTOQUE
  * (`CharacterRuntime.supplyStock`/`ammunitionStock`, `character.ts`) de quem recebe o drop, e
- * NÃO passam pela mochila: sem peso, sem instância, sem a Caixa de Loot — o mesmo motivo de
- * gold não ser item. O `.refine` recusa a linha ambígua (duas ou mais chaves) ou vazia
+ * NÃO passam pela mochila: sem peso, sem instância — o mesmo motivo de gold não ser item. O `.refine` recusa a linha ambígua (duas ou mais chaves) ou vazia
  * (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo existente que só declara
  * `itemId` continua válido sem mudar uma vírgula.
  */
@@ -563,6 +571,15 @@ export const weaponSchema = z.strictObject({
    * na mão —, a arma bate METADE em vez de não bater. Só o `combat-v3` lê.
    */
   wieldUnproperly: z.boolean().optional(),
+  /**
+   * O `breakChance` do Canary (#575, `Weapon::executeUseWeapon`, `weapons.cpp:363-367`): só em
+   * arma `distance` SEM `ammoFamily` — o arremessável (spear, throwing star), que É a própria
+   * munição, sem lançador nem seleção por família (ADR 0026 d.3 não se aplica a ele). Cada tiro
+   * rola `breakChance`% de consumir uma unidade do `ammunitionStock` do personagem (por ID do
+   * ITEM, não por família); sem quebrar, "volta ao estoque" — não é decrementado. `buildContent`
+   * exige exatamente um de `ammoFamily`/`breakChance` em toda arma `distance`.
+   */
+  breakChance: z.number().int().min(0).max(100).optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 
@@ -575,6 +592,8 @@ export type Weapon = z.infer<typeof weaponSchema>;
 export type ResolvedWeapon = WeaponProfile & {
   readonly kind: WeaponKind;
   readonly ammoFamily?: AmmoFamily;
+  /** O arremessável (#575) — ver o comentário em `weaponSchema.breakChance`. */
+  readonly breakChance?: number;
 };
 
 /**
@@ -673,6 +692,15 @@ export const consumableEffectSchema = z.discriminatedUnion('kind', [
     damageType: z.enum(DAMAGE_TYPES).default('arcane'),
   }),
   z.object({ kind: z.literal('blessing') }),
+  /**
+   * Comida (#726, ADR 0049 decisão 5, emenda ao ADR 0043): `durationMs` é `value × 12` segundos
+   * em milissegundos, o mecanismo do Canary (`foods.lua`: `itemFood[1] * 12`, teto de 1200 s —
+   * "You are full") — soma a `CharacterRuntime.fedMs`, capado em `FOOD_CAP_MS`
+   * (`packages/sim/src/food.ts`). O efeito em si (regeneração) só é lido quando
+   * `progression.regeneration.requiresFood` está ligado; comer sempre soma o contador, ligado
+   * ou não, porque é assim que o Tibia também funciona (a flag decide quem LÊ, não quem ESCREVE).
+   */
+  z.object({ kind: z.literal('food'), durationMs: z.number().int().positive() }),
 ]);
 export type ConsumableEffect = z.infer<typeof consumableEffectSchema>;
 
@@ -846,6 +874,20 @@ export const itemSchema = z.strictObject({
    */
   quiver: z.boolean().default(false),
   /**
+   * O bônus de PERFECT SHOT da aljava (#575; `Player::getPerfectShotDamage`, Canary
+   * `weapons.cpp:706-718`/`game.cpp:8500-8509`, `perfectshotrange`/`perfectshotdamage` do
+   * `items.xml` — ex. eldritch quiver, id 36666). Soma `damage` ao tiro (munição OU arremessável)
+   * quando a distância de Chebyshev até o alvo é EXATAMENTE `range` — nem mais perto, nem mais
+   * longe. Só em `kind: 'shield'` (a peça que ocupa a mão secundária, como `quiver`/`spellbook`
+   * acima); a maioria dos quivers do Canary não o declara — ausente é a aljava comum, sem bônus.
+   * Não exige `quiver: true`: as duas leituras são independentes (uma é `secondaryShield` na
+   * mitigação, a outra é dano extra no tiro).
+   */
+  perfectShot: z.strictObject({
+    range: z.number().int().positive(),
+    damage: z.number().int().positive(),
+  }).optional(),
+  /**
    * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
    *
    * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
@@ -955,6 +997,17 @@ export const itemSchema = z.strictObject({
   effect: consumableEffectSchema.optional(),
   /** De onde um item IMPORTADO veio (ADR 0038 decisão 2). Ausente em item autorado à mão. */
   source: catalogSourceSchema.optional(),
+  /**
+   * O item É uma ferramenta de cenário (#727, ADR 0050 d.1): `use.tool` diz qual interativo do
+   * mapa (`tilemapSchema.interactables[].requires.tool`) ele destrava — machete corta capim,
+   * rope sobe de um rope spot, shovel cava a pile, pick abre rachadura, key abre porta de chave.
+   * NÃO é consumida: `#useOnMap` só confere que a ferramenta compatível está na mochila ou na
+   * mão, como o Tibia faz (a machete do kit de nascimento nunca acaba). Ausente é o item comum
+   * de sempre — a maioria não destrava nada.
+   */
+  use: z.object({
+    tool: z.enum(['machete', 'rope', 'shovel', 'pick', 'key']),
+  }).optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
   // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
@@ -1055,10 +1108,11 @@ export type SpellArea = z.infer<typeof spellAreaSchema>;
  *
  * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência). Na magia de DANO o `skill` é
  * o que `scaling` declara (#677): o MAGIC LEVEL em `magic` (o `CALLBACK_PARAM_LEVELMAGICVALUE` do
- * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no
- * Paladin, `melee` no Knight — o que a `SKILLVALUE` lê); na magia e na runa de CURA é sempre o
- * MAGIC LEVEL. Sem `formula`, o efeito continua no caminho provisório de `basePower` ×
- * `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, `distance` no
+ * Paladin, e a skill da ARMA equipada no Knight desde o #567 — `SPELL_SKILL_WEAPON`, o que a
+ * `SKILLVALUE` lê); na magia e na runa de CURA é sempre o MAGIC LEVEL. Sem `formula`, o efeito
+ * continua no caminho provisório de `basePower` × `combat.spellPower`, bit a bit (ADR 0031,
+ * migração aditiva).
  */
 export const spellFormulaSchema = z.object({
   /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
@@ -1235,6 +1289,22 @@ export const supplySchema = z.object({
        * Avalanche é gelo, e o arquivo declara.
        */
       damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+    }),
+    /**
+     * Poção de BUFF (#576: Berserk, Mastermind, Bullseye, Magic Shield) — bebe e aplica uma
+     * `ConditionSpec` no próprio usuário, SEMPRE — nunca no `recipient` de `useSupply`: as quatro
+     * poções do Tibia são auto-alvo (`CONDITION_ATTRIBUTES` do Canary não tem alcance nem alvo),
+     * ao contrário da runa de cura (`heal`/`target: 'friend'`). Reaproveita `conditionSpecSchema`
+     * inteiro, a MESMA forma que `fieldSpecSchema`/`monsterAbilitySchema.condition` já usam
+     * (CMB-07): a poção não inventa um segundo jeito de declarar prazo e efeito. `z.lazy` porque
+     * `conditionSpecSchema` só é definido MAIS ABAIXO neste arquivo (a mesma técnica de
+     * `botConfigSchema.defaultConfig`) — mover ~300 linhas de `conditionEffectSchema`/`speed`/
+     * `drunk`/dano-ao-longo-do-tempo para antes de `supplySchema` só para içar a `const` custaria
+     * um diff bem maior sem mudar nenhum comportamento.
+     */
+    z.object({
+      kind: z.literal('condition'),
+      condition: z.lazy(() => conditionSpecSchema),
     }),
   ]),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
@@ -1432,6 +1502,17 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('buff'),
     damageDealtPercent: damagePercentBySource.optional(),
     damageTakenPercent: z.number().int().optional(),
+    /**
+     * Bônus/malus FLAT numa skill pelo id do catálogo (#576: Berserk soma 5 em `melee` e tira 10
+     * de `shielding`; Bullseye soma 5 em `distance` e tira 10 de `shielding`; Mastermind soma 3
+     * em `magic`, que É o magic level, FUN-92). Ao lado de `damageDealtPercent`/
+     * `damageTakenPercent`, e não um `kind` novo: as três poções do Tibia usam o MESMO
+     * `CONDITION_ATTRIBUTES` do Canary, só com parâmetros diferentes — um `kind` por poção
+     * duplicaria o `switch` de `conditions.ts` sem nenhum comportamento novo. Chave livre (não
+     * fechada a `melee`/`distance`/`magic`/`shielding`): o vocabulário de skill já é aberto no
+     * catálogo (`skills/*.json`), e fechar aqui duplicaria essa lista em outro lugar.
+     */
+    skillDeltas: z.record(z.string(), z.number().int()).optional(),
   }),
   z.object({ kind: z.literal('mana-shield') }),
   /**
@@ -2304,13 +2385,28 @@ export const regenSchema = z.strictObject({ health: regenPulseSchema, mana: rege
 export type RegenPulse = z.infer<typeof regenPulseSchema>;
 export type Regen = z.infer<typeof regenSchema>;
 
+/**
+ * Sentinela de `vocation.spellSkill` (#567): "a skill da ARMA equipada agora", nunca uma skill
+ * de verdade — não existe `skills/weapon.json`, e `buildContent` sabe disso e pula a
+ * conferência de existência para este valor (ver `content.ts`). É o que o Knight usa desde a
+ * separação de `melee` em `fist`/`club`/`sword`/`axe`: a magia dele (Berserk, Groundshaker…)
+ * escala pela skill que a família da arma na mão aponta — `fist` desarmado —, e não por um
+ * nome fixo que deixaria de existir a cada troca de arma.
+ */
+export const SPELL_SKILL_WEAPON = 'weapon' as const;
+
 export const vocationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   healthPerLevel: z.number().int().nonnegative(),
   manaPerLevel: z.number().int().nonnegative(),
   capacityPerLevel: z.number().int().nonnegative(),
-  /** A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`, e `distance` no Paladin. */
+  /**
+   * A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`,
+   * `distance` no Paladin, e `SPELL_SKILL_WEAPON` ("weapon") no Knight (#567) — a skill da
+   * FAMÍLIA da arma equipada, resolvida em tempo de execução porque o Knight troca de arma e,
+   * desde a separação de `melee`, não há mais uma skill fixa só dele.
+   */
   spellSkill: z.string().min(1).default('magic'),
   /**
    * Regeneração passiva DESTA vocação (#521, ADR 0037), na mesma forma de `progression.regen`:
@@ -2507,6 +2603,17 @@ export const progressionSchema = z.object({
    * ponto a cada `1000 / taxa` ms — mesma média, outro ritmo, e divisão em ponto flutuante.
    */
   regen: regenSchema,
+  /**
+   * A regeneração exige comida? (#726, ADR 0049 decisão 5, emenda ao ADR 0043). O ADR 0043
+   * (emenda de 2026-09-25, Huntera) tinha decidido regeneração ligada só a "estar em hunt", sem
+   * comida — e ESTA é a decisão que continua valendo por padrão: `requiresFood: false`. A flag
+   * existe para o dono poder ligar a regra do Tibia (regenerar só com `fedMs > 0`) editando
+   * CONTEÚDO, sem deploy de lógica — o motor (`#onRegen`, `packages/sim`) já sabe consultar os
+   * dois casos; só o número aqui decide qual vale.
+   */
+  regeneration: z.object({
+    requiresFood: z.boolean().default(false),
+  }).default(() => ({ requiresFood: false })),
   /**
    * A mitigação percentual BASE (#549, M30-02) — a vocação `None` do Canary `vocations.xml`
    * (`<mitigation multiplier="1.3" primaryShield="2.05" secondaryShield="1.25">`), para quem
@@ -3192,10 +3299,20 @@ export const BOT_SLOTS_PER_SET = 24;
 /** Rótulos do kit (ADR 0032 d.4): são do cliente, não mecânica. */
 export const BOT_SET_NAMES = ['Energia', 'Fogo', 'Gelo', 'Sagrado'] as const;
 
-/** 1–9, 0, F1–F12 = 22 teclas para 24 slots: `hotkey` é OPCIONAL por isso (DT-02). */
+/**
+ * 1–9, 0, F1–F12 = 22 teclas SEM modificador, e as mesmas 22 COM Shift = 32 no total, para 24
+ * slots (ADR 0049 decisão 1, emenda ao DT-02 do ADR 0032: 22 teclas para 24 slots deixava dois
+ * sem tecla própria). `hotkey` continua OPCIONAL — slot sem tecla dispara só pelo clique
+ * (AB-09/ADR 0049 decisão 1). Alargamento ADITIVO do enum: config salva com as 22 teclas antigas
+ * continua válida, sem bump de `BOT_VOCABULARY_VERSION`.
+ */
 export const BOT_HOTKEYS = [
   '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
   'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+  'shift+1', 'shift+2', 'shift+3', 'shift+4', 'shift+5',
+  'shift+6', 'shift+7', 'shift+8', 'shift+9', 'shift+0',
+  'shift+F1', 'shift+F2', 'shift+F3', 'shift+F4', 'shift+F5', 'shift+F6',
+  'shift+F7', 'shift+F8', 'shift+F9', 'shift+F10', 'shift+F11', 'shift+F12',
 ] as const;
 export const botHotkeySchema = z.enum(BOT_HOTKEYS);
 export type BotHotkey = z.infer<typeof botHotkeySchema>;
@@ -4038,6 +4155,14 @@ const point = z.object({
 const floorSchema = z.object({
   grid: z.array(z.string().min(1)).min(1),
   speed: z.array(z.string().min(1)).optional(),
+  /**
+   * Bloqueio de LINHA DE VISÃO (#553): `#` bloqueia projétil/vista, o resto é livre — a mesma
+   * convenção de `grid`, em camada SEPARADA porque bloquear passo e bloquear vista são flags
+   * distintas do pacote de aparências (`unpass` vs. `unsight`): uma peça de decoração pode ter
+   * uma sem a outra. Ausente: nada bloqueia visão neste andar (mapa autorado à mão, ou ainda
+   * não reimportado com a camada nova).
+   */
+  sight: z.array(z.string().min(1)).optional(),
 });
 
 export const tilemapSchema = z.object({
@@ -4065,6 +4190,46 @@ export const tilemapSchema = z.object({
    * à mão para o recorte; o importador só lista candidatos.
    */
   floorChanges: z.array(z.object({ from: point, to: point })).default([]),
+  /**
+   * Cenário usável (#727, ADR 0050 d.1): porta, capim, stone pile, rope spot, ladder, alavanca,
+   * baú, placa — o que o importador CLASSIFICA a partir de `aid`/`uid`/`text` do OTBM e das
+   * tabelas do Canary transcritas como dado (`data/scenery/canary-tables.json`). Só classificação
+   * e geometria aqui: o mecanismo que muda de estado por sessão é `TileOverrides` (#728), que
+   * ainda não existe — até ele pousar, `initialState`/`blocking` descrevem o que o OTBM tinha no
+   * instante da importação, e o `sim` não lê este campo.
+   */
+  interactables: z.array(z.object({
+    at: point,
+    /** O que este tile é (ADR 0050 d.1). `hole`/`teleport` ficam para o T2/T3 do plano. */
+    kind: z.enum([
+      'door', 'locked-door', 'level-door', 'quest-door', 'grass', 'stone-pile', 'hole',
+      'rope-spot', 'ladder', 'lever', 'chest', 'sign', 'teleport',
+    ]),
+    /** O estado no instante da importação (`locked`/`closed`/`open`, `uncut`/`cut`, `down`/`up`,
+     * `pile`/`hole`, ou `default` para o que só tem um estado). Vocabulário por `kind`, não
+     * fechado aqui — fechá-lo obrigaria este schema a mudar a cada `kind` novo. */
+    initialState: z.string().min(1),
+    /** A chave em `appearances.scenery` que resolve `initialState` para um id de aparência. */
+    appearanceKey: z.string().min(1),
+    /** `ATTR_ACTION_ID` do item, quando o OTBM o carrega (porta, alavanca). */
+    aid: z.number().int().positive().optional(),
+    /** `ATTR_UNIQUE_ID` do item — baú e item com storage por personagem. */
+    uid: z.number().int().positive().optional(),
+    /** `ATTR_TEXT` do item — placa e livro, lidos no Look. */
+    text: z.string().min(1).optional(),
+    requires: z.object({
+      tool: z.enum(['machete', 'rope', 'shovel', 'pick', 'key']).optional(),
+      level: z.number().int().positive().optional(),
+      storageKey: z.string().min(1).optional(),
+      keyId: z.number().int().positive().optional(),
+    }).optional(),
+    /** Alavancas ligadas a outros interativos por `aid` (#728: quem liga o quê). */
+    links: z.array(z.string().min(1)).optional(),
+    /** Em ms — quanto tempo até reverter sozinho (o `duration` do `items.xml`, #728). */
+    revertMs: z.number().int().positive().optional(),
+    /** Destino de um teleporte. */
+    target: point.optional(),
+  })).default([]),
   /** De onde um mapa importado veio (ADR 0025). Ausente em mapa autorado à mão. */
   source: z.object({
     file: z.string().min(1),
@@ -4096,6 +4261,17 @@ export const routeSchema = z.object({
        */
       monsterId: z.string().min(1).optional(),
       /**
+       * Vários monstros no MESMO ponto, cada um com peso (#582) — o caso do Canary em que dois
+       * `<monster>` do mesmo `<spawn>` caem exatamente na mesma posição: `spawn_monster.cpp`
+       * aceita um `weight` por candidato e sorteia entre eles, nunca entre os pontos vizinhos.
+       * Mutuamente exclusivo com `monsterId` (`.refine` abaixo) — um ponto ou declara UM
+       * monstro fixo, ou uma lista para sortear; nunca os dois ao mesmo tempo.
+       */
+      monsters: z.array(z.object({
+        monsterId: z.string().min(1),
+        weight: z.number().int().positive().default(1),
+      })).min(2).optional(),
+      /**
        * A posição EXATA do spawn (#519), quando ela não é o tile do `routeIndex` — o caso do
        * Canary, cujos pontos raramente caem em cima da rota do bot. Ausente é o tile da rota
        * nesse índice, como sempre foi. `routeIndex` continua obrigatório mesmo com `at`: é o
@@ -4109,6 +4285,8 @@ export const routeSchema = z.object({
        * é o que mantém rat-cellars/rotworm-caves (sem `spawntime` por ponto) exatamente iguais.
        */
       respawnDelayMs: z.number().int().positive().optional(),
+    }).refine((s) => s.monsterId === undefined || s.monsters === undefined, {
+      message: '`monsterId` e `monsters` são exclusivos — um ponto declara um monstro fixo OU uma lista com peso, nunca os dois',
     }),
   ).default([]),
 });
@@ -4116,5 +4294,11 @@ export const routeSchema = z.object({
 export type TilemapData = z.infer<typeof tilemapSchema>;
 /** O que se ESCREVE num arquivo de mapa — `floorChanges` opcional, antes do default. */
 export type TilemapInput = z.input<typeof tilemapSchema>;
+/**
+ * Um item de `tilemapSchema.interactables[]`, já resolvido (#728, ADR 0050 d.1-d.2). O `sim`
+ * lê esta forma para montar o overlay de estado por sessão (`TileOverrides`) — antes da #728
+ * ninguém a lia, e `interactables` só existia para o importador escrever.
+ */
+export type TilemapInteractable = TilemapData['interactables'][number];
 export type RouteData = z.infer<typeof routeSchema>;
 export type Point = z.infer<typeof point>;

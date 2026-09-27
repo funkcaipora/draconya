@@ -414,7 +414,10 @@ describe('HUD deltas', () => {
         vocationId: null,
         speed: 125,
         skills: {
-          melee: { level: 12, percentToNext: 40 },
+          fist: { level: 11, percentToNext: 60 },
+          club: { level: 9, percentToNext: 10 },
+          sword: { level: 12, percentToNext: 40 },
+          axe: { level: 13, percentToNext: 5 },
           distance: { level: 14, percentToNext: 75 },
           magic: { level: 4, percentToNext: 20 },
         },
@@ -425,7 +428,10 @@ describe('HUD deltas', () => {
 
     expect(hud.get().speed).toBe(125);
     expect(hud.get().skills).toEqual({
-      melee: { level: 12, percent: 40 },
+      fist: { level: 11, percent: 60 },
+      club: { level: 9, percent: 10 },
+      sword: { level: 12, percent: 40 },
+      axe: { level: 13, percent: 5 },
       distance: { level: 14, percent: 75 },
       magic: { level: 4, percent: 20 },
     });
@@ -436,7 +442,10 @@ describe('HUD deltas', () => {
       ...state,
       speed: 130,
       skills: {
-        melee: { level: 20, percent: 50 },
+        fist: { level: 22, percent: 10 },
+        club: { level: 19, percent: 90 },
+        sword: { level: 20, percent: 50 },
+        axe: { level: 21, percent: 70 },
         distance: { level: 18, percent: 40 },
         magic: { level: 8, percent: 30 },
       },
@@ -459,7 +468,10 @@ describe('HUD deltas', () => {
     expect(hud.get().health).toBe(140);
     expect(hud.get().speed).toBe(0);
     expect(hud.get().skills).toEqual({
-      melee: { level: 20, percent: 50 },
+      fist: { level: 22, percent: 10 },
+      club: { level: 19, percent: 90 },
+      sword: { level: 20, percent: 50 },
+      axe: { level: 21, percent: 70 },
       distance: { level: 18, percent: 40 },
       magic: { level: 8, percent: 30 },
     });
@@ -1113,6 +1125,8 @@ describe('o inventário (FUN-90)', () => {
     // para a tela achar a definição.
     equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },
     capacity: { used: 130, total: 400 },
+    supplies: [],
+    ammunition: [],
     ...over,
   } as S2CMessage);
 

@@ -1,9 +1,8 @@
 # Itens, equipamento e inventário
 
-**Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), o **cadáver com loot e o filtro de Quick Loot por personagem** (FUN-88,
 FUN-123, ADR 0048 — substitui a Caixa de Loot da Sessão) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; a autovenda individual e de party existem, a janela do cadáver para quem está olhando é W3/#722
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; o **kit level 200 por vocação e as nove poções do Tibia** (#524, M28): requisito de vocação com mais de uma vocação, bônus passivo de skill/velocidade por equipamento, poção de faixa aleatória e a poção de espírito (cura + mana num uso só); o **loot do Dragon/Dragon Lord, `supplyId`/`ammunitionId` no loot e o estoque USÁVEL e PERSISTIDO** (#520, M28, revisão do #536): 31 itens novos, o loot de monstro aceitando supply e munição física — que creditam `CharacterRuntime.supplyStock`/`ammunitionStock` —, `useSupply` e o tiro gastando desse estoque ANTES do gold, e as duas colunas `jsonb` (`supply_stock`/`ammunition_stock`) que levam o estoque para fora da sessão; o **importador de itens do Canary** (M34-02, #573): 1954 itens de caça gerados em `packages/content/staging/items/generated/` (10 fatias — o **arremessável e a aljava** (#575) somam-se aqui: spear/throwing star viram `stackable` como qualquer item comum, e o `ammoFamily` da munição por família ganha a aljava como fonte alternativa), 28 dos 73 itens autorais reconciliados por override (ADR 0014); e a **promoção do catálogo de itens para `data/`** (#748): 1895 dos 1954 promovidos para `packages/content/data/items/generated/` — 59 excluídos por colidir com item autoral (o autoral vence, ADR 0014), 0 por `appearanceId` fora do inventário do pacote conferido (a checagem lê o pacote que `appearances/baseline.json.pack` DECLARA, não um nome fixo — com o pacote 15.33 já adotado na integração, #720, os itens que ficariam de fora do 13.32 entraram), 0 por violar regra de conteúdo (a arma sem `slot` ganha `hand` por default — a mesma convenção dos 22 itens autorais — e `defense` de curiosidade classificada `valuables`/`creature products` deixou de ser copiado) — todos contados em `docs/reference/catalog/items-promotion-report.md`, nunca em silêncio. Loot de monstro (`pnpm catalog:promote-monsters`) recuperou daí: das 7049 linhas de `loot.items` com `itemId`, a fração descartada por item ausente do catálogo caiu de 6173 para 2482 (`docs/reference/catalog/monsters-promotion-report.md`); a autovenda individual e de party existem, a janela do cadáver para quem está olhando é W3/#722
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, cadáver e Quick Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário); E2 (kit level 200, M28); E18 · Jogável (ADR 0048)
 
@@ -156,10 +155,44 @@ preenche os dois ao mesmo tempo.
 
 | Item | Efeito | Arquivo |
 |---|---|---|
-| `blessing-charge` | `blessing` (a TP-03, M22, é quem o executa) | `data/items/blessing-charge.json` |
+| `blessing-charge` | `blessing` — consome a carga e soma `CharacterRuntime.blessings` (capado em 5, `MAX_BLESSINGS`), o executor que a TP-03/M22 esperava (#726, ADR 0049 decisão 3/consequências) | `data/items/blessing-charge.json` |
 
 A aparência de EFEITO continua em `data/appearances/baseline.json` (seção `supplies`), conferida
 de um lado só (FUN-109).
+
+**`blessings` ainda não é lida por ninguém** — ligar a bênção à redução de perda de item na
+morte é o [ADR 0042](../adr/0042-tibia-death-promotion-blessings-and-item-loss.md), fora do
+escopo da #726: o campo existe para o `use-item` ter o que fazer com a carga, sem inventar
+comportamento de morte que outra decisão ainda não tomou.
+
+### Comida (#726, ADR 0049 decisão 5, emenda ao ADR 0043)
+
+Comida entrou como item `kind: 'consumable'` **empilhável**, com `effect: { kind: 'food',
+durationMs }` — `durationMs` é `value × 12` segundos em milissegundos, o mecanismo do
+`foods.lua` do Canary (`itemFood[1] * 12`, teto de 1200 s — "You are full"). O item soma o
+contador `CharacterRuntime.fedMs` (`packages/sim/src/food.ts`, `feed`/`drainFedMs`), capado em
+`FOOD_CAP_MS` (1.200.000 ms); comer no teto recusa `you-are-full` **sem consumir** o item. O
+contador drena pelo TEMPO DE HUNT decorrido (o mesmo `dtMs` que já drena a stamina em
+`#burnStamina`), nunca por tick (invariante 2), e não recupera fora de hunt — a Cidade não anda
+(ADR 0004/0023).
+
+| Item | `durationMs` | Canary (`foods.lua`, valor × 12s) | Arquivo |
+|---|---|---|---|
+| `cheese` | 108.000 (108 s) | item 3607, valor 9 | `data/items/cheese.json` |
+| `meat` | 180.000 (180 s) | item 3577, valor 15 | `data/items/meat.json` |
+| `ham` | 360.000 (360 s) | item 3582, valor 30 | `data/items/ham.json` |
+| `dragon-ham` | 720.000 (720 s) | item 3583, valor 60 | `data/items/dragon-ham.json` |
+| `green-mushroom` | 60.000 (60 s) | item 3732, valor 5 | `data/items/green-mushroom.json` |
+
+`progression.regeneration.requiresFood` (default `false`, o Huntera) diz se a regeneração passiva
+(`HuntRuleset#onRegen`) exige `fedMs > 0` para aplicar o pulso — comer sempre soma o contador,
+ligado ou não; só a flag decide quem LÊ. Mensagem de comer ("Munch." etc. do Canary) e a exibição
+do `fedMs` no HUD ficam de fora desta entrega: nenhum dos dois tem campo de protocolo hoje
+(`player-stats`/`session-state` não expõem `fedMs`) — a confirmação visível é o `inventory`
+reenviado, como qualquer consumo de item.
+
+`fedMs` sobrevive ao logout como a stamina: `characters.fed_ms` (migração 0013, aditiva),
+carregado no ticket e escrito pelo extrato — ver `economy.md` e `docs/adr/0049-*.md`.
 
 ### Munição abstrata, colar e escudo (AB-02, AB-05, ADR 0032 decisão 7)
 
@@ -193,6 +226,39 @@ segue genérico, e não há pilha nem contagem. **A escolha persiste entre sess�
 extrato, o `jobs` grava em `characters.ammo` e ela volta pelo ticket ao entrar — o mesmo caminho
 da vocação.
 
+### Arremessável e aljava com perfect shot (M34-04, #575)
+
+Ao contrário da munição por família (arrow/bolt), o **arremessável** (spear, throwing star, royal
+spear) NÃO tem lançador nem seleção — o item na mão É o próprio projétil, `kind: 'weapon'`,
+`weapon: { kind: 'distance', family: 'distance', range, breakChance }`, sem `ammoFamily`.
+`buildContent` exige exatamente um dos dois campos em toda arma `distance` (`ammoFamily` OU
+`breakChance`, nunca os dois, nunca nenhum). É item **de verdade**, `stackable: true` — ao
+contrário da munição, ele TEM peso, pilha e proveniência de loot, como qualquer item comum.
+
+**A quebra é a única mecânica nova.** A cada tiro, `breakChance`% de chance (sempre rolado —
+ADR 0031, a sequência de RNG não pode depender do valor da chance) consome UMA unidade da pilha
+equipada na mão (`Inventory.consumeStack`, não `ammunitionStock` — aquele é só da munição
+arrow/bolt); sem quebrar, a pilha não muda. A pilha chegando a zero desarma o personagem, como
+tirar a arma pela última vez. Não há preço por tiro (ele já foi pago no loot/mercado, como
+qualquer item), e não há gold envolvido.
+
+**A aljava (quiver)** é o item que ocupa o slot de escudo junto com um bow/crossbow — uma exceção
+explícita ao `hands-full` de duas mãos (`Inventory.equip`), porque a aljava não é escudo de
+verdade. `itemSchema.perfectShot: { range, damage }` é o bônus de "perfect shot" do Canary
+(eldritch quiver, alicorn quiver): soma `damage` ao tiro — munição por família OU arremessável —
+quando a distância de Chebyshev até o alvo é EXATAMENTE `range`, nem mais perto nem mais longe. A
+maioria das aljavas do Canary não declara o bônus (`quiver: true` sozinho, sem `perfectShot`).
+
+O importador (`scripts/catalog/items.ts`) gera os dois a partir do `items.xml`: 11 arremessáveis
+(spear, throwing star, viper/leaf star, glooth/hunting/enchanted spear, assassin star, entre
+outros) e 8 aljavas (2 com `perfectShot`) em `staging/items/generated/{weapons,shields}.json`. Um
+conversor dedicado (`scripts/catalog/ammo.ts`, tipo de catálogo `ammo`) lê a munição
+(`primarytype: "ammunition"`) para `ammunitionSchema` — nunca `itemSchema` —, incluindo munição
+elemental (flash/shiver/flamming/earth/envenomed arrow: o `element<tipo>` do Canary vira
+`damageType`); os 5 slugs autorais (`arrow`, `burst-arrow`, `sniper-arrow`, `onyx-arrow`,
+`power-bolt`) nunca são gerados de novo — o preço deles já é regravado por `npc-prices.ts`
+(#574, `AMMO_CANARY_IDS`).
+
 ## Inventário e equipamento (FUN-82)
 
 **Capacidade é peso**, no paradigma do Tibia (§21.5): a mochila cabe o que o personagem aguenta,
@@ -205,7 +271,7 @@ dobro, e a capacidade deixa de significar o que diz.
 | | |
 |---|---|
 | stack máximo | 100, e pilha cheia começa outra |
-| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item |
+| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item; o arremessável (#575) empilha como qualquer item comum |
 | item que não cabe | **recusado**, e fica no cadáver do monstro até ele decair (ADR 0048) |
 
 Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a
@@ -290,6 +356,18 @@ limpar por omissão desequiparia o personagem sem ninguém ter pedido.
 Item **não muda de dono** dentro da sessão: não há troca nem venda na hunt. O que muda é onde ele
 está, e é só isso que atravessa.
 
+**Exceção nomeada (#724, ADR 0048 d.8): vender e descartar mudam a EXISTÊNCIA do item, não o
+dono.** `sell-items { instanceIds[] }` vende N instâncias da mochila/bolsa (nunca equipadas) ao
+`value` do catálogo — `value: 0` recusa o LOTE inteiro, "ninguém compra isto"; o gold entra pelo
+mesmo par `character.goldDelta` + `session.credit(id, 'goldGained', …)` do loot. `discard-item {
+instanceId }` destrói sem gold, com a confirmação já dada pelo cliente. As duas rodam dentro da
+sessão dona (hunt ou Cidade; invariante 9) e o extrato ganha `removedInstances: string[]`: o
+`jobs` apaga as linhas de `item_instance` correspondentes NA MESMA transação do ledger — a
+primeira vez que uma sessão faz uma linha de item deixar de existir. Na Cidade, o mecanismo do
+#154 (extrato de ESTADO por `dirty`, gravado só no `release`/drenagem) passou a também refletir
+`goldDelta` em `aggregates` — antes sempre zerado, porque equipar e escolher vocação nunca
+mexiam em gold.
+
 ### A tela (#161, ADR 0026 decisão 7)
 
 A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no
@@ -340,6 +418,29 @@ resgatava ou mostrava foi retirado, e o caso que ela cobria (item que não coube
 
 Com **stamina zero não cai nada** (§10.2) — nem gold, nem XP, nem item. O abate continua
 contando: o jogador matou, e o extrato mentiria se dissesse que não.
+
+### A janela do cadáver e a aba Loot da barra (W3, #722, ADR 0048 d.4)
+
+Quem está olhando pode abrir o cadáver e pegar o que o Quick Loot automático deixou para trás.
+Clicar no cadáver no mundo manda `walk-to` na hora e GUARDA o pedido: um laço de 150 ms olha o
+`world` (ninguém avisa, quem quer saber olha — ADR 0007, o mesmo padrão de andar por teclado) e
+manda `open-corpse` sozinho quando a posição confirmada do personagem fica a ≤ 1 tile do
+cadáver, no mesmo andar — já adjacente, manda na hora. O pedido é abandonado em silêncio (nunca
+`system-message`, porque nada foi de fato recusado) se o cadáver decair antes, se o jogador andar
+pelo teclado, clicar noutra criatura ou noutro cadáver, ou depois de 10 s sem chegar. O servidor
+ainda confere dono/elegibilidade (a party inteira, quando presente no abate) e distância — a
+recusa (quando chega a acontecer, por exemplo um obstáculo que o cliente não previu) é
+`system-message` em palavras ("Você está longe demais.", "Isto não é seu."). Sucesso abre a
+janela (`corpse-contents`: ouro e itens restantes), reaproveitando o mesmo desenho da mochila —
+sem arrastar: o clique num item pega ELE, ignorando o filtro (a segunda chance manual); "Pegar
+tudo" reaplica o MESMO filtro de Quick Loot do personagem, como o clique do Tibia. A janela fecha
+sozinha quando o cadáver decai, e não persiste entre sessões — reanexar não a reabre.
+
+O filtro em si (`accept`/`skip`, a lista de itens e a autovenda) é editado na aba **Loot** do
+painel de Automações da barra de ações: um seletor para o modo e uma linha por item do catálogo,
+com um checkbox para entrar na lista e outro (só em itens vendáveis, `value > 0`) para a
+autovenda individual. É a MESMA configuração (`botConfig.loot`) que `#collectFromCorpse` já lê
+no abate (#721) — a aba não inventa um segundo lugar para o filtro morar.
 
 Mochila cheia vira **uma** linha no extrato (`backpack-full`), não uma por item. Uma por item
 encheria a lista curta da tela de retorno até ela deixar de ser lista, e o que o jogador precisa
@@ -639,6 +740,55 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | amuleto | Dragon Necklace | Dragon Necklace | Dragon Necklace | Dragon Necklace |
 | anel | Might Ring | Might Ring | Might Ring | Might Ring |
 
+## O importador de itens do Canary (M34-02, #573)
+
+`scripts/catalog/items.ts` lê `data/items/items.xml` do checkout do Canary (o mesmo padrão de
+`monsters.ts`, #578) e converte cada `<item>` das categorias de caça — arma (corpo a corpo,
+distância com lançador de verdade, wand e rod), escudo e spellbook, capacete, armadura, pernas,
+bota, anel, amuleto, valuables e produto de criatura — para a forma do `itemSchema`.
+
+```
+pnpm catalog:import items          # escreve packages/content/staging/items/generated/*.json
+pnpm catalog:import items --check  # regenera em memória e compara
+```
+
+**Staging, não `data/`, por ora.** A auditoria de 2026-09-26 (`docs/tibia-math-plan.md`) contou
+1439 `itemId` citados pelo loot de monstro gerado (#578), dos quais só 82 existiam no catálogo
+antes desta issue; gerar 1300+ itens direto em `data/` sem reconciliar cada um arriscaria o boot.
+Com o importador, **989 dos 1439** resolvem — a promoção do que sobrar (loot de monstro
+apontando item de verdade) é issue à parte. O registro do tipo `items` aponta
+`packages/content/staging/items` até lá, como `staging/monsters` já faz.
+
+**Reconciliação dos 73 itens autorais (ADR 0014: o id nunca muda).** Quando o slug gerado bate com
+um arquivo de `data/items/*.json`, o importador compara os campos numéricos simples, `requires.level`
+e `weapon.manaPerHit` contra o Canary e grava a diferença em `data/items/overrides/<id>.json` —
+nunca editando o autoral. Rodar contra `47dfd51f4528` (o commit desta entrega) corrigiu:
+
+| Item | Divergência | Override |
+|---|---|---|
+| Sword, Fire Sword, Serpent Sword | `extraDefense` ausente → 1 (o `extradef` do Canary) | `sword.json`, `fire-sword.json`, `serpent-sword.json` |
+| Spike Sword | `defense` 10 → 21, `extraDefense` ausente → 2, `imbuementSlots` ausente → 2 | `spike-sword.json` |
+| Wand of Vortex / Snakebite Rod | `manaPerHit` estava TROCADO entre as duas (1↔2) e faltava `requires.level: 6` nas duas | `wand-of-vortex.json`, `snakebite-rod.json` |
+| Glacier Amulet | `charges` 20 → 200, `weight` 5,5 → 5 oz, faltava `requires.level: 60` | `glacier-amulet.json` |
+| Energy Ring / Life Ring | `weight` 2 → 0,8 oz | `energy-ring.json`, `life-ring.json` |
+| + 19 outros (kit level 200, loot do Dragon/Dragon Lord) | `imbuementSlots` (17) e `extraDefense` — nenhum dos dois existia no schema quando #524/#520 foram escritos | ver `packages/content/data/items/overrides/` |
+
+**Um divergência conhecida que o importador NÃO reconcilia**: o Glacier Amulet real (Canary id 815)
+também declara `absorbpercentenergy -10` (uma FRAQUEZA a energia) — o autoral só tem
+`mitigation.resistances.ice`, e a reconciliação só compara campo numérico simples/`requires`/
+`weapon.manaPerHit`, não mistura `mitigation` (autoral) com `absorb` (formato do importador) sem
+risco de dessincronizar os dois. Fica registrado aqui para quando alguém tratar `absorb` no
+Glacier Amulet manualmente.
+
+**O que fica de fora, e por quê** (`docs/reference/catalog/items-report.md`):
+
+- **Preço (`value`, M34-03)** — `items.xml` não carrega preço nenhum (é dado de NPC, noutra parte
+  do Canary); todo item gerado sai `value: 0`.
+- **`stackable`** — é um flag de `items.otb`, binário, que este leitor não abre; nunca declarado
+  (fica no default `false`).
+- **Arma `fist`** — a família não é declarável (o motor a usa só como fallback desarmado, DT-01).
+- **`skillfist`** — sem skill correspondente no Draconya (só `melee`/`distance`/`shielding`/`magic`).
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -649,16 +799,16 @@ concordam em peso, `hitChance`, alcance e `attack`.
 | Autovenda — tipos configuráveis (Free) | 5 | `party.autoSellItemTypes.free` (`packages/content/data/party/baseline.json`) |
 | Autovenda — tipos configuráveis (Premium) | 20 | `party.autoSellItemTypes.premium` (`packages/content/data/party/baseline.json`) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
-| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); nenhum item autorado declara ainda — o importador (M34-02) preenche | `packages/content/data/items/*.json`, campo `imbuementSlots` |
+| Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); o importador de itens (#573) preenche em todo item gerado e reconciliou 19 dos 73 autorais (sword 2, spike sword 2, magic plate armor 2, entre outros) | `packages/content/data/items/*.json`, `overrides/*.json`, campo `imbuementSlots` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
-| Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
-| Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Peso do Energy Ring / Life Ring | 0,8 oz cada (Canary `items.xml` id 3051/3052, weight 80 — reconciliado pelo importador de itens, `overrides/{energy-ring,life-ring}.json`, #573) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
+| Preço de venda do Energy Ring / Life Ring | 100 / 50 gold — maior `sell` de NPC do Canary (M34-03/#574, não mais provisório; Life Ring reconciliado em `overrides/life-ring.json`) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
 | Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |
-| Suprimentos — `price` / `group` | poção de vida 45 / `potion` `[ABERTO — preço provisório]`; poção de mana 50 / `potion` `[ABERTO — idem]`; avalanche rune 14 / `attack` `[ABERTO — idem]` | `packages/content/data/supplies/*.json` |
-| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/blessing-charge.json` |
-| Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
-| Colar — `charges` / resistência / peso / `value` | glacier amulet 20 cargas / gelo 0,2 / 5,5 oz / 0 `[ABERTO — cargas, resistência, peso e valor provisórios]` | `packages/content/data/items/glacier-amulet.json` |
-| Escudo — `defense` / peso / `value` | wooden shield 14 / 40 oz / 0 `[ABERTO — defense, peso e valor provisórios]` | `packages/content/data/items/wooden-shield.json` |
+| Suprimentos — `price` / `group` | poção de vida 50 / `potion`; poção de mana 56 / `potion`; avalanche rune 64 / `attack` — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/*.json` |
+| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` (não é item do Canary `items.xml`, fora do corte de #574) | `packages/content/data/items/blessing-charge.json` |
+| Munição — `attack` / `price` / `requires.level` | arrow 25 / 2 / —; burst arrow 27 / 15 / —; sniper arrow 28 / 5 / 20; onyx arrow 38 / 7 / 40 — `price` é o menor `buy` de NPC do Canary (M34-03/#574, não mais provisório; `attack`/`requires.level` continuam do TibiaWiki) | `packages/content/data/ammunition/*.json` |
+| Colar — `charges` / resistência / peso / `value` / level | glacier amulet 200 cargas / gelo 0,2 / 5 oz / 1500 / level 60 — cargas, peso, `value` (M34-03/#574, maior `sell` do NPC Rashid) e level reconciliados contra o Canary `items.xml` id 815 pelo importador de itens (`overrides/glacier-amulet.json`) | `packages/content/data/items/glacier-amulet.json`, `overrides/` |
+| Escudo — `defense` / peso / `value` | wooden shield 14 `[ABERTO — defense e peso provisórios]` / 40 oz `[ABERTO — idem]` / 5 (M34-03/#574, maior `sell` de NPC do Canary, `overrides/wooden-shield.json`, não mais provisório) | `packages/content/data/items/wooden-shield.json`, `overrides/` |
 | Kit level 200 — atributos e preço de NPC | os 19 itens da tabela do kit, acima (armor/attack/defense/weight/`value`/`bonuses`/`requires`) — números do Canary `items.xml` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/items/*.json` (as 16 peças novas), `packages/content/data/ammunition/power-bolt.json` |
 | Poções do Tibia — `amountRange` / `requires` / `price` | as nove poções da tabela, acima — números do Canary `potions.lua` e do TibiaWiki, NÃO provisórios (#524) | `packages/content/data/supplies/{strong,great,ultimate,supreme}-*.json` |
 | Loot do Dragon (#520) — 21 linhas | atributos e `value` do Canary `items.xml`; preço de NPC do Tibia real via TibiaWiki quando o Canary só tinha oferta custom (ADR 0037 d.4) — 18 itens novos + `supplyId: strong-health-potion` + `ammunitionId: burst-arrow` (já existia) | `packages/content/data/items/{dragon-ham,steel-shield,crossbow,dragons-tail,longsword,steel-helmet,broadsword,plate-legs,wand-of-inferno,green-dragon-scale,green-dragon-leather,double-axe,dragon-hammer,serpent-sword,small-diamond,dragon-shield,life-crystal,dragonbone-staff}.json` |
@@ -678,11 +828,13 @@ concordam em peso, `hitChance`, alcance e `attack`.
   as seis peças e o slot em que cada uma nasce vestida, e `createCharacter` grava as linhas de
   `item_instance` na **mesma transação** que o personagem (id `<characterId>:kit:<n>`), sem
   passar pelo ledger — o kit não tem preço. Personagem criado antes do #153 continua sem kit.
-- **Royal Spear (#520) não é arma de arremesso.** No Tibia real é `weaponType distance` sem
-  munição — o próprio item é o projétil, consumido ao acertar (`breakChance`). `WEAPON_KINDS`
-  (`melee` / `distance`-com-munição-abstrata / `wand`) não tem essa forma, e modelar arma de
-  arremesso ficou fora do escopo da #520: o item entra `kind: 'other'`, sem `weapon`, só
-  vendável/curiosidade — igual ao Tibia real, onde nenhum NPC compra de volta.
+- **Royal Spear (#520) agora é arma de arremesso de verdade (#575, M34-04).** No Tibia real é
+  `weaponType distance` sem munição — o próprio item é o projétil, consumido ao acertar
+  (`breakChance`). A #575 deu forma a esse mecanismo (`weapon.breakChance`, `Inventory.
+  consumeStack`), e o Royal Spear foi promovido de `kind: 'other'` (sem `weapon`, só vendável)
+  para `kind: 'weapon'`, `stackable: true`, `weapon: { kind: 'distance', family: 'distance',
+  range: 3, breakChance: 3, wieldUnproperly: true }`, level 25 — os mesmos números do Canary
+  `items.xml` id 7378 que já estavam no `_open` desde a #520/#536, agora com mecanismo.
 - **Serpent Sword e Fire Sword (#687) têm o elemento em `weapon.element`.** `attack` é só o
   físico (24 e 18); `elementfire 11` e `elementearth 8` do Canary moram em
   `weapon.element: { type, attack }`. No `combat-v3` o golpe sorteia sobre `attack + element` e

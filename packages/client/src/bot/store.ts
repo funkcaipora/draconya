@@ -285,6 +285,43 @@ export function setFollow(follow: BotConfigV2['follow']): void {
   scheduleSave();
 }
 
+/** O filtro de Quick Loot atual, ou o default do schema quando o rascunho ainda não tocou nele. */
+const DEFAULT_LOOT: BotConfigV2['loot'] = { filter: 'skip', itemIds: [], autoSell: [] };
+
+/** Troca `accept`/`skip` do filtro de Quick Loot (#722, ADR 0048 d.2/d.4) e salva com debounce. */
+export function setLootFilter(filter: BotConfigV2['loot']['filter']): void {
+  edit((draft) => ({ ...draft, loot: { ...(draft.loot ?? DEFAULT_LOOT), filter } }));
+  scheduleSave();
+}
+
+/**
+ * Liga/desliga UM item na lista do filtro (`itemIds`) — a aba Loot marca/desmarca por item do
+ * catálogo (#722, ADR 0048 d.4). O SERVIDOR confere se o id existe; a tela só reflete o que o
+ * jogador clicou.
+ */
+export function toggleLootItem(itemId: string): void {
+  edit((draft) => {
+    const loot = draft.loot ?? DEFAULT_LOOT;
+    const itemIds = loot.itemIds.includes(itemId)
+      ? loot.itemIds.filter((id) => id !== itemId)
+      : [...loot.itemIds, itemId];
+    return { ...draft, loot: { ...loot, itemIds } };
+  });
+  scheduleSave();
+}
+
+/** Liga/desliga UM item na lista de autovenda individual (§22.1, ADR 0048 d.2) e salva com debounce. */
+export function toggleAutoSellItem(itemId: string): void {
+  edit((draft) => {
+    const loot = draft.loot ?? DEFAULT_LOOT;
+    const autoSell = loot.autoSell.includes(itemId)
+      ? loot.autoSell.filter((id) => id !== itemId)
+      : [...loot.autoSell, itemId];
+    return { ...draft, loot: { ...loot, autoSell } };
+  });
+  scheduleSave();
+}
+
 /** Edita o lure dinâmico (SV-09, §13.8) e salva com debounce. `undefined` volta o bot a não usar lure. */
 export function setLure(lure: BotConfigV2['lure']): void {
   edit((draft) => ({ ...draft, lure }));

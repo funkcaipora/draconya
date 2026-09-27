@@ -101,18 +101,18 @@ ser altamente auditável e consistente.
 | Fator dinâmico por linha no modelo `canary` | 95–105 % (Canary `monstertype.lua`) | constante em `packages/sim/src/loot.ts` (`rollCanaryLine`) |
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
-| Preço de venda de cada item ao NPC | `value` por item — `bow` 130, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
-| Preço da Poção de Vida (gold no uso) | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json`, campo `price` |
-| Preço da Poção de Mana (gold no uso) | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json`, campo `price` |
-| Preço por tiro da munição | arrow 1 `[ABERTO — provisório: 1]`, burst arrow 3 `[ABERTO — provisório: 3]`, sniper arrow 5 `[ABERTO — provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json`, `price` |
-| Preço da Avalanche Rune (gold no uso) | 14 `[ABERTO — valor provisório: 14]` | `packages/content/data/supplies/avalanche-rune.json`, campo `price` |
+| Preço de venda de cada item ao NPC | `value` por item — maior `sell` de `data-otservbr-global/npc/*.lua` (M34-03/#574): `bow` 400, `sword` 25, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` (container, fora do corte do importador de itens) | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
+| Preço da Poção de Vida (gold no uso) | 50 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/health-potion.json`, campo `price` |
+| Preço da Poção de Mana (gold no uso) | 56 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/mana-potion.json`, campo `price` |
+| Preço por tiro da munição | arrow 2, burst arrow 15, sniper arrow 5, onyx arrow 7 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json`, `price` |
+| Preço da Avalanche Rune (gold no uso) | 64 — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório; a runa se compra pronta, não é dividida por carga) | `packages/content/data/supplies/avalanche-rune.json`, campo `price` |
 
 ## Em aberto
 
 - ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a munição é
-  abstrata, com `price` por tiro (ADR 0032 d.7, AB-02/AB-05); a `arrow` tem preço maior que zero
-  (ponto de partida 1), e os valores 1, 3, 5 e 7 são provisórios, em
-  `packages/content/data/ammunition/*.json`.
+  abstrata, com `price` por tiro (ADR 0032 d.7, AB-02/AB-05); os valores (arrow 2, burst arrow 15,
+  sniper arrow 5, onyx arrow 7) vêm do menor `buy` de NPC do Canary (M34-03/#574), não mais
+  provisórios, em `packages/content/data/ammunition/*.json`.
 
 ## Suprimento abstrato, na prática (FUN-77, ADR 0032 d.6)
 
@@ -139,11 +139,24 @@ O que vale do desenho original:
   **uma** linha (`supply-unaffordable`) no extrato, não uma por tentativa. A regra de saída "sair
   quando o gold acabar" é da FUN-86.
 
+### O estoque abstrato agora é VISÍVEL (#726, ADR 0049 decisão 4)
+
+Desde o #520 `useSupply` já gastava do estoque de loot (`supplyStock`/`ammunitionStock`) antes do
+gold — mas o jogador não via o número. A #726 expõe os dois: `inventory.supplies`/`ammunition`
+(`[{ id, quantity }]`, opcionais, `default([])`) levam o estoque inteiro a cada `inventory`
+reenviado, e o cliente já desenha a seção "Suprimentos" sob a mochila
+(`ContainerWindow.tsx`): nome (resolvido em `catalogue.bot.supplies`) e contagem por linha,
+clicar usa direto (`use-item`) e o clique direito abre "Usar"/"Usar com…" — o mesmo
+`ContextMenu` do item consumível. **Sem sprite**: `catalogue.bot.supplies` não carrega
+`appearanceId` — só item de verdade tem essa coluna (FUN-94) —, e dar ícone ao suprimento
+abstrato fica para quando isso for decidido; a linha hoje é texto.
+
 ## Divergências do PRD
 
-~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
-catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
-Sessão se não. Ver [`items.md`](./items.md).
+~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88; ADR 0048):**
+existe catálogo, `loot.items` é conferido contra ele, e o item cai no cadáver — mochila se o
+filtro de Quick Loot aceitar e couber, senão fica no cadáver até ele decair. Ver
+[`items.md`](./items.md).
 
 **O §20.1 está de volta.** O PRD tratava o supply como abstração que debitava gold por uso, e é o
 que a implementação faz hoje: poção, runa e munição não são itens físicos; usar um supply

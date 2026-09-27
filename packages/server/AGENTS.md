@@ -596,23 +596,30 @@ como líder e segue o fluxo de sempre (configurar e iniciar). Uma party de dois 
 instante em que o segundo chega: esperar "encher" faria dois jogadores esperarem para sempre,
 e o §15.2 admite começar com menos de quatro.
 
-## A Caixa de Loot da Sessão saiu (FUN-88, retirada pelo ADR 0048)
+## A Caixa de Loot saiu inteira, campo incluído (FUN-88, #396, retirada pelo ADR 0048)
 
-Existiu em `lootbox:{sessionId}` no Redis, TTL de 30 minutos a partir do encerramento (§21.6):
-o transbordo do loot de MONSTRO que não coube na mochila. O ADR 0048 (decisão 7) a retirou —
-**"que ninguém lê, resgata nem mostra"** foi a auditoria que a condenou — porque o caso que ela
-cobria passou a ser "fica no cadáver" (`packages/sim`, `CorpseState.items`), como o Canary faz:
-o cadáver já tem prazo próprio (`corpseTtlMs`), e duas filas de "não coube" com prazos
-diferentes eram duas regras para explicar o que o Canary resolve com uma. Nada migrou: as
-chaves do Redis expiraram sozinhas.
+Existiu em duas camadas, e as duas saíram. Primeiro `lootbox:{sessionId}` no Redis
+(`LootBoxStore`, TTL de 30 minutos a partir do encerramento, §21.6): o transbordo do loot de
+MONSTRO que não coube na mochila. O ADR 0048 (decisão 7) a retirou — **"que ninguém lê, resgata
+nem mostra"** foi a auditoria que a condenou — porque o caso que ela cobria passou a ser "fica
+no cadáver" (`packages/sim`, `CorpseState.items`), como o Canary faz: o cadáver já tem prazo
+próprio (`corpseTtlMs`), e duas filas de "não coube" com prazos diferentes eram duas regras para
+explicar o que o Canary resolve com uma. Nada migrou: as chaves do Redis expiraram sozinhas.
 
-**`CharacterRuntime.lootBox` (`packages/sim/src/character.ts`) continua existindo** — só o
-CAMINHO do loot de monstro parou de escrever nele. Os outros dois consumidores não têm cadáver
-de monstro à mão e continuam usando o campo como sempre: o grant de vocação/kit
+Isso deixou `CharacterRuntime.lootBox` (`packages/sim/src/character.ts`) de pé por um tempo,
+ainda escrito por dois consumidores sem cadáver de monstro à mão: o grant de vocação/kit
 (`chooseVocation`/`#grantKitPiece`, item que não coube na Cidade) e a liquidação da bolsa de
-party (`#settle`, `unsold` que não coube no líder ao vender). O campo `lootBox` do EXTRATO
-(`SessionReceipt.lootBox`, `game/host.ts`) segue existindo pela mesma razão — é como esses dois
-casos persistem no personagem — mesmo sem o `LootBoxStore`/Redis por trás.
+party (`#settle`, `unsold` que não coube no líder ao vender). A auditoria da #723 achou o MESMO
+problema da caixa original nesses dois: `jobs/ledger.ts` só processa `receipt.acquired`, nunca
+`receipt.lootBox` — o campo viajava no extrato e não virava linha nenhuma de `item_instance`,
+como a caixa em Redis que ninguém lia. A correção não foi outro depósito: `Inventory.forceAdd`
+(`packages/sim/src/inventory.ts`) ignora peso e sempre entra na mochila do dono — os dois
+consumidores já preferiam nunca recusar por peso (a escolha de vocação não pode ser punida pela
+mochila, e o líder da party não pode perder o que a bolsa não vendeu), então ignorar é
+estritamente melhor que gravar num campo que nada lê. `CharacterRuntime.lootBox`,
+`SessionReceipt.lootBox` (`receipts.ts`, `game/host.ts`, `snapshot-settlement.ts`) e
+`VocationPieceStatus`/`VocationResult.weapon: 'in-loot-box'` saíram junto — não sobrou nada para
+carregar.
 
 ## Como testar
 

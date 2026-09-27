@@ -10,14 +10,17 @@
 
 import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
+import { aimTracker } from './aim.js';
 import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered, partyExited } from '../party/store.js';
 
 /**
- * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
- * — um registro por id de skill do conteúdo. Vazio é um nó `game` anterior à SV-04 (o `default`
- * do protocolo): mantém o que a tela já tinha em vez de zerar as barras.
+ * As skills que o painel mostra (#340, SV-04; #568 as separa por tipo de arma), do `skills` de
+ * `player-stats`/`session-state` — um registro por id de skill do conteúdo. Vazio é um nó `game`
+ * anterior à SV-04 (o `default` do protocolo): mantém o que a tela já tinha em vez de zerar as
+ * barras. Ausência de UMA chave (nó anterior ao #567, que ainda manda só `melee`) preserva o
+ * valor anterior daquela skill em vez de zerar — a mesma regra de campo opcional de sempre.
  */
 function skillsOf(
   skills: Readonly<Record<string, ProtocolSkillProgress>>, previous: PlayerSkills,
@@ -27,7 +30,10 @@ function skillsOf(
     const progress = skills[id];
     return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
   };
-  return { melee: of('melee'), distance: of('distance'), magic: of('magic') };
+  return {
+    fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
+    distance: of('distance'), magic: of('magic'),
+  };
 }
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
@@ -73,18 +79,30 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         ...state,
         huntId: message.huntId ?? null,
         difficulty: message.difficulty ?? null,
+        // Cadáver de uma cena que acabou de ficar para trás (#722) — nenhum cadáver da
+        // instância nova pode ter o mesmo id por acidente sem que a janela mostre a coisa certa.
+        corpse: null,
       }));
       return;
 
     case 'ground-item-appear':
       world.groundItems.set(message.id, {
         id: message.id, position: message.position, appearanceId: message.appearanceId,
+        // `exactOptionalPropertyTypes`: só entra quando o servidor mandou (#722, ADR 0048 d.4).
+        ...(message.lootable === undefined ? {} : { lootable: message.lootable }),
       });
       world.groundItemsVersion += 1;
       return;
 
     case 'ground-item-disappear':
       if (world.groundItems.delete(message.id)) world.groundItemsVersion += 1;
+      // O cadáver decaiu: se a janela aberta é a DELE, ela fecha — nada mais tem o que mostrar
+      // (#722, ADR 0048 d.4). Uma janela de outro cadáver não é afetada.
+      hud.set((state) => (
+        state.corpse !== null && state.corpse.groundItemId === message.id
+          ? { ...state, corpse: null }
+          : state
+      ));
       return;
 
     case 'creature-appear':
@@ -274,8 +292,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           satchel: message.satchel,
           equipped: message.equipped,
           capacity: message.capacity,
+          // O estoque abstrato visível (#726, ADR 0049 decisão 4): `default([])` no protocolo.
+          supplies: message.supplies,
+          ammunition: message.ammunition,
         },
       }));
+      return;
+
+    case 'corpse-contents':
+      // O que ainda está no cadáver, depois do Quick Loot automático do abate (#722, ADR 0048
+      // d.4) — SUBSTITUI, como `inventory`: é o estado inteiro do cadáver, não um delta.
+      hud.set((state) => ({ ...state, corpse: { ...message } }));
       return;
 
     case 'bestiary':
@@ -340,7 +367,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // O chão também é substituído (FUN-123): o cadáver que apodreceu enquanto ninguém olhava
       // sumiria da mesma forma que o monstro que morreu.
       world.groundItems.clear();
-      for (const item of message.world.groundItems) world.groundItems.set(item.id, item);
+      for (const item of message.world.groundItems) {
+        world.groundItems.set(item.id, {
+          id: item.id, position: item.position, appearanceId: item.appearanceId,
+          ...(item.lootable === undefined ? {} : { lootable: item.lootable }),
+        });
+      }
       world.groundItemsVersion += 1;
       // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
       // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que
@@ -366,6 +398,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // A reanexação zera a sequência do alvo: um `target-cancel` atrasado da sessão anterior
       // não pode fazer rollback para um alvo que já não existe (#471).
       targetTracker.reset();
+      // A mira da sessão anterior não pode sobreviver nem voltar (ADR 0049 decisão 2, #725):
+      // um `use-slot` armado antes da queda mandaria contra o alvo errado da hunt retomada.
+      aimTracker.reset();
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,
@@ -494,6 +529,22 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       });
       return;
     }
+
+    // `use-result` (#726, ADR 0049 decisão 3/7): a resposta a `use-item`/`use-item-on`.
+    // `ok: true` não faz nada aqui — sucesso é o `inventory`/`player-stats`/`creature-hit` de
+    // sempre (decisão 7), inclusive quando a ação foi adiada pela exaustão (decisão 6) e só
+    // executou depois. `ok: false` vira o mesmo toast curto do `system-message`, sobre a
+    // mochila — o menu de contexto/seção Suprimentos que o dispara fica para uma entrega
+    // seguinte (ver desvios da spec desta issue); a MENSAGEM já chega tipada e traduzida hoje.
+    case 'use-result':
+      if (message.ok) return;
+      hud.set((state) => ({
+        ...state,
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'warning', text: message.reason ?? '', atMs: nowMs,
+        }),
+      }));
+      return;
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
