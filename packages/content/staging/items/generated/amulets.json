@@ -281,6 +281,10 @@
     "bonuses": {
       "skills": [
         {
+          "skillId": "fist",
+          "amount": 4
+        },
+        {
           "skillId": "magic",
           "amount": 2
         }
@@ -313,7 +317,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 4
+        },
+        {
+          "skillId": "sword",
+          "amount": 4
+        },
+        {
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -874,6 +886,14 @@
     "requires": {
       "level": 8,
       "vocationId": "monk"
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
     },
     "source": {
       "engine": "canary",

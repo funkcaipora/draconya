@@ -371,7 +371,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
           "amount": 2
         },
         {
@@ -413,7 +421,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
           "amount": 3
         },
         {
@@ -451,6 +467,10 @@
     },
     "bonuses": {
       "skills": [
+        {
+          "skillId": "fist",
+          "amount": 5
+        },
         {
           "skillId": "magic",
           "amount": 3
@@ -674,6 +694,10 @@
     "bonuses": {
       "skills": [
         {
+          "skillId": "fist",
+          "amount": 1
+        },
+        {
           "skillId": "magic",
           "amount": 1
         }
@@ -702,6 +726,14 @@
       "fire": {
         "percent": 4
       }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
     },
     "source": {
       "engine": "canary",
@@ -791,6 +823,14 @@
         "percent": 3
       }
     },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -814,6 +854,14 @@
       "energy": {
         "percent": 3
       }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
     },
     "source": {
       "engine": "canary",
@@ -983,6 +1031,10 @@
     "bonuses": {
       "skills": [
         {
+          "skillId": "fist",
+          "amount": 2
+        },
+        {
           "skillId": "magic",
           "amount": 1
         }
@@ -1078,6 +1130,14 @@
       "death": {
         "percent": 4
       }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
     },
     "source": {
       "engine": "canary",
@@ -1286,7 +1346,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 4
+        },
+        {
+          "skillId": "sword",
+          "amount": 4
+        },
+        {
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -1320,6 +1388,10 @@
     },
     "bonuses": {
       "skills": [
+        {
+          "skillId": "fist",
+          "amount": 4
+        },
         {
           "skillId": "magic",
           "amount": 2
@@ -1455,7 +1527,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
           "amount": 2
         }
       ]
@@ -1490,7 +1570,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
           "amount": 2
         }
       ]

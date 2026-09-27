@@ -116,8 +116,17 @@ const SPECIALIZED_MAGIC_ATTR_TO_ELEMENT: ReadonlyMap<string, string> = new Map([
   ['icemagiclevelpoints', 'ice'], ['physicalmagiclevelpoints', 'physical'],
 ]);
 
-/** `skill<família>` (corpo a corpo) → a ÚNICA skill `melee` do Draconya (CMB-05). */
-const MELEE_SKILL_ATTRS: readonly string[] = ['skillsword', 'skillaxe', 'skillclub'];
+/**
+ * `skill<família>` do Canary → a skill separada correspondente do Draconya (#567/#568): desde a
+ * migração de `melee` para `fist`/`club`/`sword`/`axe`, cada atributo vira o bônus da SUA
+ * própria skill — nunca mais uma fusão numa `melee` que não existe mais em
+ * `packages/content/data/skills/`. `skillfist` (Power Ring real, id 3087) ficava de fora antes
+ * desta correção — item com só `skillfist` não gerava bônus nenhum, um item real perdido em
+ * silêncio, não só um `skillId` inválido.
+ */
+const MELEE_SKILL_ATTR_TO_SKILL: ReadonlyMap<string, string> = new Map([
+  ['skillfist', 'fist'], ['skillclub', 'club'], ['skillsword', 'sword'], ['skillaxe', 'axe'],
+]);
 
 /** Primeiro token de `vocation="Knight;true, Paladin;true, Elite Knight, Royal Paladin"` → id. */
 export function parseVocationRequirement(raw: string | undefined): string | string[] | undefined {
@@ -160,7 +169,7 @@ function hasBonusAttribute(attrs: ReadonlyMap<string, XmlElement>): boolean {
       || key === 'magiclevelpoints' || key === 'healthgain' || key === 'managain'
       || key === 'cleavepercent' || key === 'criticalhitchance' || key === 'criticalhitdamage'
       || key === 'lifeleechamount' || key === 'manaleechamount' || key === 'reflectdamage'
-      || MELEE_SKILL_ATTRS.includes(key) || key === 'skilldist' || key === 'skillshield'
+      || MELEE_SKILL_ATTR_TO_SKILL.has(key) || key === 'skilldist' || key === 'skillshield'
       || key.startsWith('absorbpercent') || SPECIALIZED_MAGIC_ATTR_TO_ELEMENT.has(key)) return true;
   }
   return false;
@@ -244,7 +253,7 @@ const HANDLED_ATTRS: ReadonlySet<string> = new Set([
   'armor', 'range', 'weight', 'charges', 'duration', 'imbuementslot', 'speed', 'healthgain',
   'healthticks', 'managain', 'manaticks', 'suppressdrunk', 'criticalhitchance', 'criticalhitdamage',
   'lifeleechamount', 'manaleechamount', 'reflectdamage', 'cleavepercent', 'hitchance', 'hitChance',
-  'magiclevelpoints', 'skillsword', 'skillaxe', 'skillclub', 'skilldist', 'skillshield', 'ammotype',
+  'magiclevelpoints', 'skillfist', 'skillsword', 'skillaxe', 'skillclub', 'skilldist', 'skillshield', 'ammotype',
   'description', 'script',
   // O quiver (#575): `perfectshotrange`/`perfectshotdamage` viram `item.perfectShot`;
   // `containersize` é IGNORADO de propósito — o Draconya não guarda pilha física de munição
@@ -391,16 +400,13 @@ export function convertItem(
   if (manaLeech !== undefined && manaLeech > 0) combatModifiers['manaLeech'] = manaLeech;
   if (Object.keys(combatModifiers).length > 0) entity['combatModifiers'] = combatModifiers;
 
-  // bonuses (#688): skills (merge sword/axe/club em UMA `melee`), magic level (especializado e
+  // bonuses (#688): skills (fist/club/sword/axe SEPARADAS desde #567/#568 — nunca mais uma
+  // `melee` que não existe em `packages/content/data/skills/`), magic level (especializado e
   // geral), velocidade, regeneração e supressão.
   const skills: { skillId: string; amount: number }[] = [];
-  const meleeAmounts = MELEE_SKILL_ATTRS.map((attr) => numberValue(attrs, attr)).filter((n): n is number => n !== undefined && n > 0);
-  if (meleeAmounts.length > 0) {
-    const amount = Math.max(...meleeAmounts);
-    if (new Set(meleeAmounts).size > 1) {
-      ignoredFields.push(`skillsword/skillaxe/skillclub divergentes (${meleeAmounts.join('/')}) — usado o maior`);
-    }
-    skills.push({ skillId: 'melee', amount });
+  for (const [attr, skillId] of MELEE_SKILL_ATTR_TO_SKILL) {
+    const amount = numberValue(attrs, attr);
+    if (amount !== undefined && amount > 0) skills.push({ skillId, amount });
   }
   const distanceSkill = numberValue(attrs, 'skilldist');
   if (distanceSkill !== undefined && distanceSkill > 0) skills.push({ skillId: 'distance', amount: distanceSkill });

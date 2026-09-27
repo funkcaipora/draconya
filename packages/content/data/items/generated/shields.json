@@ -736,7 +736,11 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -1646,7 +1650,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]

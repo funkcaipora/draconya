@@ -43,7 +43,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -81,7 +81,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 4
         }
       ]
@@ -203,7 +203,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 4
         }
       ]
@@ -241,7 +241,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -326,7 +326,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -364,7 +364,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -2036,7 +2036,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 1
         }
       ]
@@ -2709,7 +2709,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -2751,7 +2751,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -2837,7 +2837,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -2880,7 +2880,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -2973,7 +2973,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -3066,7 +3066,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 4
         }
       ]
@@ -3564,7 +3564,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -3604,7 +3604,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -3733,7 +3733,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -4349,7 +4349,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -4435,7 +4435,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -4475,7 +4475,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -5116,7 +5116,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -5156,7 +5156,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -5285,7 +5285,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -5555,7 +5555,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 2
         }
       ]
@@ -5639,7 +5639,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 5
         }
       ]
@@ -5682,7 +5682,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 5
         }
       ]
@@ -5725,7 +5725,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 5
         }
       ]
@@ -5914,7 +5914,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 5
         }
       ]
@@ -5957,7 +5957,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 5
         }
       ]
@@ -6000,7 +6000,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 5
         }
       ]
@@ -7113,7 +7113,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -7152,7 +7152,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -7233,7 +7233,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -7273,7 +7273,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -7360,7 +7360,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -7447,7 +7447,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 4
         }
       ]
@@ -7924,7 +7924,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -7963,7 +7963,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -8044,7 +8044,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -8638,7 +8638,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 2
         }
       ]
@@ -8764,7 +8764,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 1
         }
       ]
@@ -8851,7 +8851,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -8890,7 +8890,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -9014,7 +9014,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -9564,7 +9564,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 2
         }
       ]
@@ -9943,7 +9943,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -9986,7 +9986,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -10075,7 +10075,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -10119,7 +10119,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -10214,7 +10214,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -10309,7 +10309,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 4
         }
       ]
@@ -10348,7 +10348,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 2
         }
       ]
@@ -10739,7 +10739,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 5
         }
       ]
@@ -10782,7 +10782,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 5
         }
       ]
@@ -10825,7 +10825,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 5
         }
       ]
@@ -11014,7 +11014,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 5
         }
       ]
@@ -11057,7 +11057,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 5
         }
       ]
@@ -11099,7 +11099,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 5
         }
       ]
@@ -11491,7 +11491,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 1
         }
       ]
@@ -11687,7 +11687,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -11729,7 +11729,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -11816,7 +11816,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -11859,7 +11859,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 4
         }
       ]
@@ -11952,7 +11952,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 4
         }
       ]
@@ -12045,7 +12045,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 4
         }
       ]
@@ -12298,7 +12298,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 5
         }
       ]
@@ -12387,7 +12387,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 5
         }
       ]
@@ -12430,7 +12430,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 5
         }
       ]
@@ -12473,7 +12473,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 5
         }
       ]
@@ -12563,7 +12563,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 5
         }
       ]
@@ -12651,7 +12651,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 5
         }
       ]
@@ -13013,7 +13013,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 1
         }
       ]
@@ -13094,7 +13094,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -13264,7 +13264,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 2
         }
       ]
@@ -13722,7 +13722,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 1
         }
       ]
@@ -13794,7 +13794,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -13866,7 +13866,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 3
         }
       ]
@@ -13901,7 +13901,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
           "amount": 1
         }
       ]
@@ -13936,7 +13936,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 3
         }
       ]
@@ -13971,7 +13971,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 1
         }
       ]
@@ -14641,7 +14641,7 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "sword",
           "amount": 1
         }
       ]

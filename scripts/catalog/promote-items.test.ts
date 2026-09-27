@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readGeneratedSlice } from './generated-writer.js';
 import {
-  checkItemPromotion, computeItemPromotion, readAuthoredItemIds, readPackObjectRanges, violatesContentRules,
-  writeItemPromotion,
+  checkItemPromotion, computeItemPromotion, readAuthoredItemIds, readPackObjectRanges, stripMonkVocation,
+  violatesContentRules, writeItemPromotion,
 } from './promote-items.js';
 
 const SOURCE = { engine: 'canary' as const, commit: 'a'.repeat(40), path: 'data/items/items.xml' };
@@ -107,6 +107,42 @@ describe('violatesContentRules', () => {
   });
 });
 
+describe('stripMonkVocation', () => {
+  it('sem requires, ou requires sem vocationId, passa direto', () => {
+    expect(stripMonkVocation(undefined)).toEqual({ requires: undefined, excludedWhole: false });
+    expect(stripMonkVocation({ level: 100 })).toEqual({ requires: { level: 100 }, excludedWhole: false });
+  });
+
+  it('vocação única que não é Monk passa direto', () => {
+    expect(stripMonkVocation({ vocationId: 'knight' }))
+      .toEqual({ requires: { vocationId: 'knight' }, excludedWhole: false });
+  });
+
+  it('vocação única "monk" exclui a entidade INTEIRA', () => {
+    expect(stripMonkVocation({ level: 100, vocationId: 'monk' }))
+      .toEqual({ requires: undefined, excludedWhole: true });
+  });
+
+  it('lista de vocações sem Monk passa direto', () => {
+    expect(stripMonkVocation({ vocationId: ['knight', 'paladin'] }))
+      .toEqual({ requires: { vocationId: ['knight', 'paladin'] }, excludedWhole: false });
+  });
+
+  it('lista com Monk e outra vocação: só o Monk sai, e a lista de 2 vira "outra" vocação (2->1, string simples)', () => {
+    expect(stripMonkVocation({ level: 100, vocationId: ['monk', 'knight'] }))
+      .toEqual({ requires: { level: 100, vocationId: 'knight' }, excludedWhole: false });
+  });
+
+  it('lista com Monk e DUAS outras vocações: só o Monk sai, resto continua lista (3->2)', () => {
+    expect(stripMonkVocation({ vocationId: ['monk', 'knight', 'paladin'] }))
+      .toEqual({ requires: { vocationId: ['knight', 'paladin'] }, excludedWhole: false });
+  });
+
+  it('lista só de Monk (array de 1) exclui a entidade INTEIRA, como a string simples', () => {
+    expect(stripMonkVocation({ vocationId: ['monk'] })).toEqual({ requires: undefined, excludedWhole: true });
+  });
+});
+
 describe('computeItemPromotion', () => {
   it('promove item novo e extrai appearanceId para appearanceEntries, sem o campo na entidade', () => {
     workdir = mkdtempSync(join(tmpdir(), 'draconya-promote-items-'));
@@ -160,6 +196,35 @@ describe('computeItemPromotion', () => {
       { id: 'slotless-weapon', reason: expect.stringContaining('imbuementSlots') },
     ]);
     expect(result.appearanceEntries.has('slotless-weapon')).toBe(false);
+  });
+
+  it('item exclusivo da vocação Monk (string simples) é excluído inteiro e contado, sem entrar em nenhuma fatia', () => {
+    workdir = mkdtempSync(join(tmpdir(), 'draconya-promote-items-'));
+    setupFixture(workdir, {
+      armors: [ring({
+        id: 'monk-robe', slot: 'chest', appearanceId: 3902, requires: { vocationId: 'monk' },
+      })],
+    });
+    const result = computeItemPromotion(workdir);
+    expect(result.slices.get('armors')).toEqual([]);
+    expect(result.skippedByVocation).toEqual([
+      { id: 'monk-robe', reason: expect.stringContaining('Monk') },
+    ]);
+    expect(result.appearanceEntries.has('monk-robe')).toBe(false);
+  });
+
+  it('item cuja lista de vocações inclui Monk e outra é promovido SEM o Monk na lista', () => {
+    workdir = mkdtempSync(join(tmpdir(), 'draconya-promote-items-'));
+    setupFixture(workdir, {
+      rings: [ring({
+        id: 'shared-ring', requires: { level: 100, vocationId: ['monk', 'knight'] },
+      })],
+    });
+    const result = computeItemPromotion(workdir);
+    const promoted = result.slices.get('rings');
+    expect(promoted).toHaveLength(1);
+    expect(promoted?.[0]).toMatchObject({ id: 'shared-ring', requires: { level: 100, vocationId: 'knight' } });
+    expect(result.skippedByVocation).toEqual([]);
   });
 
   it('sem tabela de aparências/pacote no checkout, nada é excluído por aparência (conteúdo de teste)', () => {

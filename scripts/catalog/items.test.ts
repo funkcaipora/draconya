@@ -314,6 +314,13 @@ const ITEMS_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
 		<attribute key="weight" value="3000"/>
 		<attribute key="imbuementslot" value="1"/>
 	</item>
+	<item id="90047" article="a" name="test power ring">
+		<attribute key="skillfist" value="6"/>
+		<attribute key="weight" value="10"/>
+		<attribute key="script" value="moveevent">
+			<attribute key="slot" value="ring"/>
+		</attribute>
+	</item>
 </items>
 `;
 
@@ -516,19 +523,30 @@ describe('convertItem', () => {
     expect(boots?.entity).toMatchObject({ kind: 'armor', slot: 'feet', bonuses: { speed: 20 } });
   });
 
-  it('skillsword/skillaxe/skillclub iguais viram UMA bonuses.skills melee (Collar of Red Plasma real, #688)', () => {
+  it('skillsword/skillaxe/skillclub viram TRÊS bonuses.skills separadas (Collar of Red Plasma real, #688, #567/#568)', () => {
     const collar = convert('90021');
     expect(collar?.entity).toMatchObject({
       kind: 'amulet', slot: 'neck', requires: { level: 150, vocationId: 'knight' },
-      bonuses: { skills: [{ skillId: 'melee', amount: 4 }] },
+      bonuses: {
+        skills: [
+          { skillId: 'club', amount: 4 }, { skillId: 'sword', amount: 4 }, { skillId: 'axe', amount: 4 },
+        ],
+      },
       absorb: { physical: { percent: 5 } },
     });
   });
 
-  it('skillsword/skillaxe divergentes usam o maior e registram a divergência', () => {
+  it('skillsword/skillaxe com valores diferentes viram duas bonuses.skills independentes, sem fusão (#567/#568)', () => {
     const divergent = convert('90022');
-    expect(divergent?.entity['bonuses']).toMatchObject({ skills: [{ skillId: 'melee', amount: 5 }] });
-    expect(divergent?.ignoredFields.some((f) => f.includes('divergentes'))).toBe(true);
+    expect(divergent?.entity['bonuses']).toMatchObject({
+      skills: [{ skillId: 'sword', amount: 3 }, { skillId: 'axe', amount: 5 }],
+    });
+    expect(divergent?.ignoredFields.some((f) => f.includes('divergentes'))).toBe(false);
+  });
+
+  it('skillfist vira bonuses.skills fist (Power Ring real, id 3087) — antes desta correção ficava de fora em silêncio', () => {
+    const ring = convert('90047');
+    expect(ring?.entity['bonuses']).toMatchObject({ skills: [{ skillId: 'fist', amount: 6 }] });
   });
 
   it('todos os bônus de #688/#680/#552/#551 juntos, e todos passam no itemSchema real', () => {

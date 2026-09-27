@@ -102,7 +102,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
           "amount": 1
         }
       ]
@@ -428,29 +436,18 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
           "amount": 1
         }
       ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "coned-hat-of-enlightenment",
-    "name": "coned hat of enlightenment",
-    "kind": "armor",
-    "weight": 10,
-    "value": 700,
-    "slot": "head",
-    "armor": 4,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 70,
-      "vocationId": "monk"
     },
     "source": {
       "engine": "canary",
@@ -540,30 +537,6 @@
     }
   },
   {
-    "id": "dark-vision-bandana",
-    "name": "dark vision bandana",
-    "kind": "armor",
-    "weight": 11,
-    "value": 0,
-    "slot": "head",
-    "armor": 5,
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 180,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "energy": {
-        "percent": 4
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
     "id": "dark-whispers",
     "name": "dark whispers",
     "kind": "armor",
@@ -604,41 +577,6 @@
     "slot": "head",
     "armor": 10,
     "imbuementSlots": 2,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "demon-mengu",
-    "name": "demon mengu",
-    "kind": "armor",
-    "weight": 19,
-    "value": 0,
-    "slot": "head",
-    "armor": 6,
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 300,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "death": {
-        "percent": 6
-      },
-      "physical": {
-        "percent": 2
-      }
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "magic",
-          "amount": 1
-        }
-      ]
-    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -905,43 +843,8 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "axe",
           "amount": 1
-        }
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "ethereal-coned-hat",
-    "name": "ethereal coned hat",
-    "kind": "armor",
-    "weight": 12,
-    "value": 0,
-    "slot": "head",
-    "armor": 7,
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 400,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "fire": {
-        "percent": 8
-      },
-      "physical": {
-        "percent": 4
-      }
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "magic",
-          "amount": 2
         }
       ]
     },
@@ -1505,30 +1408,6 @@
     }
   },
   {
-    "id": "jade-conical-hat",
-    "name": "jade conical hat",
-    "kind": "armor",
-    "weight": 21,
-    "value": 0,
-    "slot": "head",
-    "armor": 5,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 35,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "ice": {
-        "percent": 4
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
     "id": "jade-hat",
     "name": "jade hat",
     "kind": "armor",
@@ -1606,23 +1485,6 @@
     "weight": 5,
     "value": 0,
     "slot": "head",
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "light-bandana",
-    "name": "light bandana",
-    "kind": "armor",
-    "weight": 9,
-    "value": 0,
-    "slot": "head",
-    "armor": 3,
-    "requires": {
-      "vocationId": "monk"
-    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -1805,7 +1667,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
           "amount": 2
         }
       ]
@@ -1852,33 +1722,6 @@
     "value": 150,
     "slot": "head",
     "armor": 1,
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "norcferatu-bonehood",
-    "name": "norcferatu bonehood",
-    "kind": "armor",
-    "weight": 14,
-    "value": 0,
-    "slot": "head",
-    "armor": 5,
-    "imbuementSlots": 2,
-    "requires": {
-      "level": 230,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "ice": {
-        "percent": 5
-      },
-      "physical": {
-        "percent": 2
-      }
-    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -2259,7 +2102,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 3
+        },
+        {
+          "skillId": "sword",
+          "amount": 3
+        },
+        {
+          "skillId": "axe",
           "amount": 3
         }
       ]
@@ -2388,7 +2239,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 2
+        },
+        {
+          "skillId": "sword",
+          "amount": 2
+        },
+        {
+          "skillId": "axe",
           "amount": 2
         }
       ]

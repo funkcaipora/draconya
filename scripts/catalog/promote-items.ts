@@ -53,10 +53,21 @@ export interface SkippedByContentRule {
   readonly reason: string;
 }
 
+/** Uma entidade gerada excluída inteira por ser exclusiva da vocação Monk (fora do escopo). */
+export interface SkippedByVocation {
+  readonly id: string;
+  readonly reason: string;
+}
+
 interface StagingWeapon {
   readonly kind?: string;
   readonly ammoFamily?: string;
   readonly breakChance?: number;
+}
+
+interface StagingRequires {
+  readonly level?: number;
+  readonly vocationId?: string | readonly string[];
 }
 
 interface StagingItem {
@@ -66,6 +77,45 @@ interface StagingItem {
   readonly defense?: number;
   readonly imbuementSlots?: number;
   readonly weapon?: StagingWeapon;
+  readonly requires?: StagingRequires;
+}
+
+/** A vocação Monk não existe no Draconya (fora do escopo, decisão de produto). */
+const MONK_VOCATION_ID = 'monk';
+
+/**
+ * Trata `requires.vocationId` de UM item gerado contra a ausência da vocação Monk — a mesma
+ * decisão que `content.ts` tomaria no boot (`vocationIdsOf`/`vocations.has`), só que aqui a
+ * exclusão é ANTES do boot, contada, nunca silenciosa (a mesma disciplina das outras exclusões
+ * deste arquivo). Duas formas, como o Tibia real declara (`vocation="Monk;true, ..."` sozinho,
+ * ou junto de outras vocações no mesmo item — p.ex. uma peça que Knight e Monk usam igual):
+ *
+ *   - exclusivo de Monk (string única, ou array cujo ÚNICO elemento é `monk`): a entidade
+ *     INTEIRA é excluída — não há vocação nenhuma sobrando para o item valer para alguém;
+ *   - lista com Monk e outra(s) vocação(ões): só o `monk` sai da lista — o item continua
+ *     promovido para quem o Draconya de fato tem. Uma lista de dois vira `z.string()` simples
+ *     (`vocationRequirementSchema` não aceita array de 1, ADR — "a lista existe para dizer
+ *     'mais de uma'").
+ *
+ * `undefined` de volta em `vocationId` (nunca `null`): é o mesmo "sem requisito de vocação" que
+ * o item já usaria se o Canary não declarasse `vocation` nenhuma.
+ */
+export function stripMonkVocation(
+  requires: StagingRequires | undefined,
+): { readonly requires: StagingRequires | undefined; readonly excludedWhole: boolean } {
+  const vocationId = requires?.vocationId;
+  if (vocationId === undefined) return { requires, excludedWhole: false };
+  if (typeof vocationId === 'string') {
+    if (vocationId !== MONK_VOCATION_ID) return { requires, excludedWhole: false };
+    return { requires: undefined, excludedWhole: true };
+  }
+  const kept = vocationId.filter((id) => id !== MONK_VOCATION_ID);
+  if (kept.length === vocationId.length) return { requires, excludedWhole: false };
+  if (kept.length === 0) return { requires: undefined, excludedWhole: true };
+  const { vocationId: _old, ...rest } = requires ?? {};
+  const [first] = kept;
+  const nextVocationId: string | readonly string[] = kept.length === 1 && first !== undefined ? first : kept;
+  return { requires: { ...rest, vocationId: nextVocationId }, excludedWhole: false };
 }
 
 /**
@@ -109,6 +159,7 @@ export interface ItemPromotionResult {
   readonly skippedByAuthored: readonly SkippedByAuthored[];
   readonly skippedByAppearance: readonly SkippedByAppearance[];
   readonly skippedByContentRule: readonly SkippedByContentRule[];
+  readonly skippedByVocation: readonly SkippedByVocation[];
 }
 
 /** Todo `id` de item AUTORAL — arquivo `*.json` direto de `itemsDir`, nunca `generated/` nem
@@ -173,6 +224,7 @@ export function computeItemPromotion(repoRoot: string): ItemPromotionResult {
   const skippedByAuthored: SkippedByAuthored[] = [];
   const skippedByAppearance: SkippedByAppearance[] = [];
   const skippedByContentRule: SkippedByContentRule[] = [];
+  const skippedByVocation: SkippedByVocation[] = [];
 
   const sliceNames = existsSync(stagingDir)
     ? readdirSync(stagingDir).filter((n) => n.endsWith('.json')).sort()
@@ -206,19 +258,33 @@ export function computeItemPromotion(repoRoot: string): ItemPromotionResult {
         });
         continue;
       }
-      const contentRuleViolation = violatesContentRules(item as StagingItem);
+      // A vocação Monk não existe no Draconya (fora do escopo, decisão de produto) — a mesma
+      // checagem que `content.ts` faria no boot (`vocationIdsOf`/`vocations.has`), feita aqui
+      // ANTES, para a exclusão ser contada em vez de derrubar o carregamento.
+      const monkOutcome = stripMonkVocation((item as StagingItem).requires);
+      if (monkOutcome.excludedWhole) {
+        skippedByVocation.push({
+          id, reason: 'exclusivo da vocação Monk (fora do escopo do Draconya, ADR — ver PRD)',
+        });
+        continue;
+      }
+      const withoutMonk = monkOutcome.requires === (item as StagingItem).requires
+        ? item
+        : { ...item, requires: monkOutcome.requires };
+      const contentRuleViolation = violatesContentRules(withoutMonk as StagingItem);
       if (contentRuleViolation !== undefined) {
         skippedByContentRule.push({ id, reason: contentRuleViolation });
         continue;
       }
       appearanceEntries.set(id, appearance);
-      promoted.push(item as unknown as CatalogEntity);
+      promoted.push(withoutMonk as unknown as CatalogEntity);
     }
     slices.set(slice, promoted);
   }
 
   return {
     slices, appearanceEntries, skippedByAuthored, skippedByAppearance, skippedByContentRule,
+    skippedByVocation,
   };
 }
 
@@ -257,9 +323,10 @@ function formatReport(result: ItemPromotionResult): string {
     '',
     'Separa `packages/content/staging/items/generated/*.json` (a transcrição pura do Canary, '
       + '#573/#574) em `data/items/generated/` + `data/appearances/baseline.json.items` — o mesmo '
-      + 'movimento que `promote-monsters.ts` (#580) já fez para monstro. Duas exclusões, cada uma '
-      + 'contada: id que colide com item AUTORAL (o autoral vence, ADR 0014) e `appearanceId` fora '
-      + 'do inventário do pacote de assets conferido (FUN-21).',
+      + 'movimento que `promote-monsters.ts` (#580) já fez para monstro. Exclusões, cada uma '
+      + 'contada: id que colide com item AUTORAL (o autoral vence, ADR 0014), `appearanceId` fora '
+      + 'do inventário do pacote de assets conferido (FUN-21), regra de conteúdo que `buildContent` '
+      + 'reprovaria no boot, e item exclusivo da vocação Monk (fora do escopo do Draconya).',
     '',
     `${promotedCount} item(ns) promovido(s) em ${result.slices.size} fatia(s):`,
     '',
@@ -309,6 +376,23 @@ function formatReport(result: ItemPromotionResult): string {
   } else {
     lines.push('| id | motivo |', '|---|---|');
     for (const item of [...result.skippedByContentRule].sort((a, b) => a.id.localeCompare(b.id))) {
+      lines.push(`| ${item.id} | ${item.reason} |`);
+    }
+  }
+  lines.push(
+    '',
+    `## Excluídos por vocação Monk (${result.skippedByVocation.length})`,
+    '',
+    'A vocação Monk não existe no Draconya (fora do escopo, decisão de produto) — item '
+      + 'EXCLUSIVO de Monk sai inteiro; item cuja lista de vocações inclui Monk e outra(s) '
+      + 'perde só o Monk da lista, promovido normalmente para quem o Draconya de fato tem.',
+    '',
+  );
+  if (result.skippedByVocation.length === 0) {
+    lines.push('Nenhum.');
+  } else {
+    lines.push('| id | motivo |', '|---|---|');
+    for (const item of [...result.skippedByVocation].sort((a, b) => a.id.localeCompare(b.id))) {
       lines.push(`| ${item.id} | ${item.reason} |`);
     }
   }
@@ -397,5 +481,6 @@ if (import.meta.main) {
   console.log(`  excluído(s) por colisão com autoral: ${result.skippedByAuthored.length}`);
   console.log(`  excluído(s) por aparência fora do pacote: ${result.skippedByAppearance.length}`);
   console.log(`  excluído(s) por regra de conteúdo: ${result.skippedByContentRule.length}`);
+  console.log(`  excluído(s) por vocação Monk: ${result.skippedByVocation.length}`);
   console.log('  relatório: docs/reference/catalog/items-promotion-report.md');
 }

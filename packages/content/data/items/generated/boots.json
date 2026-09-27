@@ -53,24 +53,6 @@
     }
   },
   {
-    "id": "boots-of-enlightenment",
-    "name": "boots of enlightenment",
-    "kind": "armor",
-    "weight": 9,
-    "value": 80,
-    "slot": "feet",
-    "armor": 1,
-    "requires": {
-      "level": 8,
-      "vocationId": "monk"
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
     "id": "boots-of-homecoming",
     "name": "boots of homecoming",
     "kind": "armor",
@@ -281,38 +263,6 @@
     }
   },
   {
-    "id": "eldritch-monk-boots",
-    "name": "eldritch monk boots",
-    "kind": "armor",
-    "weight": 13,
-    "value": 0,
-    "slot": "feet",
-    "armor": 2,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 300,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "energy": {
-        "percent": 5
-      }
-    },
-    "bonuses": {
-      "skills": [
-        {
-          "skillId": "magic",
-          "amount": 1
-        }
-      ]
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
     "id": "feverbloom-boots",
     "name": "feverbloom boots",
     "kind": "armor",
@@ -462,33 +412,6 @@
     }
   },
   {
-    "id": "gnomish-footwraps",
-    "name": "gnomish footwraps",
-    "kind": "armor",
-    "weight": 11,
-    "value": 0,
-    "slot": "feet",
-    "armor": 1,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 150,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "earth": {
-        "percent": 3
-      },
-      "physical": {
-        "percent": 2
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
     "id": "golden-boots",
     "name": "golden boots",
     "kind": "armor",
@@ -539,30 +462,6 @@
       },
       "physical": {
         "percent": 2
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "iks-footwraps",
-    "name": "iks footwraps",
-    "kind": "armor",
-    "weight": 8,
-    "value": 0,
-    "slot": "feet",
-    "armor": 2,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 250,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "fire": {
-        "percent": 4
       }
     },
     "source": {
@@ -991,7 +890,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
           "amount": 1
         }
       ],
@@ -1144,33 +1051,6 @@
       "speed": 10,
       "specializedMagicLevel": {
         "healing": 1
-      }
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "soulsoles",
-    "name": "soulsoles",
-    "kind": "armor",
-    "weight": 13,
-    "value": 0,
-    "slot": "feet",
-    "armor": 2,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 400,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "ice": {
-        "percent": 6
-      },
-      "physical": {
-        "percent": 3
       }
     },
     "source": {
@@ -1384,33 +1264,6 @@
         }
       ],
       "speed": 15
-    },
-    "source": {
-      "engine": "canary",
-      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
-      "path": "data/items/items.xml"
-    }
-  },
-  {
-    "id": "yalahari-footwraps",
-    "name": "yalahari footwraps",
-    "kind": "armor",
-    "weight": 7,
-    "value": 0,
-    "slot": "feet",
-    "armor": 1,
-    "imbuementSlots": 1,
-    "requires": {
-      "level": 80,
-      "vocationId": "monk"
-    },
-    "absorb": {
-      "ice": {
-        "percent": 6
-      },
-      "physical": {
-        "percent": 3
-      }
     },
     "source": {
       "engine": "canary",

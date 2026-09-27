@@ -427,23 +427,28 @@ describe.skipIf(!HAS_CANARY)('leitor contra o Canary real (CANARY_DIR)', () => {
     expect(convertReal('mammals/rat.lua').entity['speed']).toBe(134);
   });
 
-  it('o Dragon gerado bate com o dragon.json autoral do #520 — onda de fogo, bola e cura', () => {
+  it('o Dragon gerado bate com o dragon promovido em data/monsters/generated/dragons.json (#581) — onda de fogo, bola e cura', () => {
     const dragon = convertReal('dragons/dragon.lua');
     expect(dragon.blockers).toEqual([]);
     const generated = monsterSchema.parse(asMonster(dragon.entity));
-    const authored = monsterSchema.parse(JSON.parse(
-      readFileSync(join(REPO_ROOT, 'packages/content/data/monsters/dragon.json'), 'utf8'),
-    ) as unknown);
-    // A ÚNICA diferença, e justificada: o Canary não declara `range` na onda (sem limite além da
-    // vista, `Monster::canUseSpell`); o leitor usa o comprimento da onda (8), e o autoral usou 7.
-    // Nenhum dos dois é número do Tibia — é o preenchimento que o schema exige.
+    // O `dragon.json` autoral saiu no #581 — Dragon/Dragon Lord/Rat/Rotworm passaram a viver
+    // direto em `generated/<fatia>.json`, regenerados uma única vez por aquela issue e
+    // preservados verbatim por `preserveHandAuthored` (`promote-monsters.ts`) daí em diante.
+    // Este teste compara a mesma coisa que sempre comparou — a conversão FRESCA do Canary contra
+    // o congelado — só que lendo do lugar novo.
+    const dragonsSlice = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'packages/content/data/monsters/generated/dragons.json'), 'utf8'),
+    ) as readonly Record<string, unknown>[];
+    const authoredRaw = dragonsSlice.find((entity) => entity['id'] === 'dragon');
+    if (authoredRaw === undefined) throw new Error('dragon não está em generated/dragons.json');
+    const authored = monsterSchema.parse(authoredRaw);
+    // O Canary não declara `range` na onda (sem limite além da vista, `Monster::canUseSpell`); o
+    // leitor usa o comprimento da onda (8) para preencher o que o schema exige — nem número do
+    // Tibia, nem divergência: o congelado em `generated/dragons.json` saiu do MESMO leitor (#581),
+    // então bate exatamente, sem ajuste nenhum.
     const firewave = generated.abilities?.find((ability) => ability.id === 'firewave');
     expect(firewave?.target.range).toBe(8);
-    const aligned = generated.abilities?.map((ability) => {
-      const { kind: _kind, ...rest } = ability as typeof ability & { kind?: string };
-      return ability.id === 'firewave' ? { ...rest, target: { ...rest.target, range: 7 } } : rest;
-    });
-    expect(aligned).toEqual(authored.abilities);
+    expect(generated.abilities).toEqual(authored.abilities);
     for (const field of [
       'class', 'health', 'experience', 'attack', 'attackIntervalMs', 'armor', 'defense', 'defenseMitigation',
       'damageType', 'mitigation', 'critChance', 'speed', 'aggroRadius', 'attackRange', 'targetDistance',

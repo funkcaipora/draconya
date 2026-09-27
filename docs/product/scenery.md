@@ -3,10 +3,10 @@
 **Status:** parcial — o importador **classifica** porta, capim, stone pile, rope spot, ladder,
 alavanca, baú, placa e teleporte a partir do OTBM real (#727, ADR 0050 d.1); o mecanismo que muda
 de estado por sessão (`TileOverrides`, #728, ADR 0050 d.2-d.5, d.8) existe para o T1 (porta comum,
-capim, stone pile, alavanca); o JOGADOR já pode acionar isso e ver o resultado — `use-on-map`,
-`look` e `tile-update` (#729, ADR 0050 d.7) — e não só o walker automático. Rope spot/ladder como
-passo de andar, e T2/T3 (porta de chave/level/quest, baú, teleporte, placa de pressão) continuam
-em aberto.
+capim, stone pile, alavanca) e para a METADE do T2 — porta de level e porta de chave (#732, ADR
+0050 d.6); o JOGADOR já pode acionar isso e ver o resultado — `use-on-map`, `look` e `tile-update`
+(#729, ADR 0050 d.7) — e não só o walker automático. Rope spot/ladder como passo de andar, e o
+resto do T2/T3 (porta de quest, baú com storage, teleporte, placa de pressão) continuam em aberto.
 **PRD:** cenário e uso de item no mapa (não numerado no PRD original; nasceu do pedido "cenário,
 itens usáveis do cenário como alavancas, portas, matos... tudo 100%")
 **Épico:** E18 (Jogável ponta a ponta)
@@ -52,8 +52,21 @@ fila, invariante 2 — nada por tique); a stone pile virada buraco desce um anda
 (`links`) quando usada. Porta comum FECHA sozinha quando o tile esvazia e ninguém está nele
 (`TileOccupancy.vacate` → `TileOverrides.closeDoorIfVacant`), nunca por prazo. O overlay entra no
 snapshot (`HuntRulesetState.tileOverrides`, opcional, sem bump de `SNAPSHOT_FORMAT_VERSION`).
-T2 (porta de chave/level/quest, baú) continua fora: sem requisito satisfazível (level/storage por
-personagem), classificá-las como bloqueantes as prenderia para sempre — pior que hoje.
+
+**Porta de level e porta de chave (T2, #732, ADR 0050 d.6).** As duas usam o MESMO
+`#useInteractable`/`useOnMap` do T1 — nenhuma bifurcação por `kind`. A de level bloqueia
+**fechada** e confere `character.level >= requires.level` no MOMENTO de usar (o `player:getLevel()
+>= item.actionid - 1000` de `level_door.lua`); insuficiente recusa `level-too-low`, sem tocar o
+overlay. A de chave nasce **trancada** — bloqueia em `locked` E `closed` — e só sai de `locked`
+DIRETO para `open` (nunca passa por `closed`, como `key_door.lua`) com uma chave cujo
+`use.keyId` bate com o `requires.keyId` do conteúdo; sem ela, `missing-tool` (a mesma recusa da
+ferramenta comum — uma chave É uma ferramenta, `use.tool: 'key'`). Destrancada, ela alterna
+`closed`↔`open` livremente, sem chave nenhuma — o key_door.lua do Canary só confere a chave
+contra o estado TRANCADO, nunca contra os outros dois. As duas fecham sozinhas ao esvaziar
+(`TileOverrides.closeDoorIfVacant`), como a porta comum — sem prazo próprio. Porta de quest e
+baú com storage (o resto do T2) continuam fora: sem storage por personagem satisfazível ainda
+para elas na hunt (`character-storage.ts`, #731, existe mas nenhum conteúdo usa `storageKey` de
+porta ainda), classificá-las como bloqueantes as prenderia para sempre — pior que hoje.
 
 ## O jogador usa e olha (#729, ADR 0050 d.7)
 
@@ -83,9 +96,11 @@ overlay ativo (`tileOverrides`, por `"x,y,z"`) como um overlay DINÂMICO sobre a
 
 Recusas de `use-on-map` (`system-message`, em português, seguindo a convenção já em vigor no
 `host.ts` — não o inglês que o ADR 0050 cita como referência do Tibia): fora de alcance, nada ali,
-`kind` fora do T1 (`locked-door`/`chest`/`sign`/… — a mesma decisão de `isToggleable`, "não
-invente" requisito que o T2/T3 ainda não tem) e ferramenta ausente (o catálogo real não tem NENHUM
-item com `use.tool` até a #573 — a recusa é sempre `missing-tool` até lá).
+`kind` fora do T1/T2 (`quest-door`/`chest`/`sign`/… — a mesma decisão de `isToggleable`, "não
+invente" requisito que o T3 ainda não tem), level insuficiente numa porta de level
+(`level-too-low`, #732) e ferramenta ausente (`missing-tool`) — inclusive a chave certa de uma
+porta trancada: o catálogo real não tem NENHUM item com `use.tool` até a #573/#754 (paralela,
+catálogo de itens do Canary) landing, então toda porta de chave real recusa por essa razão hoje.
 
 `appearances.scenery` — gerado em `data/appearances/generated/scenery.json`, nunca à mão — guarda
 só as `appearanceKey` que algum mapa importado realmente usa (não a tabela do Canary inteira, que
@@ -128,8 +143,18 @@ número de TILES com essa classificação, não de portas fisicamente distintas.
 
 ## Em aberto
 
-- `[ABERTO]` T2 (porta de chave/level/quest, baú com storage) precisa do motor de storage por
-  personagem, que `docs/product/quests.md` ainda não tem — ADR 0050 grupo 3.
+- ~~`[ABERTO]` T2: porta de level e porta de chave.~~ → **Resolvido (#732):** ver "Porta de level
+  e porta de chave" acima. Nenhum dos quatro mapas importados tem hoje uma `level-door` (zero
+  instâncias nos quatro recortes) nem um `locked-door` com `aid` (as 84 de Thais e as 2 de Rat
+  Cellars nasceram sem `ATTR_ACTION_ID` no OTBM — provavelmente portas de casa, cujo mecanismo
+  real do Tibia é posse de casa, não chave de catálogo) — o mecanismo está coberto por teste
+  sintético (ADR 0019), mas nenhum mapa real o exercita ainda. O importador (`scripts/scenery.ts`/
+  `scripts/import-map.ts`) também não foi estendido para preencher `requires.level`/
+  `requires.tool: 'key'`/`requires.keyId` automaticamente: regenerar os mapas exigiria o OTBM de
+  origem (`otservbr.otbm`, conferido pelo `sha256` do `source`), que não está neste checkout —
+  fica para quando um recorte novo com portas desse tipo for importado, ou como issue própria de
+  wiring do importador.
+- `[ABERTO]` Porta de quest e baú com `uid` (o resto do T2) — ADR 0050 grupo 3, #733.
 - `[ABERTO]` T3 (teleporte de fato, placa de pressão, livro com texto por página) — ADR 0050,
   escopo três camadas.
 - `[ABERTO]` Rope spot e ladder como passo de andar (o walker atravessando, `floorChange` por

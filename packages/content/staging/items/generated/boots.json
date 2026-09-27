@@ -66,6 +66,14 @@
       "level": 8,
       "vocationId": "monk"
     },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 1
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -332,6 +340,10 @@
     "bonuses": {
       "skills": [
         {
+          "skillId": "fist",
+          "amount": 2
+        },
+        {
           "skillId": "magic",
           "amount": 1
         }
@@ -521,6 +533,14 @@
         "percent": 2
       }
     },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
+    },
     "source": {
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
@@ -607,6 +627,14 @@
       "fire": {
         "percent": 4
       }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
     },
     "source": {
       "engine": "canary",
@@ -1064,7 +1092,15 @@
     "bonuses": {
       "skills": [
         {
-          "skillId": "melee",
+          "skillId": "club",
+          "amount": 1
+        },
+        {
+          "skillId": "sword",
+          "amount": 1
+        },
+        {
+          "skillId": "axe",
           "amount": 1
         }
       ],
@@ -1252,6 +1288,14 @@
       "physical": {
         "percent": 3
       }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 3
+        }
+      ]
     },
     "source": {
       "engine": "canary",
@@ -1501,6 +1545,14 @@
       "physical": {
         "percent": 3
       }
+    },
+    "bonuses": {
+      "skills": [
+        {
+          "skillId": "fist",
+          "amount": 2
+        }
+      ]
     },
     "source": {
       "engine": "canary",

@@ -42,11 +42,11 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2460)
+## Linhas de loot removidas (2467)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
-543 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
+550 item(ns) distinto(s) referenciado(s) e ausente(s) do catálogo real.
 
 | item | ocorrências | motivo (da primeira ocorrência) |
 |---|---|---|
@@ -159,6 +159,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | cyclops-trophy | 4 | item ausente do catálogo (packages/content/data/items) |
 | damaged-armor-plates | 2 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | dark-mushroom | 8 | item ausente do catálogo (packages/content/data/items) |
+| death-oyoroi | 1 | item ausente do catálogo (packages/content/data/items) |
 | death-toll | 9 | item ausente do catálogo (packages/content/data/items) |
 | deathstrikes-snippet | 1 | item ausente do catálogo (packages/content/data/items) |
 | decorative-ribbon | 1 | item ausente do catálogo (packages/content/data/items) |
@@ -187,6 +188,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | egg-of-the-many | 1 | item ausente do catálogo (packages/content/data/items) |
 | eggs-of-a-sacred-snake | 1 | item ausente do catálogo (packages/content/data/items) |
 | eldritch-crescent-moon-spade | 1 | item ausente do catálogo (packages/content/data/items) |
+| eldritch-monk-boots | 1 | item ausente do catálogo (packages/content/data/items) |
 | empty-goldfish-bowl | 1 | item ausente do catálogo (packages/content/data/items) |
 | energy-ball | 2 | max 4 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | energy-bar | 8 | item ausente do catálogo (packages/content/data/items) |
@@ -245,6 +247,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | glooth-steak | 2 | item ausente do catálogo (packages/content/data/items) |
 | glowing-rune | 8 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | gnomevils-hat | 1 | item ausente do catálogo (packages/content/data/items) |
+| gnomish-cuirass | 1 | item ausente do catálogo (packages/content/data/items) |
 | goat-grass | 5 | item ausente do catálogo (packages/content/data/items) |
 | goblet-of-gloom | 1 | item ausente do catálogo (packages/content/data/items) |
 | gold-ingot | 11 | max 4 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
@@ -297,10 +300,12 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | ivory-comb | 5 | item ausente do catálogo (packages/content/data/items) |
 | izcandars-snow-globe | 3 | item ausente do catálogo (packages/content/data/items) |
 | izcandars-sundial | 1 | item ausente do catálogo (packages/content/data/items) |
+| jade-legs | 1 | item ausente do catálogo (packages/content/data/items) |
 | jalapeno-pepper | 3 | item ausente do catálogo (packages/content/data/items) |
 | jewel-case | 1 | item ausente do catálogo (packages/content/data/items) |
 | jewelled-backpack | 2 | item ausente do catálogo (packages/content/data/items) |
 | jungle-moa-feather | 1 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
+| jungle-survivor-legs | 1 | item ausente do catálogo (packages/content/data/items) |
 | knowledgeable-book | 1 | item ausente do catálogo (packages/content/data/items) |
 | kongras-shoulderpad | 2 | item ausente do catálogo (packages/content/data/items) |
 | lamassu-horn | 1 | max 5 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
@@ -310,6 +315,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | leather-whip | 1 | item ausente do catálogo (packages/content/data/items) |
 | lethal-lissys-shirt | 1 | item ausente do catálogo (packages/content/data/items) |
 | letter | 2 | item ausente do catálogo (packages/content/data/items) |
+| light-bandana | 1 | item ausente do catálogo (packages/content/data/items) |
 | light-shovel | 1 | item ausente do catálogo (packages/content/data/items) |
 | liodile-fang | 1 | max 3 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | lion-trophy | 1 | item ausente do catálogo (packages/content/data/items) |
@@ -593,3 +599,4 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | yellow-gem | 6 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
 | yellow-piece-of-cloth | 5 | item ausente do catálogo (packages/content/data/items) |
 | yummy-gummy-worm | 1 | item ausente do catálogo (packages/content/data/items) |
+| zaoan-monk-robe | 1 | item ausente do catálogo (packages/content/data/items) |

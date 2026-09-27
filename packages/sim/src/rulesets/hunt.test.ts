@@ -12703,3 +12703,120 @@ describe('useOnMap, look e tileAppearanceChanges — o jogador usa e olha o cen�
     }]);
   });
 });
+
+describe('useOnMap — porta de level e porta de chave (T2, #732, ADR 0050 d.6)', () => {
+  // A porta de level exige `player:getLevel() >= item.actionid - 1000` (`level_door.lua` do
+  // Canary) — `aid: 1010` pede level 10. A porta de chave nasce TRANCADA e só abre com a chave
+  // cujo `use.keyId` bate com `requires.keyId` (`key_door.lua`: `item.actionid == target.actionid`).
+  const doorMap = {
+    ...map,
+    id: 'door-arena-732',
+    interactables: [
+      {
+        at: { x: 4, y: 2, z: 7 }, kind: 'level-door', initialState: 'closed', appearanceKey: 'level-door-1',
+        aid: 1010, requires: { level: 10 },
+      },
+      {
+        at: { x: 6, y: 2, z: 7 }, kind: 'locked-door', initialState: 'locked', appearanceKey: 'key-door-1',
+        aid: 42, requires: { tool: 'key', keyId: 42 },
+      },
+    ],
+  };
+  const doorRoute = { ...route, id: 'door-loop-732', mapId: 'door-arena-732' };
+  const doorHunt = { ...hunt, mapId: 'door-arena-732', routeId: 'door-loop-732' };
+  const testKey = {
+    id: 'test-key-732', name: 'Test Key', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'key' as const, keyId: 42 },
+  };
+  const wrongKey = {
+    id: 'test-wrong-key-732', name: 'Test Wrong Key', kind: 'other' as const, weight: 1, value: 0,
+    use: { tool: 'key' as const, keyId: 99 },
+  };
+  const loaded = () => content({
+    maps: [doorMap], routes: [doorRoute], hunts: [doorHunt], items: [...items, testKey, wrongKey],
+  });
+  const withKey = {
+    backpack: [{ instanceId: 'key-732', itemId: 'test-key-732', quantity: 1 }],
+    satchel: [], equipped: {},
+  };
+  const withWrongKey = {
+    backpack: [{ instanceId: 'wrong-key-732', itemId: 'test-wrong-key-732', quantity: 1 }],
+    satchel: [], equipped: {},
+  };
+
+  it('recusa level-too-low sem o level exigido, e não abre a porta', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 }; // adjacente à porta de level em (4,2,7)
+    expect(hero.level).toBe(1);
+    expect(ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'level-too-low' });
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'level-door')).toMatchObject({ state: 'closed' });
+  });
+
+  it('abre a porta de level com o level exigido (RF-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    hero.level = 10;
+    const result = ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(result).toEqual({
+      ok: true,
+      changes: [{
+        position: { x: 4, y: 2, z: 7 }, appearanceKey: 'level-door-1', fromState: 'closed', toState: 'open',
+      }],
+    });
+  });
+
+  it('abre a porta de level e o estado passa a `open` no overlay (RF-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded() });
+    hero.position = { x: 4, y: 1, z: 7 };
+    hero.level = 10;
+    ruleset.useOnMap(session, hero.id, { x: 4, y: 2, z: 7 });
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'level-door')).toMatchObject({ state: 'open' });
+  });
+
+  it('recusa missing-tool na porta de chave sem NENHUMA chave no catálogo carregado', () => {
+    // O catálogo desta hunt NÃO carrega `testKey` — o cenário da issue #732: sem item de chave
+    // nenhum importado ainda (a #754, paralela), a porta de chave nunca abre, com razão tipada.
+    const bareLoaded = content({ maps: [doorMap], routes: [doorRoute], hunts: [doorHunt] });
+    const { session, ruleset, hero } = start({ loaded: bareLoaded });
+    hero.position = { x: 6, y: 1, z: 7 }; // adjacente à porta de chave em (6,2,7)
+    expect(ruleset.useOnMap(session, hero.id, { x: 6, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'missing-tool' });
+    expect(ruleset.tileOverrides.find((o) => o.kind === 'locked-door')).toMatchObject({ state: 'locked' });
+  });
+
+  it('recusa missing-tool com uma chave ERRADA — o `keyId` não bate (key_door.lua: "The key does not match.")', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded(), inventory: withWrongKey });
+    hero.position = { x: 6, y: 1, z: 7 };
+    expect(ruleset.useOnMap(session, hero.id, { x: 6, y: 2, z: 7 }))
+      .toEqual({ ok: false, reason: 'missing-tool' });
+  });
+
+  it('abre a porta de chave DIRETO para `open` com a chave certa (RF-01)', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded(), inventory: withKey });
+    hero.position = { x: 6, y: 1, z: 7 };
+    const result = ruleset.useOnMap(session, hero.id, { x: 6, y: 2, z: 7 });
+    expect(result).toEqual({
+      ok: true,
+      changes: [{
+        position: { x: 6, y: 2, z: 7 }, appearanceKey: 'key-door-1', fromState: 'locked', toState: 'open',
+      }],
+    });
+  });
+
+  it('destrancada, a porta de chave alterna aberta/fechada sem precisar da chave de novo', () => {
+    const { session, ruleset, hero } = start({ loaded: loaded(), inventory: withKey });
+    hero.position = { x: 6, y: 1, z: 7 };
+    ruleset.useOnMap(session, hero.id, { x: 6, y: 2, z: 7 }); // locked → open, com a chave
+    // Já aberta: usar de novo SEM chave alterna para `closed` — nunca recusa por ferramenta,
+    // porque `toolRequiredNow` só exige a chave no estado `locked` (key_door.lua do Canary só
+    // confere `item.actionid` contra a porta trancada, nunca contra `closed`/`open`).
+    const closedResult = ruleset.useOnMap(session, hero.id, { x: 6, y: 2, z: 7 });
+    expect(closedResult).toEqual({
+      ok: true,
+      changes: [{
+        position: { x: 6, y: 2, z: 7 }, appearanceKey: 'key-door-1', fromState: 'open', toState: 'closed',
+      }],
+    });
+  });
+});

@@ -6424,10 +6424,6 @@
           "chance": 0.04
         },
         {
-          "itemId": "light-bandana",
-          "chance": 0.0095
-        },
-        {
           "itemId": "skull-belt",
           "chance": 0.0098
         }
