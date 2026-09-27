@@ -885,6 +885,34 @@ describe('a party (#188, ADR 0027; multiplicador de XP saiu do conteúdo no #525
   });
 });
 
+describe('a skill da fórmula de magia (#677)', () => {
+  const spell = (formula: Record<string, unknown>) => ({
+    id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000,
+    effect: { kind: 'damage', range: 3, formula: { skillMin: 1, skillMax: 2, ...formula } },
+  });
+
+  it('aceita `scaling: magic` e `vocation`, e o ausente continua ausente', () => {
+    const content = buildContent(base({ spells: [spell({ scaling: 'magic' })] }));
+    const effect = content.spells.get('strike')?.effect;
+    expect(effect?.kind === 'damage' && effect.formula?.scaling).toBe('magic');
+    const semCampo = buildContent(base({ spells: [spell({})] })).spells.get('strike')?.effect;
+    expect(semCampo?.kind === 'damage' && semCampo.formula !== undefined && 'scaling' in semCampo.formula)
+      .toBe(false);
+    expect(() => buildContent(base({ spells: [spell({ scaling: 'vocation', attackMin: 1 })] }))).not.toThrow();
+  });
+
+  it('recusa `scaling: magic` com termo de ataque de arma — LEVELMAGIC não recebe `attack`', () => {
+    for (const term of ['attackMin', 'attackMax', 'skillAttackMin', 'skillAttackMax']) {
+      expect(() => buildContent(base({ spells: [spell({ scaling: 'magic', [term]: 1 })] })), term)
+        .toThrow(/fórmula de magic level não tem termo de ataque de arma/);
+    }
+  });
+
+  it('recusa um valor de `scaling` fora do vocabulário', () => {
+    expect(() => buildContent(base({ spells: [spell({ scaling: 'distance' })] }))).toThrow(ContentError);
+  });
+});
+
 describe('cura e mana com alvo (§26, ADR 0035 d.10)', () => {
   const spell = (effect: Record<string, unknown>) =>
     ({ id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1000, effect });

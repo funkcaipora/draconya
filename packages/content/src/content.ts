@@ -602,6 +602,14 @@ export function buildContent(raw: RawContent): Content {
       if (fixed === scaled) {
         problems.push(`${where}: dano precisa de power OU basePower/formula, um dos dois`);
       }
+      const formula = effect.formula;
+      if (formula?.scaling === 'magic' && (
+        formula.attackMin !== undefined || formula.attackMax !== undefined
+        || formula.skillAttackMin !== undefined || formula.skillAttackMax !== undefined)) {
+        // LEVELMAGIC não recebe `attack` no Canary (#677): os dois juntos são uma transcrição
+        // que misturou o callback de magic level com o de skill da arma.
+        problems.push(`${where}: fórmula de magic level não tem termo de ataque de arma`);
+      }
       const selfOrigin = effect.area !== undefined
         && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
       if (selfOrigin && effect.range !== undefined) {
