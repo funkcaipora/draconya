@@ -254,18 +254,18 @@ Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspond
 | Velocidade do personagem | 220 no level 1, +2 por level, sem incremento por vocação — o TFS clássico (`PLAYER_BASE_SPEED` + 2×(level−1), `forgottenserver` `src/player.h`/`vocations.xml`, #527, ADR 0037 decisão 4); é a MESMA escala do passo (`ceil50(chão × 1000 / speed)`) e da velocidade de monstro, e por isso não segue o Canary (110 de base, +1/level — outra escala de cliente). Antes do #527 era 278 (observação do Huntera), provisório e sem fonte única com o resto do motor. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Regeneração de vida/mana — sem vocação (levels 1–7) | pulsos: 1 de vida a cada 12 000 ms / 2 de mana a cada 6 000 ms (a vocação `None` do Canary: `gainhpticks`/`gainhpamount`, `gainmanaticks`/`gainmanaamount` — #521, ADR 0037; em pulsos desde #678) | `packages/content/data/progression/baseline.json`, `regen.health` / `regen.mana` (`ticksMs`, `amount`) |
 | Regeneração de vida/mana — Knight / Paladin / Sorcerer / Druid | vida/mana, `amount` a cada `ticksMs`: Knight 1/6 000 e 2/6 000 · Paladin 1/8 000 e 2/4 000 · Sorcerer e Druid 1/12 000 e 2/3 000 (o `vocations.xml` do Canary, #521, #678) | `packages/content/data/vocations/*.json`, `regen` |
-| Multiplicador de skill/ML por vocação — Knight | melee 1,1 / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
-| Multiplicador de skill/ML por vocação — Paladin | melee 1,2 / distância 1,1 / escudo 1,1 / magia 1,4 | `packages/content/data/vocations/paladin.json`, `skillMultipliers` |
-| Multiplicador de skill/ML por vocação — Sorcerer | melee 2,0 / distância 2,0 / escudo 1,5 / magia 1,1 | `packages/content/data/vocations/sorcerer.json`, `skillMultipliers` |
-| Multiplicador de skill/ML por vocação — Druid | melee 1,8 / distância 1,8 / escudo 1,5 / magia 1,1 (só a Druid difere da Sorcerer aqui — a XML do Canary não trata as duas como idênticas) | `packages/content/data/vocations/druid.json`, `skillMultipliers` |
-| Multiplicador de skill/ML sem vocação (levels 1–7) | melee 2,0 / distância 2,0 / escudo 1,5 / magia 4,0 (a vocação `None`) | `packages/content/data/progression/baseline.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Knight | fist/club/sword/axe 1,1 (uniforme) / distância 1,4 / escudo 1,1 / magia 3,0 (`<skill id multiplier>` e `manamultiplier` do Canary, #521/#567, ADR 0037) | `packages/content/data/vocations/knight.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Paladin | fist/club/sword/axe 1,2 (uniforme) / distância 1,1 / escudo 1,1 / magia 1,4 | `packages/content/data/vocations/paladin.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Sorcerer | fist 1,5 / club/sword/axe 2,0 / distância 2,0 / escudo 1,5 / magia 1,1 | `packages/content/data/vocations/sorcerer.json`, `skillMultipliers` |
+| Multiplicador de skill/ML por vocação — Druid | fist 1,5 / club/sword/axe 1,8 / distância 1,8 / escudo 1,5 / magia 1,1 (só a Druid difere da Sorcerer aqui — a XML do Canary não trata as duas como idênticas) | `packages/content/data/vocations/druid.json`, `skillMultipliers` |
+| Multiplicador de skill/ML sem vocação (levels 1–7) | fist 1,5 / club/sword/axe 2,0 / distância 2,0 / escudo 1,5 / magia 4,0 (a vocação `None`) | `packages/content/data/progression/baseline.json`, `skillMultipliers` |
 | Penalidade de morte — fração fixa (< level 24) | 10 % da XP ACUMULADA (não mais de `xpToCompleteLevel`) — o Tibia, #521, ADR 0037 | `packages/content/data/progression/baseline.json`, `deathPenalty.flatFraction` |
 | Penalidade de morte — limiar da fórmula cúbica | level 24 (o Tibia) | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
 | Penalidade de morte — redução de quem está abençoado (`premium`) | 56 % (sete bênçãos × 8 % do Tibia — mapeia o `premium` que o repo já tinha) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
 | Penalidade de morte — piso de level | 8 — **sem equivalente no Tibia** (decisão de produto do Draconya, ver "Divergências do PRD") | `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor` |
 | Rates do servidor (XP, skill, magia, loot, stages, monstro, boss) | todos 1, stages desligados — o Tibia com rate 1 (#691; ver "Rates do servidor") | `packages/content/data/progression/baseline.json`, `rates` (ausente = neutro) |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
-| Corpo a Corpo — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do club/sword/axe no Canary, #521, ADR 0037; `factor` por vocação, ver acima) | `packages/content/data/skills/melee.json` |
+| Fist/Club/Sword/Axe — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do Canary para os quatro tipos, #521/#567, ADR 0037; `factor` por vocação, ver acima — separadas da antiga skill única `melee` no #567) | `packages/content/data/skills/{fist,club,sword,axe}.json` |
 | Magia (ML) — início, curva (base), dano por nível | 0 / 1600 / +3% `[ABERTO — dano por nível provisório]` (base = `getReqMana` do Canary — o custo do ML1 é sempre a base cheia, o expoente zera; `factor` = `manamultiplier`, por vocação, ver acima; #521, ADR 0037) | `packages/content/data/skills/magic.json` |
 | Escudo — início, curva (base), defesa por nível | 10 / 100 / +2% `[ABERTO — defesa por nível provisória]` (base = `skillBase` do escudo no Canary, #521, ADR 0037; `factor` por vocação, ver acima) (CMB-04) | `packages/content/data/skills/shielding.json` |
 | Cura — mana, cooldown, quanto cura | 20 / 1 000 ms / 60 `[ABERTO — valor provisório]` | `packages/content/data/spells/heal.json` |
@@ -279,9 +279,13 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
 ## Em aberto
 
 - ~~[ABERTO] HP/Mana por level do Druida (§9.3)~~ → **Resolvido:** +5 / +30 / +10, o do Tibia (ADR 0026, decisão 5), em `packages/content/data/vocations/druid.json`.
-- Skills separadas por tipo de arma (sword/axe/club), como no Tibia: a taxonomia de **família**
-  existe desde o CMB-05, mas as três corpo a corpo ainda compartilham a skill `melee` — separá-las
-  é rebalanceamento, não motor (ADR 0026, decisão 4).
+- ~~Skills separadas por tipo de arma (sword/axe/club), como no Tibia~~ → **Resolvido pelo #567:**
+  `fist`/`club`/`sword`/`axe` são quatro skills agora, cada uma com o `skillMultipliers` por
+  vocação do `<skill id multiplier>` do Canary — a taxonomia de **família** já existia desde o
+  CMB-05, e faltava só a skill acompanhar. O Knight (`vocation.spellSkill`) deixa de apontar uma
+  skill fixa: `SPELL_SKILL_WEAPON` ("weapon") é a sentinela que o `sim` resolve pela FAMÍLIA da
+  arma equipada, para Berserk/Groundshaker/Front Sweep/Fierce Berserk/Whirlwind Throw escalarem
+  certo trocando de arma. Migração do dado persistido e do painel do cliente ficam para a #568.
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
   PRD: o §9.3 define só o incremento **por vocação**. Desde a #521 (ADR 0037) esses números SÃO
   o Tibia (`gainhp`/`gainmana`/`gaincap` da vocação `None`, verificados no Canary
@@ -352,7 +356,7 @@ todos **conteúdo**, em `packages/content/data/skills/`.
 
 | Skill | Alimentada por | Contribuição |
 |---|---|---|
-| Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
+| Fist / Club / Sword / Axe | cada golpe que sai, na skill da FAMÍLIA da arma usada (#567: espada treina `sword`, não `axe`) | multiplica o poder do golpe |
 | Distância | cada tiro de arma de distância (#152) | multiplica o poder do tiro |
 | Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
 | Escudo | cada ataque físico elegível recebido (CMB-04); no `combat-v3`, só o bloqueado com escudo (#686) | multiplica a defesa do escudo ou da arma de uma mão |
@@ -381,7 +385,7 @@ quente, omitidos quando iniciais):
 
 | Skill | Tries por golpe no `combat-v3` |
 |---|---|
-| Corpo a Corpo (e punho) | 1 se o golpe treina e não foi imune, senão 0 |
+| Fist/Club/Sword/Axe (e punho) | 1 se o golpe treina e não foi imune, senão 0 — na skill DA FAMÍLIA usada (#567) |
 | Distância | 2 no tiro limpo, 1 no bloqueado, 0 no imune ou sem sangue; o tiro **errado** usa o estado do tiro anterior |
 | Escudo | 1 quando o golpe RECEBIDO foi bloqueado (`defense`/`armor`) com carga de `blockCount`, `shieldBlockCount > 0` e **escudo** na mão — arma de uma mão não treina; o contador cai mesmo sem escudo |
 
@@ -403,11 +407,12 @@ multiplier="…">` do Canary `vocations.xml`), caindo no `skillMultipliers` da t
 vocação `None`) para quem ainda não escolheu, e só no `curve.factor` do próprio conteúdo quando
 nem vocação nem tabela base declaram um valor — o caminho do conteúdo de teste antigo.
 
-É por isso que um Knight sobe corpo a corpo rápido (multiplicador 1,1) e magia devagar (3,0),
-e um Sorcerer o oposto (2,0 / 1,1) — a MESMA curva de conteúdo (`base`, `startingLevel`), um
-fator diferente por quem está jogando. A mesma tabela cobre magic level: no Canary, ML é só mais
-uma entrada de `vocations.xml` (`manamultiplier`), então não tem mecanismo próprio — é
-`skillMultipliers.magic`, como qualquer outra skill.
+É por isso que um Knight sobe corpo a corpo rápido (multiplicador 1,1, uniforme nos quatro tipos
+desde o #567) e magia devagar (3,0), e um Sorcerer o oposto (fist 1,5 / club-sword-axe 2,0 / magia
+1,1) — a MESMA curva de conteúdo (`base`, `startingLevel`), um fator diferente por quem está
+jogando. A mesma tabela cobre magic level: no Canary, ML é só mais uma entrada de `vocations.xml`
+(`manamultiplier`), então não tem mecanismo próprio — é `skillMultipliers.magic`, como qualquer
+outra skill.
 
 `character.skills.gain`/`progressOf` recebem o `factor` já resolvido: quem chama (o ruleset, ou
 `playerStatsOf` no `host`) é quem sabe a vocação do personagem — `Skills` continua sem conhecer
@@ -420,8 +425,11 @@ dado em `packages/content/data/weapon-families/` e aponta para uma skill e para 
 famílias são `fist` (desarmado), `sword`, `axe`, `club`, `distance`, `wand` e `rod`; o item de
 arma declara a sua, e `buildContent` recusa família incoerente com o `kind` ou que não exista.
 
-- `sword`/`axe`/`club`/`fist` apontam para a skill `melee` — **as três ainda compartilham uma
-  skill só** (a separação por tipo de arma é trabalho de balanceamento, não de motor).
+- `sword`/`axe`/`club`/`fist` apontam cada um para a SUA própria skill (`sword`/`axe`/`club`/
+  `fist`, #567) — antes disso as quatro compartilhavam `melee`; a espada não treinava mais
+  machado por acidente porque `#practice` (`sim`) já cita a skill pela FAMÍLIA, e não por um
+  gatilho compartilhado (`#gainSkill`, não `#gainSkills`, é quem credita o uso — a distinção
+  importa porque `fist`/`club`/`sword`/`axe` continuam com o MESMO `gain.on: 'melee-hit'`).
 - `distance` aponta para a skill `distance`; o `base` da fórmula é o `attack` da **munição**.
 - `wand`/`rod` apontam para a skill `magic` e **não** têm fórmula: usam a faixa fixa e o
   `manaPerHit` da arma, e praticam por **mana gasta**. Elas não recebem multiplicador de weapon

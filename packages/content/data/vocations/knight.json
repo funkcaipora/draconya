@@ -6,7 +6,7 @@
   "capacityPerLevel": 25,
   "meleeDamageMultiplier": 1,
   "distDamageMultiplier": 1,
-  "spellSkill": "melee",
+  "spellSkill": "weapon",
   "startingKit": [
     {
       "itemId": "steel-axe",
@@ -22,7 +22,10 @@
     "mana": { "ticksMs": 6000, "amount": 2 }
   },
   "skillMultipliers": {
-    "melee": 1.1,
+    "fist": 1.1,
+    "club": 1.1,
+    "sword": 1.1,
+    "axe": 1.1,
     "distance": 1.4,
     "shielding": 1.1,
     "magic": 3.0

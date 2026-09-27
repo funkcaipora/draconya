@@ -271,7 +271,8 @@ describe('loadContent', () => {
     const content = loadContent(DATA);
     const weapon = (id: string) => content.items.get(id)?.weapon;
     // A família é DADO (CMB-05): a arma declara a sua, e a fórmula traz a contribuição da skill
-    // apontada (`damagePerLevel` 0,02 da `melee`/`distance`, a partir do nível 10).
+    // apontada (`damagePerLevel` 0,02 de `fist`/`club`/`sword`/`axe`/`distance`, a partir do
+    // nível 10 — as quatro corpo a corpo eram uma skill só, `melee`, até o #567).
     const scaled = (base: number, skillFactor = 0.02, skillStartingLevel = 10) =>
       ({ base, levelFactor: 0, skillFactor, skillStartingLevel, spread: 0 });
     expect(weapon('machete')).toEqual({
@@ -859,10 +860,52 @@ describe('the vocation spell catalogues (#156–#159)', () => {
   });
 
   it('the Knight scales spells by the weapon skill and the Paladin by distance; the mages by magic', () => {
-    expect(content.vocations.get('knight')?.spellSkill).toBe('melee');
+    // #567: `melee` virou quatro skills (fist/club/sword/axe), e o Knight não tem mais uma
+    // fixa — `SPELL_SKILL_WEAPON` ("weapon") é a sentinela que o `sim` resolve pela arma na mão.
+    expect(content.vocations.get('knight')?.spellSkill).toBe('weapon');
     expect(content.vocations.get('paladin')?.spellSkill).toBe('distance');
     expect(content.vocations.get('sorcerer')?.spellSkill).toBe('magic');
     expect(content.vocations.get('druid')?.spellSkill).toBe('magic');
+  });
+
+  it('a skill corpo a corpo virou quatro, uma por tipo de arma (#567)', () => {
+    // Base 50 e startingLevel 10 são a `skillBase` do Canary para os quatro tipos (fist/club/
+    // sword/axe); só o fallback SEM vocação difere — fist é 1.5, os outros três são 2.0 (o
+    // `<skill id multiplier>` da vocação `None` do Canary `vocations.xml`).
+    for (const id of ['fist', 'club', 'sword', 'axe']) {
+      const skill = content.skills.get(id);
+      expect(skill?.startingLevel, id).toBe(10);
+      expect(skill?.curve.base, id).toBe(50);
+      expect(skill?.gain).toEqual({ on: 'melee-hit', points: 1 });
+    }
+    expect(content.skills.get('fist')?.curve.factor).toBe(1.5);
+    expect(content.skills.get('club')?.curve.factor).toBe(2.0);
+    expect(content.skills.get('sword')?.curve.factor).toBe(2.0);
+    expect(content.skills.get('axe')?.curve.factor).toBe(2.0);
+    expect(content.skills.has('melee')).toBe(false);
+    // Cada família de arma treina a SUA skill, não mais uma `melee` compartilhada.
+    expect(content.weaponFamilies.get('fist')?.skillId).toBe('fist');
+    expect(content.weaponFamilies.get('sword')?.skillId).toBe('sword');
+    expect(content.weaponFamilies.get('axe')?.skillId).toBe('axe');
+    expect(content.weaponFamilies.get('club')?.skillId).toBe('club');
+    // O multiplicador por vocação (Canary `vocations.xml`, verificado em `main` 2026-09-26):
+    // Knight uniforme (1.1); Sorcerer/Druid/None distinguem fist (1.5) do resto (2.0/1.8);
+    // Paladin uniforme (1.2).
+    expect(content.vocations.get('knight')?.skillMultipliers).toMatchObject({
+      fist: 1.1, club: 1.1, sword: 1.1, axe: 1.1,
+    });
+    expect(content.vocations.get('sorcerer')?.skillMultipliers).toMatchObject({
+      fist: 1.5, club: 2.0, sword: 2.0, axe: 2.0,
+    });
+    expect(content.vocations.get('druid')?.skillMultipliers).toMatchObject({
+      fist: 1.5, club: 1.8, sword: 1.8, axe: 1.8,
+    });
+    expect(content.vocations.get('paladin')?.skillMultipliers).toMatchObject({
+      fist: 1.2, club: 1.2, sword: 1.2, axe: 1.2,
+    });
+    expect(content.progression.skillMultipliers).toMatchObject({
+      fist: 1.5, club: 2.0, sword: 2.0, axe: 2.0,
+    });
   });
 });
 

@@ -489,7 +489,9 @@ não mais a exceção. O que o motor ganhou:
   `CALLBACK_PARAM_LEVELMAGICVALUE` (o MAGIC LEVEL, com o bônus de item `magic`, em qualquer
   vocação: as 37 magias LEVELMAGIC do catálogo, inclusive Divine Caldera e Divine Missile do
   Paladin); ausente (= `vocation`) é a skill da vocação (`vocation.spellSkill`: `magic`,
-  `distance` no Paladin, `melee` no Knight), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
+  `distance` no Paladin, e `SPELL_SKILL_WEAPON` ("weapon") no Knight desde o #567 — a skill da
+  FAMÍLIA da arma equipada agora, resolvida em tempo de execução porque `melee` virou quatro
+  skills e não há mais uma fixa só dele), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
   Knight e as Ethereal Spear). `scaling: 'magic'` com termo de ataque de arma é recusado no boot.
   Na magia e na runa de CURA é sempre o MAGIC LEVEL (#475). Onde o termo é o MAGIC LEVEL (cura,
   `scaling: 'magic'` e a runa com `formula`), ele ganha o **ML especializado** do elemento do
