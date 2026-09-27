@@ -27,7 +27,7 @@ import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitL
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, TakeLootRefusal, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -221,6 +221,14 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
 const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
   'level-too-low': 'Você ainda não tem o level dessa munição.',
+};
+
+/** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
+const CORPSE_REFUSAL: Readonly<Record<TakeLootRefusal, string>> = {
+  'not-found': 'Esse cadáver já não está mais lá.',
+  'not-yours': 'Isto não é seu.',
+  'too-far-away': 'Você está longe demais.',
+  'not-enough-capacity': INVENTORY_REFUSAL['over-capacity'],
 };
 
 /**
@@ -1451,6 +1459,16 @@ export class SessionHost {
         // pode propor e se todos já aprovaram é o `sim`, dentro da sessão dona (invariante 9).
         this.#partyEndVote(viewer, message);
         return;
+      case 'open-corpse':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL item do chão; dono, elegibilidade e
+        // distância são conferidos no `sim` (#722, ADR 0048 d.4).
+        this.#requestOpenCorpse(viewer, message.groundItemId);
+        return;
+      case 'take-loot':
+        // INTENÇÃO (invariante 4): `instanceId: null` é o clique (filtro do personagem); um id
+        // é arrastar ESTE item, ignorando o filtro. Dono, distância e capacidade são do `sim`.
+        this.#requestTakeLoot(viewer, message.groundItemId, message.instanceId);
+        return;
       case 'say':
         // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
         // texto de jogador dentro do motor puro só criaria estado para snapshotar sem
@@ -1675,6 +1693,58 @@ export class SessionHost {
     }
     ruleset.setAttackTarget(character, monster);
     this.#sendTargetChanged(hosted, viewer.characterId, creatureId, seq);
+  }
+
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4). Processado NA CHEGADA, como equipar: dono,
+   * elegibilidade e distância são conferidos no `sim` (`openCorpse`), dentro da sessão dona
+   * (invariante 9). Sucesso é `corpse-contents`; recusa é `system-message` (FUN-73).
+   */
+  #requestOpenCorpse(viewer: Viewer, groundItemId: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.openCorpse === undefined) return;
+    const result = ruleset.openCorpse(hosted.session, viewer.characterId, groundItemId);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CORPSE_REFUSAL[result.reason] });
+      return;
+    }
+    viewer.send({
+      type: 'corpse-contents', groundItemId,
+      gold: result.corpse.gold ?? 0,
+      items: (result.corpse.items ?? []).map((item) => ({ ...item })),
+    });
+  }
+
+  /**
+   * Pegar do cadáver o que sobrou do Quick Loot automático do abate (#722, ADR 0048 d.4).
+   * `instanceId: null` reaplica o filtro do PRÓPRIO personagem; um id arrasta ESTE item,
+   * ignorando o filtro. Sucesso reenvia `corpse-contents` (o que sobrou) e `inventory` (o que
+   * entrou); recusa é `system-message`, como o resto do inventário.
+   */
+  #requestTakeLoot(viewer: Viewer, groundItemId: number, instanceId: string | null): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.takeLoot === undefined) return;
+    const result = ruleset.takeLoot(hosted.session, viewer.characterId, groundItemId, instanceId);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CORPSE_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(viewer.characterId);
+    this.#sendInventory(viewer.characterId);
+    // O cadáver pode ter deixado de existir (decaiu no MESMO instante — improvável, mas
+    // `#corpseById` já teria recusado `not-found` antes; aqui ele sobrevive à coleta) — a
+    // leitura é feita de novo, pelo mesmo `Partial<HuntRuleset>` do início do método.
+    const corpse = ruleset.groundItems?.find((item) => item.id === groundItemId);
+    if (corpse === undefined) return;
+    viewer.send({
+      type: 'corpse-contents', groundItemId,
+      gold: corpse.gold ?? 0,
+      items: (corpse.items ?? []).map((item) => ({ ...item })),
+    });
   }
 
   /**
@@ -2299,7 +2369,18 @@ export class SessionHost {
     if (event.kind === 'ground-item-appeared') {
       const appearanceId = this.#options.monsterCatalog?.get(event.monsterId)?.corpseAppearanceId;
       if (appearanceId === undefined) return;
-      const appeared: S2CMessage = { type: 'ground-item-appear', id: event.itemId, position: event.position, appearanceId };
+      // O destaque de loot (#722, ADR 0048 d.4): lido AGORA, depois que o Quick Loot automático
+      // do abate já rodou (`#collectFromCorpse` corre ANTES deste evento, no mesmo instante da
+      // morte) — é o que sobrou de fato, não uma previsão.
+      const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+      const corpse = ruleset.groundItems?.find((item) => item.id === event.itemId);
+      const lootable = corpse === undefined
+        ? undefined
+        : (corpse.items?.length ?? 0) > 0 || (corpse.gold ?? 0) > 0;
+      const appeared: S2CMessage = {
+        type: 'ground-item-appear', id: event.itemId, position: event.position, appearanceId,
+        ...(lootable === undefined ? {} : { lootable }),
+      };
       for (const viewer of hosted.viewers) viewer.send(appeared);
       return;
     }
@@ -3769,7 +3850,10 @@ export class SessionHost {
         // Os cadáveres no chão (FUN-123), com a arte da tabela; sem linha, sem cadáver.
         groundItems: (ruleset.groundItems ?? []).flatMap((corpse) => {
           const appearanceId = this.#options.monsterCatalog?.get(corpse.monsterId)?.corpseAppearanceId;
-          return appearanceId === undefined ? [] : [{ id: corpse.id, position: corpse.position, appearanceId }];
+          if (appearanceId === undefined) return [];
+          // O destaque de loot (#722): quem reanexa precisa ver quais cadáveres ainda têm algo.
+          const lootable = (corpse.items?.length ?? 0) > 0 || (corpse.gold ?? 0) > 0;
+          return [{ id: corpse.id, position: corpse.position, appearanceId, lootable }];
         }),
       },
       // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.

@@ -329,7 +329,7 @@ de Quick Loot** dele aceita e cabe pela capacidade:
    do filtro — vira gold na hora, sem passar pela mochila;
 3. **fica no cadáver**, quando o filtro recusa OU não cabe — as duas são "não coletado". É a
    segunda chance: enquanto o cadáver não decai (o mesmo prazo `corpseTtlMs` da hunt, sem fila
-   separada), quem está olhando pode abrir e pegar o resto (janela do cadáver, W3/#722).
+   separada), quem está olhando pode abrir e pegar o resto (janela do cadáver, W3/#722, abaixo).
 
 O que ninguém pegou **apodrece com o cadáver** — nunca vira `item_instance` no banco, pela mesma
 razão que a Caixa de Loot nunca foi: expirar precisa significar que o item nunca existiu. A Caixa
@@ -339,6 +339,24 @@ resgatava ou mostrava foi retirado, e o caso que ela cobria (item que não coube
 
 Com **stamina zero não cai nada** (§10.2) — nem gold, nem XP, nem item. O abate continua
 contando: o jogador matou, e o extrato mentiria se dissesse que não.
+
+### A janela do cadáver e a aba Loot da barra (W3, #722, ADR 0048 d.4)
+
+Quem está olhando pode abrir o cadáver e pegar o que o Quick Loot automático deixou para trás.
+Clicar no cadáver no mundo manda `walk-to` (o personagem se aproxima) e `open-corpse` — o
+servidor confere dono/elegibilidade (a party inteira, quando presente no abate) e distância (≤ 1
+tile, mesmo andar); a recusa é `system-message` em palavras ("Você está longe demais.", "Isto
+não é seu."). Sucesso abre a janela (`corpse-contents`: ouro e itens restantes), reaproveitando o
+mesmo desenho da mochila — sem arrastar: o clique num item pega ELE, ignorando o filtro (a
+segunda chance manual); "Pegar tudo" reaplica o MESMO filtro de Quick Loot do personagem, como o
+clique do Tibia. A janela fecha sozinha quando o cadáver decai, e não persiste entre sessões —
+reanexar não a reabre.
+
+O filtro em si (`accept`/`skip`, a lista de itens e a autovenda) é editado na aba **Loot** do
+painel de Automações da barra de ações: um seletor para o modo e uma linha por item do catálogo,
+com um checkbox para entrar na lista e outro (só em itens vendáveis, `value > 0`) para a
+autovenda individual. É a MESMA configuração (`botConfig.loot`) que `#collectFromCorpse` já lê
+no abate (#721) — a aba não inventa um segundo lugar para o filtro morar.
 
 Mochila cheia vira **uma** linha no extrato (`backpack-full`), não uma por item. Uma por item
 encheria a lista curta da tela de retorno até ela deixar de ser lista, e o que o jogador precisa

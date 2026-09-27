@@ -4266,7 +4266,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
    * durante o teste, sem lutar contra o motor.
    */
   const comDrop = (over: {
-    capacity?: number; staminaMs?: number; catalog?: boolean;
+    capacity?: number; staminaMs?: number; catalog?: boolean; loot?: BotConfigV2['loot'];
   } = {}) => {
     const loaded = buildContent(raw({
       monsters: [ratWithDrop],
@@ -4283,6 +4283,9 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
       // espada existia quando a hunt abriu e não existe mais.
       content: over.catalog === false ? { ...loaded, items: new Map() } : loaded,
       id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      // O filtro de Quick Loot (#722, ADR 0048 d.4) — só quando o teste pede um diferente do
+      // default (`skip` + vazio, pega tudo).
+      ...(over.loot === undefined ? {} : { botConfigs: { hero: botConfigV2([], { loot: over.loot }) } }),
     });
     const stats = statsForLevel(1, null, loaded.progression);
     const hero = new CharacterRuntime({
@@ -4417,6 +4420,92 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.mochila.length).toBeGreaterThan(0);
+  });
+
+  describe('abrir o cadáver e pegar o que sobrou (#722, ADR 0048 decisão 4)', () => {
+    it('openCorpse devolve o que sobrou, para quem é dono e está perto', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0);
+      expect(corpse).toBeDefined();
+      // A rota anda o herói para longe de onde o rato morreu — aproxima para o teste falar só
+      // da elegibilidade, não da distância (que já tem teste próprio, abaixo).
+      hero.position = { ...corpse!.position };
+
+      const result = ruleset.openCorpse(session, hero.id, corpse!.id);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.corpse.id).toBe(corpse!.id);
+        expect(result.corpse.items?.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('openCorpse recusa not-found para um id que não existe (já apodreceu)', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const result = ruleset.openCorpse(session, hero.id, 999_999);
+      expect(result).toEqual({ ok: false, reason: 'not-found' });
+    });
+
+    it('openCorpse recusa not-yours para quem não é dono nem elegível', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const result = ruleset.openCorpse(session, 'someone-else', corpse.id);
+      expect(result).toEqual({ ok: false, reason: 'not-yours' });
+    });
+
+    it('openCorpse recusa too-far-away quando o personagem está longe', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      hero.position = { x: hero.position.x + 10, y: hero.position.y, z: hero.position.z };
+      const result = ruleset.openCorpse(session, hero.id, corpse.id);
+      expect(result).toEqual({ ok: false, reason: 'too-far-away' });
+    });
+
+    it('takeLoot(null) reaplica o filtro do personagem ao que sobrou no cadáver', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const antes = [...hero.inventory.items()].length;
+      // Abre capacidade para o item que sobrou entrar desta vez, e aproxima do cadáver.
+      hero.capacity = 10_000;
+      hero.position = { ...corpse.position };
+
+      const result = ruleset.takeLoot(session, hero.id, corpse.id, null);
+      expect(result).toEqual({ ok: true });
+      expect([...hero.inventory.items()].length).toBeGreaterThan(antes);
+      expect(corpse.items ?? []).toEqual([]);
+    });
+
+    it('takeLoot(instanceId) ignora o filtro e move só aquele item', () => {
+      const { session, hero, ruleset } = comDrop({
+        capacity: 50, loot: { filter: 'skip', itemIds: ['sword'], autoSell: [] },
+      });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const leftover = corpse.items![0]!;
+      hero.capacity = 10_000;
+      hero.position = { ...corpse.position };
+
+      const result = ruleset.takeLoot(session, hero.id, corpse.id, leftover.instanceId);
+      expect(result).toEqual({ ok: true });
+      expect([...hero.inventory.items()].some((i) => i.instanceId === leftover.instanceId)).toBe(true);
+      expect(corpse.items ?? []).not.toContainEqual(leftover);
+    });
+
+    it('takeLoot recusa not-enough-capacity sem mutar o cadáver', () => {
+      const { session, hero, ruleset } = comDrop({ capacity: 50 });
+      run(session, 60_000, 100);
+      const corpse = ruleset.groundItems.find((c) => (c.items?.length ?? 0) > 0)!;
+      const before = [...(corpse.items ?? [])];
+      hero.position = { ...corpse.position };
+
+      const result = ruleset.takeLoot(session, hero.id, corpse.id, before[0]!.instanceId);
+      expect(result).toEqual({ ok: false, reason: 'not-enough-capacity' });
+      expect(corpse.items ?? []).toEqual(before);
+    });
   });
 });
 

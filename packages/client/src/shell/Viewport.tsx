@@ -90,7 +90,17 @@ export function Viewport() {
     // O canvas é filho do Pixi; o overlay de status é irmão React. Só o clique no canvas escolhe.
     if (!(event.target instanceof HTMLCanvasElement)) return;
     const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
-    if (id === null || id === world.selfId) return;
+    if (id === null || id === world.selfId) {
+      // Sem criatura no ponto: um cadáver (#722, ADR 0048 d.4)? O clique manda `walk-to` (o
+      // personagem se aproxima) e `open-corpse` juntos — o servidor recusa `too-far-away` sem
+      // efeito colateral quando a chegada ainda não aconteceu, e o jogador clica de novo
+      // (DT-01 da spec da issue: coreografar a espera da chegada fica fora deste corte).
+      const groundItem = handleRef.current?.groundItemAt(event.clientX, event.clientY) ?? null;
+      if (groundItem === null) return;
+      sendIntent({ type: 'walk-to', destination: groundItem.position });
+      sendIntent({ type: 'open-corpse', groundItemId: groundItem.id });
+      return;
+    }
     // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O rastreador antecipa
     // a moldura no mesmo quadro e decide o toggle quando o clique é no alvo atual (#471).
     targetTracker.selectTarget(id, sendIntent);
