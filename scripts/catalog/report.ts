@@ -26,6 +26,8 @@ export interface CatalogReport {
   /** Fatia (nome do arquivo em `generated/`) → quantas entidades ela tem. */
   readonly slices: ReadonlyMap<string, number>;
   readonly skipped: readonly SkippedEntity[];
+  /** Observações do leitor fora da tabela de pulados (`CatalogImportResult.notes`). */
+  readonly notes?: readonly string[];
 }
 
 function heading(report: CatalogReport): string {
@@ -74,8 +76,13 @@ function skippedSection(report: CatalogReport): string {
   return lines.join('\n');
 }
 
+function notesSection(report: CatalogReport): string {
+  if (report.notes === undefined || report.notes.length === 0) return '';
+  return ['', '## Notas', '', ...report.notes.map((note) => `- ${note}`), ''].join('\n');
+}
+
 export function formatReport(report: CatalogReport): string {
-  return `${heading(report)}\n${skippedSection(report)}`;
+  return `${heading(report)}\n${notesSection(report)}${skippedSection(report)}`;
 }
 
 export function writeReport(path: string, report: CatalogReport): void {

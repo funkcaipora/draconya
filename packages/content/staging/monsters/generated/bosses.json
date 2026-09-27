@@ -1,0 +1,367 @@
+[
+  {
+    "id": "elvira-hammerthrust",
+    "name": "Elvira Hammerthrust",
+    "health": 245,
+    "experience": 165,
+    "attack": {
+      "min": 0,
+      "max": 140
+    },
+    "armor": 15,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.2,
+        "fire": -0.05,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.02,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 206,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 100,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "bag-with-stolen-gold",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 20,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/elvira_hammerthrust.lua"
+    },
+    "outfitId": 70
+  },
+  {
+    "id": "fleshslicer",
+    "name": "Fleshslicer",
+    "health": 5700,
+    "experience": 5500,
+    "attack": {
+      "min": 0,
+      "max": 99
+    },
+    "armor": 12,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 560,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.5
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/fleshslicer.lua"
+    },
+    "outfitId": 457
+  },
+  {
+    "id": "jesse-the-wicked",
+    "name": "Jesse the Wicked",
+    "health": 280,
+    "experience": 180,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 9900
+      },
+      "items": [
+        {
+          "itemId": "bag-with-stolen-gold",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/jesse_the_wicked.lua"
+    },
+    "outfitId": 134
+  },
+  {
+    "id": "robby-the-reckless",
+    "name": "Robby the Reckless",
+    "health": 155,
+    "experience": 110,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 8500
+      },
+      "items": [
+        {
+          "itemId": "bag-with-stolen-gold",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/robby_the_reckless.lua"
+    },
+    "outfitId": 129
+  },
+  {
+    "id": "teleskor",
+    "name": "Teleskor",
+    "health": 80,
+    "experience": 70,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.81,
+        "min": 1,
+        "max": 79
+      },
+      "items": [
+        {
+          "itemId": "pelvis-bone",
+          "chance": 1
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.72
+        },
+        {
+          "itemId": "viking-helmet",
+          "chance": 0.72
+        },
+        {
+          "itemId": "brass-shield",
+          "chance": 0.45
+        },
+        {
+          "itemId": "torch",
+          "chance": 0.36
+        },
+        {
+          "itemId": "hatchet",
+          "chance": 0.27
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.27
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/teleskor.lua"
+    },
+    "outfitId": 298
+  },
+  {
+    "id": "the-frog-prince",
+    "name": "The Frog Prince",
+    "health": 55,
+    "experience": 1,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 3,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.98,
+        "energy": 0.9,
+        "earth": 0.8,
+        "fire": 0.9,
+        "ice": 0.9
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_frog_prince.lua"
+    },
+    "outfitId": 224
+  }
+]

@@ -1,0 +1,1083 @@
+[
+  {
+    "id": "abyssal-calamary",
+    "name": "Abyssal Calamary",
+    "class": "aquatic",
+    "health": 300,
+    "experience": 200,
+    "attack": 0,
+    "armor": 12,
+    "defense": 13,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "shrimp",
+          "chance": 0.0968
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.1077
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.015
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0083
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0025,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.005,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.0075,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 89,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/abyssal_calamary.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 1105,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 451
+  },
+  {
+    "id": "blood-crab",
+    "name": "Blood Crab",
+    "class": "aquatic",
+    "health": 290,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 28,
+    "defense": 28,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "fire": -0.1
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8575,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.143
+        },
+        {
+          "itemId": "bloody-pincers",
+          "chance": 0.0619
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0524
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.0212
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0053
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/blood_crab.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 261,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 200
+  },
+  {
+    "id": "calamary",
+    "name": "Calamary",
+    "class": "aquatic",
+    "health": 75,
+    "experience": 0,
+    "attack": 0,
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "shrimp",
+          "chance": 0.1227,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 75,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/calamary.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 780,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 1
+    },
+    "outfitId": 451
+  },
+  {
+    "id": "crab",
+    "name": "Crab",
+    "class": "aquatic",
+    "health": 55,
+    "experience": 30,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 28,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "fire": -0.1,
+        "ice": 0.2
+      },
+      "immunities": [
+        "drown",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0.78,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.8,
+        "min": 1,
+        "max": 10
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.2
+        },
+        {
+          "itemId": "crab-pincers",
+          "chance": 0.2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/crab.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 112,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 112
+  },
+  {
+    "id": "crustacea-gigantica",
+    "name": "Crustacea Gigantica",
+    "class": "aquatic",
+    "health": 1600,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 600
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "energy": -0.05,
+        "death": 0.1
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.91,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.96,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.08885
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.0388
+        },
+        {
+          "itemId": "giant-crab-pincer",
+          "chance": 0.05,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.03
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.0122
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/crustacea_gigantica.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 697,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 383
+  },
+  {
+    "id": "deepling-worker",
+    "name": "Deepling Worker",
+    "class": "aquatic",
+    "health": 190,
+    "experience": 130,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.46,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 130,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.75,
+        "min": 1,
+        "max": 25
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.1202,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "deepling-scales",
+          "chance": 0.0695
+        },
+        {
+          "itemId": "heavy-trident",
+          "chance": 0.0051
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0035
+        },
+        {
+          "itemId": "eye-of-a-deepling",
+          "chance": 0.00283
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0011
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 20,
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepling_worker.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 795,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 470
+  },
+  {
+    "id": "deepsea-blood-crab",
+    "name": "Deepsea Blood Crab",
+    "class": "aquatic",
+    "health": 320,
+    "experience": 180,
+    "attack": {
+      "min": 0,
+      "max": 115
+    },
+    "armor": 28,
+    "defense": 28,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "fire": -0.1
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 380,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.87,
+        "min": 1,
+        "max": 20
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.1045
+        },
+        {
+          "itemId": "bloody-pincers",
+          "chance": 0.0698
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.0502
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.0272
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0062
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/deepsea_blood_crab.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 437,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 200
+  },
+  {
+    "id": "fish",
+    "name": "Fish",
+    "class": "aquatic",
+    "health": 25,
+    "experience": 0,
+    "attack": 0,
+    "armor": 9,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 25,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/fish.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 784,
+      "toKill": 250,
+      "firstUnlock": 10,
+      "secondUnlock": 100,
+      "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 455
+  },
+  {
+    "id": "northern-pike",
+    "name": "Northern Pike",
+    "class": "aquatic",
+    "health": 95,
+    "experience": 0,
+    "attack": 0,
+    "armor": 9,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 95,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/northern_pike.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 783,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 1
+    },
+    "outfitId": 454
+  },
+  {
+    "id": "quara-mantassin-scout",
+    "name": "Quara Mantassin Scout",
+    "class": "aquatic",
+    "health": 220,
+    "experience": 100,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 7,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.56,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.94,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "mantassin-tail",
+          "chance": 0.0778
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.05061
+        },
+        {
+          "itemId": "skull",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0081
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0071
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0036
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_mantassin_scout.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 242,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 72
+  },
+  {
+    "id": "quara-predator-scout",
+    "name": "Quara Predator Scout",
+    "class": "aquatic",
+    "health": 890,
+    "experience": 400,
+    "attack": {
+      "min": 0,
+      "max": 193
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 60
+      },
+      "items": [
+        {
+          "itemId": "quara-bone",
+          "chance": 0.1015
+        },
+        {
+          "itemId": "scale-armor",
+          "chance": 0.0896
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.0577
+        },
+        {
+          "itemId": "shrimp",
+          "chance": 0.0505,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0502,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0301
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0108
+        },
+        {
+          "itemId": "northwind-rod",
+          "chance": 0.0096
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_predator_scout.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 238,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 20
+  },
+  {
+    "id": "shark",
+    "name": "Shark",
+    "class": "aquatic",
+    "health": 1200,
+    "experience": 700,
+    "attack": {
+      "min": 0,
+      "max": 175
+    },
+    "armor": 32,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.05,
+        "earth": 0.2,
+        "fire": 0.55,
+        "ice": 0.1
+      },
+      "immunities": [
+        "drown"
+      ]
+    },
+    "defenseMitigation": 0.43,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "fish",
+          "chance": 0.2543,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "deepling-scales",
+          "chance": 0.0962
+        },
+        {
+          "itemId": "eye-of-a-deepling",
+          "chance": 0.012
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0109
+        },
+        {
+          "itemId": "giant-shimmering-pearl",
+          "chance": 0.0039
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.00161
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/shark.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 782,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 453
+  }
+]

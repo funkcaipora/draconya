@@ -23,6 +23,12 @@ export interface CatalogImportResult {
   /** Nome da fatia (o arquivo `generated/<fatia>.json`) → as entidades dela. */
   readonly slices: ReadonlyMap<string, readonly CatalogEntity[]>;
   readonly skipped: readonly SkippedEntity[];
+  /**
+   * O que o leitor observou e não coube no schema sem ser uma entidade inteira fora do corte —
+   * linha de moeda descartada, elemento recortado, campo ignorado (#578). Vira a seção "Notas"
+   * do relatório. Opcional: um importador que não tem nada a dizer não declara.
+   */
+  readonly notes?: readonly string[];
 }
 
 export interface CatalogType {

@@ -1,0 +1,3092 @@
+[
+  {
+    "id": "achad",
+    "name": "Achad",
+    "health": 185,
+    "experience": 70,
+    "attack": {
+      "min": 0,
+      "max": 80
+    },
+    "armor": 10,
+    "defense": 19,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.2,
+        "fire": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 176,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 55,
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/achad.lua"
+    },
+    "outfitId": 146
+  },
+  {
+    "id": "animated-cyclops",
+    "name": "Animated Cyclops",
+    "health": 260,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 105
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.82,
+        "min": 1,
+        "max": 47
+      },
+      "items": [
+        {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.01003
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.08
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.025
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.014
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.3007
+        },
+        {
+          "itemId": "cyclops-trophy",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0493
+        },
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/animated_cyclops.lua"
+    },
+    "outfitId": 22
+  },
+  {
+    "id": "animated-rotworm",
+    "name": "Animated Rotworm",
+    "health": 65,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7176,
+        "min": 1,
+        "max": 17
+      },
+      "items": [
+        {
+          "itemId": "sword",
+          "chance": 0.03
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.045
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.2
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.2012
+        },
+        {
+          "itemId": "worm",
+          "chance": 0.03,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "lump-of-dirt",
+          "chance": 0.1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.7,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/animated_rotworm.lua"
+    },
+    "outfitId": 26
+  },
+  {
+    "id": "animated-stone-golem",
+    "name": "Animated Stone Golem",
+    "health": 270,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 110
+    },
+    "armor": 20,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "energy": 0.15,
+        "fire": 0.2,
+        "ice": -0.1,
+        "death": 0.2
+      },
+      "immunities": [
+        "drown",
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9,
+        "min": 1,
+        "max": 40
+      },
+      "items": [
+        {
+          "itemId": "small-stone",
+          "chance": 0.1389,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.0012
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0003
+        },
+        {
+          "itemId": "power-ring",
+          "chance": 0.0507
+        },
+        {
+          "itemId": "carlin-sword",
+          "chance": 0.025
+        },
+        {
+          "itemId": "iron-ore",
+          "chance": 0.0198
+        },
+        {
+          "itemId": "ancient-stone",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "shiny-stone",
+          "chance": 0.0076
+        },
+        {
+          "itemId": "sulphurous-stone",
+          "chance": 0.1037
+        },
+        {
+          "itemId": "piece-of-marble-rock",
+          "chance": 0.0038
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0055
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/animated_stone_golem.lua"
+    },
+    "outfitId": 67
+  },
+  {
+    "id": "azarams-soul",
+    "name": "Azaram's Soul",
+    "health": 100000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 40,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "manadrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 300,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/azarams_soul.lua"
+    },
+    "outfitId": 1219
+  },
+  {
+    "id": "baby-dragon",
+    "name": "Baby Dragon",
+    "health": 380,
+    "experience": 185,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 25,
+    "defense": 38,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0.78,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 176,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/forgotten_knowledge/baby_dragon.lua"
+    },
+    "outfitId": 271
+  },
+  {
+    "id": "baron-brute",
+    "name": "Baron Brute",
+    "health": 5025,
+    "experience": 3000,
+    "attack": {
+      "min": 0,
+      "max": 474
+    },
+    "armor": 22,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.8
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_new_frontier/baron_brute.lua"
+    },
+    "outfitId": 2
+  },
+  {
+    "id": "bloodpaw",
+    "name": "Bloodpaw",
+    "health": 100,
+    "experience": 50,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 8,
+    "defense": 8,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/bloodpaw.lua"
+    },
+    "outfitId": 42
+  },
+  {
+    "id": "blue-butterfly",
+    "name": "Butterfly",
+    "class": "vermin",
+    "health": 2,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 6,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 0,
+      "damage": 0,
+      "random": 40
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_explorer_society/blue_butterfly.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 227,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 227
+  },
+  {
+    "id": "bovinus",
+    "name": "Bovinus",
+    "health": 150,
+    "experience": 60,
+    "attack": {
+      "min": 0,
+      "max": 50
+    },
+    "armor": 10,
+    "defense": 11,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "earth": 0.2,
+        "fire": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/bovinus.lua"
+    },
+    "outfitId": 25
+  },
+  {
+    "id": "captured-dwarf",
+    "name": "Captured Dwarf",
+    "health": 100,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dangerous_depth/captured_dwarf.lua"
+    },
+    "outfitId": 538
+  },
+  {
+    "id": "damned-soul",
+    "name": "Damned Soul",
+    "health": 800,
+    "experience": 300,
+    "attack": 0,
+    "armor": 25,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "holy": -0.1
+      },
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "fire",
+        "ice",
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 380,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.04
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 800,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ferumbras_ascension/damned_soul.lua"
+    },
+    "outfitId": 232
+  },
+  {
+    "id": "fatality",
+    "name": "Fatality",
+    "health": 6000,
+    "experience": 3250,
+    "attack": {
+      "min": 0,
+      "max": 205
+    },
+    "armor": 16,
+    "defense": 19,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_new_frontier/fatality.lua"
+    },
+    "outfitId": 113
+  },
+  {
+    "id": "frostfur",
+    "name": "Frostfur",
+    "health": 65,
+    "experience": 35,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 5,
+    "defense": 3,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/frostfur.lua"
+    },
+    "outfitId": 52
+  },
+  {
+    "id": "gnome-pack-crawler",
+    "name": "Gnome Pack Crawler",
+    "health": 5000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 45,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 199
+      },
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dangerous_depth/gnome_pack_crawler.lua"
+    },
+    "outfitId": 492
+  },
+  {
+    "id": "greater-death-minion",
+    "name": "Greater Death Minion",
+    "health": 1500,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 150,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dark_trails/greater_death_minion.lua"
+    },
+    "outfitId": 65
+  },
+  {
+    "id": "last-planegazer",
+    "name": "Last Planegazer",
+    "health": 50000,
+    "experience": 10000,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.45,
+        "fire": 0.35,
+        "ice": 0.4,
+        "death": 0.7
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.657,
+        "min": 1,
+        "max": 15
+      },
+      "items": [
+        {
+          "itemId": "plate-shield",
+          "chance": 0.2
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.129
+        },
+        {
+          "itemId": "chain-armor",
+          "chance": 0.1
+        },
+        {
+          "itemId": "brass-helmet",
+          "chance": 0.078
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.05
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.05
+        },
+        {
+          "itemId": "axe",
+          "chance": 0.04
+        },
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.02,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "shovel",
+          "chance": 0.0031
+        },
+        {
+          "itemId": "bronze-amulet",
+          "chance": 0.0012
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/last_planegazer.lua"
+    },
+    "outfitId": 1044
+  },
+  {
+    "id": "lesser-death-minion",
+    "name": "Lesser Death Minion",
+    "health": 550,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 35,
+    "defense": 34,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 154,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dark_trails/lesser_death_minion.lua"
+    },
+    "outfitId": 33
+  },
+  {
+    "id": "liquor-spirit",
+    "name": "Liquor Spirit",
+    "health": 7000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/summons/liquor_spirit.lua"
+    },
+    "outfitId": 986
+  },
+  {
+    "id": "lost-gnome",
+    "name": "Lost Gnome",
+    "health": 10000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 45,
+    "defense": 33,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.1,
+        "min": 1,
+        "max": 2
+      },
+      "items": [
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.1,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dangerous_depth/lost_gnome.lua"
+    },
+    "outfitId": 493
+  },
+  {
+    "id": "lovely-deer",
+    "name": "Lovely Deer",
+    "health": 25,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 2
+    },
+    "armor": 2,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 196,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "antlers",
+          "chance": 0.0085
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.7955,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.5133,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ferumbras_ascension/lovely/lovely_deer.lua"
+    },
+    "outfitId": 31
+  },
+  {
+    "id": "lovely-polar-bear",
+    "name": "Lovely Polar Bear",
+    "health": 85,
+    "experience": 28,
+    "attack": {
+      "min": 0,
+      "max": 30
+    },
+    "armor": 7,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 156,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "polar-bear-paw",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.5076,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.5108,
+          "min": 1,
+          "max": 4
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 5,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ferumbras_ascension/lovely/lovely_polar_bear.lua"
+    },
+    "outfitId": 42
+  },
+  {
+    "id": "lovely-rotworm",
+    "name": "Lovely Rotworm",
+    "health": 65,
+    "experience": 40,
+    "attack": {
+      "min": 0,
+      "max": 40
+    },
+    "armor": 8,
+    "defense": 11,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 116,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7177,
+        "min": 1,
+        "max": 17
+      },
+      "items": [
+        {
+          "itemId": "worm",
+          "chance": 0.0301,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.1994
+        },
+        {
+          "itemId": "lump-of-dirt",
+          "chance": 0.0999
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.2013
+        },
+        {
+          "itemId": "sword",
+          "chance": 0.0311
+        },
+        {
+          "itemId": "mace",
+          "chance": 0.0454
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ferumbras_ascension/lovely/lovely_rotworm.lua"
+    },
+    "outfitId": 26
+  },
+  {
+    "id": "menace",
+    "name": "Menace",
+    "health": 6000,
+    "experience": 3250,
+    "attack": {
+      "min": 0,
+      "max": 215
+    },
+    "armor": 16,
+    "defense": 19,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -0.1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.09
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_new_frontier/menace.lua"
+    },
+    "outfitId": 113
+  },
+  {
+    "id": "mr-punish",
+    "name": "Mr. Punish",
+    "health": 22000,
+    "experience": 9000,
+    "attack": {
+      "min": 660,
+      "max": 1280
+    },
+    "armor": 64,
+    "defense": 72,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "death": -0.1
+      },
+      "immunities": [
+        "earth",
+        "energy",
+        "fire",
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 470,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "mr-punishs-handcuffs",
+          "chance": 1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 2000,
+    "staticAttack": 0.5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/pits_of_inferno/mr._punish.lua"
+    },
+    "outfitId": 234
+  },
+  {
+    "id": "norgle-glacierbeard",
+    "name": "Norgle Glacierbeard",
+    "health": 4280,
+    "experience": 2100,
+    "attack": {
+      "min": 0,
+      "max": 225
+    },
+    "armor": 25,
+    "defense": 27,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "death": -0.01
+      },
+      "immunities": [
+        "ice"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 194,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/warlord/norgle_glacierbeard.lua"
+    },
+    "outfitId": 257
+  },
+  {
+    "id": "orc-cultist",
+    "name": "Orc Cultist",
+    "class": "humanoid",
+    "health": 1350,
+    "experience": 950,
+    "attack": {
+      "min": 0,
+      "max": 300
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.3,
+        "earth": -0.1,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.26,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 166
+      },
+      "items": [
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.1983
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.06002,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.09005
+        },
+        {
+          "itemId": "cultish-robe",
+          "chance": 0.0496
+        },
+        {
+          "itemId": "ham",
+          "chance": 0.0702,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "orc-tusk",
+          "chance": 0.0826,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "green-piece-of-cloth",
+          "chance": 0.0496
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.0496
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/orc_cultist.lua"
+    },
+    "bestiary": {
+      "class": "humanoid",
+      "race": "humanoid",
+      "raceId": 1503,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 1
+    },
+    "outfitId": 7
+  },
+  {
+    "id": "percht-minion",
+    "name": "Percht Minion",
+    "health": 55,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 20
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_percht_queens_island/percht_minion.lua"
+    },
+    "outfitId": 53
+  },
+  {
+    "id": "pink-butterfly",
+    "name": "Butterfly",
+    "class": "vermin",
+    "health": 2,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 6,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_explorer_society/pink_butterfly.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 213,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 213
+  },
+  {
+    "id": "poor-soul",
+    "name": "Poor Soul",
+    "health": 500,
+    "experience": 0,
+    "attack": {
+      "min": 250,
+      "max": 450
+    },
+    "armor": 105,
+    "defense": 90,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "drown": -1
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "energy",
+        "fire",
+        "holy",
+        "ice",
+        "lifedrain",
+        "manadrain",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.7054,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.1222,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0456
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0576
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.0496
+        },
+        {
+          "itemId": "northwind-rod",
+          "chance": 0.0592
+        },
+        {
+          "itemId": "sacred-tree-amulet",
+          "chance": 0.0552
+        },
+        {
+          "itemId": "apron",
+          "chance": 0.0792
+        },
+        {
+          "itemId": "hailstorm-rod",
+          "chance": 0.0722
+        },
+        {
+          "itemId": "glacier-shoes",
+          "chance": 0.0252
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.0222
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.0592
+        },
+        {
+          "itemId": "ring-of-red-plasma",
+          "chance": 0.04892
+        },
+        {
+          "itemId": "head",
+          "chance": 0.0352
+        },
+        {
+          "itemId": "glacial-rod",
+          "chance": 0.0062
+        },
+        {
+          "itemId": "gruesome-fan",
+          "chance": 0.0065
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.05
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 10,
+      "damage": 10,
+      "random": 20
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/soul_war/normal_monsters/furious_crater/poor_soul.lua"
+    },
+    "outfitId": 1296
+  },
+  {
+    "id": "purple-butterfly",
+    "name": "Butterfly",
+    "class": "vermin",
+    "health": 2,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 6,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 0,
+      "damage": 0,
+      "random": 40
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_explorer_society/purple_butterfly.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 213,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 213
+  },
+  {
+    "id": "red-butterfly",
+    "name": "Butterfly",
+    "class": "vermin",
+    "health": 2,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 6,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 0,
+      "damage": 0,
+      "random": 40
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_explorer_society/red_butterfly.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 228,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 228
+  },
+  {
+    "id": "rift-lord",
+    "name": "Rift Lord",
+    "health": 5,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.98,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/in_service_of_yalahar/rift_lord.lua"
+    },
+    "outfitId": 12
+  },
+  {
+    "id": "rift-phantom",
+    "name": "Rift Phantom",
+    "health": 150,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/in_service_of_yalahar/rift_phantom.lua"
+    },
+    "outfitId": 48
+  },
+  {
+    "id": "snail-slime",
+    "name": "Snail Slime",
+    "health": 4500,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 600
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.01
+      },
+      "immunities": [
+        "fire"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dangerous_depth/snail_slime.lua"
+    },
+    "outfitId": 19
+  },
+  {
+    "id": "spirit-of-earth",
+    "name": "Spirit of Earth",
+    "health": 1200,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 180
+    },
+    "armor": 0,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.5,
+        "ice": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/scrapper/spirit_of_earth.lua"
+    },
+    "outfitId": 67
+  },
+  {
+    "id": "stolen-soul",
+    "name": "Stolen Soul",
+    "health": 5000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 50,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/summons/stolen_soul.lua"
+    },
+    "outfitId": 294
+  },
+  {
+    "id": "supercharged-mazzinor",
+    "name": "Supercharged Mazzinor",
+    "health": 300000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 500
+    },
+    "armor": 40,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 120,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_secret_library/supercharged_mazzinor.lua"
+    },
+    "outfitId": 979
+  },
+  {
+    "id": "superior-death-minion",
+    "name": "Superior Death Minion",
+    "health": 2500,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 600
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dark_trails/superior_death_minion.lua"
+    },
+    "outfitId": 84
+  },
+  {
+    "id": "tainted-soul-splinter",
+    "name": "Tainted Soul Splinter",
+    "health": 10000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 40,
+    "defense": 40,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/tainted_soul_splinter.lua"
+    },
+    "outfitId": 1219
+  },
+  {
+    "id": "the-bloodtusk",
+    "name": "The Bloodtusk",
+    "health": 600,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 40,
+    "defense": 57,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.15,
+        "fire": -0.1,
+        "ice": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 99
+      },
+      "items": [
+        {
+          "itemId": "mammoth-tusk",
+          "chance": 1,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "furry-club",
+          "chance": 0.63
+        },
+        {
+          "itemId": "red-piece-of-cloth",
+          "chance": 0.6
+        },
+        {
+          "itemId": "tusk-shield",
+          "chance": 0.55
+        },
+        {
+          "itemId": "tusk",
+          "chance": 0.41,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "mammoth-fur-cape",
+          "chance": 0.18
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_bloodtusk.lua"
+    },
+    "outfitId": 199
+  },
+  {
+    "id": "the-cold-of-winter",
+    "name": "The Cold of Winter",
+    "health": 40,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 2
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 10,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_dream_courts/the_cold_of_winter.lua"
+    },
+    "outfitId": 53
+  },
+  {
+    "id": "the-hairy-one",
+    "name": "The Hairy One",
+    "health": 325,
+    "experience": 115,
+    "attack": {
+      "min": 0,
+      "max": 70
+    },
+    "armor": 16,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "fire": -0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/greenhorn/the_hairy_one.lua"
+    },
+    "outfitId": 116
+  },
+  {
+    "id": "the-snapper",
+    "name": "The Snapper",
+    "health": 300,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 60
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05,
+        "earth": 0.15,
+        "fire": -0.1,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.28,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 178
+      },
+      "items": [
+        {
+          "itemId": "health-potion",
+          "chance": 0.8,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.75,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.44
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.398
+        },
+        {
+          "itemId": "crocodile-boots",
+          "chance": 0.06
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.004
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/killing_in_the_name_of/the_snapper.lua"
+    },
+    "outfitId": 119
+  },
+  {
+    "id": "thorn-steed",
+    "name": "Thorn Steed",
+    "health": 20000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 1375
+    },
+    "armor": 10,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.5,
+        "ice": 0.4,
+        "death": -1
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 350,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/forgotten_knowledge/bosses/thorn_steed.lua"
+    },
+    "outfitId": 626
+  },
+  {
+    "id": "tremor-worm",
+    "name": "Tremor Worm",
+    "health": 125000,
+    "experience": 80000,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 100,
+    "defense": 100,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.75,
+        "energy": 0.75,
+        "earth": 0.75,
+        "fire": 0.75,
+        "lifedrain": 0.75,
+        "manadrain": 0.75,
+        "drown": 0.75,
+        "ice": 0.75,
+        "holy": 0.75,
+        "death": 0.75
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.33,
+        "min": 100,
+        "max": 500
+      },
+      "items": [
+        {
+          "itemId": "great-health-potion",
+          "chance": 0.1
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.1
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/dark_trails/tremor_worm.lua"
+    },
+    "outfitId": 295
+  },
+  {
+    "id": "warm-fire",
+    "name": "Warm Fire",
+    "health": 200,
+    "experience": 220,
+    "attack": 0,
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 94,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_percht_queens_island/warm_fire.lua"
+    },
+    "outfitId": 49
+  },
+  {
+    "id": "weeping-soul",
+    "name": "Weeping Soul",
+    "health": 7000,
+    "experience": 0,
+    "attack": {
+      "min": 220,
+      "max": 650
+    },
+    "armor": 55,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.4
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 300,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.15
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 10,
+      "damage": 10,
+      "random": 20
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/soul_war/weeping_soul.lua"
+    },
+    "outfitId": 48
+  },
+  {
+    "id": "yalahari",
+    "name": "Yalahari",
+    "health": 150,
+    "experience": 5,
+    "attack": 0,
+    "armor": 0,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "earth",
+        "physical"
+      ]
+    },
+    "defenseMitigation": 0.05,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/in_service_of_yalahar/yalahari.lua"
+    },
+    "outfitId": 309
+  },
+  {
+    "id": "yellow-butterfly",
+    "name": "Butterfly",
+    "class": "vermin",
+    "health": 2,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 6,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 60,
+      "health": 0,
+      "damage": 0,
+      "random": 40
+    },
+    "runOnHealth": 2,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_explorer_society/yellow_butterfly.lua"
+    },
+    "bestiary": {
+      "class": "vermin",
+      "race": "vermin",
+      "raceId": 235,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 0,
+      "occurrence": 0
+    },
+    "outfitId": 10
+  },
+  {
+    "id": "zarcorix-of-yalahar",
+    "name": "Zarcorix Of Yalahar",
+    "health": 99999999,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 0,
+    "defense": 0,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/zarcorix_of_yalahar.lua"
+    },
+    "outfitId": 309
+  }
+]

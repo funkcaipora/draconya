@@ -1,0 +1,121 @@
+[
+  {
+    "id": "cyclops",
+    "name": "Cyclops",
+    "class": "giant",
+    "health": 260,
+    "experience": 150,
+    "attack": {
+      "min": 0,
+      "max": 105
+    },
+    "armor": 17,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.25,
+        "earth": -0.1,
+        "holy": 0.2,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.62,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 190,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.82,
+        "min": 1,
+        "max": 47
+      },
+      "items": [
+        {
+          "itemId": "wolf-tooth-chain",
+          "chance": 0.0019
+        },
+        {
+          "itemId": "club-ring",
+          "chance": 0.0009
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.01003
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.08
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0022
+        },
+        {
+          "itemId": "plate-shield",
+          "chance": 0.025
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.014
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.3007
+        },
+        {
+          "itemId": "cyclops-trophy",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "cyclops-toe",
+          "chance": 0.0493
+        },
+        {
+          "itemId": "heavy-old-tome",
+          "chance": 0.01
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 0,
+      "damage": 30,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/giants/cyclops.lua"
+    },
+    "bestiary": {
+      "class": "giant",
+      "race": "giant",
+      "raceId": 22,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 0
+    },
+    "outfitId": 22
+  }
+]

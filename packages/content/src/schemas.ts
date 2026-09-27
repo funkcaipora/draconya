@@ -1525,12 +1525,13 @@ export interface MonsterAbility {
 
 /**
  * As classes de monstro que a Cyclopedia usa para agrupar o Bestiário (SV-20, ADR 0030,
- * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO e
- * crescido por monstro real: hoje `rat` (mammal) e `rotworm` (vermin) existem em
- * `packages/content/data/monsters/` — a segunda classe entra na mesma PR que cria o primeiro
- * monstro dela, como a primeira entrou (§1 de `docs/kit-fidelity-plan.md`: nenhum dado de
- * mentira vira constante — pré-popular as onze categorias do `data.js` do kit sem nenhum
- * monstro real de oito delas seria exatamente isso).
+ * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO: as
+ * 20 classes do `monster.Bestiary.class` do Canary (M35-01, #578), no slug em inglês — o leitor
+ * de monstros (`scripts/catalog/monsters.ts`, `BESTIARY_CLASS_MAP`) converte `"Extra
+ * Dimensional"` em `extra-dimensional` e o resto em minúsculas. Antes do catálogo importado o
+ * vocabulário crescia por monstro real (`mammal`, `vermin`, `dragon`, nessa ordem); as três
+ * continuam na frente para a ordem de quem já as lia não mudar, e as outras dezessete seguem em
+ * ordem alfabética. A contagem por classe no Canary (47dfd51) vai de Humanoid (90) a Amphibic (11).
  *
  * Identificador em inglês, valor de exibição em português fica para quem desenhar a `SideList`
  * (RC-08/#321) — o mesmo desenho de `HUNT_DIFFICULTY_NAMES`/`cautious` (traduzido para
@@ -1538,7 +1539,11 @@ export interface MonsterAbility {
  * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
  * Ver Decisão técnica DT-02.
  */
-export const MONSTER_CLASSES = ['mammal', 'vermin', 'dragon'] as const;
+export const MONSTER_CLASSES = [
+  'mammal', 'vermin', 'dragon',
+  'amphibic', 'aquatic', 'bird', 'construct', 'demon', 'elemental', 'extra-dimensional', 'fey',
+  'giant', 'human', 'humanoid', 'lycanthrope', 'magical', 'plant', 'reptile', 'slime', 'undead',
+] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 /**
@@ -1712,7 +1717,12 @@ export const monsterSchema = z.strictObject({
    * entradas" na tela (nenhuma categoria própria ainda).
    */
   class: z.enum(MONSTER_CLASSES).optional(),
-  recommendedLevel: z.number().int().positive(),
+  /**
+   * Level sugerido, só informativo — nenhum sistema lê o do MONSTRO (a hunt tem o próprio). O
+   * Canary não tem esse campo, e o leitor de monstros (#578) não inventa um número: ausente no
+   * monstro importado, declarado nos quatro autorais de sempre.
+   */
+  recommendedLevel: z.number().int().positive().optional(),
   health: z.number().int().positive(),
   experience: z.number().int().nonnegative(),
   /**
@@ -2639,6 +2649,12 @@ export type PartyConfig = z.infer<typeof partySchema>;
 export const bestiaryEntrySchema = z.strictObject({
   class: z.enum(MONSTER_CLASSES),
   race: z.string().min(1),
+  /**
+   * O `monster.raceId` do Canary — o id do monstro no Bestiário/Cyclopedia do cliente Tibia (34
+   * para o Dragon). Opcional: só entrada importada (#578) o traz; é dado à espera de consumidor,
+   * como o resto da ficha.
+   */
+  raceId: z.number().int().positive().optional(),
   /** Abates para a ficha completa (Canary `toKill`, TFS `mastery`). */
   toKill: z.number().int().positive(),
   /** Abates para o primeiro desbloqueio — a ficha básica (Canary `FirstUnlock`, TFS `prowess`). */
@@ -2647,8 +2663,12 @@ export const bestiaryEntrySchema = z.strictObject({
   secondUnlock: z.number().int().positive(),
   /** Pontos de Charm ganhos ao completar a ficha (Canary `CharmsPoints`, TFS `charmPoints`). */
   charmsPoints: z.number().int().nonnegative(),
-  /** Estrelas de dificuldade do Cyclopedia, 1 a 4 (Canary `Stars`). */
-  stars: z.number().int().min(1).max(4),
+  /**
+   * Estrelas de dificuldade do Cyclopedia (Canary `Stars`): 0 (inofensivo) a 5 (desafiador). Era
+   * 1 a 4 antes do leitor de monstros (#578), que achou os dois extremos no Canary (47dfd51): 13
+   * monstros com 0 estrela (o Northern Pike, por exemplo) e 53 com 5.
+   */
+  stars: z.number().int().min(0).max(5),
   /** Raridade de encontro do Cyclopedia: 0 comum … 3 muito raro (Canary `Occurrence`). */
   occurrence: z.number().int().min(0).max(3),
   _open: z.string().optional(),

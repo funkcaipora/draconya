@@ -27,6 +27,13 @@ estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 ## O catálogo importado (ADR 0038, #572)
 
+**`staging/monsters/` não é conteúdo carregado** (#578): é onde `pnpm catalog:import monsters`
+escreve enquanto o monstro gerado não passa no boot — o loot aponta item por slug de nome, e o
+catálogo de itens (#573) e as linhas de aparência ainda não existem. Cada entidade de lá é a forma
+do `monsterSchema` mais dois campos que o #580 separa ao mover para `data/`: `bestiary` (vai para
+`bestiary/baseline.json`, `entries`) e `outfitId` (vai para `appearances/baseline.json`). `load.ts`
+não lê `staging/`, e nada do jogo deve ler.
+
 Qualquer `data/<tipo>/` (hoje `items/`, mais tarde `monsters/`) aceita, além do arquivo autoral
 direto na pasta, duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em
 `content.ts`:
