@@ -161,3 +161,42 @@ A auditoria inicial errou em alguns pontos, e as specs carregam o número verifi
 - só Health e Mana Potion divergem; as outras nove poções já batem;
 - loot aninhado (`child`) não existe no Canary — as ocorrências eram falas;
 - são 4 elementos acima de 100 %, não 18; e 46 itens com ML especializado, não 12.
+
+## 6. Execução (2026-09-26)
+
+As 15 issues foram implementadas no mesmo dia, cada uma numa PR com base `tibia-parity` (ou
+empilhada sobre a PR de que depende). Os quatro bloqueios que ainda não existiam em código foram
+feitos junto: #552 (assumida da outra sessão, com autorização do dono), #578, #579 e #604.
+
+| Issue | PR | Base |
+|---|---|---|
+| #677 LEVELMAGIC pelo ML | #700 | `tibia-parity` |
+| #678 cura no level up e regeneração em pulsos | #707 | `tibia-parity` |
+| #679 área pelas fileiras | #701 | `tibia-parity` |
+| #680 ML especializado | #709 | #700 |
+| #681 normal truncada | #698 | `tibia-parity` |
+| #682 bloqueio por tipo de ataque | #695 | `tibia-parity` |
+| #683 elemento no monstro | #715 | #710 |
+| #684 melee por skill/attack | #716 | #714 |
+| #685 rolagem de loot | #711 | #708 |
+| #686 origem dos tries | #704 | `tibia-parity` |
+| #687 arma elemental | #705 | `tibia-parity` |
+| #688 bônus completos | #712 | #707 |
+| #689 duração de anel | #713 | #702 |
+| #690 poções | #706 | `tibia-parity` |
+| #691 rates | #703 | `tibia-parity` |
+| bloqueio #552 | #710 | `tibia-parity` |
+| bloqueio #578 | #708 | `tibia-parity` |
+| bloqueio #579 | #714 | #708 |
+| bloqueio #604 | #702 | `tibia-parity` |
+
+**Verificação conjunta:** a PR #717 (rascunho, só para verificação) junta todas sobre a
+`tibia-parity`, resolve os conflitos e roda o `pnpm check` completo com banco — **252 arquivos,
+4557 testes, verde**. A ordem de merge recomendada e cada conflito resolvido estão no corpo dela.
+Três ajustes só existem na junção e foram anotados nas PRs: o cleave da #552 depois da #687, o
+rate de loot do modelo `canary` (#685 com #691) e um comentário da #683.
+
+**Ficou para depois:** a #579 chegou a 63,4 % dos monstros de caça importáveis, abaixo da meta de
+70 % da própria issue — o que falta são magias de monstro escritas em script Lua e `invisible`
+(#559). Dois achados viraram tarefa separada: o teto do manadrain no jogador sob `combat-v3` e a
+aproximação do monstro pelo `targetDistance` em vez do maior alcance de ability.
