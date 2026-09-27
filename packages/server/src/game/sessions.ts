@@ -264,6 +264,9 @@ export function characterFromTicket(
         ? {} : { supplyStock: initialCharacter.supplyStock }),
       ...(initialCharacter.ammunitionStock === undefined
         ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
+      // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
+      // parte sem storage nenhum setado — a mesma degradação de sempre.
+      ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),
       // Comida ativa (#726, ADR 0049 decisão 5): ausente, a sessão parte sem — ninguém comeu
       // ainda, o de sempre.
       ...(initialCharacter.fedMs === undefined ? {} : { fedMs: initialCharacter.fedMs }),

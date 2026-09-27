@@ -16,7 +16,8 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
-import type { BestiaryState } from '@draconya/sim';
+import { isCharacterStorageMap } from '@draconya/sim';
+import type { BestiaryState, CharacterStorageMap } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -152,6 +153,14 @@ export interface InitialCharacter {
   readonly supplyStock?: Readonly<Record<string, number>>;
   /** O estoque de munição do loot (#520), pela mesma razão e a mesma forma do `supplyStock`. */
   readonly ammunitionStock?: Readonly<Record<string, number>>;
+  /**
+   * Storages por personagem (#731, ADR 0050 d.6 T2): `storageKey → value`, a semente do motor
+   * de quest. Entra na sessão, e não só sai dela, porque a porta/baú de quest confere o
+   * storage DURANTE a hunt (a checagem é a mesma pergunta do Canary, `getStorageValue`).
+   * Validado como o Bestiário/estoque: mapa de inteiros, sem o valor de ausência (`-1`). Ausente
+   * é quem nunca setou nada, ou ticket de um `api` antigo: a sessão parte de `{}`.
+   */
+  readonly storages?: CharacterStorageMap;
   /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
@@ -617,6 +626,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // um valor torto vira AUSENTE, nunca ticket recusado.
     ...(isStockMap(initial['supplyStock']) ? { supplyStock: initial['supplyStock'] } : {}),
     ...(isStockMap(initial['ammunitionStock']) ? { ammunitionStock: initial['ammunitionStock'] } : {}),
+    // Storages (#731): mesma régua do Bestiário/estoque — inteiro seguro, e nunca o `-1` de
+    // ausência (`isCharacterStorageMap`, `sim`). Torto vira AUSENTE, nunca ticket recusado.
+    ...(isCharacterStorageMap(initial['storages']) ? { storages: initial['storages'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0

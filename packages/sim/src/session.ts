@@ -197,6 +197,13 @@ export interface Receipt {
   readonly seq: number;
   readonly aggregates: Aggregates;
   readonly notableEvents: readonly NotableEvent[];
+  /**
+   * As instâncias destruídas por `sell-items`/`discard-item` nesta sessão, ainda não entregues
+   * a um extrato aceito (#724, ADR 0048 d.8). É o `jobs` que apaga as linhas de `item_instance`,
+   * na mesma transação do ledger — a sessão nunca escreve o banco (invariante 9/10). Drenada de
+   * `CharacterRuntime.removedInstances`, como `goldDelta` drena para `aggregates.goldGained`.
+   */
+  readonly removedInstances: readonly string[];
 }
 
 /** O que `leave` devolve: quem saiu, e o extrato dele. */
@@ -635,6 +642,7 @@ export class Session {
       seq: ++this.ledgerSeq,
       aggregates: { ...this.aggregatesOf(character.id) },
       notableEvents: this.notableEvents.filter((event) => event.atMs >= joinedAtMs),
+      removedInstances: character.drainRemovedInstances(),
     };
   }
 

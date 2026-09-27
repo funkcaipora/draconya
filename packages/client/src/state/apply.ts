@@ -16,9 +16,11 @@ import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered, partyExited } from '../party/store.js';
 
 /**
- * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
- * — um registro por id de skill do conteúdo. Vazio é um nó `game` anterior à SV-04 (o `default`
- * do protocolo): mantém o que a tela já tinha em vez de zerar as barras.
+ * As skills que o painel mostra (#340, SV-04; #568 as separa por tipo de arma), do `skills` de
+ * `player-stats`/`session-state` — um registro por id de skill do conteúdo. Vazio é um nó `game`
+ * anterior à SV-04 (o `default` do protocolo): mantém o que a tela já tinha em vez de zerar as
+ * barras. Ausência de UMA chave (nó anterior ao #567, que ainda manda só `melee`) preserva o
+ * valor anterior daquela skill em vez de zerar — a mesma regra de campo opcional de sempre.
  */
 function skillsOf(
   skills: Readonly<Record<string, ProtocolSkillProgress>>, previous: PlayerSkills,
@@ -28,7 +30,10 @@ function skillsOf(
     const progress = skills[id];
     return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
   };
-  return { melee: of('melee'), distance: of('distance'), magic: of('magic') };
+  return {
+    fist: of('fist'), club: of('club'), sword: of('sword'), axe: of('axe'),
+    distance: of('distance'), magic: of('magic'),
+  };
 }
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
@@ -74,18 +79,30 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         ...state,
         huntId: message.huntId ?? null,
         difficulty: message.difficulty ?? null,
+        // Cadáver de uma cena que acabou de ficar para trás (#722) — nenhum cadáver da
+        // instância nova pode ter o mesmo id por acidente sem que a janela mostre a coisa certa.
+        corpse: null,
       }));
       return;
 
     case 'ground-item-appear':
       world.groundItems.set(message.id, {
         id: message.id, position: message.position, appearanceId: message.appearanceId,
+        // `exactOptionalPropertyTypes`: só entra quando o servidor mandou (#722, ADR 0048 d.4).
+        ...(message.lootable === undefined ? {} : { lootable: message.lootable }),
       });
       world.groundItemsVersion += 1;
       return;
 
     case 'ground-item-disappear':
       if (world.groundItems.delete(message.id)) world.groundItemsVersion += 1;
+      // O cadáver decaiu: se a janela aberta é a DELE, ela fecha — nada mais tem o que mostrar
+      // (#722, ADR 0048 d.4). Uma janela de outro cadáver não é afetada.
+      hud.set((state) => (
+        state.corpse !== null && state.corpse.groundItemId === message.id
+          ? { ...state, corpse: null }
+          : state
+      ));
       return;
 
     case 'creature-appear':
@@ -282,6 +299,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
+    case 'corpse-contents':
+      // O que ainda está no cadáver, depois do Quick Loot automático do abate (#722, ADR 0048
+      // d.4) — SUBSTITUI, como `inventory`: é o estado inteiro do cadáver, não um delta.
+      hud.set((state) => ({ ...state, corpse: { ...message } }));
+      return;
+
     case 'bestiary':
       // SUBSTITUI, como o inventário: é o contador INTEIRO de cada monstro, não um delta. O
       // servidor manda no attach e sempre que um contador muda (FUN-113), e somar aqui daria
@@ -344,7 +367,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // O chão também é substituído (FUN-123): o cadáver que apodreceu enquanto ninguém olhava
       // sumiria da mesma forma que o monstro que morreu.
       world.groundItems.clear();
-      for (const item of message.world.groundItems) world.groundItems.set(item.id, item);
+      for (const item of message.world.groundItems) {
+        world.groundItems.set(item.id, {
+          id: item.id, position: item.position, appearanceId: item.appearanceId,
+          ...(item.lootable === undefined ? {} : { lootable: item.lootable }),
+        });
+      }
       world.groundItemsVersion += 1;
       // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
       // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que

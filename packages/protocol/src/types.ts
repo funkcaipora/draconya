@@ -276,6 +276,33 @@ export const C2S_SCHEMAS = {
    */
   'party-end-vote': z.object({ approve: z.boolean() }),
   /**
+   * Vender N itens da mochila/bolsa (#724, ADR 0048 d.8). INTENÇÃO: o cliente diz QUAIS
+   * instâncias; quem decide se existem, se estão carregadas (nunca equipadas) e se `value` do
+   * catálogo é maior que zero é o servidor (invariante 4). `value: 0` recusa o LOTE inteiro —
+   * "ninguém compra isto" — sem vender parte dele.
+   */
+  'sell-items': z.object({ instanceIds: z.array(z.string().min(1)).min(1) }),
+  /**
+   * Descartar um item da mochila/bolsa (#724, ADR 0048 d.8): destrói, sem gold. A confirmação
+   * ("tem certeza?") é do cliente; o servidor não pergunta de novo.
+   */
+  'discard-item': z.object({ instanceId: z.string().min(1) }),
+  /**
+   * Abrir a janela do cadáver (#722, ADR 0048 d.4). INTENÇÃO: só o id do item do chão; dono,
+   * elegibilidade e distância (≤ 1, mesmo andar) são do servidor (invariante 4). Sucesso é
+   * `corpse-contents`; recusa é `system-message`.
+   */
+  'open-corpse': z.object({ groundItemId: z.number().int() }),
+  /**
+   * Pegar do cadáver (#722, ADR 0048 d.4). `instanceId: null` aplica o filtro de Quick Loot do
+   * PRÓPRIO personagem a tudo que ainda está no cadáver (o clique); um id específico arrasta
+   * ESTE item, ignorando o filtro. Quem confere dono, distância e capacidade é o servidor.
+   */
+  'take-loot': z.object({
+    groundItemId: z.number().int(),
+    instanceId: z.string().min(1).nullable(),
+  }),
+  /**
    * Usar um item da mochila/bolsa/equipado, ou uma unidade do estoque de suprimento (#726, ADR
    * 0049 decisão 3). INTENÇÃO: o cliente diz QUAL `ref`; existir, o catálogo saber usá-lo, a
    * exaustão e o efeito são do servidor (invariante 4). `target` é a mesma mira OPCIONAL de
@@ -570,6 +597,8 @@ export const S2C_SCHEMAS = {
         id: z.number().int(),
         position: Point,
         appearanceId: z.number().int().positive(),
+        /** Ver `ground-item-appear.lootable` (#722) — mesmo campo, para quem reanexa. */
+        lootable: z.boolean().optional(),
       })).default([]),
     }),
     aggregates: Aggregates,
@@ -628,6 +657,13 @@ export const S2C_SCHEMAS = {
     id: z.number().int(),
     position: Point,
     appearanceId: z.number().int().positive(),
+    /**
+     * Tem loot pendente AGORA (#722, ADR 0048 d.4) — o destaque de loot do cliente. Calculado
+     * no instante do evento (depois do Quick Loot automático do abate já ter rodado), nunca
+     * recalculado depois: `corpse-contents`/`take-loot` são quem atualiza a janela aberta.
+     * Ausente: nó anterior a esta issue, ou item do chão sem noção de loot nenhuma.
+     */
+    lootable: z.boolean().optional(),
   }),
   /** O item do chão sumiu — o cadáver apodreceu. */
   'ground-item-disappear': z.object({ id: z.number().int() }),
@@ -1150,6 +1186,17 @@ export const S2C_SCHEMAS = {
    */
   'target-cancel': z.object({
     seq: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * O conteúdo do cadáver (#722, ADR 0048 d.4): o que ainda está lá depois do Quick Loot
+   * automático do abate. Sai ao `open-corpse` bem-sucedido e a cada `take-loot` bem-sucedido —
+   * é o mesmo `CarriedItem` do inventário, porque um item do cadáver é o MESMO objeto antes de
+   * entrar na mochila (§4.1 da spec da issue).
+   */
+  'corpse-contents': z.object({
+    groundItemId: z.number().int(),
+    gold: z.number().int().nonnegative(),
+    items: z.array(CarriedItem),
   }),
   /**
    * A resposta ao `use-item`/`use-item-on` (#726, ADR 0049 decisão 3), como `slot-result`:

@@ -93,7 +93,7 @@ const EnvironmentSchema = z.object({
    * `VITE_THINGS_URL`). O boot a compara com o inventário contra o qual o conteúdo foi
    * conferido (FUN-21, `served-pack.ts`): divergência é recusa, não aviso.
    */
-  THINGS_VERSION: z.string().default('1332'),
+  THINGS_VERSION: z.string().default('1533'),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

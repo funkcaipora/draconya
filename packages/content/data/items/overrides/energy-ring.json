@@ -1,0 +1,7 @@
+{
+  "id": "energy-ring",
+  "reason": "Reconciliação do importador de itens (#573/#574) contra o Canary items.xml em `47dfd51f4528`: weight: 2 → 0.8.",
+  "patch": {
+    "weight": 0.8
+  }
+}

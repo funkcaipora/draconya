@@ -1,0 +1,24 @@
+{
+  "id": "bullseye-potion",
+  "name": "Bullseye Potion",
+  "description": "Aumenta a skill de distância em 5 e reduz a de shielding em 10 por 10 minutos. Somente Paladin.",
+  "price": 0,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
+  "effect": {
+    "kind": "condition",
+    "condition": {
+      "key": "bullseye-potion",
+      "durationMs": 600000,
+      "effect": {
+        "kind": "buff",
+        "skillDeltas": { "distance": 5, "shielding": -10 }
+      }
+    }
+  },
+  "requires": {
+    "vocationId": "paladin"
+  },
+  "_open": "#576, M34-05. Canary `data/scripts/actions/items/potions.lua` (`things/sources/canary`, commit 47dfd51), item id 7443: `CONDITION_PARAM_TICKS = 10*60*1000`, `CONDITION_PARAM_SKILL_DISTANCE = 5`, `CONDITION_PARAM_SKILL_SHIELD = -10`, `vocations = { PALADIN }` — sem restrição de level. `key` própria (`bullseye-potion`), pela mesma razão do Berserk: o Canary usa um `CONDITION_PARAM_SUBID` (`JeanPierreDistance`) independente do buff de magia, e as duas condições somam de verdade. `actionExhaustMs` 1000 (#690), como o Berserk. `price` 0: PENDENTE de #574 (M34-03) — `fiona.lua` só tem `sell = 500` (o que Fiona PAGA pela poção), nenhum NPC do Canary a VENDE. `appearances.supplies.effect` 15 é `CONST_ME_MAGIC_GREEN` (o `effect = CONST_ME_MAGIC_GREEN` do `potions.lua`), verificado contra a legenda auditada do pacote 13.32 em `docs/reference/catalog/monsters-report.md` (\"magic-green effect 15\", CMB-09)."
+}

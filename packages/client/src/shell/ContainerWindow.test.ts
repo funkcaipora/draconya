@@ -92,6 +92,16 @@ describe('ContainerWindow', () => {
     expect(html).not.toContain('ui-slot-label');
   });
 
+  it('vender/descartar (#724, ADR 0048 d.8): nem o menu de contexto nem a confirmação aparecem sem clique — abrir os dois é captura no navegador', async () => {
+    // `prerender` não simula clique nenhum (mesmo limite de `ExitRulesPopover.test.ts`): o que
+    // esta suíte prova é que o estado FECHADO por padrão não vaza para a tela — um menu ou uma
+    // confirmação abertos sem interação seriam o defeito oposto de "sumiu": apareceriam sozinhos.
+    const html = await render('backpack');
+    expect(html).not.toContain('ui-context-menu');
+    expect(html).not.toContain('ui-modal-scrim');
+    expect(html).not.toContain('Descartar item');
+  });
+
   describe('a seção Suprimentos (#726, ADR 0049 decisão 4)', () => {
     it('some quando o estoque está vazio (o de sempre, sem loot de supply ainda)', async () => {
       const html = await render('backpack');

@@ -105,7 +105,7 @@ cada uma das 42 mil aparências. O leitor dirigido pula a submensagem lendo um v
 `avoid`, `no_movement_animation`, `take`, `hang`, `dont_hide`, `hook`, `shift`, `height`,
 `lying_object`, `animate_always`, `fullbank` — booleanos e três números por aparência, com os
 números de campo
-conferidos contra o pacote 1332 real (`appearances.pack.test.ts`). Pulados: o resto das flags
+conferidos contra o pacote 1533 real (`appearances.pack.test.ts`). Pulados: o resto das flags
 (mercado, NPC, cyclopedia, vocação, luz, minimapa), `name`, `description`,
 `bounding_box_per_direction`, `is_opaque` — e todo campo que uma versão futura trouxer, **pelo
 wire type**. É isso, e não a lista de campos conhecidos, que mantém o leitor válido quando o

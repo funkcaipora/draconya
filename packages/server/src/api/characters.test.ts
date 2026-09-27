@@ -6,6 +6,7 @@ import {
   CharacterNameTakenError,
   type AccountRecord,
   type CharacterRecord,
+  type CharacterStorageRecord,
   type GameRepository,
   type ItemInstanceRecord,
   type StartingKitPiece,
@@ -40,6 +41,9 @@ class MemoryRepository implements GameRepository {
     };
   }
   async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
+    return [];
+  }
+  async listCharacterStorages(): Promise<readonly CharacterStorageRecord[]> {
     return [];
   }
   async saveBotConfig(characterId: string, config: unknown): Promise<void> {

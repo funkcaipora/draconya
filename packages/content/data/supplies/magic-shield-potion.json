@@ -1,0 +1,20 @@
+{
+  "id": "magic-shield-potion",
+  "name": "Magic Shield Potion",
+  "description": "Absorve dano com a própria mana por 1 minuto. Nível 14 ou mais, Sorcerer e Druid.",
+  "price": 0,
+  "group": "potion",
+  "effect": {
+    "kind": "condition",
+    "condition": {
+      "key": "mana-shield",
+      "durationMs": 60000,
+      "effect": { "kind": "mana-shield" }
+    }
+  },
+  "requires": {
+    "level": 14,
+    "vocationId": ["sorcerer", "druid"]
+  },
+  "_open": "#576, M34-05. Canary `data/scripts/actions/items/potions.lua` (`things/sources/canary`, commit 47dfd51), item id 35563: `func = magicshield`, `vocations = { SORCERER, DRUID }`, `level = 14`. A função `magicshield` cria `Condition(CONDITION_MANASHIELD)` com `CONDITION_PARAM_TICKS = 60000` e um `CONDITION_PARAM_MANASHIELD` de MAGNITUDE separada (`min(maxMana, 300 + 7.6*level + 7*magicLevel)`) — um BALDE independente da mana do personagem, que absorve até esvaziar e só então cai. O Draconya JÁ simplifica mana shield para absorver da própria mana do personagem, sem balde separado (CMB-08, `docs/product/combat.md` \"Mana shield como estágio visível\", decisão tomada antes desta issue) — esta poção reaproveita o MESMO `kind: 'mana-shield'` que a magia já usa (`spellEffectSchema`), sem reabrir essa simplificação. `key: 'mana-shield'` é a MESMA chave da magia de propósito: as duas são uma leitura OU-lógica só (`hasManaShield()`), nunca dois escudos empilhados — beber a poção com a magia já ativa apenas estende o prazo (`merge: 'refresh'`, o default). Sem `actionExhaustMs` (#690): o `func` da poção só chama `player:addCondition` da mana shield — o `potions.lua` do Canary declara uma variável `exhaust` de módulo com `CONDITION_PARAM_TICKS = 500` dentro de `magicshield()`, mas NENHUMA chamada deste arquivo aplica essa condição a um jogador (`player:addCondition(exhaust)` não aparece no arquivo); é o achado que o comentário de `supplySchema.actionExhaustMs` já registra (\"a Magic Shield Potion, #576, que o Canary tira da exaustão\"). `price` 0: PENDENTE de #574 (M34-03) — `cledwyn.lua` tem `buy = 1` (o NPC Cledwyn vende por 1 gold, no Canary), registrado aqui para quem for decidir #574; este arquivo não antecipa o número. `appearances.supplies.effect` 38 é `CONST_ME_ENERGYAREA` (`effect = CONST_ME_ENERGYAREA` no `potions.lua`), verificado contra a legenda auditada do pacote 13.32 em `docs/reference/catalog/monsters-report.md` (\"energyarea effect 38\", CMB-09)."
+}
