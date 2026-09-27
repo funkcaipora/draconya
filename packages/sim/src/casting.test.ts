@@ -600,6 +600,64 @@ describe('a fórmula canônica do Canary (#474)', () => {
   });
 });
 
+describe('a skill da fórmula: LEVELMAGIC lê o magic level, SKILLVALUE a da vocação (#677)', () => {
+  // Paladin level 100, distance 100 e ML 20. Divine Caldera no Canary registra
+  // `CALLBACK_PARAM_LEVELMAGICVALUE`: min = level/5 + ML×4, max = level/5 + ML×6.
+  const divineCaldera: Spell = {
+    id: 'divine-caldera', name: 'Divine Caldera', manaCost: 160, cooldownMs: 4_000, minLevel: 50,
+    vocationId: 'paladin',
+    effect: {
+      kind: 'damage', basePower: 150, damageType: 'holy',
+      area: { shape: 'circle', radius: 3, centered: 'caster' },
+      formula: { levelFactor: 0.2, skillMin: 4, skillMax: 6, baseMin: 0, baseMax: 0, scaling: 'magic' },
+    },
+  };
+  // Ethereal Spear registra `CALLBACK_PARAM_SKILLVALUE`: o termo é a distance, e a fórmula não
+  // declara `scaling` (= `vocation`).
+  const etherealSpear: Spell = {
+    id: 'ethereal-spear', name: 'Ethereal Spear', manaCost: 25, cooldownMs: 2_000, minLevel: 23,
+    vocationId: 'paladin',
+    effect: {
+      kind: 'damage', basePower: 25, range: 7, damageType: 'physical',
+      formula: { levelFactor: 0.2, skillMin: 0.333333, skillMax: 1, baseMin: 8.333333, baseMax: 25 },
+    },
+  };
+  const paladin = (): CharacterRuntime => {
+    const caster = hero({ level: 100, mana: 1_000 });
+    caster.vocationId = 'paladin';
+    return caster;
+  };
+  const scaling = { skillLevel: 100, powerScale: 1, magicLevel: 20 };
+
+  it('Divine Caldera com `scaling: magic` rende 100~140 pelo ML 20, não 420~620 pela distance', () => {
+    const result = castSpell(paladin(), divineCaldera, near(), 0, combat, rng(), scaling);
+    if (!result.ok) throw new Error('lançamento recusado');
+    // min = 20 + 20×4 = 100; max = 20 + 20×6 = 140. Lendo a distance seria 420~620.
+    expect(result.hits[0]).toBeGreaterThanOrEqual(100);
+    expect(result.hits[0]).toBeLessThanOrEqual(140);
+  });
+
+  it('Ethereal Spear sem `scaling` continua lendo a skill da vocação (distance 100)', () => {
+    const result = castSpell(paladin(), etherealSpear, near({ distance: 3 }), 0, combat, rng(), scaling);
+    if (!result.ok) throw new Error('lançamento recusado');
+    // min = 20 + 100×0.333333 + 8.33 ≈ 61.67; max = 20 + 100 + 25 = 145. A prova de que o ML
+    // não entra: o mesmo lançamento com ML 500 sai idêntico (lendo o ML, o teto iria a 545).
+    const outroMl = castSpell(paladin(), etherealSpear, near({ distance: 3 }), 0, combat, rng(),
+      { ...scaling, magicLevel: 500 });
+    if (!outroMl.ok) throw new Error('lançamento recusado');
+    expect(result.hits).toEqual(outroMl.hits);
+    expect(result.hits[0]).toBeGreaterThanOrEqual(61);
+    expect(result.hits[0]).toBeLessThanOrEqual(145);
+  });
+
+  it('`scaling: magic` sem `magicLevel` na escala cai em `skillLevel` (o fallback das fixtures)', () => {
+    const result = castSpell(paladin(), divineCaldera, near(), 0, combat, rng(), { skillLevel: 20, powerScale: 1 });
+    if (!result.ok) throw new Error('lançamento recusado');
+    expect(result.hits[0]).toBeGreaterThanOrEqual(100);
+    expect(result.hits[0]).toBeLessThanOrEqual(140);
+  });
+});
+
 describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisão 8)', () => {
   const rune: Supply = {
     id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack', groupCooldownMs: 2_000,

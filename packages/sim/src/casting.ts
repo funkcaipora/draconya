@@ -168,7 +168,7 @@ export function secondaryCooldownKey(name: string): string {
 
 /**
  * O que escala uma magia (#155). `skillLevel` é o level da skill que a vocação usa para magia
- * (`spellSkill`, `magic` por padrão); `powerScale` é o multiplicador das skills por uso
+ * (`spellSkill`, `magic` por padrão) — o que a fórmula de dano SEM `scaling: 'magic'` lê (#677); `powerScale` é o multiplicador das skills por uso
  * (`#scaledPower`) e só vale para `power`/`amount` FIXOS — o `basePower` já entra pela
  * conversão, e multiplicar de novo contaria a mesma skill duas vezes.
  */
@@ -205,6 +205,15 @@ export interface HealEffect {
 }
 
 /**
+ * A skill da fórmula (#677): cura e `scaling: 'magic'` leem o ML; ausente (= `vocation`) é a skill
+ * da vocação, bit a bit o caminho de antes. `?? skillLevel` é o fallback de fixture sem ML.
+ */
+function formulaSkill(kind: string, formula: SpellFormula, scaling: SpellScaling): number {
+  if (kind === 'heal' || formula.scaling === 'magic') return scaling.magicLevel ?? scaling.skillLevel;
+  return scaling.skillLevel;
+}
+
+/**
  * O poder de um efeito: o BP convertido e sorteado (UMA rolagem por chamada — ordem é
  * contrato), ou o fixo escalado pelas skills por uso.
  *
@@ -212,8 +221,9 @@ export interface HealEffect {
  * exatamente no caminho do `basePower` × `combat.spellPower`, bit a bit (ADR 0031). Os dois
  * caminhos consomem UM `rng.integer`, então a ordem de sorteio não muda para ninguém.
  *
- * O `skill` da fórmula é o da vocação na magia de DANO e o MAGIC LEVEL na CURA (#475): a mesma
- * fórmula, dois vocabulários, e é o `kind` do efeito que escolhe.
+ * O `skill` da fórmula é o MAGIC LEVEL na CURA (#475) e na magia de DANO que declara
+ * `scaling: 'magic'` (#677, o `LEVELMAGICVALUE` do Canary); na de dano sem `scaling`, é a skill
+ * da vocação (`SKILLVALUE`). Ver `formulaSkill`.
  */
 function powerOf(
   effect: {
@@ -226,7 +236,7 @@ function powerOf(
   caster: CharacterRuntime, scaling: SpellScaling, combat: Combat, rng: Rng,
 ): number {
   if (effect.formula !== undefined) {
-    const skill = effect.kind === 'heal' ? scaling.magicLevel ?? scaling.skillLevel : scaling.skillLevel;
+    const skill = formulaSkill(effect.kind, effect.formula, scaling);
     const { min, max } = evaluateSpellPower(
       effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
       scaling.weaponAttack ?? 0,

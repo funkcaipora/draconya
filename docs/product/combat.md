@@ -441,9 +441,14 @@ não mais a exceção. O que o motor ganhou:
   efeito aparece em todos — inclusive onde não há monstro, como no Tibia.
 - **Fórmula canônica** (`effect.formula`, #474/#523): `min = level × levelFactor + skill ×
   skillMin + baseMin` (idem `max`), os mesmos coeficientes que o `onGetFormulaValues` do Canary
-  devolve. `levelFactor` default 0,2 é o `level / 5` da referência; a skill é a da vocação
-  (`vocation.spellSkill`: `magic`, `distance` no Paladin, `melee` no Knight) na magia de DANO, e
-  o MAGIC LEVEL em toda vocação na magia e na runa de CURA (#475). Desde o #523, TODA magia de
+  devolve. `levelFactor` default 0,2 é o `level / 5` da referência. Na magia de DANO a skill é a
+  que `formula.scaling` declara (#677), transcrevendo o callback do Canary: `magic` é o
+  `CALLBACK_PARAM_LEVELMAGICVALUE` (o MAGIC LEVEL, com o bônus de item `magic`, em qualquer
+  vocação: as 37 magias LEVELMAGIC do catálogo, inclusive Divine Caldera e Divine Missile do
+  Paladin); ausente (= `vocation`) é a skill da vocação (`vocation.spellSkill`: `magic`,
+  `distance` no Paladin, `melee` no Knight), o que a `CALLBACK_PARAM_SKILLVALUE` lê (as 10 de
+  Knight e as Ethereal Spear). `scaling: 'magic'` com termo de ataque de arma é recusado no boot.
+  Na magia e na runa de CURA é sempre o MAGIC LEVEL (#475). Desde o #523, TODA magia de
   dano/cura com correspondente real no Canary declara `formula` — só ficam de fora as três
   genéricas pré-vocação (`heal`/`strike`/`blast`, que o Tibia não tem) e três magias inventadas
   antes da auditoria sem nome correspondente no Canary (`divine-barrage`, `ethereal-barrage`,
@@ -549,8 +554,8 @@ genérica com level 8 (o real é 15), e Ultimate Healing Rune tinha coeficientes
 
 O que difere da magia de ataque, e por quê:
 
-- **Escala sempre pelo magic level**, em toda vocação. Magia escala pela skill que a vocação
-  declara (`spellSkill`, §"Magias do catálogo"); runa é do magic level no Tibia, e knight de
+- **Escala sempre pelo magic level**, em toda vocação. Magia de dano escala pela skill que a
+  fórmula declara (`formula.scaling`, #677, §"Magias do catálogo"); runa é do magic level no Tibia, e knight de
   magic level 2 usando Avalanche é a cena real — bate fraco, mas bate.
 - **Cooldown por grupo do conteúdo.** A runa declara `group: attack`; a cadência é a do motor v2,
   e a runa não tranca nem é trancada pelo cooldown individual de uma magia.
