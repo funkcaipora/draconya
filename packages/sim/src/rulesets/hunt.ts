@@ -45,6 +45,9 @@ import type { TileFieldState } from '../fields.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
+import { reflectedDamageIntent } from '../combat/reflect.js';
+import { cleavePower, cleaveTiles } from '../combat/cleave.js';
+import type { ReflectedDamage } from '../combat/reflect.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import {
   combineCombatModifiers, monsterCriticalModifiers, rollSharedCriticalOutcome,
@@ -96,7 +99,9 @@ import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from 
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { containerRulesFor } from '../inventory.js';
+import {
+  containerRulesFor, equipmentAbsorb, equipmentCleavePercent, equipmentReflect, immunitiesOnly,
+} from '../inventory.js';
 import {
   TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
 } from '../movement.js';
@@ -5246,7 +5251,9 @@ const slots = bot.groups.get(group);
     const definition = this.#options.items.get(equipped.itemId);
     if (definition?.charges === undefined) return;
     const protects = definition.mitigation.immunities.has(damageType)
-      || definition.mitigation.resistances[damageType] > 0;
+      || definition.mitigation.resistances[damageType] > 0
+      // `absorb.percent` (#552) é o mesmo `absorbpercent*`: gasta carga como a resistência.
+      || (definition.absorb?.[damageType]?.percent ?? 0) > 0;
     if (!protects) return;
     if (character.inventory.consumeCharge(slot, definition.charges) > 0) return;
     session.record(recordType, equipped.itemId);
@@ -5492,6 +5499,14 @@ const slots = bot.groups.get(group);
           // decidindo SÓ a apresentação (`source`).
           blockable: abilityBlockFlags(ability),
           ...(resolvedMonsterModifiers === undefined ? {} : { modifiers: resolvedMonsterModifiers }),
+          // Contra quem o reflexo do equipamento volta (#552): a vida máxima do monstro (o teto
+          // de 1 %) e a distância dele ao alvo (a exceção do físico flat). Só o `combat-v3` lê.
+          ...(monsterDefinition === undefined ? {} : {
+            attacker: {
+              maxHealth: monsterDefinition.health,
+              distance: distance(monster.position, character.position),
+            },
+          }),
         },
         defender,
         'pve',
@@ -5499,6 +5514,12 @@ const slots = bot.groups.get(group);
         session.rng,
         session.nowMs,
       );
+      // O reflexo sai ANTES do dano no alvo, como no Canary (`Combat::doCombatHealth` contra o
+      // atacante no fim do bloqueio, antes de a vida do alvo mudar) — um monstro que morre pelo
+      // próprio golpe refletido ainda acerta este golpe.
+      if (result.reflected !== undefined && monster.alive) {
+        this.#reflectOntoMonster(session, character, monster, result.reflected);
+      }
       this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
@@ -5515,6 +5536,38 @@ const slots = bot.groups.get(group);
     if (ability.field !== undefined) {
       this.applyField(session, ability.field, this.#at(primary), 'monster');
     }
+    // O reflexo (#552) pode ter matado o monstro no meio da ability. Quem aplica dano não decide
+    // morte: o pipeline resolve depois do golpe inteiro, como faz depois do golpe do personagem.
+    if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+  }
+
+  /**
+   * A SEGUNDA resolução do reflexo (#552, M30-05): o dano que o equipamento do personagem devolve
+   * ao monstro que o atacou. É uma EXTENSÃO (`reflectedDamageIntent`): passa por `resolveDamage`
+   * contra a defesa do monstro sem bloqueio por defesa/armadura, nunca reflete de volta, não
+   * critica e não faz leech (`attacker` nulo em `applyDamageOutcome`). O crédito do dano é do
+   * personagem — ele conta para quem matou e para o DPS, como qualquer golpe dele.
+   *
+   * Não resolve a morte: quem chama decide quando (`#executeMonsterAbility`, depois do golpe
+   * inteiro). O reflexo do MONSTRO sobre o personagem (#683) é o espelho deste, com o mesmo
+   * `resolveReflect`.
+   */
+  #reflectOntoMonster(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
+  ): void {
+    const outcome = resolveDamage(
+      reflectedDamageIntent(reflected), this.#monsterDefender(monster), 'pve', this.#options.combat,
+      session.rng, session.nowMs,
+    );
+    const applied = applyDamageOutcome(monster, outcome, null);
+    recordDamage(monster.contribution, character.id, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+      amount: applied.healthDamage + applied.manaDamage, source: 'melee', position: this.#at(monster),
+      damageType: outcome.damageType,
+    });
+    this.#emitHealth(session, monster);
+    session.creditDamage(character.id, applied.healthDamage);
   }
 
   /**
@@ -6060,6 +6113,9 @@ const slots = bot.groups.get(group);
     // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
     // o `attack`, o alcance e o tipo de `combat.player`.
     const profile: WeaponProfile = how ?? this.#options.unarmed;
+    // O cleave (#552) sai ANTES do golpe principal, como no Canary; só com ARMA corpo a corpo —
+    // o punho do Canary (`Weapon::useFist`) não passa por `WeaponMelee::useWeapon`.
+    if (weapon !== null && how?.kind === 'melee') this.#cleave(session, character, monster, profile, damagePercent);
     const hit = this.#weaponPower(session, character, profile, damagePercent);
     const result = resolveDamage(
       {
@@ -6091,6 +6147,74 @@ const slots = bot.groups.get(group);
     // é o tipo de bloqueio que decide: 1 try, ou 0 contra imune e bloqueado sem sangue.
     this.#practice(session, character, profile.family,
       this.#isV3() ? meleeTries(character.attackPractice) : 1);
+  }
+
+  /**
+   * O cleave do golpe corpo a corpo (M30-05, #552; `WeaponMelee::useWeapon` do Canary): com
+   * `cleavePercent` vestido, cada monstro vivo nos dois tiles que flanqueiam o alvo
+   * (`cleaveTiles`) leva uma rolagem PRÓPRIA de poder da arma na fração do cleave. É EXTENSÃO
+   * (`damage.extension = true` no Canary): sem crítico, sem leech e sem reflexo — o intent não
+   * declara crítico nem leech, só o aumento por tipo do atacante, que o `blockHit` do alvo aplica
+   * a qualquer golpe. Bloqueia como corpo a corpo, e cada vítima pratica a skill uma vez
+   * (`onUsedWeapon` roda por `internalUseWeapon`).
+   *
+   * Só no `combat-v3`: os perfis anteriores não conhecem o atributo, e o item que o declara não
+   * muda um golpe congelado neles. A morte das vítimas é resolvida aqui, depois de todas — a
+   * regra de colher antes de aplicar (FUN-92) — e antes do golpe principal, que é de outro tile.
+   */
+  #cleave(
+    session: Session, character: CharacterRuntime, target: MonsterRuntime, profile: WeaponProfile,
+    damagePercent: number,
+  ): void {
+    if (this.#options.combat.compatibilityProfile !== 'combat-v3') return;
+    const percent = equipmentCleavePercent(character.inventory, this.#options.items);
+    if (percent <= 0) return;
+    const tiles = cleaveTiles(character.position, target.position);
+    if (tiles === null) return;
+    const victims: MonsterRuntime[] = [];
+    for (const tile of tiles) {
+      for (const candidate of this.#monsters) {
+        if (candidate !== target && candidate.alive
+          && candidate.position.x === tile.x && candidate.position.y === tile.y
+          && sameFloor(candidate.position.z, target.position.z)) {
+          victims.push(candidate);
+        }
+      }
+    }
+    if (victims.length === 0) return;
+    const increase = this.#attackerModifiers(character)?.increase;
+    for (const victim of victims) {
+      // O golpe do cleave é o `internalUseWeapon` inteiro na fração (`weapons.cpp:282-306`): o
+      // `damageModifier` do `unproperly` (#687) e a divisão físico/elemento vêm ANTES, e a fração
+      // corta os dois componentes, cada um truncado.
+      const hit = this.#weaponPower(session, character, profile, damagePercent);
+      const elemental = cleavePower(hit.elemental, percent);
+      const result = resolveDamage(
+        {
+          rawDamage: cleavePower(hit.physical, percent),
+          source: 'basic-attack',
+          damageType: profile.damageType,
+          ...(increase === undefined ? {} : { modifiers: { increase } }),
+          blockable: MELEE_BLOCK_FLAGS,
+          extension: true,
+          ...(elemental > 0 && profile.element !== undefined
+            ? {
+              secondary: {
+                rawDamage: elemental,
+                damageType: profile.element.type,
+                blockable: MAGIC_BLOCK_FLAGS,
+              },
+            }
+            : {}),
+        },
+        this.#monsterDefender(victim), 'pve', this.#options.combat, session.rng, session.nowMs,
+      );
+      this.#land(session, character, victim, result, 'melee');
+      this.#practice(session, character, profile.family, 1);
+    }
+    for (const victim of victims) {
+      if (!victim.alive) resolveDeath(session, { kind: 'monster', monster: victim });
+    }
   }
 
   /**
@@ -7098,8 +7222,8 @@ const slots = bot.groups.get(group);
    */
   #playerDefender(character: CharacterRuntime): Defender {
     // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
-    // partir dos poucos slots vestidos — não é varredura de tabela de resistência. Igual nos
-    // três perfis: nem #548 nem esta issue mexem em `mitigation` (resistência por tipo).
+    // partir dos poucos slots vestidos — não é varredura de tabela de resistência. `combat-v1`/
+    // `v2` a usam inteira; o `combat-v3` (#552) tira dela a resistência, que vira `absorb`.
     const mitigation = character.inventory.mitigation(this.#options.items);
     const blockCharge = character.blockCharge;
 
@@ -7117,10 +7241,17 @@ const slots = bot.groups.get(group);
       // (aqui e as duas de baixo) usam o MESMO equipamento do MESMO golpe.
       const weaponItem = character.inventory.weapon(this.#options.items, character);
       const shieldItem = character.inventory.shield(this.#options.items, character);
+      // A absorção e o reflexo do equipamento (#552, M30-05): a resistência do ITEM é o
+      // `absorbpercent*` do Canary, aplicado item a item DEPOIS da armadura (`Player::blockHit`)
+      // — por isso ela sai de `mitigation` (que fica só com as imunidades) e entra em `absorb`.
+      const absorb = equipmentAbsorb(character.inventory, this.#options.items);
+      const reflect = equipmentReflect(character.inventory, this.#options.items);
       return {
         armor: playerArmor(character.inventory.armor(this.#options.items)),
         dodgeChance: this.#options.player.dodgeChance,
-        mitigation,
+        mitigation: immunitiesOnly(mitigation),
+        ...(absorb === undefined ? {} : { absorb }),
+        ...(reflect === undefined ? {} : { reflect: { reflector: 'player' as const, table: reflect } }),
         defense: {
           kind: shieldItem !== null ? 'shield' : weaponItem !== null ? 'weapon' : 'none',
           defense: this.#playerDefenseV3(character, weaponItem, shieldItem),

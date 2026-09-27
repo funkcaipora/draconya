@@ -22,6 +22,28 @@ import { FULL_BLOCK_CHARGE, type BlockChargeState } from './block-charge.js';
 import { MELEE_BLOCK_FLAGS, resolveBlockHit } from './blockhit.js';
 import type { BlockFlags, BlockType } from './blockhit.js';
 import type { Rng } from '../rng.js';
+import { resolveReflect } from './reflect.js';
+import type { DefenderReflect, ReflectAttacker, ReflectedDamage } from './reflect.js';
+
+/**
+ * A absorção do DEFENSOR no `combat-v3` (M30-05, #552), em percentual INTEIRO — a escala do
+ * Canary. São dois estágios em lugares diferentes do pipeline, como lá:
+ *
+ *   - `flat` é o `absorbFlat` do `Creature` (`applyAbsorbDamageModifications`,
+ *     `creature.cpp:924-942`), ANTES da imunidade e da defesa;
+ *   - `items` é o `absorbPercent` de CADA item vestido (`Player::blockHit`,
+ *     `player.cpp:3938-3962`), DEPOIS da defesa, da armadura e da mitigação percentual, um item
+ *     por vez e arredondando a cada um: `damage -= round(damage × p / 100)`. Dois itens de 20 %
+ *     tiram 36 %, não 40 %.
+ *
+ * Ausente é o defensor sem absorção nenhuma — o monstro (os `elements` dele são a resistência de
+ * `mitigation`, um estágio próprio do `Monster::blockHit`, não esta absorção) e todo jogador sem
+ * item que absorva.
+ */
+export interface DefenderAbsorb {
+  readonly items: readonly Readonly<Partial<Record<DamageType, number>>>[];
+  readonly flat: Readonly<Partial<Record<DamageType, number>>>;
+}
 
 /**
  * Onde o golpe acontece. Bônus de Bestiário são **PvE-only** (§18.5), e o contexto é o que
@@ -81,6 +103,13 @@ export interface Defender {
    * sempre 0). Ignorado para qualquer outro tipo de dano.
    */
   readonly mana?: number | undefined;
+  /** A absorção do `combat-v3` (#552) — ver `DefenderAbsorb`. Ignorada em `combat-v1`/`v2`. */
+  readonly absorb?: DefenderAbsorb | undefined;
+  /**
+   * O reflexo do defensor (#552; o de monstro é o #683) — ver `combat/reflect.ts`. Ausente é quem
+   * não reflete nada. Ignorado em `combat-v1`/`v2`.
+   */
+  readonly reflect?: DefenderReflect | undefined;
 }
 
 /**
@@ -91,7 +120,7 @@ export interface Defender {
  * aquele é apresentação e diz que efeito desenhar; este diz qual fórmula resolveu. Reusar o
  * visual para a fórmula é exatamente a confusão que a DT-01 descarta.
  */
-export type DamageSource = 'basic-attack' | 'spell' | 'rune' | 'monster-attack';
+export type DamageSource = 'basic-attack' | 'spell' | 'rune' | 'monster-attack' | 'reflect';
 
 /**
  * O TIPO de dano. Desde o CMB-03 é o vocabulário CANÔNICO de `@draconya/content` — o `sim`
@@ -145,6 +174,24 @@ export interface DamageIntent {
    * mágica ou à distância declara o próprio. Ignorado em `combat-v1`/`v2`.
    */
   readonly blockable?: BlockFlags | undefined;
+  /**
+   * O atacante CRIATURA do golpe (#552): o que o reflexo precisa (vida máxima e distância). Ausente
+   * é golpe sem contra quem refletir. Só o `combat-v3` lê.
+   */
+  readonly attacker?: ReflectAttacker | undefined;
+  /**
+   * O golpe é EXTENSÃO de outro (#552, o `damage.extension` do Canary): o reflexo e o cleave.
+   * Extensão nunca gera reflexo — é o que impede reflexo sobre reflexo. Crítico e leech a
+   * extensão também não tem, mas isso é de quem monta o intent: ele não declara `modifiers` de
+   * crítico nem de leech.
+   */
+  readonly extension?: boolean | undefined;
+  /**
+   * Dano NEUTRO (#552): o reflexo de um JOGADOR (`ReflectedDamage.neutral`). Pula absorção,
+   * aumento, imunidade e resistência — o `COMBAT_NEUTRALDAMAGE` do Canary não tem entrada em
+   * nenhuma dessas tabelas. Só o `combat-v3` lê.
+   */
+  readonly neutral?: boolean | undefined;
 }
 
 /**
@@ -209,6 +256,13 @@ export interface DamageOutcome {
   readonly blockType?: BlockType;
   /** Se havia carga de bloqueio para consumir (#686, o `hasDefense` do Canary). Só no `combat-v3`. */
   readonly hadBlockCharge?: boolean;
+  /**
+   * O dano que volta ao ATACANTE (#552): o reflexo do defensor sobre este golpe, já com o teto de
+   * 1 % da vida máxima do atacante. Quem aplica o outcome é quem faz a segunda resolução contra o
+   * atacante (`reflectedDamageIntent`). Ausente sem reflexo — sempre em `combat-v1`/`v2`, e
+   * sempre num golpe que já é extensão.
+   */
+  readonly reflected?: ReflectedDamage;
 }
 
 /** Chance de esquiva que de fato vale, dado onde a luta acontece. */
@@ -352,11 +406,15 @@ function resolveMitigation(
  *      percentual — o estágio `resolveBlockHit` (`blockhit.ts`), que substitui o bloqueio
  *      binário do CMB-04 inteiro (defesa) e a subtração flat de armadura do CMB-02/03, agora
  *      sobre o dano JÁ crítico;
- *   4. resistência/vulnerabilidade por tipo (CMB-03, `mitigation.resistances`) — INTOCADO, e
- *      continua um estágio à parte: o Canary a resolve como absorção percentual (o PRIMEIRO
- *      estágio de `blockHit`, fora do escopo do #548, M30-05), e o Draconya já tinha este
- *      mecanismo antes desta issue — não duplicado aqui, só reposicionado depois do estágio
- *      novo por não ter razão para vir antes dele;
+ *   2b. (#552, M30-05) o corte de manadrain à mana atual e o estágio de absorção do `Creature`
+ *      (`applyAbsorbDamageModifications`): absorção FLAT do defensor e AUMENTO do atacante por
+ *      tipo — ANTES da imunidade e da defesa, como o primeiro ato do `blockHit` do Canary;
+ *   3b. (#552) a absorção percentual ITEM A ITEM do jogador (`Player::blockHit`), depois do
+ *      estágio de bloqueio inteiro, arredondando a cada item;
+ *   4. resistência/vulnerabilidade por tipo (CMB-03, `mitigation.resistances`) — os `elements`
+ *      do MONSTRO, que o Canary aplica em `Monster::blockHit` depois do `Creature::blockHit`
+ *      (conferido no #552: NÃO passam por `getAbsorbPercent`). O jogador do `combat-v3` chega
+ *      aqui sem resistência: a do item é a absorção do passo 3b;
  *   5. piso (`minimumDamageFraction`), sobre o PODER BRUTO ORIGINAL (sem o crítico) — mantido
  *      como salvaguarda de PRODUTO do Draconya (nunca existiu no Canary: lá um bloqueio pode
  *      legitimamente zerar um golpe, e o crítico não existe no Canary como conceito de "piso").
@@ -364,7 +422,10 @@ function resolveMitigation(
  *   6. corte do Dodge, se a rolagem ativou;
  *   7. arredondamento só no fim, com piso em zero;
  *   8. componente secundário (#473), se declarado — mesma regra do v1/v2, e o secundário
- *      continua SEM crítico nem leech próprios (`intent` sintetizado não herda `modifiers`).
+ *      continua SEM crítico nem leech próprios (`intent` sintetizado herda só o `increase`);
+ *   9. reflexo (#552, `combat/reflect.ts`), sobre o `resolvedDamage` do primário, quando o
+ *      defensor reflete, o intent traz o atacante e não é extensão. A segunda resolução contra
+ *      o atacante é de quem aplica o outcome.
  *
  * O LEECH (M30-04) não mora aqui: ele opera sobre o HP EFETIVAMENTE removido, não sobre o
  * `DamageOutcome`, e por isso é aplicado depois — em `applyDamageOutcome`/`applyLeech`
@@ -396,7 +457,31 @@ function resolveBlockHitProfile(
     ? intent.rawDamage * (criticalModifier?.multiplier ?? 1)
     : intent.rawDamage;
 
-  const immune = defender.mitigation?.immunities.has(intent.damageType) ?? false;
+  // O dano NEUTRO (#552, reflexo de jogador) não tem entrada em tabela nenhuma do defensor:
+  // imunidade, absorção, aumento e resistência não o tocam.
+  const neutral = intent.neutral === true;
+  const immune = !neutral && (defender.mitigation?.immunities.has(intent.damageType) ?? false);
+
+  // Manadrain capa para a mana ATUAL do alvo ANTES de qualquer estágio (#547, M29-07 — achado da
+  // revisão do PR #648): o Canary computa `manaLoss = min(mana atual, -manaChange)` e só DEPOIS
+  // roda `blockHit` — que abre com `applyAbsorbDamageModifications` e termina com a resistência —
+  // sobre o valor já capado (`game.cpp:9175-9176`). Resistir primeiro e capar depois (a ordem que
+  // `applyDamageOutcome` sozinho produziria) dobra o dreno sempre que a mana disponível for menor
+  // que o poder bruto e o alvo tiver resistência — ver o exemplo no comentário de
+  // `Defender.mana`. Sem `defender.mana` (monstro, que não tem), nada muda aqui: o dreno dele já
+  // é zerado depois, em `applyDamageOutcome` (mana sempre 0). Até o #552 o corte vinha depois do
+  // `resolveBlockHit`, que para manadrain só zera por imunidade — capar antes dá o mesmo número, e
+  // agora vem antes também da absorção, como no Canary.
+  const manaCapped = intent.damageType === 'manadrain' && defender.mana !== undefined
+    ? Math.min(defender.mana, criticalRawDamage)
+    : criticalRawDamage;
+
+  // O estágio de absorção do `Creature` (#552, `applyAbsorbDamageModifications`,
+  // `creature.cpp:924-942`), o PRIMEIRO de `blockHit`: a absorção flat do defensor (sem descer de
+  // zero) e o aumento do ATACANTE por tipo (`increasePercent`), arredondado. Sem sorteio. A
+  // absorção PERCENTUAL do item não é esta: ela vem depois da armadura (abaixo).
+  const afterAbsorbStage = neutral ? manaCapped : absorbStage(intent, defender, manaCapped);
+
   // Manadrain NUNCA bloqueia por defesa/escudo nem por armadura (#547, M29-07 — achado da
   // revisão do PR #648): o Canary chama `target->blockHit(attacker, COMBAT_MANADRAIN,
   // manaLoss)` com só 3 argumentos (`game.cpp:9176`), e `checkDefense`/`checkArmor` default a
@@ -410,7 +495,7 @@ function resolveBlockHitProfile(
     // O dano JÁ crítico entra no estágio de bloqueio — defesa, armadura e o "pular armadura
     // quando a defesa absorveu tudo" decidem sobre o número que o alvo de fato recebe, não
     // sobre o poder bruto sem o bônus.
-    rawDamage: criticalRawDamage,
+    rawDamage: afterAbsorbStage,
     damageType: intent.damageType,
     immune,
     blockable,
@@ -426,22 +511,18 @@ function resolveBlockHitProfile(
     nowMs,
   }, rng);
 
-  // Manadrain capa para a mana ATUAL do alvo ANTES da resistência (#547, M29-07 — achado da
-  // revisão do PR #648): o Canary computa `manaLoss = min(mana atual, -manaChange)` e só DEPOIS
-  // roda `blockHit` (que aplica `applyAbsorbDamageModifications`, a resistência/absorção) sobre
-  // o valor já capado (`game.cpp:9175-9176`). Resistir primeiro e capar depois (a ordem que
-  // `applyDamageOutcome` sozinho produziria) dobra o dreno sempre que a mana disponível for
-  // menor que o poder bruto e o alvo tiver resistência — ver o exemplo no comentário de
-  // `Defender.mana`. Sem `defender.mana` (monstro, que não tem), nada muda aqui: o dreno dele já
-  // é zerado depois, em `applyDamageOutcome` (mana sempre 0).
-  const manaCapped = intent.damageType === 'manadrain' && defender.mana !== undefined
-    ? Math.min(defender.mana, blockHit.damage)
-    : blockHit.damage;
+  // A absorção percentual de CADA item vestido (#552, `Player::blockHit`, `player.cpp:3938-3962`):
+  // depois da defesa, da armadura e da mitigação, só sobre dano que passou, um item por vez e
+  // arredondando a cada um. Neutro não é absorvido.
+  const afterItemAbsorb = neutral ? blockHit.damage : itemAbsorb(defender.absorb, intent.damageType, blockHit.damage);
 
-  // Resistência/vulnerabilidade por tipo (CMB-03): o mesmo mecanismo do v1/v2, intocado — ver o
-  // comentário acima sobre por que ele continua separado do estágio novo.
-  const resistance = defender.mitigation?.resistances[intent.damageType] ?? 0;
-  const afterResistance = manaCapped * (1 - resistance);
+  // Resistência/vulnerabilidade por tipo (CMB-03): o mesmo mecanismo do v1/v2 — os `elements` do
+  // MONSTRO, que o Canary aplica em `Monster::blockHit` DEPOIS do `Creature::blockHit` inteiro
+  // (`monster.cpp:1402-1426`) e NÃO por `getAbsorbPercent` (conferido no #552): é por isso que
+  // ele continua um estágio à parte, depois do estágio novo. O jogador do `combat-v3` chega aqui
+  // sem resistência (a do item virou a absorção acima, `HuntRuleset#playerDefender`).
+  const resistance = neutral ? 0 : defender.mitigation?.resistances[intent.damageType] ?? 0;
+  const afterResistance = afterItemAbsorb * (1 - resistance);
 
   // Piso, sobre o PODER BRUTO ORIGINAL (sem o crítico) — como no v1/v2 — mas nunca revogando
   // imunidade explícita. O crítico é bônus do atacante; o piso é a garantia de que nem a maior
@@ -465,9 +546,24 @@ function resolveBlockHitProfile(
         source: intent.source,
         damageType: intent.secondary.damageType,
         ...(secondaryBlockable === undefined ? {} : { blockable: secondaryBlockable }),
+        // O aumento do atacante vale para o secundário também (#552, o `blockHit` do secundário
+        // chama o mesmo `applyAbsorbDamageModifications`); crítico e leech continuam do primário.
+        ...(intent.modifiers?.increase === undefined
+          ? {} : { modifiers: { increase: intent.modifiers.increase } }),
+        // Sem `attacker`: o secundário não reflete por conta própria. O Canary só olha o reflexo
+        // do secundário quando o ALVO é monstro (`game.cpp:8016-8039`), o que é do #683.
       },
       { ...defender, blockCharge: blockHit.blockCharge }, context, combat, rng, nowMs,
     );
+
+  const resolvedDamage = Math.max(0, Math.round(damage));
+  // O reflexo (#552): sobre o dano JÁ bloqueado, nunca num golpe que já é extensão (reflexo e
+  // cleave), e só com um atacante criatura contra quem voltar. A segunda resolução é de quem
+  // aplica o outcome — este resolver continua puro.
+  const reflected = intent.extension === true || intent.attacker === undefined
+    || defender.reflect === undefined
+    ? undefined
+    : resolveReflect(resolvedDamage, intent.damageType, defender.reflect, intent.attacker);
 
   return {
     profile: combat.compatibilityProfile,
@@ -481,7 +577,7 @@ function resolveBlockHitProfile(
     immune,
     dodged,
     critical,
-    resolvedDamage: Math.max(0, Math.round(damage)),
+    resolvedDamage,
     defenseMitigationRemoved: blockHit.mitigationRemoved,
     // O estado que `applyDamageOutcome` grava de volta (invariante 9) tem que refletir o QUE O
     // SECUNDÁRIO ainda gastou por cima do primário — sem isto, o consumo dele nunca persistiria.
@@ -489,7 +585,40 @@ function resolveBlockHitProfile(
     blockType: blockHit.blockType,
     hadBlockCharge: blockHit.hadBlockCharge,
     ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
+    ...(reflected === undefined ? {} : { reflected }),
   };
+}
+
+/**
+ * `applyAbsorbDamageModifications` do Canary (#552, `creature.cpp:924-942`), na ordem dele: a
+ * absorção flat do defensor (`max(0, d − flat)`) e depois o aumento do atacante
+ * (`d += round(d × p / 100)`). A absorção percentual do `Creature` do Canary vem de wheel e
+ * condição — nada disso existe no Draconya —, então a percentual do ITEM é outro estágio
+ * (`itemAbsorb`).
+ *
+ * O sinal do flat: o Canary soma (`damage + value`) um campo que nenhum código escreve
+ * (`setAbsorbFlat` não tem chamador no `47dfd51`), então não há comportamento observável a copiar;
+ * aqui "absorver" subtrai, como o nome diz.
+ */
+function absorbStage(intent: DamageIntent, defender: Defender, damage: number): number {
+  if (damage === 0) return 0;
+  let value = damage;
+  const flat = defender.absorb?.flat[intent.damageType] ?? 0;
+  if (flat !== 0) value = Math.max(0, value - flat);
+  const increase = intent.modifiers?.increase?.[intent.damageType] ?? 0;
+  if (increase !== 0) value += Math.round((value * increase) / 100);
+  return value;
+}
+
+/** A absorção percentual item a item (#552, `Player::blockHit`): ver `DefenderAbsorb`. */
+function itemAbsorb(absorb: DefenderAbsorb | undefined, damageType: DamageType, damage: number): number {
+  if (absorb === undefined || damage <= 0) return damage;
+  let value = damage;
+  for (const item of absorb.items) {
+    const percent = item[damageType] ?? 0;
+    if (percent !== 0) value -= Math.round((value * percent) / 100);
+  }
+  return Math.max(0, value);
 }
 
 /**

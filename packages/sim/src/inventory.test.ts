@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { compileItem, itemSchema } from '@draconya/content';
 import type { Item } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
-import { Inventory, MAX_STACK } from './inventory.js';
+import {
+  equipmentAbsorb, equipmentCleavePercent, equipmentReflect, Inventory, MAX_STACK,
+} from './inventory.js';
 import type { CarriedItem, ContainerRules, Wearer } from './inventory.js';
 
 // A aparência é resolvida por `buildContent` a partir de `appearances/baseline.json` (FUN-94),
@@ -548,6 +550,59 @@ describe('o que o combate lê', () => {
     expect(inventory.combatModifiers(catalog)).toEqual({
       critical: { chance: 0.15, multiplier: 1.35 },
     });
+  });
+});
+
+describe('absorção, aumento, reflexo e cleave do equipamento (#552)', () => {
+  const local = new Map<string, Item>([
+    ['glacier', define({
+      id: 'glacier', kind: 'amulet', slot: 'neck', weight: 5, value: 0,
+      mitigation: { resistances: { ice: 0.07 } },
+    })],
+    ['ice-legs', define({
+      id: 'ice-legs', kind: 'armor', slot: 'legs', weight: 5, value: 0,
+      absorb: { ice: { percent: 20, flat: 3 } }, increase: { ice: 10 },
+      reflect: { physical: { flat: 13 } }, cleavePercent: 2,
+    })],
+    ['ice-helmet', define({
+      id: 'ice-helmet', kind: 'armor', slot: 'head', weight: 5, value: 0,
+      absorb: { ice: { flat: 2 } }, increase: { ice: 5 },
+      reflect: { physical: { flat: 29 }, fire: { percent: 10 } }, cleavePercent: 1,
+    })],
+  ]);
+  const dress = (...ids: readonly string[]): Inventory => {
+    const inventory = new Inventory();
+    for (const id of ids) {
+      inventory.add(carried(id), local, wearer({ capacity: 1_000 }), rules);
+      inventory.equip(id, wearer(), local);
+    }
+    return inventory;
+  };
+
+  it('nada vestido que absorva, reflita ou divida: tudo ausente, zero de cleave', () => {
+    const inventory = dress();
+    expect(equipmentAbsorb(inventory, local)).toBeUndefined();
+    expect(equipmentReflect(inventory, local)).toBeUndefined();
+    expect(equipmentCleavePercent(inventory, local)).toBe(0);
+    expect(inventory.combatModifiers(local)).toBeUndefined();
+  });
+
+  it('a absorção percentual é POR ITEM, na ordem de slot do Canary, e a resistência legada entra ×100', () => {
+    // Vestidos fora de ordem: pernas primeiro, colar depois. O Canary varre head → neck → … → legs.
+    const inventory = dress('ice-legs', 'glacier', 'ice-helmet');
+    expect(equipmentAbsorb(inventory, local)).toEqual({
+      items: [{ ice: 7 }, { ice: 20 }],
+      flat: { ice: 5 },
+    });
+  });
+
+  it('reflexo e cleave somam entre os vestidos; o aumento viaja em combatModifiers', () => {
+    const inventory = dress('ice-legs', 'ice-helmet');
+    const reflect = equipmentReflect(inventory, local);
+    expect(reflect?.flat.physical).toBe(42);
+    expect(reflect?.percent.fire).toBe(10);
+    expect(equipmentCleavePercent(inventory, local)).toBe(3);
+    expect(inventory.combatModifiers(local)).toEqual({ increase: { ice: 15 } });
   });
 });
 
