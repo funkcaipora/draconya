@@ -5,6 +5,7 @@
   "price": 20,
   "group": "healing",
   "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
   "requires": {
     "level": 15,
     "magicLevel": 1

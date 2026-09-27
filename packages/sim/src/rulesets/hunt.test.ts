@@ -5185,6 +5185,77 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
   });
 });
 
+// --- a exaustão de ação compartilhada entre poção e runa (#690) --------------------------------
+
+describe('poção e runa dividem UM relógio de exaustão de ação (#690, `nextPotionAction` do Canary)', () => {
+  const attackRune = (exhaust: boolean) => ({
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack', groupCooldownMs: 2_000,
+    ...(exhaust ? { actionExhaustMs: 1_000 } : {}),
+    requires: { level: 30, magicLevel: 0 },
+    effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  });
+  // O grupo da poção a 1500 ms, e não 1000, é o que deixa a runa ENTRAR: com a regra "sempre" e
+  // o grupo igual à exaustão, a poção vence todo empate no vencimento (a fila é FIFO) e a runa
+  // espera para sempre — o mesmo que um jogador que aperta a poção a cada segundo no Canary.
+  const potion = (exhaust: boolean) => ({
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_500,
+    ...(exhaust ? { actionExhaustMs: 1_000 } : {}),
+    effect: { kind: 'heal', amount: 80 },
+  });
+
+  /** Os instantes lógicos de cada uso, a passo de 1 ms: a espera é conferida ao milissegundo. */
+  const uses = (exhaust: boolean) => {
+    const { session, hero } = withSpells(botConfig({
+      potion: [supplyRule('health-potion')],
+      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    }), { gold: 100_000, supplies: [potion(exhaust), attackRune(exhaust)], health: 5_000 }, 'bold');
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+    const out: { at: number; supplyId: string }[] = [];
+    // O que vence no instante 0 (o bot armado na entrada) sai no primeiro passo: o instante do
+    // uso é o INÍCIO do passo nesse caso, e o fim dele em todos os outros.
+    let first = true;
+    for (let t = 0; t < 15_000 && session.ended === null; t += 1) {
+      session.advanceBy(1);
+      for (const event of session.drainEvents()) {
+        if (event.kind === 'supply-used') out.push({ at: first ? 0 : session.nowMs, supplyId: event.supplyId });
+      }
+      first = false;
+    }
+    return out;
+  };
+
+  it('a poção depois de uma runa de ataque só sai 1000 ms depois dela, e vice-versa', () => {
+    const timeline = uses(true);
+    // Os dois tipos saíram — sem isso, a asserção de espaçamento passaria com um só.
+    const runes = timeline.filter((use) => use.supplyId === 'avalanche-rune');
+    expect(runes.length).toBeGreaterThan(0);
+    expect(timeline.some((use) => use.supplyId === 'health-potion')).toBe(true);
+    // Um relógio só: NENHUM par de usos consecutivos, poção ou runa, a menos de 1000 ms.
+    for (let i = 1; i < timeline.length; i += 1) {
+      const gap = (timeline[i]?.at ?? 0) - (timeline[i - 1]?.at ?? 0);
+      expect(gap, JSON.stringify(timeline.slice(i - 1, i + 1))).toBeGreaterThanOrEqual(1_000);
+    }
+    // A primeira poção depois de uma runa sai EXATAMENTE no vencimento: adiada, não perdida.
+    const firstRune = runes[0]?.at ?? 0;
+    const next = timeline.find((use) => use.at > firstRune);
+    expect(next?.at).toBe(firstRune + 1_000);
+    // A runa continua com o cooldown do PRÓPRIO grupo: 2000 ms entre duas runas.
+    for (let i = 1; i < runes.length; i += 1) {
+      expect((runes[i]?.at ?? 0) - (runes[i - 1]?.at ?? 0)).toBeGreaterThanOrEqual(2_000);
+    }
+  });
+
+  it('supply sem `actionExhaustMs` não espera: os livros continuam independentes (fixture)', () => {
+    const timeline = uses(false);
+    const firstRune = timeline.find((use) => use.supplyId === 'avalanche-rune')?.at;
+    expect(firstRune).toBeDefined();
+    // A poção bebe a cada 1000 ms desde t=0, sem desviar da runa: algum par fica a menos de 1 s.
+    const close = timeline.some((use, i) => i > 0 && use.at - (timeline[i - 1]?.at ?? 0) < 1_000);
+    expect(close).toBe(true);
+  });
+});
+
 // --- a densidade REAL da área governa "targets >= N" (#480) -----------------------------------
 
 describe('a condição "targets >= N" conta o FOOTPRINT da área, não um círculo no jogador (#480)', () => {

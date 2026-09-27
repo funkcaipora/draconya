@@ -992,6 +992,13 @@ export const supplySchema = z.object({
    * respeitava; a runa de `attack` declara o dela para se alinhar às magias de ataque.
    */
   groupCooldownMs: z.number().int().positive().default(1_000),
+  /**
+   * A exaustão de AÇÃO compartilhada (`nextPotionAction` do Canary, `timeBetweenExActions`,
+   * #690): todo supply que a declara trava o MESMO livro, poção ou runa — uma poção logo depois
+   * de uma runa de ataque espera, apesar de os grupos serem livros separados. Ausente não trava
+   * (fixture e a Magic Shield Potion, #576, que o Canary tira da exaustão).
+   */
+  actionExhaustMs: z.number().int().positive().optional(),
   effect: z.discriminatedUnion('kind', [
     /**
      * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). QUATRO mecanismos —
