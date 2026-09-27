@@ -11,6 +11,7 @@ import {
   COMBAT_PROFILES,
   DAMAGE_TYPES,
   NEUTRAL_RATES,
+  SPELL_SKILL_WEAPON,
   abilityPower,
   ammunitionSchema,
   appearancesSchema,
@@ -957,10 +958,12 @@ export function buildContent(raw: RawContent): Content {
   }
   // A skill que escala a magia de cada vocação (#155) precisa existir — quando há skills. O
   // conteúdo de teste sem skills não tem como conferir, e não precisa: `levelOf` de skill
-  // desconhecida é zero.
+  // desconhecida é zero. `SPELL_SKILL_WEAPON` (#567) é a única exceção: é a sentinela "skill da
+  // arma equipada", nunca o id de uma skill do catálogo — não há `skills/weapon.json` para
+  // conferir contra.
   if (skills.size > 0) {
     for (const vocation of vocations.values()) {
-      if (!skills.has(vocation.spellSkill)) {
+      if (vocation.spellSkill !== SPELL_SKILL_WEAPON && !skills.has(vocation.spellSkill)) {
         problems.push(`vocation/${vocation.id}: spellSkill "${vocation.spellSkill}" não existe`);
       }
     }

@@ -1055,10 +1055,11 @@ export type SpellArea = z.infer<typeof spellAreaSchema>;
  *
  * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência). Na magia de DANO o `skill` é
  * o que `scaling` declara (#677): o MAGIC LEVEL em `magic` (o `CALLBACK_PARAM_LEVELMAGICVALUE` do
- * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no
- * Paladin, `melee` no Knight — o que a `SKILLVALUE` lê); na magia e na runa de CURA é sempre o
- * MAGIC LEVEL. Sem `formula`, o efeito continua no caminho provisório de `basePower` ×
- * `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ * Canary) ou, ausente, a skill que a vocação usa (`vocation.spellSkill` — `magic`, `distance` no
+ * Paladin, e a skill da ARMA equipada no Knight desde o #567 — `SPELL_SKILL_WEAPON`, o que a
+ * `SKILLVALUE` lê); na magia e na runa de CURA é sempre o MAGIC LEVEL. Sem `formula`, o efeito
+ * continua no caminho provisório de `basePower` × `combat.spellPower`, bit a bit (ADR 0031,
+ * migração aditiva).
  */
 export const spellFormulaSchema = z.object({
   /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
@@ -2298,13 +2299,28 @@ export const regenSchema = z.strictObject({ health: regenPulseSchema, mana: rege
 export type RegenPulse = z.infer<typeof regenPulseSchema>;
 export type Regen = z.infer<typeof regenSchema>;
 
+/**
+ * Sentinela de `vocation.spellSkill` (#567): "a skill da ARMA equipada agora", nunca uma skill
+ * de verdade — não existe `skills/weapon.json`, e `buildContent` sabe disso e pula a
+ * conferência de existência para este valor (ver `content.ts`). É o que o Knight usa desde a
+ * separação de `melee` em `fist`/`club`/`sword`/`axe`: a magia dele (Berserk, Groundshaker…)
+ * escala pela skill que a família da arma na mão aponta — `fist` desarmado —, e não por um
+ * nome fixo que deixaria de existir a cada troca de arma.
+ */
+export const SPELL_SKILL_WEAPON = 'weapon' as const;
+
 export const vocationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   healthPerLevel: z.number().int().nonnegative(),
   manaPerLevel: z.number().int().nonnegative(),
   capacityPerLevel: z.number().int().nonnegative(),
-  /** A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`, e `distance` no Paladin. */
+  /**
+   * A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`,
+   * `distance` no Paladin, e `SPELL_SKILL_WEAPON` ("weapon") no Knight (#567) — a skill da
+   * FAMÍLIA da arma equipada, resolvida em tempo de execução porque o Knight troca de arma e,
+   * desde a separação de `melee`, não há mais uma skill fixa só dele.
+   */
   spellSkill: z.string().min(1).default('magic'),
   /**
    * Regeneração passiva DESTA vocação (#521, ADR 0037), na mesma forma de `progression.regen`:
