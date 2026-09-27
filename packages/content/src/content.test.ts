@@ -325,6 +325,8 @@ describe('rates do servidor (#691)', () => {
     const neutral = buildContent(base()).version;
     const doubled = buildContent(base({ progression: [{ ...baseline, rates: { experience: 2 } }] })).version;
     expect(doubled).not.toBe(neutral);
+  });
+});
 
 describe('regeneração em pulsos (#678)', () => {
   const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
