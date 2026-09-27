@@ -128,18 +128,21 @@ function rollLine(line: LootRoll, rng: Rng, lootRate: number): number {
  * Linha não-empilhável chega aqui com `min = max = 1` (o `buildContent` recusa o resto), e a
  * conta devolve 1 — o mesmo que o ramo não-empilhável do Canary.
  */
-function rollCanaryLine(line: LootRoll, rng: Rng, _lootRate: number): number {
+function rollCanaryLine(line: LootRoll, rng: Rng, lootRate: number): number {
   const chance = Math.round(line.chance * CANARY_LOOT_CHANCE_SCALE);
   // A ordem das operações é a do Canary: reassociar muda o último bit do double e, na fronteira,
   // o drop.
   const dynamicFactor = LOOT_FACTOR * (rng.integer(95, 105) / 100);
   const adjustedChance = chance * dynamicFactor;
-  // `getLootRandom` com rateLoot 1: inteiro em [0, 100000], os DOIS extremos inclusos.
-  // PONTO DE ENCAIXE do rate de loot (#691): no Canary o `rateLoot` divide a ROLAGEM
-  // (`random × 100 / max(1, rateLoot × 100)`), não a chance — e a quantidade sai da rolagem já
-  // dividida. Quando a #691 e esta se encontrarem, o rate entra aqui, sobre `randValue`, e não
-  // pela chance como no `rollLine`.
-  const randValue = rng.integer(0, CANARY_LOOT_CHANCE_SCALE);
+  // `getLootRandom`: inteiro em [0, 100000], os DOIS extremos inclusos, DIVIDIDO pelo rate de
+  // loot (#691, `random × 100 / max(1, rateLoot × SCHEDULE_LOOT_RATE)`, com o schedule em 100):
+  // no modelo `canary` o rate não multiplica a chance como no `rollLine` — ele encolhe a
+  // rolagem, e a quantidade sai da rolagem JÁ dividida. Rate entre 0 e 1 age como 1 (o
+  // `max(1, …)`). Com rate 1 a rolagem é o inteiro de sempre, bit a bit.
+  const rawValue = rng.integer(0, CANARY_LOOT_CHANCE_SCALE);
+  const randValue = lootRate <= 1 ? rawValue : rawValue / lootRate;
   if (randValue >= adjustedChance) return 0;
-  return (randValue % (line.max - line.min + 1)) + line.min;
+  // Com rate > 1 a rolagem é fracionária (Lua divide em ponto flutuante), e o `%` do Lua sobre
+  // ela também; a contagem chega ao item truncada — o `Game.createItem` a lê como inteiro.
+  return Math.trunc(randValue % (line.max - line.min + 1)) + line.min;
 }

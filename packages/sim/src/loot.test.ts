@@ -272,3 +272,50 @@ describe('rollLoot com rollModel canary (#685)', () => {
   });
 });
 
+describe('rate de loot no modelo canary (#691 × #685)', () => {
+  it('rate 1 é bit a bit o sorteio sem rate, com a mesma semente', () => {
+    const t = canary({
+      gold: { chance: 0.4, min: 1, max: 30 },
+      items: [{ itemId: 'ham', chance: 0.2, min: 1, max: 4 }],
+    });
+    const run = (rng: Rng, rate?: number) => Array.from({ length: 200 }, () =>
+      rate === undefined ? rollLoot(t, rng) : rollLoot(t, rng, rate));
+    expect(run(Rng.fromSeed('canary-rate-1'), 1)).toEqual(run(Rng.fromSeed('canary-rate-1')));
+  });
+
+  it('o rate DIVIDE a rolagem, e a quantidade sai da rolagem já dividida', () => {
+    // Fator 100, chance 30000, rolagem 50000: sem rate não cai; com rate 2 a rolagem vira 25000,
+    // cai, e a quantidade é 25000 % 10 + 1 = 1 — não 50000 % 10 + 1, nem um sorteio novo.
+    const t = canary({ gold: { chance: 0.3, min: 1, max: 10 } });
+    expect(rollLoot(t, new ScriptedRng([100, 50_000])).gold).toBe(0);
+    const rng = new ScriptedRng([100, 50_000]);
+    expect(rollLoot(t, rng, 2).gold).toBe(1);
+    expect(rng.remaining).toBe(0);
+    // Rolagem fracionária (12345 / 2 = 6172,5): a contagem chega truncada, 6172,5 % 10 + 1 → 3.
+    expect(rollLoot(t, new ScriptedRng([100, 12_345]), 2).gold).toBe(3);
+  });
+
+  it('rate 2 dobra a chance efetiva da linha', () => {
+    const t = canary({ gold: { chance: 0.1, min: 1, max: 1 } });
+    const kills = 100_000;
+    const rate = (lootRate: number) => {
+      const rng = Rng.fromSeed('canary-rate-2');
+      let drops = 0;
+      for (let i = 0; i < kills; i++) if (rollLoot(t, rng, lootRate).gold > 0) drops++;
+      return drops / kills;
+    };
+    expect(rate(1)).toBeGreaterThan(0.095);
+    expect(rate(1)).toBeLessThan(0.105);
+    expect(rate(2)).toBeGreaterThan(0.195);
+    expect(rate(2)).toBeLessThan(0.205);
+  });
+
+  it('continua consumindo exatamente dois sorteios por linha com rate > 1', () => {
+    const rng = new CountingRng(Rng.fromSeed('canary-rate-count').getState());
+    rollLoot(canary({
+      gold: { chance: 0.5, min: 1, max: 10 },
+      items: [{ itemId: 'ham', chance: 0, min: 1, max: 1 }],
+    }), rng, 3);
+    expect(rng.draws).toBe(4);
+  });
+});
