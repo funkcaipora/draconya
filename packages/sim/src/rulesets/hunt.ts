@@ -30,7 +30,7 @@ import type {
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
-import type { AreaSource } from '../area.js';
+import type { AreaSource, Direction } from '../area.js';
 import {
   NOT_IN_CATALOG, actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey,
   ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
@@ -315,6 +315,18 @@ const FIELD_EXPIRE = 'field-expire';
  */
 const FIELD_STAGE_ADVANCE = 'field-stage-advance';
 const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
+
+/**
+ * O id de UMA instância de campo lançado por JOGADOR (#591) — `Fields` indexa por id de
+ * conteúdo (`fields.ts`), então reaproveitar `spec.id` cru faria a mesma runa em tiles
+ * diferentes se substituir (a segunda plantação MOVERIA a primeira) em vez de abrir campos
+ * independentes, como o Tibia permite (várias Fire Field lado a lado). O id é o TILE: relançar
+ * a MESMA runa no MESMO tile reinicia — a mesma semântica que `applyField` já documenta —, e
+ * é determinístico (sem contador para persistir no snapshot).
+ */
+function fieldInstanceId(specId: string, at: WorldPoint): string {
+  return `${specId}@${at.x},${at.y},${at.z}`;
+}
 /**
  * No MESMO instante, o vencimento roda ANTES do tique — de condição e de campo. É a ordem
  * documentada e testada: o tique do instante de expiração não acontece. A prioridade é explícita
@@ -5648,6 +5660,31 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * A mira de CHÃO da runa de campo (#591: Fire/Poison/Energy Field/Wall, Magic Wall, Wild
+   * Growth, Destroy Field) — DIFERENTE de `#aimFor`: não exige criatura nenhuma no tile (o
+   * campo nasce no CHÃO), então não usa `#collect`/`#spellHits`. Exige mira EXPLÍCITA (`#725`/
+   * `#726`, `target.position` já resolvido pelo host em `explicit`): sem "alvo atual" — campo
+   * não tem alvo selecionado, só tile apontado. `FloorPoint` mira o tile direto; `MonsterRuntime`
+   * mira o tile dela (útil no clique em cima de um monstro). Mesmo andar (#519) e linha de
+   * visão livre (a mesma checagem que `#aimFor` já aplica à mira manual).
+   */
+  #groundAimFor(
+    character: CharacterRuntime, explicit: MonsterRuntime | FloorPoint | undefined,
+  ): SpellAim | null {
+    if (explicit === undefined) return null;
+    let point: WorldPoint;
+    if ('position' in explicit) {
+      if (!explicit.alive || !sameFloor(character.position.z, explicit.position.z)) return null;
+      point = this.#at(explicit);
+    } else {
+      if (!sameFloor(character.position.z, explicit.z)) return null;
+      point = { x: explicit.x, y: explicit.y, z: explicit.z ?? this.#world.map.z };
+    }
+    if (!isSightClear(this.#world.map, character.position, point)) return null;
+    return { distance: distance(character.position, point), targets: [], point };
+  }
+
+  /**
    * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
    * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
    * Mind Control) MAIS o de condição (#576: Mastermind Potion soma 3 — `CONDITION_PARAM_BUFF_SPELL`
@@ -5995,8 +6032,15 @@ const slots = bot.groups.get(group);
    * antes, sem órfão. É a porta ÚNICA — a ability de monstro e o teste passam por aqui.
    *
    * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
+   *
+   * `direction` (#591) só importa para a forma `wall` — a fileira perpendicular precisa saber
+   * lançador→alvo para se orientar. Default `'south'`, preservando bit a bit o único chamador
+   * de antes desta issue (a ability de monstro, sempre `circle`, que ignora direção).
    */
-  applyField(session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell'): TileFieldState {
+  applyField(
+    session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell',
+    direction: Direction = 'south',
+  ): TileFieldState {
     const subject = fieldSubject(spec.id);
     const previous = this.#fields.get(spec.id);
     const stages = fieldStagesOf(spec);
@@ -6025,7 +6069,7 @@ const slots = bot.groups.get(group);
       // MESMA tabela de anéis que a área de dano dela — senão o campo de fogo do Dragon Lord
       // cobriria 69 tiles em vez dos 21 que o raio 4 do Canary de fato cobre, enquanto a bola
       // de fogo do mesmo ataque já usa os 21 certos.
-      tiles: areaTiles(spec.shape, at, 'south', at, source),
+      tiles: areaTiles(spec.shape, at, direction, at, source),
       expiresAtMs: session.nowMs + stage.durationMs,
       ...(stage.condition === undefined ? {} : { condition: stage.condition }),
       ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
@@ -6099,6 +6143,27 @@ const slots = bot.groups.get(group);
     // A tela fica sabendo (#561, M31-06): só quando de fato havia campo para remover — um
     // snapshot restaurado de formato anterior nunca teria este evento, mas a defesa é de graça.
     if (removed !== null) session.emit({ kind: 'field-vanished', fieldId });
+  }
+
+  /**
+   * Destroy Field (#591, `destroy_field_rune.lua`): remove o campo NÃO-bloqueante no tile, com
+   * a MESMA cancelação de eventos que `applyField` faz ao relançar — sem isso, o `FIELD_TICK`/
+   * `FIELD_EXPIRE`/`FIELD_STAGE_ADVANCE` órfão dispararia contra um campo que já não existe.
+   * Campo bloqueante (Magic Wall, Wild Growth) nunca é alvo — o Canary também não os lista em
+   * `fields` (`destroy_field_rune.lua`). Devolve `false` sem tocar nada quando não há o que
+   * destruir, para o chamador recusar `no-target` ANTES de gastar carga/gold (o Lua também só
+   * consome o uso em caso de sucesso).
+   */
+  #destroyFieldAt(session: Session, at: WorldPoint): boolean {
+    const field = this.#fields.at(at);
+    if (field === null || field.blocksMovement === true) return false;
+    const subject = fieldSubject(field.id);
+    session.cancelEvent(FIELD_EXPIRE, subject);
+    session.cancelEvent(FIELD_STAGE_ADVANCE, subject);
+    session.cancelEvent(FIELD_TICK, subject);
+    this.#fields.remove(field.id);
+    session.emit({ kind: 'field-vanished', fieldId: field.id });
+    return true;
   }
 
   /**
@@ -6208,14 +6273,27 @@ const slots = bot.groups.get(group);
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
 
-    // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
-    // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação. A runa de
-    // CONDIÇÃO a distância (#592, Paralyze Rune) mira do MESMO jeito, sem área — só um alvo.
+    // A runa de dano (#165) mira como a magia em área — o mesmo `#aimFor`. A runa de CONDIÇÃO a
+    // distância (#592, Paralyze Rune) mira do MESMO jeito, sem área — só um alvo. A runa de CAMPO/
+    // Destroy Field (#591) mira o CHÃO — `#groundAimFor`, que não exige criatura nenhuma no
+    // tile. Escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
+    const isGroundSupply = supply.effect.kind === 'field' || supply.effect.kind === 'destroy-field';
     const aim = supply.effect.kind === 'damage'
       ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
       : (supply.effect.kind === 'condition' && supply.effect.target === 'enemy')
         ? this.#aimFor(character, supply.effect.range, undefined, explicit)
-        : null;
+        : isGroundSupply
+          ? this.#groundAimFor(character, explicit)
+          : null;
+    // Destroy Field (#591): sem campo destrutível no tile mirado, recusa ANTES de gastar gold/
+    // carga — o `useSupply` (casting.ts) não tem `Fields` para conferir (invariante 1), então a
+    // conferência é daqui, o único lugar com estado de sessão.
+    if (supply.effect.kind === 'destroy-field' && aim?.point !== undefined) {
+      const existing = this.#fields.at(aim.point);
+      if (existing === null || existing.blocksMovement === true) {
+        return { ok: false, reason: 'no-target', retryInMs: 0 };
+      }
+    }
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
     const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
@@ -6236,6 +6314,33 @@ const slots = bot.groups.get(group);
       if (result.dispel !== undefined) {
         this.#dispelConditions(session, recipient, result.dispel);
       }
+
+      // Runa de campo (#591): planta no tile que `useSupply` devolveu, com id POR INSTÂNCIA
+      // (`fieldInstanceId`) — a mesma runa em tiles diferentes abre campos independentes, em vez
+      // de o segundo cast mover o primeiro (Fields indexa por id de conteúdo, ver fields.ts). A
+      // direção lançador→alvo importa só para `wall` (Fire/Poison/Energy Wall); `directionOf`
+      // devolve `null` quando lançador e alvo caem no mesmo tile, e a direção atual do
+      // personagem é a mesma resposta honesta que o resto do arquivo já dá nesse caso.
+      if (result.field !== undefined) {
+        const direction = directionOf(character.position, result.field.at) ?? character.direction;
+        const instanced: FieldSpec = { ...result.field.spec, id: fieldInstanceId(result.field.spec.id, result.field.at) };
+        this.applyField(session, instanced, result.field.at, 'spell', direction);
+        session.emit({
+          kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+          position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.field.at],
+        });
+        return result;
+      }
+      // Destroy Field (#591): a presença já foi conferida acima — aqui só remove.
+      if (result.destroyFieldAt !== undefined) {
+        this.#destroyFieldAt(session, result.destroyFieldAt);
+        session.emit({
+          kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+          position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.destroyFieldAt],
+        });
+        return result;
+      }
+
       // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
       // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
       session.emit({
@@ -6435,8 +6540,14 @@ const slots = bot.groups.get(group);
     return { set, slot, state: 'ready', remainingMs: 0 };
   }
 
-  /** O efeito exige alvo? Forma que sai do LANÇADOR não exige (onda, cleave, explosão em volta). */
+  /**
+   * O efeito exige alvo? Forma que sai do LANÇADOR não exige (onda, cleave, explosão em volta).
+   * `field`/`destroy-field` (#591) SEMPRE exigem — campo nasce no tile mirado, nunca no
+   * lançador — é o que faz `#resolveManualTarget` repassar `target.position` como `explicit`
+   * até `#groundAimFor`, em vez de descartar a mira como "não se aplica".
+   */
   #needsTarget(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    if (effect.kind === 'field' || effect.kind === 'destroy-field') return true;
     if (effect.kind !== 'damage' && effect.kind !== 'damage-over-time') return false;
     return effect.area === undefined || !isSelfOrigin(effect.area);
   }

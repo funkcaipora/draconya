@@ -552,6 +552,10 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('rows'), widths: z.array(z.number().int().positive()).min(1) }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+  /** Um tile só, no alvo (#591: runa de campo simples, Destroy Field). */
+  z.object({ shape: z.literal('point') }),
+  /** A fileira perpendicular centrada no alvo (#591: Fire/Poison/Energy Wall). */
+  z.object({ shape: z.literal('wall'), width: z.number().int().positive() }),
 ]);
 
 /** Uma faixa `[min, max]` de exibição (#524) — a poção do Tibia, que sorteia dentro dela sem escalar por level/ML. */

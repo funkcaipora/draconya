@@ -1121,6 +1121,28 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
    * atingido como qualquer valor não-zero (`AreaCombat::getList`, #679).
    */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+  /**
+   * UM tile só, no ALVO mirado (#591): a runa de campo simples (Fire/Poison/Energy Field) e a
+   * Destroy Field mesma miram um único tile vazio — diferente do círculo no alvo, que sempre
+   * cobre mais de um. Sem parâmetro: a geometria inteira é "o tile que o jogador apontou".
+   */
+  z.object({ shape: z.literal('point') }),
+  /**
+   * A parede (#591, Magic Wall/Wild Growth NÃO usam esta forma — as duas nascem num tile só,
+   * `point`, `magic_wall.lua`/`wild_growth.lua` do Canary criam o item só na posição mirada, sem
+   * `setArea`; é Fire/Poison/Energy WALL que usam `AREA_WALLFIELD`/`AREA_WALLFIELD_ENERGY` —
+   * "a forma da parede é perpendicular à direção" no corpo da issue): `width` (ímpar) tiles
+   * numa linha CENTRADA no alvo, perpendicular à direção lançador→alvo — a mesma fileira que
+   * `row()` já calcula para `cleave`/`beam`/`rows`, só que ancorada no ALVO (distância 0) em vez
+   * do lançador. Não há matriz do Canary aqui (ADR 0019): só a CONTAGEM (3 tiles), como toda
+   * outra forma deste arquivo.
+   */
+  z.object({
+    shape: z.literal('wall'),
+    width: z.number().int().positive().refine((w) => w % 2 === 1, {
+      message: 'largura de parede é ímpar (centrada no alvo)',
+    }),
+  }),
 ]);
 
 export type SpellArea = z.infer<typeof spellAreaSchema>;
@@ -1369,6 +1391,34 @@ export const supplySchema = z.object({
     z.object({
       kind: z.literal('dispel'),
       types: z.array(z.string().min(1)).min(1),
+    }),
+    /**
+     * Runa de CAMPO (#591): Fire/Poison/Energy Field/Wall, Magic Wall, Wild Growth — planta o
+     * `FieldSpec` inteiro (`z.lazy`, o mesmo truque de `condition` acima — `fieldSpecSchema` só é
+     * definida bem mais abaixo neste arquivo) no tile mirado. `range` é o alcance até o tile —
+     * `#725`/`#726` já miram `target.position`; o `sim` resolve o tile, nunca o cliente
+     * (invariante 4). O `FieldSpec.shape` decide a geometria: `point` (Fire/Poison/Energy
+     * Field, Magic Wall, Wild Growth — um tile só) ou `wall` (Fire/Poison/Energy Wall — a
+     * fileira perpendicular). Cada cast em tile DIFERENTE é uma instância própria — o `sim`
+     * deriva o id de campo por instância a partir de `field.id` + tile, nunca reaproveita o id
+     * do conteúdo cru (que reiniciaria o campo antigo em vez de abrir um novo).
+     */
+    z.object({
+      kind: z.literal('field'),
+      field: z.lazy(() => fieldSpecSchema),
+      range: z.number().int().positive(),
+    }),
+    /**
+     * Destroy Field (#591, `destroy_field_rune.lua`): remove um campo NÃO-bloqueante no tile
+     * mirado — o Canary lista só variantes de fogo/veneno/energia (`fields = {105, 2118..2126,
+     * 2132..2135, 21465}`); Magic Wall (2128) e Wild Growth (2130) NUNCA entram nessa lista, e a
+     * regra equivalente aqui é `blocksMovement`: o `sim` recusa remover campo bloqueante. Sem
+     * campo destrutível no tile, `no-target` — a carga NUNCA é gasta à toa (o Lua devolve
+     * `false` sem `field:remove()`).
+     */
+    z.object({
+      kind: z.literal('destroy-field'),
+      range: z.number().int().positive(),
     }),
   ]).refine(
     (effect) => effect.kind !== 'condition' || (effect.target === 'enemy') === (effect.range !== undefined),

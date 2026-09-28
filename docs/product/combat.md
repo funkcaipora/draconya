@@ -1902,9 +1902,37 @@ interface FieldSpec {                     // declarado em content
   rodar de verdade) — a fiação de produção fica para quando o M30-06 tiver conteúdo real e mapa
   real para testar contra.
 
-**Fora do escopo**, por decisão: runa de campo e parede jogável (Magic Wall/Wild Growth por
-mágica do jogador — #591), novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de
-buff.
+- **Runa de campo e parede do jogador (#591)**: Fire/Poison/Energy Field/Wall, Magic Wall, Wild
+  Growth, Destroy Field e as três bombas (Fire/Poison/Energy Bomb) — `supplySchema.effect`
+  ganhou os `kind`s `field` (planta o `FieldSpec` inteiro no tile mirado) e `destroy-field`
+  (remove um campo não-bloqueante no tile). Mira SEMPRE de CHÃO — `HuntRuleset#groundAimFor`,
+  distinto de `#aimFor`: não exige criatura no tile (o campo nasce vazio), só andar (#519) e
+  linha de visão (a mesma checagem de 3 argumentos que a mira manual já usa). `#needsTarget`
+  passou a reconhecer os dois `kind`s como "sempre exige alvo" — sem isso, `target.position`
+  (`#725`/`#726`) seria descartado como "não se aplica" antes de chegar ao `sim`.
+  `spellAreaSchema` ganhou duas formas: `point` (um tile só, no alvo — Fire/Poison/Energy Field,
+  Magic Wall, Wild Growth) e `wall` (a fileira perpendicular ao lançador→alvo, CENTRADA no alvo
+  — Fire/Poison/Energy Wall; só a CONTAGEM de 3 tiles é transcrita do `AREA_WALLFIELD*` do
+  Canary, nunca a matriz, ADR 0019). `applyField` ganhou um parâmetro `direction` (default
+  `'south'`, preservando bit a bit o único chamador de antes — a ability de monstro, sempre
+  `circle`) para a `wall` se orientar pela direção real lançador→alvo
+  (`directionOf(character.position, at)`). Cada cast em tile DIFERENTE é uma instância PRÓPRIA —
+  `Fields` indexa por id de conteúdo, então o `sim` deriva o id por TILE
+  (`fieldInstanceId`, `"<specId>@x,y,z"`); relançar a MESMA runa no MESMO tile reinicia, como
+  `applyField` já documentava. Destroy Field (`HuntRuleset#destroyFieldAt`) recusa remover campo
+  com `blocksMovement: true` — o mesmo corte que `destroy_field_rune.lua` faz ao listar só ids de
+  fogo/veneno/energia, nunca Magic Wall (2128) nem Wild Growth (2130); a checagem de presença
+  roda ANTES do gold sair, para não cobrar carga de uma remoção que falha (o Lua também só
+  consome o uso em sucesso). Magic Wall usa a duração BASE do `items.xml` (20 s) como número
+  fixo — o Lua sorteia `setDuration(16, 24)` por instância, e reproduzir isso exigiria um
+  mecanismo de duração aleatória em `applyField` que esta issue não pede (desvio documentado).
+  `scripts/catalog/monster-abilities.ts#CANARY_FIELD_ITEMS` ganhou `stages` para os três tipos —
+  fechando o TODO(#560) que só o Dragon Lord tinha cadeia real: fire field (2118→2119→2120,
+  a mesma cadeia do Dragon Lord) agora sai assim para TODO monstro gerado; poison (105) e energy
+  (2122) declaram `stages` de um elemento só (redundante com `fieldStagesOf`, mas explícito).
+
+**Fora do escopo**, por decisão: novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada
+de buff.
 
 ## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
 

@@ -11176,6 +11176,162 @@ describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic W
   });
 });
 
+describe('runa de campo e parede do jogador (#591: Fire/Poison/Energy Field/Wall, Magic Wall, Wild Growth, Destroy Field)', () => {
+  const fireFieldRune = {
+    id: 'fire-field-591', name: 'Fire Field', price: 20, group: 'attack' as const,
+    effect: {
+      kind: 'field' as const, range: 8,
+      field: {
+        id: 'player-fire-591', durationMs: 20_000,
+        shape: { shape: 'point' as const },
+        condition: {
+          key: 'burning', merge: 'strongest' as const, durationMs: 20_000,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 2, intervalMs: 10_000, damage: 20 }], damageType: 'fire' as const,
+          },
+        },
+      },
+    },
+  };
+  const fireWallRune = {
+    id: 'fire-wall-591', name: 'Fire Wall', price: 32, group: 'attack' as const,
+    effect: {
+      kind: 'field' as const, range: 8,
+      field: {
+        id: 'player-fire-wall-591', durationMs: 20_000,
+        shape: { shape: 'wall' as const, width: 3 },
+        condition: fireFieldRune.effect.field.condition,
+      },
+    },
+  };
+  const magicWallRune = {
+    id: 'magic-wall-591', name: 'Magic Wall', price: 45, group: 'attack' as const,
+    effect: {
+      kind: 'field' as const, range: 8,
+      field: {
+        id: 'player-magic-wall-591', durationMs: 20_000,
+        shape: { shape: 'point' as const }, blocksMovement: true,
+      },
+    },
+  };
+  const destroyFieldRune = {
+    id: 'destroy-field-591', name: 'Destroy Field', price: 10, group: 'support' as const,
+    effect: { kind: 'destroy-field' as const, range: 5 },
+  };
+  const cast = (supplyId: string) => botConfigV2([{ do: { kind: 'supply' as const, supplyId }, auto: false }]);
+  const at = (x: number, y: number): { readonly kind: 'position'; readonly position: { x: number; y: number; z: number } } =>
+    ({ kind: 'position', position: { x, y, z: 7 } });
+
+  it('planta o FieldSpec no tile mirado, debita o preço e trava o cooldown do grupo', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    expect(hero.goldDelta).toBe(-20);
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.tiles).toEqual([{ x: 3, y: 3, z: 7 }]);
+    expect(ruleset.fields[0]?.condition?.effect.kind).toBe('damage-over-time');
+  });
+
+  it('a MESMA runa em tiles DIFERENTES abre campos independentes — o segundo não move o primeiro', () => {
+    const { session, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    session.advanceBy(1_100); // fora do cooldown de grupo (1000ms default de `supplySchema`).
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(2);
+  });
+
+  it('relançar a MESMA runa no MESMO tile reinicia — nunca duplica', () => {
+    const { session, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+  });
+
+  it('sem mira recusa `no-target`, sem debitar gold nem plantar campo', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.goldDelta).toBe(0);
+    expect(ruleset.fields).toHaveLength(0);
+  });
+
+  it('fora do alcance recusa `out-of-range`, sem debitar', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(50, 50))).toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('a parede (#591) se orienta PERPENDICULAR ao lançador→alvo, centrada no tile mirado', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-wall-591'), {
+      gold: 1_000, supplies: [...supplies, fireWallRune], monsters: false,
+    });
+    // O herói entra em (1,1); mirar dois tiles ao SUL é uma linha norte-sul — a parede corre
+    // LESTE-OESTE, centrada no alvo.
+    const target = { x: hero.position.x, y: hero.position.y + 2, z: 7 };
+    expect(ruleset.useSlot(
+      session, 'hero', 0, 0, { kind: 'position', position: target },
+    )).toEqual({ ok: true });
+    const tiles = ruleset.fields[0]?.tiles ?? [];
+    expect(tiles).toHaveLength(3);
+    expect(tiles).toContainEqual(target);
+    expect(tiles.every((t) => t.y === target.y)).toBe(true);
+    expect(new Set(tiles.map((t) => t.x))).toEqual(new Set([target.x - 1, target.x, target.x + 1]));
+  });
+
+  it('Magic Wall bloqueia jogador E monstro, como parede — some ao vencer', () => {
+    const { session, hero, ruleset } = withSpells(cast('magic-wall-591'), {
+      gold: 1_000, supplies: [...supplies, magicWallRune], monsters: false,
+    });
+    const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(ahead.x, ahead.y))).toEqual({ ok: true });
+    expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+
+    session.advanceBy(21_000);
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+  });
+
+  it('Destroy Field remove campo destrutível; recusa `no-target` sem campo (sem gastar); recusa remover campo bloqueante', () => {
+    const threeRunes = botConfigV2([
+      { do: { kind: 'supply' as const, supplyId: 'fire-field-591' }, auto: false },
+      { do: { kind: 'supply' as const, supplyId: 'destroy-field-591' }, auto: false },
+      { do: { kind: 'supply' as const, supplyId: 'magic-wall-591' }, auto: false },
+    ]);
+    const { session, hero, ruleset } = withSpells(threeRunes, {
+      gold: 1_000, supplies: [...supplies, fireFieldRune, destroyFieldRune, magicWallRune],
+      monsters: false,
+    });
+    // Sem campo nenhum no tile: recusa `no-target`, e o gold não sai.
+    expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.goldDelta).toBe(0);
+
+    // Planta o fire field, depois destrói.
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(2, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(0);
+
+    // Magic Wall é bloqueante — Destroy Field recusa remover, como o Canary também não o lista.
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 2, at(2, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(ruleset.fields).toHaveLength(1);
+  });
+});
+
 describe('outcomes avançados na hunt (CMB-08)', () => {
   // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
   // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.

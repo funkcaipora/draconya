@@ -978,7 +978,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -4317,7 +4362,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -6177,7 +6267,25 @@
               "damageType": "earth",
               "startDamage": 5
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 248000,
+              "condition": {
+                "key": "poisoned",
+                "merge": "strongest",
+                "durationMs": 230000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "generated",
+                  "totalDamage": 100,
+                  "intervalMs": 5000,
+                  "damageType": "earth",
+                  "startDamage": 5
+                }
+              }
+            }
+          ]
         }
       },
       {
@@ -9516,7 +9624,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -11271,7 +11424,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -15067,7 +15265,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -15265,7 +15508,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -22185,7 +22473,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -37725,7 +38058,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -44346,7 +44724,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -45557,7 +45980,25 @@
               "damageType": "earth",
               "startDamage": 5
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 248000,
+              "condition": {
+                "key": "poisoned",
+                "merge": "strongest",
+                "durationMs": 230000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "generated",
+                  "totalDamage": 100,
+                  "intervalMs": 5000,
+                  "damageType": "earth",
+                  "startDamage": 5
+                }
+              }
+            }
+          ]
         }
       }
     ],
@@ -49224,7 +49665,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {

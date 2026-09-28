@@ -16,8 +16,8 @@
 
 import { matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS } from '@draconya/content';
 import type {
-  Combat, CompiledMitigation, DamageModifiers, DamageType, SpecializedMagicElement, Spell,
-  SpellFormula, Supply,
+  Combat, CompiledMitigation, DamageModifiers, DamageType, FieldSpec, SpecializedMagicElement,
+  Spell, SpellFormula, Supply,
 } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -30,6 +30,7 @@ import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
 import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
+import type { WorldPoint } from './movement.js';
 import type { Rng } from './rng.js';
 
 /** Por que a ação não aconteceu. Tipada porque o jogador merece saber qual das sete foi. */
@@ -117,6 +118,14 @@ export interface CastSuccess {
    * `conditions.remove(key)` direto — não há vencimento para uma remoção.
    */
   readonly removeConditionKey?: string;
+  /**
+   * A runa de campo (#591): o `FieldSpec` do conteúdo e o tile onde plantar — devolvidos, não
+   * aplicados, como `condition` acima. Quem tem a fila de eventos e o índice `Fields` é o
+   * ruleset (`HuntRuleset#applyField`); este arquivo só decide QUE a runa saiu e ONDE.
+   */
+  readonly field?: { readonly spec: FieldSpec; readonly at: WorldPoint };
+  /** Destroy Field (#591): o tile onde remover um campo — ver `field` acima. */
+  readonly destroyFieldAt?: WorldPoint;
 }
 
 export interface CastRefused {
@@ -195,6 +204,12 @@ function spellTargetDefender(target: SpellTarget): Defender {
 export interface SpellAim {
   readonly distance: number;
   readonly targets: readonly SpellTarget[];
+  /**
+   * O tile mirado (#591), quando a mira é de CHÃO — runa de campo/Destroy Field, que não
+   * precisam de criatura nenhuma no alvo. Ausente em toda mira de criatura de antes desta
+   * issue (dano/cura): ninguém além delas lê este campo.
+   */
+  readonly point?: WorldPoint;
 }
 
 const NO_HITS: readonly number[] = [];
@@ -990,6 +1005,64 @@ export function useSupply(
     return {
       ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
       goldSpent: paidFromStockBuff ? 0 : supply.price, condition,
+    };
+  }
+
+  // Runa de CAMPO (#591: Fire/Poison/Energy Field/Wall, Magic Wall, Wild Growth) — mesma ordem
+  // de sempre: requisitos, alvo/alcance, e só então o gold. `aim.point` vem de `#groundAimFor`
+  // (o ruleset já resolveu andar e linha de visão); sem mira, `no-target`, como a runa de dano.
+  if (supply.effect.kind === 'field') {
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.point === undefined) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const hasStockField = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockField && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockField = hasStockField && spendStock(user, supply.id);
+    if (!paidFromStockField) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockField ? 0 : supply.price,
+      field: { spec: supply.effect.field, at: aim.point },
+    };
+  }
+
+  // Destroy Field (#591): sem vocação nem magic level no Canary (`destroy_field_rune.lua` não
+  // declara nenhum dos dois) — só level. A PRESENÇA de um campo destrutível no tile é conferida
+  // por quem chama (`HuntRuleset#useSupply`), ANTES desta função: o Lua só gasta carga em
+  // sucesso, e aqui não temos `Fields` para conferir (invariante 1 — este arquivo não tem
+  // estado de sessão).
+  if (supply.effect.kind === 'destroy-field') {
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.point === undefined) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const hasStockDestroy = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockDestroy && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockDestroy = hasStockDestroy && spendStock(user, supply.id);
+    if (!paidFromStockDestroy) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockDestroy ? 0 : supply.price,
+      destroyFieldAt: aim.point,
     };
   }
 
