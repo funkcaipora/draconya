@@ -192,7 +192,7 @@ describe('outfit colours on the creature (FUN-104)', () => {
         creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { groundItems: [], tileUpdates: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -250,7 +250,7 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
       creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
-    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
   };
@@ -640,7 +640,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       },
       magicLevel: { level: 2, percentToNext: 80 },
     },
-    world: { groundItems: [], tileUpdates: [], mapId: 'arena', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'arena', creatures: [] },
     aggregates: { durationMs: 12000, xpGained: 500, goldGained: 100, goldSpent: 0, kills: 5, deaths: 0 },
     notableEvents: [],
   };
@@ -1297,7 +1297,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
       },
-      world: { mapId: 'rats-cave', creatures: [], groundItems: [], tileUpdates: [] },
+      world: { mapId: 'rats-cave', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
       aggregates: { durationMs: 5000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -1468,6 +1468,48 @@ describe('usable scenery: use-on-map, look, tile-update (#729, ADR 0050 d.7)', (
     });
     expect(withOverlay.world.tileUpdates).toEqual([
       { position: { x: 1, y: 2, z: 3 }, replace: [{ from: 1, to: 2 }] },
+    ]);
+  });
+});
+
+describe('fields on the world: field-appear, field-disappear (#561, M31-06)', () => {
+  it('round trips field-appear and field-disappear S2C', () => {
+    const fieldAppear: S2CMessage = {
+      type: 'field-appear',
+      id: 'fire',
+      tiles: [{ x: 10, y: 12, z: 7 }, { x: 11, y: 12, z: 7 }],
+      appearanceId: 2118,
+    };
+    const fieldDisappear: S2CMessage = { type: 'field-disappear', id: 'fire' };
+    expect(decodeS2C(encodeS2C(fieldAppear))).toEqual([fieldAppear]);
+    expect(decodeS2C(encodeS2C(fieldDisappear))).toEqual([fieldDisappear]);
+  });
+
+  it('the session state carries the active fields, empty by default', () => {
+    const base = {
+      sessionType: 'hunt' as const,
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0,
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    const withoutFields = S2C_SCHEMAS['session-state']
+      .parse({ ...base, world: { mapId: null, creatures: [] } });
+    expect(withoutFields.world.fields).toEqual([]);
+
+    const withFields = S2C_SCHEMAS['session-state'].parse({
+      ...base,
+      world: {
+        mapId: null,
+        creatures: [],
+        fields: [{ id: 'fire', tiles: [{ x: 1, y: 2, z: 3 }], appearanceId: 2118 }],
+      },
+    });
+    expect(withFields.world.fields).toEqual([
+      { id: 'fire', tiles: [{ x: 1, y: 2, z: 3 }], appearanceId: 2118 },
     ]);
   });
 });

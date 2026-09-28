@@ -728,7 +728,9 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 const EXCLUDED_SPELLS = [
   'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
   'invisible', 'cancel-invisibility', 'cancel-magic-shield', 'creature-illusion',
-  'cure-poison', 'cure-bleeding', 'cure-curse', 'cure-electrification', 'cure-burning',
+  // Cure Poison/Burning/Electrification/Bleeding/Curse entraram no #590 — a cura de condição
+  // agora existe (CMB-07 generalizou a `Condition`). Continuam de fora as magias que INFLIGEM
+  // condição (Envenom, Curse, Ignite, Electrify): o #590 é só a metade que remove.
   'inflict-wound', 'holy-flash', 'ignite', 'electrify', 'curse', 'envenom',
   'shield-bash', 'shield-slam', 'challenge', 'train-party', 'protect-party', 'enchant-party',
   'heal-party', 'elemental-synthesis', 'shared-conservation',
@@ -765,18 +767,21 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 15 + 16 + 24 + 24 vocation spells, plus the three generic ones', () => {
+  it('has exactly the catalogue: 16 + 17 + 24 + 27 vocation spells, plus the four generic ones', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
+    // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
+    // Curse no Paladin (+1), Cure Burning e Cure Electrification só no Druid (+2) — e Cure
+    // Poison é a QUARTA magia genérica (sem `vocationId`), como as três de antes.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(15);
-    expect(byVocation.get('paladin')).toBe(16);
+    expect(byVocation.get('knight')).toBe(16);
+    expect(byVocation.get('paladin')).toBe(17);
     expect(byVocation.get('sorcerer')).toBe(24);
-    expect(byVocation.get('druid')).toBe(24);
-    expect(byVocation.get(undefined)).toBe(3);
+    expect(byVocation.get('druid')).toBe(27);
+    expect(byVocation.get(undefined)).toBe(4);
   });
 
   it('leaves out, by name, what the engine does not express (ADR 0026 decisão 5)', () => {

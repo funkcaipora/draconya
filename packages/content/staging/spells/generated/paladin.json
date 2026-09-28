@@ -1,0 +1,292 @@
+[
+  {
+    "id": "divine-caldera",
+    "name": "Divine Caldera",
+    "manaCost": 160,
+    "cooldownMs": 4000,
+    "minLevel": 50,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4,
+        "skillMax": 6,
+        "baseMin": 0,
+        "baseMax": 0,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/divine_caldera.lua"
+    }
+  },
+  {
+    "id": "divine-grenade",
+    "name": "Divine Grenade",
+    "manaCost": 160,
+    "cooldownMs": 1000,
+    "minLevel": 300,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4,
+        "skillMax": 6,
+        "baseMin": 0,
+        "baseMax": 0,
+        "scaling": "magic"
+      },
+      "range": 7
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/divine_grenade.lua"
+    }
+  },
+  {
+    "id": "divine-healing",
+    "name": "Divine Healing",
+    "manaCost": 160,
+    "cooldownMs": 1000,
+    "minLevel": 35,
+    "vocationId": "paladin",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 7.22,
+        "skillMax": 12.79,
+        "baseMin": 44,
+        "baseMax": 79,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/divine_healing.lua"
+    }
+  },
+  {
+    "id": "divine-missile",
+    "name": "Divine Missile",
+    "manaCost": 20,
+    "cooldownMs": 2000,
+    "minLevel": 40,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.79,
+        "skillMax": 3,
+        "baseMin": 11,
+        "baseMax": 18,
+        "scaling": "magic"
+      },
+      "range": 4
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/divine_missile.lua"
+    }
+  },
+  {
+    "id": "ethereal-spear",
+    "name": "Ethereal Spear",
+    "manaCost": 25,
+    "cooldownMs": 2000,
+    "minLevel": 23,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.333333333,
+        "skillMax": 1,
+        "baseMin": 8.333333333,
+        "baseMax": 25
+      },
+      "range": 7
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/ethereal_spear.lua"
+    }
+  },
+  {
+    "id": "intense-healing-paladin",
+    "name": "Intense Healing",
+    "manaCost": 70,
+    "cooldownMs": 1000,
+    "minLevel": 20,
+    "vocationId": "paladin",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 3.184,
+        "skillMax": 5.59,
+        "baseMin": 20,
+        "baseMax": 35,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/intense_healing.lua"
+    }
+  },
+  {
+    "id": "lesser-ethereal-spear",
+    "name": "Lesser Ethereal Spear",
+    "manaCost": 6,
+    "cooldownMs": 2000,
+    "minLevel": 1,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.333333333,
+        "skillMax": 1,
+        "baseMin": 3,
+        "baseMax": 9
+      },
+      "range": 7
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/lesser_ethereal_spear.lua"
+    }
+  },
+  {
+    "id": "light-healing-paladin",
+    "name": "Light Healing",
+    "manaCost": 20,
+    "cooldownMs": 1000,
+    "minLevel": 8,
+    "vocationId": "paladin",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.4,
+        "skillMax": 1.795,
+        "baseMin": 8,
+        "baseMax": 11,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/light_healing.lua"
+    }
+  },
+  {
+    "id": "magic-patch-paladin",
+    "name": "Magic Patch",
+    "manaCost": 6,
+    "cooldownMs": 1000,
+    "minLevel": 1,
+    "vocationId": "paladin",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0,
+        "skillMin": 0.1614,
+        "skillMax": 0.2468,
+        "baseMin": 8,
+        "baseMax": 15,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/magic_patch.lua"
+    }
+  },
+  {
+    "id": "salvation",
+    "name": "Salvation",
+    "manaCost": 210,
+    "cooldownMs": 1000,
+    "minLevel": 60,
+    "vocationId": "paladin",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 12,
+        "skillMax": 20,
+        "baseMin": 75,
+        "baseMax": 125,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/salvation.lua"
+    }
+  },
+  {
+    "id": "strong-ethereal-spear",
+    "name": "Strong Ethereal Spear",
+    "manaCost": 55,
+    "cooldownMs": 8000,
+    "minLevel": 90,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4.6,
+        "skillMax": 6.6,
+        "baseMin": 7,
+        "baseMax": 13,
+        "attackMin": 0.00092,
+        "attackMax": 0.00176
+      },
+      "range": 7
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/strong_ethereal_spear.lua"
+    }
+  }
+]

@@ -21,6 +21,21 @@ const TileUpdate = z.object({
 });
 
 /**
+ * Um campo de tile apareceu ou está ativo AGORA (#561, M31-06): fogo, veneno, energia — a
+ * mesma indireção de `ground-item-appear` resolvendo `corpses`, aqui resolvendo
+ * `appearances.fields` (invariante 6). `id` é o do CONTEÚDO (`FieldSpec.id`, ex.: "fire"), não
+ * um id sequencial — relançar o MESMO reinicia, e é por isso que não há id numérico próprio
+ * como o de `ground-item-appear`. `tiles` cobre a área inteira: um campo nasce de uma forma,
+ * nunca de um tile só. Compartilhado por `field-appear` (evento) e por
+ * `session-state.world.fields` (catch-up de quem reanexa) — o mesmo contrato dos dois.
+ */
+const FieldTile = z.object({
+  id: z.string().min(1),
+  tiles: z.array(Point),
+  appearanceId: z.number().int().positive(),
+});
+
+/**
  * O TIPO de dano elemental (#479; drown/lifedrain/manadrain pelo #547, M29-07). Espelha
  * `DAMAGE_TYPES` do conteúdo, mas vive aqui pela mesma razão que todo contrato de rede: o
  * protocolo é a base da pilha e não importa `content`. A lista é fechada de propósito — um
@@ -633,6 +648,12 @@ export const S2C_SCHEMAS = {
        * de chegar. `default([])`: nó `game` anterior a esta issue, ou nada foi usado ainda.
        */
       tileUpdates: z.array(TileUpdate).default([]),
+      /**
+       * Os campos de tile ATIVOS agora (#561, M31-06): quem reanexa no meio de uma hunt precisa
+       * ver o fogo/veneno/energia já no chão, no MESMO contrato de `field-appear`. `default([])`:
+       * nó `game` anterior a esta issue, ou hunt sem campo nenhum ativo.
+       */
+      fields: z.array(FieldTile).default([]),
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
@@ -1255,6 +1276,13 @@ export const S2C_SCHEMAS = {
    * `kind` de cenário. Só para quem pediu.
    */
   'look-result': z.object({ text: z.string() }),
+  /**
+   * Um campo de tile apareceu ou reiniciou (#561, M31-06). Broadcast para todos os viewers da
+   * sessão, como `tile-update` — campo é compartilhado, ao contrário de `player-stats`.
+   */
+  'field-appear': FieldTile,
+  /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
+  'field-disappear': z.object({ id: z.string().min(1) }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

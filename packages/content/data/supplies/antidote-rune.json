@@ -1,0 +1,17 @@
+{
+  "id": "antidote-rune",
+  "name": "Antidote Rune",
+  "description": "Remove o veneno de quem usa.",
+  "price": 15,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 15
+  },
+  "effect": {
+    "kind": "dispel",
+    "types": ["poison"]
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0026 d.6/ADR 0032 d.6). Canary `data/scripts/runes/antidote_rune.lua` (main, 2026-09-27): `runeId(3153)`, `charges(1)`, `level(15)`, `magicLevel(0)`, `cooldown(1000)/groupCooldown(1000)`, `allowFarUse(true)`/`needTarget(true)` — só `COMBAT_PARAM_DISPEL` (CONDITION_POISON), sem cura. Preço provisório (15, o valor de NPC observado no TibiaWiki para 1 carga — não confirmado contra este pacote); marcado `_open` como toda runa nova. **Desvio de #590 §12:** o Canary mira qualquer criatura à distância (`allowFarUse`); esta runa usa só o caminho de `recipient` default (o próprio usuário) — mirar outro personagem exigiria estender `#healRangeOf`/a resolução de alvo `friend` do bot para o novo efeito `dispel`, fora do recorte desta issue."
+}

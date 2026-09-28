@@ -133,3 +133,17 @@ dessas telas foi capturada.
 
 (Evidência: `docs/reference/huntera-observed.md` Parte I §1-2 linha 22; Parte IV linhas 474-475 e
 655-656; Parte III §18 linha 406; Parte V §31 linha 709.)
+
+## Emenda — 2026-09-27: o pacote 15.33 não move o corte da decisão 5
+
+O [ADR 0051](0051-playable-delivery-cut-and-art-pack-1533-on-parity.md) trocou o pacote de arte
+para o 15.33 por razão operacional (só ele existe na máquina), sem mudar id de aparência nem
+mecânica. A nota de Consequências acima ("se o pacote trocar, o corte muda junto") **não se aplica
+a essa troca**: o corte da decisão 5 segue o **release de referência 13.32** do
+[ADR 0031](0031-contrato-de-compatibilidade-de-combate-e-migracao.md), que já dizia que a versão
+de arte não é a fonte da decisão (DT-01). Monk, Weapon Proficiency (#630, fechada), Animus
+Mastery e Soulpit continuam fora mesmo com o 15.33 desenhando-os. O que o
+[ADR 0053](0053-bestiary-xp-line-kept-and-charms-added.md) d.3 acrescenta é a régua para o caso
+intermediário: **revisão de um sistema que o 13.32 já tinha segue o Canary `main`** (Charms com
+tiers, Roda sem a parte do Monk); **sistema novo** pós-13.32 fica no relatório. O corte muda de
+verdade só quando o ADR 0031 mudar o release de referência.

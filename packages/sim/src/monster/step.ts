@@ -60,6 +60,16 @@ const DIRECTIONS: readonly GridPoint[] = [
   { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 },
 ];
 
+/**
+ * As quatro direções CARDINAIS, na ordem que o Canary embaralha para escolher onde empurrar
+ * uma criatura fora do caminho (M29-08, `Monster::pushCreature`, `monster.cpp:2387-2403`:
+ * dirList `{NORTH, WEST, EAST, SOUTH}` antes do `std::ranges::shuffle`). Nunca diagonal — o
+ * Tibia empurra só para os quatro lados retos.
+ */
+export const PUSH_DIRECTIONS: readonly GridPoint[] = [
+  { x: 0, y: -1 }, { x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 },
+];
+
 const sign = (value: number): number => (value > 0 ? 1 : value < 0 ? -1 : 0);
 
 /**
@@ -115,4 +125,45 @@ export function distance(a: GridPoint, b: GridPoint): number {
 export function isAdjacent(a: GridPoint, b: GridPoint): boolean {
   const d = distance(a, b);
   return d === 1;
+}
+
+/**
+ * O passo LATERAL de quem já não tem passo a dar rumo ao alvo (#543, TFS/Canary
+ * `Monster::getDanceStep`, `monster.cpp:2570-2624` — mecanismo, não código, ADR 0019). Chamado
+ * só quando o monstro está "colado" (o guloso já devolveria `null` para aproximar mais), este é
+ * o passo cosmético que evita o monstro parecer uma estátua.
+ *
+ * Só as quatro direções CARDINAIS entram — nunca diagonal, diferente do guloso/fuga. Uma
+ * candidata só é válida se a distância Chebyshev dela ATÉ O ALVO for EXATAMENTE igual à
+ * distância atual (nunca aproxima, nunca afasta) e o tile for andável. O filtro de sinal
+ * (`offsetX`/`offsetY`, a posição do monstro MENOS a do alvo) é o `keepDistance` do Canary: só
+ * tenta o lado que não empurra o monstro para mais perto do eixo já mais próximo.
+ *
+ * Esta função só replica o ramo `keepAttack=true, keepDistance=true` (o não-fugindo) — a dança
+ * durante a fuga é fora do escopo do #543. Por isso não há parâmetro de alcance nem de "ainda
+ * consegue atacar": com a distância EXATAMENTE preservada, quem já podia atacar da posição atual
+ * continua podendo da candidata — o `keepAttack` do Canary vira identidade sob essa restrição.
+ *
+ * Sorteia uniformemente entre as candidatas — mesmo com uma só, para o sorteio não depender de
+ * quantas sobraram (o mesmo `uniform_random` do Canary, chamado sempre que a lista não é vazia).
+ * Lista vazia devolve `null` sem consumir `rng`.
+ */
+export function danceStep(
+  from: GridPoint, target: GridPoint, blocked: Blocked, rng: { integer(min: number, max: number): number },
+): GridPoint | null {
+  const centerToDist = distance(from, target);
+  const offsetX = from.x - target.x;
+  const offsetY = from.y - target.y;
+  const candidates: GridPoint[] = [];
+  const tryAdd = (x: number, y: number): void => {
+    if (Math.max(Math.abs(x - target.x), Math.abs(y - target.y)) !== centerToDist) return;
+    if (blocked(x, y)) return;
+    candidates.push({ x, y });
+  };
+  if (offsetY >= 0) tryAdd(from.x, from.y - 1); // norte
+  if (offsetY <= 0) tryAdd(from.x, from.y + 1); // sul
+  if (offsetX <= 0) tryAdd(from.x + 1, from.y); // leste
+  if (offsetX >= 0) tryAdd(from.x - 1, from.y); // oeste
+  if (candidates.length === 0) return null;
+  return candidates[rng.integer(0, candidates.length - 1)] ?? null;
 }
