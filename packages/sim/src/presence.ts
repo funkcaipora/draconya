@@ -63,6 +63,26 @@ export interface GroundItemVanished {
   readonly itemId: number;
 }
 
+/**
+ * Um campo de tile apareceu, ou reiniciou (#561, M31-06). O `id` é o do CONTEÚDO
+ * (`FieldSpec.id`, ex.: "dragon-lord-firefield"), não um id sequencial — relançar o MESMO id
+ * REINICIA (`Fields.apply`, `packages/sim/src/fields.ts`), e é por isso que não há um segundo
+ * id como o de `GroundItemAppeared`. `tiles` cobre a forma inteira: um campo nasce de uma
+ * área, nunca de um tile só. Só a apresentação; a arte é resolvida no hospedeiro (invariante 6).
+ */
+export interface FieldAppeared {
+  readonly kind: 'field-appeared';
+  readonly fieldId: string;
+  readonly tiles: readonly WorldPoint[];
+}
+
+/** O campo sumiu — o prazo (`expiresAtMs`) venceu. */
+export interface FieldVanished {
+  readonly kind: 'field-vanished';
+  readonly fieldId: string;
+}
+
 export type PresenceEvent =
   | CreatureAppeared | CreatureVanished | CreatureHealthChanged
-  | GroundItemAppeared | GroundItemVanished;
+  | GroundItemAppeared | GroundItemVanished
+  | FieldAppeared | FieldVanished;

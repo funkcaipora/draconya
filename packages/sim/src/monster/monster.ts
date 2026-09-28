@@ -112,6 +112,15 @@ export interface MonsterState {
    * é `false` — precisa sobreviver ao snapshot pela mesma razão de `lastStepBlocked`.
    */
   readonly ignoresFieldDamage?: boolean;
+  /**
+   * O timer de `MONSTER_DANCE` (#543) está agendado AGORA? Só existe enquanto o monstro está
+   * colado no alvo, sem passo a dar — diferente de `scheduledDefenses`/`scheduledAbilities`, que
+   * rodam a vida inteira, este é armado e DESARMADO conforme a adjacência muda (custo: quem
+   * persegue ou está sem alvo não paga o timer). Ausente é `false` — o monstro que nunca armou,
+   * ou snapshot anterior a esta issue. Precisa sobreviver ao snapshot: sem ele, uma hunt retomada
+   * armaria de novo por cima do evento que o snapshot já trouxe na fila, dobrando o timer.
+   */
+  readonly danceArmed?: boolean;
 }
 
 /**
@@ -198,6 +207,8 @@ export class MonsterRuntime {
   lastStepBlocked: boolean;
   /** Ver `MonsterState.ignoresFieldDamage` (M29-05). */
   ignoresFieldDamage: boolean;
+  /** Ver `MonsterState.danceArmed` (#543). */
+  danceArmed: boolean;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -218,6 +229,7 @@ export class MonsterRuntime {
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
     this.lastStepBlocked = state.lastStepBlocked ?? false;
     this.ignoresFieldDamage = state.ignoresFieldDamage ?? false;
+    this.danceArmed = state.danceArmed ?? false;
   }
 
   get alive(): boolean {
@@ -263,6 +275,7 @@ export class MonsterRuntime {
       ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
       ...(this.lastStepBlocked ? { lastStepBlocked: true } : {}),
       ...(this.ignoresFieldDamage ? { ignoresFieldDamage: true } : {}),
+      ...(this.danceArmed ? { danceArmed: true } : {}),
     };
   }
 

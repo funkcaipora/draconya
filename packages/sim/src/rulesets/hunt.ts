@@ -64,7 +64,7 @@ import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { rollCombatValue } from '../combat/combat-value.js';
 import { resolveWeaponHit } from '../combat/weapon-power.js';
 import type { WeaponHit } from '../combat/weapon-power.js';
-import { rollDistanceHit } from '../combat/distance-hit.js';
+import { missShotTile, rollDistanceHit } from '../combat/distance-hit.js';
 import {
   afterAttackBlock, afterShieldBlock, distanceTries, meleeTries,
 } from '../combat/attack-practice.js';
@@ -96,7 +96,9 @@ import {
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
-import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import {
+  PUSH_DIRECTIONS, danceStep, distance, fleeStep, greedyStep, sameFloor,
+} from '../monster/step.js';
 import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
@@ -182,6 +184,17 @@ const SUMMON_SPAWN_RADIUS = 1;
  * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
  */
 const MONSTER_TARGET_CHANGE = 'monster-target-change';
+/**
+ * A dança de alvo (#543, TFS/Canary `Monster::getDanceStep`): o passo lateral cosmético de quem
+ * já está colado e sem passo a dar. Mesmo desenho do `MONSTER_TARGET_CHANGE` — subject `m:<id>`
+ * exato, cancelado de graça por `resolveDeath` (`cancelEvents(subject)`) —, mas diferente dele
+ * na vida útil: NÃO roda a hunt inteira, só enquanto a adjacência se mantém (`MonsterRuntime.
+ * danceArmed`). Um monstro perseguindo ou sem alvo não paga o timer.
+ */
+const MONSTER_DANCE = 'monster-dance';
+/** A cadência PRÓPRIA da dança (#543) — decisão de produto do Draconya, não réplica de um
+ * "think" de movimento do Canary, que não tem um relógio separado do passo em si. */
+const DANCE_INTERVAL_MS = 1_000;
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
@@ -367,7 +380,9 @@ export type UseItemOutcome =
 export type SlotRefusal =
   | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
   | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
-  | 'on-cooldown' | 'group-cooldown';
+  | 'on-cooldown' | 'group-cooldown'
+  /** Stairhop (#554, M30-07): a magia é agressiva e a trava de ataque ainda não venceu. */
+  | 'attack-locked';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -495,6 +510,7 @@ function refusalOf(result: CastRefused): SlotRefusal {
     // O suprimento v2 é ABSTRATO: o "estoque" é o saldo, e a falta dele tem motivo próprio —
     // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
     case 'not-enough-gold': return 'not-enough-gold';
+    case 'attack-locked': return 'attack-locked';
   }
 }
 
@@ -2937,6 +2953,7 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_DEFENSE: return this.#onMonsterDefense(session, event.subject);
       case MONSTER_SUMMON: return this.#onMonsterSummon(session, event.subject);
       case MONSTER_TARGET_CHANGE: return this.#onMonsterTargetChange(session, event.subject);
+      case MONSTER_DANCE: return this.#onMonsterDance(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN_INITIAL: return this.#onSpawnInitial(session, event.subject);
@@ -3069,11 +3086,14 @@ export class HuntRuleset implements Ruleset {
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
     // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
     const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
+    // `promoted` ainda não existe como estado do personagem (#566/ADR 0042) — o parâmetro é o
+    // ponto de extensão que a promoção vai acionar quando o estado existir (#569).
     const penalty = applyDeathPenalty(
       character,
       { premium },
       this.#vocationOf(character),
       this.#options.progression,
+      this.#options.skills,
     );
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
@@ -3088,6 +3108,14 @@ export class HuntRuleset implements Ruleset {
       // mudou, e o cliente que só recebeu o golpe fatal ficaria com um "0 / máximo do level
       // antigo" até a reanexação.
       this.#emitCharacterHealth(session, character);
+    }
+    // Skill (magic inclusive — é ela quem carrega a perda de mana gasta, ver `DeathPenalty` em
+    // `progression.ts`) que perdeu tries: um registro por skill afetada (#569).
+    for (const loss of penalty.skillLosses) {
+      session.record('skill-penalty', `${loss.skillId}/${String(loss.triesLost)}`);
+      if (loss.levelChange !== null) {
+        session.record('skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`);
+      }
     }
 
     // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
@@ -4837,6 +4865,15 @@ export class HuntRuleset implements Ruleset {
       }
     }
 
+    // Stairhop (#554, M30-07, ADR 0040 decisão 1): reagenda para o INSTANTE do destravamento,
+    // sem golpe — nunca engatilha (o alvo continua ao alcance) e nunca dobra o evento, a mesma
+    // invariante de `#schedulePlayerAttack`. `attackLockedUntil` é sempre `0` fora do
+    // `combat-v3` (só `#step` escreve, e só lá), então v1/v2 nunca entram aqui.
+    if (character.attackLockedUntil > session.nowMs) {
+      this.#schedulePlayerAttack(session, characterId, character.attackLockedUntil - session.nowMs);
+      return;
+    }
+
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
     // `combat-v3` (#687): a arma que ficou na mão abaixo do level exigido — o level caiu com
     // ela vestida — bate metade com `wieldUnproperly`, ou NÃO bate (`damagePercent` 0): como o
@@ -5181,6 +5218,12 @@ const slots = bot.groups.get(group);
       // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
       tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
     });
+    // Dispel (#590): o `castSpell` devolve as CHAVES a remover, e quem tem a fila (para
+    // cancelar `condition-expire`/`condition-tick`) é o ruleset — a mesma divisão da condição
+    // abaixo. Vale para o RECIPIENTE: o mesmo alvo que a cura composta cura, quando há cura.
+    if (result.dispel !== undefined) {
+      this.#dispelConditions(session, recipient, result.dispel);
+    }
     // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
     // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
     if (result.condition !== undefined) {
@@ -5700,6 +5743,24 @@ const slots = bot.groups.get(group);
     }
   }
 
+  /**
+   * Remove condições ESPECÍFICAS de um alvo por chave (#590: Cure Poison e afins, puras ou
+   * combinadas com cura). Diferente de `#cancelConditions` — que zera TUDO na morte/saída —,
+   * aqui só as chaves que o efeito declarou saem; o resto do alvo continua intocado (o critério
+   * da issue: Cure Poison remove o poison e NÃO o burning). Chave ausente no alvo não é erro —
+   * a magia sai igual, sem nada para remover.
+   */
+  #dispelConditions(session: Session, target: ConditionTarget, types: readonly string[]): void {
+    const id = this.#subjectOf(target);
+    for (const type of types) {
+      if (target.conditions.get(type) === null) continue;
+      const subject = conditionSubject(id, type);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      target.conditions.remove(type);
+    }
+  }
+
   // --- campos de tile (CMB-07) ---------------------------------------------------------------
 
   /**
@@ -5753,6 +5814,11 @@ const slots = bot.groups.get(group);
         priority: TICK_PRIORITY, subject,
       });
     }
+    // A tela fica sabendo (#561, M31-06): campo aparece OU reinicia, e as duas usam o MESMO
+    // evento — o hospedeiro resolve a arte pelo id de conteúdo e substitui pelo mesmo `id`, como
+    // relançar já substitui aqui. Emitido DEPOIS de indexar: o cliente nunca vê um campo que o
+    // `at()` ainda não devolveria.
+    session.emit({ kind: 'field-appeared', fieldId: field.id, tiles: field.tiles });
     return field;
   }
 
@@ -5786,7 +5852,11 @@ const slots = bot.groups.get(group);
   }
 
   #onFieldExpire(session: Session, subject: string): void {
-    this.#fields.remove(subject.slice(2));
+    const fieldId = subject.slice(2);
+    const removed = this.#fields.remove(fieldId);
+    // A tela fica sabendo (#561, M31-06): só quando de fato havia campo para remover — um
+    // snapshot restaurado de formato anterior nunca teria este evento, mas a defesa é de graça.
+    if (removed !== null) session.emit({ kind: 'field-vanished', fieldId });
   }
 
   /** Quem está sobre os tiles do campo: participantes e monstros vivos. */
@@ -5867,6 +5937,11 @@ const slots = bot.groups.get(group);
       // E a CONTAGEM, que é outra pergunta: "gastei 4.000 de gold" e "bebi 80 poções" contam
       // coisas diferentes sobre a mesma hunt, e o §16.1 pede as duas.
       session.credit(character.id, 'suppliesUsed', 1);
+      // Dispel (#590, Antidote Rune): mesma divisão de `#castSpell` — o `useSupply` devolve as
+      // chaves, o ruleset cancela o evento e remove.
+      if (result.dispel !== undefined) {
+        this.#dispelConditions(session, recipient, result.dispel);
+      }
       // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
       // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
       session.emit({
@@ -6623,12 +6698,69 @@ const slots = bot.groups.get(group);
     // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
     // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
     this.#armMonsterAbilities(session, monster, definition, target);
+    // A dança (#543) só existe agendada enquanto o monstro está colado, sem passo a dar — é
+    // exatamente `action.kind === 'attack'`, a tradução deste motor para "getNextStep devolveu
+    // falso" do Canary. `#onMonsterStep` é o único lugar que ARMA (aqui) e DESARMA (a condição
+    // caiu) — `#onMonsterDance` só decide se reagenda A SI MESMO uma vez já em voo.
+    if (definition.staticAttack !== undefined) {
+      if (action.kind === 'attack' && !monster.danceArmed) {
+        monster.danceArmed = true;
+        session.scheduleIn(MONSTER_DANCE, DANCE_INTERVAL_MS, {
+          priority: EventPriority.Movement, subject,
+        });
+      } else if (action.kind !== 'attack' && monster.danceArmed) {
+        monster.danceArmed = false;
+        session.cancelEvent(MONSTER_DANCE, subject);
+      }
+    }
     // Um monstro que entrou no raio de busca vira alvo na hora (#444): sem isto, quem se
     // aproxima de fora da tela só seria notado no próximo passo do personagem.
     for (const character of session.participants) {
       this.#autoSelectTarget(session, character);
       this.#armBot(session, character.id);
     }
+  }
+
+  /**
+   * A dança de alvo venceu (#543, TFS/Canary `Monster::doFollowCreature`/`getDanceStep`,
+   * mecanismo — não código, ADR 0019). Não escolhe alvo (a dança reage ao que já está
+   * perseguido, como o Canary usa `getAttackedCreature`, não uma busca nova) e não muda
+   * `lastStepBlocked`/`ignoresFieldDamage`: esses dois são do passo de PERSEGUIÇÃO
+   * (`#onMonsterStep`), e a dança é um timer independente que só se aproveita da mesma
+   * mecânica de passo (`#step`) para o commit.
+   *
+   * A condição pode ter caído entre o armamento e este vencimento (o alvo morreu, saiu do
+   * alcance, o monstro morreu) — é aqui que ela é revalidada, e é aqui que o evento MORRE sem
+   * reagendar quando cai: a outra metade do "cancelado quando a condição cai" (a primeira
+   * metade é o desarme ativo de `#onMonsterStep`).
+   */
+  #onMonsterDance(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined || definition.staticAttack === undefined) return;
+    const target = findById(session.participants, monster.targetId);
+    const blocked = this.#blockedForMonster(monster, definition);
+    const action = decideMonsterAction(
+      monster, target, definition, blocked,
+      (from, to) => isSightClear(this.#world.map, from, to),
+    );
+    if (action.kind !== 'attack' || target === null) {
+      monster.danceArmed = false;
+      return;
+    }
+
+    // A cadência corre INDEPENDENTE do resultado do sorteio — o mesmo `doAttacking`/`onThinkDefense`
+    // de sempre: o intervalo continua enquanto a adjacência se mantém, falhe ou acerte a rolagem.
+    session.scheduleIn(MONSTER_DANCE, DANCE_INTERVAL_MS, {
+      priority: EventPriority.Movement, subject,
+    });
+    // Ausente é sempre parado, sem sorteio — mas `staticAttack` já foi conferido acima, então
+    // este SEMPRE consome exatamente UMA rolagem (o mesmo contrato de `ability.chance`/
+    // `blockChance`/`modifiers.critical`), mesmo com `staticAttack` 0 ou 1.
+    if (!session.rng.chance(1 - definition.staticAttack)) return;
+    const to = danceStep(monster.position, target.position, blocked, session.rng);
+    if (to !== null) this.#step(session, monster, to, subject);
   }
 
   /**
@@ -7109,12 +7241,29 @@ const slots = bot.groups.get(group);
     if (mover instanceof MonsterRuntime && this.#monsterFieldBlocked(mover, target)) {
       return { ok: false, reason: 'tile-blocked' };
     }
+    // Empurra quem ocupa o destino FINAL, pela mesma razão do campo acima (M29-08): o destino
+    // que chega até aqui pode ter sido reescrito depois da decisão em `#monsterBlocked`.
+    if (mover instanceof MonsterRuntime) this.#clearPushableOccupant(session, mover, target);
     const result = move(this.#world, mover, target);
     if (result.ok) {
       // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
       // escreve, e só a do personagem — o monstro não lança magia.
       if (mover instanceof CharacterRuntime) {
         mover.direction = directionOf(result.from, result.to) ?? mover.direction;
+        // Stairhop (#554, M30-07, ADR 0040 decisão 1): trocar de andar OU ser redirecionado por
+        // um teleporte tranca o ataque do personagem por `stairhopDelayMs` — `oldPos.z !=
+        // newPos.z || teleport` do Canary (`player.cpp:12417-12423`). Escada e teleporte passam
+        // pelos DOIS mesmos redirecionamentos de `move()` (`packages/sim/src/movement.ts`), e um
+        // que pousa fora do tile adjacente pedido É um dos dois — um passo comum nunca é. Só o
+        // `combat-v3` lê (`#isV3`); ausente é identidade, e nenhuma sessão v1/v2 grava a trava.
+        const stairhopDelayMs = this.#options.combat.stairhopDelayMs;
+        if (stairhopDelayMs !== undefined && this.#isV3() && (
+          result.to.z !== result.from.z
+          || Math.abs(result.to.x - result.from.x) > 1
+          || Math.abs(result.to.y - result.from.y) > 1
+        )) {
+          mover.attackLockedUntil = session.nowMs + stairhopDelayMs;
+        }
       }
       session.emit({
         kind: 'creature-moved', creatureId,
@@ -7135,6 +7284,91 @@ const slots = bot.groups.get(group);
       this.#onSteppedOffOf(session, character, result.from);
     }
     return result;
+  }
+
+  /**
+   * Abre o tile de destino para quem `canPushCreatures` (M29-08, TFS/Canary `Monster::
+   * pushCreatures`, `monster.cpp:2405-2440`): sem efeito para quem não tem a flag, para tile
+   * vazio, ou quando o ocupante não é um monstro `pushable` — inclusive o JOGADOR, que
+   * `#monsterAt` nunca encontra (só varre `this.#monsters`). Roda no COMMIT — dentro de
+   * `#step`, revalidado no destino FINAL —, nunca na decisão: `decideMonsterAction`
+   * (`monster/monster.ts`) é PURA e não pode mover ninguém (invariante 9); só `#step` tem
+   * autoridade de escrita.
+   *
+   * **Só em `combat-v3`** (ADR 0031/0040): o empurrão consome `session.rng` (`#pushAside`, o
+   * Fisher-Yates dos 4 cardeais) e move OUTRA criatura, e as duas coisas mudam o que uma hunt
+   * `combat-v1`/`v2` congelada rende — a MESMA razão pela qual `#practice`/o crítico de item
+   * (CMB-08, #551) e o hit chance de distância (#555) só entram sob `combat-v3`. Hoje nenhum
+   * monstro do catálogo declara `canPushCreatures` (Dragon e Dragon Lord AINDA não — ver a nota
+   * de `pushable`/`canPushCreatures`/`canPushItems` no schema), mas o predicado de decisão
+   * (`#pushablePathThrough`) já teria mudado o CAMINHO escolhido bem antes de chegar aqui: a
+   * dupla checagem (lá e aqui) é a mesma redundância que `#monsterFieldBlocked` já faz para o
+   * campo — nunca confiar que só o outro lado da linha barrou.
+   */
+  #clearPushableOccupant(session: Session, pusher: MonsterRuntime, to: GridPoint): void {
+    if (!this.#isV3()) return;
+    const definition = this.#options.monsters.get(pusher.monsterId);
+    if (definition === undefined || !definition.canPushCreatures) return;
+    const z = this.#floorOf(pusher);
+    if (!this.#world.occupied(to.x, to.y, z)) return;
+    const occupant = this.#monsterAt(to.x, to.y, z, pusher);
+    if (occupant === null) return;
+    if (this.#options.monsters.get(occupant.monsterId)?.pushable !== true) return;
+    if (!this.#pushAside(session, occupant)) this.#crushMonster(session, occupant);
+  }
+
+  /** O monstro VIVO em (x, y, z), exceto `exclude` — varre `this.#monsters`, nunca jogador. */
+  #monsterAt(x: number, y: number, z: number, exclude: MonsterRuntime): MonsterRuntime | null {
+    for (const candidate of this.#monsters) {
+      if (candidate === exclude || !candidate.alive) continue;
+      if (candidate.position.x !== x || candidate.position.y !== y) continue;
+      if (!sameFloor(candidate.position.z, z)) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * Empurra para um tile cardinal livre, em ordem embaralhada pelo `session.rng` — Fisher-Yates
+   * completo dos 4 índices de `PUSH_DIRECTIONS`, o mesmo desenho do parcial de `#creditStock`
+   * mais abaixo — e tenta cada um pelo MESMO `#step` de qualquer outro passo (§10.2 da
+   * referência de domínio: nunca atribuir a posição da vítima diretamente, sempre pelo mesmo
+   * `MovementSystem`). `rollDrunk: false`: o empurrão é
+   * força EXTERNA, não a decisão de movimento do empurrado — ele não rola a própria condição
+   * por ter sido empurrado. Devolve `false`, sem NENHUM efeito, quando os quatro recusam
+   * (parede, fora do mapa, outro ocupante, campo que ele mesmo não cruza) — quem chama esmaga.
+   */
+  #pushAside(session: Session, occupant: MonsterRuntime): boolean {
+    const order = [0, 1, 2, 3];
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const pick = session.rng.integer(0, i);
+      const chosen = order[pick] as number;
+      order[pick] = order[i] as number;
+      order[i] = chosen;
+    }
+    for (const index of order) {
+      const direction = PUSH_DIRECTIONS[index] as GridPoint;
+      const candidate = {
+        ...occupant.position, x: occupant.position.x + direction.x, y: occupant.position.y + direction.y,
+      };
+      if (this.#step(session, occupant, candidate, occupant.subject, false).ok) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Esmaga quem não coube em nenhum cardinal (Canary `Monster::pushCreatures`, `monster.cpp:
+   * 2429-2431`: `changeHealth(-health)` + `setDropLoot(true)`). Zera a vida e entrega ao MESMO
+   * pipeline de morte de qualquer monstro (`resolveDeath` → `#onMonsterDied`) — nunca um segundo
+   * caminho de morte: `contribution` continua vazia (ninguém bateu), então `credit.lastHitBy` é
+   * `null`, e `#onMonsterDied` já paga a regra de "sem dono" que um abate cujo matador sumiu
+   * paga hoje — sem XP, loot elegível a quem estiver presente. Não passa por `resolveDamage`:
+   * não é golpe, é esmagamento — o Canary também não chama `Game::combatChangeHealth` aqui, só
+   * `changeHealth` direto, sem tipo de dano, sem defesa, sem crítico.
+   */
+  #crushMonster(session: Session, occupant: MonsterRuntime): void {
+    occupant.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: occupant });
   }
 
   /** Pisou numa placa de pressão OCIOSA (`up`): pressiona, com o cascade de `links` de sempre. */
@@ -7380,13 +7614,19 @@ const slots = bot.groups.get(group);
           session.credit(character.id, 'goldSpent', ammo.price);
         }
       }
+      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
+      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta. Rolada
+      // ANTES do `emit` (#555): o destino do `shot` depende de `hit` só no `combat-v3` — errado
+      // E a mais de 1 tile do alvo, o projétil visualmente cai num tile adjacente. `v1`/`v2`
+      // continuam com `to` fixo no monstro mesmo no erro (ADR 0031/0040: perfil já publicado é
+      // bit a bit, e `#missDestination` consome um sorteio A MAIS do `session.rng` que esses
+      // dois perfis não podiam ganhar sem virar um perfil novo).
+      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
-        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
+        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character),
+        to: hit || !this.#isV3() ? this.#at(monster) : this.#missDestination(session, character, monster),
       });
-      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
-      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
-      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
       // `combat-v1`/`v2`: a prática é do TIRO, não do acerto (CMB-05) — imunidade, bloqueio e
       // o erro de pontaria não impedem a skill de subir. No `combat-v3` (#686) quantos tries o
       // tiro rende vem do tipo de bloqueio (`distanceTries`): 2 limpo, 1 bloqueado, 0 imune.
@@ -7672,6 +7912,20 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O destino do `shot` de um tiro à distância que ERROU, só sob `combat-v3` (#555,
+   * `missShotTile`, `combat/distance-hit.ts`) — os dois chamadores (`#strike`, `#throwWeapon`)
+   * só entram aqui depois de conferir `this.#isV3()`, nunca em `v1`/`v2`. Adjacente ao alvo, o
+   * Canary não redireciona, e o destino continua sendo o próprio alvo; a mais de 1 tile,
+   * sorteia com `session.rng` um tile ANDÁVEL entre os nove do quadro 3×3 centrado nele.
+   * Compartilhada pela munição por família (`#strike`) e pelo arremessável (`#throwWeapon`) —
+   * os dois caminhos de tiro que podem errar.
+   */
+  #missDestination(session: Session, character: CharacterRuntime, monster: MonsterRuntime): WorldPoint {
+    const tiles = distance(character.position, monster.position);
+    return missShotTile(this.#world.map, tiles, this.#at(monster), session.rng);
+  }
+
+  /**
    * O arremessável (#575, ADR 0026 d.3 NÃO se aplica): sem `ammoFamily`, o item na mão É o
    * próprio projétil — não há seleção por família nem lançador, e não é munição abstrata: é um
    * item de verdade, `stackable: true` (spear, throwing star — como o `royal-spear.json`
@@ -7685,11 +7939,15 @@ const slots = bot.groups.get(group);
     how: ResolvedWeapon, damagePercent: number, defender: Defender,
     reflectAttacker: ReflectAttacker | undefined,
   ): void {
+    // A chance de acerto é rolada ANTES do `emit` (#555): no `combat-v3`, errado E a mais de 1
+    // tile do alvo, o destino cai num tile adjacente — ver `#missDestination`. `v1`/`v2` mantêm
+    // `to` fixo no monstro mesmo no erro (ADR 0031/0040: perfil já publicado é bit a bit).
+    const hit = this.#rollThrowHit(session, character, monster, how);
     session.emit({
       kind: 'shot', attackerId: character.id, targetId: monster.subject,
-      weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+      weaponItemId: weapon.id, from: this.#at(character),
+      to: hit || !this.#isV3() ? this.#at(monster) : this.#missDestination(session, character, monster),
     });
-    const hit = this.#rollThrowHit(session, character, monster, how);
     if (!this.#isV3()) this.#practice(session, character, how.family, 1);
     // A quebra é rolagem SEMPRE consumida (ADR 0031): a sequência de RNG não pode depender do
     // valor de `breakChance` — a mesma regra do bloqueio e do crítico.
@@ -9341,10 +9599,40 @@ const slots = bot.groups.get(group);
     return !canMonsterEnterField(definition, monster.ignoresFieldDamage, field);
   }
 
+  /**
+   * `#moverBlocked`, mas com uma exceção (M29-08, TFS/Canary `Monster::canPushCreatures`): um
+   * tile SÓ recusado por `tile-occupied` deixa de bloquear quando quem decide `canPushCreatures`
+   * e o único ocupante é um monstro `pushable` — o empurrão em si acontece no COMMIT
+   * (`#clearPushableOccupant`, dentro de `#step`), nunca aqui: esta função é PURA quanto a mundo
+   * (só lê), como todo `Blocked` (ADR 0009). Qualquer OUTRA razão de recusa (parede, fora do
+   * mapa, jogador no tile, monstro não-pushable) continua bloqueando como sempre.
+   */
   readonly #monsterBlocked: Blocked = (x, y) => {
-    if (this.#moverBlocked(x, y)) return true;
+    this.#probe.x = x;
+    this.#probe.y = y;
+    const rejection = canOccupy(this.#world, this.#fieldMonster as MonsterRuntime, this.#probe);
+    if (rejection !== null && !(rejection === 'tile-occupied' && this.#pushablePathThrough(x, y))) {
+      return true;
+    }
     return this.#fieldBlocksMonster(this.#fieldMonster as MonsterRuntime, this.#fieldDefinition as Monster, x, y);
   };
+
+  /**
+   * Só a metade de LEITURA de `#clearPushableOccupant` (M29-08) — ver o comentário lá, inclusive
+   * o porquê de `#isV3()` gatear os dois lados: sem ele, um monstro `combat-v1`/`v2` já
+   * ESCOLHERIA um caminho diferente aqui (achando o tile passável), mesmo que o commit acabasse
+   * recusando por falta do gate lá — e "o caminho escolhido muda" já é o suficiente para uma
+   * hunt congelada divergir (o guloso tenta os DOIS vizinhos só quando o primário falha).
+   */
+  #pushablePathThrough(x: number, y: number): boolean {
+    if (!this.#isV3()) return false;
+    const pusher = this.#fieldMonster;
+    const definition = this.#fieldDefinition;
+    if (pusher === null || definition === null || !definition.canPushCreatures) return false;
+    const occupant = this.#monsterAt(x, y, this.#floorOf(pusher), pusher);
+    if (occupant === null) return false;
+    return this.#options.monsters.get(occupant.monsterId)?.pushable === true;
+  }
 
   #blockedForMonster(monster: MonsterRuntime, definition: Monster): Blocked {
     this.#mover = monster;

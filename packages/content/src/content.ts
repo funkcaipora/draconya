@@ -1529,6 +1529,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
+    // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
+    fields: {},
     // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
     scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [

@@ -65,6 +65,19 @@ acontecer, não pede mudança aqui). `appearanceId` é staging-only — o mesmo 
 usa em monstro — e vira linha em `appearances/baseline.json.items`, nunca campo do item
 (`itemSchema` não o declara).
 
+**`staging/spells/` e `staging/runes/` também não são conteúdo carregado** (M37-08, #595):
+`pnpm catalog:import spells`/`pnpm catalog:import runes` lê `data/scripts/spells/**`/`data/scripts/
+runes/**` do Canary (`scripts/catalog/spell-calls.ts` para a chamada de método, `scripts/catalog/
+spell-formula.ts` para o reconhecedor estrutural de `onGetFormulaValues` — nunca executa Lua, ADR
+0019) e escreve lá, por fatia de VOCAÇÃO (`generated/knight.json`, `generated/general.json` para
+o que não tem restrição). As 82 magias e 20 supplies do #523 continuam autorais em `data/spells/
+*.json`/`data/supplies/*.json` com os MESMOS ids — gerar direto em `data/spells/generated/`
+colidiria (a mesma razão de `staging/monsters/`); não existe `pnpm catalog:promote-spells` ainda —
+migrar o catálogo manual para `overrides/` + `generated/` é trabalho de #596/#597, que também
+cobrem o resto das ~120 magias e as runas fora das duas formas de fórmula que este leitor
+reconhece (`docs/reference/catalog/spells-report.md`/`runes-report.md` listam o que ficou de
+fora, com o motivo).
+
 Qualquer `data/<tipo>/` (`items/`, `monsters/`) aceita, além do arquivo autoral direto na pasta,
 duas subpastas que `load.ts` lê sozinho, sem precisar de mudança em `content.ts`:
 
