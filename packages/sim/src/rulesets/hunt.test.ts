@@ -10649,6 +10649,122 @@ describe('dispel: cura de condição (#590, Cure Poison e afins)', () => {
   });
 });
 
+describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic Wall/Wild Growth)', () => {
+  // Cadeia sintética curta (o firefield real do Dragon Lord tem a mesma FORMA, testada em
+  // `content/src/load.test.ts` contra os números reais do Canary): estágio 0 com dano, estágio
+  // 1 mais fraco, estágio 2 MUDO (some sem causar nada) — a forma exata de 2118 → 2119 → 2120.
+  const stagedFire: FieldSpec = {
+    id: 'fire-chain', durationMs: 1_000, // ignorado: `stages` manda quando presente.
+    shape: { shape: 'circle', radius: 0, centered: 'caster' },
+    stages: [
+      {
+        durationMs: 1_000,
+        condition: {
+          key: 'burning', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 1, intervalMs: 500, damage: 20 }], damageType: 'fire',
+          },
+        },
+      },
+      {
+        durationMs: 800,
+        condition: {
+          key: 'burning', merge: 'refresh', durationMs: 800,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 1, intervalMs: 400, damage: 10 }], damageType: 'fire',
+          },
+        },
+      },
+      { durationMs: 600 }, // sem `condition`: o estágio mudo, só ocupa até sumir.
+    ],
+  };
+
+  it('avança de estágio ao vencer cada duração, emite `field-stage-changed`, e some no fim (`field-vanished`)', () => {
+    const { session, ruleset } = start({ health: 1_000_000 });
+    ruleset.applyField(session, stagedFire, { x: 0, y: 0, z: 7 });
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.stageIndex ?? 0).toBe(0);
+    expect(ruleset.fields[0]?.condition?.effect.kind).toBe('damage-over-time');
+
+    session.advanceBy(999); // ainda dentro do estágio 0 (vence em 1000).
+    expect(ruleset.fields[0]?.stageIndex ?? 0).toBe(0);
+
+    session.advanceBy(2); // passou de 1000: o estágio 1 (mais fraco) entra.
+    expect(ruleset.fields[0]?.stageIndex).toBe(1);
+    const stage1 = ruleset.fields[0]?.condition;
+    expect(stage1?.effect.kind).toBe('damage-over-time');
+    if (stage1?.effect.kind === 'damage-over-time' && stage1.effect.form === 'rounds') {
+      expect(stage1.effect.rounds[0]?.damage).toBe(10);
+    }
+
+    session.advanceBy(800); // vence o estágio 1 (800 ms): o estágio 2, MUDO, entra.
+    expect(ruleset.fields[0]?.stageIndex).toBe(2);
+    expect(ruleset.fields[0]?.condition).toBeUndefined();
+
+    const midEvents = session.drainEvents();
+    expect(ofKind(midEvents, 'field-stage-changed').map((e) => e.stageIndex)).toEqual([1, 2]);
+
+    session.advanceBy(600); // vence o último estágio: o campo desaparece de vez.
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ofKind(session.drainEvents(), 'field-vanished')).toHaveLength(1);
+  });
+
+  it('campo bloqueante (Magic Wall) impede o passo do JOGADOR, como parede, e libera quando some', () => {
+    const { session, hero, ruleset } = start({ health: 1_000_000 });
+    const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+    const magicWall: FieldSpec = {
+      id: 'magic-wall', durationMs: 500,
+      shape: { shape: 'circle', radius: 0, centered: 'caster' },
+      blocksMovement: true,
+    };
+    ruleset.applyField(session, magicWall, ahead);
+
+    expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(hero.position).not.toEqual(ahead);
+
+    session.advanceBy(600); // vence: o campo some, sem `decayTo` (estágio único).
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+  });
+
+  it('campo bloqueante impede o passo do MONSTRO igual — sem exceção de dano (ao contrário do desvio do M29-05)', () => {
+    // Rato COMUM, sem `canWalkOnFire: false`: a M29-05 só desvia de campo com dano que o
+    // monstro não pode encaixar — este bloqueio vale para QUALQUER monstro, porque mora em
+    // `canOccupy`/`TileOccupancy.blockedAt`, não no predicado de desvio de dano.
+    const stuckRoute = {
+      id: 'wall-stuck-route', mapId: 'arena',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+      spawnPoints: [{ routeIndex: 0 }],
+    };
+    const stuckHunt = {
+      ...hunt, routeId: 'wall-stuck-route',
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+        },
+      },
+    };
+    const loaded = content({ routes: [stuckRoute], hunts: [stuckHunt] });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { x: 4, y: 1, z: 7 };
+    // Uma parede de 3 tiles na coluna x=3, cobrindo as únicas rotas de fuga do monstro preso em
+    // (4,1) rumo ao herói a oeste — a MESMA geometria do bloco M29-05 acima, mas SEM dano algum.
+    ruleset.applyField(session, {
+      id: 'wild-growth', durationMs: 9_999_999,
+      shape: { shape: 'beam', length: 3 },
+      blocksMovement: true,
+    }, { x: 3, y: 0, z: 7 });
+
+    run(session, 20_000, 100);
+    expect(monster?.position.x).toBe(4); // nunca cruzou — bloqueado como parede.
+  });
+});
+
 describe('outcomes avançados na hunt (CMB-08)', () => {
   // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
   // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.
