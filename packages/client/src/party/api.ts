@@ -101,10 +101,16 @@ export type JoinResult =
   | { readonly kind: 'formed'; readonly party: PartyView }
   | { readonly kind: 'entered'; readonly ticket: PartyTicketView };
 
-/** A configuração COMPLETA da sala — o que o configure-then-start do `HuntsModal` manda. */
+/**
+ * A configuração COMPLETA da sala — o que o configure-then-start do `HuntsModal` manda.
+ *
+ * `difficulty` é opcional desde o #584 (ADR 0039, fim do pull por dificuldade): o servidor
+ * preenche `DEFAULT_DIFFICULTY_NAME` quando `huntId` muda e o campo não vem. Mantido no
+ * contrato só por compatibilidade (ADR 0014).
+ */
 export interface PartyConfigInput {
   readonly huntId: string;
-  readonly difficulty: string;
+  readonly difficulty?: string;
   readonly minLevel: number;
   readonly vocationTargets: Readonly<Record<string, number>>;
   readonly shareCosts: boolean;

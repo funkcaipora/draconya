@@ -57,14 +57,14 @@ describe('os eventos notáveis com os nomes do CATÁLOGO (FUN-110, FUN-113)', ()
     // montagem de `names` em `Events` — o evento sairia com o id cru.
     hud.set((state) => ({ ...state, catalogue }));
     const html = await render(createElement(Events, { events }));
-    expect(html).toContain('Entrou em Rat Cellars · Cauteloso');
+    expect(html).toContain('Entrou em Rat Cellars');
     expect(html).toContain('Gold acabou para Poção de Mana');
     expect(html).toContain('Bestiário: Rato · marco 1 (+1 % XP)');
   });
 
   it('sem catálogo os ids ficam no lugar dos nomes, e o marco sai sem bônus', async () => {
     const html = await render(createElement(Events, { events }));
-    expect(html).toContain('Entrou em rat-cellars · Cauteloso');
+    expect(html).toContain('Entrou em rat-cellars');
     expect(html).toContain('Bestiário: rat · marco 1');
     expect(html).not.toContain('% XP');
   });

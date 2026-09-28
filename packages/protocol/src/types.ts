@@ -194,15 +194,17 @@ export const C2S_SCHEMAS = {
   say: z.object({ channel: z.string(), text: z.string().max(255) }),
   logout: z.object({}),
   /**
-   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt e
-   * qual dificuldade, e o servidor decide se a transição é válida, cria a instância e
-   * responde com o estado novo (invariante 4).
+   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt, e o
+   * servidor decide se a transição é válida, cria a instância e responde com o estado novo
+   * (invariante 4).
    *
-   * A dificuldade vem como string livre e é validada contra o CONTEÚDO, não contra um enum
-   * aqui: uma hunt define as dificuldades que fazem sentido para ela, não obrigatoriamente as
-   * quatro, e repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+   * `difficulty` é opcional desde o #584 (ADR 0039, fim do pull por dificuldade — #583 já
+   * eliminou a escolha de tamanho de pull no `sim`/`content`). Campo mantido no protocolo só
+   * por compatibilidade (ADR 0014): um cliente ANTIGO ainda manda um nome de antes do #583
+   * (`'cautious'`/`'bold'`/`'reckless'`) e é ACEITO E IGNORADO — nunca validado contra um
+   * enum aqui nem contra o conteúdo.
    */
-  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
+  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1).optional() }),
   /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
   'leave-hunt': z.object({}),
   /**
