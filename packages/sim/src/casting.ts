@@ -21,6 +21,7 @@ import type {
 } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
+import { partyScaledManaCost } from './party.js';
 import { resolveDamage } from './combat/damage.js';
 import type { DamageOutcome, Defender } from './combat/damage.js';
 import type { DefenderReflect, ReflectAttacker } from './combat/reflect.js';
@@ -440,6 +441,15 @@ export function castSpell(
    * básico) —, e é isso que este parâmetro passa adiante para `resolveDamage`.
    */
   modifiers: DamageModifiers | undefined = undefined,
+  /**
+   * Os membros da party já colhidos por `hunt.ts` (#588: Heal/Protect/Enchant/Train Party) —
+   * só quem tem `session.participants` sabe quem está no alcance, este arquivo não conhece
+   * sessão. `null` é "não é magia de party": nenhuma checagem de alvo/custo de party roda, e
+   * `heal-over-time`/`buff` com `target` ausente ou `'self'` continua valendo só para o
+   * lançador, como sempre. Presente, é a lista NA ORDEM de `session.participants` — a mesma
+   * ordem que `hunt.ts` usa para aplicar a condição a cada um.
+   */
+  partyTargets: readonly CharacterRuntime[] | null = null,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -494,7 +504,23 @@ export function castSpell(
       return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
     }
   }
-  if (caster.mana < spell.manaCost) {
+  // Alvo de party (#588: Heal/Protect/Enchant/Train Party) — `hunt.ts` já colheu quem está no
+  // alcance (só ele conhece `session.participants`) e devolve `null` para "não é magia de
+  // party"; `<= 1` (o lançador sozinho) é a MESMA recusa "No party members in range" do Canary
+  // — ANTES da mana, pela mesma posição relativa do `tmp <= 1` dos scripts.
+  if (
+    (effect.kind === 'heal-over-time' || effect.kind === 'buff') && effect.target === 'party'
+    && (partyTargets === null || partyTargets.length <= 1)
+  ) {
+    return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+  }
+  // O custo escalado (#588) só existe com `partyTargets` resolvido — o número de afetados que
+  // `spell.manaCost` (`party-scaled`) escala é o MESMO `partyTargets.length` da checagem acima,
+  // nunca uma segunda contagem.
+  const manaCost = typeof spell.manaCost === 'number'
+    ? spell.manaCost
+    : partyScaledManaCost(spell.manaCost, partyTargets?.length ?? 0);
+  if (caster.mana < manaCost) {
     return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
   }
   // Alma sai pela MESMA regra da mana (#593): recusa sem lançar nada, nunca fica devendo. Só
@@ -506,7 +532,7 @@ export function castSpell(
     return { ok: false, reason: 'not-enough-soul', retryInMs: NOT_WAITING };
   }
 
-  caster.mana -= spell.manaCost;
+  caster.mana -= manaCost;
   caster.soul -= soulCost;
   // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
   caster.cooldowns.start(key, nowMs, spell.cooldownMs);
@@ -590,6 +616,9 @@ export function castSpell(
         key: 'buff', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
         ...(effect.damageTakenPercent === undefined ? {} : { damageTakenPercent: effect.damageTakenPercent }),
+        // Protect/Enchant/Train Party (#588): o MESMO `Conditions.skillBonus` que já soma o
+        // delta de ability/defesa de monstro soma este, sem consumo novo a escrever.
+        ...(effect.skillDeltas === undefined ? {} : { skillDeltas: effect.skillDeltas }),
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });

@@ -4195,12 +4195,22 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
      */
     damageType: z.enum(DAMAGE_TYPES).default('arcane'),
   }),
-  /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
+  /**
+   * Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery), no lançador — ou em CADA
+   * membro da party no alcance com `target: 'party'` (Heal Party, #588: `CONDITION_REGENERATION`
+   * do Canary, `data/scripts/spells/party/heal_party.lua` — 20 de vida a cada 2000 ms por 2
+   * minutos). `sim` resolve os membros da MESMA sessão dentro de `range` e aplica a MESMA
+   * condição a cada um — sem sorteio por membro, os números do script são fixos.
+   */
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
     intervalMs: z.number().int().positive(),
     durationMs: z.number().int().positive(),
+    /** `self` (default) cura só o lançador; `party` cura cada membro da party no alcance. */
+    target: z.enum(['self', 'party']).optional(),
+    /** Obrigatório com `target: 'party'` — o raio em tiles (Canary: 36, distância Chebyshev). */
+    range: z.number().int().positive().optional(),
   }),
   /**
    * Dano ao longo do tempo (CMB-07): `amount` a cada `intervalMs`, por `durationMs`, aplicado
@@ -4222,12 +4232,29 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     durationMs: z.number().int().positive(),
     damageDealtPercent: damagePercentBySource.optional(),
   }),
-  /** Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs`. */
+  /**
+   * Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs` — no lançador,
+   * ou em CADA membro da party no alcance com `target: 'party'` (Protect/Enchant/Train Party,
+   * #588: `CONDITION_ATTRIBUTES` do Canary, `data/scripts/spells/party/*.lua`).
+   *
+   * `skillDeltas` (bônus FLAT por skill, #576: shielding +3 do Protect, magic +1 do Enchant,
+   * melee +3/distance +3 do Train — o MESMO campo que `conditionEffectSchema` já declara para
+   * ability/defesa de monstro) entra aqui pela primeira vez do lado da MAGIA de JOGADOR: o
+   * consumo é o MESMO mecanismo já ativo (`Conditions.skillBonus`, somado em `#skillLevelOf`/
+   * `#spellScaling`/`#defenseSourceOf`, `sim/rulesets/hunt.ts`) — ele não distingue de onde a
+   * condição veio, só soma `skillDeltas` de toda condição ATIVA do personagem. Nenhum consumo
+   * novo a escrever: `castSpell` só precisa propagar o campo para o `ConditionState`.
+   */
   z.object({
     kind: z.literal('buff'),
     durationMs: z.number().int().positive(),
     damageDealtPercent: damagePercentBySource.optional(),
     damageTakenPercent: z.number().int().optional(),
+    skillDeltas: z.record(z.string(), z.number().int()).optional(),
+    /** `self` (default) afeta só o lançador; `party` afeta cada membro da party no alcance. */
+    target: z.enum(['self', 'party']).optional(),
+    /** Obrigatório com `target: 'party'` — o raio em tiles (Canary: 36, distância Chebyshev). */
+    range: z.number().int().positive().optional(),
   }),
   /**
    * Provocação (#589, Canary `doChallengeCreature`/`challengeFocusDuration`): força quem ela
@@ -4280,6 +4307,38 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 
 /**
+ * O custo de mana de uma magia (#588): o número FIXO de sempre, OU escalado pelo tamanho da
+ * party no alcance (Heal/Protect/Enchant/Train Party) — `Party::onCastSpell` do Canary,
+ * `data/scripts/spells/party/*.lua`: `mana = ceil((decay^(n-1) × base) × n)`, `n` sendo quantos
+ * membros do roster (líder incluso) estão dentro do alcance do efeito. `decay` é 0,9 nas
+ * quatro magias do Canary — campo, não constante, porque o número é conteúdo, não motor.
+ *
+ * Só faz sentido ao lado de um efeito com `target: 'party'` — `buildContent` confere que os
+ * dois andam juntos, nos dois sentidos.
+ */
+export const spellManaCostSchema = z.union([
+  z.number().int().nonnegative(),
+  z.object({
+    kind: z.literal('party-scaled'),
+    /** O mana de UM lançador sozinho — nunca cobrado sozinho: `n <= 1` recusa antes (no-target). */
+    base: z.number().int().positive(),
+    /** O fator de decaimento por membro afetado (Canary: 0,9). */
+    decay: z.number().positive().max(1),
+  }),
+]);
+export type SpellManaCost = z.infer<typeof spellManaCostSchema>;
+
+/**
+ * O mana de EXIBIÇÃO de uma magia (#588): o número fixo de sempre, ou o `base` do custo
+ * escalado pela party — o mesmo que o Tibia anuncia no grimório (`spell:mana(120)` do Canary é
+ * o `base`, separado da conta de `onCastSpell`). Nunca o custo real de um lançamento
+ * específico, que depende de quantos estão no alcance — só quem tem a sessão (`sim`) sabe isso.
+ */
+export function manaCostDisplayOf(manaCost: SpellManaCost): number {
+  return typeof manaCost === 'number' ? manaCost : manaCost.base;
+}
+
+/**
  * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
  *
  * Tudo em CONTEÚDO: custo, cooldown, grupo, alcance, forma e efeito. O motor não sabe quanto
@@ -4303,7 +4362,7 @@ export const spellSchema = z.object({
    */
   description: z.string().min(1).optional(),
   /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
-  manaCost: z.number().int().nonnegative(),
+  manaCost: spellManaCostSchema,
   /**
    * Alma gasta ao lançar (#593), a `spell:soul(n)` do Canary — hoje só a conjuração de runa a
    * declara (`spells/conjuring/*.lua`), e a conjuração em si é a #594, fora desta issue.

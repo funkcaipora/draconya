@@ -1747,6 +1747,20 @@ interface FieldSpec {                     // declarado em content
 }
 ```
 
+- **Alvo de PARTY (#588: Heal/Protect/Enchant/Train Party, level 32, uma por vocação).**
+  `spellEffectSchema` ganhou `target: 'party'` nos efeitos `heal-over-time` e `buff` — um TERCEIRO
+  alvo ao lado de `self`/`friend` (a cura, §26), mas RAIO, não forma: quem está a até `range`
+  tiles (Chebyshev, mesmo andar) do lançador, roster inteiro da sessão, líder incluso, recebe a
+  MESMA condição — sem geometria desenhada no chão (`AREA_CIRCLE5X5` do Canary é só o efeito
+  visual). `HuntRuleset#collectPartyAllies` (`sim/rulesets/hunt.ts`) resolve quem está no
+  alcance; sozinho, o lançador recusa `no-target`, a mesma mensagem "No party members in range"
+  do Canary. O custo de mana também pode ser `{ kind: 'party-scaled', base, decay }`
+  (`spellSchema.manaCost`, união com o número fixo de sempre) — `ceil((decay^(n−1) × base) × n)`,
+  `n` sendo quantos estão no alcance —, resolvido em `party.ts#partyScaledManaCost` e cobrado
+  ANTES do cast, nunca o `base` do catálogo (que é só o custo de exibição,
+  `manaCostDisplayOf`). `skillDeltas` (bônus FLAT por skill, #576) chega pela primeira vez ao
+  `buff` de MAGIA — antes só o de SUPPLY o tinha —, e o consumo é o MESMO
+  `Conditions.skillBonus` já ativo, sem lógica nova. Ver `docs/product/party.md`.
 - **Alvo duplo.** O estado de runtime do #155 continua plano (compatibilidade de snapshot) e
   ganha `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais. O monstro carrega
   `conditions`, e o vencimento/tique usam o mesmo sujeito (`<id>/<chave>`, com `m:<id>` no

@@ -738,6 +738,74 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
     expect(caster.mana).toBe(1_000 - 50);
   });
 
+  describe('alvo de party e custo escalado (#588: Heal/Protect/Enchant/Train Party)', () => {
+    const healParty: Spell = {
+      ...heal, id: 'heal-party', manaCost: { kind: 'party-scaled', base: 120, decay: 0.9 },
+      effect: {
+        kind: 'heal-over-time', amount: 20, intervalMs: 2_000, durationMs: 120_000, target: 'party', range: 36,
+      },
+    };
+    const protectParty: Spell = {
+      ...heal, id: 'protect-party', manaCost: { kind: 'party-scaled', base: 90, decay: 0.9 },
+      effect: {
+        kind: 'buff', durationMs: 120_000, skillDeltas: { shielding: 3 }, target: 'party', range: 36,
+      },
+    };
+
+    it('refuses "no-target" with nobody else in range — the lone caster never pays', () => {
+      const caster = hero({ level: 50, mana: 1_000 });
+      // `partyTargets: []` é "colhido, e ninguém além do lançador está no alcance" — o
+      // MESMO "No party members in range" do Canary com `tmp <= 1`.
+      expect(castSpell(caster, healParty, null, 0, combat, rng(), undefined, undefined, undefined, []))
+        .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      expect(castSpell(caster, healParty, null, 0, combat, rng(), undefined, undefined, undefined, [caster]))
+        .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      // Mana intocada: a recusa vem ANTES do débito.
+      expect(caster.mana).toBe(1_000);
+    });
+
+    it('refuses "no-target" when partyTargets is absent — a non-party call never pays either', () => {
+      const caster = hero({ level: 50, mana: 1_000 });
+      expect(castSpell(caster, healParty, null, 0, combat, rng())).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      expect(caster.mana).toBe(1_000);
+    });
+
+    it('charges the Canary formula, scaled by affectedCount — not the flat base', () => {
+      const caster = hero({ level: 50, mana: 1_000 });
+      const ally1 = hero({ level: 50, mana: 1_000 });
+      const ally2 = hero({ level: 50, mana: 1_000 });
+      // n = 3: ceil((0.9^2 * 120) * 3) = 292 — não os 120 do `base` de exibição.
+      const result = castSpell(
+        caster, healParty, null, 0, combat, rng(), undefined, undefined, undefined, [caster, ally1, ally2],
+      );
+      expect(result.ok).toBe(true);
+      expect(caster.mana).toBe(1_000 - 292);
+    });
+
+    it('applies the SAME condition to every affected member, and only to them', () => {
+      // O CHAMADOR (hunt.ts) é quem aplica a condição a cada membro — `castSpell` só a
+      // DEVOLVE, uma vez, para quem chama replicar. Aqui confere-se que a condição devolvida
+      // carrega os números certos (Protect Party: shielding +3, 2 minutos).
+      const caster = hero({ level: 50, mana: 1_000 });
+      const ally = hero({ level: 50, mana: 1_000 });
+      const result = castSpell(
+        caster, protectParty, null, 10_000, combat, rng(), undefined, undefined, undefined, [caster, ally],
+      );
+      expect(result.ok && result.condition).toEqual({
+        key: 'buff', spellId: 'protect-party', expiresAtMs: 130_000, skillDeltas: { shielding: 3 },
+      });
+    });
+
+    it('a plain numeric manaCost ignores affectedCount entirely', () => {
+      // `partyTargets` presente mas o efeito não é `target: 'party'`: nenhuma checagem de
+      // party roda, e o custo é o de sempre.
+      const caster = hero({ level: 50, mana: 1_000 });
+      const result = castSpell(caster, heal, null, 0, combat, rng(), undefined, undefined, undefined, [caster]);
+      expect(result.ok).toBe(true);
+      expect(caster.mana).toBe(1_000 - 20);
+    });
+  });
+
   it('a self-origin shape needs no range and no primary distance; the posture scales the spell hit', () => {
     const wave: Spell = {
       ...strike, id: 'fire-wave', effect: { kind: 'damage', power: 40, area: { shape: 'wave', length: 3 }, damageType: 'fire' },

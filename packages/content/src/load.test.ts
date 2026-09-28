@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { floorChangeAt, isBlocked } from './map.js';
-import { BOT_CATEGORIES, NEUTRAL_RATES } from './schemas.js';
+import { BOT_CATEGORIES, manaCostDisplayOf, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -86,14 +86,16 @@ describe('loadContent', () => {
     expect(config?.potion.map((rule) => rule.do)).toEqual([{ kind: 'supply', supplyId: 'health-potion' }]);
     expect(config?.attack).toEqual([]);
     // E cada `defaultConfigByVocation` aponta uma magia REAL de mana acessível no level em que a
-    // vocação é escolhida (level 8, §7.4) — nunca um id que o #596 removeu.
+    // vocação é escolhida (level 8, §7.4) — nunca um id que o #596 removeu. `manaCostDisplayOf`
+    // (#588): magia de party tem `manaCost` escalado pelo tamanho da party, não um número — o
+    // que se compara aqui é o custo de EXIBIÇÃO (o `base`), como o catálogo mostra.
     for (const [vocationId, vocationConfig] of Object.entries(content.bot.defaultConfigByVocation ?? {})) {
       for (const slot of vocationConfig.sets[0]?.slots ?? []) {
         if (slot?.do.kind !== 'spell') continue;
         const spell = content.spells.get(slot.do.spellId);
         expect(spell, `${vocationId}: ${slot.do.spellId}`).toBeDefined();
         expect(content.progression.startingMana, `${vocationId}: ${slot.do.spellId}`)
-          .toBeGreaterThanOrEqual(spell?.manaCost ?? Infinity);
+          .toBeGreaterThanOrEqual(spell === undefined ? Infinity : manaCostDisplayOf(spell.manaCost));
       }
     }
   });
@@ -792,8 +794,10 @@ const EXCLUDED_SPELLS = [
   // Invisibility/Cancel Invisibility entraram no #592 (`invisibility-druid`,
   // `invisibility-sorcerer`, `cancel-invisibility`) — a condição `invisible` (CMB-07) e o
   // dispel em área agora existem, e por isso saem desta allowlist.
-  'shield-bash', 'shield-slam', 'train-party', 'protect-party', 'enchant-party',
-  'heal-party', 'elemental-synthesis', 'shared-conservation',
+  // Heal/Protect/Enchant/Train Party entraram no #588 (alvo de party e custo escalado) — saem
+  // da lista de excluídas, e a golden table acima não as cobre porque `manaCost` delas é
+  // `party-scaled` (objeto, não número): ver o teste dedicado mais abaixo.
+  'shield-bash', 'shield-slam', 'elemental-synthesis', 'shared-conservation',
   'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
@@ -827,7 +831,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 20 + 16 + 30 + 32 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 21 + 17 + 31 + 33 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -843,15 +847,18 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // Envenom, Strong Haste, Cancel Magic Shield) → 27+4=31. As três genéricas pré-vocação
     // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`. #592
     // acrescentou: Cancel Invisibility no Paladin (15+1=16), Invisibility no Sorcerer (29+1=30)
-    // e no Druid (31+1=32).
+    // e no Druid (31+1=32). #588 acrescentou uma magia de PARTY por vocação: Train Party
+    // (Knight, 20+1=21), Protect Party (Paladin, 16+1=17), Enchant Party (Sorcerer, 30+1=31),
+    // Heal Party (Druid, 32+1=33) — a golden table acima não as cobre (`manaCost` delas é
+    // `party-scaled`, não um número); ver o teste dedicado mais abaixo.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(20);
-    expect(byVocation.get('paladin')).toBe(16);
-    expect(byVocation.get('sorcerer')).toBe(30);
-    expect(byVocation.get('druid')).toBe(32);
+    expect(byVocation.get('knight')).toBe(21);
+    expect(byVocation.get('paladin')).toBe(17);
+    expect(byVocation.get('sorcerer')).toBe(31);
+    expect(byVocation.get('druid')).toBe(33);
     expect(byVocation.get(undefined)).toBe(1);
   });
 
@@ -879,6 +886,44 @@ describe('the vocation spell catalogues (#156–#159)', () => {
       'strike', 'blast', 'heal', 'divine-defiance', 'divine-barrage', 'ethereal-barrage', 'forked-thorns',
     ]) {
       expect(content.spells.has(removed), removed).toBe(false);
+    }
+  });
+
+  it('the four party spells carry the Canary numbers (#588)', () => {
+    // `data/scripts/spells/party/*.lua`, main, 2026-09-28: level 32, cooldown/groupCooldown
+    // 2000 ms, grupo "support", `manaCost` escalado (`party-scaled`) com o `base`/`decay` de
+    // cada script — nunca um número fixo, e nunca a comparação direta da golden table acima
+    // (que espera `toBe(row.mana)`, um NÚMERO).
+    const rows: Record<string, {
+      vocationId: string; base: number; decay: number; effect: 'heal-over-time' | 'buff';
+      skillDeltas?: Record<string, number>; amount?: number;
+    }> = {
+      'heal-party': { vocationId: 'druid', base: 120, decay: 0.9, effect: 'heal-over-time', amount: 20 },
+      'protect-party': { vocationId: 'paladin', base: 90, decay: 0.9, effect: 'buff', skillDeltas: { shielding: 3 } },
+      'enchant-party': { vocationId: 'sorcerer', base: 120, decay: 0.9, effect: 'buff', skillDeltas: { magic: 1 } },
+      'train-party': {
+        vocationId: 'knight', base: 60, decay: 0.9, effect: 'buff',
+        skillDeltas: { axe: 3, club: 3, sword: 3, fist: 3, distance: 3 },
+      },
+    };
+    for (const [id, row] of Object.entries(rows)) {
+      const spell = content.spells.get(id);
+      expect(spell, id).toBeDefined();
+      if (spell === undefined) continue;
+      expect(spell.vocationId, id).toBe(row.vocationId);
+      expect(spell.minLevel, id).toBe(32);
+      expect(spell.group, id).toBe('support');
+      expect(spell.groupCooldownMs, id).toBe(2000);
+      expect(spell.cooldownMs, id).toBe(2000);
+      expect(spell.manaCost, id).toEqual({ kind: 'party-scaled', base: row.base, decay: row.decay });
+      expect(spell.effect.kind, id).toBe(row.effect);
+      expect((spell.effect as { target?: string }).target, id).toBe('party');
+      expect((spell.effect as { range?: number }).range, id).toBe(36);
+      expect((spell.effect as { durationMs?: number }).durationMs, id).toBe(120_000);
+      if (row.amount !== undefined) expect((spell.effect as { amount?: number }).amount, id).toBe(row.amount);
+      if (row.skillDeltas !== undefined) {
+        expect((spell.effect as { skillDeltas?: Record<string, number> }).skillDeltas, id).toEqual(row.skillDeltas);
+      }
     }
   });
 

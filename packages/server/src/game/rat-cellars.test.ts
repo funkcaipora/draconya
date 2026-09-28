@@ -124,7 +124,14 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
   for (const vocationId of ['knight', 'paladin', 'sorcerer', 'druid']) {
     it(`a ${vocationId} casts one spell of each kind of the vocation`, () => {
       const content = real();
-      const mine = [...content.spells.values()].filter((s) => s.vocationId === vocationId);
+      // Alvo de party (#588: Heal/Protect/Enchant/Train Party) fica de fora: elas SEMPRE
+      // recusam sem `partyTargets` (a mesma recusa "No party members in range" do Canary com
+      // um lançador sozinho), e este harness testa UM herói solo — `casting.test.ts` é quem
+      // exercita `castSpell` com a party colhida.
+      const mine = [...content.spells.values()].filter(
+        (s) => s.vocationId === vocationId
+          && !((s.effect.kind === 'heal-over-time' || s.effect.kind === 'buff') && s.effect.target === 'party'),
+      );
       expect(mine.length).toBeGreaterThan(0);
       const oneOfEach = new Map(mine.map((s) => [s.effect.kind, s]));
       let now = 0;
@@ -138,7 +145,9 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
           || spell.effect.kind === 'damage-over-time';
         const result = castSpell(hero, spell, needsAim ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
         expect(result.ok, spell.id).toBe(true);
-        expect(hero.mana, spell.id).toBe(100_000 - spell.manaCost);
+        // `manaCost` é sempre NÚMERO aqui — o filtro acima já tirou as magias de party, as
+        // únicas com `manaCost` escalado (`party-scaled`).
+        expect(hero.mana, spell.id).toBe(100_000 - (spell.manaCost as number));
         expect(hero.cooldowns.isReady(spellCooldownKey(spell.id), now), spell.id).toBe(false);
         if (spell.group !== undefined) {
           expect(hero.cooldowns.isReady(groupCooldownKey(spell.group), now), spell.id).toBe(false);
