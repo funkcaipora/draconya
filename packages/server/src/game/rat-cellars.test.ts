@@ -121,8 +121,10 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       for (const spell of oneOfEach.values()) {
         const hero = caster(content, vocationId, 100);
         // Self-origin ou no alvo: a mira sintética serve às duas — `distance` 1 cabe em todo
-        // alcance, e a forma que sai do lançador ignora a distância.
-        const result = castSpell(hero, spell, spell.effect.kind === 'damage' ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
+        // alcance, e a forma que sai do lançador ignora a distância. DOT (#596) também mira
+        // o alvo, como dano.
+        const needsAim = spell.effect.kind === 'damage' || spell.effect.kind === 'damage-over-time';
+        const result = castSpell(hero, spell, needsAim ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
         expect(result.ok, spell.id).toBe(true);
         expect(hero.mana, spell.id).toBe(100_000 - spell.manaCost);
         expect(hero.cooldowns.isReady(spellCooldownKey(spell.id), now), spell.id).toBe(false);
@@ -134,8 +136,12 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
         }
         now += 1;
       }
-      // Outra vocação, e um level abaixo do mínimo.
-      const first = mine[0] as NonNullable<(typeof mine)[number]>;
+      // Outra vocação, e um level abaixo do mínimo. A magia usada para o cross-vocation check
+      // precisa ser a de MENOR `minLevel` da vocação (#596: `mine[0]` deixou de ser confiável —
+      // a ordem é a de leitura do arquivo, alfabética por id, e `annihilation`/`ultimate-*`
+      // entraram com level bem acima de 80) — senão o caster de level 80 da OUTRA vocação já
+      // cairia em `level-too-low` antes de chegar a `wrong-vocation`.
+      const first = mine.reduce((a, b) => (a.minLevel < b.minLevel ? a : b));
       const other = vocationId === 'knight' ? 'druid' : 'knight';
       expect(castSpell(caster(content, other, 80), first, aim, 0, content.combat, Rng.fromSeed('x')))
         .toMatchObject({ ok: false, reason: 'wrong-vocation' });

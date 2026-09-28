@@ -4018,6 +4018,16 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
   }),
   /** Dano vira mana enquanto vale. */
   z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
+  /**
+   * Remove uma condição do PRÓPRIO lançador, na hora (Cancel Magic Shield, #596) — o
+   * `creature:removeCondition(...)` do Canary. Ao contrário de toda outra `SpellEffect`, esta não
+   * AGENDA nada: `castSpell` devolve `CastSuccess.removeConditionKey`, e quem tem a `Conditions`
+   * (o ruleset) remove no mesmo instante, sem evento na fila — não há "vencimento" para uma
+   * remoção. `key` é a MESMA chave reservada que a condição alvo usa (`mana-shield` para a
+   * Cancel Magic Shield); string livre porque o vocabulário de condição já não é fechado aqui
+   * (`speed`/`drunk`/etc. usam a mesma convenção de chave reservada, CMB-11).
+   */
+  z.object({ kind: z.literal('remove-condition'), key: z.string().min(1) }),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 

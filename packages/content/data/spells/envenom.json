@@ -1,0 +1,20 @@
+{
+  "id": "envenom",
+  "name": "Envenom",
+  "description": "Envenena o seu alvo, causando dano de terra ao longo do tempo.",
+  "vocationId": "druid",
+  "minLevel": 50,
+  "manaCost": 30,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 40000,
+  "effect": {
+    "kind": "damage-over-time",
+    "amount": 45,
+    "intervalMs": 3000,
+    "durationMs": 75000,
+    "range": 3,
+    "damageType": "earth"
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): DOT de terra (veneno) do Druid (level 50), `utori pox` no Canary. Fonte `data/scripts/spells/attack/envenom.lua` (Canary local, 47dfd51): `spell:id(142)`, level 50, mana 30, cooldown 40s, grupo `attack` 2s, `range 3`, `COMBAT_EARTHDAMAGE`, `needTarget`. Mecanismo `Condition:addDamage` (M31-02): `condition:addDamage(25, 3000, -45)` — 25 tiques de 45 de dano a cada 3000 ms, total 75000 ms (os MESMOS números de `ignite.json`/`electrify.json`, só o elemento e o cooldown mudam). Aparência: efeito 17 e projétil 30, reaproveitados de `terra-strike-druid`/`mud-attack` (mesmo elemento terra) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

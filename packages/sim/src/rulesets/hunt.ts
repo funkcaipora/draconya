@@ -5057,6 +5057,12 @@ const slots = bot.groups.get(group);
       }
       return result;
     }
+    // Remoção sem evento (#596: Cancel Magic Shield) — sem `expiresAtMs` a agendar, só a
+    // `Conditions` do PRÓPRIO lançador a apagar na hora.
+    if (result.removeConditionKey !== undefined) {
+      character.conditions.remove(result.removeConditionKey);
+      return result;
+    }
     if (aim === null) {
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar. O anúncio é do
       // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou. O HPS, ao
