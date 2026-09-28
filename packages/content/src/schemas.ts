@@ -2253,6 +2253,42 @@ export const monsterSchema = z.strictObject({
    */
   blockable: z.boolean().default(false),
   /**
+   * O monstro pode ser EMPURRADO por outro que declare `canPushCreatures` (M29-08, TFS/Canary
+   * `Monster::isPushable`, `monster.cpp:276`: `pushable && baseSpeed != 0`). A segunda metade
+   * não precisa de campo aqui: `speed` é `positive()` neste schema (nunca zero), então
+   * `pushable` sozinho decide. Ausente é `true` — o default do Canary e de 1.598/1.655 do
+   * bestiário real; rato e rotworm não declaram (preservam `true`). **Dragon e Dragon Lord
+   * declaram `false`** (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-27) — mas o
+   * conteúdo autoral de hoje (`data/monsters/generated/dragons.json`, regenerado pelo #581)
+   * ainda não carrega o campo, então os dois caem no default `true` até alguém trazer o valor
+   * real (fora do escopo desta issue — ver `canPushCreatures` abaixo para o porquê disso ser
+   * seguro por ora).
+   */
+  pushable: z.boolean().default(true),
+  /**
+   * Empurra CRIATURAS empurráveis que bloqueiam o próprio passo, em vez de tratá-las como
+   * parede (M29-08, TFS/Canary `Monster::canPushCreatures`, `monsters.hpp:138`). Ausente é
+   * `false` — o default do Canary; rato e rotworm não declaram. **Dragon e Dragon Lord
+   * declaram `true`** (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-27) — o conteúdo
+   * autoral de hoje ainda não carrega o campo (mesma nota de `pushable`), então os dois caem no
+   * default `false` e continuam vendo tile ocupado como parede, exatamente como antes desta
+   * issue: nenhum monstro do catálogo empurra nada ainda, e trazer o valor real do Dragon é
+   * trabalho À PARTE (#578, o leitor de bestiário). Isso é seguro mesmo assim porque `sim`
+   * (`HuntRuleset#clearPushableOccupant`/`#pushablePathThrough`) só executa o empurrão sob
+   * `combat-v3` — sob `combat-v1`/`v2` o campo é lido, mas NUNCA move nada nem consome
+   * `session.rng`, para uma hunt já congelada (ADR 0031/0040) nunca divergir por causa de um
+   * valor de conteúdo que mudou depois dela ter começado.
+   */
+  canPushCreatures: z.boolean().default(false),
+  /**
+   * Empurra ITENS móveis do tile de destino (TFS/Canary `Monster::canPushItems`,
+   * `monsters.hpp:137`). Aceito e validado, mas SEM EFEITO no Draconya: não existe item móvel
+   * no chão — o cadáver é só visual (ADR 0048) — então não há o que empurrar. Ausente é
+   * `false`, o default do Canary; Dragon e Dragon Lord declaram `true` no Canary
+   * (`dragon.lua`/`dragon_lord.lua`), mas sem efeito nenhum aqui de qualquer forma.
+   */
+  canPushItems: z.boolean().default(false),
+  /**
    * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
    * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
    * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.

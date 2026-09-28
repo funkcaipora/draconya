@@ -1678,6 +1678,250 @@ describe('walk-to distante na hunt: caminho no servidor e pausa do bot (#763)', 
   });
 });
 
+// --- empurrar criatura e esmagamento (M29-08, #544) ------------------------------------------
+//
+// Um monstro com `canPushCreatures` empurra um monstro `pushable` que bloqueia o próprio passo,
+// em vez de tratá-lo como parede; sem cardinal livre, o empurrado é esmagado sem atacante. O
+// herói mora numa BOLSA à parte, ligada por uma parede — longe o bastante do corredor (nunca
+// adjacente) para nunca entrar em combate com o rato: ele existe só para dar ao Dragon um alvo
+// na direção certa (leste), sem contaminar o teste com o ataque automático do jogador.
+describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
+  const pusherDragon = {
+    ...rat, id: 'push-dragon', name: 'Push Dragon', health: 999_999_999, attack: 0,
+    aggroRadius: 10, canPushCreatures: true,
+  };
+  const pushableRat = { ...rat, id: 'pushable-rat', name: 'Pushable Rat' };
+  const stuckRat = { ...rat, id: 'stuck-rat', name: 'Stuck Rat', pushable: false };
+
+  // Empurrar/esmagar só roda sob `combat-v3` (ADR 0031/0040, DT-04 do #544): o empurrão consome
+  // `session.rng` e move outra criatura, e as duas coisas mudariam o que uma hunt `combat-v1`/
+  // `v2` congelada rende. Os testes de MECANISMO (RF-02 a RF-06) usam este perfil de propósito,
+  // para exercitar o caminho de código real — não porque `combat-v1`/`v2` sejam o alvo da issue.
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+
+  // Corredor SEM saída: x=1 (Dragon) e x=2 (rato) são as únicas colunas do corredor — a parede
+  // em x=3 fecha o beco. Norte/sul (y=0/y=2) também são parede: os quatro cardinais do rato
+  // (norte, sul, oeste-Dragon, leste-parede) ficam bloqueados. Além da parede, uma bolsa (x=4..8)
+  // hospeda o herói, a pelo menos duas colunas de distância de qualquer monstro do corredor.
+  const narrowMap = {
+    id: 'push-narrow', z: 7,
+    grid: ['##########', '#..#.....#', '##########'],
+  };
+  const narrowRoute = {
+    id: 'push-narrow-loop', mapId: 'push-narrow',
+    tiles: [{ x: 4, y: 1, z: 7 }, { x: 5, y: 1, z: 7 }],
+    spawnPoints: [],
+  };
+
+  // A mesma ideia, mas com y=1/y=3 livres nas duas colunas do corredor: o rato do meio tem para
+  // onde ser empurrado (norte ou sul) — a parede em x=3 continua fechando o corredor a leste.
+  const wideCorridorMap = {
+    id: 'push-wide-corridor', z: 7,
+    grid: [
+      '##########', '#..#.....#', '#..#.....#', '#..#.....#', '##########',
+    ],
+  };
+  const wideCorridorRoute = {
+    id: 'push-wide-corridor-loop', mapId: 'push-wide-corridor',
+    tiles: [{ x: 4, y: 2, z: 7 }, { x: 5, y: 2, z: 7 }],
+    spawnPoints: [],
+  };
+
+  /**
+   * Sobe uma hunt com monstros em pontos de spawn fixos (#519) e o herói na própria bolsa.
+   * `combatProfile` é `combatV3` por default — os testes de mecanismo precisam do perfil que
+   * liga o empurrão; o teste do GATE (RF-07, abaixo) passa `combat` (v1, o default do conteúdo)
+   * de propósito, para provar que o mecanismo sai inteiro sem efeito fora de `combat-v3`.
+   */
+  const startCorridor = (
+    map: typeof narrowMap, route: typeof narrowRoute,
+    monsters: readonly { readonly id: string }[],
+    positions: readonly { readonly x: number; readonly y: number; readonly z: number }[],
+    combatProfile: typeof combat = combatV3,
+  ) => {
+    const corridorHunt = {
+      ...hunt, id: map.id, mapId: map.id, routeId: route.id,
+      difficulties: {
+        cautious: {
+          monsterCount: monsters.length,
+          composition: [{ monsterId: (monsters[0] as { readonly id: string }).id, weight: 1 }],
+          respawnDelayMs: 1_000_000,
+        },
+      },
+    };
+    const routeWithSpawns = {
+      ...route,
+      spawnPoints: monsters.map((monster, i) => ({
+        routeIndex: 0, radius: 1, monsterId: monster.id, at: positions[i],
+      })),
+    };
+    const loaded = buildContent(raw({
+      monsters: [...monsters], maps: [map], routes: [routeWithSpawns], hunts: [corridorHunt],
+      combat: [combatProfile],
+    }));
+    const session = createHuntSession({
+      content: loaded, id: `push-${map.id}`, huntId: map.id, difficulty: 'cautious', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: route.tiles[0] as { readonly x: number; readonly y: number; readonly z: number },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      capacity: stats.capacity,
+    });
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('RF-02: Dragon com canPushCreatures avança sobre um rato pushable — o rato vai para um cardinal livre', () => {
+    // Dragon em (1,2), rato em (2,2) — corredor largo: (2,1) e (2,3) são os cardinais livres do
+    // rato (a parede em x=3 fecha a terceira saída).
+    const { session, ruleset } = startCorridor(
+      wideCorridorMap, wideCorridorRoute, [pusherDragon, pushableRat],
+      [{ x: 1, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'push-dragon');
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'pushable-rat');
+    expect(dragon).toBeDefined();
+    expect(ratMonster).toBeDefined();
+    if (dragon === undefined || ratMonster === undefined) return;
+
+    // O Dragon ocupou o tile que era do rato — a prova de que o passo aconteceu.
+    expect(dragon.position).toEqual({ x: 2, y: 2, z: 7 });
+    // O rato foi para um dos dois cardinais livres, nunca ficou no lugar nem sumiu.
+    expect(ratMonster.alive).toBe(true);
+    expect([
+      { x: 2, y: 1, z: 7 }, { x: 2, y: 3, z: 7 },
+    ]).toContainEqual(ratMonster.position);
+  });
+
+  it('RF-03: sem cardinal livre (corredor sem saída), o rato empurrado morre sem atacante — sem XP para ninguém', () => {
+    // Dragon em (1,1), rato em (2,1): os quatro cardinais do rato são parede (norte, sul, leste)
+    // ou o próprio Dragon (oeste) — nenhum livre.
+    const { session, hero, ruleset } = startCorridor(
+      narrowMap, narrowRoute, [pusherDragon, pushableRat],
+      [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'pushable-rat');
+    expect(ratMonster).toBeUndefined();
+    // Sem atacante: ninguém ganhou XP pelo abate (o herói nunca chegou perto do rato).
+    expect(hero.xp).toBe(0);
+    expect(hero.health).toBe(hero.maxHealth);
+  });
+
+  it('RF-04: Dragon SEM canPushCreatures (o default) continua bloqueado por um monstro no caminho', () => {
+    const plainDragon = {
+      ...rat, id: 'plain-dragon', name: 'Plain Dragon', health: 999_999_999, attack: 0, aggroRadius: 10,
+    };
+    const { session, ruleset } = startCorridor(
+      narrowMap, narrowRoute, [plainDragon, pushableRat],
+      [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'plain-dragon');
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'pushable-rat');
+    expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(ratMonster?.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(ratMonster?.alive).toBe(true);
+  });
+
+  it('RF-06: rato pushable: false nunca é empurrado nem esmagado, mesmo por quem canPushCreatures', () => {
+    const { session, ruleset } = startCorridor(
+      narrowMap, narrowRoute, [pusherDragon, stuckRat],
+      [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'push-dragon');
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'stuck-rat');
+    expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(ratMonster?.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(ratMonster?.alive).toBe(true);
+  });
+
+  // Mapa dedicado, sem bolsa nem rato: o herói nasce DIRETO adjacente ao Dragon (distância 1),
+  // então o combate-stop de sempre (`#playerStep`) já o segura ali antes do primeiro passo, e
+  // nunca chega a andar até o segundo tile da própria rota.
+  const playerBlockMap = { id: 'push-player-block', z: 7, grid: ['#####', '#...#', '#####'] };
+  const playerBlockRoute = {
+    id: 'push-player-block-loop', mapId: 'push-player-block',
+    tiles: [{ x: 2, y: 1, z: 7 }, { x: 3, y: 1, z: 7 }],
+    spawnPoints: [],
+  };
+
+  it('RF-05: jogador nunca é empurrado — bloqueia um Dragon canPushCreatures como qualquer tile ocupado', () => {
+    // `#monsterAt` só varre `this.#monsters`, então o herói nunca é candidato a ocupante
+    // empurrável — o Dragon nunca sequer TENTA empurrá-lo, só bate (sem dano, attack: 0).
+    const { session, hero, ruleset } = startCorridor(
+      playerBlockMap, playerBlockRoute, [pusherDragon], [{ x: 1, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'push-dragon');
+    // O Dragon nunca ocupa o tile do herói, nem o herói o dele — cada um no seu, como qualquer
+    // bloqueio comum.
+    expect(hero.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(hero.health).toBe(hero.maxHealth);
+    expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(dragon?.alive).toBe(true);
+  });
+
+  it('RF-07 (ADR 0031/0040): sob combat-v1 o tile ocupado continua parede — nenhum sorteio novo, mesmo com canPushCreatures: true', () => {
+    // O MESMO cenário do RF-03 (o rato seria esmagado sob combat-v3), rodado sob `combat-v1` —
+    // o default do conteúdo de teste, e o perfil de toda hunt congelada antes desta issue — com
+    // a flag `canPushCreatures` LIGADA e DESLIGADA no Dragon. Sem o gate `#isV3()`, a rodada
+    // "ligada" mataria o rato e divergiria da "desligada"; com o gate, `#pushablePathThrough`/
+    // `#clearPushableOccupant` saem no primeiro `if` sem SEQUER ler `canPushCreatures` — as duas
+    // rodadas precisam ser bit a bit a MESMA sequência de sorteio (a mesma prova que #555 fez
+    // para o hit chance de distância em `weapons.test.ts`), e o rato tem que sobreviver nas duas.
+    const runUnderV1 = (canPushCreatures: boolean) => {
+      const dragon = { ...pusherDragon, canPushCreatures };
+      const spy = vi.spyOn(Rng.prototype, 'integer');
+      try {
+        const { session, hero, ruleset } = startCorridor(
+          narrowMap, narrowRoute, [dragon, pushableRat],
+          [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+          combat,
+        );
+        run(session, 5_000, 100);
+        return {
+          rngCalls: spy.mock.calls.map((call) => [...call]),
+          dragonPosition: ruleset.monsters.find((m) => m.monsterId === dragon.id)?.position,
+          ratAlive: ruleset.monsters.find((m) => m.monsterId === 'pushable-rat')?.alive,
+          xp: hero.xp,
+        };
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    const withFlag = runUnderV1(true);
+    const withoutFlag = runUnderV1(false);
+
+    // Sem o gate, o rato desta rodada estaria esmagado (RF-03) — aqui ele sobrevive, intocado,
+    // exatamente como no cenário sem a flag.
+    expect(withFlag.ratAlive).toBe(true);
+    expect(withFlag.dragonPosition).toEqual({ x: 1, y: 1, z: 7 });
+    expect(withFlag.dragonPosition).toEqual(withoutFlag.dragonPosition);
+    expect(withFlag.xp).toBe(withoutFlag.xp);
+    // A prova mais forte: a MESMA sequência de `session.rng.integer(...)`, chamada a chamada —
+    // nenhum sorteio do empurrão entrou na sequência de uma hunt combat-v1.
+    expect(withFlag.rngCalls).toEqual(withoutFlag.rngCalls);
+  });
+});
+
 // --- as cinco categorias do bot (FUN-84) -----------------------------------------------------
 
 import type { BotAction, BotConfig, BotConfigV2, BotSlot } from '@draconya/content';

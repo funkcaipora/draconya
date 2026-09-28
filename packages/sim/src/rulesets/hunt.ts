@@ -96,7 +96,7 @@ import {
 import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityBlockFlags, abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, FloorPoint, GridPoint } from '../monster/step.js';
-import { distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
+import { PUSH_DIRECTIONS, distance, fleeStep, greedyStep, sameFloor } from '../monster/step.js';
 import { isSightClear } from '../line-of-sight.js';
 import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
@@ -7031,6 +7031,9 @@ const slots = bot.groups.get(group);
     if (mover instanceof MonsterRuntime && this.#monsterFieldBlocked(mover, target)) {
       return { ok: false, reason: 'tile-blocked' };
     }
+    // Empurra quem ocupa o destino FINAL, pela mesma razão do campo acima (M29-08): o destino
+    // que chega até aqui pode ter sido reescrito depois da decisão em `#monsterBlocked`.
+    if (mover instanceof MonsterRuntime) this.#clearPushableOccupant(session, mover, target);
     const result = move(this.#world, mover, target);
     if (result.ok) {
       // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
@@ -7071,6 +7074,91 @@ const slots = bot.groups.get(group);
       this.#onSteppedOffOf(session, character, result.from);
     }
     return result;
+  }
+
+  /**
+   * Abre o tile de destino para quem `canPushCreatures` (M29-08, TFS/Canary `Monster::
+   * pushCreatures`, `monster.cpp:2405-2440`): sem efeito para quem não tem a flag, para tile
+   * vazio, ou quando o ocupante não é um monstro `pushable` — inclusive o JOGADOR, que
+   * `#monsterAt` nunca encontra (só varre `this.#monsters`). Roda no COMMIT — dentro de
+   * `#step`, revalidado no destino FINAL —, nunca na decisão: `decideMonsterAction`
+   * (`monster/monster.ts`) é PURA e não pode mover ninguém (invariante 9); só `#step` tem
+   * autoridade de escrita.
+   *
+   * **Só em `combat-v3`** (ADR 0031/0040): o empurrão consome `session.rng` (`#pushAside`, o
+   * Fisher-Yates dos 4 cardeais) e move OUTRA criatura, e as duas coisas mudam o que uma hunt
+   * `combat-v1`/`v2` congelada rende — a MESMA razão pela qual `#practice`/o crítico de item
+   * (CMB-08, #551) e o hit chance de distância (#555) só entram sob `combat-v3`. Hoje nenhum
+   * monstro do catálogo declara `canPushCreatures` (Dragon e Dragon Lord AINDA não — ver a nota
+   * de `pushable`/`canPushCreatures`/`canPushItems` no schema), mas o predicado de decisão
+   * (`#pushablePathThrough`) já teria mudado o CAMINHO escolhido bem antes de chegar aqui: a
+   * dupla checagem (lá e aqui) é a mesma redundância que `#monsterFieldBlocked` já faz para o
+   * campo — nunca confiar que só o outro lado da linha barrou.
+   */
+  #clearPushableOccupant(session: Session, pusher: MonsterRuntime, to: GridPoint): void {
+    if (!this.#isV3()) return;
+    const definition = this.#options.monsters.get(pusher.monsterId);
+    if (definition === undefined || !definition.canPushCreatures) return;
+    const z = this.#floorOf(pusher);
+    if (!this.#world.occupied(to.x, to.y, z)) return;
+    const occupant = this.#monsterAt(to.x, to.y, z, pusher);
+    if (occupant === null) return;
+    if (this.#options.monsters.get(occupant.monsterId)?.pushable !== true) return;
+    if (!this.#pushAside(session, occupant)) this.#crushMonster(session, occupant);
+  }
+
+  /** O monstro VIVO em (x, y, z), exceto `exclude` — varre `this.#monsters`, nunca jogador. */
+  #monsterAt(x: number, y: number, z: number, exclude: MonsterRuntime): MonsterRuntime | null {
+    for (const candidate of this.#monsters) {
+      if (candidate === exclude || !candidate.alive) continue;
+      if (candidate.position.x !== x || candidate.position.y !== y) continue;
+      if (!sameFloor(candidate.position.z, z)) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * Empurra para um tile cardinal livre, em ordem embaralhada pelo `session.rng` — Fisher-Yates
+   * completo dos 4 índices de `PUSH_DIRECTIONS`, o mesmo desenho do parcial de `#creditStock`
+   * mais abaixo — e tenta cada um pelo MESMO `#step` de qualquer outro passo (§10.2 da
+   * referência de domínio: nunca atribuir a posição da vítima diretamente, sempre pelo mesmo
+   * `MovementSystem`). `rollDrunk: false`: o empurrão é
+   * força EXTERNA, não a decisão de movimento do empurrado — ele não rola a própria condição
+   * por ter sido empurrado. Devolve `false`, sem NENHUM efeito, quando os quatro recusam
+   * (parede, fora do mapa, outro ocupante, campo que ele mesmo não cruza) — quem chama esmaga.
+   */
+  #pushAside(session: Session, occupant: MonsterRuntime): boolean {
+    const order = [0, 1, 2, 3];
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const pick = session.rng.integer(0, i);
+      const chosen = order[pick] as number;
+      order[pick] = order[i] as number;
+      order[i] = chosen;
+    }
+    for (const index of order) {
+      const direction = PUSH_DIRECTIONS[index] as GridPoint;
+      const candidate = {
+        ...occupant.position, x: occupant.position.x + direction.x, y: occupant.position.y + direction.y,
+      };
+      if (this.#step(session, occupant, candidate, occupant.subject, false).ok) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Esmaga quem não coube em nenhum cardinal (Canary `Monster::pushCreatures`, `monster.cpp:
+   * 2429-2431`: `changeHealth(-health)` + `setDropLoot(true)`). Zera a vida e entrega ao MESMO
+   * pipeline de morte de qualquer monstro (`resolveDeath` → `#onMonsterDied`) — nunca um segundo
+   * caminho de morte: `contribution` continua vazia (ninguém bateu), então `credit.lastHitBy` é
+   * `null`, e `#onMonsterDied` já paga a regra de "sem dono" que um abate cujo matador sumiu
+   * paga hoje — sem XP, loot elegível a quem estiver presente. Não passa por `resolveDamage`:
+   * não é golpe, é esmagamento — o Canary também não chama `Game::combatChangeHealth` aqui, só
+   * `changeHealth` direto, sem tipo de dano, sem defesa, sem crítico.
+   */
+  #crushMonster(session: Session, occupant: MonsterRuntime): void {
+    occupant.health = 0;
+    resolveDeath(session, { kind: 'monster', monster: occupant });
   }
 
   /** Pisou numa placa de pressão OCIOSA (`up`): pressiona, com o cascade de `links` de sempre. */
@@ -9300,10 +9388,40 @@ const slots = bot.groups.get(group);
     return !canMonsterEnterField(definition, monster.ignoresFieldDamage, field);
   }
 
+  /**
+   * `#moverBlocked`, mas com uma exceção (M29-08, TFS/Canary `Monster::canPushCreatures`): um
+   * tile SÓ recusado por `tile-occupied` deixa de bloquear quando quem decide `canPushCreatures`
+   * e o único ocupante é um monstro `pushable` — o empurrão em si acontece no COMMIT
+   * (`#clearPushableOccupant`, dentro de `#step`), nunca aqui: esta função é PURA quanto a mundo
+   * (só lê), como todo `Blocked` (ADR 0009). Qualquer OUTRA razão de recusa (parede, fora do
+   * mapa, jogador no tile, monstro não-pushable) continua bloqueando como sempre.
+   */
   readonly #monsterBlocked: Blocked = (x, y) => {
-    if (this.#moverBlocked(x, y)) return true;
+    this.#probe.x = x;
+    this.#probe.y = y;
+    const rejection = canOccupy(this.#world, this.#fieldMonster as MonsterRuntime, this.#probe);
+    if (rejection !== null && !(rejection === 'tile-occupied' && this.#pushablePathThrough(x, y))) {
+      return true;
+    }
     return this.#fieldBlocksMonster(this.#fieldMonster as MonsterRuntime, this.#fieldDefinition as Monster, x, y);
   };
+
+  /**
+   * Só a metade de LEITURA de `#clearPushableOccupant` (M29-08) — ver o comentário lá, inclusive
+   * o porquê de `#isV3()` gatear os dois lados: sem ele, um monstro `combat-v1`/`v2` já
+   * ESCOLHERIA um caminho diferente aqui (achando o tile passável), mesmo que o commit acabasse
+   * recusando por falta do gate lá — e "o caminho escolhido muda" já é o suficiente para uma
+   * hunt congelada divergir (o guloso tenta os DOIS vizinhos só quando o primário falha).
+   */
+  #pushablePathThrough(x: number, y: number): boolean {
+    if (!this.#isV3()) return false;
+    const pusher = this.#fieldMonster;
+    const definition = this.#fieldDefinition;
+    if (pusher === null || definition === null || !definition.canPushCreatures) return false;
+    const occupant = this.#monsterAt(x, y, this.#floorOf(pusher), pusher);
+    if (occupant === null) return false;
+    return this.#options.monsters.get(occupant.monsterId)?.pushable === true;
+  }
 
   #blockedForMonster(monster: MonsterRuntime, definition: Monster): Blocked {
     this.#mover = monster;

@@ -60,6 +60,16 @@ const DIRECTIONS: readonly GridPoint[] = [
   { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 },
 ];
 
+/**
+ * As quatro direções CARDINAIS, na ordem que o Canary embaralha para escolher onde empurrar
+ * uma criatura fora do caminho (M29-08, `Monster::pushCreature`, `monster.cpp:2387-2403`:
+ * dirList `{NORTH, WEST, EAST, SOUTH}` antes do `std::ranges::shuffle`). Nunca diagonal — o
+ * Tibia empurra só para os quatro lados retos.
+ */
+export const PUSH_DIRECTIONS: readonly GridPoint[] = [
+  { x: 0, y: -1 }, { x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 },
+];
+
 const sign = (value: number): number => (value > 0 ? 1 : value < 0 ? -1 : 0);
 
 /**
