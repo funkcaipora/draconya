@@ -82,6 +82,9 @@ export function isSelfOrigin(area: SpellArea | undefined): boolean {
     case 'rows':
     case 'cleave':
     case 'beam': return true;
+    // `point`/`wall` (#591) miram o tile do alvo, como a cruz — nunca o lançador.
+    case 'point':
+    case 'wall': return false;
   }
 }
 
@@ -190,6 +193,15 @@ export function areaTiles(
       }
       return tiles;
     }
+    // Um tile só, no alvo (#591: Fire/Poison/Energy Field, Magic Wall, Wild Growth — o Canary
+    // cria o item DIRETO na posição mirada, sem `setArea`).
+    case 'point':
+      return [{ ...(target ?? origin) }];
+    // A fileira perpendicular CENTRADA no alvo (#591: Fire/Poison/Energy Wall,
+    // `AREA_WALLFIELD`/`AREA_WALLFIELD_ENERGY`) — `distance` 0 a partir do ALVO, não do
+    // lançador: é o que ancora a linha exatamente sobre o tile mirado, como o Canary faz.
+    case 'wall':
+      return row(target ?? origin, f, s, 0, shape.width);
   }
 }
 

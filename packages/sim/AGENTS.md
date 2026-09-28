@@ -596,3 +596,63 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   continuam liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` é
   campo solto no personagem, não `ConditionState`: migra para a condição `pacified` de verdade
   quando ela existir (M44-04).
+- **Campo bloqueante é PAREDE, não desvio de dano** (#560). `Fields.blockedAt`/
+  `TileOccupancy.blockedAt` bloqueiam para QUALQUER criatura, e valem em `canOccupy`/`move`
+  sem checagem extra em `hunt.ts` — ao contrário do desvio de dano do M29-05
+  (`canMonsterEnterField`), que só o MONSTRO respeita e só quando o campo declara
+  `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
+  ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
+  quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
+  também usa.
+- **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
+  isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
+  devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra
+  `map.width`/`map.height`. Um teste que mira um monstro DELIBERADAMENTE fora do mapa (para
+  testar `out-of-range` sem se importar com LOS) passava por acidente. Dar ao parâmetro
+  `blocksProjectileAt` um valor não-`undefined` desliga esse atalho e faz o passeio rodar de
+  verdade — e a conferência de limite, agora executada, reprova a mira fora do mapa como
+  bloqueada, quebrando três testes que dependiam do atalho sem saber. **Por isso os call sites
+  de combate em `hunt.ts` continuam passando só três argumentos para `isSightClear`** (o
+  parâmetro existe e tem teste próprio em `line-of-sight.test.ts`, mas não está fiado à
+  produção): ligá-lo de verdade é trabalho do M30-06, com mapa e conteúdo reais para testar
+  contra, não desta issue.
+- **Runa de campo mira o CHÃO, e a mira de chão é uma busca SEPARADA de `#aimFor`** (#591).
+  `#groundAimFor` não colhe criatura nenhuma (`#collect`/`#spellHits` ficam de fora) — um campo
+  nasce num tile vazio, e a antiga exigência "pelo menos um alvo colhido" de `#aimFor` faria
+  toda runa de campo mirada em chão vazio recusar `no-target` por engano. `#needsTarget` precisa
+  reconhecer os `kind`s `field`/`destroy-field` como "sempre exige alvo" — sem isso,
+  `#resolveManualTarget` descarta `target.position` como "não se aplica" ANTES de a mira de chão
+  rodar, e a runa nunca recebe o tile que o jogador apontou.
+- **`Fields` indexa por id de CONTEÚDO, e uma runa de jogador cast duas vezes em tiles
+  diferentes não pode reusar o `spec.id` cru** (#591) — faria o segundo cast MOVER o campo do
+  primeiro (`Fields.apply` substitui pelo id), não abrir um segundo independente, ao contrário
+  do Tibia real (várias Fire Field lado a lado). `fieldInstanceId(specId, at)` deriva o id pelo
+  TILE (`"<specId>@x,y,z"`) — determinístico, sem contador para persistir no snapshot —, e é só
+  o `sim` (`HuntRuleset#useSupply`) quem reescreve o id antes de chamar `applyField`; `useSupply`
+  (`casting.ts`) devolve o `FieldSpec` do CONTEÚDO, cru. Relançar a MESMA runa no MESMO tile
+  ainda reinicia — o mesmo tile produz o mesmo id.
+- **`applyField` recebeu um `direction` opcional (default `'south'`) só para a forma `wall`
+  (#591) — o único chamador de antes desta issue (a ability de monstro) sempre usa `circle`, que
+  ignora direção, e por isso continua preservado bit a bit sem passar o parâmetro novo.** Quem
+  planta uma parede de jogador precisa calcular `directionOf(character.position, at)` e passar
+  explicitamente — esquecer faz a parede sempre se orientar como se o lançador estivesse ao SUL
+  do alvo, silenciosamente errado em qualquer outra direção.
+- **A invocação do PERSONAGEM (#598, M38-01, ADR 0057) estende `masterId` a `characterId` — a
+  DISTINÇÃO DE TIPO (número é monstro, #546; string é personagem) decide o comportamento, sem
+  campo `masterKind` à parte.** `HuntRuleset#chooseMonsterTarget` bifurca por isso: invocação de
+  personagem NUNCA roda `chooseTarget` própria — herda o alvo do mestre (`attackTargetOf`) a
+  cada passo/ataque/ability; invocação de monstro continua igual ao #546. **O dano dela credita
+  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnSummon`, achado da implementação: sem o
+  redirecionamento, `xpByDamage` não reconhece um `m:<id>` como participante e o abate renderia
+  ZERO XP para quem invocou). **`#hostileMonsters()` é o outro lado da mesma moeda — proteção
+  contra FOGO AMIGO.** Estender a lista de presas de um monstro hostil (`#playerSummonPrey`) para
+  incluir invocações de personagem tem uma consequência que NÃO é óbvia: o auto-target do
+  PRÓPRIO jogador (#444) usa `this.#monsters` sem saber "isto é minha invocação" — sem o filtro,
+  o personagem mataria a própria invocação (ou a de um companheiro de party) no primeiro golpe
+  engatilhado. Foi reproduzido em teste real durante esta issue antes de existir o filtro; todo
+  call site de `selectTarget`/`countTargets`/`countAreaTargets` que serve um PERSONAGEM (nunca os
+  que servem um MONSTRO escolhendo alvo) usa `#hostileMonsters()`, não `this.#monsters` cru — e
+  `chooseTarget`/`#resolveManualTarget` recusam `monster.masterId === character.id` mesmo com o
+  subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
+  "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
+  mana do MONSTRO via `manaCostOverride`, `combat-v4`).

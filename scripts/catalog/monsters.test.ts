@@ -309,6 +309,10 @@ describe('convertMonster (fixture sintética)', () => {
     });
     expect(converted.notes.clampedWeaknesses).toEqual(['drown -250%']);
     expect(converted.notes.elementImmunities).toEqual(['fire 100%', 'holy 150%']);
+    // #559/#592: `immunities[].condition = true` (paralyze) vira `conditionImmunities`, não mais
+    // uma entrada muda em `ignoredFields`.
+    expect(entity['conditionImmunities']).toEqual(['paralyze']);
+    expect(converted.notes.ignoredFields.some((field) => field.startsWith('immunities.condition'))).toBe(false);
   });
 
   it('loot: gold coin vira loot.gold, a moeda extra vai para o relatório, id resolve pelo items.xml', () => {

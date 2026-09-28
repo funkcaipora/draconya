@@ -269,7 +269,7 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       }
       const result = castSpell(
         character, spell, null, session.nowMs, options.combat, session.rng,
-        undefined, character, undefined, ownPurse(character),
+        undefined, character, undefined, null, ownPurse(character),
       );
       if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
       // O gold da runa em branco (#594, ADR 0044), pela MESMA conta da hunt (`#castSpell`):

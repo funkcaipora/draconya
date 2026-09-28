@@ -1,0 +1,30 @@
+{
+  "id": "light-stone-shower-rune",
+  "name": "Light Stone Shower Rune",
+  "description": "Provoca uma chuva de pedras em cruz ao redor do alvo selecionado.",
+  "price": 3,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 1,
+    "magicLevel": 0
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.3,
+      "skillMax": 0.45,
+      "baseMin": 2,
+      "baseMax": 3
+    },
+    "range": 8,
+    "damageType": "earth",
+    "area": {
+      "shape": "cross",
+      "radius": 1
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#595, `staging/runes/generated/general.json`, `light_stone_shower.lua`): min = level/5 + ml*0.3 + 2, max = level/5 + ml*0.45 + 3 (level/magicLevel capados em 20 no Canary — sem efeito no Draconya, que já os deixa livres nas outras runas). Level 1 e magic level 0 (`rune:level`/`rune:magicLevel`), a mais fraca das 12. `combat:setArea(AREA_CIRCLE1X1)` é a CRUZ de 5 tiles no alvo, não um círculo — o mesmo precedente de `explosion-rune.json`. `price` PROVISÓRIO: nenhum NPC de `data-otservbr-global` vende o clientId 21351 (`pnpm catalog:npc-prices` devolve \"sem preço resolvido\") — 3 é extrapolado por baixo do preço da Light Magic Missile Rune (4, level 15), a runa mais barata das 12; ajustar se uma fonte de preço aparecer. Aparência: efeito 17 e projétil 30, reaproveitados de `stone-shower-rune` (mesmo elemento terra) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

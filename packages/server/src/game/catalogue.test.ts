@@ -561,6 +561,9 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       class: 'mammal',
       health: 20,
       experience: 5,
+      bestiary: {
+        stars: 1, occurrence: 0, firstUnlock: 10, secondUnlock: 100, toKill: 250, charmsPoints: 5,
+      },
     });
     expect('class' in (rat ?? {})).toBe(true);
 
@@ -568,6 +571,21 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const withoutClass = buildCatalogue(content).monsters[0];
     expect(withoutClass).toBeDefined();
     expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('leva a ficha do Canary por monstro quando content.bestiary.entries a tem, e omite quando não (#601, ADR 0053 d.1)', () => {
+    const realContent = loadContent(DATA);
+    const { monsters } = buildCatalogue(realContent);
+    const dragon = monsters.find((m) => m.id === 'dragon');
+    // Os mesmos números do issue #601 e de `content/data/bestiary/baseline.json`.
+    expect(dragon?.bestiary).toEqual({
+      stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+    });
+
+    // A fixture de teste não tem `bestiary` no conteúdo: a chave fica AUSENTE, não `undefined`.
+    const withoutEntry = buildCatalogue(content).monsters[0];
+    expect(withoutEntry).toBeDefined();
+    expect('bestiary' in (withoutEntry ?? {})).toBe(false);
   });
 
   it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
@@ -585,16 +603,23 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
 
-  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520)', () => {
+  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
     expect(hunts.map((h) => h.id)).toEqual(['rat-cellars', 'rotworm-caves', 'darashia-dragon-lair']);
     const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
-    expect(rotworm?.monsters).toEqual([{ id: 'rotworm', name: 'Rotworm' }]);
+    // Composição real do Canary (#586): rotworm E terramite, não mais só rotworm.
+    expect(rotworm?.monsters).toEqual([
+      { id: 'rotworm', name: 'Rotworm' },
+      { id: 'terramite', name: 'Terramite' },
+    ]);
     expect(rotworm?.loot.map((l) => l.itemId).sort()).toEqual(
-      ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
+      [
+        'ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm',
+        'terramite-shell', 'terramite-legs',
+      ].sort(),
     );
-    expect(rotworm?.lootDrops).toBe(8); // 7 itens + gold (lootDropsOf, catalogue.ts:301-315)
+    expect(rotworm?.lootDrops).toBe(10); // 9 itens + gold (lootDropsOf, catalogue.ts:301-315)
   });
 
   it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {

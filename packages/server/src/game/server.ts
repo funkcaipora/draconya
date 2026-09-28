@@ -43,6 +43,11 @@ export interface GameDependencies {
   readonly now?: () => number;
   /** Aceita ou recusa uma configuração de bot (FUN-81). Ver `SessionHostOptions`. */
   readonly acceptBotConfig?: SessionHostOptions['acceptBotConfig'];
+  /**
+   * Carrega uma configuração de bot JÁ PERSISTIDA (ADR 0014) — slot com referência morta
+   * esvazia em vez de recusar a configuração inteira. Ver `SessionHostOptions`.
+   */
+  readonly loadBotConfig?: SessionHostOptions['loadBotConfig'];
   /** Registra a configuração aceita no Redis; jobs/api escrevem no Postgres (ADR 0028). */
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
@@ -132,6 +137,9 @@ export function createGame(
       ...(dependencies.acceptBotConfig === undefined
         ? {}
         : { acceptBotConfig: dependencies.acceptBotConfig }),
+      ...(dependencies.loadBotConfig === undefined
+        ? {}
+        : { loadBotConfig: dependencies.loadBotConfig }),
       ...(dependencies.saveBotConfig === undefined
         ? {}
         : { saveBotConfig: dependencies.saveBotConfig }),

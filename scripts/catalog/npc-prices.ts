@@ -206,6 +206,25 @@ export const SUPPLY_CANARY_IDS: Readonly<Record<string, number>> = {
   'stone-shower-rune': 3175,
   'thunderstorm-rune': 3202,
   'intense-healing-rune': 3152,
+  'fireball-rune': 3189,
+  'icicle-rune': 3158,
+  'light-magic-missile-rune': 3174,
+  'light-stone-shower-rune': 21351,
+  'stalagmite-rune': 3179,
+  // Runas de campo e parede do jogador (#591) — `runeId` de cada script em
+  // `data/scripts/runes/*.lua` (o mesmo `id` que `items.xml` usa).
+  'fire-field-rune': 3188,
+  'poison-field-rune': 3172,
+  'energy-field-rune': 3164,
+  'fire-wall-rune': 3190,
+  'poison-wall-rune': 3176,
+  'energy-wall-rune': 3166,
+  'magic-wall-rune': 3180,
+  'wild-growth-rune': 3156,
+  'destroy-field-rune': 3148,
+  'fire-bomb-rune': 3192,
+  'poison-bomb-rune': 3173,
+  'energy-bomb-rune': 3149,
 };
 
 /** slug do arquivo autoral em `data/ammunition/` → `clientId` do Canary. */

@@ -99,6 +99,15 @@ const CreatureState = z.object({
    * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
    */
   colors: OutfitColors.optional(),
+  /**
+   * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
+   * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
+   * isto, e um cliente que exigisse recusaria a mensagem inteira em silêncio. Ausente é "não é
+   * invocação de personagem" — o de sempre, inclusive para toda invocação de MONSTRO (#546),
+   * que o cliente não precisa marcar. O cliente usa isto só para destacar "sua invocação" —
+   * nunca para decidir dono de loot, alvo ou qualquer resultado (invariante 4).
+   */
+  masterId: z.string().optional(),
 });
 
 /** Os agregados da sessão — o que o §16.2 chama de "quanto rendeu". */
@@ -194,15 +203,17 @@ export const C2S_SCHEMAS = {
   say: z.object({ channel: z.string(), text: z.string().max(255) }),
   logout: z.object({}),
   /**
-   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt e
-   * qual dificuldade, e o servidor decide se a transição é válida, cria a instância e
-   * responde com o estado novo (invariante 4).
+   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt, e o
+   * servidor decide se a transição é válida, cria a instância e responde com o estado novo
+   * (invariante 4).
    *
-   * A dificuldade vem como string livre e é validada contra o CONTEÚDO, não contra um enum
-   * aqui: uma hunt define as dificuldades que fazem sentido para ela, não obrigatoriamente as
-   * quatro, e repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+   * `difficulty` é opcional desde o #584 (ADR 0039, fim do pull por dificuldade — #583 já
+   * eliminou a escolha de tamanho de pull no `sim`/`content`). Campo mantido no protocolo só
+   * por compatibilidade (ADR 0014): um cliente ANTIGO ainda manda um nome de antes do #583
+   * (`'cautious'`/`'bold'`/`'reckless'`) e é ACEITO E IGNORADO — nunca validado contra um
+   * enum aqui nem contra o conteúdo.
    */
-  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
+  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1).optional() }),
   /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
   'leave-hunt': z.object({}),
   /**
@@ -550,6 +561,10 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('rows'), widths: z.array(z.number().int().positive()).min(1) }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+  /** Um tile só, no alvo (#591: runa de campo simples, Destroy Field). */
+  z.object({ shape: z.literal('point') }),
+  /** A fileira perpendicular centrada no alvo (#591: Fire/Poison/Energy Wall). */
+  z.object({ shape: z.literal('wall'), width: z.number().int().positive() }),
 ]);
 
 /** Uma faixa `[min, max]` de exibição (#524) — a poção do Tibia, que sorteia dentro dela sem escalar por level/ML. */
@@ -886,6 +901,21 @@ export const S2C_SCHEMAS = {
       class: z.string().optional(),
       health: z.number().int().positive().optional(),
       experience: z.number().int().nonnegative().optional(),
+      /**
+       * A ficha de Bestiário do Canary por monstro (#601, ADR 0053 d.1): estágio, estrelas,
+       * ocorrência e pontos de Charm são DERIVADOS no cliente a partir dela e do contador de
+       * `bestiary.counts` — nada aqui é calculado no servidor além do que o conteúdo já fixa na
+       * sessão (invariante 7). Ausente: monstro sem ficha em `content.bestiary.entries` (nenhum
+       * do catálogo real hoje) ou nó `game` anterior a esta issue.
+       */
+      bestiary: z.object({
+        stars: z.number().int().min(0).max(5),
+        occurrence: z.number().int().min(0).max(3),
+        firstUnlock: z.number().int().positive(),
+        secondUnlock: z.number().int().positive(),
+        toKill: z.number().int().positive(),
+        charmsPoints: z.number().int().nonnegative(),
+      }).optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
@@ -1292,6 +1322,14 @@ export const S2C_SCHEMAS = {
   'field-appear': FieldTile,
   /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
   'field-disappear': z.object({ id: z.string().min(1) }),
+  /**
+   * O campo trocou de estágio (#560): o mesmo `id` de `field-appear`, e o `appearanceId` NOVO
+   * já resolvido pelo hospedeiro — sem `tiles`, que não muda entre estágios.
+   */
+  'field-stage-change': z.object({
+    id: z.string().min(1),
+    appearanceId: z.number().int().positive(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

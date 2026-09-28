@@ -28,15 +28,28 @@ import type { FloorPoint } from './monster/step.js';
  * Mapa sem a camada `sight` neste andar (nenhum mapa reimportado ainda — RF-02 da spec)
  * devolve sempre `true`: "sem dado, sem restrição", o mesmo comportamento que `speed` ausente
  * já usa para velocidade de chão. É o que mantém todo mapa de hoje bit a bit até a reimportação.
+ *
+ * `blocksProjectileAt` (#560, `CONST_PROP_BLOCKPROJECTILE`) é o campo de tile bloqueante — Magic
+ * Wall, Wild Growth — consultado no MESMO passeio, tile a tile: um campo assim tapa a visão como
+ * a geometria do mapa tapa, e os dois extremos continuam de fora (quem atira e quem é atingido
+ * nunca bloqueiam a própria linha, mesmo em cima de um campo). AUSENTE (não uma função que
+ * sempre devolve falso — a distinção importa para o atalho abaixo) é o comportamento de antes
+ * desta issue, e o que preserva todo chamador que ainda não tem `Fields` à mão (a maioria dos
+ * testes deste arquivo, e qualquer LOS fora de uma hunt).
  */
-export function isSightClear(map: Tilemap, from: FloorPoint, to: FloorPoint): boolean {
+export function isSightClear(
+  map: Tilemap, from: FloorPoint, to: FloorPoint,
+  blocksProjectileAt?: (x: number, y: number, z: number) => boolean,
+): boolean {
   if (!sameFloor(from.z, to.z)) return false;
   if (from.x === to.x && from.y === to.y) return true;
 
   const z = from.z ?? to.z ?? map.z;
   const floor = map.floors.get(z);
-  if (floor === undefined || floor.blocksSight === null) return true;
-  const grid = floor.blocksSight;
+  const grid = floor === undefined ? null : floor.blocksSight;
+  // Sem camada de `sight` E sem campo para consultar: nada pode bloquear, e o atalho poupa o
+  // passeio inteiro — é o caminho de TODO mapa de hoje, ainda não reimportado (RF-02 da spec).
+  if (grid === null && blocksProjectileAt === undefined) return true;
 
   // Midpoint-line: percorre os tiles entre os dois extremos, um passo por iteração. Os
   // extremos em si nunca são conferidos — só o que fica ENTRE eles.
@@ -54,6 +67,7 @@ export function isSightClear(map: Tilemap, from: FloorPoint, to: FloorPoint): bo
     if (e2 <= dx) { err += dx; y += sy; }
     if (x === to.x && y === to.y) return true; // chegou ao destino: o próprio alvo não bloqueia
     if (x < 0 || y < 0 || x >= map.width || y >= map.height) return false;
-    if (grid[y * map.width + x] === 1) return false;
+    if (grid !== null && grid[y * map.width + x] === 1) return false;
+    if (blocksProjectileAt !== undefined && blocksProjectileAt(x, y, z)) return false;
   }
 }

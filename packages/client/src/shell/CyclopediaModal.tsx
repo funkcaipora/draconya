@@ -5,8 +5,10 @@
 import { useMemo, useState } from 'react';
 import type { BestiaryConfig, BestiaryCounts, ItemDefinition, MonsterListing } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
-import { bonusPercent, progressOf } from './bestiary-progress.js';
-import type { BestiaryProgress } from './bestiary-progress.js';
+import {
+  bestiaryStageOf, bonusPercent, charmPointsEarned, progressOf,
+} from './bestiary-progress.js';
+import type { BestiaryCharmThresholds, BestiaryProgress, BestiaryStage } from './bestiary-progress.js';
 import { SLOT_TEXT } from './EquipmentPanel.js';
 import { ItemSprite } from './ItemSprite.js';
 import { Badge } from './ui/Badge.js';
@@ -43,21 +45,36 @@ export interface BestiaryEntry {
   readonly goal: number;
   readonly done: boolean;
   readonly percent: number;
+  /**
+   * O estágio da ficha do Canary (#601, ADR 0053 d.1) — 0 sem ficha ainda. `null` sem
+   * `monster.bestiary`: o catálogo não trouxe a ficha deste monstro (nó `game` anterior a esta
+   * issue). Independente de `progress`/`goal`/`done` acima, que continuam sendo os marcos de XP.
+   */
+  readonly stage: BestiaryStage | null;
 }
+
+/** O rótulo curto de cada estágio da ficha do Canary, na ordem 0 → 3. */
+const STAGE_TEXT: readonly string[] = ['Bloqueado', '1º desbloqueio', '2º desbloqueio', 'Completo'];
+
+/** "Comum" a "muito raro" (Canary `Occurrence`, 0 a 3) — o mesmo vocabulário do Cyclopedia real. */
+const OCCURRENCE_TEXT: readonly string[] = ['Comum', 'Incomum', 'Raro', 'Muito raro'];
 
 /** Prepara uma entrada para as duas vistas, sem duplicar a regra de marcos do Bestiário. */
 export function entryOf(
   monster: MonsterListing, kills: number, config: BestiaryConfig | null,
 ): BestiaryEntry {
+  const stage = monster.bestiary === undefined ? null : bestiaryStageOf(kills, monster.bestiary);
   if (config === null || config.milestones.length === 0) {
-    return { monster, kills, progress: { reached: 0, next: null }, goal: 0, done: false, percent: 0 };
+    return {
+      monster, kills, progress: { reached: 0, next: null }, goal: 0, done: false, percent: 0, stage,
+    };
   }
   const progress = progressOf(kills, config.milestones);
   const lastMilestone = config.milestones[config.milestones.length - 1] ?? 0;
   const goal = progress.next ?? lastMilestone;
   const done = progress.next === null;
   const percent = done ? 100 : Math.min(100, (kills / goal) * 100);
-  return { monster, kills, progress, goal, done, percent };
+  return { monster, kills, progress, goal, done, percent, stage };
 }
 
 /** Busca por nome, sem categoria até o catálogo transportar essa dimensão (SV-20). */
@@ -75,6 +92,19 @@ export function sortEntries(entries: readonly BestiaryEntry[], sort: BestiarySor
   return sorted.sort((a, b) => b.percent - a.percent || b.progress.reached - a.progress.reached);
 }
 
+/**
+ * Os pontos de Charm ganhos por todos os monstros VISÍVEIS nesta lista (#601, ADR 0053 d.1) —
+ * a mesma restrição de `bonusPercent`, que só soma marco de monstro no catálogo: sem a ficha
+ * (`toKill`/`charmsPoints`) não há como saber quanto um monstro fora do catálogo valeria.
+ */
+function charmPointsOf(entries: readonly BestiaryEntry[], counts: BestiaryCounts): number {
+  const thresholds: Record<string, BestiaryCharmThresholds> = {};
+  for (const entry of entries) {
+    if (entry.monster.bestiary !== undefined) thresholds[entry.monster.id] = entry.monster.bestiary;
+  }
+  return charmPointsEarned(counts, thresholds);
+}
+
 function ProgressBox({ entries, config, counts }: {
   entries: readonly BestiaryEntry[]; config: BestiaryConfig; counts: BestiaryCounts;
 }) {
@@ -82,6 +112,7 @@ function ProgressBox({ entries, config, counts }: {
   const reached = entries.reduce((sum, entry) => sum + entry.progress.reached, 0);
   const percent = total > 0 ? Math.round((reached / total) * 100) : 0;
   const bonus = bonusPercent(counts, config.milestones, config.xpBonusPercentPerMilestone);
+  const charmPoints = charmPointsOf(entries, counts);
   return (
     <section className="cyclopedia-modal-progress">
       <Kicker tone="muted">Progresso no Bestiário</Kicker>
@@ -92,8 +123,14 @@ function ProgressBox({ entries, config, counts }: {
       <i className="cyclopedia-modal-progress-track">
         <i className="cyclopedia-modal-progress-fill" style={{ width: `${String(percent)}%` }} />
       </i>
+      {/* Os marcos de XP (FUN-113) e os Charms do Canary (#601) são DOIS vocabulários de
+          progresso — ADR 0053 d.2 registra a divergência —, e por isso duas linhas distintas
+          em vez de uma soma que nenhum dos dois sistemas explicaria sozinho. */}
       <span className="cyclopedia-modal-progress-note">
         {'Bônus: '}<b>{bonusText(bonus)}</b>{' de experiência'}
+      </span>
+      <span className="cyclopedia-modal-progress-note">
+        {'Pontos de Charm: '}<b>{count(charmPoints)}</b>
       </span>
     </section>
   );
@@ -104,8 +141,19 @@ function EntrySprite({ className }: { className: string }) {
   return <span className={className} aria-hidden="true" />;
 }
 
+/** As estrelas de dificuldade do Canary (0 a 5) — cheia até `stars`, vazia depois. */
+function DifficultyStars({ stars }: { stars: number }) {
+  return (
+    <span className="cyclopedia-modal-card-difficulty" title={`Dificuldade ${String(stars)}/5`}>
+      {Array.from({ length: 5 }, (_, index) => (index < stars ? '★' : '☆')).join('')}
+    </span>
+  );
+}
+
 function EntryCard({ entry }: { entry: BestiaryEntry }) {
-  const { monster, kills, goal, done, percent, progress } = entry;
+  const {
+    monster, kills, goal, done, percent, progress, stage,
+  } = entry;
   return (
     <article className="cyclopedia-modal-card">
       <b className="cyclopedia-modal-card-name">{monster.name}</b>
@@ -117,6 +165,15 @@ function EntryCard({ entry }: { entry: BestiaryEntry }) {
           </Badge>
         )}
       </span>
+      {/* A ficha do Canary (#601): estágio, estrelas de dificuldade e ocorrência — à PARTE do
+          marco de XP acima (o "★N" é o milestone global do FUN-113, não a dificuldade). */}
+      {monster.bestiary !== undefined && stage !== null && (
+        <span className="cyclopedia-modal-card-bestiary">
+          <DifficultyStars stars={monster.bestiary.stars} />
+          <span className="cyclopedia-modal-card-stage">{STAGE_TEXT[stage]}</span>
+          <span className="cyclopedia-modal-card-occurrence">{OCCURRENCE_TEXT[monster.bestiary.occurrence]}</span>
+        </span>
+      )}
       <span className={`cyclopedia-modal-card-count${done ? ' cyclopedia-modal-count-done' : ''}`}>
         {done ? '✓ ' : ''}{count(kills)} / {count(goal)}
       </span>
@@ -129,11 +186,19 @@ function EntryCard({ entry }: { entry: BestiaryEntry }) {
 }
 
 function EntryRow({ entry }: { entry: BestiaryEntry }) {
-  const { monster, kills, goal, done, percent } = entry;
+  const {
+    monster, kills, goal, done, percent, stage,
+  } = entry;
   return (
     <div className="cyclopedia-modal-row">
       <EntrySprite className="cyclopedia-modal-row-sprite" />
       <b>{monster.name}</b>
+      {monster.bestiary !== undefined && stage !== null && (
+        <span className="cyclopedia-modal-row-bestiary">
+          <DifficultyStars stars={monster.bestiary.stars} />
+          <span className="cyclopedia-modal-card-stage">{STAGE_TEXT[stage]}</span>
+        </span>
+      )}
       <i className="cyclopedia-modal-row-track">
         <i className={`cyclopedia-modal-row-fill${done ? ' cyclopedia-modal-fill-done' : ''}`}
           style={{ width: `${String(percent)}%` }} />

@@ -1,8 +1,10 @@
-// "Detalhes da caçada" completo (#325, #349, SV-13). O modal que mostra tamanhos de pull,
+// "Detalhes da caçada" completo (#325, #349, SV-13). O modal que mostra nível recomendado,
 // criaturas, loot possível e descrição da hunt ativa — aberto pela pill no topo da tela de
-// caçada. A identidade da hunt ativa (SV-05) chega em `hud.huntId`/`hud.difficulty`, gravados
-// por `session-state` e `instance-enter` — o servidor diz qual é, mesmo para quem reanexou
-// numa hunt já em andamento, sem depender de lembrança nenhuma desta aba do navegador.
+// caçada. A identidade da hunt ativa (SV-05) chega em `hud.huntId`, gravado por `session-state`
+// e `instance-enter` — o servidor diz qual é, mesmo para quem reanexou numa hunt já em
+// andamento, sem depender de lembrança nenhuma desta aba do navegador. Não há mais "Tamanhos de
+// pull"/"Dificuldades" desde o #584 (ADR 0039, fim do pull por dificuldade) — a composição
+// (seção "Criaturas") já é a resposta a "o que essa hunt tem".
 //
 // "Seu recorde" é uma decisão de produto permanente: XP/h e gp/h não são métricas oficiais.
 
@@ -16,35 +18,6 @@ import { Checkbox } from './ui/Checkbox.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 import { StatRow } from './ui/StatRow.js';
-
-/** Os três tamanhos de pull (FUN-123), em palavras iguais às do seletor de hunts. */
-const DIFFICULTY_TEXT: Record<string, string> = {
-  cautious: 'Cauteloso',
-  bold: 'Ousado',
-  reckless: 'Agressivo',
-};
-
-export interface PullSize {
-  readonly id: string;
-  readonly monsterCount: number;
-}
-
-/**
- * Os tamanhos de pull com contagem de monstros (SV-19), na ordem de `hunt.difficulties` —
- * não na ordem de `difficultyDetails`, que é só o catálogo bruto. Dificuldade sem entrada em
- * `difficultyDetails` (nó anterior à SV-19, que manda a lista vazia) é FILTRADA: sem número,
- * não há "Ousado · N" para mostrar aqui — o seletor de hunts é quem cai para só o nome.
- */
-export function pullSizesOf(hunt: HuntListing): readonly PullSize[] {
-  const byId = new Map(hunt.difficultyDetails.map((detail) => [detail.id, detail] as const));
-  return hunt.difficulties
-    .map((difficultyId) => byId.get(difficultyId))
-    .filter((detail): detail is PullSize => detail !== undefined);
-}
-
-export function pullSizeLabel({ id, monsterCount }: PullSize): string {
-  return `${DIFFICULTY_TEXT[id] ?? id} · ${String(monsterCount)}`;
-}
 
 /**
  * Os monstros da hunt, na ordem de `hunt.monsters` (SV-02). Monstro sem entrada em
@@ -121,7 +94,6 @@ function HuntDetailsBody() {
     );
   }
 
-  const pulls = pullSizesOf(hunt);
   const monsters = monstersOf(hunt, catalogue?.monsters ?? []);
   const lootItems = lootItemsOf(hunt, catalogue?.items ?? []);
 
@@ -144,24 +116,7 @@ function HuntDetailsBody() {
         <section className="hunt-details-modal-info">
           <Kicker tone="muted">Sobre esta caçada</Kicker>
           <StatRow label="Nível recomendado" value={`${String(hunt.recommendedLevel)}+`} bar={false} />
-          <StatRow
-            label="Dificuldades"
-            value={hunt.difficulties.map((difficulty) => DIFFICULTY_TEXT[difficulty] ?? difficulty).join(' · ')}
-            bar={false}
-          />
         </section>
-        {pulls.length > 0 && (
-          <>
-            <Kicker tone="muted" className="hunt-details-kicker">Tamanhos de pull</Kicker>
-            {/* Um `span` por pull, não uma string com espaços: o HTML colapsa espaço, e
-                "Cauteloso · 2 Ousado · 5" vira uma frase sem fronteira entre os três. */}
-            <p className="hunt-details-pulls">
-              {pulls.map((pull) => (
-                <span key={pull.id} className="hunt-details-pull">{pullSizeLabel(pull)}</span>
-              ))}
-            </p>
-          </>
-        )}
         {monsters.length > 0 && (
           <>
             <Kicker tone="muted" className="hunt-details-kicker">Criaturas</Kicker>

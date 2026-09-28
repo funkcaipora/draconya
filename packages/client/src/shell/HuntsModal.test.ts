@@ -3,32 +3,31 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, findPartyDecision, pullLabel, resolveSelection,
+  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, findPartyDecision, resolveSelection,
 } from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
 import type { PartyView } from '../party/api.js';
 
-// "Escolha uma caçada" (#259, duas colunas desde a #503). `prerender` roda a árvore sem DOM e
-// sem eventos — um clique real não dispara (mesmo limite de VocationChoice.test.ts). A decisão
-// em si (que hunt, que pull, se a intenção é enviada e se o modal fecha) mora em funções puras
-// exportadas e testadas direto; aqui só se prende a ESTRUTURA e o que essas funções produzem
-// por padrão. A formação embutida SAIU (#503): o modal não renderiza PartyPanel, e as duas
-// pontes de party ("Encontrar Party", "Iniciar com o time") são testadas em party-start.test.ts
-// e pela decisão pura `findPartyDecision`.
+// "Escolha uma caçada" (#259, UMA coluna desde o #584 — ADR 0039, fim do pull por dificuldade).
+// `prerender` roda a árvore sem DOM e sem eventos — um clique real não dispara (mesmo limite de
+// VocationChoice.test.ts). A decisão em si (que hunt, se a intenção é enviada e se o modal
+// fecha) mora em funções puras exportadas e testadas direto; aqui só se prende a ESTRUTURA e o
+// que essas funções produzem por padrão. A formação embutida SAIU (#503): o modal não renderiza
+// PartyPanel, e as duas pontes de party ("Encontrar Party", "Iniciar com o time") são testadas
+// em party-start.test.ts e pela decisão pura `findPartyDecision`.
 
 const hunts: HuntListing[] = [
   {
     id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
-    difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2,
-    difficultyDetails: [], monsters: [], loot: [],
+    difficulties: ['default'], outfitIds: [21], lootDrops: 2,
+    difficultyDetails: [], monsters: [{ id: 'rat', name: 'Rato' }], loot: [],
   },
   {
     id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60,
-    difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7,
-    difficultyDetails: [{ id: 'cautious', monsterCount: 3 }, { id: 'bold', monsterCount: 6 }],
-    monsters: [], loot: [],
+    difficulties: ['default'], outfitIds: [], lootDrops: 7,
+    difficultyDetails: [], monsters: [], loot: [],
   },
 ];
 
@@ -63,19 +62,33 @@ describe('HuntsModal', () => {
     expect(html).toContain('2 caçadas disponíveis');
   });
 
-  it('RF-01: lists every hunt of the catalogue with sprite, name, "level N+" and pulls/drops', async () => {
+  it('RF-01: lists every hunt of the catalogue with sprite, name, "level N+" and the monster composition', async () => {
     const html = await render({ hunting: false });
     for (const hunt of hunts) {
       expect(html).toContain(hunt.name);
       expect(html).toContain(`level ${String(hunt.recommendedLevel)}+`);
-      expect(html).toContain(`${String(hunt.difficulties.length)} tamanhos de pull · ${String(hunt.lootDrops)} drops de loot`);
     }
+    // rat-cellars tem monstros no catálogo: a linha mostra o nome deles, não uma contagem
+    // de "tamanhos de pull" — esse eixo não existe mais (#584, ADR 0039).
+    expect(html).toContain('Rato · 2 drops de loot');
+    // dragon-lair não tem monstros no catálogo de teste: cai só para os drops.
+    expect(html).toContain('7 drops de loot');
     // O sprite: com `outfitIds`, a inicial cai enquanto não há pacote (mesmo padrão de
     // OutfitSprite.test.ts); sem `outfitIds`, cai igual — as duas linhas mostram `item-sprite`.
     expect((html.match(/class="item-sprite"/g) ?? []).length).toBe(hunts.length);
   });
 
-  it('RF-02: never shows XP/h, gold/h, monsters or possible loot (D8)', async () => {
+  it('RF-06: never shows a pull-size/difficulty selector — that surface moved to HuntDetailsModal', async () => {
+    const html = await render({ hunting: false });
+    expect(html).not.toContain('tamanhos de pull');
+    expect(html).not.toContain('hunts-modal-detail');
+    expect(html).not.toContain('hunts-modal-pulls');
+    expect(html).not.toContain('Cauteloso');
+    expect(html).not.toContain('Ousado');
+    expect(html).not.toContain('Agressivo');
+  });
+
+  it('RF-02: never shows XP/h, gold/h or possible loot (D8)', async () => {
     const html = await render({ hunting: false });
     expect(html).not.toMatch(/XP\/h|gold\/h/);
     expect(html).not.toContain('Loot possível');
@@ -85,7 +98,6 @@ describe('HuntsModal', () => {
     const html = await render({ hunting: false });
     expect(html).not.toContain('Criar party');
     expect(html).not.toContain('Procurar party');
-    // Estrutura: duas colunas (lista + detalhe), sem moldura vazia de formação.
     expect(html).not.toContain('party-panel');
     // Mutação que mata: re-adicionar o import/render de PartyPanel.
     const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
@@ -158,18 +170,16 @@ describe('HuntsModal', () => {
     expect(html).not.toContain('>Entrar na caçada<');
   });
 
-  it('the first hunt and its first difficulty are selected by default (ui-button-primary)', async () => {
+  it('the first hunt is selected by default, and "Entrar" is enabled without any pull choice', async () => {
     const html = await render({ hunting: false });
-    const detailIndex = html.indexOf('hunts-modal-detail');
-    expect(detailIndex).toBeGreaterThan(-1);
-    expect(html.slice(detailIndex)).toMatch(/class="[^"]*ui-button-primary[^"]*">Cauteloso</);
+    expect(html).toContain('hunts-modal-row-selected');
+    expect(html).toMatch(/<button[^>]*class="[^"]*ui-button-primary[^"]*"[^>]*>Entrar na caçada<\/button>/);
   });
 
-  it('an empty catalogue.hunts shows the "no hunt" message, without pull buttons', async () => {
+  it('an empty catalogue.hunts shows the "no hunt" message', async () => {
     hud.set((state) => ({ ...state, catalogue: { ...catalogue, hunts: [] } }));
     const html = await render({ hunting: false });
     expect(html).toContain('Nenhuma caçada disponível neste servidor.');
-    expect(html).not.toContain('hunts-modal-pulls');
     expect(html).not.toContain('Buscar uma caçada ou criatura');
   });
 
@@ -197,60 +207,48 @@ describe('filterHunts (RF-08)', () => {
 
   it('does not replace the selection when the filter hides it', () => {
     expect(filterHunts(hunts, 'rat')).toEqual([hunts[0]]);
-    expect(resolveSelection(hunts, 'dragon-lair', null))
-      .toEqual({ hunt: hunts[1], difficulty: 'cautious' });
+    expect(resolveSelection(hunts, 'dragon-lair')).toEqual({ hunt: hunts[1] });
   });
 });
 
 describe('resolveSelection (RF-03)', () => {
-  it('falls back to hunts[0] and its first difficulty with no selection at all', () => {
-    expect(resolveSelection(hunts, null, null)).toEqual({ hunt: hunts[0], difficulty: 'cautious' });
+  it('falls back to hunts[0] with no selection at all', () => {
+    expect(resolveSelection(hunts, null)).toEqual({ hunt: hunts[0] });
   });
 
-  it('honors the selected hunt id, and its own first difficulty when no pull chosen', () => {
-    expect(resolveSelection(hunts, 'dragon-lair', null)).toEqual({ hunt: hunts[1], difficulty: 'cautious' });
-  });
-
-  it('honors a chosen pull that belongs to the selected hunt', () => {
-    expect(resolveSelection(hunts, 'rat-cellars', 'reckless')).toEqual({ hunt: hunts[0], difficulty: 'reckless' });
-  });
-
-  it('falls back to the hunt\'s first difficulty when the chosen pull no longer belongs to it', () => {
-    // Mutação que mata: ignorar `hunt.difficulties.includes(pull)` — "reckless" não existe em
-    // dragon-lair, e aceitá-lo mandaria uma dificuldade que a hunt não define.
-    expect(resolveSelection(hunts, 'dragon-lair', 'reckless')).toEqual({ hunt: hunts[1], difficulty: 'cautious' });
+  it('honors the selected hunt id', () => {
+    expect(resolveSelection(hunts, 'dragon-lair')).toEqual({ hunt: hunts[1] });
   });
 
   it('falls back to hunts[0] when the selected id no longer exists (reconnect swapped the catalogue)', () => {
-    expect(resolveSelection(hunts, 'an-old-hunt-gone-after-reconnect', null)).toEqual({ hunt: hunts[0], difficulty: 'cautious' });
+    expect(resolveSelection(hunts, 'an-old-hunt-gone-after-reconnect')).toEqual({ hunt: hunts[0] });
   });
 
-  it('returns null hunt and null difficulty for an empty catalogue', () => {
-    expect(resolveSelection([], null, null)).toEqual({ hunt: null, difficulty: null });
+  it('returns a null hunt for an empty catalogue', () => {
+    expect(resolveSelection([], null)).toEqual({ hunt: null });
   });
 });
 
 describe('enterHuntMessage (RF-04)', () => {
-  it('builds the enter-hunt intent from the selected hunt and difficulty', () => {
-    expect(enterHuntMessage(hunts[0]!, 'bold')).toEqual({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' });
+  it('builds the enter-hunt intent from the selected hunt, without a difficulty field (#584)', () => {
+    expect(enterHuntMessage(hunts[0]!)).toEqual({ type: 'enter-hunt', huntId: 'rat-cellars' });
   });
 
-  it('is null without a hunt or without a difficulty', () => {
-    expect(enterHuntMessage(null, 'bold')).toBeNull();
-    expect(enterHuntMessage(hunts[0]!, null)).toBeNull();
+  it('is null without a hunt', () => {
+    expect(enterHuntMessage(null)).toBeNull();
   });
 });
 
 describe('attemptEnter (RF-04, RF-09)', () => {
   it('returns true and closes the modal when send() returns true', () => {
     const onClose = vi.fn();
-    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => true, onClose)).toBe(true);
+    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars' }, () => true, onClose)).toBe(true);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('returns false and does NOT close the modal when send() returns false', () => {
     const onClose = vi.fn();
-    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => false, onClose)).toBe(false);
+    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars' }, () => false, onClose)).toBe(false);
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -260,22 +258,5 @@ describe('attemptEnter (RF-04, RF-09)', () => {
     expect(attemptEnter(null, send, onClose)).toBe(false);
     expect(send).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
-  });
-});
-
-describe('pullLabel (SV-19)', () => {
-  it('appends the monster count from difficultyDetails when present', () => {
-    expect(pullLabel(hunts[1]!, 'cautious')).toBe('Cauteloso · 3');
-    expect(pullLabel(hunts[1]!, 'bold')).toBe('Ousado · 6');
-  });
-
-  it('falls back to only the localized name without a count, never "· undefined"', () => {
-    // rat-cellars tem `difficultyDetails: []` — o catálogo de um nó anterior à SV-19.
-    expect(pullLabel(hunts[0]!, 'reckless')).toBe('Agressivo');
-    expect(pullLabel(hunts[0]!, 'reckless')).not.toContain('undefined');
-  });
-
-  it('falls back to the raw difficulty id when it has no localized text', () => {
-    expect(pullLabel(hunts[0]!, 'custom')).toBe('custom');
   });
 });

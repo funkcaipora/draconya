@@ -1,8 +1,11 @@
-// "Escolha uma caçada" (#259, ADR 0029 D6). Duas colunas: a lista de hunts e o detalhe da
-// selecionada. A formação embutida SAIU (#503, DT-01/DT-02 de #499) — a party tem superfície
-// própria em `PartyModal.tsx`, e daqui saem só as DUAS pontes: "Encontrar Party" (abre a busca
-// filtrada pela hunt selecionada, pelo `onFindParty`) e "Iniciar com o time" (configure-then-
-// start do líder, via `party-start.ts` — nunca `enter-hunt` solo).
+// "Escolha uma caçada" (#259, ADR 0029 D6). UMA coluna desde o #584 (ADR 0039, fim do pull por
+// dificuldade): a coluna de detalhe (tamanhos de pull) saiu — a composição de monstros já
+// aparece na linha da lista e, com mais detalhe, em "Detalhes da caçada"
+// (`HuntDetailsModal.tsx`), aberto à parte. A formação embutida SAIU (#503, DT-01/DT-02 de
+// #499) — a party tem superfície própria em `PartyModal.tsx`, e daqui saem só as DUAS pontes:
+// "Encontrar Party" (abre a busca filtrada pela hunt selecionada, pelo `onFindParty`) e
+// "Iniciar com o time" (configure-then-start do líder, via `party-start.ts` — nunca `enter-hunt`
+// solo).
 //
 // Sem abas (Treino/Quests/Arena/Bosses não existem, D8), com busca só por NOME (#324). "Loot
 // possível" e a grade de criaturas ficam fora daqui de propósito (D8) — existem em "Detalhes da
@@ -28,25 +31,6 @@ import { Button } from './ui/Button.js';
 import { Input } from './ui/Input.js';
 import { Kicker } from './ui/Kicker.js';
 
-/** Os três tamanhos de pull do Huntera (FUN-123), em palavras — os mesmos de `event-text.ts`. */
-const DIFFICULTY_TEXT: Record<string, string> = {
-  cautious: 'Cauteloso',
-  bold: 'Ousado',
-  reckless: 'Agressivo',
-};
-
-/**
- * O rótulo do botão de pull — "Ousado · 4" como o Huntera mostra (kit: Modals.jsx:52,
- * `{n} · {c}`; SV-19). `difficultyDetails` é PARALELO a `difficulties` — um catálogo de nó
- * `game` anterior à SV-19 chega com a lista vazia —, então sem contagem para esta dificuldade
- * o rótulo cai para só o nome, nunca "· undefined".
- */
-export function pullLabel(hunt: HuntListing, difficulty: string): string {
-  const label = DIFFICULTY_TEXT[difficulty] ?? difficulty;
-  const count = hunt.difficultyDetails.find((detail) => detail.id === difficulty)?.monsterCount;
-  return count === undefined ? label : `${label} · ${String(count)}`;
-}
-
 /**
  * As hunts cujo nome contém `query`, sem diferenciar maiúsculas de minúsculas.
  *
@@ -60,26 +44,22 @@ export function filterHunts(hunts: readonly HuntListing[], query: string): HuntL
 }
 
 /**
- * A hunt e a dificuldade EFETIVAS dadas a seleção do jogador (RF-03).
+ * A hunt EFETIVA dada a seleção do jogador (RF-03).
  *
  * Sem `selectedId` na lista (reconexão trocou o catálogo com o modal aberto — §7 da spec), cai
- * em `hunts[0]`. Sem `pull`, ou com um `pull` que não pertence mais à hunt selecionada (troca de
- * hunt zera a seleção de pull), cai na primeira dificuldade DELA.
+ * em `hunts[0]`. Não há mais eixo de dificuldade a resolver desde o #584 (ADR 0039, fim do pull
+ * por dificuldade) — a hunt nasce dos spawns reais, sem escolha de tamanho.
  */
 export function resolveSelection(
-  hunts: readonly HuntListing[], selectedId: string | null, pull: string | null,
-): { hunt: HuntListing | null; difficulty: string | null } {
-  const hunt = hunts.find((h) => h.id === selectedId) ?? hunts[0] ?? null;
-  const difficulty = pull !== null && hunt !== null && hunt.difficulties.includes(pull)
-    ? pull
-    : (hunt?.difficulties[0] ?? null);
-  return { hunt, difficulty };
+  hunts: readonly HuntListing[], selectedId: string | null,
+): { hunt: HuntListing | null } {
+  return { hunt: hunts.find((h) => h.id === selectedId) ?? hunts[0] ?? null };
 }
 
 /** A intenção `enter-hunt`, ou `null` quando a seleção não chega a formar uma (RF-04). */
-export function enterHuntMessage(hunt: HuntListing | null, difficulty: string | null): C2SMessage | null {
-  if (hunt === null || difficulty === null) return null;
-  return { type: 'enter-hunt', huntId: hunt.id, difficulty };
+export function enterHuntMessage(hunt: HuntListing | null): C2SMessage | null {
+  if (hunt === null) return null;
+  return { type: 'enter-hunt', huntId: hunt.id };
 }
 
 /**
@@ -126,7 +106,9 @@ function HuntRow({ hunt, level, selected, onSelect }: {
           <strong>{hunt.name}</strong>
           <span className={below ? 'hunt-warn' : 'entry-meta'}>{`level ${String(hunt.recommendedLevel)}+`}</span>
           <span className="entry-meta">
-            {`${String(hunt.difficulties.length)} tamanhos de pull · ${String(hunt.lootDrops)} drops de loot`}
+            {hunt.monsters.length === 0
+              ? `${String(hunt.lootDrops)} drops de loot`
+              : `${hunt.monsters.map((m) => m.name).join(' · ')} · ${String(hunt.lootDrops)} drops de loot`}
           </span>
         </span>
       </button>
@@ -147,22 +129,21 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
   const partyBusy = useStoreSlice(party, (state) => state.busy);
   const partyError = useStoreSlice(party, (state) => state.error);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pull, setPull] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
   const hunts = catalogue?.hunts ?? [];
   const visibleHunts = filterHunts(hunts, query);
-  const { hunt: selected, difficulty } = resolveSelection(hunts, selectedId, pull);
+  const { hunt: selected } = resolveSelection(hunts, selectedId);
 
   const enter = (): void => {
-    const message = enterHuntMessage(selected, difficulty);
+    const message = enterHuntMessage(selected);
     attemptEnter(message, sendIntent, onClose);
   };
 
   const findParty = findPartyDecision(selected);
   // "Iniciar com o time" só existe com party EM FORMAÇÃO (RF-03) — depois do start a party é a
   // sessão de hunt, e os eixos de rateio vivem no rodapé de `PartyMembers`.
-  const teamStart = startWithTeam(formation, me ?? '', selected?.id ?? null, difficulty);
+  const teamStart = startWithTeam(formation, me ?? '', selected?.id ?? null);
   // RF-03: patch null = a configuração já confere — o configure é PULADO, e só o start sai.
   const startTeam = (): void => {
     if (!teamStart.enabled) return;
@@ -194,7 +175,7 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
             onClick={() => { if (findParty.huntId !== null) onFindParty?.(findParty.huntId); }}>
             Encontrar Party
           </Button>
-          <Button variant="primary" size="sm" disabled={selected === null || difficulty === null} onClick={enter}>
+          <Button variant="primary" size="sm" disabled={selected === null} onClick={enter}>
             {hunting ? 'Trocar de caçada' : 'Entrar na caçada'}
           </Button>
         </>
@@ -218,24 +199,10 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
                 <ul className="hunts-modal-list" aria-label="hunts">
                   {visibleHunts.map((hunt) => (
                     <HuntRow key={hunt.id} hunt={hunt} level={level} selected={hunt.id === selected?.id}
-                      onSelect={() => { setSelectedId(hunt.id); setPull(null); }} />
+                      onSelect={() => { setSelectedId(hunt.id); }} />
                   ))}
                 </ul>
               </div>
-              {selected !== null && (
-                <div className="hunts-modal-detail">
-                  <h2>{selected.name}</h2>
-                  <Kicker tone="muted">Tamanho do pull</Kicker>
-                  <div className="hunts-modal-pulls" aria-label="tamanho do pull">
-                    {selected.difficulties.map((d) => (
-                      <Button key={d} variant={d === difficulty ? 'primary' : 'secondary'} size="sm"
-                        onClick={() => { setPull(d); }}>
-                        {pullLabel(selected, d)}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
     </Modal>
