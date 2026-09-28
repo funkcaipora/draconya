@@ -1715,6 +1715,96 @@ interface MonsterSummons {
 - **Fora do escopo** (#546): invocação pelo JOGADOR (magia/item que convoca uma criatura própria
   — M38), scripts de boss e o `staticAttack` que já ficava de fora do #518.
 
+## Invocação do PERSONAGEM (#598, M38-01, ADR 0057; TFS/Canary `summon_creature.lua`)
+
+Estende o `masterId` do #546 (acima) a `characterId`: a mesma criatura da sessão, mesmo
+mecanismo de nascimento/desaparecimento, dono diferente — e por isso esta seção presume a
+anterior lida. `MonsterState.masterId` é `number | string`: numérico é invocação de MONSTRO
+(#546), string é `characterId` — a distinção de TIPO decide qual dos dois comportamentos vale,
+sem um campo `masterKind` à parte.
+
+**Level 25, ambos Sorcerer e Druid** (`spell:vocation("druid;true", "sorcerer;true", ...)`,
+conferido linha a linha contra `summon_creature.lua` em 2026-09-28) — duas entradas de catálogo,
+`summon-creature-sorcerer`/`-druid` (o padrão de duplicação por vocação deste repositório),
+`effect: { kind: 'summon' }` **sem** `monsterId` fixo: o parâmetro vem da barra
+(`BotAction.kind === 'spell'` ganhou `monsterId?: string`, opcional, sem subir
+`BOT_VOCABULARY_VERSION`) ou do preset do bot. `spell.manaCost` do catálogo é **0**, PLACEHOLDER:
+o custo real sai do `manaCost` do MONSTRO invocado (`monsterSchema.summonable`/`manaCost`, 184
+monstros no Canary o declaram — nenhum promovido ao catálogo real ainda) — `HuntRuleset#castSpell`
+lê o monstro e passa o custo como `manaCostOverride` para `casting.ts#castSpell` (que continua
+puro e genérico, sem conhecer monstro nenhum); a skill `magic` também pratica por ESTE valor, não
+por `spell.manaCost`.
+
+- **Teto de 2 invocações vivas por personagem**, contando qualquer nome (`player:getSummonCount()
+  >= 2` do Canary) — `HuntRuleset#playerSummonCountOf`, antes de qualquer débito. Sem
+  `monsterId`, monstro fora do catálogo, `summonable: false` ou teto atingido: recusa
+  `not-summonable` (`CastRefusal`/`SlotRefusal` novos), sem debitar mana.
+- **Nasce perto do mestre** — mesmo `#spawnSummon`/raio 1/ordem fixa de vizinhos do #546, agora
+  por `HuntRuleset#spawnPlayerSummon`. **A mana e o cooldown já saíram quando a invocação nasce**
+  (a mesma ordem do Canary: débito, depois `Game::createMonster`) — sem tile livre, a magia sai do
+  mesmo jeito, e o jogador sente o custo mesmo sem a invocação nascer (`Game::createMonster`
+  devolvendo `nullptr` não desfaz o `player:addMana(-manaCost)` que já rodou).
+- **Segue o alvo do mestre, nunca escolhe sozinha** (`HuntRuleset#chooseMonsterTarget`): ao
+  contrário da invocação de MONSTRO (#546, que roda `chooseTarget` normal), a de PERSONAGEM tem o
+  `targetId` PROPAGADO do alvo atual do mestre (`attackTargetOf`, a mesma resolução que já limpa
+  alvo morto/fora de alcance) a cada passo/ataque/ability — e troca junto quando o mestre troca.
+  Sem mestre vivo ou mestre sem alvo, fica parada (`targetId: null`), sem sortear nada; não roda o
+  timer de `targetChange` do próprio monstro (gated, mas continua reagendando — inofensivo, como
+  o de `MONSTER_SUMMON` numa invocação que nunca arma a própria lista).
+  - **Divergência aceita:** sem alvo, a invocação NÃO persegue o mestre fisicamente (o
+    `follow` genérico de personagem só existe entre membros de party) — ela fica onde nasceu até
+    ter um alvo para seguir. Num mapa de rota fixa isso raramente importa (o combate normalmente
+    já está próximo quando a invocação nasce); registrado aqui, não escondido.
+- **Monstros HOSTIS a atacam** (`isOpponent` do Canary): a lista de presas de um monstro
+  hostil (`masterId === null`, ou invocado por OUTRO monstro) é estendida pelas invocações de
+  personagem VIVAS (`HuntRuleset#playerSummonPrey`/`#livePlayerSummons`) — devolve a MESMA
+  referência de `session.participants` quando não há nenhuma, então uma hunt sem ninguém
+  invocando não aloca nada a mais e não sorteia nada a mais (garantia que os testes de RNG
+  prendem). O golpe de um monstro contra uma invocação usa `#monsterDefender` (o "monstro como
+  defensor" que já existia para o reflexo do #552) — nunca o caminho do jogador (sem mana shield,
+  sem carga de colar/anel, sem shielding): `#applyMonsterHitOnSummon` é a metade nova de um par
+  com `#applyMonsterHit`.
+- **O contrário também: `#hostileMonsters()` protege contra fogo amigo.** Achado da implementação
+  — sem isto, o auto-target (#444), a mira de área e o clique do próprio jogador (`chooseTarget`,
+  opcode `select-target`) tratariam a invocação (a própria, ou a de um companheiro de party) como
+  QUALQUER monstro comum, e o personagem mataria o que acabou de invocar no primeiro golpe
+  engatilhado — foi reproduzido e corrigido durante os testes deste sistema. `#hostileMonsters()`
+  é `#monsters` menos as invocações de personagem vivas (mesma referência quando não há
+  nenhuma); `chooseTarget`/`#resolveManualTarget` recusam explicitamente `monster.masterId ===
+  character.id` mesmo com o subject certo — defesa em profundidade contra o cliente pedindo por
+  fora do auto-target.
+- **O dano da invocação credita o MESTRE, nunca ela mesma** (ADR 0057 decisão 2,
+  `Creature::getGainedExperience`/`attackerMaster` do Canary): quando o ATACANTE de um golpe
+  monstro-contra-monstro tem `masterId` string, `#applyMonsterHitOnSummon` redireciona o
+  `recordDamage`/`session.creditDamage` para o `characterId` do mestre, não para o `subject` da
+  invocação — é o que faz a XP por razão de dano (#523) e o Bestiário renderem para o
+  PERSONAGEM: `xpByDamage`/`session.participants` nunca reconheceriam um `m:<id>` como
+  participante, e sem o redirecionamento o abate renderia ZERO para o mestre mesmo com a
+  invocação tendo matado sozinha.
+- **Nunca ganha nada por si mesma** — sem `CharacterRuntime`, sem XP nem Bestiário possíveis; e o
+  abate que ELA sofre (morre em combate) segue a regra de sempre do #546: `isSummon` no
+  `#onMonsterDied` continua gatendo por `masterId !== null` (número OU string), então uma
+  invocação de personagem morta também não paga nada a ninguém.
+- **Some ao morrer o mestre, sair da hunt, ou a sessão acabar** — o `#removeSummon` do #546 é
+  reusado tal e qual (masterId numérico ou string, o filtro não distingue); `HuntRuleset#onLeave`
+  ganhou a MESMA cascata para `masterId === character.id`, cobrindo morte, saída manual e regra
+  de saída (todas passam por `Session.leave`). Fim de sessão não precisa de código: a instância
+  inteira morre junto, como todo outro monstro.
+- **Recusada na Cidade — estruturalmente, não por um campo de PZ.** A Cidade
+  (`rulesets/city.ts`) não implementa `castSpell` nenhum hoje; não existe caminho para invocar lá
+  até a Cidade ganhar magia (M42+). Quando ganhar, precisará repetir a checagem de PZ que outra
+  mecânica de dano/invocação já tiver decidido — não há mecanismo de zona de proteção neste
+  repositório ainda.
+- **`combat-v4` (ADR 0052 decisão 7):** o veículo único do endgame — ver "O `combat-v4`" em
+  `docs/product/combat-conformance.md` para o estágio que este sistema declara nele (additive:
+  nenhum abate ou golpe que já existia muda de número quando ninguém invoca).
+- **Fora do escopo** (M38 continua em #599/#600): os quatro familiares (level 200, duração/
+  cooldown de parede), Convince Creature (rouba um monstro hostil) e Animate Dead (cadáver vira
+  Skeleton). O PRESET "sem invocação viva → invocar" para Druid/Sorcerer também fica de fora — o
+  vocabulário (`kind: 'summons'`, a ação `spell` com `monsterId`) já suporta configurá-lo à mão
+  pela barra, mas o mecanismo de PRESET em si (aplicar automaticamente ao escolher vocação) é o
+  #526, que ainda não existe neste repositório.
+
 ## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
 
 O #155 criou as condições como estado temporário do PERSONAGEM com quatro chaves fixas (haste,

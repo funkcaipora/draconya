@@ -616,3 +616,22 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   parâmetro existe e tem teste próprio em `line-of-sight.test.ts`, mas não está fiado à
   produção): ligá-lo de verdade é trabalho do M30-06, com mapa e conteúdo reais para testar
   contra, não desta issue.
+- **A invocação do PERSONAGEM (#598, M38-01, ADR 0057) estende `masterId` a `characterId` — a
+  DISTINÇÃO DE TIPO (número é monstro, #546; string é personagem) decide o comportamento, sem
+  campo `masterKind` à parte.** `HuntRuleset#chooseMonsterTarget` bifurca por isso: invocação de
+  personagem NUNCA roda `chooseTarget` própria — herda o alvo do mestre (`attackTargetOf`) a
+  cada passo/ataque/ability; invocação de monstro continua igual ao #546. **O dano dela credita
+  o MESTRE, nunca o `subject` dela** (`#applyMonsterHitOnSummon`, achado da implementação: sem o
+  redirecionamento, `xpByDamage` não reconhece um `m:<id>` como participante e o abate renderia
+  ZERO XP para quem invocou). **`#hostileMonsters()` é o outro lado da mesma moeda — proteção
+  contra FOGO AMIGO.** Estender a lista de presas de um monstro hostil (`#playerSummonPrey`) para
+  incluir invocações de personagem tem uma consequência que NÃO é óbvia: o auto-target do
+  PRÓPRIO jogador (#444) usa `this.#monsters` sem saber "isto é minha invocação" — sem o filtro,
+  o personagem mataria a própria invocação (ou a de um companheiro de party) no primeiro golpe
+  engatilhado. Foi reproduzido em teste real durante esta issue antes de existir o filtro; todo
+  call site de `selectTarget`/`countTargets`/`countAreaTargets` que serve um PERSONAGEM (nunca os
+  que servem um MONSTRO escolhendo alvo) usa `#hostileMonsters()`, não `this.#monsters` cru — e
+  `chooseTarget`/`#resolveManualTarget` recusam `monster.masterId === character.id` mesmo com o
+  subject certo, como cinto e suspensório contra o cliente pedindo por fora do auto-target. Ver
+  "Invocação do PERSONAGEM" em `docs/product/combat.md` para o resto do contrato (teto de 2,
+  mana do MONSTRO via `manaCostOverride`, `combat-v4`).

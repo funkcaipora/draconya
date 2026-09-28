@@ -3106,6 +3106,9 @@
     "magic-shield-sorcerer": {
       "effect": 13
     },
+    "summon-creature-sorcerer": {
+      "effect": 14
+    },
     "death-strike": {
       "effect": 17,
       "missile": 11
@@ -3187,6 +3190,9 @@
     },
     "magic-shield-druid": {
       "effect": 13
+    },
+    "summon-creature-druid": {
+      "effect": 14
     },
     "physical-strike": {
       "effect": 10,

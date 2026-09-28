@@ -182,6 +182,32 @@ O que muda, e o que NÃO muda:
 | `packages/sim/src/rulesets/hunt.test.ts` (`defesa, escudo e prática de shielding`) | shielding treina por ORIGEM sob `combat-v3` — um ataque corpo a corpo elemental (que `combat.defense.blockTypes` recusaria) ainda treina, o oposto do `combat-v1`/`v2` |
 | `packages/sim/src/combat/damage.test.ts` (achado da revisão do PR #642) | o componente secundário (#473) herda a carga que o primário já gastou, e o `blockCharge` de nível superior — o único que `applyDamageOutcome` grava de volta — reflete o total consumido pelos dois |
 
+## O `combat-v4` (ADR 0052 decisão 7)
+
+O veículo ÚNICO do endgame (M38–M44, #598–#632/#643): enquanto `tibia-parity` for a branch de
+integração, toda issue do endgame que muda resultado ou ordem de sorteio emenda este MESMO
+perfil — um estágio declarado por issue nesta seção, em vez de ganhar um `combat-v5` próprio. Ele
+SOMA em cima do `combat-v3`, nunca revoga: `HuntRuleset#isV3()` trata `combat-v3` e `combat-v4`
+como o mesmo mecanismo de bloqueio/defesa/mitigação do jogador (o predicado central que TODO
+`this.#options.combat.compatibilityProfile === 'combat-v3'` espalhado pelo `sim` precisou virar
+`isV3OrLater`/`#isV3()` para continuar valendo sob v4 — achado da implementação do #598, que
+criou o perfil: sem isso uma sessão `combat-v4` perderia block-charge, mitigação e o resto do
+pipeline de recebimento do v3 em silêncio). O perfil só congela (vira imutável) no merge na
+`main` (ADR 0040 decisão 3).
+
+### Estágio #598 (M38-01, invocação do jogador — ADR 0057)
+
+A invocação do jogador vira alvo válido do `chooseTarget` de monstro hostil e credita dano ao
+MESTRE via `Contribution`/mapa de dano (ver "Invocação do PERSONAGEM" em `docs/product/
+combat.md`). **`additive`, não `breaking`**: nenhum cenário SEM invocação muda de resultado ou de
+ordem de sorteio — `HuntRuleset#hostileMonsters()`/`#playerSummonPrey()` devolvem a MESMA
+referência de array quando não há invocação viva nenhuma, e nenhum sorteio novo entra no caminho
+de quem nunca invoca. O teste de conformance (`hunt.test.ts`, describe "Invocação do PERSONAGEM")
+prova o mecanismo com invocação presente; nenhum teste de RNG dedicado foi necessário para "sem
+invocação, nada muda" porque a suíte de regressão inteira (4.000+ casos, incluindo os oráculos de
+conformance do v3 acima) já roda sob o conteúdo real sem NENHUM monstro `summonable` — e continua
+batendo os mesmos números depois da mudança, o que é a prova por ausência de qualquer perturbação.
+
 ## Benchmark: o cenário misto
 
 ```

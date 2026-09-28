@@ -2080,6 +2080,11 @@ export class HuntRuleset implements Ruleset {
     if (monster === undefined || !monster.alive) return false;
     const character = findById(session.participants, characterId);
     if (character === null) return false;
+    // A invocação de personagem nunca é alvo de ataque válido — nem a própria, nem a de um
+    // companheiro de party (#598, ADR 0057): fogo amigo não é intenção que o cliente devesse
+    // conseguir expressar clicando, e o servidor recusa em silêncio, como o clique num monstro
+    // morto.
+    if (typeof monster.masterId === 'string') return false;
     this.setAttackTarget(character, monster);
     return true;
   }
@@ -3825,6 +3830,20 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * `#monsters`, MENOS as invocações de personagem VIVAS (#598, ADR 0057 decisão 1) — é o que
+   * um PERSONAGEM pode escolher como alvo: `selectTarget`/`countTargets`/`countAreaTargets` não
+   * sabem "isto é minha invocação", e sem este filtro o auto-target (#444) e a mira de área
+   * tratariam a própria invocação (ou a de um companheiro de party) como qualquer monstro comum
+   * — o personagem mataria o que acabou de invocar no primeiro golpe engatilhado. Devolve a
+   * MESMA referência de `#monsters` quando não há invocação nenhuma (o caso comum, hoje sempre):
+   * zero alocação e zero mudança de comportamento para quem nunca invoca.
+   */
+  #hostileMonsters(): readonly MonsterRuntime[] {
+    if (this.#livePlayerSummons().length === 0) return this.#monsters;
+    return this.#monsters.filter((m) => typeof m.masterId !== 'string');
+  }
+
+  /**
    * Resolve um `targetId` — de PERSONAGEM ou de invocação (`m:<id>`, #598) — na entidade real,
    * para quem precisa de mais que a forma `Prey` (aplicar dano, ler inventário, decidir morte).
    * `session.participants` primeiro: é a lista pequena e o caso comum, contra `#monsterBySubject`
@@ -5300,6 +5319,12 @@ const slots = bot.groups.get(group);
     if (target.kind === 'monster') {
       const monster = this.#monsterBySubject.get(target.subject);
       if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
+      // A invocação (#598, ADR 0057) nunca é alvo válido de fogo amigo — nem por
+      // auto-target (`#hostileMonsters`), nem por clique explícito: o cliente manda intenção
+      // (invariante 4), e a mira num aliado é sempre inválida, o mesmo `no-target` de "sem
+      // alvo" — não "recusado", porque a invocação de outro dono é invisível para este gate
+      // por design (só a masterId string do PRÓPRIO personagem importa aqui).
+      if (monster.masterId === character.id) return { ok: false, reason: 'no-target' };
       return { ok: true, explicit: monster };
     }
     return { ok: true, explicit: target.position };
@@ -6496,7 +6521,7 @@ const slots = bot.groups.get(group);
       return candidate;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, maxDistance,
+      this.#targetingOf(character), this.#hostileMonsters(), character.position, maxDistance,
     );
   }
 
@@ -6544,17 +6569,17 @@ const slots = bot.groups.get(group);
   ): number {
     const targeting = this.#targetingOf(character);
     if (area === undefined) {
-      return countTargets(targeting, this.#monsters, character.position, reach);
+      return countTargets(targeting, this.#hostileMonsters(), character.position, reach);
     }
     if (isSelfOrigin(area)) {
       return countAreaTargets(
-        targeting, this.#monsters, areaTiles(area, character.position, character.direction),
+        targeting, this.#hostileMonsters(), areaTiles(area, character.position, character.direction),
       );
     }
     const primary = this.#targetInRange(character, actionRange ?? reach);
     if (primary === null) return 0;
     return countAreaTargets(
-      targeting, this.#monsters,
+      targeting, this.#hostileMonsters(),
       areaTiles(area, character.position, character.direction, this.#at(primary)),
     );
   }
@@ -6654,7 +6679,7 @@ const slots = bot.groups.get(group);
     }
 
     const perto = countTargets(
-      targetingOf(runner), this.#monsters, character.position,
+      targetingOf(runner), this.#hostileMonsters(), character.position,
       this.#options.targetSearchRadius ?? 8,
     );
     if (runner.running) {
@@ -7317,7 +7342,7 @@ const slots = bot.groups.get(group);
           session.rng,
           session.nowMs,
         );
-        this.#applyMonsterHitOnSummon(session, subject, character, result, source);
+        this.#applyMonsterHitOnSummon(session, monster, character, result, source);
         continue;
       }
       const defender = this.#playerDefender(character);
@@ -7485,21 +7510,32 @@ const slots = bot.groups.get(group);
    * A morte é resolvida AQUI, e não deixada para o fim de `#executeMonsterAbility` como o dano
    * ao próprio `monster` (reflexo): a invocação não é o atacante desta ability, e nada mais no
    * laço por alvo depende dela continuar viva depois deste golpe.
+   *
+   * Serve os DOIS sentidos do combate monstro-contra-monstro que o #598 abre: um monstro
+   * HOSTIL golpeando a invocação do jogador (`target` é a invocação), e a invocação do jogador
+   * golpeando um monstro hostil (`target` é o hostil, `attacker` é a invocação). No segundo
+   * caso a atribuição (#598, ADR 0057 decisão 2) vai para o MESTRE, nunca para a invocação: o
+   * dano dela entra no mapa de dano em nome de quem a invocou — é o que faz a XP por razão de
+   * dano (#523) e o Bestiário renderem para o personagem, não para um `m:<id>` que `xpByDamage`
+   * nunca reconheceria como participante.
    */
   #applyMonsterHitOnSummon(
-    session: Session, subject: string, summon: MonsterRuntime, outcome: DamageOutcome,
+    session: Session, attacker: MonsterRuntime, target: MonsterRuntime, outcome: DamageOutcome,
     source: 'melee' | 'spell',
   ): void {
-    const applied = applyDamageOutcome(summon, outcome, null);
-    recordDamage(summon.contribution, subject, applied.healthDamage);
+    const creditId = typeof attacker.masterId === 'string' ? attacker.masterId : attacker.subject;
+    const applied = applyDamageOutcome(target, outcome, null);
+    recordDamage(target.contribution, creditId, applied.healthDamage);
     session.emit({
-      kind: 'creature-hit', creatureId: summon.subject, attackerId: subject,
-      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(summon),
+      kind: 'creature-hit', creatureId: target.subject, attackerId: attacker.subject,
+      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(target),
       damageType: outcome.damageType,
     });
-    this.#emitHealth(session, summon);
-    if (summon.health > 0) return;
-    resolveDeath(session, { kind: 'monster', monster: summon });
+    this.#emitHealth(session, target);
+    // O dano da invocação conta para o DPS do MESTRE (#431), como qualquer golpe dele.
+    if (typeof attacker.masterId === 'string') session.creditDamage(attacker.masterId, applied.healthDamage);
+    if (target.health > 0) return;
+    resolveDeath(session, { kind: 'monster', monster: target });
   }
 
   /** O mesmo do lado do monstro, e pela mesma razão. */
@@ -9890,7 +9926,7 @@ const slots = bot.groups.get(group);
       return candidate;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
+      this.#targetingOf(character), this.#hostileMonsters(), character.position, this.#attackRangeOf(character),
     );
   }
 
@@ -9962,7 +9998,8 @@ const slots = bot.groups.get(group);
       if (attack !== null) return attack;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
+      this.#targetingOf(character), this.#hostileMonsters(), character.position,
+      this.#options.targetSearchRadius ?? 8,
     );
   }
 
