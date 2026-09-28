@@ -68,7 +68,7 @@ export function scenario(): Content {
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
       startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
       xp: { kind: 'power', base: 20, exponent: 2 },
-      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
     }],
     combat: [{
       id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },

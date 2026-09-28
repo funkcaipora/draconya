@@ -320,6 +320,24 @@ export const SERVER_TO_CLIENT = {
    * 39: o 38 é do `tile-update`.
    */
   'look-result': 39,
+  /**
+   * Um campo de tile apareceu (#561, M31-06): fogo, veneno, energia — a MESMA indireção de
+   * `ground-item-appear` resolvendo `corpses`, aqui resolvendo `appearances.fields`
+   * (invariante 6). Cobre vários tiles de uma vez (`tiles`), porque um campo nasce de uma
+   * área inteira (`applyField`, `packages/sim/src/rulesets/hunt.ts`), nunca um tile só.
+   * Relançar o MESMO `id` (o id de CONTEÚDO do campo, não um id sequencial) REINICIA — o
+   * cliente substitui a entrada, como o servidor substitui no `Fields` do `sim`. Broadcast
+   * para todos os viewers da sessão, como `tile-update`: campo é compartilhado.
+   *
+   * 40: o 39 é do `look-result`.
+   */
+  'field-appear': 40,
+  /**
+   * O campo sumiu — o prazo (`expiresAtMs`) venceu (#561, M31-06). Só o `id` de conteúdo.
+   *
+   * 41: o 40 é do `field-appear`.
+   */
+  'field-disappear': 41,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

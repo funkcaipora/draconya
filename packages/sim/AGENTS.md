@@ -581,3 +581,15 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
   `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
   `SKILL_SHIELD`.
+- **Stairhop (#554, M30-07, ADR 0040 decisão 1): `#step` é quem detecta a travessia, não um
+  booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS únicos jeitos de
+  `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou distância — e é
+  ESSE sinal, lido do `MoveResult`, que grava `character.attackLockedUntil = session.nowMs +
+  stairhopDelayMs`. Um passo comum nunca bate essa condição. Só sob `combat-v3` (`#isV3`) e com
+  `combat.stairhopDelayMs` declarado (ausente é identidade, como `defense`/`modifiers`); v1/v2
+  nunca escrevem o campo. `#onPlayerAttack` reagenda para o INSTANTE EXATO do destravamento
+  (nunca para o intervalo normal de ataque) e `castSpell` (`casting.ts`) recusa só a magia
+  AGRESSIVA (`damage`/`damage-over-time`) com `attack-locked` — cura e o resto do vocabulário
+  continuam liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` é
+  campo solto no personagem, não `ConditionState`: migra para a condição `pacified` de verdade
+  quando ela existir (M44-04).

@@ -106,7 +106,7 @@ const progression = {
   startingSpeed: 300, speedPerLevel: 0,
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 
@@ -1675,6 +1675,250 @@ describe('walk-to distante na hunt: caminho no servidor e pausa do bot (#763)', 
 
     const taken = ruleset.takeLoot(session, hero.id, corpse.id, null);
     expect(taken.ok).toBe(true);
+  });
+});
+
+// --- empurrar criatura e esmagamento (M29-08, #544) ------------------------------------------
+//
+// Um monstro com `canPushCreatures` empurra um monstro `pushable` que bloqueia o próprio passo,
+// em vez de tratá-lo como parede; sem cardinal livre, o empurrado é esmagado sem atacante. O
+// herói mora numa BOLSA à parte, ligada por uma parede — longe o bastante do corredor (nunca
+// adjacente) para nunca entrar em combate com o rato: ele existe só para dar ao Dragon um alvo
+// na direção certa (leste), sem contaminar o teste com o ataque automático do jogador.
+describe('empurrar criatura e esmagamento (M29-08, #544)', () => {
+  const pusherDragon = {
+    ...rat, id: 'push-dragon', name: 'Push Dragon', health: 999_999_999, attack: 0,
+    aggroRadius: 10, canPushCreatures: true,
+  };
+  const pushableRat = { ...rat, id: 'pushable-rat', name: 'Pushable Rat' };
+  const stuckRat = { ...rat, id: 'stuck-rat', name: 'Stuck Rat', pushable: false };
+
+  // Empurrar/esmagar só roda sob `combat-v3` (ADR 0031/0040, DT-04 do #544): o empurrão consome
+  // `session.rng` e move outra criatura, e as duas coisas mudariam o que uma hunt `combat-v1`/
+  // `v2` congelada rende. Os testes de MECANISMO (RF-02 a RF-06) usam este perfil de propósito,
+  // para exercitar o caminho de código real — não porque `combat-v1`/`v2` sejam o alvo da issue.
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+  };
+
+  // Corredor SEM saída: x=1 (Dragon) e x=2 (rato) são as únicas colunas do corredor — a parede
+  // em x=3 fecha o beco. Norte/sul (y=0/y=2) também são parede: os quatro cardinais do rato
+  // (norte, sul, oeste-Dragon, leste-parede) ficam bloqueados. Além da parede, uma bolsa (x=4..8)
+  // hospeda o herói, a pelo menos duas colunas de distância de qualquer monstro do corredor.
+  const narrowMap = {
+    id: 'push-narrow', z: 7,
+    grid: ['##########', '#..#.....#', '##########'],
+  };
+  const narrowRoute = {
+    id: 'push-narrow-loop', mapId: 'push-narrow',
+    tiles: [{ x: 4, y: 1, z: 7 }, { x: 5, y: 1, z: 7 }],
+    spawnPoints: [],
+  };
+
+  // A mesma ideia, mas com y=1/y=3 livres nas duas colunas do corredor: o rato do meio tem para
+  // onde ser empurrado (norte ou sul) — a parede em x=3 continua fechando o corredor a leste.
+  const wideCorridorMap = {
+    id: 'push-wide-corridor', z: 7,
+    grid: [
+      '##########', '#..#.....#', '#..#.....#', '#..#.....#', '##########',
+    ],
+  };
+  const wideCorridorRoute = {
+    id: 'push-wide-corridor-loop', mapId: 'push-wide-corridor',
+    tiles: [{ x: 4, y: 2, z: 7 }, { x: 5, y: 2, z: 7 }],
+    spawnPoints: [],
+  };
+
+  /**
+   * Sobe uma hunt com monstros em pontos de spawn fixos (#519) e o herói na própria bolsa.
+   * `combatProfile` é `combatV3` por default — os testes de mecanismo precisam do perfil que
+   * liga o empurrão; o teste do GATE (RF-07, abaixo) passa `combat` (v1, o default do conteúdo)
+   * de propósito, para provar que o mecanismo sai inteiro sem efeito fora de `combat-v3`.
+   */
+  const startCorridor = (
+    map: typeof narrowMap, route: typeof narrowRoute,
+    monsters: readonly { readonly id: string }[],
+    positions: readonly { readonly x: number; readonly y: number; readonly z: number }[],
+    combatProfile: typeof combat = combatV3,
+  ) => {
+    const corridorHunt = {
+      ...hunt, id: map.id, mapId: map.id, routeId: route.id,
+      difficulties: {
+        cautious: {
+          monsterCount: monsters.length,
+          composition: [{ monsterId: (monsters[0] as { readonly id: string }).id, weight: 1 }],
+          respawnDelayMs: 1_000_000,
+        },
+      },
+    };
+    const routeWithSpawns = {
+      ...route,
+      spawnPoints: monsters.map((monster, i) => ({
+        routeIndex: 0, radius: 1, monsterId: monster.id, at: positions[i],
+      })),
+    };
+    const loaded = buildContent(raw({
+      monsters: [...monsters], maps: [map], routes: [routeWithSpawns], hunts: [corridorHunt],
+      combat: [combatProfile],
+    }));
+    const session = createHuntSession({
+      content: loaded, id: `push-${map.id}`, huntId: map.id, difficulty: 'cautious', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: route.tiles[0] as { readonly x: number; readonly y: number; readonly z: number },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      capacity: stats.capacity,
+    });
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('RF-02: Dragon com canPushCreatures avança sobre um rato pushable — o rato vai para um cardinal livre', () => {
+    // Dragon em (1,2), rato em (2,2) — corredor largo: (2,1) e (2,3) são os cardinais livres do
+    // rato (a parede em x=3 fecha a terceira saída).
+    const { session, ruleset } = startCorridor(
+      wideCorridorMap, wideCorridorRoute, [pusherDragon, pushableRat],
+      [{ x: 1, y: 2, z: 7 }, { x: 2, y: 2, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'push-dragon');
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'pushable-rat');
+    expect(dragon).toBeDefined();
+    expect(ratMonster).toBeDefined();
+    if (dragon === undefined || ratMonster === undefined) return;
+
+    // O Dragon ocupou o tile que era do rato — a prova de que o passo aconteceu.
+    expect(dragon.position).toEqual({ x: 2, y: 2, z: 7 });
+    // O rato foi para um dos dois cardinais livres, nunca ficou no lugar nem sumiu.
+    expect(ratMonster.alive).toBe(true);
+    expect([
+      { x: 2, y: 1, z: 7 }, { x: 2, y: 3, z: 7 },
+    ]).toContainEqual(ratMonster.position);
+  });
+
+  it('RF-03: sem cardinal livre (corredor sem saída), o rato empurrado morre sem atacante — sem XP para ninguém', () => {
+    // Dragon em (1,1), rato em (2,1): os quatro cardinais do rato são parede (norte, sul, leste)
+    // ou o próprio Dragon (oeste) — nenhum livre.
+    const { session, hero, ruleset } = startCorridor(
+      narrowMap, narrowRoute, [pusherDragon, pushableRat],
+      [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'pushable-rat');
+    expect(ratMonster).toBeUndefined();
+    // Sem atacante: ninguém ganhou XP pelo abate (o herói nunca chegou perto do rato).
+    expect(hero.xp).toBe(0);
+    expect(hero.health).toBe(hero.maxHealth);
+  });
+
+  it('RF-04: Dragon SEM canPushCreatures (o default) continua bloqueado por um monstro no caminho', () => {
+    const plainDragon = {
+      ...rat, id: 'plain-dragon', name: 'Plain Dragon', health: 999_999_999, attack: 0, aggroRadius: 10,
+    };
+    const { session, ruleset } = startCorridor(
+      narrowMap, narrowRoute, [plainDragon, pushableRat],
+      [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'plain-dragon');
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'pushable-rat');
+    expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(ratMonster?.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(ratMonster?.alive).toBe(true);
+  });
+
+  it('RF-06: rato pushable: false nunca é empurrado nem esmagado, mesmo por quem canPushCreatures', () => {
+    const { session, ruleset } = startCorridor(
+      narrowMap, narrowRoute, [pusherDragon, stuckRat],
+      [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'push-dragon');
+    const ratMonster = ruleset.monsters.find((m) => m.monsterId === 'stuck-rat');
+    expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(ratMonster?.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(ratMonster?.alive).toBe(true);
+  });
+
+  // Mapa dedicado, sem bolsa nem rato: o herói nasce DIRETO adjacente ao Dragon (distância 1),
+  // então o combate-stop de sempre (`#playerStep`) já o segura ali antes do primeiro passo, e
+  // nunca chega a andar até o segundo tile da própria rota.
+  const playerBlockMap = { id: 'push-player-block', z: 7, grid: ['#####', '#...#', '#####'] };
+  const playerBlockRoute = {
+    id: 'push-player-block-loop', mapId: 'push-player-block',
+    tiles: [{ x: 2, y: 1, z: 7 }, { x: 3, y: 1, z: 7 }],
+    spawnPoints: [],
+  };
+
+  it('RF-05: jogador nunca é empurrado — bloqueia um Dragon canPushCreatures como qualquer tile ocupado', () => {
+    // `#monsterAt` só varre `this.#monsters`, então o herói nunca é candidato a ocupante
+    // empurrável — o Dragon nunca sequer TENTA empurrá-lo, só bate (sem dano, attack: 0).
+    const { session, hero, ruleset } = startCorridor(
+      playerBlockMap, playerBlockRoute, [pusherDragon], [{ x: 1, y: 1, z: 7 }],
+    );
+    run(session, 5_000, 100);
+
+    const dragon = ruleset.monsters.find((m) => m.monsterId === 'push-dragon');
+    // O Dragon nunca ocupa o tile do herói, nem o herói o dele — cada um no seu, como qualquer
+    // bloqueio comum.
+    expect(hero.position).toEqual({ x: 2, y: 1, z: 7 });
+    expect(hero.health).toBe(hero.maxHealth);
+    expect(dragon?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(dragon?.alive).toBe(true);
+  });
+
+  it('RF-07 (ADR 0031/0040): sob combat-v1 o tile ocupado continua parede — nenhum sorteio novo, mesmo com canPushCreatures: true', () => {
+    // O MESMO cenário do RF-03 (o rato seria esmagado sob combat-v3), rodado sob `combat-v1` —
+    // o default do conteúdo de teste, e o perfil de toda hunt congelada antes desta issue — com
+    // a flag `canPushCreatures` LIGADA e DESLIGADA no Dragon. Sem o gate `#isV3()`, a rodada
+    // "ligada" mataria o rato e divergiria da "desligada"; com o gate, `#pushablePathThrough`/
+    // `#clearPushableOccupant` saem no primeiro `if` sem SEQUER ler `canPushCreatures` — as duas
+    // rodadas precisam ser bit a bit a MESMA sequência de sorteio (a mesma prova que #555 fez
+    // para o hit chance de distância em `weapons.test.ts`), e o rato tem que sobreviver nas duas.
+    const runUnderV1 = (canPushCreatures: boolean) => {
+      const dragon = { ...pusherDragon, canPushCreatures };
+      const spy = vi.spyOn(Rng.prototype, 'integer');
+      try {
+        const { session, hero, ruleset } = startCorridor(
+          narrowMap, narrowRoute, [dragon, pushableRat],
+          [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+          combat,
+        );
+        run(session, 5_000, 100);
+        return {
+          rngCalls: spy.mock.calls.map((call) => [...call]),
+          dragonPosition: ruleset.monsters.find((m) => m.monsterId === dragon.id)?.position,
+          ratAlive: ruleset.monsters.find((m) => m.monsterId === 'pushable-rat')?.alive,
+          xp: hero.xp,
+        };
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    const withFlag = runUnderV1(true);
+    const withoutFlag = runUnderV1(false);
+
+    // Sem o gate, o rato desta rodada estaria esmagado (RF-03) — aqui ele sobrevive, intocado,
+    // exatamente como no cenário sem a flag.
+    expect(withFlag.ratAlive).toBe(true);
+    expect(withFlag.dragonPosition).toEqual({ x: 1, y: 1, z: 7 });
+    expect(withFlag.dragonPosition).toEqual(withoutFlag.dragonPosition);
+    expect(withFlag.xp).toBe(withoutFlag.xp);
+    // A prova mais forte: a MESMA sequência de `session.rng.integer(...)`, chamada a chamada —
+    // nenhum sorteio do empurrão entrou na sequência de uma hunt combat-v1.
+    expect(withFlag.rngCalls).toEqual(withoutFlag.rngCalls);
   });
 });
 
@@ -9919,6 +10163,29 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     expect(ruleset.fields).toHaveLength(0);
   });
 
+  it('a tela fica sabendo: aparece ao aplicar e some ao vencer (#561, M31-06)', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    const field = ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    const appeared = session.drainEvents()
+      .find((event) => event.kind === 'field-appeared');
+    expect(appeared).toEqual({ kind: 'field-appeared', fieldId: fireField.id, tiles: field.tiles });
+
+    run(session, 21_000, 100);
+    const vanished = session.drainEvents()
+      .find((event) => event.kind === 'field-vanished');
+    expect(vanished).toEqual({ kind: 'field-vanished', fieldId: fireField.id });
+  });
+
+  it('relançar o MESMO id reinicia e emite `field-appeared` de novo, sem `field-vanished`', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    session.drainEvents();
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    const events = session.drainEvents();
+    expect(events.filter((event) => event.kind === 'field-appeared')).toHaveLength(1);
+    expect(events.some((event) => event.kind === 'field-vanished')).toBe(false);
+  });
+
   it('campo relançado depois do último tique continua tiquetando (#334)', () => {
     // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3) — irrelevante aqui de propósito:
     // `#enterField` aplica um tique a CADA passo aceito sobre o campo (independente do
@@ -10109,6 +10376,79 @@ describe('monstro evita campo que não pode atravessar (M29-05)', () => {
     // Cruzou a parede que ele não pode pisar sozinho: só o bypass explica x < 4 — o mesmo
     // mecanismo do teste da wand acima, agora armado pelo tique de campo, não por um golpe.
     expect(monster?.position.x).toBeLessThan(4);
+  });
+});
+
+describe('dispel: cura de condição (#590, Cure Poison e afins)', () => {
+  const curePoison = {
+    id: 'cure-poison-test', name: 'Cure Poison', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'dispel' as const, types: ['poison'] },
+  };
+  const fairWoundCleansingTest = {
+    id: 'fair-wound-cleansing-test', name: 'Fair Wound Cleansing', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'heal' as const, amount: 30, dispel: { types: ['poison'] } },
+  };
+
+  it('remove o poison e NÃO toca o burning, cancelando só o vencimento pendente do que saiu', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: true }],
+        do: { kind: 'spell', spellId: 'cure-poison-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [curePoison], monsters: false },
+    );
+    const expiresAtMs = session.nowMs + 60_000;
+    // Aplicado direto no `Conditions` do personagem, como o CMB-07 documenta: `castSpell`
+    // DEVOLVE a condição, quem agenda é o ruleset — aqui simulamos as duas já agendadas, como
+    // se uma ability de monstro (`field.condition.key`, o mesmo vocabulário de `"burning"` no
+    // Dragon Lord) as tivesse aplicado antes deste teste começar.
+    hero.conditions.apply({ key: 'poison', targetId: hero.id, expiresAtMs });
+    hero.conditions.apply({ key: 'burning', targetId: hero.id, expiresAtMs });
+    session.scheduleIn('condition-expire', 60_000, { subject: `${hero.id}/poison` });
+    session.scheduleIn('condition-expire', 60_000, { subject: `${hero.id}/burning` });
+
+    session.advanceBy(1_500);
+
+    expect(hero.conditions.get('poison')).toBeNull();
+    expect(hero.conditions.get('burning')).not.toBeNull();
+    const events = session.snapshot().schedule.events;
+    expect(events.some((e) => e.subject === `${hero.id}/poison`)).toBe(false);
+    expect(events.some((e) => e.subject === `${hero.id}/burning`)).toBe(true);
+  });
+
+  it('a cura composta cura E remove no MESMO lançamento — as duas coisas, não uma escolhida', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'hp', op: '<=', percent: 100 }],
+        do: { kind: 'spell', spellId: 'fair-wound-cleansing-test' },
+      }]),
+      { mana: 1_000, health: 900, spells: [fairWoundCleansingTest], monsters: false },
+    );
+    hero.conditions.apply({
+      key: 'poison', targetId: hero.id, expiresAtMs: session.nowMs + 60_000,
+    });
+    session.scheduleIn('condition-expire', 60_000, { subject: `${hero.id}/poison` });
+
+    session.advanceBy(1_500);
+
+    // Cooldown de 1 s: dois lançamentos em 1 500 ms (0 e ~1 000), 30 de cura cada — a soma prova
+    // que a cura ACONTECEU nos dois, não só no primeiro em que havia condição para remover.
+    expect(hero.health).toBe(960);
+    expect(hero.conditions.get('poison')).toBeNull();
+  });
+
+  it('sem a condição no alvo a magia sai igual — recusar por "nada para remover" não existe', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: false }],
+        do: { kind: 'spell', spellId: 'cure-poison-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [curePoison], monsters: false },
+    );
+    session.advanceBy(1_500);
+    // Dois lançamentos (cooldown 1 s em 1 500 ms) — a magia SAI toda vez, mesmo sem "poison"
+    // nenhum para limpar: gastou a mana as duas vezes.
+    expect(hero.mana).toBe(980);
   });
 });
 
@@ -12060,6 +12400,152 @@ describe('hunt multiandar (#519)', () => {
     session.advanceBy(10);
     expect(ruleset.monsters).toHaveLength(1);
     expect(ruleset.monsters[0]?.position).toEqual({ x: 1, y: 2, z: 6 });
+  });
+});
+
+describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 decisão 1)', () => {
+  // O mesmo par de andares e a mesma geometria do #519: descer em (2,1,7) pousa em (3,1,6),
+  // subir em (3,2,6) pousa em (2,2,7). O rato nasce EM CIMA do degrau de subida — é o segundo
+  // tile que o walker persegue depois de descer, e ele fica permanentemente ocupado, então a
+  // travessia de volta nunca acontece dentro da janela deste teste (bem menor que os ~500 ms
+  // que o walker levaria para sequer tentar o segundo passo).
+  const stairsMap = {
+    id: 'casa-554', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#....#', '######'] },
+      '6': { grid: ['######', '#....#', '#....#', '######'] },
+    },
+    floorChanges: [
+      { from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } },
+      { from: { x: 3, y: 2, z: 6 }, to: { x: 2, y: 2, z: 7 } },
+    ],
+  };
+  const stairsRoute = {
+    id: 'casa-554-loop', mapId: 'casa-554',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
+    spawnPoints: [{ routeIndex: 2, radius: 1, at: { x: 3, y: 2, z: 6 }, monsterId: 'rat' }],
+  };
+  const stairsHunt = {
+    // `id: 'arena'` porque `start()` (o helper deste arquivo) sempre pede `huntId: 'arena'` —
+    // `content({ hunts: [...] })` SUBSTITUI a lista inteira, então não há colisão com a hunt
+    // padrão do topo do arquivo.
+    id: 'arena', name: 'Casa', recommendedLevel: 1, mapId: 'casa-554', routeId: 'casa-554-loop',
+    difficulties: {
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 300_000 },
+    },
+  };
+  // O mesmo `combatV3` do #548 acima (`weaponDamage`/`distanceHitChance` mínimos exigidos pelo
+  // perfil), com `stairhopDelayMs` — a issue declara 2000, o número real da baseline.
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    stairhopDelayMs: 2_000,
+  };
+  const stairsContent = (): Content => content({
+    maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt], combat: [combatV3],
+  });
+
+  it('descer a escada trava o golpe por 2 s: nada antes, sai no instante exato do destravamento', () => {
+    const { session, hero, ruleset } = start({ loaded: stairsContent() });
+    // t=0: SPAWN e o primeiro PLAYER_STEP vencem no mesmo instante (a hunt entra pronta) — o
+    // rato já nasceu no degrau de subida, adjacente ao pouso da descida, e o walker já desceu.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+    expect(hero.attackLockedUntil).toBe(2_000);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    const fullHealth = monster.health;
+
+    // Ainda travado: avança quase até o destravamento e o rato continua intacto.
+    session.advanceBy(1_998);
+    expect(monster.health).toBe(fullHealth);
+
+    // Destravado: o golpe engatilhado sai no PRÓXIMO evento — o instante exato do
+    // destravamento, sem esperar o intervalo normal de ataque nem o mundo mudar de novo.
+    session.advanceBy(2);
+    expect(monster.health).toBeLessThan(fullHealth);
+  });
+
+  it('sem `stairhopDelayMs` declarado, a travessia não trava nada (ausente é identidade)', () => {
+    const combatV3SemStairhop = { ...combatV3, stairhopDelayMs: undefined };
+    const { session, hero, ruleset } = start({
+      loaded: content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt], combat: [combatV3SemStairhop],
+      }),
+    });
+    // Sem trava, o golpe SAI dentro deste mesmo `advanceBy` — a asserção compara com a vida
+    // CHEIA do conteúdo (`rat.health`), não com uma leitura de DEPOIS do golpe já ter saído.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+    expect(hero.attackLockedUntil).toBe(0);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    expect(monster.health).toBeLessThan(rat.health);
+  });
+
+  it('sob combat-v1/v2, a travessia não trava nada mesmo com `stairhopDelayMs` no conteúdo', () => {
+    // Defensivo: só o `combat-v3` lê o campo. Um conteúdo v1/v2 que o declarasse por engano
+    // continua bit a bit.
+    const { session, hero, ruleset } = start({
+      loaded: content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt],
+        combat: [{ ...combat, stairhopDelayMs: 2_000 }],
+      }),
+    });
+    session.advanceBy(1);
+    expect(hero.attackLockedUntil).toBe(0);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    expect(monster.health).toBeLessThan(rat.health);
+  });
+});
+
+describe('stairhop: magia agressiva recusa, cura não (#554, M30-07)', () => {
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    stairhopDelayMs: 2_000,
+  };
+
+  it('`strike` (dano) recusa com `attack-locked` e o prazo exato — a mana não sai', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
+      { mana: 200, monsters: false, combat: [combatV3] },
+    );
+    hero.attackLockedUntil = 1_500;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    expect(hero.mana).toBe(200);
+  });
+
+  it('`heal` continua liberada com a MESMA trava ativa — a exceção do Canary para o que não é agressivo', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'heal' }, auto: false }]),
+      { health: 100, mana: 200, monsters: false, combat: [combatV3] },
+    );
+    hero.attackLockedUntil = 1_500;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(hero.health).toBe(160);
+    expect(hero.mana).toBe(180);
+  });
+
+  it('sob combat-v1/v2, `attackLockedUntil` não bloqueia a magia agressiva (só o combat-v3 lê)', () => {
+    // Sem monstro (`monsters: false`), `strike` recusa por falta de alvo — e é EXATAMENTE essa
+    // recusa, não `attack-locked`, que prova que o portão do stairhop nunca chegou a ser
+    // conferido fora do `combat-v3`: se conferisse, a recusa seria `attack-locked` primeiro.
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
+      { mana: 200, monsters: false },
+    );
+    hero.attackLockedUntil = 1_500;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.mana).toBe(200);
   });
 });
 

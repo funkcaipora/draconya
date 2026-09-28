@@ -236,6 +236,13 @@ export const appearancesSchema = z.object({
    */
   corpses: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de campo de tile → appearanceId` (#561, M31-06): fogo, veneno, energia — o `sim` diz
+   * QUE campo está ativo e ONDE (`FieldSpec.id`, declarado inline em spell/ability); a arte é
+   * daqui (invariante 6). Campo sem linha não aparece — MUDO, não erro, como `spells`: um campo
+   * novo não precisa nascer com arte antes de nascer com mecânica.
+   */
+  fields: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * `appearanceKey → { estado → id }` do cenário usável (#727, ADR 0050 d.1): a mesma
    * indireção de `corpses` para porta, capim, stone pile, rope spot, ladder, alavanca. GERADO
    * por `pnpm map:import` em `appearances/generated/scenery.json` — nunca escrito à mão —,
@@ -1267,6 +1274,10 @@ export const supplySchema = z.object({
       target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
+      /** A cura COMPOSTA (#590), como na magia — ver `spellEffectSchema`. */
+      dispel: z.object({
+        types: z.array(z.string().min(1)).min(1),
+      }).optional(),
     }).refine(
       (effect) => effect.amount !== undefined || effect.amountRange !== undefined
         || effect.basePower !== undefined || effect.formula !== undefined,
@@ -1320,6 +1331,17 @@ export const supplySchema = z.object({
       kind: z.literal('condition'),
       condition: z.lazy(() => conditionSpecSchema),
     }),
+    /**
+     * Runa de dispel puro (#590, Canary `antidote_rune.lua`: só `COMBAT_PARAM_DISPEL`, sem cura
+     * nenhuma). Sem `target`/`range` declarados o uso é SEMPRE no próprio usuário — o mesmo
+     * caminho de `recipient` default de `useSupply` —, e a runa não ganha a mira à distância que
+     * o Canary tem (`allowFarUse`/`needTarget`): mirar outro personagem por esta runa fica fora
+     * do recorte desta issue (§12).
+     */
+    z.object({
+      kind: z.literal('dispel'),
+      types: z.array(z.string().min(1)).min(1),
+    }),
   ]),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
   requires: z.object({
@@ -1329,6 +1351,8 @@ export const supplySchema = z.object({
      * espírito é só do Paladin, a grande poção de mana é Sorcerer/Druid/Paladin). */
     vocationId: vocationRequirementSchema.optional(),
   }).default(() => ({})),
+  /** De onde um suprimento IMPORTADO veio (ADR 0038 decisão 2). Ausente em supply autorado à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 });
 
@@ -2229,6 +2253,42 @@ export const monsterSchema = z.strictObject({
    */
   blockable: z.boolean().default(false),
   /**
+   * O monstro pode ser EMPURRADO por outro que declare `canPushCreatures` (M29-08, TFS/Canary
+   * `Monster::isPushable`, `monster.cpp:276`: `pushable && baseSpeed != 0`). A segunda metade
+   * não precisa de campo aqui: `speed` é `positive()` neste schema (nunca zero), então
+   * `pushable` sozinho decide. Ausente é `true` — o default do Canary e de 1.598/1.655 do
+   * bestiário real; rato e rotworm não declaram (preservam `true`). **Dragon e Dragon Lord
+   * declaram `false`** (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-27) — mas o
+   * conteúdo autoral de hoje (`data/monsters/generated/dragons.json`, regenerado pelo #581)
+   * ainda não carrega o campo, então os dois caem no default `true` até alguém trazer o valor
+   * real (fora do escopo desta issue — ver `canPushCreatures` abaixo para o porquê disso ser
+   * seguro por ora).
+   */
+  pushable: z.boolean().default(true),
+  /**
+   * Empurra CRIATURAS empurráveis que bloqueiam o próprio passo, em vez de tratá-las como
+   * parede (M29-08, TFS/Canary `Monster::canPushCreatures`, `monsters.hpp:138`). Ausente é
+   * `false` — o default do Canary; rato e rotworm não declaram. **Dragon e Dragon Lord
+   * declaram `true`** (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-27) — o conteúdo
+   * autoral de hoje ainda não carrega o campo (mesma nota de `pushable`), então os dois caem no
+   * default `false` e continuam vendo tile ocupado como parede, exatamente como antes desta
+   * issue: nenhum monstro do catálogo empurra nada ainda, e trazer o valor real do Dragon é
+   * trabalho À PARTE (#578, o leitor de bestiário). Isso é seguro mesmo assim porque `sim`
+   * (`HuntRuleset#clearPushableOccupant`/`#pushablePathThrough`) só executa o empurrão sob
+   * `combat-v3` — sob `combat-v1`/`v2` o campo é lido, mas NUNCA move nada nem consome
+   * `session.rng`, para uma hunt já congelada (ADR 0031/0040) nunca divergir por causa de um
+   * valor de conteúdo que mudou depois dela ter começado.
+   */
+  canPushCreatures: z.boolean().default(false),
+  /**
+   * Empurra ITENS móveis do tile de destino (TFS/Canary `Monster::canPushItems`,
+   * `monsters.hpp:137`). Aceito e validado, mas SEM EFEITO no Draconya: não existe item móvel
+   * no chão — o cadáver é só visual (ADR 0048) — então não há o que empurrar. Ausente é
+   * `false`, o default do Canary; Dragon e Dragon Lord declaram `true` no Canary
+   * (`dragon.lua`/`dragon_lord.lua`), mas sem efeito nenhum aqui de qualquer forma.
+   */
+  canPushItems: z.boolean().default(false),
+  /**
    * É boss (#691)? O `MonsterType::isBoss` do Canary (`!bosstiaryClass.empty()`), que decide
    * se os rates de `progression.rates.boss` valem no lugar dos de `monster`. Só a flag: a
    * raridade e os pontos do Bosstiary são o #629. Ausente é `false`.
@@ -2686,7 +2746,7 @@ export const progressionSchema = z.object({
     }),
   ]),
   /**
-   * Penalidade de morte (#521, ADR 0037): a fórmula do Tibia (`Player::getLostPercent`,
+   * Penalidade de morte (#521/#569, ADR 0037): a fórmula do Tibia (`Player::getLostPercent`,
    * `Player::death` do Canary), não mais uma fração fixa de um level.
    *
    * Abaixo de `cubicFromLevel` o Tibia cobra uma fração FIXA da XP acumulada (`flatFraction`,
@@ -2694,7 +2754,9 @@ export const progressionSchema = z.object({
    * `((L+50) / 100) × 50 × (L² − 5L + 8)`, com `L` incluindo a fração de progresso dentro do
    * level, para a perda não saltar na fronteira — sobre a XP acumulada, não mais uma fração de
    * `xpToCompleteLevel`. `blessedReduction` mapeia o conceito de bênção do repo (`premium` na
-   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%.
+   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%. O
+   * MESMO percentual (menos a redução) tira também os tries de skill e a mana gasta (#569) —
+   * não só a XP.
    */
   deathPenalty: z.object({
     /** Fração fixa da XP acumulada perdida abaixo de `cubicFromLevel`. Tibia: 10%. */
@@ -2704,12 +2766,15 @@ export const progressionSchema = z.object({
     /** Redução de quem está "abençoado" (mapeia `premium`). Tibia: 56% (7 bênçãos × 8%). */
     blessedReduction: z.number().min(0).max(1),
     /**
-     * Abaixo deste level a penalidade não tira XP nenhuma. **Sem equivalente no Tibia** — lá
-     * não existe piso (TibiaPlan, "Tibia Death Penalty", 2026-09-24): é decisão de PRODUTO do
-     * Draconya, para não punir quem acabou de escolher vocação, documentada como divergência
-     * em `docs/product/progression.md`.
+     * Redução ADITIVA de quem já se promoveu (`Player::getLostPercent`: `percentReduction +=
+     * 0.30`), somada à redução de bênção — nunca tetada pelo teto de 50% do ramo
+     * `level < cubicFromLevel`, que só se aplica à parcela de bênção (#569). Tibia: 30%.
+     *
+     * `promoted` ainda não existe como estado do personagem (`applyDeathPenalty` o recebe como
+     * parâmetro, opcional, default `false`) — a promoção em si é a #566/ADR 0042, ainda aberta;
+     * este campo é o ponto de extensão que ela vai acionar.
      */
-    levelFloor: z.number().int().positive(),
+    promotionReduction: z.number().min(0).max(1),
   }),
   /**
    * O bônus de XP por FAIXA de level (#563), em faixas ORDENADAS: `maxLevel` é o teto INCLUSIVO
@@ -3074,6 +3139,25 @@ export const combatSchema = z.object({
       }
     }),
   }).optional(),
+  /**
+   * A trava de ataque ao trocar de andar (M30-07, #554, ADR 0040 decisão 1): `stairJumpExhaustion`
+   * do Canary (`config.lua.dist:45`, `2 * 1000`), aplicada em `Player::onChangeZone`
+   * (`player.cpp:2857-2866`) e na mudança de posição com teleporte ou troca de `z`
+   * (`player.cpp:12417-12423`, `teleport || oldPos.z != newPos.z`) — `CONDITION_PACIFIED` por
+   * `STAIRHOP_DELAY`, só para jogador. Em milissegundos: o passo que troca de `z` OU redireciona
+   * por teleporte (escada e teleporte passam pelo mesmo `move()`, `packages/sim/src/movement.ts`)
+   * grava `character.attackLockedUntil = nowMs + stairhopDelayMs`, e nem o golpe corpo a corpo
+   * nem a magia AGRESSIVA (`damage`/`damage-over-time`) saem antes desse instante — cura,
+   * condição e o resto do vocabulário continuam liberados, como o Canary libera tudo que não é
+   * `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`, `Spell::aggressive` é `true` por
+   * padrão). **Ausente é IDENTIDADE**: sem o campo, nenhum passo grava trava nenhuma, e todo
+   * conteúdo que não o declara — `combat-v1`/`v2` inclusive — segue bit a bit. Só o `combat-v3`
+   * lê (`HuntRuleset#isV3`); um `combat-v1`/`v2` que declarasse o campo por engano seria
+   * ignorado do mesmo jeito. Migra para a condição `pacified` de verdade quando ela existir
+   * (M44-04) — até lá é um campo solto no personagem, porque não há efeito de RESOLUÇÃO de golpe
+   * recebido para compor: é só um portão de saída, como `blockCharge`/`attackPractice`.
+   */
+  stairhopDelayMs: z.number().int().positive().optional(),
   _open: z.string().optional(),
 }).superRefine((combat, context) => {
   // A #522/ADR 0037: perfil `combat-v2` sem os blocos novos é conteúdo que o resolver de poder
@@ -3954,6 +4038,15 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     range: z.number().int().positive().optional(),
     /** Forma de grupo (Mass Healing): `circle` centrado no lançador. `buildContent` confere. */
     area: spellAreaSchema.optional(),
+    /**
+     * A cura COMPOSTA (#590, Canary `fair_wound_cleansing.lua`/`nature's_embrace.lua`/
+     * `restoration.lua`: `COMBAT_PARAM_DISPEL` ao lado de `COMBAT_PARAM_TYPE, COMBAT_HEALING`).
+     * Ausente é a cura de sempre, sem remoção nenhuma; declarado, o alvo perde as condições
+     * destas chaves no MESMO lançamento que cura — nunca um segundo efeito.
+     */
+    dispel: z.object({
+      types: z.array(z.string().min(1)).min(1),
+    }).optional(),
   }),
   /**
    * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
@@ -4016,6 +4109,17 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
   }),
   /** Dano vira mana enquanto vale. */
   z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
+  /**
+   * Remove condição do lançador, sem curar (#590, Canary `cure_{poison,burning,curse,
+   * electrification,bleeding}.lua`: só `COMBAT_PARAM_DISPEL`, sem `COMBAT_PARAM_TYPE,
+   * COMBAT_HEALING`). `types` são as CHAVES de `ConditionState.key` que a magia remove — o
+   * mesmo vocabulário que `field.condition.key` já declara (`"burning"` no Dragon Lord). Chave
+   * ausente no alvo não é erro: a magia sai igual, sem efeito nenhum a remover.
+   */
+  z.object({
+    kind: z.literal('dispel'),
+    types: z.array(z.string().min(1)).min(1),
+  }),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 
@@ -4074,6 +4178,8 @@ export const spellSchema = z.object({
   effect: spellEffectSchema.transform((effect): SpellEffect =>
     effect.kind === 'heal' ? { ...effect, target: effect.target ?? 'self' } : effect,
   ),
+  /** De onde uma magia IMPORTADA veio (ADR 0038 decisão 2). Ausente em magia autorada à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 });
 

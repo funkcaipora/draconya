@@ -270,6 +270,32 @@ describe('o campo "source" da entidade GERADA (ADR 0038 decisão 2)', () => {
   });
 });
 
+// `pushable`/`canPushCreatures`/`canPushItems` (M29-08, #544): empurrar criatura, monstro
+// empurrável e esmagamento. Os defaults são os do Canary (`monsters.hpp:137-139`), e um monstro
+// sem os três campos precisa continuar bit a bit idêntico ao de antes desta issue.
+describe('monsterSchema — pushable/canPushCreatures/canPushItems (M29-08, #544)', () => {
+  const base = {
+    id: 'rat', name: 'Rat', health: 20, experience: 5,
+    attack: 5, armor: 0, attackIntervalMs: 2000, speed: 172, aggroRadius: 11,
+  };
+
+  it('ausentes: `pushable` é `true`, `canPushCreatures`/`canPushItems` são `false` — os defaults do Canary', () => {
+    const parsed = monsterSchema.parse(base);
+    expect(parsed.pushable).toBe(true);
+    expect(parsed.canPushCreatures).toBe(false);
+    expect(parsed.canPushItems).toBe(false);
+  });
+
+  it('declarados explicitamente, os três valores sobrevivem à validação', () => {
+    const parsed = monsterSchema.parse({
+      ...base, pushable: false, canPushCreatures: true, canPushItems: true,
+    });
+    expect(parsed.pushable).toBe(false);
+    expect(parsed.canPushCreatures).toBe(true);
+    expect(parsed.canPushItems).toBe(true);
+  });
+});
+
 describe('o vocabulário v2 do bot (AB-03, ADR 0032)', () => {
   const emptySlots = (): (unknown)[] => Array.from({ length: 24 }, () => null);
   const set = (slots = emptySlots()) => ({ slots });

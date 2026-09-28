@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { NEUTRAL_RATES } from '@draconya/content';
-import type { Progression, Vocation } from '@draconya/content';
+import type { Progression, Skill, Vocation } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
 import {
   applyDeathPenalty, applyExperienceBonus, grantXp, levelExperienceBonusPercent, levelForXp,
   statsForLevel, totalXpForLevel, xpToCompleteLevel,
 } from './progression.js';
+
+/** Sem skill nenhuma no catálogo: o caso de quem só quer a conta de XP. */
+const NO_SKILLS: ReadonlyMap<string, Skill> = new Map();
 
 const baseline: Progression = {
   id: 'baseline',
@@ -16,7 +19,7 @@ const baseline: Progression = {
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   regeneration: { requiresFood: false },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
   experienceBonusByLevel: [],
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
@@ -183,14 +186,14 @@ describe('level up', () => {
   });
 });
 
-describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
+describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', () => {
   it('abaixo do limiar cúbico (24), tira a fração fixa da XP ACUMULADA — não mais de UM level', () => {
     // A diferença estrutural para o modelo antigo: a fração agora é sobre `character.xp`
     // (o total), não sobre `xpToCompleteLevel` (o custo de UM level).
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes);
-    expect(applyDeathPenalty(character, { premium: false }, null, baseline).xpLost)
+    expect(applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
@@ -201,7 +204,8 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.50));
-    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline, NO_SKILLS).xpLost)
+      .toBe(esperado);
   });
 
   it('abaixo de 40% cru, o teto não mexe em nada — só entra quando a redução bateria 40% ou mais', () => {
@@ -209,7 +213,8 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(gentle.deathPenalty.flatFraction * antes * (1 - 0.30));
-    expect(applyDeathPenalty(character, { premium: true }, null, gentle).xpLost).toBe(esperado);
+    expect(applyDeathPenalty(character, { premium: true }, null, gentle, NO_SKILLS).xpLost)
+      .toBe(esperado);
   });
 
   it('no limiar cúbico (level ≥ 24) a redução crua vale, sem teto: 56%, não 50%', () => {
@@ -219,12 +224,32 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     const level = character.level; // atLevel deixa o personagem exatamente na fronteira do level.
     const rawLoss = ((level + 50) / 100) * 50 * (level * level - 5 * level + 8);
     const esperado = Math.round(rawLoss * (1 - baseline.deathPenalty.blessedReduction));
-    expect(applyDeathPenalty(character, { premium: true }, null, baseline).xpLost).toBe(esperado);
+    expect(applyDeathPenalty(character, { premium: true }, null, baseline, NO_SKILLS).xpLost)
+      .toBe(esperado);
+  });
+
+  it('promovido soma 30% de redução, ADITIVA à bênção e NUNCA tetada (#569)', () => {
+    // `Player::getLostPercent`: `if (isPromoted()) percentReduction += 0.30` acontece DEPOIS
+    // do teto de 50% do ramo `level < cubicFromLevel` — a promoção nunca passa pelo teto.
+    const character = atLevel(20);
+    const antes = character.xp;
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.30));
+    expect(applyDeathPenalty(character, { premium: false, promoted: true }, null, baseline, NO_SKILLS).xpLost)
+      .toBe(esperado);
+  });
+
+  it('bênção TETADA em 50% mais promoção somam 80%, sem re-tetar o total', () => {
+    const character = atLevel(20);
+    const antes = character.xp;
+    // blessedReduction (0.56) ≥ 0.40 → teto 50%; + 30% de promoção = 80% total.
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.80));
+    expect(applyDeathPenalty(character, { premium: true, promoted: true }, null, baseline, NO_SKILLS).xpLost)
+      .toBe(esperado);
   });
 
   it('pode rebaixar o level', () => {
     const character = atLevel(20);
-    expect(applyDeathPenalty(character, { premium: false }, null, baseline).levelChange)
+    expect(applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS).levelChange)
       .toEqual({ from: 20, to: 19 });
   });
 
@@ -232,7 +257,7 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     const character = atLevel(20);
     character.health = 10;
     character.mana = 3;
-    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline);
+    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
     expect(penalidade.levelChange).toEqual({ from: 20, to: 19 });
     expect(character.health).toBeLessThan(character.maxHealth);
     expect(character.health).toBeLessThanOrEqual(10);
@@ -246,9 +271,8 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
     // ultrapassar o termo do level anterior. O código trata cascata mesmo assim (abaixo), com
     // uma curva onde o modelo cúbico (level ≥ 24) domina.
     const character = atLevel(9);
-    applyDeathPenalty(character, { premium: false }, null, baseline);
+    applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
     expect(character.level).toBe(8);
-    // Perdeu um level, não a XP toda: parou onde a perda o deixou, acima do piso.
     expect(character.xp).toBeGreaterThan(totalXpForLevel(8, baseline));
   });
 
@@ -262,39 +286,119 @@ describe('penalidade de morte (#521, ADR 0037 — a fórmula do Tibia)', () => {
   it('CASCATEIA por mais de um level quando a perda passa do level inteiro', () => {
     // O caso que passa despercebido e só aparece com um jogador reclamando.
     const character = hero({ level: 24, xp: totalXpForLevel(24, íngreme) });
-    const penalidade = applyDeathPenalty(character, { premium: false }, null, íngreme);
+    const penalidade = applyDeathPenalty(character, { premium: false }, null, íngreme, NO_SKILLS);
     expect(penalidade.levelChange?.to).toBeLessThan(23);
     expect(character.level).toBe(levelForXp(character.xp, íngreme));
   });
 
-  it('nunca desce abaixo do level 8, e para nele com a XP EXATA do 8', () => {
-    // O piso é de XP, não só de level: parar no 8 com XP negativa é um estado impossível que
-    // dá erro estranho três sistemas adiante.
+  it('SEM piso (#569): pode cair abaixo do level 8, e a XP nunca fica negativa', () => {
+    // Antes do #569 esta mesma curva parava EXATAMENTE no level 8 (o piso do Draconya). O
+    // Tibia não tem esse piso (`Player::death`/`getLostPercent`, sem `levelFloor` nenhum), e a
+    // #569 alinhou o Draconya a isso: a curva agressiva agora derruba até o level 1.
     const character = hero({ level: 24, xp: totalXpForLevel(24, profunda) });
-    applyDeathPenalty(character, { premium: false }, null, profunda);
-    expect(character.level).toBe(8);
-    expect(character.xp).toBe(totalXpForLevel(8, profunda));
+    applyDeathPenalty(character, { premium: false }, null, profunda, NO_SKILLS);
+    expect(character.level).toBe(1);
+    expect(character.xp).toBe(0);
   });
 
-  it('o piso protege, e nunca promove', () => {
-    // Escrito como `max` puro, o piso levantaria a XP de quem está no level 5 — um castigo
-    // que dá level. Quem já está abaixo do piso não perde nada.
+  it('nível baixo NÃO é mais protegido: perde a fração fixa como qualquer outro abaixo do limiar', () => {
+    // Antes do #569 o piso do level 8 fazia o level 5 não perder XP nenhuma. Sem piso, ele
+    // segue a MESMA regra `flatFraction` de todo mundo abaixo de `cubicFromLevel`.
     const character = atLevel(5);
     const antes = character.xp;
-    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline);
-    expect(character.level).toBe(5);
-    expect(character.xp).toBe(antes);
-    expect(penalidade.xpLost).toBe(0);
+    const esperado = Math.round(baseline.deathPenalty.flatFraction * antes);
+    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    expect(penalidade.xpLost).toBe(esperado);
+    expect(penalidade.xpLost).toBeGreaterThan(0);
   });
 
   it('nunca perde item, porque não existe nada disso aqui', () => {
     // §3.8: morte no Draconya nunca é perda material, e é o que elimina a necessidade de
     // qualquer sistema de recuperação de itens. O teste é a ausência: a penalidade mexe em
-    // XP, level e stats derivados, e em mais nada.
+    // XP, level, skill e stats derivados, e em mais nada.
     const character = atLevel(20);
     character.goldDelta = 500;
-    applyDeathPenalty(character, { premium: false }, null, baseline);
+    applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
     expect(character.goldDelta).toBe(500);
+  });
+});
+
+// --- #569: a mesma fração tira tries de skill e mana gasta (a skill `magic`) --------------------
+
+describe('perda de skill e de mana gasta na morte (#569, `Player::death` do Canary)', () => {
+  const fist: Skill = {
+    id: 'fist', name: 'Punho', startingLevel: 10,
+    curve: { base: 50, factor: 1.5 },
+    gain: { on: 'melee-hit', points: 1 },
+    damagePerLevel: 0.02,
+  };
+  const magicSkill: Skill = {
+    id: 'magic', name: 'Magia', startingLevel: 0,
+    curve: { base: 1600, factor: 4.0 },
+    gain: { on: 'spell-cast', pointsPerMana: 1 },
+    damagePerLevel: 0.03,
+  };
+  const skillCatalog: ReadonlyMap<string, Skill> = new Map([[fist.id, fist], [magicSkill.id, magicSkill]]);
+
+  /** Personagem no level 20 (abaixo do limiar cúbico), com `fist` e `magic` no estado dado. */
+  const withSkills = (skills: { fist: { level: number; points: number }; magic: { level: number; points: number } }) =>
+    new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: 150, maxHealth: 150, mana: 0, maxMana: 0,
+      level: 20, xp: totalXpForLevel(20, baseline), vocationId: null,
+      goldDelta: 0, alive: true, cooldowns: {}, skills,
+    });
+
+  it('tira tries de skill corpo a corpo e mana gasta (magic) na MESMA fração da XP, e cada uma pode cruzar nível', () => {
+    // fist no level 12 com 10 pontos: total acumulado = pointsForLevel(10) + pointsForLevel(11)
+    // + 10 = 50 + 75 + 10 = 135. Fração (premium false, belowCubic) = flatFraction = 0.1.
+    // triesLost = floor(135 × 0,1) = 13; 13 > 10 (pontos correntes) desce um nível: pontos
+    // recarregam para pointsForLevel(11) = 75, e os 3 que sobram saem dali: 75 − 3 = 72.
+    //
+    // magic no level 1 com 0 pontos: total acumulado = pointsForLevel(0) = 1600.
+    // triesLost = floor(1600 × 0,1) = 160; 160 > 0 desce para o level 0 (piso da própria
+    // magia — `startingLevel`), pontos recarregam para pointsForLevel(0) = 1600, sobra 160:
+    // 1600 − 160 = 1440.
+    const character = withSkills({ fist: { level: 12, points: 10 }, magic: { level: 1, points: 0 } });
+    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, skillCatalog);
+
+    const fistLoss = penalty.skillLosses.find((loss) => loss.skillId === 'fist');
+    expect(fistLoss).toEqual({ skillId: 'fist', triesLost: 13, levelChange: { from: 12, to: 11 } });
+    expect(character.skills.levelOf(fist)).toBe(11);
+    expect(character.skills.pointsOf(fist)).toBe(72);
+
+    const magicLoss = penalty.skillLosses.find((loss) => loss.skillId === 'magic');
+    expect(magicLoss).toEqual({ skillId: 'magic', triesLost: 160, levelChange: { from: 1, to: 0 } });
+    expect(character.skills.levelOf(magicSkill)).toBe(0);
+    expect(character.skills.pointsOf(magicSkill)).toBe(1440);
+  });
+
+  it('perda pequena não cruza nível: só desconta os pontos, `levelChange` fica `null`', () => {
+    // fist no level 20 com 1000 pontos: perder uma fração pequena de um total grande não chega
+    // a esvaziar os pontos correntes.
+    const character = withSkills({ fist: { level: 20, points: 1000 }, magic: { level: 0, points: 0 } });
+    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, skillCatalog);
+    const fistLoss = penalty.skillLosses.find((loss) => loss.skillId === 'fist');
+    expect(fistLoss?.levelChange).toBeNull();
+    expect(character.skills.levelOf(fist)).toBe(20);
+    expect(character.skills.pointsOf(fist)).toBe(1000 - (fistLoss?.triesLost ?? 0));
+  });
+
+  it('skill no piso (`startingLevel`) não desce mais: os pontos zeram e param', () => {
+    // fist já no level inicial (10), sem pontos: não há para onde descer.
+    const character = withSkills({ fist: { level: 10, points: 0 }, magic: { level: 0, points: 0 } });
+    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, skillCatalog);
+    const fistLoss = penalty.skillLosses.find((loss) => loss.skillId === 'fist');
+    expect(fistLoss).toBeUndefined(); // nada para perder: total acumulado × fração dá zero.
+    expect(character.skills.levelOf(fist)).toBe(10);
+    expect(character.skills.pointsOf(fist)).toBe(0);
+  });
+
+  it('sem skill no catálogo, `skillLosses` é uma lista vazia — a XP continua sendo tirada normalmente', () => {
+    const character = atLevel(20);
+    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    expect(penalty.skillLosses).toEqual([]);
+    expect(penalty.xpLost).toBeGreaterThan(0);
   });
 });
 

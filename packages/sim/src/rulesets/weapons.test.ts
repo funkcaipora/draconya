@@ -6,7 +6,7 @@
 
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { INITIAL_ATTACK_PRACTICE, afterAttackBlock } from '../combat/attack-practice.js';
 import type { InventoryState } from '../inventory.js';
@@ -53,7 +53,7 @@ const progression = {
   startingSpeed: 300, speedPerLevel: 0,
   regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 const combat = {
@@ -617,5 +617,68 @@ describe('combat-v3: tries de distância pelo tipo de bloqueio (#686)', () => {
     const v3 = distanceTally(started);
     expect(v3.shots).toBeGreaterThan(5);
     expect(v3.tries).toBe(2 * v3.shots);
+  });
+});
+
+// --- #555: o destino do tiro errado é só do combat-v3 (ADR 0031/0040) -------------------------
+//
+// `missShotTile` consome UM sorteio A MAIS do `session.rng` — e um perfil já publicado
+// (`combat-v1`/`v2`) não pode ganhar rolagem nova sem deixar de ser bit a bit. Os dois testes
+// abaixo MEDEM a sequência de RNG (via `Rng.prototype.next`, que `chance`/`fraction`/`integer`
+// atravessam sempre), em vez de só inspecionar o resultado: é o mesmo padrão do resto do
+// arquivo — "meça, não raciocine" (skill `/spec`, Passo 2).
+
+describe('#555: destino do tiro errado — nunca em combat-v1/v2, só em combat-v3', () => {
+  it('combat-v2: `to` do tiro errado continua fixo no alvo, e NENHUMA rolagem extra é consumida', () => {
+    const nextSpy = vi.spyOn(Rng.prototype, 'next');
+    const started = startProfile('combat-v2', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    started.session.advanceBy(50);
+    // A 3 tiles (> 1): é o caso que arriscaria redirecionar, se o v2 ganhasse o sorteio.
+    const rat = ratAt(started.ruleset, 3);
+    const target = { x: rat.position.x, y: rat.position.y, z: rat.position.z ?? 7 };
+    // O rato nasce AO LADO do herói (comentário do topo do arquivo) e o primeiro golpe já sai em
+    // t = 0 — antes de `ratAt` reposicioná-lo no bolsão. Esse tiro fica pendente no buffer da
+    // sessão até o primeiro `drainEvents`; descartá-lo aqui evita contar um tiro fantasma, de
+    // ANTES do reposicionamento, como parte da amostra medida.
+    started.session.drainEvents();
+    nextSpy.mockClear();
+    const events = run(started.session, 20_000, 100);
+    const shots = events.filter((e) => e.kind === 'shot');
+    expect(shots.length).toBeGreaterThan(5);
+    // `arrow` neste conteúdo (balde 90 sem `tiers`) sempre erra — every tiro é um erro — e o
+    // destino continua sendo o do alvo: nunca redirecionado, como antes do #555.
+    expect(shots.every((e) => (
+      e.kind === 'shot' && e.to.x === target.x && e.to.y === target.y && e.to.z === target.z
+    ))).toBe(true);
+    // UMA rolagem de acerto por tiro — a de sempre (#522) — e NENHUMA a mais. Se `missShotTile`
+    // fosse chamado aqui, a sequência de `session.rng` para tudo o que vem depois deste tiro
+    // (dano, loot, IA de monstro) se deslocaria, e o perfil já publicado deixaria de ser bit a
+    // bit (ADR 0031/0040).
+    expect(nextSpy.mock.calls.length).toBe(shots.length);
+  });
+
+  it('combat-v3: o MESMO cenário consome uma rolagem A MAIS por tiro errado, e o destino varia', () => {
+    const nextSpy = vi.spyOn(Rng.prototype, 'next');
+    const started = startProfile('combat-v3', {
+      inventory: armed('bow'), gold: 10_000, ammo: { arrow: 'arrow' },
+    });
+    started.session.advanceBy(50);
+    const rat = ratAt(started.ruleset, 3);
+    const target = { x: rat.position.x, y: rat.position.y, z: rat.position.z ?? 7 };
+    // Ver o comentário equivalente no teste v2 acima: descarta o tiro pendente de ANTES do
+    // reposicionamento, para não contar um tiro fantasma na amostra.
+    started.session.drainEvents();
+    nextSpy.mockClear();
+    const events = run(started.session, 20_000, 100);
+    const shots = events.filter((e) => e.kind === 'shot');
+    expect(shots.length).toBeGreaterThan(5);
+    // Duas rolagens por tiro errado: o acerto (sempre existiu) e o tile do erro (novo, só v3).
+    expect(nextSpy.mock.calls.length).toBe(2 * shots.length);
+    // Ao menos um tiro caiu num tile DIFERENTE do alvo — a apresentação nova aparece de fato.
+    expect(shots.some((e) => (
+      e.kind === 'shot' && (e.to.x !== target.x || e.to.y !== target.y)
+    ))).toBe(true);
   });
 });

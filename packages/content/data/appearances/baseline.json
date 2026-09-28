@@ -2925,9 +2925,31 @@
     "dragon": 5973,
     "dragon-lord": 5984
   },
+  "fields": {
+    "dragon-lord-firefield": 2118,
+    "dragon-lord-hatchling-firefield": 2118
+  },
   "maps": {},
   "spells": {
     "heal": {
+      "effect": 13
+    },
+    "cure-poison": {
+      "effect": 13
+    },
+    "cure-burning": {
+      "effect": 13
+    },
+    "cure-electrification": {
+      "effect": 13
+    },
+    "cure-bleeding-druid": {
+      "effect": 13
+    },
+    "cure-bleeding-knight": {
+      "effect": 13
+    },
+    "cure-curse": {
       "effect": 13
     },
     "strike": {
@@ -3206,6 +3228,9 @@
   "supplies": {
     "health-potion": {
       "effect": 14
+    },
+    "antidote-rune": {
+      "effect": 13
     },
     "mana-potion": {
       "effect": 13
