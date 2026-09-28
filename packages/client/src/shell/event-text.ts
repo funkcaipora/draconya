@@ -7,13 +7,6 @@
 
 import type { NotableEvent } from '../state/hud.js';
 
-/** Os três tamanhos de pull (FUN-123, cópia do Huntera), em palavras. Os mesmos de `HuntsModal`. */
-const DIFFICULTY_TEXT: Record<string, string> = {
-  cautious: 'Cauteloso',
-  bold: 'Ousado',
-  reckless: 'Agressivo',
-};
-
 const REASON_TEXT: Record<string, string> = {
   'manual-exit': 'saiu da hunt',
   'exit-rule': 'regra de saída',
@@ -51,10 +44,11 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
   const detail = event.detail ?? '';
   switch (event.type) {
     case 'entered-hunt': {
-      const [huntId = '', difficulty = ''] = detail.split('/');
+      // O `detail` continua `huntId/difficulty` (o `sim` não mudou o formato do evento), mas a
+      // dificuldade não é mais mostrada desde o #584 (ADR 0039, fim do pull por dificuldade).
+      const [huntId = ''] = detail.split('/');
       const hunt = names.hunts?.get(huntId) ?? huntId;
-      const level = DIFFICULTY_TEXT[difficulty] ?? difficulty;
-      return level === '' ? `Entrou em ${hunt}` : `Entrou em ${hunt} · ${level}`;
+      return `Entrou em ${hunt}`;
     }
     case 'entered-city': return 'Voltou para a cidade';
     case 'level-up': {

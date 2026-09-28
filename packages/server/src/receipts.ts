@@ -97,6 +97,13 @@ export interface SessionReceipt {
    */
   readonly vocation?: string;
   /**
+   * Pontos de alma (#593). ABSOLUTO e última-escrita-vence, como `ammo`/`equipment` — NUNCA
+   * fundido por máximo como `skills`/`bestiary`: alma PODE DESCER (gasta na conjuração), e um
+   * extrato antigo fora de ordem não pode reviver um saldo já gasto. Ausente é sessão de
+   * Cidade que não tocou alma, ou nó `game` anterior a esta issue.
+   */
+  readonly soul?: number;
+  /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
    * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
@@ -350,6 +357,8 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }
       : {}),
+    // Pontos de alma (#593): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['soul'] === 'number' ? { soul: value['soul'] } : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.
     ...(typeof value['equipment'] === 'object' && value['equipment'] !== null

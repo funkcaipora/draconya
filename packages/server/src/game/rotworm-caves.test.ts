@@ -31,10 +31,10 @@ function enter(
     level: 8, xp: 0, gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
   }));
   const ruleset = session.ruleset as HuntRuleset;
-  // O personagem novo já nasce com o bot padrão do conteúdo (FUN-114), como no Huntera — onde a
-  // cura automática (poção com HP ≤ 70 %, aqui a magia `heal`) é o que segura o level 8 contra o
-  // rotworm (Parte VI §36, #515). Sem isto o herói de teste golpeava e nunca se curava, o que
-  // não é o cenário que a paridade pede.
+  // O personagem novo já nasce com o bot padrão do conteúdo (FUN-114), como no Huntera — a
+  // poção (HP ≤ 40%, com gold) é o que segura o level 8 contra o rotworm (Parte VI §36, #515).
+  // Desde o #596, o Tibia real não dá magia nenhuma antes da escolha de vocação (§7.4), então o
+  // `defaultConfig` pré-vocação não tem mais cura automática por magia — só a poção.
   const defaults = migrateBotConfigV1(content.bot.defaultConfig);
   ruleset.configureBot(session, defaults, 'hero');
   return { session, ruleset };
@@ -68,9 +68,12 @@ describe('a Rotworm Caves real (#511, #586)', () => {
     // armor 8, muito mais forte que o rato (3-4). Antes da #521 (ADR 0037) o herói level 8
     // desarmado sobrevivia dez minutos no cautious com a regeneração provisória (1 HP/s para
     // todos); o regen REAL do Tibia (`vocations.xml` da vocação `None`, ~0,08 HP/s — mais de
-    // 10× mais lento) tira a folga que sobrava, e este herói — SEM gold, sem poção — depende só
-    // da cura automática (heal com HP ≤ 70%), que já não garante os dez minutos inteiros. O
-    // teste passa a medir o rendimento até o fim da janela OU até a morte, o que vier primeiro.
+    // 10× mais lento) tira a folga que sobrava. Desde o #596, o `defaultConfig` PRÉ-VOCAÇÃO não
+    // tem mais cura automática por magia (o Tibia real não dá magia nenhuma antes do level 8,
+    // §7.4; `heal`/`strike` eram genéricas inventadas antes da auditoria do #523/#596) — este
+    // herói entra com gold suficiente para a poção (HP ≤ 40%) segurar a hunt, o equivalente
+    // realista a como um personagem de verdade chegaria ao level 8. O teste passa a medir o
+    // rendimento até o fim da janela OU até a morte, o que vier primeiro.
     //
     // O invariante `xpGained === Σ(abates de cada monstro × experiência dele) × 3` continua de
     // pé QUANDO o herói sobrevive — o ×3 é o bônus de level do conteúdo real (+200% até o level

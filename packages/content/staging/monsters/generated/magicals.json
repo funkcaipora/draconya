@@ -1771,6 +1771,208 @@
     "outfitId": 1061
   },
   {
+    "id": "candy-horror",
+    "name": "Candy Horror",
+    "class": "magical",
+    "health": 3100,
+    "experience": 3000,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 43,
+    "defense": 24,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.05,
+        "energy": -0.1,
+        "earth": 0.1,
+        "fire": 0.05,
+        "holy": -0.15,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.21,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 30
+      },
+      "items": [
+        {
+          "itemId": "giant-shimmering-pearl",
+          "chance": 0.0651
+        },
+        {
+          "itemId": "strawberry",
+          "chance": 0.014,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "dark-chocolate-coin",
+          "chance": 0.0044,
+          "min": 1,
+          "max": 11
+        },
+        {
+          "itemId": "gummy-rotworm",
+          "chance": 0.0249,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0155
+        },
+        {
+          "itemId": "brigadeiro",
+          "chance": 0.0125
+        },
+        {
+          "itemId": "energy-bar",
+          "chance": 0.0555
+        },
+        {
+          "itemId": "raspberry",
+          "chance": 0.0124,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "dreaded-cleaver",
+          "chance": 0.00502
+        },
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.0184
+        },
+        {
+          "itemId": "black-shield",
+          "chance": 0.0283
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 120,
+          "max": 300
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "cake"
+        }
+      },
+      {
+        "id": "deathburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 120,
+          "max": 350
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "cacao"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 120,
+          "max": 350
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "big-scratch"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 5000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/magicals/candy_horror.lua"
+    },
+    "bestiary": {
+      "class": "magical",
+      "race": "magical",
+      "raceId": 2535,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1739
+  },
+  {
     "id": "crystalcrusher",
     "name": "Crystalcrusher",
     "class": "magical",
@@ -5446,6 +5648,220 @@
       "occurrence": 0
     },
     "outfitId": 1138
+  },
+  {
+    "id": "nibblemaw",
+    "name": "Nibblemaw",
+    "class": "magical",
+    "health": 2900,
+    "experience": 2700,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 48,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": -0.15,
+        "earth": -0.1,
+        "holy": -0.05,
+        "death": 0.4
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.1,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 236,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.06
+        },
+        {
+          "itemId": "lime-tart",
+          "chance": 0.0109
+        },
+        {
+          "itemId": "dark-chocolate-coin",
+          "chance": 0.0094,
+          "min": 1,
+          "max": 64
+        },
+        {
+          "itemId": "gummy-rotworm",
+          "chance": 0.0459,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "melon",
+          "chance": 0.0155
+        },
+        {
+          "itemId": "raspberry",
+          "chance": 0.0124,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "assassin-dagger",
+          "chance": 0.004
+        },
+        {
+          "itemId": "red-crystal-fragment",
+          "chance": 0.034
+        },
+        {
+          "itemId": "frazzle-tongue",
+          "chance": 0.1043
+        },
+        {
+          "itemId": "frazzle-skin",
+          "chance": 0.077
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 70,
+          "max": 150
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              3,
+              3,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 20,
+          "max": 250
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "sirup"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 250
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "stones"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 225,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "hitbypoison"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/magicals/nibblemaw.lua"
+    },
+    "bestiary": {
+      "class": "magical",
+      "race": "magical",
+      "raceId": 2531,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1737
   },
   {
     "id": "nightmare",

@@ -596,8 +596,20 @@ uso**, por `useSupply`, como qualquer suprimento (ADR 0032 d.6).
 | Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.605 + 28` / `level/5 + ml×7.395 + 46` |
 | Heavy Magic Missile | `energy` | **alvo único** | 25 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Explosion | `physical` | **cruz** raio 1 | 31 / 6 | `level/5` (aprox.) / `level/5 + ml×4.8` |
+| Fireball | `fire` | **alvo único** | 27 / 4 | `level/5 + ml×1.81 + 10` / `level/5 + ml×3 + 18` |
+| Icicle | `ice` | **alvo único** | 28 / 4 | `level/5 + ml×1.81 + 10` / `level/5 + ml×3 + 18` |
+| Light Magic Missile | `energy` | **alvo único** | 15 / 0 | `level/5 + ml×0.4 + 2` / `level/5 + ml×0.81 + 4` |
+| Light Stone Shower | `earth` | **cruz** raio 1 | 1 / 0 | `level/5 + ml×0.3 + 2` / `level/5 + ml×0.45 + 3` |
+| Stalagmite | `earth` | **alvo único** | 24 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Intense Healing (runa) | cura | **alvo único** | 15 / 1 | `level/5 + ml×3.2 + 20` / `level/5 + ml×5.4 + 40` |
 | Ultimate Healing (runa) | cura | **alvo único** | 24 / 4 | `level/5 + ml×7.3 + 42` / `level/5 + ml×12.4 + 90` |
+
+As 5 acima fecham o catálogo de 12 runas de ataque do Canary (#597; `data/scripts/runes/`,
+`things/sources/canary` 47dfd51). Fora desta contagem, de propósito: `lightest-magic-missile-rune`/
+`lightest-missile-rune` (dano quase nulo ou negativo — runa de treino de skill em dummy) e
+`holy-missile-rune` (restrita ao Paladin); nenhuma das três tem pedido explícito. Runas de campo
+(`fire_bomb`/`energy_bomb`/`poison_bomb`) continuam fora — mecanismo de campo lançável pelo
+jogador não existe ainda.
 
 A `formula` é a mesma da magia de dano (#474): `min = level × levelFactor + ml × skillMin +
 baseMin` (idem `max`), com `levelFactor` 0,2 — o `level / 5` da referência. Runa sem `formula`
@@ -1719,11 +1731,19 @@ interface ConditionSpec {                 // declarado em content
   readonly effect: ConditionEffect;       // speed | buff | mana-shield | heal-over-time | damage-over-time
 }
 
+interface FieldStage {                    // declarado em content (#560)
+  readonly durationMs: number;
+  readonly condition?: ConditionSpec;     // ausente: estágio MUDO (só ocupa/bloqueia)
+}
+
 interface FieldSpec {                     // declarado em content
   readonly id: string;
   readonly durationMs: number;
   readonly shape: SpellArea;              // a MESMA geometria da magia/ability
-  readonly condition: ConditionSpec;
+  readonly condition?: ConditionSpec;     // #560: opcional — campo puramente bloqueante não tem
+  readonly stages?: readonly FieldStage[]; // #560: a cadeia `decayTo`; ausente é UM estágio só
+  readonly blocksMovement?: boolean;      // #560: Magic Wall/Wild Growth
+  readonly blocksProjectile?: boolean;    // #560: alimenta a LOS quando o M30-06 existir
 }
 ```
 
@@ -1832,14 +1852,45 @@ interface FieldSpec {                     // declarado em content
   Campo sem linha na tabela é MUDO — a mecânica do tique (acima) não muda, só a apresentação —,
   e o `session-state.world.fields` leva os campos ATIVOS para quem reanexa no meio da hunt,
   como `session-state.world.groundItems` já leva os cadáveres. Opcodes S2C `field-appear` (40) e
-  `field-disappear` (41). **Trocar de ESTÁGIO (a cadeia `decayTo` do fogo do Canary) continua
-  fora do escopo aqui**: o `sim` só tem UM campo por relançamento, sem a cadeia decrescente de
-  estágios — isso é o #560 (M31-05), ainda não implementado; o protocolo desta issue não reserva
-  opcode nenhum para isso, porque a forma de uma mensagem de estágio depende de como o #560
-  vier a representar a cadeia no `sim`.
+  `field-disappear` (41).
+- **A cadeia de estágios (`decayTo` do Canary, #560, M31-05).** `fieldSpecSchema.stages` é a
+  cadeia inteira — `items.xml:4212-4246`: o fire field 2118 (dano 20, 200 s) decai para 2119
+  (10, 148 s) e depois para 2120 (sem dano, 98 s) antes de sumir, e o `dragon-lord`/
+  `dragon-lord-hatchling` do catálogo já declaram os três estágios (`load.test.ts` prende os
+  números). `stages` AUSENTE é um estágio só, do próprio `durationMs`/`condition` do spec — todo
+  campo declarado antes desta issue continua bit a bit (`fieldStagesOf`, `content/schemas.ts`).
+  `TileFieldState` ganhou `stageIndex` (ausente é 0) e, só quando há mais de um estágio, a
+  cadeia INTEIRA (`stages`) — ela precisa viajar no estado porque `#onFieldStageAdvance` roda
+  bem depois de `applyField`, sem mais acesso ao `FieldSpec` que criou o campo. Um evento novo,
+  `FIELD_STAGE_ADVANCE`, troca de estágio no vencimento do atual — reagendando ele mesmo se
+  sobrar outro estágio, ou caindo em `FIELD_EXPIRE` no último —, cancela e reagenda o tique da
+  condição do estágio novo (nunca herda a cadência do estágio anterior) e emite
+  `field-stage-changed` (S2C opcode 42) com o `stageIndex` novo; o hospedeiro resolve a arte por
+  ÍNDICE em `appearances.fieldStages[id][stageIndex − 1]` (o índice 0 continua em
+  `appearances.fields`, como sempre) — campo sem entrada troca de estágio MUDO. Quem reanexa no
+  MEIO da cadeia recebe, no `session-state`, a arte do estágio ATUAL, não sempre a do nascimento.
+- **Campo bloqueante (Magic Wall, Wild Growth, #560).** `blocksMovement` (default falso) faz o
+  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro, diferente do desvio de
+  dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
+  `damageType`. Mecanismo: `Fields.blockedAt`/`blocksProjectileAt` (novos métodos em
+  `sim/fields.ts`) e `TileOccupancy.blockedAt` os combina com o mapa e com `TileOverrides`
+  (#728) — a MESMA composição de três fontes, uma pergunta só para `canOccupy`/`move`, o passo
+  guloso do monstro e o BFS do `walk-to` distante. Magic Wall (Canary id 2128) e Wild Growth
+  (rush wood, id 2130) são um estágio só, `blocking="1"`/`duration=20`/`decayTo=0` — 20 s e
+  sumiu, sem cadeia decrescente. `blocksProjectile` (também default falso) alimenta
+  `isSightClear` (`sim/line-of-sight.ts`, parâmetro novo e opcional) para quando o M30-06
+  importar a flag `unsight` do pacote de aparências — **nenhum conteúdo declara a flag hoje**
+  (Magic Wall no Canary é `blockSolid`, não `blockProjectile` — a segunda vem do pacote de
+  assets, não de `items.xml`), e por isso os chamadores de combate em `hunt.ts` continuam
+  passando só três argumentos: testado ligar os dez pontos de LOS de `hunt.ts` ao predicado
+  revelou que ele quebrava mira explícita num alvo fora do mapa de teste (a checagem de limites
+  do passeio, antes escondida atrás do atalho "sem camada de sight, sempre livre", passou a
+  rodar de verdade) — a fiação de produção fica para quando o M30-06 tiver conteúdo real e mapa
+  real para testar contra.
 
-**Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
-e a UI detalhada de buff.
+**Fora do escopo**, por decisão: runa de campo e parede jogável (Magic Wall/Wild Growth por
+mágica do jogador — #591), novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de
+buff.
 
 ## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
 
@@ -2251,6 +2302,7 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 8 | Wound Cleansing | 40 | healing (1 s) | 1 s | cura | 70 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
 | 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 · skill×attack | 39 |
+| 20 | Challenge (#589) | 30 | support (2 s) | 2 s | provocação: força o alvo, suspende a fuga · alvo, alcance 3 · 6 s | — |
 | 25 | Charge | 100 | support (2 s) | 2 s | haste +90 % / 5 s | — |
 | 28 | Whirlwind Throw | 40 | attack (2 s) | 6 s | dano · alvo, alcance 5 · skill+attack | 32 |
 | 33 | Groundshaker | 160 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador · skill+attack | 32 |
@@ -2259,8 +2311,11 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 55 | Protector | 200 | support (2 s) + focus (2 s) | 2 s | postura 13 s (−35 % causado / −15 % tomado) | — |
 | 60 | Blood Rage | 290 | support (2 s) + focus (2 s) | 2 s | postura 10 s (+25 % causado / +15 % tomado) | — |
 | 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave (3 tiles à frente) · skill×attack | 80 |
+| 40 | Inflict Wound (`utori kor`, novo #596) | 30 | attack (2 s) | 30 s | dano ao longo do tempo · alvo, alcance 1 · 50 a cada 2 s por 30 s | — |
 | 80 | Intense Wound Cleansing | 200 | healing (1 s) | **10 min** | cura | 500 |
 | 90 | **Fierce Berserk** (`exori gran`, novo #523) | 340 | attack (2 s) | 6 s | dano · círculo raio 1 no lançador · skill+2×attack | 90 |
+| 110 | **Annihilation** (`exori gran ico`, novo #596) | 300 | attack (2 s) | 30 s | dano · alvo, alcance 1 · skill×attack | — |
+| 150 | Chivalrous Challenge (#589) | 80 | support (2 s) | 2 s | provocação em área (raio 3): força o alvo, suspende a fuga · 12 s | — |
 
 Blood Rage e Protector eram level 20/mana 20 (um placeholder de bootstrap): o Canary real os
 pede level 60/mana 290 e level 55/mana 200. Groundshaker (mana 200→160) e Berserk (mana 125→115)
@@ -2273,7 +2328,6 @@ também tinham mana acima da real.
 | 1 | Lesser Ethereal Spear | 6 | attack (2 s) | 2 s | dano · alvo, alcance 7 | 9 |
 | 8 | Light Healing | 20 | healing (1 s) | 1 s | cura | 40 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
-| 20 | Divine Defiance* | 250 | support (2 s) + stance (10 s) | 10 s | postura 10 s | — |
 | 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
 | 23 | Ethereal Spear | 25 | attack (2 s) | 2 s | dano · alvo, alcance 7 | 25 |
 | 35 | Divine Healing | 160 | healing (1 s) | 1 s | cura | 250 |
@@ -2281,21 +2335,22 @@ também tinham mana acima da real.
 | 50 | Divine Caldera | 160 | attack (2 s) | 4 s | dano · círculo raio 3 no lançador | 150 |
 | 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
 | 55 | Swift Foot | 400 | support (2 s) + focus (10 s) | 10 s | haste +80 % / 10 s | — |
-| 60 | Ethereal Barrage* | 135 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 100 |
 | 60 | Salvation | 210 | healing (1 s) | 1 s | cura | 500 |
 | 60 | Sharpshooter | 450 | support (2 s) + focus (10 s) | 10 s | postura 10 s | — |
-| 70 | Divine Barrage* | 175 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 130 |
+| 70 | Holy Flash (`utori san`, novo #596) | 30 | attack (2 s) | 40 s | dano ao longo do tempo · alvo, alcance 3 · 20 a cada 3 s por ~27 s (tique aleatório 7-11, aproximado pela média) | — |
 | 90 | **Strong Ethereal Spear** (`exori gran con`, novo #523) | 55 | attack (2 s) | 8 s | dano · alvo, alcance 7 | 70 |
 
 Lesser Ethereal Spear e Ethereal Spear tinham alcance 5 (o real é 7) — Lesser também tinha
 cooldown 8 s (o real é 2 s, igual ao da versão normal). Sharpshooter era level 20/mana 250 (o
 real é 60/450). Swift Foot tinha cooldown próprio 4 s e o do grupo `focus` 2 s (os dois são 10 s
-no Canary, o mesmo prazo da postura). \* Divine Barrage, Ethereal Barrage e Divine Defiance não
-têm correspondente no Canary/TibiaWiki — duas varreduras do #523 (a segunda incluindo
+no Canary, o mesmo prazo da postura). Divine Barrage, Ethereal Barrage e Divine Defiance NÃO
+tinham correspondente no Canary/TibiaWiki — duas varreduras do #523 (a segunda incluindo
 `data-otservbr-global/` e `src/`, não só `data/scripts/spells/`) não acharam o nome nem a palavra
-mágica em nenhuma das três. Ficam como conteúdo próprio do Draconya, documentado no `_open` de
-cada uma, fora da conformidade de fórmula, e com remoção planejada (ADR 0037) — a remoção em si,
-com a migração de `botConfig` de quem já as configurou, é issue separada.
+mágica em nenhuma das três, e a decisão de 2026-09-25 na issue #596 (a captura do Huntera
+confirma independentemente: nenhuma das três aparece no menu de um paladino real) removeu as
+três do catálogo — `botConfig` que as referenciasse seria migrado, mas nenhum personagem real
+havia sido criado ainda. Divine Grenade e Ice/Terra Burst (Wheel of Destiny, `revelationStageWOD`)
+continuam fora — a Roda não existe (M41-03).
 
 **Sorcerer (escala por `magic`)**
 
@@ -2313,9 +2368,12 @@ com a migração de `botConfig` de quem já as configurou, é issue separada.
 | 15 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 16 | Death Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
 | 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 4 | 40 |
+| 20 | Strong Haste (`utani gran hur`, novo #596) | 100 | support (2 s) | 2 s | haste +70 % / 22 s | — |
 | 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 5 | 60 |
+| 26 | Ignite (`utori flam`, novo #596) | 30 | attack (2 s) | 30 s | dano ao longo do tempo · alvo, alcance 3 · 45 a cada 3 s por 75 s | — |
 | 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 8 | 155 |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
+| 34 | Electrify (`utori vis`, novo #596) | 30 | attack (2 s) | 30 s | dano ao longo do tempo · alvo, alcance 3 · 45 a cada 3 s por 75 s | — |
 | 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 5 | 150 |
 | 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 5 | 100 |
 | 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 4 | 110 |
@@ -2323,8 +2381,15 @@ com a migração de `botConfig` de quem já as configurou, é issue separada.
 | 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 250 |
 | 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
 | 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 125 |
+| 90 | **Ultimate Flame Strike** (`exori max flam`, novo #596) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
 | 100 | **Ultimate Energy Strike** (`exori max vis`, novo #523) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
 | 300† | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 10 s | dano · feixe 6 | 155 |
+| — | Cancel Magic Shield (`exana vita`, novo #596) | 50 | support (2 s) | 2 s | remove a própria condição `mana-shield`, sem prazo | — |
+
+Cancel Magic Shield entra no level 14, ao lado de Magic Shield — listada por último porque o
+mecanismo é diferente de toda outra magia da tabela: `effect.kind: 'remove-condition'` é NOVO
+desta issue (`spellEffectSchema`, `packages/sim/src/casting.ts`/`rulesets/hunt.ts`) e não agenda
+nada — remove a condição `mana-shield` do próprio lançador na hora, sem `expiresAtMs`.
 
 Os `X Strike` fortes (Strong Energy/Flame Strike) e Lightning tinham alcance 7 (o real é 3/4).
 Ice Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. † Great Death
@@ -2352,28 +2417,52 @@ Wheel, o que o ADR 0037 aceita como resultado correto.
 | 18 | Heal Friend (`exura sio`) | 120 | healing (1 s) | 1 s | cura, alvo em terceiro alcance 5 | 60 |
 | 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 4 | 35 |
 | 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
+| 20 | Strong Haste (`utani gran hur`, novo #596) | 100 | support (2 s) | 2 s | haste +70 % / 22 s | — |
 | 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
 | 36 | Mass Healing | 150 | healing (1 s) | 2 s | cura · círculo raio 3 no lançador | 200 |
 | 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 120 |
 | 40 | Strong Ice Wave | 170 | attack (2 s) | 8 s | dano · onda 3 | 150 |
+| 50 | Envenom (`utori pox`, novo #596) | 30 | attack (2 s) | 40 s | dano ao longo do tempo · alvo, alcance 3 · 45 a cada 3 s por 75 s | — |
 | 55 | Wrath of Nature | 700 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 6 no lançador | 175 |
 | 60 | Eternal Winter | 1050 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 200 |
 | 70 | Strong Terra Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 115 |
-| 80 | Forked Thorns* | 180 | attack (2 s) | 6 s | dano · círculo raio 1 no alvo, alcance 5 | 97 |
 | 80 | Strong Ice Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 3 | 115 |
+| 90 | **Ultimate Terra Strike** (`exori max tera`, novo #596) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
+| 100 | **Ultimate Ice Strike** (`exori max frigo`, novo #596) | 100 | attack (2 s) + ultimatestrikes (30 s) | 30 s | dano · alvo, alcance 3 | 180 |
+| — | Cancel Magic Shield (`exana vita`, novo #596) | 50 | support (2 s) | 2 s | remove a própria condição `mana-shield`, sem prazo | — |
 
 Mass Healing tinha raio 1 (9 tiles) — o Canary real é `AREA_CIRCLE3X3`, raio 3 (37 tiles). Heal
 Friend saiu da lista de excluídas desde o §26 (ADR 0035 d.10); o `_open` dizia "não auditado
 nesta task" e o #523 confirmou os números reais (level 14→18, mana 30→120). Strong Ice Wave
 tinha onda 5 e cooldown 4 s — o Canary real é `AREA_SHORTWAVE3` (3 fileiras contando a do `3`, #679) e cooldown 8 s. Ice
-Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. \* Forked Thorns não
-tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/` e
-`src/` também) — conteúdo próprio, remoção planejada (ADR 0037), ver `_open`.
+Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real. Forked Thorns NÃO
+tinha correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/`
+e `src/` também) — a decisão de 2026-09-25 na issue #596 removeu-a do catálogo, como Divine
+Barrage/Ethereal Barrage/Divine Defiance (ver a nota do Paladin, acima). Ice Burst e Terra Burst
+(Wheel of Destiny, `revelationStageWOD("Twin Burst")`) continuam fora — M41-03.
 
-**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Fair Wound Cleansing, Divine Grenade, Terra Burst (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo, porque o Tibia não dá magia nenhuma antes da escolha de vocação — não há "fórmula do Canary" para elas.
+Ignite/Electrify/Envenom/Inflict Wound/Holy Flash usam o mecanismo `Condition:addDamage` do
+Canary (M31-02) — um `amount` FIXO a cada `intervalMs`, por `durationMs` (`spellEffectSchema.
+damage-over-time`). Holy Flash é a exceção: `math.random(7, 11)` tiques (número aleatório), dano
+por tique fixo (20) — o schema não modela duração aleatória, e a tabela usa a MÉDIA (9 tiques,
+27 s), preservando o dano total esperado (180) com ±40 de erro. Curse (`utori mort`, DOT de morte
+do Sorcerer, 17 estágios de dano DECRESCENTE) ficou de fora: a forma não é um valor fixo — é uma
+curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `EXCLUDED_SPELLS` em
+`load.test.ts`).
+
+**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Curse (dano ao longo do tempo, forma não reconhecida — ver acima); Shield Bash, Shield Slam (defesa de escudo); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Divine Grenade, Executioner's Throw, Ice Burst, Terra Burst, Fair Wound Cleansing, Great Death Beam (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing. Challenge/Chivalrous Challenge (#589) e Cancel Magic Shield (#596) SAÍRAM desta lista — estão implementadas, acima. As três magias genéricas pré-vocação (`heal`, `strike`, `blast`) e as quatro sem fonte no Canary (`divine-defiance`, `divine-barrage`, `ethereal-barrage`, `forked-thorns`) saíram do CATÁLOGO no #596 — o Tibia não dá magia nenhuma antes da escolha de vocação, e não havia "fórmula do Canary" para nenhuma das sete; Cure Poison é a única magia que segue sem `vocationId`.
 
 ## Em aberto
 
+- `[ABERTO]` (#589) Challenge no Canary exige a vocação Elite Knight
+  (`spell:vocation("elite knight;true")`); o Draconya ainda não modela promoção de vocação (#566,
+  aberta, sem PR), então a magia entra com `vocationId: "knight"` sozinho, sem o gate. Chivalrous
+  Challenge não tem esse problema — o Canary já aceita `"knight;true"` OU `"elite knight;true"`.
+  Quando #566 fechar, Challenge ganha o mesmo gate que qualquer outra magia de promoção. A
+  Chivalrous Challenge também diverge do Canary por decisão (DT-03 da issue): vira `circle raio 3
+  centrado no lançador` em vez do chain-picker exato (até 5 monstros à distância, sem reward
+  boss/invocação) — o Draconya não tem chain-picker nem Wheel of Destiny, e não força
+  `changeTargetDistance` (o atirador melee temporário) — ver "Fora do escopo" da issue #589.
 - `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
   do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.

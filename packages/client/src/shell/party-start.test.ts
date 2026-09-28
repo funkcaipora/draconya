@@ -5,14 +5,15 @@ import { readFile } from 'node:fs/promises';
 
 // A decisão de "Iniciar com o time" (RF-03), PURA: líder/membro/sem party, patch só quando a
 // seleção diverge do estado REAL, e NENHUMA decisão produz `enter-hunt` — o início da party
-// vai por HTTP (`configure` + `start`), nunca pela intenção de hunt solo.
+// vai por HTTP (`configure` + `start`), nunca pela intenção de hunt solo. Não há mais eixo de
+// dificuldade desde o #584 (ADR 0039, fim do pull por dificuldade).
 
 const forming = (over: Partial<PartyView> = {}): PartyView => ({
   id: 'party-1',
   leaderId: 'me',
   mode: 'split',
   huntId: 'rat-cellars',
-  difficulty: 'cautious',
+  difficulty: 'default',
   minLevel: 10,
   vocationTargets: { knight: 2, paladin: 1 },
   shareCosts: true,
@@ -30,18 +31,17 @@ const forming = (over: Partial<PartyView> = {}): PartyView => ({
 
 describe('startWithTeam (RF-03)', () => {
   it('the leader with an unchanged selection gets patch: null — only the start goes out', () => {
-    const decision = startWithTeam(forming(), 'me', 'rat-cellars', 'cautious');
+    const decision = startWithTeam(forming(), 'me', 'rat-cellars');
     expect(decision).toEqual({ enabled: true, reason: null, patch: null });
   });
 
   it('a different hunt produces the patch with the REAL state passed through', () => {
     // Mutação que mata: inventar shareCosts/splitLoot/minLevel/vocationTargets no patch —
     // o início não pode reescrever o que o líder configurou.
-    const decision = startWithTeam(forming(), 'me', 'dragon-lair', 'bold');
+    const decision = startWithTeam(forming(), 'me', 'dragon-lair');
     expect(decision.enabled).toBe(true);
     expect(decision.patch).toEqual({
       huntId: 'dragon-lair',
-      difficulty: 'bold',
       minLevel: 10,
       vocationTargets: { knight: 2, paladin: 1 },
       shareCosts: true,
@@ -49,54 +49,47 @@ describe('startWithTeam (RF-03)', () => {
     });
   });
 
-  it('a different pull on the same hunt produces the patch, and only difficulty changes', () => {
-    const decision = startWithTeam(forming(), 'me', 'rat-cellars', 'reckless');
-    expect(decision.patch).toMatchObject({ huntId: 'rat-cellars', difficulty: 'reckless' });
-  });
-
   it('a null minLevel passes through as the server floor (1), never as an invented value', () => {
-    const decision = startWithTeam(forming({ minLevel: null }), 'me', 'dragon-lair', 'bold');
+    const decision = startWithTeam(forming({ minLevel: null }), 'me', 'dragon-lair');
     expect(decision.patch?.minLevel).toBe(1);
   });
 
   it('a non-leader is disabled with the reason, and no patch is built', () => {
-    const decision = startWithTeam(forming(), 'bob', 'dragon-lair', 'bold');
+    const decision = startWithTeam(forming(), 'bob', 'dragon-lair');
     expect(decision).toEqual({ enabled: false, reason: 'Só o líder inicia com o time.', patch: null });
   });
 
-  it('without a party the decision is disabled, and without a hunt/pull selection too', () => {
-    expect(startWithTeam(null, 'me', 'rat-cellars', 'cautious'))
+  it('without a party the decision is disabled, and without a hunt selection too', () => {
+    expect(startWithTeam(null, 'me', 'rat-cellars'))
       .toEqual({ enabled: false, reason: 'Você não está numa party.', patch: null });
-    expect(startWithTeam(forming(), 'me', null, null))
-      .toEqual({ enabled: false, reason: 'Escolha a caçada e o tamanho do pull.', patch: null });
-    expect(startWithTeam(forming(), 'me', 'rat-cellars', null))
-      .toEqual({ enabled: false, reason: 'Escolha a caçada e o tamanho do pull.', patch: null });
+    expect(startWithTeam(forming(), 'me', null))
+      .toEqual({ enabled: false, reason: 'Escolha a caçada.', patch: null });
   });
 
   it('a solo party (leader alone) cannot start — the server would refuse not-enough-members', () => {
     const decision = startWithTeam(
-      forming({ members: [{ characterId: 'me', name: 'Eu' }] }), 'me', 'dragon-lair', 'bold',
+      forming({ members: [{ characterId: 'me', name: 'Eu' }] }), 'me', 'dragon-lair',
     );
     expect(decision).toEqual({ enabled: false, reason: 'Uma party precisa de pelo menos dois.', patch: null });
   });
 
   it('a party already hunting cannot start again', () => {
-    const decision = startWithTeam(forming({ state: 'hunting', sessionId: 's1' }), 'me', 'dragon-lair', 'bold');
+    const decision = startWithTeam(forming({ state: 'hunting', sessionId: 's1' }), 'me', 'dragon-lair');
     expect(decision).toEqual({ enabled: false, reason: 'A party já está caçando.', patch: null });
   });
 
   it('NO decision ever produces an enter-hunt intent', () => {
     const cases: Array<Parameters<typeof startWithTeam>> = [
-      [forming(), 'me', 'rat-cellars', 'cautious'],
-      [forming(), 'me', 'dragon-lair', 'bold'],
-      [forming(), 'bob', 'dragon-lair', 'bold'],
-      [forming({ state: 'hunting', sessionId: 's1' }), 'me', 'dragon-lair', 'bold'],
-      [null, 'me', 'rat-cellars', 'cautious'],
-      [forming(), 'me', null, null],
-      [forming({ members: [{ characterId: 'me', name: 'Eu' }] }), 'me', 'dragon-lair', 'bold'],
+      [forming(), 'me', 'rat-cellars'],
+      [forming(), 'me', 'dragon-lair'],
+      [forming(), 'bob', 'dragon-lair'],
+      [forming({ state: 'hunting', sessionId: 's1' }), 'me', 'dragon-lair'],
+      [null, 'me', 'rat-cellars'],
+      [forming(), 'me', null],
+      [forming({ members: [{ characterId: 'me', name: 'Eu' }] }), 'me', 'dragon-lair'],
     ];
-    for (const [current, me, huntId, difficulty] of cases) {
-      const decision = startWithTeam(current, me, huntId, difficulty);
+    for (const [current, me, huntId] of cases) {
+      const decision = startWithTeam(current, me, huntId);
       expect(JSON.stringify(decision)).not.toContain('enter-hunt');
     }
   });

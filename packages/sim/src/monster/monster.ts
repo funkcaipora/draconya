@@ -432,21 +432,30 @@ export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Pre
  * Pura e recalculada a cada decisão — não é estado guardado, como o `attackReady` é: fugir é
  * uma FUNÇÃO do HP atual, e o HP já é o estado. Guardar um segundo booleano derivado dele
  * divergiria na primeira cura que não passasse por aqui.
+ *
+ * Provocação (#589, Canary `Monster::isFleeing`: `challengeFocusDuration <= 0`) suspende a fuga
+ * enquanto a condição `'challenge'` vale — o mesmo lookup O(1) em `Conditions` que qualquer
+ * outra condição já usa, sem campo novo.
  */
 export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
   return definition.runOnHealth !== undefined
     && monster.alive
-    && monster.health <= definition.runOnHealth;
+    && monster.health <= definition.runOnHealth
+    && monster.conditions.get('challenge') === null;
 }
 
 /**
  * O tipo de dano de um campo, quando ele CAUSA dano ao longo do tempo (CMB-07). Um campo de
  * outro efeito (velocidade, cura) não tem `damageType` — nunca conta para `canWalkOnFieldType`,
  * porque o Tibia só tem o par `canWalkOn*` para fogo/veneno/energia (o resto do switch do TFS/
- * Canary devolve sempre `true`).
+ * Canary devolve sempre `true`). Estágio SEM condição (#560: Magic Wall, Wild Growth, o último
+ * estágio mudo do fire field) também devolve `null` — não é dano, é bloqueio, e quem julga
+ * bloqueio é `canOccupy`/`TileOccupancy`, não este predicado.
  */
 function fieldDamageType(field: TileFieldState): DamageType | null {
-  return field.condition.effect.kind === 'damage-over-time' ? field.condition.effect.damageType : null;
+  return field.condition !== undefined && field.condition.effect.kind === 'damage-over-time'
+    ? field.condition.effect.damageType
+    : null;
 }
 
 /**
