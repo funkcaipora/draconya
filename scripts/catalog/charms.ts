@@ -186,6 +186,7 @@ export function readCharmCatalog(ctx: CatalogImportContext): CharmCatalog {
     .sort((a, b) => a - b);
   for (const position of positions) {
     const raw = table[String(position)];
+    if (raw === undefined) continue;
     const catalogSource: CatalogSource = { engine: 'canary', commit: ctx.canaryCommit, path };
     const result = convertCharm(position - 1, raw, resolved, catalogSource);
     if (result !== undefined) converted.push(result);

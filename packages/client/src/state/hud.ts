@@ -118,6 +118,15 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** Um Charm do catálogo (M39-02, #602, ADR 0053 d.3): custo, chance e categoria por tier. */
+export type CharmDefinition = Catalogue['charms'][number];
+/**
+ * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): o registro CRU que o
+ * servidor manda — pontos/echoes gastos, tier de cada charm e as atribuições por monstro. A
+ * tela deriva ganho/disponível cruzando com `CharmDefinition`/`BestiaryCounts`, do mesmo jeito
+ * que já deriva o bônus de XP do Bestiário (`bestiary-progress.ts`).
+ */
+export type CharmsRegister = Readonly<S2CProps<'charms'>>;
 /** A party (#196): quem está nela, do `session-state` e do `party-state`. */
 export type PartyView = Readonly<S2CProps<'party-state'>>;
 export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
@@ -290,6 +299,11 @@ export interface HudState {
    */
   readonly bestiary: BestiaryCounts | null;
   /**
+   * A economia de Charms (M39-02, #602). `null` até chegar — o primeiro segundo de toda
+   * conexão, ou um nó anterior a esta issue. SUBSTITUI: é o registro inteiro, não um delta.
+   */
+  readonly charms: CharmsRegister | null;
+  /**
    * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
    * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
    * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
@@ -362,6 +376,7 @@ export const INITIAL_HUD: HudState = {
   slotStates: {},
   slotResults: {},
   bestiary: null,
+  charms: null,
   party: null,
   partyBag: null,
   lastSettlement: null,

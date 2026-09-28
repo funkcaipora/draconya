@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import type { CharmsState } from '@draconya/sim';
 import { ReceiptStore, type SessionReceipt } from './receipts.js';
 import { connectTestRedis } from './testing/redis.js';
 
@@ -134,7 +135,7 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     // conferência: campo que não entra em `parseReceipt` some no caminho de volta sem erro.
     const store = new ReceiptStore(redis);
     const characterId = randomUUID();
-    const charms = {
+    const charms: CharmsState = {
       pointsSpent: 240, echoesSpent: 50, tiers: { wound: 1 }, assignments: { wound: 'rat' }, version: 1,
     };
     await store.save(receiptOf(randomUUID(), characterId, { charms }));

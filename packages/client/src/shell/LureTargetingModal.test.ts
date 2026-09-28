@@ -16,7 +16,7 @@ const catalogue: Catalogue = {
   items: [],
   ammunition: [],
   vocations: [],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1,
     slots: { heal: 2, potion: 4, attack: 2, rune: 2, support: 2 },

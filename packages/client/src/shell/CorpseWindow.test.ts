@@ -21,7 +21,7 @@ async function source(): Promise<string> {
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 8,
+  hunts: [], monsters: [], ammunition: [], vocations: [], charms: [], vocationLevel: 8,
   bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
   items: [
     { id: 'gem', name: 'Gem', appearanceId: 5, weight: 1, slot: null, twoHanded: false },

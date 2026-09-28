@@ -23,7 +23,7 @@ async function render(): Promise<string> {
 const catalogue: Catalogue = {
   hunts: [],
   monsters: [],
-  vocations: [], vocationLevel: 8,
+  vocations: [], charms: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],

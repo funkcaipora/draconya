@@ -457,7 +457,7 @@ describe('actionTab — as três abas (RF-03)', () => {
 
 describe('entriesOf — por level exigido e depois por nome', () => {
   const catalogue: Catalogue = {
-    hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 0, items: [],
+    hunts: [], monsters: [], ammunition: [], vocations: [], charms: [], vocationLevel: 0, items: [],
     bot: {
       vocabularyVersion: 2,
       spells: [

@@ -54,6 +54,10 @@ export interface GameDependencies {
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
   /** O catálogo de munição abstrata, para `select-ammo` (#152). */
   readonly ammunitionCatalog?: SessionHostOptions['ammunitionCatalog'];
+  /** O catálogo dos 25 Charms, para `charm-unlock`/`charm-assign` (M39-02, #602). */
+  readonly charmCatalog?: SessionHostOptions['charmCatalog'];
+  /** A ficha de Bestiário de cada monstro, para a economia de Charms derivar pontos e completude. */
+  readonly charmBestiaryEntries?: SessionHostOptions['charmBestiaryEntries'];
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
@@ -149,6 +153,12 @@ export function createGame(
       ...(dependencies.ammunitionCatalog === undefined
         ? {}
         : { ammunitionCatalog: dependencies.ammunitionCatalog }),
+      ...(dependencies.charmCatalog === undefined
+        ? {}
+        : { charmCatalog: dependencies.charmCatalog }),
+      ...(dependencies.charmBestiaryEntries === undefined
+        ? {}
+        : { charmBestiaryEntries: dependencies.charmBestiaryEntries }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
       ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),

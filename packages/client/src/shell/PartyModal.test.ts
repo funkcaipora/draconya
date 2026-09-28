@@ -53,7 +53,7 @@ const catalogue: Catalogue = {
     { id: 'knight', name: 'Cavaleiro', healthPerLevel: 1, manaPerLevel: 1, capacityPerLevel: 1, startingWeaponItemId: 'sword' },
     { id: 'paladin', name: 'Paladino', healthPerLevel: 1, manaPerLevel: 1, capacityPerLevel: 1, startingWeaponItemId: 'bow' },
   ],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 function fakeClient(over: Partial<PartyClient> = {}): PartyClient {

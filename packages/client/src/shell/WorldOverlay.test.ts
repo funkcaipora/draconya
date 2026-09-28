@@ -33,7 +33,7 @@ const mockCatalogue: Catalogue = {
   items: [],
   ammunition: [],
   vocations: [],
-  vocationLevel: 8,
+  charms: [], vocationLevel: 8,
 };
 
 async function render(element: ReactElement): Promise<string> {

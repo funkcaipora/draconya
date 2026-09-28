@@ -22,11 +22,13 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, RemovedBotSlot, Skill, Vocation,
+  Ammunition, Appearances, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot, Skill,
+  Vocation,
 } from '@draconya/content';
 import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
 import type {
-  AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
+  AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
+  CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
   PartySettingsPatch, Place, SlotRefusal, SlotState, TakeLootRefusal, TileAppearanceChange,
   UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
@@ -139,6 +141,17 @@ export interface SessionHostOptions {
    */
   readonly ammunitionCatalog?: ReadonlyMap<string, Ammunition>;
   /**
+   * O catálogo dos 25 Charms (M39-02, #602, ADR 0053 d.3), para `charm-unlock`/`charm-assign`.
+   * Ausente: nada se desbloqueia, e a recusa é honesta — como os itens.
+   */
+  readonly charmCatalog?: ReadonlyMap<string, Charm>;
+  /**
+   * A ficha de Bestiário de cada monstro — só `toKill`/`charmsPoints` (ADR 0053 d.1) —, para
+   * `Charms.unlock`/`assign` derivarem pontos ganhos e a completude do alvo. Ausente: nenhum
+   * ponto de Charm é ganho, e nenhum major é atribuível (a mesma degradação honesta de acima).
+   */
+  readonly charmBestiaryEntries?: ReadonlyMap<string, CharmBestiaryEntry>;
+  /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
    */
@@ -203,6 +216,8 @@ export interface SessionHostOptions {
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
+const EMPTY_CHARMS: ReadonlyMap<string, Charm> = new Map();
+const EMPTY_CHARM_ENTRIES: ReadonlyMap<string, CharmBestiaryEntry> = new Map();
 
 /**
  * Por que o item não entrou, em português e para o jogador.
@@ -232,6 +247,29 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
 const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
   'level-too-low': 'Você ainda não tem o level dessa munição.',
+};
+
+/** A recusa de `charm-unlock` (M39-02, #602, ADR 0053 d.3), em palavras. */
+const CHARM_UNLOCK_REFUSAL: Readonly<Record<CharmUnlockRefusal, string>> = {
+  'unknown-charm': 'Esse Charm não existe.',
+  'already-max-tier': 'Esse Charm já está no tier máximo.',
+  'not-enough-points': 'Você não tem pontos de Charm suficientes.',
+  'not-enough-echoes': 'Você não tem Minor Charm Echoes suficientes.',
+};
+
+/** A recusa de `charm-assign` (ADR 0053 d.4), em palavras. */
+const CHARM_ASSIGN_REFUSAL: Readonly<Record<CharmAssignRefusal, string>> = {
+  'unknown-charm': 'Esse Charm não existe.',
+  'not-unlocked': 'Você precisa desbloquear esse Charm antes de atribuí-lo.',
+  'no-slots': 'Você não tem mais slots de Charm disponíveis.',
+  'monster-not-complete': 'Você ainda não completou a ficha desse monstro no Bestiário.',
+  'category-taken': 'Essa criatura já tem um Charm dessa categoria atribuído.',
+};
+
+/** A recusa de `charm-remove` (ADR 0053 d.4), em palavras. */
+const CHARM_REMOVE_REFUSAL: Readonly<Record<CharmRemoveRefusal, string>> = {
+  'unknown-charm': 'Esse Charm não existe.',
+  'not-assigned': 'Esse Charm não está atribuído a nenhuma criatura.',
 };
 
 /** A recusa de `open-corpse`/`take-loot` (#722, ADR 0048 d.4), em palavras — FUN-73. */
@@ -978,6 +1016,13 @@ export class SessionHost {
   /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
   readonly #nameByCharacter = new Map<string, string>();
   /**
+   * O Premium do ticket (ADR 0035 D3), para os slots de Charm (2 Free/6 Premium, ADR 0053 d.4)
+   * — a hunt já tem o dela (`premiumByCharacter` do ruleset), mas a Cidade não tinha NENHUM
+   * lugar para isso, e Charms se gerem de qualquer sessão (ADR 0052 d.4). Vive como nome/cores:
+   * entra quando a sessão é preparada, vive até `release`; ausente é Free, o lado seguro.
+   */
+  readonly #premiumByCharacter = new Map<string, boolean>();
+  /**
    * As cores do outfit, do ticket (FUN-104). Só `creature-appear` e `session-state` leem; o
    * `sim` não conhece cor, e o snapshot não a carrega — é apresentação, não simulação. Como o
    * nome, entram quando a sessão é preparada e vivem até `release`: uma escolha nova feita no
@@ -1261,6 +1306,7 @@ export class SessionHost {
     // party (#400): sem ele, a penalidade de morte do recém-chegado usaria o default do líder.
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     ruleset.setMemberPremium?.(hosted.session, characterId, member?.initialCharacter.premium ?? false);
+    this.#premiumByCharacter.set(characterId, member?.initialCharacter.premium ?? false);
     // Registro sob lease ANTES do local: registro recusado não pode deixar rastro.
     await this.#register(characterId, hosted.session, accountId);
     // Nome e cores ANTES de `#createLocal`, como no caminho da party nova (FUN-104).
@@ -1415,6 +1461,7 @@ export class SessionHost {
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
     this.#colorsByCharacter.delete(characterId);
+    this.#premiumByCharacter.delete(characterId);
     this.#botByCharacter.delete(characterId);
     this.#restingSince.delete(characterId);
 
@@ -1536,6 +1583,22 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL posição; o texto vem do conteúdo, nunca
         // do cliente (#729, ADR 0050 d.7).
         this.#requestLook(viewer, message.position);
+        return;
+      case 'charm-unlock':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL charm; o custo (derivado do Bestiário) e
+        // o tier são do servidor. Aceita na Cidade E na hunt, sem rolagem (ADR 0052 d.2/d.4) —
+        // como `equip`/`select-ammo`, processada na chegada, sem passar pelo ruleset.
+        this.#requestCharmUnlock(viewer, message.charmId);
+        return;
+      case 'charm-assign':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL charm e QUAL monstro do bestiário; slot,
+        // categoria e a ficha completa do alvo (major) são do servidor (ADR 0053 d.4).
+        this.#requestCharmAssign(viewer, message.charmId, message.monsterId);
+        return;
+      case 'charm-remove':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL charm; o custo em gold (`level × 100`)
+        // é calculado e debitado pelo servidor, pelo ledger (invariante 10).
+        this.#requestCharmRemove(viewer, message.charmId);
         return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
@@ -2215,6 +2278,90 @@ export class SessionHost {
     const stats = this.#statsOf(character);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+  }
+
+  /** O registro cru de Charms (M39-02, #602), na forma que `charms` (S2C) manda. */
+  #charmsMessageFor(character: CharacterRuntime): S2CMessage {
+    return { type: 'charms', ...character.charms.getState() };
+  }
+
+  /**
+   * Desbloquear o próximo tier de um Charm (M39-02, #602, ADR 0053 d.3). INTENÇÃO: o cliente
+   * diz QUAL charm; o custo (pontos de Charm derivados do Bestiário, ou echoes derivados dos
+   * tiers major já desbloqueados) é do servidor. Aceita em QUALQUER sessão — Cidade e hunt —,
+   * porque não há rolagem (ADR 0052 d.2/d.4): processada na chegada, como `equip`, sem passar
+   * pelo ruleset.
+   */
+  #requestCharmUnlock(viewer: Viewer, charmId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const catalogue = this.#options.charmCatalog ?? EMPTY_CHARMS;
+    const entries = this.#options.charmBestiaryEntries ?? EMPTY_CHARM_ENTRIES;
+    const result = character.charms.unlock(charmId, catalogue, character.bestiary, entries);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CHARM_UNLOCK_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    this.#sendToViewersOf(hosted, character.id, this.#charmsMessageFor(character));
+  }
+
+  /**
+   * Atribuir um Charm desbloqueado a um monstro do bestiário (ADR 0053 d.4). `monsterId` é o
+   * id de CONTEÚDO (`catalogue.monsters[].id`), nunca uma criatura viva — Charms atacam por
+   * RAÇA. O Premium (2 Free/6 slots) vem do ticket (`#premiumByCharacter`), como em qualquer
+   * outra sessão (ADR 0035 D3).
+   */
+  #requestCharmAssign(viewer: Viewer, charmId: string, monsterId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const catalogue = this.#options.charmCatalog ?? EMPTY_CHARMS;
+    const entries = this.#options.charmBestiaryEntries ?? EMPTY_CHARM_ENTRIES;
+    const premium = this.#premiumByCharacter.get(character.id) ?? false;
+    const result = character.charms.assign(
+      charmId, monsterId, catalogue, character.bestiary, entries, { premium },
+    );
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CHARM_ASSIGN_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    this.#sendToViewersOf(hosted, character.id, this.#charmsMessageFor(character));
+  }
+
+  /**
+   * Remover a atribuição de um Charm (ADR 0053 d.4): custa `level × 100` gold pelo ledger
+   * (invariante 10) — o mesmo caminho de `#requestSellItems` para o gold entrar/sair pela
+   * sessão certa (agregado só em hunt privada; na Cidade só `goldDelta`, drenado no extrato de
+   * estado durável). O gold é conferido ANTES de mexer no `sim`: sem saldo, nada muda.
+   */
+  #requestCharmRemove(viewer: Viewer, charmId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (character.charms.assignmentOf(charmId) === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CHARM_REMOVE_REFUSAL['not-assigned'] });
+      return;
+    }
+    const fee = character.level * 100;
+    const balance = character.gold + character.goldDelta;
+    if (balance < fee) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Você não tem gold suficiente para remover esse Charm.' });
+      return;
+    }
+    const result = character.charms.remove(charmId);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: CHARM_REMOVE_REFUSAL[result.reason] });
+      return;
+    }
+    character.goldDelta -= fee;
+    if (hosted.session.ruleset.shared !== true) {
+      hosted.session.credit(viewer.characterId, 'goldSpent', fee);
+    }
+    this.#markDirty(character.id);
+    this.#sendToViewersOf(hosted, character.id, this.#charmsMessageFor(character));
   }
 
   /**
@@ -3161,6 +3308,9 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E a economia de Charms (M39-02, #602), pela mesma razão do Bestiário: sem isto, quem
+    // reconecta veria os Charms zerados até a próxima intenção aceita.
+    if (participant !== undefined) viewer.send(this.#charmsMessageFor(participant));
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -4382,6 +4532,7 @@ export class SessionHost {
     if (initialCharacter?.outfitColors !== undefined) {
       this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
     }
+    this.#premiumByCharacter.set(characterId, initialCharacter?.premium ?? false);
     this.#createLocal(characterId, session, accountId);
     for (const other of others) {
       // A Cidade dele já foi deixada no loop acima, ANTES do `#register` — aqui só falta o
@@ -4394,6 +4545,7 @@ export class SessionHost {
       const member = party?.members.find((m) => m.characterId === other.id);
       if (member?.initialCharacter.name !== undefined) this.#nameByCharacter.set(other.id, member.initialCharacter.name);
       if (member?.initialCharacter.outfitColors !== undefined) this.#colorsByCharacter.set(other.id, member.initialCharacter.outfitColors);
+      this.#premiumByCharacter.set(other.id, member?.initialCharacter.premium ?? false);
       if (member !== undefined) this.#adoptTicketBotConfig(other.id, session, member.initialCharacter);
     }
     this.#adoptTicketBotConfig(characterId, session, initialCharacter);

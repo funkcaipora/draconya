@@ -322,6 +322,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           vocations: message.vocations,
           vocationLevel: message.vocationLevel,
           ...(message.bestiary === undefined ? {} : { bestiary: message.bestiary }),
+          // Os 25 Charms (M39-02, #602, ADR 0053 d.3): custo, chance e categoria de cada um,
+          // fixados na sessão — a tela do Cyclopedia lê daqui.
+          charms: message.charms,
         },
       }));
       return;
@@ -356,6 +359,21 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // servidor manda no attach e sempre que um contador muda (FUN-113), e somar aqui daria
       // um Bestiário que diverge do dele na primeira reconexão — que reenvia o mesmo total.
       hud.set((state) => ({ ...state, bestiary: message.counts }));
+      return;
+
+    case 'charms':
+      // SUBSTITUI, como o Bestiário: é o registro INTEIRO (pontos/echoes gastos, tiers,
+      // atribuições), não um delta — o servidor manda no attach e a cada intenção aceita
+      // (M39-02, #602, ADR 0052 d.1).
+      hud.set((state) => ({
+        ...state,
+        charms: {
+          pointsSpent: message.pointsSpent,
+          echoesSpent: message.echoesSpent,
+          tiers: message.tiers,
+          assignments: message.assignments,
+        },
+      }));
       return;
 
     case 'bot-config-result':

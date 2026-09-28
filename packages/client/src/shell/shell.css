@@ -1083,6 +1083,21 @@ body {
 .cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
 .cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
 
+/* ---- Cyclopedia: aba Charms (M39-02, #602, ADR 0052/0053) --------------------------------- */
+.cyclopedia-modal-charm-list {
+  display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0;
+  max-height: 424px; scrollbar-width: thin;
+}
+.cyclopedia-modal-charm-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 10px;
+  border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1);
+  font: 8.5px var(--font-mono); color: var(--parchment-1);
+}
+.cyclopedia-modal-charm-name { display: flex; align-items: center; gap: 6px; min-width: 160px; }
+.cyclopedia-modal-charm-tier { color: var(--text-muted); min-width: 48px; }
+.cyclopedia-modal-charm-target { color: var(--parchment-2); flex: 1 1 auto; min-width: 120px; }
+.cyclopedia-modal-charm-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). */
 .bot-category-head { display: flex; align-items: baseline; gap: 6px; }
 .bot-category-head strong { flex: 1 1 auto; }

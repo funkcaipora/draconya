@@ -4,14 +4,18 @@
 FUN-113 (o contador de abates por monstro é permanente, os cinco marcos fecham e cada um dá
 +1 % de XP PvE para sempre) e, desde o #601, o Bestiário do Canary (estágio por monstro,
 estrelas de dificuldade, ocorrência e pontos de Charm — os dois primeiros DERIVADOS do mesmo
-contador, nunca guardados à parte). Faltam as recompensas especiais por monstro do PRD (§18.4),
-a regra de Guild War (§18.5, que não tem Guild War para valer) e a ECONOMIA de Charms — gastar
-pontos em runa, atribuir a um monstro, remover (#602) — e o efeito deles em combate (#603).
+contador, nunca guardados à parte). Desde o #602, a ECONOMIA de Charms existe: os 25 Charms
+do Canary `main` importados para `content/data/charms/generated/`, o registro `charms`
+(ADR 0052 d.1 — primeira issue a materializar o padrão) e as três intenções (`charm-unlock`,
+`charm-assign`, `charm-remove`), aceitas na Cidade e na hunt (ADR 0052 d.4). Faltam as
+recompensas especiais por monstro do PRD (§18.4), a regra de Guild War (§18.5, que não tem
+Guild War para valer) e o EFEITO dos Charms em combate — Wound causando dano, Dodge esquivando,
+etc. (#603, que abre o `combat-v4`).
 **PRD:** §18
 **Épico:** E7
 **ADRs:** [0053](../adr/0053-bestiary-xp-line-kept-and-charms-added.md) (decisão sobre este
 sistema), [0052](../adr/0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
-(estado durável do endgame, ainda não usado por este sistema — ver Divergências)
+(estado durável do endgame — a economia de Charms é a primeira a usá-lo)
 
 ## Comportamento
 
@@ -80,10 +84,14 @@ Tibia mostra por monstro (Canary `Bestiary`/TFS `bestiary`, conferido monstro a 
 uma delas. `packages/server/src/game/catalogue.ts` publica a ficha em
 `catalogue.monsters[].bestiary` (os seis campos que a tela precisa; `class`/`race`/`raceId` ficam
 de fora — `class` já viaja solto no monstro, e `race`/`raceId` seguem sem consumidor); o cliente
-DERIVA estágio e pontos, nunca guarda os dois (`shell/bestiary-progress.ts`). **`sim` continua sem
-ler `entries`**, porque estágio e pontos de Charm não mudam resultado de jogo nenhum ainda — só a
-ECONOMIA de Charms (gastar ponto, atribuir a um monstro, remover, #602) e o efeito deles em
-combate (#603) vão precisar do `sim`.
+DERIVA estágio e pontos, nunca guarda os dois (`shell/bestiary-progress.ts`), para a APRESENTAÇÃO
+do Bestiário puro (#601). **Desde o #602, o `sim` LÊ `entries`** — mas só `toKill`/`charmsPoints`
+por monstro (`CharmBestiaryEntry`, `packages/sim/src/charms.ts`), passados pelo servidor
+(`charmBestiaryEntries`, derivado de `content.bestiary.entries` em `main.ts`), porque a economia
+de Charms (desbloquear, atribuir, remover) precisa saber quantos pontos o Bestiário já rendeu e
+se a ficha de um alvo está completa — a mesma conta de `charmPointsEarned`, agora do lado do
+servidor porque decide se uma intenção é aceita (invariante 4). O efeito dos Charms em combate
+(#603) ainda não existe.
 
 **O leitor de monstros do Canary (#578) gera a ficha junto com o monstro.** `scripts/catalog/
 monsters.ts` converte `monster.Bestiary` e `monster.raceId` para a forma de `bestiaryEntrySchema`
@@ -103,6 +111,53 @@ deixá-los fora da promoção em vez de inventar uma chance que o Canary não es
 de fora. **O #581 fechou as quatro fichas que faltavam** — Rat e Rotworm entraram em `entries`
 pela primeira vez (vinham sem ficha nenhuma); Dragon e Dragon Lord já tinham a ficha hand-authored
 de antes, e os números batiam com o que o leitor do Canary produz, então continuam como estavam.
+
+## Economia de Charms (#602, ADR 0052/0053)
+
+**Catálogo.** `scripts/catalog/charms.ts` lê `data/scripts/systems/bestiary_charms.lua` do
+Canary `main` (revisão de sistema existente em 13.32 — Charms existem desde 8.6 —, segue o
+Canary por precedência do ADR 0037 d.4, não a forma sem tiers de 13.32) e gera
+`content/data/charms/generated/charms.json`: 25 charms, não os 20 que a issue previa antes de
+conferir o arquivo real — o número certo é o do arquivo. Cada um traz `name`, `category`
+(`major`/`minor`), `type` (`offensive`/`defensive`/`passive`), `damageType` (vocabulário PRÓPRIO
+deste catálogo — inclui `neutral`, que `DAMAGE_TYPES` do resto do conteúdo não tem, para
+Carnage/Overpower/Overflux), `percent`, `chance[3]` e `points[3]` por tier. `effect`/
+`messageCancel`/`messageServerLog`/`description` do Canary não entram (invariante 6, e a
+Direção da issue só pede os sete campos mecânicos).
+
+**Registro.** `characters.charms` (`jsonb`, migração 0018) guarda
+`{ pointsSpent, echoesSpent, tiers, assignments, version }` — primeiro sistema a materializar
+o padrão do ADR 0052 d.1: lido INTEIRO no ticket, escrito INTEIRO pela transação do ledger a
+partir do extrato, ÚLTIMA ESCRITA VENCE (como `ammo`/`equipment`, não fusão por máximo como o
+resto do Bestiário — aqui não há contador externo monotônico a fundir, é o estado final da
+sessão dona). Pontos e echoes GANHOS nunca são armazenados: são sempre derivados —
+`Charms.pointsEarned` soma `charmsPoints` de todo monstro com a ficha completa (a mesma conta
+de `charmPointsEarned` do #601); `Charms.echoesEarned` soma `25·t² + 25·t + 50` sobre cada tier
+MAJOR já atravessado (`t` = 0, 1, 2), a fórmula de `IOBestiary::handleAction` do Canary. Só o
+GASTO persiste, em `pointsSpent`/`echoesSpent`.
+
+**Intenções.** `charm-unlock { charmId }`, `charm-assign { charmId, monsterId }` e
+`charm-remove { charmId }` (opcodes C2S 29/30/31) são aceitas em QUALQUER sessão — Cidade e
+hunt —, sem rolagem (ADR 0052 d.2/d.4), processadas na chegada como `equip`/`select-ammo`, sem
+passar pelo ruleset. `packages/sim/src/charms.ts` é a aritmética pura (`Charms.unlock`/`assign`/
+`remove`); `packages/server/src/game/host.ts` valida contra o catálogo/ficha e aplica. Unlock
+major gasta pontos de Charm; unlock minor gasta echoes. Assign exige o charm desbloqueado
+(`tier >= 1`), um slot livre (2 Free/6 Premium — ADR 0053 d.4; a Charm Expansion de 25, Loja/M22,
+fica fora desta issue), e para major a ficha COMPLETA do alvo (`kills >= toKill`); um major e um
+minor por criatura, nunca dois do mesmo tipo no mesmo alvo. Remove custa `level × 100` gold pelo
+ledger (invariante 10) — conferido ANTES de mexer no `sim`, e debitado só se o `sim` aceitar a
+remoção; a atribuição some, o tier fica (remover não desfaz o que foi desbloqueado).
+
+**Apresentação.** A mensagem S2C `charms` manda o registro CRU (opcode 43), como `bestiary`
+manda os abates crus; o catálogo (`catalogue.charms`) leva o que cada charm custa e rende,
+fixado na sessão (invariante 7). `shell/charms-progress.ts` deriva ganho/disponível no cliente,
+do mesmo jeito que `bestiary-progress.ts` já faz para o bônus de XP — se divergir do servidor, a
+conta do servidor é a verdadeira. A terceira aba do Cyclopedia ("Charms") lista o catálogo com
+tier atual, custo do próximo, alvo atribuído e os três botões de intenção.
+
+**Fora do escopo desta issue:** o EFEITO dos Charms em combate (Wound/Poison/etc. causando dano,
+Dodge esquivando, Bless reduzindo perda por morte, Scavenge/Gut no loot) — isso é o #603, que
+abre o perfil `combat-v4` (ADR 0052 d.7).
 
 ## Regras
 
@@ -158,6 +213,10 @@ de antes, e os números batiam com o que o leitor do Canary produz, então conti
 | Recompensas especiais por monstro | não implementado (DT-05) | sem entrada — entram com o primeiro monstro que as pedir |
 | Ficha do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0, class/race `dragon` — os dois iguais | `packages/content/data/bestiary/baseline.json`, `entries.dragon` / `entries.dragon-lord` |
 | Fichas importadas do Canary (#578/#580/#581) | 451 monstros com `entries` hoje (o corte de `content/data/monsters` — ver `docs/reference/catalog/monsters-promotion-report.md` para o que ficou de fora) | `packages/content/data/bestiary/baseline.json`, `entries` |
+| Charms importados do Canary `main` (#602) | 25 charms (major/minor, 3 tiers cada) | `packages/content/data/charms/generated/charms.json` |
+| Slots de atribuição de Charm | 2 Free / 6 Premium (Charm Expansion de 25, Loja/M22, fora do corte) | `charmSlotsFor`, `packages/sim/src/charms.ts` |
+| Echoes por tier major desbloqueado | `25·t² + 25·t + 50` (t = tier antes do desbloqueio: 0, 1, 2) | `Charms.echoesEarned`, `packages/sim/src/charms.ts` |
+| Custo de remover a atribuição de um Charm | `level × 100` gold | `#requestCharmRemove`, `packages/server/src/game/host.ts` |
 
 O schema (`bestiarySchema`, em `packages/content/src/schemas.ts`) exige os marcos em ordem
 crescente: o `sim` para de contar no primeiro que o contador não alcança, e uma lista fora de
@@ -180,9 +239,9 @@ ordem faria o terceiro marco fechar antes do segundo.
   primeiro que pedir, não antes.
 - **Guild War** (§18.5): "os bônus valem só em PvE" é verdade por falta de PvP, não por regra
   escrita. A regra entra com a Guild War.
-- **A economia de Charms** (gastar pontos numa runa, atribuir a um monstro, remover) e o efeito
-  deles em combate são o #602 e o #603, ainda não implementados. Este sistema (#601) só mostra o
-  estágio e os pontos GANHOS; não há como gastá-los ainda, e nenhum Charm altera combate.
+- **O efeito dos Charms em combate** (Wound/Poison/etc. causando dano, Dodge esquivando, Bless
+  reduzindo perda por morte, Scavenge/Gut no loot) é o #603, que abre o `combat-v4` (ADR 0052
+  d.7) — ainda não implementado. A economia (desbloquear, atribuir, remover, #602) já existe.
 
 ## Divergências do PRD
 

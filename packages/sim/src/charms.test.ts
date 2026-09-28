@@ -4,7 +4,7 @@ import { Bestiary } from './bestiary.js';
 import {
   Charms, charmSlotsFor, emptyCharmsState,
 } from './charms.js';
-import type { CharmBestiaryEntry } from './charms.js';
+import type { CharmBestiaryEntry, CharmsState } from './charms.js';
 
 const wound: Charm = {
   id: 'wound', name: 'Wound', canaryCharmId: 0, category: 'major', type: 'offensive',
@@ -227,7 +227,7 @@ describe('remove (ADR 0053 d.4 — o gold é de quem chama, invariante 10)', () 
 
 describe('ida e volta do estado', () => {
   it('fromState/getState preserva pontos, echoes, tiers e atribuições', () => {
-    const state = {
+    const state: CharmsState = {
       pointsSpent: 240, echoesSpent: 50, tiers: { wound: 1 }, assignments: { wound: 'rat' }, version: 1,
     };
     expect(Charms.fromState(state).getState()).toEqual(state);

@@ -26,7 +26,7 @@ const character = (id: string, accountId: string, over: Partial<Pick<CharacterRe
   id, accountId, name: `Hero ${id}`, vocation: over.vocation ?? null, level: 10, xp: 0, soul: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, fedMs: 0,
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0,
   createdAt: new Date(),
 });
 

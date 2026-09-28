@@ -207,6 +207,19 @@ async function main(): Promise<void> {
       itemCatalog: content.items,
       // A munição abstrata (#152): o `select-ammo` escolhe daqui, com o level conferido.
       ammunitionCatalog: content.ammunition,
+      // O catálogo dos 25 Charms (M39-02, #602) e a ficha de Bestiário de cada monstro (só
+      // `toKill`/`charmsPoints`, ADR 0053 d.1) — o que `charm-unlock`/`charm-assign` precisam
+      // para derivar pontos ganhos e completude, sem o host conhecer o `Content` inteiro.
+      charmCatalog: content.charms,
+      ...(content.bestiary === undefined
+        ? {}
+        : {
+          charmBestiaryEntries: new Map(
+            Object.entries(content.bestiary.entries).map(([monsterId, entry]) => [
+              monsterId, { toKill: entry.toKill, charmsPoints: entry.charmsPoints },
+            ]),
+          ),
+        }),
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,
