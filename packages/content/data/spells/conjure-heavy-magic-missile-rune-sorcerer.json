@@ -1,0 +1,19 @@
+{
+  "id": "conjure-heavy-magic-missile-rune-sorcerer",
+  "name": "Heavy Magic Missile Rune",
+  "description": "Conjura cargas da Heavy Magic Missile Rune, consumindo uma runa em branco.",
+  "vocationId": "sorcerer",
+  "minLevel": 25,
+  "manaCost": 350,
+  "soulCost": 2,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "heavy-magic-missile-rune",
+    "charges": 10,
+    "blankPrice": 10
+  },
+  "_open": "A metade Sorcerer de `conjure-heavy-magic-missile-rune-druid.json` — ver o `_open` de lá para os números e o motivo do split por vocação."
+}

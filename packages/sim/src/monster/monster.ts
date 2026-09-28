@@ -62,14 +62,19 @@ export interface MonsterState {
    */
   readonly scheduledDefenses?: readonly string[];
   /**
-   * O monstro que o invocou (#546, TFS `Creature::master`/`setMaster`). Ausente é nascido do
-   * Spawner — o comportamento de sempre. Presente, é o id de OUTRO monstro desta instância: a
-   * invocação não ocupa slot do Spawner, não paga XP nem loot, não conta no Bestiário
-   * (`Player::onKilledMonster`, `hasBeenSummoned()`), e some quando o mestre morre ou é
-   * removido (TFS `Game::removeCreature`). Campo NOVO e aditivo: ausente é sempre "não é
-   * invocação", sem bump de formato.
+   * O invocador (#546, TFS `Creature::master`/`setMaster`). Ausente é nascido do Spawner — o
+   * comportamento de sempre. `number` é o id de OUTRO monstro desta instância (#546, monstro
+   * invocando monstro): a invocação não ocupa slot do Spawner, não paga XP nem loot, não conta
+   * no Bestiário (`Player::onKilledMonster`, `hasBeenSummoned()`), e some quando o mestre morre
+   * ou é removido (TFS `Game::removeCreature`). `string` é o `characterId` do MESTRE (#598, M38-
+   * 01, ADR 0057): a invocação do JOGADOR — mesmo mecanismo, dono diferente. Os dois tipos nunca
+   * colidem (id de monstro é numérico, id de personagem é string), e é essa distinção de TIPO —
+   * não um campo `masterKind` à parte — que `hunt.ts` usa para decidir se a invocação segue o
+   * `chooseTarget` de sempre (mestre monstro, #546) ou o alvo do MESTRE propagado (mestre
+   * personagem, #598 — ver `HuntRuleset#onMonsterStep`/`#onMonsterAttack`/`#onMonsterAbility`).
+   * Campo aditivo desde o #546: ausente continua "não é invocação", sem bump de formato.
    */
-  readonly masterId?: number;
+  readonly masterId?: number | string;
   /**
    * As entradas de invocação DECLARADAS com evento pendente na fila (#546) — mesma invariante e
    * mesmo desenho de `scheduledDefenses`, agora para `monster.summons.entries`. Ausente é
@@ -141,6 +146,14 @@ export interface Prey {
    * nada à parte.
    */
   readonly health: number;
+  /**
+   * Invisível (#592, `CONDITION_INVISIBLE`). Ausente/`false` é o de sempre — só `CharacterRuntime`
+   * expõe `true` (via `Conditions.hasInvisible`); monstro nunca é alvo invisível de outro
+   * monstro. `chooseTarget` (abaixo) recusa como candidato — e DROPA o alvo já retido — quem
+   * carrega isto, a menos que `seesInvisible(definition)` seja `true` (`canSeeInvisibility` do
+   * Canary/TFS, ADR 0041 d.2 — a imunidade à condição `invisible`).
+   */
+  readonly invisible?: boolean;
 }
 
 /**
@@ -192,8 +205,8 @@ export class MonsterRuntime {
   readonly scheduledAbilities: Set<string>;
   /** Ver `MonsterState.scheduledDefenses` (#518). */
   readonly scheduledDefenses: Set<string>;
-  /** Ver `MonsterState.masterId` (#546). `null` é "não é invocação" — o de sempre. */
-  readonly masterId: number | null;
+  /** Ver `MonsterState.masterId` (#546/#598). `null` é "não é invocação" — o de sempre. */
+  readonly masterId: number | string | null;
   /** Ver `MonsterState.scheduledSummons` (#546). */
   readonly scheduledSummons: Set<string>;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
@@ -247,6 +260,15 @@ export class MonsterRuntime {
    */
   get speedScale(): number {
     return this.conditions.speedScale();
+  }
+
+  /**
+   * Invisível (#559/#592) — o que `TargetLike.invisible` (`targeting.ts`) lê em `selectTarget`:
+   * o BOT do jogador não mira o monstro que ficou invisível sozinho (`monster.defenses`).
+   * Reconhecida pela chave reservada da condição, como `speedScale`/`CharacterRuntime.invisible`.
+   */
+  get invisible(): boolean {
+    return this.conditions.hasInvisible();
   }
 
   getState(): MonsterState {
@@ -337,6 +359,17 @@ const TARGET_THINK_COOLDOWN_KEY = 'target-think';
  * os demais devolvem o `current` retido, como o Canary faria entre um `onThink_async` e o
  * próximo.
  */
+/**
+ * `Monster::canSeeInvisibility()` do Canary/TFS (#559, ADR 0041 d.2): a MESMA imunidade a
+ * `invisible` que, para qualquer outra condição, bloquearia a aplicação — aqui vira "enxerga
+ * quem está invisível". Nunca lida como `conditionImmunities` genérico em `chooseTarget`: um
+ * monstro imune a `invisible` continuaria mirando alvo invisível igual, se a leitura fosse a
+ * mesma checagem de bloqueio que `#applyConditionTo` usa para `paralyze`/`drunk`.
+ */
+export function seesInvisible(definition: Pick<Monster, 'conditionImmunities'>): boolean {
+  return definition.conditionImmunities.includes('invisible');
+}
+
 export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
@@ -348,7 +381,17 @@ export function chooseTarget(
     ? undefined
     : prey.find((p) => p.id === monster.targetId);
 
-  if (current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
+  // Invisibilidade (#559/#592): quem não "vê invisível" não retém o alvo que virou invisível —
+  // o `Creature::onAddCondition`/`canSee` do Canary/TFS já testado do lado de ATAQUE (o
+  // passo/ataque em si segue sem alvo, como qualquer outro `chooseTarget` devolvendo `null`).
+  // Cai direto para a reaquisição abaixo, que já filtra o mesmo candidato pela mesma razão —
+  // "largar" é não conseguir reter, nunca um terceiro ramo.
+  const currentVisible = current === undefined
+    || !current.invisible
+    || seesInvisible(definition);
+
+  if (currentVisible
+    && current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
     const leash = definition.leashRadius;
     // Zero significa "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK
     // faria o jogador voltar e encontrar tudo parado sem explicação.
@@ -369,6 +412,7 @@ export function chooseTarget(
         const candidates: TargetRankCandidate[] = [];
         for (const candidate of prey) {
           if (!candidate.alive) continue;
+          if (candidate.invisible && !seesInvisible(definition)) continue;
           if (!sameFloor(monster.position.z, candidate.position.z)) continue;
           const d = distance(monster.position, candidate.position);
           if (d > definition.aggroRadius) continue;
@@ -391,6 +435,7 @@ export function chooseTarget(
   let closestDistance = Number.POSITIVE_INFINITY;
   for (const candidate of prey) {
     if (!candidate.alive) continue;
+    if (candidate.invisible && !seesInvisible(definition)) continue;
     // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
     // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair
     // compartilham a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima
@@ -448,10 +493,14 @@ export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): 
  * O tipo de dano de um campo, quando ele CAUSA dano ao longo do tempo (CMB-07). Um campo de
  * outro efeito (velocidade, cura) não tem `damageType` — nunca conta para `canWalkOnFieldType`,
  * porque o Tibia só tem o par `canWalkOn*` para fogo/veneno/energia (o resto do switch do TFS/
- * Canary devolve sempre `true`).
+ * Canary devolve sempre `true`). Estágio SEM condição (#560: Magic Wall, Wild Growth, o último
+ * estágio mudo do fire field) também devolve `null` — não é dano, é bloqueio, e quem julga
+ * bloqueio é `canOccupy`/`TileOccupancy`, não este predicado.
  */
 function fieldDamageType(field: TileFieldState): DamageType | null {
-  return field.condition.effect.kind === 'damage-over-time' ? field.condition.effect.damageType : null;
+  return field.condition !== undefined && field.condition.effect.kind === 'damage-over-time'
+    ? field.condition.effect.damageType
+    : null;
 }
 
 /**

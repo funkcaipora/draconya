@@ -97,6 +97,13 @@ export interface SessionReceipt {
    */
   readonly vocation?: string;
   /**
+   * Pontos de alma (#593). ABSOLUTO e última-escrita-vence, como `ammo`/`equipment` — NUNCA
+   * fundido por máximo como `skills`/`bestiary`: alma PODE DESCER (gasta na conjuração), e um
+   * extrato antigo fora de ordem não pode reviver um saldo já gasto. Ausente é sessão de
+   * Cidade que não tocou alma, ou nó `game` anterior a esta issue.
+   */
+  readonly soul?: number;
+  /**
    * Promovido (#566, ADR 0042 decisão 1). Só `true` viaja — o campo NUNCA carrega `false`
    * (ver `#requestPromoteVocation`/`#saveDurableReceipt`, `game/host.ts`). O `jobs` funde por
    * `OR` (`characters.promoted OR receipt.promoted`): um extrato fora de ordem nunca desce o
@@ -358,6 +365,8 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }
       : {}),
+    // Pontos de alma (#593): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['soul'] === 'number' ? { soul: value['soul'] } : {}),
     // A promoção (#566): lista de PERMISSÃO, pela razão das skills — só `true` sobrevive à
     // volta; `false`/ausente/torto vira ausente, o lado seguro (nunca desce o estado).
     ...(value['promoted'] === true ? { promoted: true } : {}),

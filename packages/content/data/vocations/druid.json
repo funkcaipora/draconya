@@ -6,6 +6,8 @@
   "capacityPerLevel": 10,
   "meleeDamageMultiplier": 1,
   "distDamageMultiplier": 1,
+  "soulMax": 100,
+  "soulGainTicksMs": 120000,
   "startingKit": [
     {
       "itemId": "snakebite-rod",

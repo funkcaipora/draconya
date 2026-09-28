@@ -1,0 +1,35 @@
+{
+  "id": "paralyze-rune",
+  "name": "Paralyze Rune",
+  "description": "Paralisa o alvo selecionado por 6 segundos.",
+  "price": 700,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 6000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 54,
+    "magicLevel": 18
+  },
+  "effect": {
+    "kind": "condition",
+    "target": "enemy",
+    "range": 3,
+    "condition": {
+      "key": "speed",
+      "merge": "replace",
+      "durationMs": 6000,
+      "effect": {
+        "kind": "speed",
+        "type": "paralyze",
+        "formula": {
+          "mina": -1,
+          "minb": 0,
+          "maxa": -1,
+          "maxb": 0
+        }
+      }
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Canary `data/scripts/runes/paralyze_rune.lua` (main, 2026-09-27): `runeId(3165)`, `level(54)`, `magicLevel(18)`, `cooldown(6*1000)` AO LADO de `groupCooldown(2*1000)` (#592 — os dois livros, ver `cooldownMs`/`groupCooldownMs`), `mana(1400)` (custo de CRIAR a runa por magia — não se aplica ao suprimento abstrato, que cobra só o `price`), `needTarget(true)`/`allowFarUse(true)`, `vocation(\"druid;true\", \"elder druid;true\")`. `setFormula(-1, 0, -1, 0)` — os quatro coeficientes copiados direto para `condition.effect.formula` (`mina/minb/maxa/maxb`), a MESMA forma que `ConditionSpeed` já resolve para o piso de paralyze (CMB-11, #556). `range` 3: o alcance de runa de suporte do Tibia (TibiaWiki, conferir ao gravar — o Canary não declara `range` para runa; `allowFarUse` só diz que ela tem alcance, não qual). `price` 700: `buy` uniforme em `data-otservbr-global/npc/*.lua` (clientId 3165, ex. `alexander.lua`) — a runa PRONTA, não dividida por carga. Vocação restrita a Druid: o schema de supply não tem `requires.vocationId` fechado para uma runa de condição ainda — fica como `_open` para o #559/catálogo generalizar, e o recorte desta issue aceita a runa utilizável por qualquer vocação com o level/ML certos (desvio registrado na PR, §12)."
+}

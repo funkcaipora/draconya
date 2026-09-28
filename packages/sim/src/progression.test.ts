@@ -28,10 +28,12 @@ const baseline: Progression = {
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25, spellSkill: 'magic',
   startingKit: [], skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+  soulMax: 100, soulGainTicksMs: 120000,
 };
 const sorcerer: Vocation = {
   id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 25, capacityPerLevel: 10, spellSkill: 'magic',
   startingKit: [], skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+  soulMax: 100, soulGainTicksMs: 120000,
 };
 
 describe('statsForLevel', () => {

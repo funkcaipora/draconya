@@ -18,6 +18,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -60,6 +64,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -192,6 +200,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -490,6 +502,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -618,6 +634,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -775,6 +795,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -954,7 +978,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -1110,6 +1179,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1184,6 +1257,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1274,6 +1351,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1491,6 +1572,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1650,6 +1735,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1827,6 +1916,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1963,6 +2056,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2162,6 +2259,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2242,6 +2343,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2334,6 +2439,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2532,6 +2640,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2822,6 +2934,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2962,6 +3078,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3100,6 +3220,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -3189,6 +3312,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3241,6 +3368,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3294,6 +3425,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3459,6 +3594,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3587,6 +3726,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -3711,6 +3854,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3759,6 +3906,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3846,6 +3997,223 @@
     }
   },
   {
+    "id": "black-vixen",
+    "name": "Black Vixen",
+    "health": 3200,
+    "experience": 3200,
+    "attack": {
+      "min": 0,
+      "max": 290
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": 0.5,
+        "earth": 0.5,
+        "fire": 0.5,
+        "ice": -0.4,
+        "holy": 0.5,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 3,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "moonlight-rod",
+          "chance": 1
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 1
+        },
+        {
+          "itemId": "werefox-tail",
+          "chance": 1
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.004
+        },
+        {
+          "itemId": "werewolf-amulet",
+          "chance": 0.004
+        },
+        {
+          "itemId": "composite-hornbow",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "silver-token",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "silver-token",
+          "chance": 0.001
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 290
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 100,
+          "max": 720
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingstar"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      },
+      {
+        "id": "deathbeam",
+        "cadenceMs": 1000,
+        "chance": 0.14,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 700
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "heal": {
+          "min": 150,
+          "max": 345
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_curse_spreads/black_vixen.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "werefox",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
     "id": "blazing-fire-elemental",
     "name": "Blazing Fire Elemental",
     "health": 650,
@@ -3867,6 +4235,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3990,7 +4362,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -4013,6 +4430,205 @@
     }
   },
   {
+    "id": "bloodback",
+    "name": "Bloodback",
+    "health": 5200,
+    "experience": 4000,
+    "attack": {
+      "min": 0,
+      "max": 290
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.15,
+        "earth": 0.4,
+        "fire": -0.05,
+        "death": 0.5
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "furry-club",
+          "chance": 1
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 1
+        },
+        {
+          "itemId": "spiked-squelcher",
+          "chance": 1
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 1
+        },
+        {
+          "itemId": "dreaded-cleaver",
+          "chance": 0.004
+        },
+        {
+          "itemId": "fur-armor",
+          "chance": 0.004
+        },
+        {
+          "itemId": "fur-boots",
+          "chance": 0.004
+        },
+        {
+          "itemId": "silver-token",
+          "chance": 0.0025
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 290
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 100,
+          "max": 420
+        },
+        "damageType": "physical",
+        "kind": "combat"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      },
+      {
+        "id": "deathbeam",
+        "cadenceMs": 1000,
+        "chance": 0.14,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 200
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 4000,
+        "chance": 0.15,
+        "heal": {
+          "min": 150,
+          "max": 345
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_curse_spreads/bloodback.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "wereboar",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
     "id": "bloodpaw",
     "name": "Bloodpaw",
     "health": 100,
@@ -4032,6 +4648,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4123,6 +4743,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4236,6 +4859,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4334,6 +4961,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.4,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4504,6 +5135,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4621,6 +5256,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4665,6 +5304,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4841,6 +5484,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5110,6 +5757,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5216,6 +5867,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5333,6 +5988,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5460,6 +6119,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5508,6 +6171,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5600,7 +6267,25 @@
               "damageType": "earth",
               "startDamage": 5
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 248000,
+              "condition": {
+                "key": "poisoned",
+                "merge": "strongest",
+                "durationMs": 230000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "generated",
+                  "totalDamage": 100,
+                  "intervalMs": 5000,
+                  "damageType": "earth",
+                  "startDamage": 5
+                }
+              }
+            }
+          ]
         }
       },
       {
@@ -5697,6 +6382,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5811,6 +6500,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5907,6 +6600,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -5988,6 +6685,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6249,6 +6950,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6508,6 +7213,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -6619,6 +7328,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.24,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -6736,6 +7449,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -6847,6 +7564,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -6935,6 +7656,10 @@
         "manadrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6987,6 +7712,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -7077,6 +7805,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7153,6 +7885,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7229,6 +7965,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7318,6 +8058,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7394,6 +8138,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7455,6 +8203,100 @@
     }
   },
   {
+    "id": "dark-soul",
+    "name": "Dark Soul",
+    "health": 5000,
+    "experience": 0,
+    "attack": 0,
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 162,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 240
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 200,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 250,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/summons/dark_soul.lua"
+    }
+  },
+  {
     "id": "darklight-source",
     "name": "Darklight Source",
     "class": "magical",
@@ -7477,6 +8319,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 3.19,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7648,6 +8494,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7759,6 +8609,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7933,6 +8787,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.61,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -8107,6 +8965,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -8298,6 +9160,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -8460,6 +9326,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -8613,6 +9483,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -8750,7 +9624,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -8846,6 +9765,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -9067,6 +9990,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -9179,6 +10106,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -9321,6 +10252,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.09,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -9423,6 +10358,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -9498,6 +10437,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -9720,6 +10662,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -9838,6 +10784,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -9930,6 +10880,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -10166,6 +11120,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -10345,6 +11303,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.29,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -10462,7 +11424,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -10517,6 +11524,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -10630,6 +11641,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -10854,6 +11869,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -10980,6 +11999,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -11104,6 +12127,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -11299,6 +12326,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -11523,6 +12554,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -11683,6 +12718,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.29,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -11826,6 +12865,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -11980,6 +13023,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -12134,6 +13181,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -12288,6 +13339,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -12449,6 +13504,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -12600,6 +13659,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -12681,6 +13744,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -12791,6 +13857,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.19,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -13031,6 +14101,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.4,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -13244,6 +14318,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -13565,6 +14643,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -13686,6 +14768,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -13740,6 +14826,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -13881,6 +14971,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -13940,6 +15034,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -14069,6 +15167,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -14163,7 +15265,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -14248,6 +15395,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -14357,7 +15508,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -14380,6 +15576,72 @@
     }
   },
   {
+    "id": "flickering-spirit-elemental",
+    "name": "Flickering Spirit Elemental",
+    "health": 600,
+    "experience": 450,
+    "attack": 0,
+    "armor": 6,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.44,
+        "min": 1,
+        "max": 120
+      },
+      "items": [
+        {
+          "itemId": "holy-ash",
+          "chance": 0.108
+        },
+        {
+          "itemId": "spirited-soil",
+          "chance": 0.021
+        }
+      ]
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_elemental_spheres/flickering_spirit_elemental.lua"
+    }
+  },
+  {
     "id": "frostfur",
     "name": "Frostfur",
     "health": 65,
@@ -14399,6 +15661,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -14451,6 +15717,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -14540,6 +15810,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -14659,6 +15933,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -14833,6 +16111,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -15111,6 +16393,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -15358,6 +16644,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -15445,6 +16735,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -15574,6 +16868,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -15637,6 +16934,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -15835,6 +17136,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -15930,6 +17235,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -16107,6 +17416,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -16437,6 +17750,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.94,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -16635,6 +17952,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -16843,6 +18164,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 5.4,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -17030,6 +18355,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -17257,6 +18586,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -17496,6 +18829,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -17646,6 +18983,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -17854,6 +19195,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -17913,6 +19258,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -18016,6 +19365,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -18092,6 +19445,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -18227,6 +19584,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -18355,6 +19716,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -18669,6 +20034,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.71,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -18811,6 +20180,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -19067,6 +20440,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -19324,6 +20701,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -19458,6 +20839,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -19566,6 +20951,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -19668,6 +21057,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -19783,6 +21176,9 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -19984,6 +21380,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -20286,6 +21686,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -20415,6 +21819,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -20533,6 +21941,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -20872,6 +22284,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -21057,7 +22473,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -21128,6 +22589,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.95,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -21363,6 +22828,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -21616,6 +23085,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -21711,6 +23184,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -21807,6 +23284,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -22071,6 +23551,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22217,6 +23701,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -22301,6 +23788,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22360,6 +23851,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22465,6 +23960,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.24,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22667,6 +24166,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22775,6 +24278,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22829,6 +24336,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -22984,6 +24495,9 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23045,6 +24559,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23118,6 +24636,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23192,6 +24714,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23280,6 +24806,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23369,6 +24899,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23452,6 +24986,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -23697,6 +25235,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -23888,6 +25430,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24174,6 +25720,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24310,6 +25860,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24416,6 +25970,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24549,6 +26107,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24635,6 +26197,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24802,6 +26368,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -24947,6 +26517,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25103,6 +26677,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25213,6 +26791,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25246,6 +26828,154 @@
     }
   },
   {
+    "id": "mephiles",
+    "name": "Mephiles",
+    "health": 415,
+    "experience": 415,
+    "attack": {
+      "min": 0,
+      "max": 35
+    },
+    "armor": 30,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "earth": 0.5,
+        "ice": -0.1,
+        "holy": -0.05
+      },
+      "immunities": [
+        "fire",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.4,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1200,
+    "speed": 300,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 3,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.02,
+        "min": 1,
+        "max": 95
+      },
+      "items": [
+        {
+          "itemId": "stale-bread-of-ancientness",
+          "chance": 0.01
+        },
+        {
+          "itemId": "poets-fencing-quill",
+          "chance": 0.01
+        },
+        {
+          "itemId": "rain-coat",
+          "chance": 0.01
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1200,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 35
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 1500,
+        "chance": 0.7,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 15,
+          "max": 45
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.4,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 40000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 400
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 4000,
+        "chance": 0.5,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/isle_of_evil/mephiles.lua"
+    }
+  },
+  {
     "id": "mighty-splinter-of-madness",
     "name": "Mighty Splinter of Madness",
     "health": 4000,
@@ -25272,6 +27002,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25369,6 +27103,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25565,6 +27303,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -25680,6 +27421,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25780,6 +27525,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -25896,6 +27645,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -26028,6 +27780,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.5,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -26146,6 +27902,259 @@
     }
   },
   {
+    "id": "morguthis",
+    "name": "Morguthis",
+    "health": 4800,
+    "experience": 3000,
+    "attack": {
+      "min": 0,
+      "max": 1000
+    },
+    "armor": 35,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.52,
+        "earth": -0.15,
+        "fire": 0.6,
+        "ice": 0.62,
+        "holy": -0.22
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 590,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "demonbone-amulet",
+          "chance": 0.005
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.07
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.07
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.07
+        },
+        {
+          "itemId": "ravagers-axe",
+          "chance": 0.003
+        },
+        {
+          "itemId": "steel-boots",
+          "chance": 0.005
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 1000
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 136000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 65,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 3000,
+        "chance": 0.07,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 55,
+          "max": 550
+        },
+        "damageType": "lifedrain",
+        "kind": "combat"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 50000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -650
+          }
+        }
+      },
+      {
+        "id": "physicalburst",
+        "cadenceMs": 1000,
+        "chance": 0.2,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 40,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitarea"
+        }
+      },
+      {
+        "id": "physicalburst-2",
+        "cadenceMs": 3000,
+        "chance": 0.07,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 50,
+          "max": 500
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "heal": {
+          "min": 200,
+          "max": 300
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 1201
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 80,
+      "health": 10,
+      "damage": 10,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ancient_tombs/morguthis.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "hero",
+          "intervalMs": 2000,
+          "chance": 1,
+          "count": 3
+        }
+      ]
+    }
+  },
+  {
     "id": "mozradek",
     "name": "Mozradek",
     "health": 28000,
@@ -26167,6 +28176,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -26323,6 +28336,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -26379,6 +28396,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -26525,6 +28546,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -26662,6 +28687,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -26864,6 +28893,9 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -26966,6 +28998,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -27080,6 +29116,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -27190,6 +29230,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -27351,6 +29395,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -27403,6 +29451,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -27620,6 +29672,233 @@
     }
   },
   {
+    "id": "omruc",
+    "name": "Omruc",
+    "health": 4300,
+    "experience": 2950,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 20,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 370,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 90
+      },
+      "items": [
+        {
+          "itemId": "small-diamond",
+          "chance": 0.07,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.05
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.05
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.015
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 136000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 65,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 5000,
+        "chance": 0.2,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 100,
+          "max": 250
+        },
+        "damageType": "lifedrain",
+        "kind": "combat"
+      },
+      {
+        "id": "earthstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 200,
+          "max": 500
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poisonarrow"
+        }
+      },
+      {
+        "id": "firestrike",
+        "cadenceMs": 1000,
+        "chance": 0.2,
+        "target": {
+          "range": 3
+        },
+        "power": {
+          "min": 120,
+          "max": 450
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "burstarrow",
+          "impactKey": "explosionarea"
+        }
+      },
+      {
+        "id": "melee-2",
+        "cadenceMs": 3000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 150,
+          "max": 500
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 50000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -900
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.17,
+        "heal": {
+          "min": 100,
+          "max": 200
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.14,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 20,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ancient_tombs/omruc.lua"
+    },
+    "summons": {
+      "max": 4,
+      "entries": [
+        {
+          "monsterId": "stalker",
+          "intervalMs": 2000,
+          "chance": 1,
+          "count": 4
+        }
+      ]
+    }
+  },
+  {
     "id": "orc-cult-fanatic",
     "name": "Orc Cult Fanatic",
     "class": "humanoid",
@@ -27644,6 +29923,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -27776,6 +30058,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -27888,6 +30173,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -27992,6 +30280,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -28069,6 +30360,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -28150,6 +30445,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -28449,6 +30748,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.83,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -28658,6 +30961,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -28754,6 +31061,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -28938,6 +31249,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -29046,6 +31361,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -29277,6 +31596,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -29388,6 +31711,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -29474,6 +31800,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -29673,6 +32003,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -29800,6 +32134,110 @@
     }
   },
   {
+    "id": "psychic-spirit-elemental",
+    "name": "Psychic Spirit Elemental",
+    "health": 1400,
+    "experience": 1300,
+    "attack": {
+      "min": 0,
+      "max": 15
+    },
+    "armor": 6,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": -1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.44,
+        "min": 1,
+        "max": 120
+      },
+      "items": [
+        {
+          "itemId": "holy-ash",
+          "chance": 0.108
+        },
+        {
+          "itemId": "spirited-soil",
+          "chance": 0.021
+        },
+        {
+          "itemId": "moonlight-rod",
+          "chance": 0.01935
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 15
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 25
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "arrow"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_elemental_spheres/psychic_spirit_elemental.lua"
+    }
+  },
+  {
     "id": "purple-butterfly",
     "name": "Butterfly",
     "class": "vermin",
@@ -29870,6 +32308,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -30095,6 +32537,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -30311,6 +32757,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -30448,6 +32898,106 @@
     }
   },
   {
+    "id": "redeemed-soul",
+    "name": "Redeemed Soul",
+    "class": "magical",
+    "health": 250,
+    "experience": 0,
+    "attack": 0,
+    "armor": 12,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.6,
+        "energy": 0.2
+      },
+      "immunities": [
+        "holy"
+      ]
+    },
+    "conditionImmunities": [
+      "paralyze"
+    ],
+    "defenseMitigation": 0.64,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 240
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 1,
+        "heal": {
+          "min": 200,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 250,
+    "staticAttack": 0.9,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 310000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/ferumbras_ascension/bosses/redeemed_soul.lua"
+    }
+  },
+  {
     "id": "reflection-of-mawhawk",
     "name": "Reflection of Mawhawk",
     "health": 45000,
@@ -30463,6 +33013,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -30651,6 +33205,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -30888,6 +33446,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -30950,6 +33512,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -31031,6 +33597,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -31205,6 +33775,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -31368,6 +33942,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -31583,6 +34161,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -31800,6 +34382,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -31956,6 +34542,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -32130,6 +34720,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -32221,6 +34815,201 @@
     }
   },
   {
+    "id": "rift-worm",
+    "name": "Rift Worm",
+    "health": 2800,
+    "experience": 1195,
+    "attack": {
+      "min": 0,
+      "max": 160
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.25,
+        "fire": -0.05,
+        "ice": -0.05,
+        "holy": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 160
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 500,
+          "max": 1000
+        },
+        "damageType": "manadrain",
+        "kind": "combat"
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 60000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.5,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/in_service_of_yalahar/rift_worm.lua"
+    }
+  },
+  {
+    "id": "risen-soldier",
+    "name": "Risen Soldier",
+    "health": 6000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 45,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 435
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/risen_soldier.lua"
+    }
+  },
+  {
     "id": "roaring-water-elemental",
     "name": "Roaring Water Elemental",
     "health": 1750,
@@ -32245,6 +35034,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -32375,6 +35168,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -32503,6 +35300,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -32561,6 +35362,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -32642,6 +35447,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -32848,6 +35657,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -33020,6 +35833,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -33145,6 +35962,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -33341,6 +36162,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -33425,6 +36250,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -33587,6 +36416,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.9,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -33723,6 +36556,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -33926,6 +36763,174 @@
     }
   },
   {
+    "id": "sir-nictros",
+    "name": "Sir Nictros",
+    "health": 75000,
+    "experience": 55000,
+    "attack": {
+      "min": 0,
+      "max": 900
+    },
+    "armor": 78,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "earth": 0.8,
+        "fire": -0.1,
+        "ice": 0.35,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 250,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 900
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalbeam",
+        "cadenceMs": 3100,
+        "chance": 0.37,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 1000
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2500,
+        "chance": 0.35,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 350,
+          "max": 625
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindaxe",
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2700,
+        "chance": 0.3,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 180,
+          "max": 250
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "heal": {
+          "min": 350,
+          "max": 550
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/bosses/sir_nictros.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "squire-of-nictros",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 3
+        }
+      ]
+    }
+  },
+  {
     "id": "slick-water-elemental",
     "name": "Slick Water Elemental",
     "health": 550,
@@ -33950,6 +36955,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34093,6 +37102,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34147,6 +37159,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34281,6 +37297,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -34411,6 +37431,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34495,6 +37519,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34590,6 +37618,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34699,6 +37731,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34786,6 +37822,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -34830,6 +37870,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -34946,6 +37990,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -35010,7 +38058,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -35046,6 +38139,170 @@
     }
   },
   {
+    "id": "spirit-overlord",
+    "name": "Spirit Overlord",
+    "health": 4000,
+    "experience": 2800,
+    "attack": {
+      "min": 0,
+      "max": 400
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 330,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.44,
+        "min": 1,
+        "max": 120
+      },
+      "items": [
+        {
+          "itemId": "holy-ash",
+          "chance": 0.108
+        },
+        {
+          "itemId": "moonlight-rod",
+          "chance": 0.083
+        },
+        {
+          "itemId": "spirited-soil",
+          "chance": 0.07
+        },
+        {
+          "itemId": "holy-orchid",
+          "chance": 0.06
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 400
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "earthbeam",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 800
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "stones"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 1000,
+        "chance": 0.09,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 490
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bigplants"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -750
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 20000,
+      "chance": 0.3
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 1,
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_elemental_spheres/spirit_overlord.lua"
+    }
+  },
+  {
     "id": "spite-of-the-emperor",
     "name": "Spite of the Emperor",
     "health": 48000,
@@ -35070,6 +38327,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35238,6 +38499,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35366,6 +38631,103 @@
     }
   },
   {
+    "id": "squire-of-nictros",
+    "name": "Squire of Nictros",
+    "health": 10000,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 250
+    },
+    "armor": 45,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 180,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 250
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 190,
+          "max": 335
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/grave_danger/squire_of_nictros.lua"
+    }
+  },
+  {
     "id": "stolen-knowledge-of-armor",
     "name": "Stolen Knowledge of Armor",
     "health": 10000,
@@ -35381,6 +38743,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35486,6 +38852,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35591,6 +38961,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35696,6 +39070,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35801,6 +39179,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35903,6 +39285,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -35957,6 +39343,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.94,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36105,6 +39495,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36188,6 +39581,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -36389,6 +39786,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36430,6 +39831,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36482,6 +39887,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36566,6 +39975,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36616,6 +40029,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -36924,6 +40341,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -37229,6 +40650,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -37442,6 +40867,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -37560,6 +40989,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -37684,6 +41116,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38008,6 +41444,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38118,6 +41558,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -38190,6 +41633,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.8,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38377,6 +41824,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38411,6 +41862,149 @@
     }
   },
   {
+    "id": "the-count",
+    "name": "The Count",
+    "health": 1250,
+    "experience": 450,
+    "attack": {
+      "min": 80,
+      "max": 135
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.6,
+        "holy": -0.01
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 370,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.4,
+        "min": 1,
+        "max": 98
+      },
+      "items": [
+        {
+          "itemId": "war-hammer",
+          "chance": 0.023
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 80,
+          "max": 135
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.09,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 300
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "heal": {
+          "min": 100,
+          "max": 195
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.3,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_inquisition/the_count.lua"
+    },
+    "summons": {
+      "max": 1,
+      "entries": [
+        {
+          "monsterId": "banshee",
+          "intervalMs": 4000,
+          "chance": 0.5,
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
     "id": "the-count-of-the-core",
     "name": "The Count of the Core",
     "health": 350000,
@@ -38428,6 +42022,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38704,6 +42302,217 @@
     }
   },
   {
+    "id": "the-dark-dancer",
+    "name": "The Dark Dancer",
+    "health": 805,
+    "experience": 435,
+    "attack": {
+      "min": 0,
+      "max": 45
+    },
+    "armor": 11,
+    "defense": 12,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.4,
+        "death": 0.01
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 45
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 240000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 220,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 3000,
+        "chance": 0.7,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 95
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "physicalball-2",
+        "cadenceMs": 6000,
+        "chance": 0.9,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 95
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 3500,
+        "chance": 0.35,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -400
+          }
+        }
+      },
+      {
+        "id": "manadrainball",
+        "cadenceMs": 4000,
+        "chance": 0.3,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 2,
+          "max": 110
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.45,
+        "heal": {
+          "min": 75,
+          "max": 135
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.5,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "corpseTtlMs": 5000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/scrapper/the_dark_dancer.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "ghoul",
+          "intervalMs": 2000,
+          "chance": 0.2,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
     "id": "the-devourer-of-secrets",
     "name": "The Devourer of Secrets",
     "health": 10000,
@@ -38719,6 +42528,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38827,6 +42640,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38933,6 +42750,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -38995,6 +42816,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -39283,6 +43108,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -39439,6 +43268,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -39712,6 +43545,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -39909,6 +43746,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -40196,6 +44037,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -40389,6 +44234,166 @@
     }
   },
   {
+    "id": "the-hag",
+    "name": "The Hag",
+    "health": 935,
+    "experience": 510,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 24,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "fire": 0.3,
+        "ice": 0.2
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 204,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 5,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 3000,
+        "chance": 0.35,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "drunk",
+          "durationMs": 15000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 4000,
+        "chance": 0.55,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 12000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -400
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.35,
+        "heal": {
+          "min": 95,
+          "max": 155
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.5,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.95,
+    "corpseTtlMs": 5000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/svargrond_arena/scrapper/the_hag.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "ghost",
+          "intervalMs": 2000,
+          "chance": 0.26,
+          "count": 1
+        },
+        {
+          "monsterId": "crypt-shambler",
+          "intervalMs": 2000,
+          "chance": 0.26,
+          "count": 1
+        }
+      ]
+    }
+  },
+  {
     "id": "the-hairy-one",
     "name": "The Hairy One",
     "health": 325,
@@ -40407,6 +44412,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -40436,6 +44445,179 @@
     }
   },
   {
+    "id": "the-handmaiden",
+    "name": "The Handmaiden",
+    "health": 19500,
+    "experience": 7500,
+    "attack": {
+      "min": 0,
+      "max": 800
+    },
+    "armor": 25,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.1,
+        "energy": 0.15,
+        "ice": 0.15,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "fire"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 450,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 800
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 150,
+          "max": 800
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 1
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "drunk",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 3000,
+        "chance": 0.12,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 8000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 380
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 4000,
+        "chance": 0.5,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "heal": {
+          "min": 100,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste-2",
+        "cadenceMs": 1000,
+        "chance": 0.35,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 370
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 3100,
+    "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/pits_of_inferno/the_handmaiden.lua"
+    }
+  },
+  {
     "id": "the-heat-of-summer",
     "name": "The Heat of Summer",
     "health": 280,
@@ -40451,6 +44633,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -40538,7 +44724,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -40583,6 +44814,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -40762,6 +44997,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -40874,6 +45113,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.48,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -41095,6 +45338,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -41191,6 +45438,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -41430,6 +45681,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -41573,6 +45828,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -41721,7 +45980,25 @@
               "damageType": "earth",
               "startDamage": 5
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 248000,
+              "condition": {
+                "key": "poisoned",
+                "merge": "strongest",
+                "durationMs": 230000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "generated",
+                  "totalDamage": 100,
+                  "intervalMs": 5000,
+                  "damageType": "earth",
+                  "startDamage": 5
+                }
+              }
+            }
+          ]
         }
       }
     ],
@@ -41810,6 +46087,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -42105,6 +46386,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -42223,6 +46508,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -42328,6 +46617,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -42529,6 +46822,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -42642,6 +46939,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -42757,6 +47058,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -42936,6 +47241,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -43147,6 +47456,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.28,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -43218,6 +47531,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -43332,6 +47649,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -43531,6 +47852,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -43811,6 +48136,134 @@
     }
   },
   {
+    "id": "the-weakened-count",
+    "name": "The Weakened Count",
+    "health": 740,
+    "experience": 450,
+    "attack": {
+      "min": 50,
+      "max": 75
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.01,
+        "fire": -0.01,
+        "holy": -0.01
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 370,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.4,
+        "min": 1,
+        "max": 98
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 50,
+          "max": 75
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.09,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallclouds"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "heal": {
+          "min": 50,
+          "max": 105
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.3,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_inquisition/the_weakened_count.lua"
+    }
+  },
+  {
     "id": "thorn-minion",
     "name": "Thorn Minion",
     "health": 3500,
@@ -43826,6 +48279,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -44005,6 +48462,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -44059,6 +48520,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -44143,6 +48608,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.23,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -44419,6 +48888,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -44480,6 +48953,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -44595,6 +49072,135 @@
     }
   },
   {
+    "id": "ugly-monster",
+    "name": "Ugly Monster",
+    "health": 10000,
+    "experience": 1000,
+    "attack": {
+      "min": 0,
+      "max": 120
+    },
+    "armor": 0,
+    "defense": 48,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "fire": 0.2,
+        "ice": 0.2
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 680,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "cobra-crossbow",
+          "chance": 0.003
+        },
+        {
+          "itemId": "cobra-hood",
+          "chance": 0.003
+        },
+        {
+          "itemId": "cobra-boots",
+          "chance": 0.003
+        },
+        {
+          "itemId": "cobra-wand",
+          "chance": 0.003
+        },
+        {
+          "itemId": "cobra-rod",
+          "chance": 0.003
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 120
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "earth"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.08,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/mysterious_ornate_chest/ugly_monster.lua"
+    }
+  },
+  {
     "id": "unaz-the-mean",
     "name": "Unaz the Mean",
     "health": 28000,
@@ -44616,6 +49222,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -44806,6 +49416,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -44946,6 +49560,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -45047,7 +49665,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -45201,6 +49864,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -45375,6 +50042,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -45478,6 +50149,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -45627,6 +50302,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -45966,6 +50645,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -46087,6 +50770,9 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -46359,6 +51045,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -46537,6 +51227,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -46640,6 +51334,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -46695,6 +51393,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -46774,6 +51475,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -46902,6 +51607,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47028,6 +51737,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47084,6 +51796,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47174,6 +51889,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47253,6 +51972,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.28,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47388,6 +52111,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47557,6 +52284,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.05,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47606,6 +52337,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -47764,6 +52499,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -48047,6 +52786,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -48255,6 +52998,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -48345,6 +53092,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -48375,6 +53126,283 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/quests/cults_of_tibia/bosses/zarcorix_of_yalahar.lua"
+    }
+  },
+  {
+    "id": "zugurosh",
+    "name": "Zugurosh",
+    "health": 90500,
+    "experience": 10000,
+    "attack": {
+      "min": 0,
+      "max": 800
+    },
+    "armor": 45,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": 0.3,
+        "earth": 0.3,
+        "fire": 0.3,
+        "ice": 0.3,
+        "holy": 0.3
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 330,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 194
+      },
+      "items": [
+        {
+          "itemId": "demonic-essence",
+          "chance": 1
+        },
+        {
+          "itemId": "slightly-rusted-legs",
+          "chance": 0.54
+        },
+        {
+          "itemId": "slightly-rusted-armor",
+          "chance": 0.45
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.21
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.17
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.087
+        },
+        {
+          "itemId": "amulet-of-loss",
+          "chance": 0.06
+        },
+        {
+          "itemId": "steel-boots",
+          "chance": 0.045
+        },
+        {
+          "itemId": "golden-boots",
+          "chance": 0.015
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 800
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 0,
+          "max": 500
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "deathwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 500
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "deathburst",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallclouds"
+        }
+      },
+      {
+        "id": "burning",
+        "cadenceMs": 3000,
+        "chance": 0.2,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "fire",
+        "presentation": {
+          "impactKey": "explosionhit"
+        },
+        "condition": {
+          "key": "burning",
+          "merge": "strongest",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 10,
+            "intervalMs": 2000,
+            "damageType": "fire"
+          }
+        }
+      },
+      {
+        "id": "manadrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 60,
+          "max": 200
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "watersplash"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "heal": {
+          "min": 40,
+          "max": 60
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "heal-2",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "heal": {
+          "min": 400,
+          "max": 600
+        },
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 1000,
+        "chance": 0.05,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.15
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 4500,
+    "staticAttack": 0.85,
+    "corpseTtlMs": 180000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/quests/the_inquisition/zugurosh.lua"
     }
   }
 ]

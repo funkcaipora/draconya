@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Item } from '@draconya/content';
 import {
-  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
-  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
-  xpByDamage, xpShare,
+  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, partyScaledManaCost,
+  reserveProportionally, settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually,
+  splitLootOf, uniqueVocations, xpByDamage, xpShare,
 } from './party.js';
 import type {
   BagEntry, GoldEntry, MemberCapacity, PartyBagState, PartyMember, SharedExperienceMember,
@@ -198,6 +198,35 @@ describe('splitEqually', () => {
     for (const [total, n] of [[1, 4], [99, 7], [1_000_000, 3]] as const) {
       expect(splitEqually(total, n).reduce((a, b) => a + b, 0)).toBe(total);
     }
+  });
+});
+
+describe('partyScaledManaCost — Party::onCastSpell do Canary (#588)', () => {
+  it('returns the fixed number unchanged, ignoring affectedCount', () => {
+    expect(partyScaledManaCost(20, 1)).toBe(20);
+    expect(partyScaledManaCost(20, 4)).toBe(20);
+  });
+
+  it('matches the Canary numbers for the four party spells at 1, 2, 3 and 4 members', () => {
+    // `mana = ceil((0.9^(n-1) * base) * n)` — verificado à mão contra os quatro scripts
+    // (`heal_party`/`protect_party`/`enchant_party`.lua base 120, `train_party.lua` base 60):
+    // n=1 devolve o `base` cru (o lançador sozinho nunca chega a ser cobrado — quem chama já
+    // recusa antes, `no-target`); n=2..4 é a fórmula.
+    const base120 = { kind: 'party-scaled' as const, base: 120, decay: 0.9 };
+    expect(partyScaledManaCost(base120, 1)).toBe(120);
+    expect(partyScaledManaCost(base120, 2)).toBe(216);
+    expect(partyScaledManaCost(base120, 3)).toBe(292);
+    expect(partyScaledManaCost(base120, 4)).toBe(350);
+
+    const base90 = { kind: 'party-scaled' as const, base: 90, decay: 0.9 };
+    expect(partyScaledManaCost(base90, 2)).toBe(162);
+    expect(partyScaledManaCost(base90, 3)).toBe(219);
+    expect(partyScaledManaCost(base90, 4)).toBe(263);
+
+    const base60 = { kind: 'party-scaled' as const, base: 60, decay: 0.9 };
+    expect(partyScaledManaCost(base60, 2)).toBe(108);
+    expect(partyScaledManaCost(base60, 3)).toBe(146);
+    expect(partyScaledManaCost(base60, 4)).toBe(175);
   });
 });
 

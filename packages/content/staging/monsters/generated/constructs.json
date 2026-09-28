@@ -19,6 +19,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -168,6 +172,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -325,6 +333,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.7,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -491,6 +503,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.86,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -561,6 +577,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.33,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -700,6 +720,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.83,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -923,6 +947,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1028,6 +1056,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1129,6 +1161,289 @@
     "outfitId": 345
   },
   {
+    "id": "gingerbread-man",
+    "name": "Gingerbread Man",
+    "class": "construct",
+    "health": 85,
+    "experience": 22,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.4,
+        "fire": -0.1,
+        "holy": 0.1,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 85,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/gingerbread_men.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 2549,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1738
+  },
+  {
+    "id": "goggle-cake",
+    "name": "Goggle Cake",
+    "class": "construct",
+    "health": 2700,
+    "experience": 2700,
+    "attack": {
+      "min": 0,
+      "max": 350
+    },
+    "armor": 38,
+    "defense": 38,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.15,
+        "ice": -0.15,
+        "holy": -0.05,
+        "death": -0.15
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire",
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 244,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-enchanted-sapphire",
+          "chance": 0.0673,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "combat-knife",
+          "chance": 0.0571
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.0569
+        },
+        {
+          "itemId": "rainbow-quartz",
+          "chance": 0.0381,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0359,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0266
+        },
+        {
+          "itemId": "spirit-cloak",
+          "chance": 0.0174
+        },
+        {
+          "itemId": "gummy-rotworm",
+          "chance": 0.0169
+        },
+        {
+          "itemId": "churro-heart",
+          "chance": 0.0152
+        },
+        {
+          "itemId": "glacier-amulet",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "egg",
+          "chance": 0.01
+        },
+        {
+          "itemId": "milk-chocolate-coin",
+          "chance": 0.0078,
+          "min": 1,
+          "max": 15
+        },
+        {
+          "itemId": "flour",
+          "chance": 0.0069
+        },
+        {
+          "itemId": "cookie",
+          "chance": 0.0052,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.005
+        },
+        {
+          "itemId": "epee",
+          "chance": 0.004
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "cream-cake",
+          "chance": 0.0014
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 350
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 170,
+          "max": 300
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "cherrybomb",
+          "impactKey": "starburst"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 120,
+          "max": 260
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "cherrybomb",
+          "impactKey": "cream"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/goggle_cake.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 2534,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1740
+  },
+  {
     "id": "golden-servant",
     "name": "Golden Servant",
     "class": "construct",
@@ -1152,6 +1467,10 @@
         "holy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.88,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1359,6 +1678,10 @@
         "holy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.88,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1534,6 +1857,211 @@
     "outfitId": 396
   },
   {
+    "id": "infected-weeper",
+    "name": "Infected Weeper",
+    "class": "construct",
+    "health": 3000,
+    "experience": 1200,
+    "attack": {
+      "min": 0,
+      "max": 280
+    },
+    "armor": 76,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "energy": 0.25,
+        "fire": -1,
+        "ice": -0.1,
+        "death": 0.3
+      },
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.19,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 198
+      },
+      "items": [
+        {
+          "itemId": "coal",
+          "chance": 0.0146
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 280
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainwave",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 700
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 80,
+          "max": 250
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbyfire"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -800
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 80,
+      "health": 0,
+      "damage": 0,
+      "random": 20
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/infected_weeper.lua"
+    },
+    "summons": {
+      "max": 6,
+      "entries": [
+        {
+          "monsterId": "parasite",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 6
+        }
+      ]
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 897,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
+    "outfitId": 489
+  },
+  {
     "id": "iron-servant",
     "name": "Iron Servant",
     "class": "construct",
@@ -1556,6 +2084,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1700,6 +2232,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1843,6 +2379,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.13,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1982,6 +2521,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.31,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2226,6 +2769,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2323,6 +2869,276 @@
     "outfitId": 67
   },
   {
+    "id": "weeper",
+    "name": "Weeper",
+    "class": "construct",
+    "health": 6800,
+    "experience": 5800,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 76,
+    "defense": 50,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "ice": -0.05,
+        "death": 0.3
+      },
+      "immunities": [
+        "earth",
+        "fire"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.19,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-ruby",
+          "chance": 0.1569,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "fire-sword",
+          "chance": 0.0328
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.0215
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.148,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "magma-legs",
+          "chance": 0.0079
+        },
+        {
+          "itemId": "magma-coat",
+          "chance": 0.0079
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.1544,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "fiery-heart",
+          "chance": 0.1357
+        },
+        {
+          "itemId": "coal",
+          "chance": 0.0132
+        },
+        {
+          "itemId": "wand-of-everblazing",
+          "chance": 0.0148
+        },
+        {
+          "itemId": "violet-crystal-shard",
+          "chance": 0.0543
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.121,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "red-crystal-fragment",
+          "chance": 0.0888
+        },
+        {
+          "itemId": "magma-clump",
+          "chance": 0.1324
+        },
+        {
+          "itemId": "blazing-bone",
+          "chance": 0.1489
+        },
+        {
+          "itemId": "eye-of-a-weeper",
+          "chance": 0.1587
+        },
+        {
+          "itemId": "prismatic-bolt",
+          "chance": 0.109,
+          "min": 1,
+          "max": 5
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "firebeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 1000
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "fireattack"
+        }
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 3000,
+        "chance": 1,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 80,
+          "max": 250
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitbyfire"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 80,
+      "health": 0,
+      "damage": 0,
+      "random": 20
+    },
+    "staticAttack": 0.7,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/weeper.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 882,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
+    "outfitId": 489
+  },
+  {
     "id": "worker-golem",
     "name": "Worker Golem",
     "class": "construct",
@@ -2346,6 +3162,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.32,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,

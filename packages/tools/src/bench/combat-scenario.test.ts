@@ -35,7 +35,7 @@ describe('the combat bench scenario (CMB-10, #336)', () => {
     const ability = flamer?.abilities.find((candidate) => candidate.id === 'flame-burst');
     expect(ability?.target.area?.shape).toBe('circle');
     expect(ability?.condition?.effect.kind).toBe('damage-over-time');
-    expect(ability?.field?.condition.effect.kind).toBe('damage-over-time');
+    expect(ability?.field?.condition?.effect.kind).toBe('damage-over-time');
     // CMB-03: resistência e vulnerabilidade no mesmo monstro.
     expect(flamer?.mitigation.resistances.fire).toBe(0.5);
     expect(flamer?.mitigation.resistances.ice).toBe(-0.25);

@@ -1,0 +1,20 @@
+{
+  "id": "inflict-wound",
+  "name": "Inflict Wound",
+  "description": "Fere o seu alvo, causando dano físico ao longo do tempo.",
+  "vocationId": "knight",
+  "minLevel": 40,
+  "manaCost": 30,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "effect": {
+    "kind": "damage-over-time",
+    "amount": 50,
+    "intervalMs": 2000,
+    "durationMs": 30000,
+    "range": 1,
+    "damageType": "physical"
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): DOT físico (sangramento) do Knight (level 40), `utori kor` no Canary. Fonte `data/scripts/spells/attack/inflict_wound.lua` (Canary local, 47dfd51): `spell:id(141)`, level 40, mana 30, cooldown 30s, grupo `attack` 2s, `range 1` (corpo a corpo), `COMBAT_PHYSICALDAMAGE`, `needTarget`. Mecanismo `Condition:addDamage` (M31-02): `condition:addDamage(15, 2000, -50)` — 15 tiques de 50 de dano a cada 2000 ms, total 30000 ms — o único DOT desta issue com intervalo/duração diferentes dos outros quatro. Aparência: efeito 10 e projétil 10, reaproveitados de `physical-strike` (mesmo tipo físico) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "cancel-invisibility",
+  "name": "Cancel Invisibility",
+  "description": "Remove a invisibilidade dos monstros numa área de 3x3 ao seu redor.",
+  "vocationId": "paladin",
+  "minLevel": 26,
+  "manaCost": 200,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "dispel",
+    "types": ["invisible"],
+    "area": {
+      "shape": "circle",
+      "radius": 1,
+      "centered": "caster"
+    }
+  },
+  "_open": "Canary `data/scripts/spells/support/cancel_invisibility.lua` (main, 2026-09-27): `words(\"exana ina\")`, `id(90)`, `level(26)`, `mana(200)`, `cooldown(2*1000)`/`groupCooldown(2*1000)`, `isSelfTarget(true)`, `isAggressive(false)`, `isPremium(true)` (Premium fica fora do recorte — Draconya não tem conta free/premium ainda), `vocation(\"paladin;true\", \"royal paladin;true\")`, `combat:setArea(createCombatArea(AREA_CIRCLE3X3))` (raio 1, a mesma convenção literal de `berserk.json`) com `COMBAT_PARAM_DISPEL, CONDITION_INVISIBLE`. Remove a chave `invisible` dos MONSTROS na área (#592) — nenhum monstro do recorte atual se torna invisível sozinho, então o efeito é mudo em produção até um monstro com essa ability existir; o mecanismo está pronto e testado (`sim/rulesets/hunt.test.ts`). Efeito (magic blue), auditado em 2026-09-27 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver `docs/combat-presentation-audit.md`)."
+}

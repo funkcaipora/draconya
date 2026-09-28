@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
-import { createHuntSession, Inventory, levelForXp } from '@draconya/sim';
+import { CharacterRuntime, createHuntSession, Inventory, levelForXp } from '@draconya/sim';
 import type { InventoryState } from '@draconya/sim';
 import { NEUTRAL_RATES } from '@draconya/content';
-import type { Progression } from '@draconya/content';
+import type { Progression, Vocation } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   accounts, characterStorages, characters, itemInstances, ledger,
@@ -108,12 +108,12 @@ const staminaUpdatedAt = async (
 const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
-  xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
+  xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
   ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
 }> => {
   const [row] = await database.database.db
     .select({
-      xp: characters.xp, gold: characters.gold, level: characters.level,
+      xp: characters.xp, gold: characters.gold, soul: characters.soul, level: characters.level,
       skills: characters.skills,
       bestiary: characters.bestiary,
       ammo: characters.ammo,
@@ -126,7 +126,7 @@ const characterRow = async (
     .from(characters)
     .where(eq(characters.id, characterId));
   return row as {
-    xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
+    xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
     ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
   };
 };
@@ -742,6 +742,81 @@ describe.runIf(ready)('a munição escolhida chega ao Postgres pelo extrato (#15
     await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     expect((await characterRow(database, characterId)).ammo).toEqual({ arrow: 'onyx-arrow' });
+  });
+});
+
+describe.runIf(ready)('pontos de alma chegam ao Postgres pelo extrato (#593)', () => {
+  it('nasce zero, a última escrita vence, e o extrato sem o campo não toca na coluna', async () => {
+    // Como a munição: ABSOLUTO, última-escrita-vence — NUNCA fundido por máximo. Diferente da
+    // munição, aqui o valor pode DESCER de verdade (gasto de conjuração), e é exatamente esse
+    // caso que a segunda gravação abaixo prova: 30 depois de 80 teria "voltado" se o ledger
+    // fundisse pelo maior, como faz com skill e Bestiário.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).soul).toBe(0);
+
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), soul: 80 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).soul).toBe(80);
+
+    // Gasto em conjuração: o extrato seguinte leva um número MENOR, e a coluna precisa DESCER
+    // com ele — a régua oposta da de skill/Bestiário, que nunca aceitam um valor menor.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, soul: 65 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).soul).toBe(65);
+
+    // Extrato de Cidade (sem o campo) não toca na coluna — o personagem não escolheu vocação
+    // nem lançou nada ali, e `65` continua sendo o último valor de verdade.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).soul).toBe(65);
+  });
+
+  it('ida e volta: chooseVocation enche a alma → sessão encerra → extrato (parseReceipt) → ledger → banco', async () => {
+    // Prova a issue #593 ponta a ponta: `CharacterRuntime.chooseVocation` (o `sim`) enche a
+    // alma pela primeira vez, a sessão emite o extrato de verdade (`session.end`), o extrato
+    // passa pelo Redis — serializado e reconstruído por `parseReceipt`, a lista de PERMISSÃO —,
+    // o `jobs` credita, e o valor bate no Postgres.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const vocation: Vocation = {
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      spellSkill: 'magic', startingKit: [], skillMultipliers: {},
+      meleeDamageMultiplier: 1, distDamageMultiplier: 1, soulMax: 100, soulGainTicksMs: 120_000,
+    };
+
+    const sessionId = randomUUID();
+    const content = testContent();
+    const session = createHuntSession({
+      id: sessionId, huntId: TEST_HUNT.id, difficulty: 'cautious', content, createdAtMs: 0,
+    });
+    const character = new CharacterRuntime({
+      id: characterId, position: { x: 1, y: 1, z: 7 },
+      health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+      level: 8, xp: 0, vocationId: null,
+      staminaMs: null, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(character);
+
+    const result = character.chooseVocation(vocation, null, {
+      catalog: content.items, vocationLevel: 8, instanceId: `${sessionId}:${characterId}:vocation`,
+      rules: { backpackSlots: 0, satchelSlots: 0, row: 1 },
+    });
+    expect(result.ok).toBe(true);
+    expect(character.soul).toBe(100);
+
+    const [receipt] = session.end('manual-exit');
+    if (receipt === undefined) throw new Error('a sessão não emitiu extrato');
+
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({
+      sessionId, characterId, accountId: 'a1', reason: receipt.reason, seq: receipt.seq,
+      aggregates: receipt.aggregates, notableEvents: receipt.notableEvents, soul: character.soul,
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).soul).toBe(100);
   });
 });
 

@@ -21,6 +21,8 @@ export interface CharacterRecord {
   readonly promoted: boolean;
   readonly level: number;
   readonly xp: number;
+  /** Pontos de alma (#593). ÚLTIMA ESCRITA VENCE no ledger, nunca fundido por máximo — pode DESCER. */
+  readonly soul: number;
   readonly gold: number;
   readonly capacity: number;
   readonly premiumUntil: Date | null;
@@ -555,6 +557,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     promoted: row.promoted,
     level: row.level,
     xp: row.xp,
+    soul: row.soul,
     gold: row.gold,
     capacity: row.capacity,
     premiumUntil: row.premiumUntil,

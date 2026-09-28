@@ -39,6 +39,17 @@ export interface CharacterState {
   /** XP ACUMULADA, não o progresso dentro do level. Ver `progression.ts` (FUN-37). */
   readonly xp: number;
   /**
+   * Pontos de alma (#593), o `spell:soul(n)` do Canary — hoje só a plumbing: nenhuma magia do
+   * catálogo real ainda declara `soulCost` (a conjuração é a #594). PODE DESCER — é gasto, não
+   * progressão monotônica como skill/Bestiário — e por isso o extrato o leva como valor
+   * ABSOLUTO, última-escrita-vence, nunca fundido por máximo no ledger (ver `receipts.ts`).
+   *
+   * Opcional: personagem e snapshot anteriores a esta issue não têm a chave, e `0` é onde todo
+   * personagem sem vocação está — o Tibia sempre tem vocação e por isso sempre tem alma; aqui
+   * o personagem nasce sem uma (§7.4), e `chooseVocation` é quem a enche pela primeira vez.
+   */
+  readonly soul?: number;
+  /**
    * A vocação escolhida, ou ausente enquanto não há uma — o personagem nasce sem e escolhe no
    * level 8 (§7.4).
    *
@@ -47,6 +58,15 @@ export interface CharacterState {
    * formato antigo continua legível e o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
    */
   readonly vocationId?: string | null;
+  /**
+   * A Boosted Creature do dia em que este personagem entrou no jogo (M42, #615, ADR 0052
+   * decisão 5): vem do ticket, FIXADA aqui como a versão de conteúdo (invariante 7) — e não
+   * relida do mundo a cada transição Cidade↔hunt, para a hunt que atravessa a virada continuar
+   * com a boosted com que nasceu (ADR 0054 decisão 7). Ausente é ticket sem o dado (conteúdo
+   * sem `boosted/baseline.json`, ou `api` antigo em deploy em rolagem): nenhuma hunt deste
+   * personagem aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
   /**
    * Stamina que sobrava em `staminaUpdatedAtMs`, em milissegundos (§10). NÃO é decrementada
    * por ninguém fora da hunt: o valor de agora é calculado na leitura (ver `stamina.ts`).
@@ -308,7 +328,10 @@ export class CharacterRuntime {
   maxMana: number;
   level: number;
   xp: number;
+  soul: number;
   vocationId: string | null;
+  /** Ver `CharacterState.boostedMonsterId`. Nunca escrito depois da construção — fixado. */
+  readonly boostedMonsterId?: string;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
   /** Saldo-base privado; só `settleGoldDelta` pode incorporá-lo ao extrato já aceito. */
@@ -382,7 +405,9 @@ export class CharacterRuntime {
     this.maxMana = state.maxMana;
     this.level = state.level;
     this.xp = state.xp;
+    this.soul = state.soul ?? 0;
     this.vocationId = state.vocationId ?? null;
+    if (state.boostedMonsterId !== undefined) this.boostedMonsterId = state.boostedMonsterId;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.#gold = state.gold ?? 0;
@@ -419,6 +444,15 @@ export class CharacterRuntime {
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
   get speedScale(): number {
     return this.conditions.speedScale();
+  }
+
+  /**
+   * Invisível (#592) — o que `Prey.invisible` (`monster/monster.ts`) lê em `chooseTarget`: um
+   * monstro sem `seesInvisible` não seleciona nem retém este personagem como alvo enquanto isto
+   * for `true`. Reconhecida pela chave reservada da condição, como `speedScale`/`hasManaShield`.
+   */
+  get invisible(): boolean {
+    return this.conditions.hasInvisible();
   }
 
   /** Saldo de entrada visível ao motor. A sessão só movimenta `goldDelta`. */
@@ -505,6 +539,10 @@ export class CharacterRuntime {
     // A vocação PRIMEIRO: `equip` confere `requires.vocationId` contra `this.vocationId`, e a
     // arma exige exatamente a que está sendo escolhida.
     this.vocationId = vocation.id;
+    // A alma nasce CHEIA (#593): o Tibia sempre tem vocação e por isso sempre tem alma; aqui
+    // ela só existe a partir de agora, e o personagem que acabou de escolher não pode começar
+    // devendo — é a mesma decisão de "vestir o kit completo", não "vestir aos poucos".
+    this.soul = vocation.soulMax;
     if (options.kitItems !== undefined && options.kitItems.length > 0) {
       const kit: VocationPieceResult[] = [];
       for (const { item } of options.kitItems) {
@@ -580,7 +618,9 @@ export class CharacterRuntime {
       maxMana: this.maxMana,
       level: this.level,
       xp: this.xp,
+      soul: this.soul,
       vocationId: this.vocationId,
+      ...(this.boostedMonsterId === undefined ? {} : { boostedMonsterId: this.boostedMonsterId }),
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       speed: this.speed,
@@ -650,6 +690,17 @@ export class CharacterRuntime {
   heal(amount: number): number {
     const applied = Math.min(amount, this.maxHealth - this.health);
     this.health += applied;
+    return applied;
+  }
+
+  /**
+   * Ganha alma (#593), capada no `soulMax` da vocação. Devolve o quanto de fato entrou — como
+   * `heal` devolve o quanto de fato curou —, para quem chama saber se vale a pena continuar
+   * tiquetando (o Canary não cancela a condição ao encher, mas o chamador pode).
+   */
+  gainSoul(amount: number, max: number): number {
+    const applied = Math.min(amount, Math.max(0, max - this.soul));
+    this.soul += applied;
     return applied;
   }
 }

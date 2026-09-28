@@ -549,3 +549,61 @@ Três campos são expostos em `player-stats` e em `session-state.self`:
 - `magicLevel`: atalho com `{ level, percentToNext }` para a skill `magic` (`skills.magic`), duplicado no topo para facilitar acesso direto nas barras de interface do HUD e manter paridade com as barras clássicas.
 
 O percentual para o próximo nível (`percentToNext`) é um número inteiro de 0 a 99 (truncado via piso `Math.floor` e limitado a 99 enquanto o nível não fecha).
+
+## Alma (soul, #593)
+
+**Status:** implementado — máximo, ganho por XP e custo de magia. **Conjuração ainda não** (a
+magia que de fato gasta alma é a #594).
+
+Saiu de `docs/product/future-systems.md`: o handoff só listava "Soul Points" como estatística de
+personagem, mas o épico E7 já cobria a mecânica que faltava — o Canary cobra alma
+(`spell:soul(n)`) de 50 magias de conjuração de runa, e sem alma nenhuma delas existe de verdade.
+
+**O teto e a cadência de ganho são da VOCAÇÃO** (`soulMax`/`soulGainTicksMs`,
+`packages/content/data/vocations/*.json`), do `soulmax`/`gainsoulticks` do Canary
+`vocations.xml` — verificado em `opentibiabr/canary` `main` 2026-09-27. O Canary distingue
+vocação base (100/120000 ms) de PROMOVIDA (200/15000 ms); Draconya não tem promoção ainda
+(ver "Em aberto" acima), então cada vocação carrega só o número da base — o dia em que a
+promoção existir, ela reescreve estes dois campos como já reescreve stats por level.
+
+**Sem vocação não há alma.** O Canary sempre tem vocação (mesmo `VOCATION_NONE` declara os
+dois números); aqui o personagem nasce sem uma e escolhe no level 8 (§7.4), e a alma só passa a
+existir quando ele escolhe: `chooseVocation` enche a alma para o `soulMax` da vocação na hora —
+a mesma decisão de "veste o kit completo", não "veste aos poucos". Até lá, `soul` é `0` e a
+coluna do banco também nasce em `0`.
+
+**O ganho é passivo, disparado por XP** (`Player::onGainExperience` do Canary,
+`data/events/scripts/player.lua`): a cada abate que rende XP ≥ o level QUE O PERSONAGEM TINHA
+antes do ganho, com a alma abaixo do teto, (re)aplica-se uma condição de quatro minutos
+(`CONDITION_SOUL`, fixo — não é conteúdo, ao contrário do teto e da cadência) que credita um
+ponto de alma a cada `soulGainTicksMs`. É a MESMA máquina de condição com tique periódico que
+haste, cura ao longo do tempo e veneno já usam (#155/CMB-07) — só o efeito muda: soma alma em
+vez de saúde. Relançar (matar outro monstro dentro da janela) reinicia o prazo de quatro
+minutos, como no Canary.
+
+**O custo é da MAGIA** (`spellSchema.soulCost`, opcional — ausente é `0`, o normal de hoje):
+lançar sem alma suficiente é RECUSADO pela MESMA regra da mana — a ação não sai e a alma não é
+gasta —, e a alma sai por último, junto da mana. Nenhuma magia real declara `soulCost > 0`
+ainda: a conjuração de runa (que é quem de fato cobra) é a #594.
+
+**Persistência.** `characters.soul` (migração `0017_593-soul.sql`) é a coluna do banco: valor
+ABSOLUTO, ÚLTIMA-ESCRITA-VENCE, nunca fundido pelo maior como skill/Bestiário — alma PODE
+DESCER (é gasta), e fundir por máximo reviveria um saldo já gasto. Viaja ticket → sessão →
+extrato → ledger pela mesma régua da munição escolhida e do equipamento.
+
+**HUD.** `soul`/`soulMax` chegam em `player-stats` e `session-state.self`, como `speed`/`skills`
+acima; a linha "Soul Points" do painel Skills mostra `soul/soulMax` — `0/0` é "sem vocação
+escolhida", a mesma degradação de `vocationId: null`.
+
+| Parâmetro | Valor | Onde mora em packages/content |
+|---|---|---|
+| Teto de alma (base, as quatro vocações) | 100 | `packages/content/data/vocations/*.json`, `soulMax` |
+| Cadência de ganho (base, as quatro vocações) | 1 ponto a cada 120 000 ms | `packages/content/data/vocations/*.json`, `soulGainTicksMs` |
+| Duração da condição de ganho após XP | 4 minutos, fixo (mecanismo, não conteúdo) | `packages/sim/src/rulesets/hunt.ts`, `SOUL_CONDITION_DURATION_MS` |
+| Custo de alma por magia | `0` em todo o catálogo real hoje | `packages/content/data/spells/*.json`, `soulCost` |
+
+### Divergência do Canary
+
+Vocação PROMOVIDA (200/15000 ms) não existe em Draconya — promoção de vocação é `[ABERTO]` (ver
+acima), e o dia em que ela chegar reescreve `soulMax`/`soulGainTicksMs` como já reescreve o resto
+dos stats por promoção.

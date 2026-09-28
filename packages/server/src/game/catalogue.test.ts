@@ -633,16 +633,23 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
 
-  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520)', () => {
+  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
     expect(hunts.map((h) => h.id)).toEqual(['rat-cellars', 'rotworm-caves', 'darashia-dragon-lair']);
     const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
-    expect(rotworm?.monsters).toEqual([{ id: 'rotworm', name: 'Rotworm' }]);
+    // Composição real do Canary (#586): rotworm E terramite, não mais só rotworm.
+    expect(rotworm?.monsters).toEqual([
+      { id: 'rotworm', name: 'Rotworm' },
+      { id: 'terramite', name: 'Terramite' },
+    ]);
     expect(rotworm?.loot.map((l) => l.itemId).sort()).toEqual(
-      ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
+      [
+        'ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm',
+        'terramite-shell', 'terramite-legs',
+      ].sort(),
     );
-    expect(rotworm?.lootDrops).toBe(8); // 7 itens + gold (lootDropsOf, catalogue.ts:301-315)
+    expect(rotworm?.lootDrops).toBe(10); // 9 itens + gold (lootDropsOf, catalogue.ts:301-315)
   });
 
   it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {

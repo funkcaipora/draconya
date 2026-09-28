@@ -99,6 +99,15 @@ const CreatureState = z.object({
    * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
    */
   colors: OutfitColors.optional(),
+  /**
+   * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
+   * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
+   * isto, e um cliente que exigisse recusaria a mensagem inteira em silêncio. Ausente é "não é
+   * invocação de personagem" — o de sempre, inclusive para toda invocação de MONSTRO (#546),
+   * que o cliente não precisa marcar. O cliente usa isto só para destacar "sua invocação" —
+   * nunca para decidir dono de loot, alvo ou qualquer resultado (invariante 4).
+   */
+  masterId: z.string().optional(),
 });
 
 /** Os agregados da sessão — o que o §16.2 chama de "quanto rendeu". */
@@ -558,6 +567,10 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('rows'), widths: z.array(z.number().int().positive()).min(1) }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+  /** Um tile só, no alvo (#591: runa de campo simples, Destroy Field). */
+  z.object({ shape: z.literal('point') }),
+  /** A fileira perpendicular centrada no alvo (#591: Fire/Poison/Energy Wall). */
+  z.object({ shape: z.literal('wall'), width: z.number().int().positive() }),
 ]);
 
 /** Uma faixa `[min, max]` de exibição (#524) — a poção do Tibia, que sorteia dentro dela sem escalar por level/ML. */
@@ -637,6 +650,9 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
+      soul: z.number().int().nonnegative().default(0),
+      soulMax: z.number().int().nonnegative().default(0),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -1194,6 +1210,14 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+    /**
+     * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
+     * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um
+     * nó `game` anterior a esta issue manda sem, e o HUD mostra "0/0" em vez de recusar o
+     * parse inteiro — a mesma degradação de `speed`/`ammo` acima.
+     */
+    soul: z.number().int().nonnegative().default(0),
+    soulMax: z.number().int().nonnegative().default(0),
   }),
   /**
    * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o
@@ -1321,6 +1345,14 @@ export const S2C_SCHEMAS = {
   'field-appear': FieldTile,
   /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
   'field-disappear': z.object({ id: z.string().min(1) }),
+  /**
+   * O campo trocou de estágio (#560): o mesmo `id` de `field-appear`, e o `appearanceId` NOVO
+   * já resolvido pelo hospedeiro — sem `tiles`, que não muda entre estágios.
+   */
+  'field-stage-change': z.object({
+    id: z.string().min(1),
+    appearanceId: z.number().int().positive(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

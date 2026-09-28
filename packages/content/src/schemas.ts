@@ -243,6 +243,15 @@ export const appearancesSchema = z.object({
    */
   fields: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de campo → [appearanceId dos estágios 1, 2, …]` (#560): o segundo estágio do fire
+   * field, mais fraco, é OUTRA arte — a mesma indireção de `fields` acima, só que por índice em
+   * vez de um número só. `fields[id]` continua sendo a arte do NASCIMENTO (estágio 0); este
+   * array começa no estágio 1 — `fieldStages[id][stageIndex - 1]` é o id de quem recebe
+   * `field-stage-change` com aquele `stageIndex`. Campo cuja cadeia não tem entrada aqui troca
+   * de estágio MUDO — o cliente não redesenha, mas a mecânica (dano, bloqueio) já rodou no `sim`.
+   */
+  fieldStages: z.record(z.string().min(1), z.array(appearanceId)).default({}),
+  /**
    * `appearanceKey → { estado → id }` do cenário usável (#727, ADR 0050 d.1): a mesma
    * indireção de `corpses` para porta, capim, stone pile, rope spot, ladder, alavanca. GERADO
    * por `pnpm map:import` em `appearances/generated/scenery.json` — nunca escrito à mão —,
@@ -1112,6 +1121,28 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
    * atingido como qualquer valor não-zero (`AreaCombat::getList`, #679).
    */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+  /**
+   * UM tile só, no ALVO mirado (#591): a runa de campo simples (Fire/Poison/Energy Field) e a
+   * Destroy Field mesma miram um único tile vazio — diferente do círculo no alvo, que sempre
+   * cobre mais de um. Sem parâmetro: a geometria inteira é "o tile que o jogador apontou".
+   */
+  z.object({ shape: z.literal('point') }),
+  /**
+   * A parede (#591, Magic Wall/Wild Growth NÃO usam esta forma — as duas nascem num tile só,
+   * `point`, `magic_wall.lua`/`wild_growth.lua` do Canary criam o item só na posição mirada, sem
+   * `setArea`; é Fire/Poison/Energy WALL que usam `AREA_WALLFIELD`/`AREA_WALLFIELD_ENERGY` —
+   * "a forma da parede é perpendicular à direção" no corpo da issue): `width` (ímpar) tiles
+   * numa linha CENTRADA no alvo, perpendicular à direção lançador→alvo — a mesma fileira que
+   * `row()` já calcula para `cleave`/`beam`/`rows`, só que ancorada no ALVO (distância 0) em vez
+   * do lançador. Não há matriz do Canary aqui (ADR 0019): só a CONTAGEM (3 tiles), como toda
+   * outra forma deste arquivo.
+   */
+  z.object({
+    shape: z.literal('wall'),
+    width: z.number().int().positive().refine((w) => w % 2 === 1, {
+      message: 'largura de parede é ímpar (centrada no alvo)',
+    }),
+  }),
 ]);
 
 export type SpellArea = z.infer<typeof spellAreaSchema>;
@@ -1228,11 +1259,21 @@ export const supplySchema = z.object({
   group: z.enum(CONSUMABLE_GROUPS),
   /**
    * Por quanto tempo o uso tranca o livro do grupo (ADR 0032 d.2/d.6), como
-   * `spell.groupCooldownMs`. O supply não tem cooldown individual separado: o grupo É o livro
-   * dele. Default 1000: o passo do Tibia para poção e a cadência que o pool `potion` já
-   * respeitava; a runa de `attack` declara o dela para se alinhar às magias de ataque.
+   * `spell.groupCooldownMs`. Default 1000: o passo do Tibia para poção e a cadência que o pool
+   * `potion` já respeitava; a runa de `attack` declara o dela para se alinhar às magias de
+   * ataque. Até o #592, o supply não tinha cooldown individual separado: o grupo era o único
+   * livro dele — ver `cooldownMs` logo abaixo para a exceção.
    */
   groupCooldownMs: z.number().int().positive().default(1_000),
+  /**
+   * O cooldown PRÓPRIO do supply (#592, Canary `paralyze_rune.lua`: `rune:cooldown(6*1000)` AO
+   * LADO de `rune:groupCooldown(2*1000)`) — os dois livros trancam ao mesmo tempo, e os dois
+   * precisam vencer para o próximo uso. Ausente é o comportamento de sempre (só o grupo);
+   * `startSupplyCooldown`/`useSupply` (`sim/casting.ts`) iniciam e conferem os dois quando
+   * declarado. Diferente de `supplyCooldownKey` — que já existia para o supply SEM `group`
+   * (nenhum caso real usa isso hoje) —, aqui o livro próprio SOMA ao de grupo, nunca o substitui.
+   */
+  cooldownMs: z.number().int().positive().optional(),
   /**
    * A exaustão de AÇÃO compartilhada (`nextPotionAction` do Canary, `timeBetweenExActions`,
    * #690): todo supply que a declara trava o MESMO livro, poção ou runa — uma poção logo depois
@@ -1330,6 +1371,15 @@ export const supplySchema = z.object({
     z.object({
       kind: z.literal('condition'),
       condition: z.lazy(() => conditionSpecSchema),
+      /**
+       * O alvo à distância (#592, Paralyze Rune: `rune:needTarget(true)`/`allowFarUse(true)`).
+       * Ausente é o auto-alvo de sempre, das quatro poções acima; `'enemy'` mira o monstro
+       * selecionado como a runa de ataque (`kind: 'damage'`) — mesma ordem de recusas, mesmo
+       * `#aimFor`, e a condição só entra depois do gold sair (`useSupply`, `sim/casting.ts`).
+       * Exige `range` (`buildContent` confere as duas implicações).
+       */
+      target: z.enum(['enemy']).optional(),
+      range: z.number().int().positive().optional(),
     }),
     /**
      * Runa de dispel puro (#590, Canary `antidote_rune.lua`: só `COMBAT_PARAM_DISPEL`, sem cura
@@ -1342,7 +1392,38 @@ export const supplySchema = z.object({
       kind: z.literal('dispel'),
       types: z.array(z.string().min(1)).min(1),
     }),
-  ]),
+    /**
+     * Runa de CAMPO (#591): Fire/Poison/Energy Field/Wall, Magic Wall, Wild Growth — planta o
+     * `FieldSpec` inteiro (`z.lazy`, o mesmo truque de `condition` acima — `fieldSpecSchema` só é
+     * definida bem mais abaixo neste arquivo) no tile mirado. `range` é o alcance até o tile —
+     * `#725`/`#726` já miram `target.position`; o `sim` resolve o tile, nunca o cliente
+     * (invariante 4). O `FieldSpec.shape` decide a geometria: `point` (Fire/Poison/Energy
+     * Field, Magic Wall, Wild Growth — um tile só) ou `wall` (Fire/Poison/Energy Wall — a
+     * fileira perpendicular). Cada cast em tile DIFERENTE é uma instância própria — o `sim`
+     * deriva o id de campo por instância a partir de `field.id` + tile, nunca reaproveita o id
+     * do conteúdo cru (que reiniciaria o campo antigo em vez de abrir um novo).
+     */
+    z.object({
+      kind: z.literal('field'),
+      field: z.lazy(() => fieldSpecSchema),
+      range: z.number().int().positive(),
+    }),
+    /**
+     * Destroy Field (#591, `destroy_field_rune.lua`): remove um campo NÃO-bloqueante no tile
+     * mirado — o Canary lista só variantes de fogo/veneno/energia (`fields = {105, 2118..2126,
+     * 2132..2135, 21465}`); Magic Wall (2128) e Wild Growth (2130) NUNCA entram nessa lista, e a
+     * regra equivalente aqui é `blocksMovement`: o `sim` recusa remover campo bloqueante. Sem
+     * campo destrutível no tile, `no-target` — a carga NUNCA é gasta à toa (o Lua devolve
+     * `false` sem `field:remove()`).
+     */
+    z.object({
+      kind: z.literal('destroy-field'),
+      range: z.number().int().positive(),
+    }),
+  ]).refine(
+    (effect) => effect.kind !== 'condition' || (effect.target === 'enemy') === (effect.range !== undefined),
+    { message: 'o efeito condition com target "enemy" exige range, e só ele (#592)' },
+  ),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
   requires: z.object({
     level: z.number().int().positive().optional(),
@@ -1480,6 +1561,13 @@ export const SPEED_CONDITION_KEY = 'speed' as const;
 export const DRUNK_CONDITION_KEY = 'drunk' as const;
 
 /**
+ * A chave RESERVADA de uma condição `invisible` (#592, `CONDITION_INVISIBLE`). Sem campo
+ * próprio, como `drunk`/`mana-shield`: `Conditions.hasInvisible` (`sim/conditions.ts`)
+ * reconhece a condição pela CHAVE — nenhum estado de runtime a distingue de um `buff` vazio.
+ */
+export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
+
+/**
  * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
  * cada `intervalMs` — o `addDamage(rounds, interval, value)` que os scripts de magia do Canary
  * usam (Ignite: `addDamage(25, 3000, -45)`) e que o campo de fogo do Dragon Lord também usa
@@ -1562,6 +1650,14 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
    * `monsterAbilitySchema`, o mesmo mecanismo de toda ability em área — nada de novo aqui.
    */
   z.object({ kind: z.literal('drunk') }),
+  /**
+   * Invisibilidade do personagem (#592, Canary `invisible.lua`: `Condition(CONDITION_INVISIBLE)`,
+   * sem parâmetro além do prazo). Sem campo próprio, como `drunk` — `Conditions.hasInvisible`
+   * reconhece pela chave reservada (`INVISIBLE_CONDITION_KEY`). Um monstro que não "vê invisível"
+   * (`Monster.seesInvisible`) não seleciona nem retém quem carrega esta condição como alvo
+   * (`chooseTarget`, `sim/monster/monster.ts`).
+   */
+  z.object({ kind: z.literal('invisible') }),
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
@@ -1758,22 +1854,87 @@ export const conditionSpecSchema = z.object({
 ).refine(
   (spec) => (spec.effect.kind === 'drunk') === (spec.key === DRUNK_CONDITION_KEY),
   { message: `a condição drunk precisa da chave reservada "${DRUNK_CONDITION_KEY}", e só ela` },
+).refine(
+  (spec) => (spec.effect.kind === 'invisible') === (spec.key === INVISIBLE_CONDITION_KEY),
+  {
+    message: `a condição invisible precisa da chave reservada "${INVISIBLE_CONDITION_KEY}", `
+      + 'e só ela',
+  },
 );
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
+
+/**
+ * UM estágio da cadeia de decaimento de um campo (#560, `decayTo` do Canary —
+ * `items.xml:4212-4246`: o fire field 2118 (dano 20, 200s) decai para 2119 (dano 10, 148s) e
+ * depois para 2120 (sem dano, 98s) antes de sumir). `condition` AUSENTE é estágio sem efeito —
+ * o campo continua ocupando o tile (e bloqueando, se `fieldSpecSchema.blocksMovement`), mas
+ * ninguém que pisa nele sofre nada; é o caso do 2120 e de todo campo puramente bloqueante
+ * (Magic Wall, Wild Growth) — nenhum dos dois tem `field value="fire"` correspondente no
+ * Canary, então nunca houve condição para preservar bit a bit.
+ */
+export const fieldStageSchema = z.object({
+  durationMs: z.number().int().positive(),
+  condition: conditionSpecSchema.optional(),
+});
+export type FieldStage = z.infer<typeof fieldStageSchema>;
 
 /**
  * Um CAMPO de tile declarativo (CMB-07): uma condição que vive no chão por um prazo, numa forma
  * (`spellAreaSchema`, a MESMA geometria da magia e da ability). O `sim` resolve os tiles no
  * momento da aplicação e indexa por chave NUMÉRICA de tile — nunca varre todos os campos por
  * passo. O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01: conteúdo é imutável).
+ *
+ * **`condition` é OPCIONAL desde o #560** — era obrigatória até então, e a mudança é o que
+ * permite um campo puramente bloqueante (Magic Wall, Wild Growth: nenhum dano, só parede
+ * temporária). `durationMs`/`condition` no NÍVEL DO SPEC continuam sendo o estágio ÚNICO de
+ * sempre — todo campo declarado antes desta issue não tem `stages`, e por isso preserva bit a
+ * bit o sorteio e a cadência: `fieldStagesOf` (abaixo) devolve exatamente
+ * `[{ durationMs, condition }]` quando `stages` está ausente, o mesmo par que `applyField` já
+ * lia direto do spec.
+ *
+ * **`stages`, quando presente, é a cadeia inteira** (o `decayTo` do Canary) — o primeiro
+ * elemento é o estado de nascimento do campo, e `durationMs`/`condition` do próprio spec ficam
+ * como documentação do primeiro estágio (não lidos por quem usa `fieldStagesOf`).
  */
 export const fieldSpecSchema = z.object({
   id: z.string().min(1),
   durationMs: z.number().int().positive(),
   shape: spellAreaSchema,
-  condition: conditionSpecSchema,
+  condition: conditionSpecSchema.optional(),
+  /** A cadeia de decaimento (#560). Ausente: um estágio só, do próprio spec. */
+  stages: z.array(fieldStageSchema).min(1).optional(),
+  /**
+   * Bloqueia movimento, como parede (#560, Magic Wall/Wild Growth: `blocking="1"` no
+   * `items.xml`)? Vale para QUALQUER criatura — jogador e monstro — ao contrário do desvio de
+   * dano (`canMonsterEnterField`, M29-05), que só o monstro respeita e só quando o campo tem
+   * `damageType`. **`optional`, não `default`** (ao contrário do padrão do resto do schema): um
+   * default preenchido tornaria o campo OBRIGATÓRIO no tipo `FieldSpec` — toda fixture de teste
+   * que já constrói um `FieldSpec` literal (e são muitas) passaria a exigir as duas flags à toa.
+   * Ausente é `false` em todo consumidor (`spec.blocksMovement ?? false`), o que preserva bit a
+   * bit todo campo de hoje (fogo, veneno, energia — nenhum bloqueia passagem no Canary).
+   */
+  blocksMovement: z.boolean().optional(),
+  /**
+   * Bloqueia projétil e linha de visão (#560, `CONST_PROP_BLOCKPROJECTILE`)? Consultado por
+   * `isSightClear` (`packages/sim/src/line-of-sight.ts`) quando o M30-06 estiver completo — a
+   * TASK atual só declara o campo; o consumo em LOS já está fiado a `fieldBlocksProjectileAt`.
+   * `optional`, pelo mesmo motivo de `blocksMovement` acima. Ausente é `false`.
+   */
+  blocksProjectile: z.boolean().optional(),
 });
 export type FieldSpec = z.infer<typeof fieldSpecSchema>;
+
+/**
+ * A cadeia de estágios de um `FieldSpec`, NORMALIZADA — sempre pelo menos um elemento, nunca
+ * lida por `spec.stages` diretamente (que pode estar ausente). É o `sim` quem consome isto, não
+ * o schema: mora aqui porque é função pura sobre o tipo de conteúdo, sem estado de sessão.
+ */
+export function fieldStagesOf(spec: FieldSpec): readonly FieldStage[] {
+  if (spec.stages !== undefined) return spec.stages;
+  return spec.condition === undefined
+    ? [{ durationMs: spec.durationMs }]
+    : [{ durationMs: spec.durationMs, condition: spec.condition }];
+}
 
 
 /**
@@ -1923,10 +2084,12 @@ export type MonsterClass = (typeof MONSTER_CLASSES)[number];
  * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
  * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
- * `damage-over-time` ficam de fora por isso.
+ * `damage-over-time` ficam de fora por isso. `invisible` entrou no #559/#592 (Killer Rabbit e
+ * afins, `{ name = "invisible", ... }` em `monster.defenses` — o monstro fica invisível sozinho,
+ * o mesmo self-buff que `speed`/`buff` já são).
  */
 const DEFENSE_SELF_CONDITION_KINDS = new Set<ConditionEffect['kind']>([
-  'speed', 'buff', 'mana-shield', 'heal-over-time',
+  'speed', 'buff', 'mana-shield', 'heal-over-time', 'invisible',
 ]);
 
 /**
@@ -2127,6 +2290,20 @@ export const monsterSchema = z.strictObject({
    * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
    */
   mitigation: monsterMitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * As condições a que o monstro é IMUNE (#559/#592, ADR 0041 decisão 2 — `Monster::isImmune`
+   * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk`: a condição não é
+   * ADICIONADA — `#applyConditionTo` (`sim/rulesets/hunt.ts`) recusa antes de entrar, a mesma
+   * forma que a supressão de `drunk` por anel já usa. `invisible` é o CASO especial que o Canary
+   * também trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE);
+   * }` — a MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
+   * `chooseTarget` (`sim/monster/monster.ts`) lê esta chave para decidir se o monstro seleciona
+   * ou retém um alvo invisível. Ausente é `[]`, o monstro de sempre, sem imunidade nenhuma —
+   * preserva bit a bit todo monstro já importado. Outras chaves do Canary sem modelo aqui
+   * (`outfit`, `bleed`…) ficam de fora, e o importador as reporta em vez de descartar em
+   * silêncio (`scripts/catalog/monsters.ts`).
+   */
+  conditionImmunities: z.array(z.enum(['paralyze', 'drunk', 'invisible'])).default([]),
   /**
    * A cura por elemento (#683, M30-G6; `monster.heals` do Canary): por tipo, o PERCENTUAL
    * INTEIRO do dano que o atinge — já crítico, ANTES de qualquer bloqueio, resistência ou
@@ -2352,9 +2529,27 @@ export const monsterSchema = z.strictObject({
    * referência §15-19). Ausente é nenhuma — o comportamento de sempre.
    */
   summons: monsterSummonsSchema.optional(),
+  /**
+   * O monstro pode ser invocado por um PERSONAGEM (#598, M38-01, ADR 0057; TFS/Canary
+   * `MonsterType::isSummonable()`, `data/scripts/spells/support/summon_creature.lua`: só monstro
+   * com o campo marcado entra no parâmetro de `summon`). Distinto de `summons` acima — aquele é
+   * o monstro CONVOCANDO outro; este é o monstro sendo convocado pelo JOGADOR. Ausente é `false`:
+   * a maioria do bestiário do Canary não é invocável, e nenhum dos quatro monstros do recorte
+   * atual (rat, rotworm, dragon, dragon-lord) declara.
+   */
+  summonable: z.boolean().default(false),
+  /**
+   * `manaCost` da invocação (#598, `MonsterType::info.manaCost`, o custo de mana que
+   * `summon_creature.lua` debita do mestre por invocação) — 184 monstros do Canary o declaram.
+   * Obrigatório quando `summonable` é `true` (`.refine` abaixo); sem uso quando `false`.
+   */
+  manaCost: z.number().int().positive().optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
   _open: z.string().optional(),
-});
+}).refine(
+  (monster) => !monster.summonable || monster.manaCost !== undefined,
+  { message: 'monster.summonable exige manaCost', path: ['manaCost'] },
+);
 
 /**
  * O nome de dificuldade que ainda chega no protocolo (`enter-hunt.difficulty`, #584). O modelo de
@@ -2519,6 +2714,28 @@ export const vocationSchema = z.object({
    */
   meleeDamageMultiplier: z.number().positive().default(1),
   distDamageMultiplier: z.number().positive().default(1),
+  /**
+   * Pontos de alma (#593): teto e cadência de ganho, de `vocations.xml` (Canary) —
+   * `soulmax`/`gainsoulticks`, verificados em `opentibiabr/canary` `data/XML/vocations.xml`,
+   * `main` 2026-09-27. `soulGainTicksMs` é o `gainsoulticks` já em milissegundos (o Canary
+   * também mede em ms); um ponto de alma a cada intervalo, nunca por tick (invariante 2).
+   *
+   * O Canary distingue vocação base (100/120000) de PROMOVIDA (200/15000) — Draconya não tem
+   * promoção ainda, então cada vocação carrega só o número da base; o dia em que a promoção
+   * existir, ela reescreve estes dois campos como já reescreve stats por level.
+   *
+   * Sem vocação (personagem antes do level 8, §7.4) não há alma: o Canary sempre tem vocação
+   * (mesmo `VOCATION_NONE` declara os dois), mas aqui o personagem nasce sem uma, e a alma só
+   * passa a existir quando ele escolhe — `chooseVocation` é quem a enche pela primeira vez.
+   *
+   * `default` é o número BASE (as quatro vocações reais o repetem explicitamente, como
+   * `meleeDamageMultiplier: 1` — documentação, não silêncio): sem promoção implementada ainda,
+   * é o único número que existe, e um default poupa cada conteúdo de TESTE — dezenas, entre
+   * `content.test.ts`, `hunt.test.ts` e `catalogue.test.ts` — de declarar um par que não muda
+   * o resultado de nenhum deles.
+   */
+  soulMax: z.number().int().positive().default(100),
+  soulGainTicksMs: z.number().int().positive().default(120_000),
   /**
    * O bloco da vocação PROMOVIDA (#566, ADR 0042 decisão 1): `vocations.xml` ids 5–8 do Canary,
    * comparados às bases 1–4, verificado contra o checkout local em 2026-09-28. `name` é o nome
@@ -2894,11 +3111,38 @@ export const COMBAT_V3: CombatCompatibilityProfile = {
 };
 
 /**
+ * O perfil `combat-v4` (ADR 0052 decisão 7): o veículo ÚNICO do endgame inteiro (M38–M44,
+ * #598–#632/#643). Enquanto `tibia-parity` for a branch de integração, toda issue do endgame
+ * que muda resultado ou ordem de sorteio emenda este MESMO perfil — um estágio declarado por
+ * issue, documentado em `docs/product/combat-conformance.md` — em vez de ganhar um `combat-v5`
+ * próprio; ele só congela (vira imutável) no merge na `main` (ADR 0040 decisão 3). Ele SOMA em
+ * cima do `combat-v3`, nunca revoga: `HuntRuleset#isV3()` trata os dois ids como o mesmo
+ * mecanismo de bloqueio/defesa/mitigação do jogador, e cada campo do `combat-v3` que este
+ * perfil não menciona continua valendo sem mudança.
+ *
+ * **Estágio #598** (M38-01, invocação do jogador — ADR 0057): a invocação vira alvo válido do
+ * `chooseTarget` de monstro e credita dano ao MESTRE via `Contribution`/mapa de dano — não
+ * existe hoje nenhum cenário sem invocação onde isso mude ordem de sorteio ou resultado
+ * resolvido (o teste de conformance §11 prende que a hunt sem ninguém invocando consome
+ * `session.rng` exatamente como antes). Por isso a política aqui é `additive`, como o
+ * `combat-v1`: o mecanismo é novo, mas nenhum abate ou golpe que já existia muda de número.
+ */
+export const COMBAT_V4: CombatCompatibilityProfile = {
+  id: 'combat-v4',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'additive',
+};
+
+/**
  * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
  * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
  */
 export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
-  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2], [COMBAT_V3.id, COMBAT_V3]]);
+  new Map([
+    [COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2], [COMBAT_V3.id, COMBAT_V3],
+    [COMBAT_V4.id, COMBAT_V4],
+  ]);
 
 /**
  * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
@@ -3358,6 +3602,21 @@ export const bestiarySchema = z.object({
 export type Bestiary = z.infer<typeof bestiarySchema>;
 
 /**
+ * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): quando o dia troca no relógio de
+ * parede. `rolloverHourUtc` é a hora UTC (0–23) em que o `jobs` sorteia o monstro do próximo
+ * dia — o mesmo instante em que o Canary vira o server-save (`SpawnMonster::addMonster`,
+ * `spawn_monster.cpp:379-386`, e `data/globalevents/scripts/serverlog.lua` para o horário).
+ * Sem outro parâmetro: o CANDIDATO é o bestiário inteiro (`content.bestiary.entries`), não uma
+ * lista separada — todo monstro com ficha de Bestiário é elegível, como o Canary faz com
+ * `g_game().getBestiaryList()`.
+ */
+export const boostedSchema = z.object({
+  id: z.literal('baseline'),
+  rolloverHourUtc: z.number().int().min(0).max(23),
+});
+export type Boosted = z.infer<typeof boostedSchema>;
+
+/**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).
  *
  * **Fechado** porque o compilador só transforma em predicado o que conhece: uma linguagem de
@@ -3494,8 +3753,10 @@ export const botConditionSchemaV1 = z.discriminatedUnion('kind', [
   }),
 ]);
 
-/** Os cinco tipos de condição da v2 (ADR 0032 d.2). */
-export const BOT_CONDITION_KINDS_V2 = ['hp', 'mana', 'targets', 'target-hp', 'condition'] as const;
+/** Os seis tipos de condição da v2 (ADR 0032 d.2; `summons` do #598, M38-01, ADR 0057 d.4). */
+export const BOT_CONDITION_KINDS_V2 = [
+  'hp', 'mana', 'targets', 'target-hp', 'condition', 'summons',
+] as const;
 export type BotConditionKindV2 = (typeof BOT_CONDITION_KINDS_V2)[number];
 
 /**
@@ -3521,6 +3782,15 @@ export const botConditionSchema = z.discriminatedUnion('kind', [
     conditionId: z.string().min(1),
     present: z.boolean().default(true),
   }),
+  /**
+   * Quantas invocações VIVAS este personagem tem agora (#598, M38-01, ADR 0057 decisão 4 —
+   * "sem invocação viva → invocar" do preset Druid/Sorcerer). Campo NOVO no vocabulário v2, com
+   * o MESMO desenho de `targets` — contagem, nunca a lista —, e por isso não sobe
+   * `BOT_VOCABULARY_VERSION` (aditivo, como `condition` foi ao entrar).
+   */
+  z.object({
+    kind: z.literal('summons'), op: botOperator, count: z.number().int().nonnegative(),
+  }),
 ]);
 
 /**
@@ -3544,9 +3814,18 @@ export const botActionV1Schema = botActionSchema;
  * A ação da v2: `spell` ou `supply`. O suprimento voltou a ser ABSTRATO (gold no uso), então o
  * token `supplyId` volta ao vocabulário; o `item` de slot saiu — item de equipamento é das
  * automações, não de um slot da barra.
+ *
+ * `monsterId` em `spell` (#598, M38-01, ADR 0057 decisão 4) é o PARÂMETRO de uma magia cujo
+ * efeito é `summon` — "Summon Creature com parâmetro": a barra escolhe QUAL `summonable`
+ * nascer, e a magia (level, vocação, cooldown, grupo) continua sendo o `spellId` de sempre.
+ * Campo NOVO e OPCIONAL: uma ação `spell` sem `monsterId` continua válida — é toda magia que
+ * não é invocação —, então nenhuma configuração salva antes desta issue muda de forma, e
+ * `BOT_VOCABULARY_VERSION` não sobe.
  */
 export const botActionV2Schema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('spell'), spellId: z.string().min(1) }),
+  z.object({
+    kind: z.literal('spell'), spellId: z.string().min(1), monsterId: z.string().min(1).optional(),
+  }),
   z.object({ kind: z.literal('supply'), supplyId: z.string().min(1) }),
 ]);
 
@@ -4065,12 +4344,22 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
      */
     damageType: z.enum(DAMAGE_TYPES).default('arcane'),
   }),
-  /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
+  /**
+   * Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery), no lançador — ou em CADA
+   * membro da party no alcance com `target: 'party'` (Heal Party, #588: `CONDITION_REGENERATION`
+   * do Canary, `data/scripts/spells/party/heal_party.lua` — 20 de vida a cada 2000 ms por 2
+   * minutos). `sim` resolve os membros da MESMA sessão dentro de `range` e aplica a MESMA
+   * condição a cada um — sem sorteio por membro, os números do script são fixos.
+   */
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
     intervalMs: z.number().int().positive(),
     durationMs: z.number().int().positive(),
+    /** `self` (default) cura só o lançador; `party` cura cada membro da party no alcance. */
+    target: z.enum(['self', 'party']).optional(),
+    /** Obrigatório com `target: 'party'` — o raio em tiles (Canary: 36, distância Chebyshev). */
+    range: z.number().int().positive().optional(),
   }),
   /**
    * Dano ao longo do tempo (CMB-07): `amount` a cada `intervalMs`, por `durationMs`, aplicado
@@ -4092,12 +4381,29 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     durationMs: z.number().int().positive(),
     damageDealtPercent: damagePercentBySource.optional(),
   }),
-  /** Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs`. */
+  /**
+   * Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs` — no lançador,
+   * ou em CADA membro da party no alcance com `target: 'party'` (Protect/Enchant/Train Party,
+   * #588: `CONDITION_ATTRIBUTES` do Canary, `data/scripts/spells/party/*.lua`).
+   *
+   * `skillDeltas` (bônus FLAT por skill, #576: shielding +3 do Protect, magic +1 do Enchant,
+   * melee +3/distance +3 do Train — o MESMO campo que `conditionEffectSchema` já declara para
+   * ability/defesa de monstro) entra aqui pela primeira vez do lado da MAGIA de JOGADOR: o
+   * consumo é o MESMO mecanismo já ativo (`Conditions.skillBonus`, somado em `#skillLevelOf`/
+   * `#spellScaling`/`#defenseSourceOf`, `sim/rulesets/hunt.ts`) — ele não distingue de onde a
+   * condição veio, só soma `skillDeltas` de toda condição ATIVA do personagem. Nenhum consumo
+   * novo a escrever: `castSpell` só precisa propagar o campo para o `ConditionState`.
+   */
   z.object({
     kind: z.literal('buff'),
     durationMs: z.number().int().positive(),
     damageDealtPercent: damagePercentBySource.optional(),
     damageTakenPercent: z.number().int().optional(),
+    skillDeltas: z.record(z.string(), z.number().int()).optional(),
+    /** `self` (default) afeta só o lançador; `party` afeta cada membro da party no alcance. */
+    target: z.enum(['self', 'party']).optional(),
+    /** Obrigatório com `target: 'party'` — o raio em tiles (Canary: 36, distância Chebyshev). */
+    range: z.number().int().positive().optional(),
   }),
   /**
    * Provocação (#589, Canary `doChallengeCreature`/`challengeFocusDuration`): força quem ela
@@ -4115,18 +4421,115 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
   /** Dano vira mana enquanto vale. */
   z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
   /**
+   * Invisibilidade do LANÇADOR (#592, Canary `invisible.lua`: level 35, mana 440, 200 s,
+   * `isSelfTarget(true)`). Sem campo além do prazo — a chave reservada `invisible`
+   * (`INVISIBLE_CONDITION_KEY`) é quem o `sim` reconhece, como `mana-shield`.
+   */
+  z.object({ kind: z.literal('invisible'), durationMs: z.number().int().positive() }),
+  /**
    * Remove condição do lançador, sem curar (#590, Canary `cure_{poison,burning,curse,
    * electrification,bleeding}.lua`: só `COMBAT_PARAM_DISPEL`, sem `COMBAT_PARAM_TYPE,
    * COMBAT_HEALING`). `types` são as CHAVES de `ConditionState.key` que a magia remove — o
    * mesmo vocabulário que `field.condition.key` já declara (`"burning"` no Dragon Lord). Chave
    * ausente no alvo não é erro: a magia sai igual, sem efeito nenhum a remover.
+   *
+   * `area` (#592, Cancel Invisibility: `combat:setArea(createCombatArea(AREA_CIRCLE3X3))`) é a
+   * forma centrada no LANÇADOR cujos MONSTROS perdem as chaves — nunca os aliados na área, fora
+   * do recorte desta issue (§12). Ausente é o dispel de sempre, só no `recipient`.
    */
   z.object({
     kind: z.literal('dispel'),
     types: z.array(z.string().min(1)).min(1),
+    area: spellAreaSchema.optional(),
   }),
+  /**
+   * Invocação do jogador (#598, M38-01, ADR 0057; TFS/Canary `summon_creature.lua`): SEM
+   * `monsterId` fixo no conteúdo — o parâmetro vem da barra (`BotAction` `kind: 'spell'` com
+   * `monsterId`, ver `botActionV2Schema`) ou do preset do bot, e é ele que escolhe QUAL
+   * `summonable` nascer. A magia em si só declara o portão (level, vocação, cooldown, grupo) —
+   * `manaCost` do CATÁLOGO desta magia fica sem uso aqui: o custo real é o `manaCost` do
+   * MONSTRO (`MonsterType::getManaCost()`), e é assim que a mesma "Summon Creature" custa mais
+   * mana para um Fire Elemental do que para um Poison Spider. `HuntRuleset#castSpell` lê o
+   * monstro do catálogo e faz esse desvio — `casting.ts` continua puro e genérico, sem
+   * conhecer monstro nenhum.
+   */
+  z.object({ kind: z.literal('summon') }),
+  /**
+   * Remove uma condição do PRÓPRIO lançador, na hora (Cancel Magic Shield, #596) — o
+   * `creature:removeCondition(...)` do Canary. Ao contrário de toda outra `SpellEffect`, esta não
+   * AGENDA nada: `castSpell` devolve `CastSuccess.removeConditionKey`, e quem tem a `Conditions`
+   * (o ruleset) remove no mesmo instante, sem evento na fila — não há "vencimento" para uma
+   * remoção. `key` é a MESMA chave reservada que a condição alvo usa (`mana-shield` para a
+   * Cancel Magic Shield); string livre porque o vocabulário de condição já não é fechado aqui
+   * (`speed`/`drunk`/etc. usam a mesma convenção de chave reservada, CMB-11).
+   */
+  z.object({ kind: z.literal('remove-condition'), key: z.string().min(1) }),
+  /**
+   * Conjuração (#594, ADR 0044): `creature:conjureItem(blankId, itemId, charges)` do Canary
+   * (`data/scripts/spells/conjuring/*.lua`). SEMPRE self-only — o lançador credita CARGAS no
+   * próprio estoque abstrato de suprimento (runa) OU munição, nunca no de outro personagem, e
+   * por isso não tem `target`/`range`/`area`: a runa avulsa que a magia conjura é quem mira,
+   * depois, no uso — a conjuração em si nunca mira ninguém.
+   *
+   * Suprimento continua ABSTRATO (ADR 0026 d.8/0032 d.6/d.7, ADR 0044 decisão 1): nasce carga no
+   * `Map` de `CharacterRuntime.supplyStock`/`ammunitionStock`, nunca item físico novo — o mesmo
+   * modelo que o loot (#520) já credita, só que pela mão do lançador em vez do abate.
+   * `buildContent` confere que exatamente um entre `supplyId`/`ammunitionId` está presente E
+   * que o id aponta para o catálogo correspondente — magia de conjuração para runa/munição que
+   * não existe subiria muda, creditando um id que `useSupply`/o tiro nunca reconhecem.
+   */
+  z.object({
+    kind: z.literal('conjure'),
+    supplyId: z.string().min(1).optional(),
+    ammunitionId: z.string().min(1).optional(),
+    /** Cargas creditadas por lançamento — o terceiro argumento de `conjureItem` no Canary. */
+    charges: z.number().int().positive(),
+    /**
+     * O preço da runa em branco (10 gold, `npc/alexander.lua`), cobrado do gold JUNTO da
+     * mana/alma — nunca criada como item: é o mesmo gold que `useSupply` já debita, só que na
+     * hora de CRIAR a carga em vez de gastá-la. Ausente ou `0`: a conjuração de MUNIÇÃO
+     * (paladin) não compra runa em branco nenhuma — `conjureItem(0, …)` no Canary, `blankId`
+     * zero é "nada a consumir".
+     */
+    blankPrice: z.number().int().nonnegative().default(0),
+  }).refine(
+    (effect) => (effect.supplyId !== undefined) !== (effect.ammunitionId !== undefined),
+    { message: 'conjure precisa de exatamente um entre "supplyId" e "ammunitionId"' },
+  ),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
+
+/**
+ * O custo de mana de uma magia (#588): o número FIXO de sempre, OU escalado pelo tamanho da
+ * party no alcance (Heal/Protect/Enchant/Train Party) — `Party::onCastSpell` do Canary,
+ * `data/scripts/spells/party/*.lua`: `mana = ceil((decay^(n-1) × base) × n)`, `n` sendo quantos
+ * membros do roster (líder incluso) estão dentro do alcance do efeito. `decay` é 0,9 nas
+ * quatro magias do Canary — campo, não constante, porque o número é conteúdo, não motor.
+ *
+ * Só faz sentido ao lado de um efeito com `target: 'party'` — `buildContent` confere que os
+ * dois andam juntos, nos dois sentidos.
+ */
+export const spellManaCostSchema = z.union([
+  z.number().int().nonnegative(),
+  z.object({
+    kind: z.literal('party-scaled'),
+    /** O mana de UM lançador sozinho — nunca cobrado sozinho: `n <= 1` recusa antes (no-target). */
+    base: z.number().int().positive(),
+    /** O fator de decaimento por membro afetado (Canary: 0,9). */
+    decay: z.number().positive().max(1),
+  }),
+]);
+export type SpellManaCost = z.infer<typeof spellManaCostSchema>;
+
+/**
+ * O mana de EXIBIÇÃO de uma magia (#588): o número fixo de sempre, ou o `base` do custo
+ * escalado pela party — o mesmo que o Tibia anuncia no grimório (`spell:mana(120)` do Canary é
+ * o `base`, separado da conta de `onCastSpell`). Nunca o custo real de um lançamento
+ * específico, que depende de quantos estão no alcance — só quem tem a sessão (`sim`) sabe isso.
+ */
+export function manaCostDisplayOf(manaCost: SpellManaCost): number {
+  return typeof manaCost === 'number' ? manaCost : manaCost.base;
+}
 
 /**
  * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
@@ -4152,7 +4555,17 @@ export const spellSchema = z.object({
    */
   description: z.string().min(1).optional(),
   /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
-  manaCost: z.number().int().nonnegative(),
+  manaCost: spellManaCostSchema,
+  /**
+   * Alma gasta ao lançar (#593), a `spell:soul(n)` do Canary — hoje só a conjuração de runa a
+   * declara (`spells/conjuring/*.lua`), e a conjuração em si é a #594, fora desta issue.
+   * OPCIONAL, como `group`/`groupCooldownMs`, e não `.default(0)`: um default preenchido
+   * obrigaria todo `Spell` literal do repositório (as `.trace.ts` e os testes de conformidade)
+   * a declarar o campo mesmo sem custo nenhum. Ausente é toda magia de hoje: sem recusa nova.
+   * Como a mana, sem alma o lançamento é RECUSADO, nunca fica devendo — e sai por ÚLTIMO, junto
+   * da mana.
+   */
+  soulCost: z.number().int().nonnegative().optional(),
   /** O cooldown DA MAGIA. Evento na fila, nunca acumulador (ADR 0020). */
   cooldownMs: z.number().int().positive(),
   /**
