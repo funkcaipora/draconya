@@ -1,0 +1,30 @@
+{
+  "id": "ultimate-terra-strike",
+  "name": "Ultimate Terra Strike",
+  "description": "Faz brotar espinhos de pedra devastadores sob o seu alvo atual.",
+  "vocationId": "druid",
+  "minLevel": 90,
+  "manaCost": 100,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "secondaryGroup": {
+    "name": "ultimatestrikes",
+    "cooldownMs": 30000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 180,
+    "range": 3,
+    "damageType": "earth",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 4.5,
+      "skillMax": 7.3,
+      "baseMin": 35,
+      "baseMax": 55,
+      "scaling": "magic"
+    }
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): o topo da linha `X Strike` do Druid (level 90), `exori max tera` no Canary — falta entre `terra-strike-druid.json` (`exori tera`) e `strong-terra-strike.json` (`exori gran tera`), a mesma lacuna que `ultimate-energy-strike.json` (#523) fechou para o Sorcerer. Fonte `data/scripts/spells/attack/ultimate_terra_strike.lua` (Canary local, 47dfd51): `spell:id(157)`, level 90, mana 100, cooldown 30s, grupo `attack` 2s + grupo secundário `ultimatestrikes` 30s, `range 3`, `COMBAT_EARTHDAMAGE`, sem área. Fórmula IDÊNTICA à de `ultimate-flame-strike.json`/`ultimate-ice-strike.json`: `min = level/5 + ml×4.5 + 35`, `max = level/5 + ml×7.3 + 55`. `basePower` 180 reaproveita `ultimate-energy-strike.json` (mesma fórmula, ver a nota em `ultimate-flame-strike.json`). Aparência: efeito 17 e projétil 30, reaproveitados de `terra-strike-druid`/`strong-terra-strike` (mesmo elemento terra) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

@@ -46,6 +46,8 @@ export type CastRefusal =
   | 'no-target'
   | 'out-of-range'
   | 'not-enough-mana'
+  /** A magia pede alma (#593, `spell:soul(n)` do Canary) que este personagem não tem. */
+  | 'not-enough-soul'
   | 'not-enough-gold'
   /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
   | 'wrong-vocation'
@@ -107,6 +109,13 @@ export interface CastSuccess {
    * a mesma divisão de `condition` acima.
    */
   readonly dispel?: readonly string[];
+  /**
+   * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
+   * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
+   * remove algo, nunca as duas. Quem tem a `Conditions` do lançador (o ruleset) chama
+   * `conditions.remove(key)` direto — não há vencimento para uma remoção.
+   */
+  readonly removeConditionKey?: string;
 }
 
 export interface CastRefused {
@@ -488,8 +497,17 @@ export function castSpell(
   if (caster.mana < spell.manaCost) {
     return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
   }
+  // Alma sai pela MESMA regra da mana (#593): recusa sem lançar nada, nunca fica devendo. Só
+  // depois da mana porque, hoje, nenhuma magia real declara `soulCost` — a ordem entre as duas
+  // recusas tardias não é observável ainda, e fica ao lado da mana por serem o mesmo tipo de
+  // recurso do lançador. Ausente é toda magia de hoje: zero, como `manaCost` sempre foi.
+  const soulCost = spell.soulCost ?? 0;
+  if (caster.soul < soulCost) {
+    return { ok: false, reason: 'not-enough-soul', retryInMs: NOT_WAITING };
+  }
 
   caster.mana -= spell.manaCost;
+  caster.soul -= soulCost;
   // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
   caster.cooldowns.start(key, nowMs, spell.cooldownMs);
   if (groupKey !== null && spell.groupCooldownMs !== undefined) {
@@ -584,6 +602,11 @@ export function castSpell(
     // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
     case 'challenge':
       return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+    case 'remove-condition':
+      return {
+        ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        removeConditionKey: effect.key,
+      };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
      * aplica (o ruleset) agenda o tique. O `targetId` fica vazio aqui porque o lançador não

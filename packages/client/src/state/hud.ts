@@ -222,6 +222,13 @@ export interface HudState {
   readonly staminaMs: number;
   readonly speed: number;
   readonly skills: PlayerSkills;
+  /**
+   * Pontos de alma (#593): `soulMax` é da vocação — `0` é "sem vocação escolhida", o mesmo
+   * "sem teto para mostrar" que `vocationId: null` já significa. Chega em `player-stats` e em
+   * `session-state.self`, como `speed`/`skills`.
+   */
+  readonly soul: number;
+  readonly soulMax: number;
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
   readonly vocationId: string | null;
 
@@ -341,6 +348,8 @@ export const INITIAL_HUD: HudState = {
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
+  soul: 0,
+  soulMax: 0,
   vocationId: null,
   latencyMs: null,
   connection: 'idle',

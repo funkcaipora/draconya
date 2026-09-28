@@ -172,6 +172,11 @@ const spells = [
     id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 1_000,
     effect: { kind: 'damage', power: 80, range: 3, area: { shape: 'circle', radius: 2, centered: 'target' } },
   },
+  // #596: Cancel Magic Shield — remove a condição do lançador NA HORA, sem agendar nada.
+  {
+    id: 'cancel-magic-shield', name: 'Cancel Magic Shield', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'remove-condition', key: 'mana-shield' },
+  },
 ];
 // Poção e runa são suprimentos ABSTRATOS (FUN-77, §20.1): usar debita gold, sem pilha. Os
 // números são redondos de propósito, como os das magias.
@@ -1002,6 +1007,52 @@ describe('level up e penalidade de morte dentro da hunt', () => {
     const expected = statsForLevel(8, null, progression as Progression).maxHealth + (ten.level - 8) * 15;
     expect(ten.max).toBe(expected);
     expect(at(1)).toEqual(ten);
+  });
+
+  it('ganha alma passivamente ao ganhar XP ≥ level, capada no soulMax da vocação (#593)', () => {
+    // `soulGainTicksMs`/`soulMax` pequenos de propósito: o teste mede o MECANISMO (condição
+    // aplicada pelo ganho de XP, tique periódico, teto), não o número real do Canary — esse já
+    // está fixado em `content.test.ts` e nas quatro vocações reais.
+    const knight = {
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      soulMax: 3, soulGainTicksMs: 500,
+    };
+    // XP alta o bastante para bater o portão `experience >= levelBeforeGain` no level 8.
+    const fatRat = { ...rat, experience: 100, health: 1 };
+    const withKnight = content({ vocations: [knight], monsters: [fatRat] });
+    const { session, hero } = start({ loaded: withKnight, difficulty: 'bold' });
+    hero.level = 8;
+    const chosen = hero.chooseVocation(
+      withKnight.vocations.get('knight') as NonNullable<ReturnType<typeof withKnight.vocations.get>>,
+      null, {
+        catalog: withKnight.items, vocationLevel: 8, instanceId: 's:hero:vocation',
+        rules: { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      },
+    );
+    expect(chosen.ok).toBe(true);
+    // A escolha enche a alma na hora, no soulMax da vocação — antes de qualquer abate.
+    expect(hero.soul).toBe(3);
+
+    // Simula gasto: sem magia real de custo ainda (a conjuração é a #594), a alma só desce por
+    // ação manual neste teste — é o que deixa espaço para o ganho aparecer.
+    hero.soul = 0;
+    // Um abate (100 XP ≥ level 8) aplica a condição de ganho; ticando a cada 500 ms, o teto de
+    // 3 é alcançado bem dentro dos quatro minutos fixos da condição.
+    run(session, 30_000, 100);
+    expect(hero.soul).toBeGreaterThan(0);
+    expect(hero.soul).toBeLessThanOrEqual(3);
+    run(session, 30_000, 100);
+    expect(hero.soul).toBe(3);
+  });
+
+  it('sem vocação escolhida, XP não gera alma nenhuma (#593)', () => {
+    // O personagem nasce sem vocação (§7.4) e o Canary sempre tem uma — o portão simplesmente
+    // não abre até o level 8 acontecer de verdade.
+    const fatRat = { ...rat, experience: 100, health: 1 };
+    const withoutVocation = content({ monsters: [fatRat] });
+    const { session, hero } = start({ loaded: withoutVocation, difficulty: 'bold' });
+    run(session, 30_000, 100);
+    expect(hero.soul).toBe(0);
   });
 
   it('sair ou ser encerrado por regra NÃO custa XP: quem paga é quem morre', () => {
@@ -2574,6 +2625,24 @@ describe('magia (FUN-74)', () => {
 
     expect(() => run(session, 3_000, 100)).not.toThrow();
     expect(hero.mana).toBe(200);
+  });
+
+  it('Cancel Magic Shield (#596) remove a condição do lançador NA HORA, sem evento agendado', () => {
+    const { session, hero } = withSpells(botConfig({
+      support: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'cancel-magic-shield' },
+      }],
+    }), { health: 1_000, mana: 100, monsters: false });
+    // Mana Shield já ativo — como uma poção ou magia anterior teria deixado.
+    hero.conditions.apply({ key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000 });
+    expect(hero.conditions.hasManaShield()).toBe(true);
+
+    session.advanceBy(50);
+
+    // A remoção é IMEDIATA — não é uma condição nova com prazo curto, é a ausência da anterior.
+    expect(hero.conditions.hasManaShield()).toBe(false);
+    expect(hero.mana).toBe(90);
   });
 });
 
@@ -10740,6 +10809,122 @@ describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
     session.advanceBy(1_500); // 1 lançamento (cooldown 1 s), sem depender de "poison" nenhum.
     expect(monster.invisible).toBe(false);
     void hero;
+  });
+});
+
+describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic Wall/Wild Growth)', () => {
+  // Cadeia sintética curta (o firefield real do Dragon Lord tem a mesma FORMA, testada em
+  // `content/src/load.test.ts` contra os números reais do Canary): estágio 0 com dano, estágio
+  // 1 mais fraco, estágio 2 MUDO (some sem causar nada) — a forma exata de 2118 → 2119 → 2120.
+  const stagedFire: FieldSpec = {
+    id: 'fire-chain', durationMs: 1_000, // ignorado: `stages` manda quando presente.
+    shape: { shape: 'circle', radius: 0, centered: 'caster' },
+    stages: [
+      {
+        durationMs: 1_000,
+        condition: {
+          key: 'burning', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 1, intervalMs: 500, damage: 20 }], damageType: 'fire',
+          },
+        },
+      },
+      {
+        durationMs: 800,
+        condition: {
+          key: 'burning', merge: 'refresh', durationMs: 800,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 1, intervalMs: 400, damage: 10 }], damageType: 'fire',
+          },
+        },
+      },
+      { durationMs: 600 }, // sem `condition`: o estágio mudo, só ocupa até sumir.
+    ],
+  };
+
+  it('avança de estágio ao vencer cada duração, emite `field-stage-changed`, e some no fim (`field-vanished`)', () => {
+    const { session, ruleset } = start({ health: 1_000_000 });
+    ruleset.applyField(session, stagedFire, { x: 0, y: 0, z: 7 });
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.stageIndex ?? 0).toBe(0);
+    expect(ruleset.fields[0]?.condition?.effect.kind).toBe('damage-over-time');
+
+    session.advanceBy(999); // ainda dentro do estágio 0 (vence em 1000).
+    expect(ruleset.fields[0]?.stageIndex ?? 0).toBe(0);
+
+    session.advanceBy(2); // passou de 1000: o estágio 1 (mais fraco) entra.
+    expect(ruleset.fields[0]?.stageIndex).toBe(1);
+    const stage1 = ruleset.fields[0]?.condition;
+    expect(stage1?.effect.kind).toBe('damage-over-time');
+    if (stage1?.effect.kind === 'damage-over-time' && stage1.effect.form === 'rounds') {
+      expect(stage1.effect.rounds[0]?.damage).toBe(10);
+    }
+
+    session.advanceBy(800); // vence o estágio 1 (800 ms): o estágio 2, MUDO, entra.
+    expect(ruleset.fields[0]?.stageIndex).toBe(2);
+    expect(ruleset.fields[0]?.condition).toBeUndefined();
+
+    const midEvents = session.drainEvents();
+    expect(ofKind(midEvents, 'field-stage-changed').map((e) => e.stageIndex)).toEqual([1, 2]);
+
+    session.advanceBy(600); // vence o último estágio: o campo desaparece de vez.
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ofKind(session.drainEvents(), 'field-vanished')).toHaveLength(1);
+  });
+
+  it('campo bloqueante (Magic Wall) impede o passo do JOGADOR, como parede, e libera quando some', () => {
+    const { session, hero, ruleset } = start({ health: 1_000_000 });
+    const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+    const magicWall: FieldSpec = {
+      id: 'magic-wall', durationMs: 500,
+      shape: { shape: 'circle', radius: 0, centered: 'caster' },
+      blocksMovement: true,
+    };
+    ruleset.applyField(session, magicWall, ahead);
+
+    expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(hero.position).not.toEqual(ahead);
+
+    session.advanceBy(600); // vence: o campo some, sem `decayTo` (estágio único).
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+  });
+
+  it('campo bloqueante impede o passo do MONSTRO igual — sem exceção de dano (ao contrário do desvio do M29-05)', () => {
+    // Rato COMUM, sem `canWalkOnFire: false`: a M29-05 só desvia de campo com dano que o
+    // monstro não pode encaixar — este bloqueio vale para QUALQUER monstro, porque mora em
+    // `canOccupy`/`TileOccupancy.blockedAt`, não no predicado de desvio de dano.
+    const stuckRoute = {
+      id: 'wall-stuck-route', mapId: 'arena',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+      spawnPoints: [{ routeIndex: 0, monsterId: 'rat', respawnDelayMs: 30_000 }],
+    };
+    const stuckHunt = {
+      ...hunt, routeId: 'wall-stuck-route',
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+        },
+      },
+    };
+    const loaded = content({ routes: [stuckRoute], hunts: [stuckHunt] });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { x: 4, y: 1, z: 7 };
+    // Uma parede de 3 tiles na coluna x=3, cobrindo as únicas rotas de fuga do monstro preso em
+    // (4,1) rumo ao herói a oeste — a MESMA geometria do bloco M29-05 acima, mas SEM dano algum.
+    ruleset.applyField(session, {
+      id: 'wild-growth', durationMs: 9_999_999,
+      shape: { shape: 'beam', length: 3 },
+      blocksMovement: true,
+    }, { x: 3, y: 0, z: 7 });
+
+    run(session, 20_000, 100);
+    expect(monster?.position.x).toBe(4); // nunca cruzou — bloqueado como parede.
   });
 });
 

@@ -2,7 +2,7 @@
 
 Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pura do Canary, #578/#579) em `data/monsters/generated/` + `data/bestiary/baseline.json` + `data/appearances/baseline.json`, e valida `loot.items` contra o catálogo de itens REAL (`packages/content/data/items`, autoral + `generated/` — o que `loadContent` de fato carrega hoje; a promoção de itens é `promote-items.ts`, #748).
 
-1022 monstro(s) promovido(s) em 26 fatia(s):
+1021 monstro(s) promovido(s) em 26 fatia(s):
 
 - `amphibics.json`: 11
 - `aquatics.json`: 33
@@ -11,7 +11,7 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 - `constructs.json`: 20
 - `dawnport.json`: 18
 - `demons.json`: 21
-- `dragons.json`: 7
+- `dragons.json`: 6
 - `elementals.json`: 5
 - `event_creatures.json`: 30
 - `extra_dimensional.json`: 2
@@ -31,18 +31,19 @@ Separa `packages/content/staging/monsters/generated/*.json` (a transcrição pur
 - `undeads.json`: 48
 - `vermins.json`: 46
 
-## Não promovidos (6)
+## Não promovidos (7)
 
 | id | motivo |
 |---|---|
 | dragon | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | dragon-lord | hand-authored — regenerado só pelo #581, nunca por esta promoção |
+| dragon-lord-hatchling | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | eshtaba-the-conjurer | summons.entries repete o mesmo monsterId com chances diferentes — o sim só aceita uma entrada por id (content.ts) |
 | leiden | summons.entries repete o mesmo monsterId com chances diferentes — o sim só aceita uma entrada por id (content.ts) |
 | rat | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 | rotworm | hand-authored — regenerado só pelo #581, nunca por esta promoção |
 
-## Linhas de loot removidas (2786)
+## Linhas de loot removidas (2785)
 
 Item referenciado por `loot.items` que não existe no catálogo real, ou que excede a pilha de um item que não empilha. A linha inteira é removida — nunca creditada como item fantasma (§"Loot" de `packages/content/CLAUDE.md`).
 
@@ -358,7 +359,7 @@ Item referenciado por `loot.items` que não existe no catálogo real, ou que exc
 | malices-horn | 1 | item ausente do catálogo (packages/content/data/items) |
 | malices-spine | 1 | item ausente do catálogo (packages/content/data/items) |
 | mammoth-tusk | 3 | max 2 pede pilha, e o item não empilha (rollModel "canary" daria 1) |
-| mana-potion | 25 | item ausente do catálogo (packages/content/data/items) |
+| mana-potion | 24 | item ausente do catálogo (packages/content/data/items) |
 | mandrake | 5 | item ausente do catálogo (packages/content/data/items) |
 | mango | 1 | item ausente do catálogo (packages/content/data/items) |
 | marlin | 1 | item ausente do catálogo (packages/content/data/items) |

@@ -229,6 +229,11 @@ async function applyProgression(
   // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
   const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
 
+  // Pontos de alma (#593): ABSOLUTO, última-escrita-vence, como `ammo` — NUNCA fundido por
+  // MÁXIMO como skills/Bestiário. Alma DESCE (gasta na conjuração), e ficar com o maior de duas
+  // gravações fora de ordem reviveria um saldo que a sessão mais nova já gastou.
+  const soul = receipt.soul === undefined ? {} : { soul: receipt.soul };
+
   // O estoque de supply/munição do loot (#520): ABSOLUTO e última-escrita-vence, como `ammo` —
   // sobe por loot e desce por uso na MESMA sessão, então o valor final da sessão é o único que
   // os dois lados podem concordar sobre (não monotônico como o Bestiário, que funde pelo maior).
@@ -311,6 +316,7 @@ async function applyProgression(
       ...skills,
       ...bestiary,
       ...ammo,
+      ...soul,
       ...supplyStock,
       ...ammunitionStock,
       ...fedMs,

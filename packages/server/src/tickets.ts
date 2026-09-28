@@ -84,6 +84,12 @@ export interface InitialCharacter {
    */
   readonly gold?: number;
   /**
+   * Pontos de alma (#593). Vem do banco pela mesma razão de gold: nada que o cliente manda
+   * participa da criação da sessão (invariante 4). Ausente é personagem gravado antes desta
+   * issue — a sessão entra com zero, que é o normal de quem ainda não escolheu vocação.
+   */
+  readonly soul?: number;
+  /**
    * A configuração do bot, crua e ainda NÃO validada (FUN-81).
    *
    * Vem do banco pelo mesmo caminho que level, XP e gold — o `api` lê a linha, e nada que o

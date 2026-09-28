@@ -89,7 +89,12 @@ export interface QueuedTick {
 export interface ConditionTick {
   readonly amount: number;
   readonly intervalMs: number;
-  readonly kind?: 'heal' | 'damage';
+  /**
+   * `'soul'` (#593) é o `CONDITION_SOUL` do Canary: um ponto de alma por tique, aplicado pelo
+   * ganho de XP (`hunt.ts`), nunca declarado por `ConditionSpec` de conteúdo — é por isso que
+   * `conditionFromSpec` não tem um `case` para ele.
+   */
+  readonly kind?: 'heal' | 'damage' | 'soul';
   readonly damageType?: DamageType;
   readonly source?: DamageSource;
   readonly queue?: readonly QueuedTick[];
@@ -134,7 +139,7 @@ export interface ConditionState {
 export interface NormalizedTick {
   readonly amount: number;
   readonly intervalMs: number;
-  readonly kind: 'heal' | 'damage';
+  readonly kind: 'heal' | 'damage' | 'soul';
   readonly damageType?: DamageType;
   readonly source?: DamageSource;
   readonly queue?: readonly QueuedTick[];

@@ -5,6 +5,7 @@ import {
   TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
+import { Fields } from './fields.js';
 import { TileOverrides, interactableIdOf } from './tile-overrides.js';
 
 // Uma sala de 4×3 com uma parede no meio. Pequena de propósito: num mapa assim dá para dizer,
@@ -636,5 +637,51 @@ describe('teleporte por pisar (#734, ADR 0050 d.6 T3)', () => {
   it('sem overlay nenhum, `teleportAt` é sempre null — a Cidade não constrói TileOverrides', () => {
     const w = new TileOccupancy(map);
     expect(w.teleportAt(3, 1, 7)).toBeNull();
+  });
+});
+
+describe('TileOccupancy.fields — campo bloqueante (#560, Magic Wall/Wild Growth)', () => {
+  it('um campo com `blocksMovement` bloqueia como parede — para QUALQUER criatura, sem exceção de dano', () => {
+    const fields = new Fields();
+    fields.apply({
+      id: 'magic-wall', tiles: [{ x: 3, y: 1, z: 7 }], expiresAtMs: 20_000, blocksMovement: true,
+    });
+    const w = new TileOccupancy(map, { fields });
+    w.reset([at(1, 1)]);
+    expect(w.blockedAt(3, 1, 7)).toBe(true);
+    const hero = at(2, 1);
+    expect(canOccupy(w, hero, to(3, 1))).toBe('tile-blocked');
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: false, reason: 'tile-blocked' });
+  });
+
+  it('um campo comum (sem `blocksMovement`) NUNCA bloqueia — só o dano, aplicado à parte', () => {
+    const fields = new Fields();
+    fields.apply({ id: 'fire', tiles: [{ x: 3, y: 1, z: 7 }], expiresAtMs: 20_000 });
+    const w = new TileOccupancy(map, { fields });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    expect(w.blockedAt(3, 1, 7)).toBe(false);
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true });
+  });
+
+  it('o campo bloqueante some quando removido (o `expiresAtMs` venceu) — o tile volta a admitir passagem', () => {
+    const fields = new Fields();
+    fields.apply({
+      id: 'wall', tiles: [{ x: 3, y: 1, z: 7 }], expiresAtMs: 20_000, blocksMovement: true,
+    });
+    const w = new TileOccupancy(map, { fields });
+    const hero = at(2, 1);
+    w.reset([hero]);
+    expect(canOccupy(w, hero, to(3, 1))).toBe('tile-blocked');
+
+    fields.remove('wall'); // o mesmo que `HuntRuleset#onFieldExpire`/`#onFieldStageAdvance` fazem
+    expect(w.blockedAt(3, 1, 7)).toBe(false);
+    expect(move(w, hero, to(3, 1))).toMatchObject({ ok: true, to: { x: 3, y: 1, z: 7 } });
+  });
+
+  it('sem `fields` nenhum, `blockedAt` continua sendo mapa + overlay, como antes desta issue', () => {
+    const w = new TileOccupancy(map);
+    expect(w.blockedAt(2, 2, 7)).toBe(true); // a parede do meio da sala
+    expect(w.blockedAt(3, 1, 7)).toBe(false);
   });
 });

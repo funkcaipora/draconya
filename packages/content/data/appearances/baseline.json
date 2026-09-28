@@ -3018,11 +3018,18 @@
     "dragon-lord-firefield": 2118,
     "dragon-lord-hatchling-firefield": 2118
   },
+  "fieldStages": {
+    "dragon-lord-firefield": [
+      2119,
+      2120
+    ],
+    "dragon-lord-hatchling-firefield": [
+      2119,
+      2120
+    ]
+  },
   "maps": {},
   "spells": {
-    "heal": {
-      "effect": 13
-    },
     "challenge": {
       "effect": 13
     },
@@ -3055,13 +3062,6 @@
     },
     "cancel-invisibility": {
       "effect": 13
-    },
-    "strike": {
-      "effect": 12,
-      "missile": 5
-    },
-    "blast": {
-      "effect": 38
     },
     "bruise-bane": {
       "effect": 13
@@ -3119,9 +3119,6 @@
     "intense-healing-paladin": {
       "effect": 13
     },
-    "divine-defiance": {
-      "effect": 39
-    },
     "sharpshooter": {
       "effect": 14
     },
@@ -3147,14 +3144,6 @@
     },
     "salvation": {
       "effect": 13
-    },
-    "ethereal-barrage": {
-      "effect": 2,
-      "missile": 28
-    },
-    "divine-barrage": {
-      "effect": 39,
-      "missile": 31
     },
     "buzz": {
       "effect": 12,
@@ -3309,10 +3298,6 @@
       "effect": 17,
       "missile": 30
     },
-    "forked-thorns": {
-      "effect": 45,
-      "missile": 39
-    },
     "strong-ice-strike": {
       "effect": 43,
       "missile": 29
@@ -3327,6 +3312,54 @@
     "ultimate-energy-strike": {
       "effect": 12,
       "missile": 5
+    },
+    "annihilation": {
+      "effect": 10,
+      "missile": 10
+    },
+    "ultimate-flame-strike": {
+      "effect": 16,
+      "missile": 4
+    },
+    "ultimate-ice-strike": {
+      "effect": 43,
+      "missile": 29
+    },
+    "ultimate-terra-strike": {
+      "effect": 17,
+      "missile": 30
+    },
+    "ignite": {
+      "effect": 7,
+      "missile": 4
+    },
+    "electrify": {
+      "effect": 12,
+      "missile": 5
+    },
+    "envenom": {
+      "effect": 17,
+      "missile": 30
+    },
+    "inflict-wound": {
+      "effect": 10,
+      "missile": 10
+    },
+    "holy-flash": {
+      "effect": 39,
+      "missile": 31
+    },
+    "strong-haste-sorcerer": {
+      "effect": 14
+    },
+    "strong-haste-druid": {
+      "effect": 14
+    },
+    "cancel-magic-shield-sorcerer": {
+      "effect": 13
+    },
+    "cancel-magic-shield-druid": {
+      "effect": 13
     }
   },
   "supplies": {

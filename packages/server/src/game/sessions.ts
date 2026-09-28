@@ -13,9 +13,10 @@ import type {
   HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
 } from '@draconya/sim';
 import {
-  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, validateBotConfigV2,
+  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, sanitizeBotConfigV2,
+  validateBotConfigV2,
 } from '@draconya/content';
-import type { BotConfigV2, Content } from '@draconya/content';
+import type { BotConfigV2, Content, RemovedBotSlot } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
@@ -189,11 +190,15 @@ export function createLateJoiner(
 
 /**
  * A hunt de uma party, com os N membros dentro (#195): o mesmo `createHuntSession` da
- * transição, com `partyOptions` fixadas e o bot de cada um — validado AQUI, com o conteúdo,
- * porque chega cru do ticket como o solo chega, e o host só valida o do personagem que entrou.
+ * transição, com `partyOptions` fixadas e o bot de cada um — carregado AQUI, com o conteúdo,
+ * porque chega cru do ticket como o solo chega, e o host só carrega o do personagem que entrou.
+ *
+ * `createBotConfigLoader`, não `createBotConfigValidator` (ADR 0014): isto é CARGA de uma
+ * configuração já persistida, não uma edição — um slot cuja magia/supply saiu do catálogo (o
+ * #596, por exemplo) vira `null` em vez de derrubar a configuração inteira do membro.
  */
 function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
-  const accept = createBotConfigValidator(content);
+  const load = createBotConfigLoader(content);
 const botConfigs: Record<string, BotConfigV2> = {};
   const premiumByCharacter: Record<string, boolean> = {};
   for (const member of party.members) {
@@ -202,7 +207,7 @@ const botConfigs: Record<string, BotConfigV2> = {};
     premiumByCharacter[member.characterId] = member.initialCharacter.premium ?? false;
     const raw = member.initialCharacter.botConfig;
     if (raw === undefined) continue;
-    const decision = accept(raw, member.initialCharacter.level);
+    const decision = load(raw, member.initialCharacter.level);
     if (decision.ok) botConfigs[member.characterId] = decision.config;
   }
   const session = createHuntSession({
@@ -241,6 +246,7 @@ export function characterFromTicket(
       ...INITIAL_FLAGS,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
+      soul: initialCharacter.soul ?? 0,
       vocationId,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
@@ -445,42 +451,83 @@ export type BotConfigDecision =
   | { readonly ok: false; readonly reason: string };
 
 /**
+ * O portão de versão mais a migração v1→v2, compartilhados por `createBotConfigValidator`
+ * (EDIÇÃO — recusa com motivo) e `createBotConfigLoader` (CARGA — nunca recusa por conteúdo,
+ * ver o comentário de `sanitizeBotConfigV2`). O que os dois têm em comum é só isto: o FORMATO
+ * precisa ser reconhecível. Versão desconhecida ou vocabulário torto continuam recusa em
+ * QUALQUER caminho — não é conteúdo que mudou sob a configuração, é a configuração que nunca
+ * foi válida (corrompida, ou de um servidor que fala outra versão).
+ */
+function migrateBotConfigGate(raw: unknown): { readonly ok: true; readonly config: BotConfigV2 } | { readonly ok: false; readonly reason: string } {
+  // O portão de versão ANTES da migração: `migrateBotConfigV1` aceita qualquer v1 bem formado,
+  // e uma config com `version: 99` que trouxesse as cinco categorias migraria em silêncio.
+  const version = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)['version']
+    : undefined;
+  if (version !== BOT_VOCABULARY_VERSION_V1 && version !== BOT_VOCABULARY_VERSION) {
+    return {
+      ok: false,
+      reason: `configuração na versão ${String(version)} de vocabulário; este servidor `
+        + `entende ${BOT_VOCABULARY_VERSION}`,
+    };
+  }
+  try {
+    return { ok: true, config: migrateBotConfigV1(raw) };
+  } catch {
+    return { ok: false, reason: 'configuração fora do vocabulário' };
+  }
+}
+
+/**
  * O juiz único da configuração do bot (FUN-81, AB-09). Migra v1→v2 e valida contra o conteúdo
  * fixado na sessão (invariante 7). A migração é pura e idempotente (AB-03): v2 volta só
  * parseada, v1 vira v2. Versão desconhecida é recusa com motivo — o portão de versão.
+ *
+ * **Só para a EDIÇÃO** (`#configureBot`, uma configuração NOVA que o jogador acabou de salvar):
+ * recusar tudo com o motivo é o certo aqui — é o jogador que escreveu a regra torta, e ele
+ * precisa saber qual foi para corrigir. Quem CARREGA uma configuração já persistida usa
+ * `createBotConfigLoader`, que nunca recusa por causa de conteúdo (ADR 0014).
  */
 export function createBotConfigValidator(
   content: Content,
 ): (raw: unknown, level: number) => BotConfigDecision {
   return (raw, _level) => {
-    // O portão de versão ANTES da migração: `migrateBotConfigV1` aceita qualquer v1 bem formado,
-    // e uma config com `version: 99` que trouxesse as cinco categorias migraria em silêncio.
-    const version = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)['version']
-      : undefined;
-    if (version !== BOT_VOCABULARY_VERSION_V1 && version !== BOT_VOCABULARY_VERSION) {
-      return {
-        ok: false,
-        reason: `configuração na versão ${String(version)} de vocabulário; este servidor `
-          + `entende ${BOT_VOCABULARY_VERSION}`,
-      };
-    }
+    const gated = migrateBotConfigGate(raw);
+    if (!gated.ok) return gated;
 
-    let config: BotConfigV2;
-    try {
-      config = migrateBotConfigV1(raw);
-    } catch {
-      return { ok: false, reason: 'configuração fora do vocabulário' };
-    }
-
-    const problems = validateBotConfigV2(config, content);
+    const problems = validateBotConfigV2(gated.config, content);
     if (problems.length > 0) {
       // Só o primeiro problema vai para o socket. A lista inteira é da UI (M10), que consegue
       // apontar slot por slot; numa linha de chat, cinco motivos viram ruído.
       return { ok: false, reason: problems[0] as string };
     }
 
-    return { ok: true, config };
+    return { ok: true, config: gated.config };
+  };
+}
+
+export type BotConfigLoadResult =
+  | { readonly ok: true; readonly config: BotConfigV2; readonly removed: readonly RemovedBotSlot[] }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * O carregador de uma configuração JÁ PERSISTIDA (FUN-81, ADR 0014) — o que
+ * `#adoptTicketBotConfig` e `partyHuntFor` usam para o bot que chega no TICKET, não o que o
+ * jogador acabou de editar. Mesmo portão de versão/migração de `createBotConfigValidator`, mas
+ * a referência cruzada (`sanitizeBotConfigV2`) esvazia o slot torto em vez de recusar tudo: o
+ * personagem que entra na hunt não pode ficar sem NENHUM automatismo — o `swap-weapon-shield-
+ * by-hp`, o `ringSwap`, os outros 23 slots do conjunto — só porque uma magia que ele configurou
+ * meses atrás saiu do catálogo (#596). `ok: false` aqui continua existindo para o que É
+ * corrupção de verdade: versão desconhecida, ou vocabulário que nem migra.
+ */
+export function createBotConfigLoader(
+  content: Content,
+): (raw: unknown, level: number) => BotConfigLoadResult {
+  return (raw, _level) => {
+    const gated = migrateBotConfigGate(raw);
+    if (!gated.ok) return gated;
+
+    return { ok: true, ...sanitizeBotConfigV2(gated.config, content) };
   };
 }
 
