@@ -125,3 +125,11 @@ export const MAGIC_EFFECT_ENUM = 'MagicEffectClasses';
 
 /** Mesmo arquivo, enum `ShootType_t` — `CONST_ANI_FIRE`, … (o projétil). */
 export const SHOOT_TYPE_ENUM = 'ShootType_t';
+
+/** Mesmo arquivo dos combates, enum `charmCategory_t` — `CHARM_MAJOR`/`CHARM_MINOR` (#602). */
+export const CHARM_CATEGORY_HEADER = 'src/creatures/creatures_definitions.hpp';
+export const CHARM_CATEGORY_ENUM = 'charmCategory_t';
+
+/** Mesmo arquivo, enum `charm_t` — `CHARM_OFFENSIVE`/`CHARM_DEFENSIVE`/`CHARM_PASSIVE` (#602). */
+export const CHARM_TYPE_HEADER = 'src/creatures/creatures_definitions.hpp';
+export const CHARM_TYPE_ENUM = 'charm_t';

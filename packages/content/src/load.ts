@@ -29,6 +29,8 @@ export function loadContent(dir: string): Content {
     stamina: readJsonDir(join(dir, 'stamina')),
     party: readJsonDir(join(dir, 'party')),
     bestiary: readJsonDir(join(dir, 'bestiary')),
+    // Os 25 Charms do Canary (M39-02, #602) — uma entidade por arquivo/fatia, como `spells`.
+    charms: readJsonDir(join(dir, 'charms')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
     // Suprimentos e munição ABSTRATOS (ADR 0026 d.3): poção, runa e flecha não são itens — o

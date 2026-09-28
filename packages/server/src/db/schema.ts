@@ -198,6 +198,17 @@ export const characters = pgTable(
     ammunitionStock: jsonb('ammunition_stock'),
 
     /**
+     * A economia de Charms (M39-02, #602): pontos/echoes gastos, tier de cada charm e as
+     * atribuições por monstro — `{ pointsSpent, echoesSpent, tiers, assignments, version }`.
+     * Nulável: `null` é quem nunca gastou um ponto de Charm. Primeira issue a materializar o
+     * ADR 0052 decisão 1: registro `jsonb` por sistema, lido INTEIRO no ticket, escrito
+     * INTEIRO pela transação do ledger a partir do extrato — ÚLTIMA ESCRITA VENCE, como
+     * `ammo`/`equipment`, NÃO fusão por máximo como o Bestiário (não há contador externo
+     * monotônico a fundir; é o estado final da sessão dona).
+     */
+    charms: jsonb('charms'),
+
+    /**
      * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, em milissegundos — a
      * `CONDITION_REGENERATION` do Tibia. Drenado pelo TEMPO DE HUNT decorrido
      * (`packages/sim/src/food.ts`), não por job — não precisa de um `updatedAt` companheiro

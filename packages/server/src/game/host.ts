@@ -3970,6 +3970,9 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
+      // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
+      ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
@@ -4055,6 +4058,10 @@ export class SessionHost {
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // A economia de Charms (M39-02, #602, ADR 0052 d.1): a Cidade marca `dirty` como o
+      // equipamento — sem isto, um `charm-unlock`/`charm-assign`/`charm-remove` feito na praça
+      // sumiria no logout, porque a Cidade não gera `Receipt` de progresso (ADR 0023).
+      charms: owner.charms.getState(),
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),

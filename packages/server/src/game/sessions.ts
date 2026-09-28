@@ -264,6 +264,10 @@ export function characterFromTicket(
         ? {} : { supplyStock: initialCharacter.supplyStock }),
       ...(initialCharacter.ammunitionStock === undefined
         ? {} : { ammunitionStock: initialCharacter.ammunitionStock }),
+      // A economia de Charms (M39-02, #602, ADR 0052 d.1): validada na emissão e no consumo
+      // (`isCharmsState`); ausente, a sessão parte sem nenhum ponto/tier/atribuição — o mesmo
+      // personagem novo que `bestiary` ausente já descreve.
+      ...(initialCharacter.charms === undefined ? {} : { charms: initialCharacter.charms }),
       // Os storages (#731, ADR 0050 d.6 T2): validados como o Bestiário; ausente, a sessão
       // parte sem storage nenhum setado — a mesma degradação de sempre.
       ...(initialCharacter.storages === undefined ? {} : { storages: initialCharacter.storages }),

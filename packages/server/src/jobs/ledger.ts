@@ -240,6 +240,12 @@ async function applyProgression(
   // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
   const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
 
+  // A economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA e última-escrita-vence, como
+  // `ammo`/`equipment` — NÃO fundida pelo maior como o Bestiário: não há aqui um contador
+  // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
+  // ou nó antigo em deploy) não toca na coluna.
+  const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -314,6 +320,7 @@ async function applyProgression(
       ...supplyStock,
       ...ammunitionStock,
       ...fedMs,
+      ...charms,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

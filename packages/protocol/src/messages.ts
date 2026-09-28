@@ -135,6 +135,31 @@ export const CLIENT_TO_SERVER = {
    * 28: o 27 é do `use-on-map`.
    */
   look: 28,
+  /**
+   * Desbloquear o próximo tier de um Charm (M39-02, #602; ADR 0052 d.2, ADR 0053 d.3).
+   * INTENÇÃO: o cliente diz QUAL charm; quem decide se os pontos/echoes derivados do Bestiário
+   * bastam é o servidor (invariante 4). Tratada pela sessão de Cidade E pela hunt — sem
+   * rolagem, o mesmo caminho aceita as duas (ADR 0052 d.4). Sucesso é `charms` reenviado;
+   * recusa é `system-message`.
+   *
+   * 29: o 28 é do `look`.
+   */
+  'charm-unlock': 29,
+  /**
+   * Atribuir um Charm desbloqueado a um monstro (ADR 0053 d.4). INTENÇÃO: `monsterId` é o id de
+   * CONTEÚDO do bestiário, não uma criatura da hunt — Charms se gerem de qualquer lugar
+   * (ADR 0052 d.4), inclusive olhando o Cyclopedia fora de sessão nenhuma de combate.
+   *
+   * 30: o 29 é do `charm-unlock`.
+   */
+  'charm-assign': 30,
+  /**
+   * Remover a atribuição de um Charm (ADR 0053 d.4): custa `level × 100` gold pelo ledger
+   * (invariante 10) — o servidor debita, nunca o cliente informa quanto pagou.
+   *
+   * 31: o 30 é do `charm-assign`.
+   */
+  'charm-remove': 31,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -338,6 +363,17 @@ export const SERVER_TO_CLIENT = {
    * 41: o 40 é do `field-appear`.
    */
   'field-disappear': 41,
+  /**
+   * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos,
+   * tier de cada charm e as atribuições por monstro — o registro cru, como `bestiary` manda os
+   * abates crus. O que cada charm CUSTA e RENDE é do `catalogue` (fixado na sessão, invariante
+   * 7); o cliente deriva ganho/disponível do mesmo jeito que já deriva o bônus de XP do
+   * Bestiário (`bestiary-progress.ts`). Sai no attach e sempre que uma intenção de Charm muda o
+   * registro.
+   *
+   * 42: o 40/41 são do `field-appear`/`field-disappear`.
+   */
+  charms: 42,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

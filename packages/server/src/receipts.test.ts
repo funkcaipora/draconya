@@ -128,6 +128,24 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bestiary');
   });
 
+  it('carries the Charms economy through Redis and back, and a receipt without one stays without (#602)', async () => {
+    // A mesma lista de PERMISSÃO do Bestiário logo acima. Diferente dele, este registro é
+    // ABSOLUTO (última escrita vence, ADR 0052 d.1) — mas a ida e volta pelo Redis é a MESMA
+    // conferência: campo que não entra em `parseReceipt` some no caminho de volta sem erro.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const charms = {
+      pointsSpent: 240, echoesSpent: 50, tiers: { wound: 1 }, assignments: { wound: 'rat' }, version: 1,
+    };
+    await store.save(receiptOf(randomUUID(), characterId, { charms }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.charms).toEqual(charms);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('charms');
+  });
+
   it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {
     // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: a escolha gravada tem de voltar
     // inteira, e o extrato sem ela não pode ganhar a chave — o ledger não toca na coluna.

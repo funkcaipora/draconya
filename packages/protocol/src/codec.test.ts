@@ -172,6 +172,7 @@ describe('catalogue item stats (#337)', () => {
       type: 'catalogue',
       hunts: [],
       monsters: [],
+      charms: [],
       vocations: [],
       vocationLevel: 0,
       bot: {

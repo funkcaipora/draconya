@@ -1,0 +1,12 @@
+-- #602 (M39-02): a economia de Charms — pontos/echoes gastos, tier de cada charm e as
+-- atribuições por monstro. Primeira issue a materializar o ADR 0052 decisão 1: registro
+-- `jsonb` por sistema, uma coluna só, `{ pointsSpent, echoesSpent, tiers, assignments, version }`.
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default. `null` é quem nunca
+-- gastou um ponto de Charm — o mesmo personagem novo que `bestiary`/`ammo` já tratam.
+-- `jsonb`, como o resto do padrão: lido INTEIRO no ticket, escrito INTEIRO no extrato pela
+-- transação do ledger — ÚLTIMA ESCRITA VENCE (ADR 0052 d.1), como `ammo`/`equipment`, NÃO
+-- fusão por máximo como o Bestiário: não há aqui um contador externo monotônico a fundir, é o
+-- estado final da sessão dona. Sem CHECK: `charmId`/`monsterId` são conteúdo, versionado à
+-- parte, e um id fora do catálogo simplesmente não resolve nada, nunca uma linha ilegível.
+ALTER TABLE character ADD COLUMN charms jsonb;

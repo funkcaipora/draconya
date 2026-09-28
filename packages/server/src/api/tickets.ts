@@ -4,8 +4,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import { readItemOverlay } from '@draconya/sim';
-import type { BestiaryState } from '@draconya/sim';
-import { isAmmoSelection, isBestiaryState, isStockMap } from '../tickets.js';
+import type { BestiaryState, CharmsState } from '@draconya/sim';
+import { isAmmoSelection, isBestiaryState, isCharmsState, isStockMap } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
@@ -218,6 +218,8 @@ export function initialCharacterOf(
     // sempre começaria com estoque zero, mesmo com drop de ontem esperando na linha.
     ...(isStockMap(character.supplyStock) ? { supplyStock: character.supplyStock } : {}),
     ...(isStockMap(character.ammunitionStock) ? { ammunitionStock: character.ammunitionStock } : {}),
+    // E a economia de Charms (M39-02, #602), pela mesma régua do Bestiário.
+    ...charmsOf(character.charms),
     // E os storages (#731, ADR 0050 d.6 T2): uma linha por chave, não uma coluna — a montagem é
     // a mesma ideia de `inventoryOf`, reduzindo as linhas do banco a um mapa.
     ...storagesOf(storages),
@@ -264,6 +266,11 @@ function outfitColorsOf(stored: unknown): { outfitColors?: OutfitColors } {
  */
 function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
   return isBestiaryState(stored) ? { bestiary: stored } : {};
+}
+
+/** A economia de Charms (M39-02, #602), pela mesma régua e razão de `bestiaryOf`. */
+function charmsOf(stored: unknown): { charms?: CharmsState } {
+  return isCharmsState(stored) ? { charms: stored } : {};
 }
 
 /**

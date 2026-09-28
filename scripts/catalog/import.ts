@@ -27,6 +27,7 @@ import './items.js';
 import './monsters.js';
 import './ammo.js';
 import './spells.js';
+import './charms.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 

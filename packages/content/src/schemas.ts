@@ -3339,6 +3339,44 @@ export const bestiarySchema = z.object({
 export type Bestiary = z.infer<typeof bestiarySchema>;
 
 /**
+ * Os 25 Charms do Canary `main` (M39-02, #602; ADR 0053 d.3 — revisão de sistema existente em
+ * 13.32, segue o Canary por precedência do ADR 0037 d.4, não a forma de 13.32 sem tiers).
+ * `content/data/charms/generated/charms.json` (`scripts/catalog/charms.ts`).
+ *
+ * Só os sete campos que a Direção da issue pede: `description`/`messageCancel`/
+ * `messageServerLog`/`effect` do Canary (arte e texto de log, invariante 6) não entram.
+ *
+ * `damageType` usa um vocabulário PRÓPRIO deste catálogo (ver `scripts/catalog/charms.ts`), e
+ * não `DAMAGE_TYPES`: três charms usam `COMBAT_NEUTRALDAMAGE`, que o resto do conteúdo nunca
+ * declara. A resolução em combate é do `combat-v4` (#603) — este schema só transcreve o Canary.
+ */
+export const charmCategorySchema = z.enum(['major', 'minor']);
+export type CharmCategory = z.infer<typeof charmCategorySchema>;
+
+export const charmTypeSchema = z.enum(['offensive', 'defensive', 'passive']);
+export type CharmType = z.infer<typeof charmTypeSchema>;
+
+export const charmSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** A posição do Canary (`Game.createBestiaryCharm(charmId - 1)`), só para proveniência. */
+  canaryCharmId: z.number().int().nonnegative(),
+  category: charmCategorySchema,
+  type: charmTypeSchema,
+  damageType: z.string().min(1).optional(),
+  /** Percentual da vida inicial do alvo (charm ofensivo) ou de leech/crítico (passivo). */
+  percent: z.number().optional(),
+  /** Chance por tier (1/2/3), em percentual — `chance[tier] ≥ normal_random(1,10000)/100`. */
+  chance: z.tuple([z.number(), z.number(), z.number()]),
+  /** Custo em pontos de Charm (major) ou echoes (minor) por tier (1/2/3). */
+  points: z.tuple([z.number().int().positive(), z.number().int().positive(), z.number().int().positive()]),
+  /** Proveniência (ADR 0038 d.2) — toda entidade GERADA carrega este bloco. */
+  source: catalogSourceSchema.optional(),
+  _open: z.string().optional(),
+});
+export type Charm = z.infer<typeof charmSchema>;
+
+/**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).
  *
  * **Fechado** porque o compilador só transforma em predicado o que conhece: uma linguagem de
