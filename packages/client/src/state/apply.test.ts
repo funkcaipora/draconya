@@ -107,7 +107,7 @@ describe('world deltas', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
@@ -133,7 +133,7 @@ describe('world deltas', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       world: {
         mapId: 'rat-cellars', creatures: [], tileUpdates: [], fields: [],
@@ -165,7 +165,7 @@ describe('world deltas', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
         soul: 0, soulMax: 0,
       },
       world: {
@@ -234,7 +234,7 @@ describe('cenário usável: tile-update, look-result e o overlay do session-stat
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
         soul: 0, soulMax: 0,
       },
       world: {
@@ -257,7 +257,7 @@ describe('cenário usável: tile-update, look-result e o overlay do session-stat
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
         soul: 0, soulMax: 0,
       },
       world: { mapId: 'rat-cellars', creatures: [], groundItems: [] },
@@ -304,7 +304,7 @@ describe('as cores de outfit (FUN-104)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [],
         mapId: 'rat-cellars',
@@ -476,7 +476,7 @@ describe('combat transients (FUN-106)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -514,7 +514,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       0,
     );
@@ -531,6 +531,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
+        promoted: false,
         speed: 125,
         skills: {
           fist: { level: 11, percentToNext: 60 },
@@ -581,7 +582,7 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       0,
     );
@@ -671,7 +672,7 @@ describe('session-state', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
-      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
     world: { groundItems: [], tileUpdates: [], fields: [],
       mapId: 'rat-cellars',
@@ -778,7 +779,7 @@ describe('o analisador (FUN-83)', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
-      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
     world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
@@ -867,7 +868,7 @@ describe('o analisador ao vivo (FUN-110)', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
       self: {
         creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35,
-        level: 8, xp: 4_200, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        level: 8, xp: 4_200, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
@@ -928,7 +929,7 @@ describe('a party v2 no estado (#405, ADR 0035)', () => {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
     world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -1031,7 +1032,7 @@ describe('o follow-state do bot (#406, ADR 0035 d.9)', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -1046,7 +1047,7 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: {
       creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     },
     world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },

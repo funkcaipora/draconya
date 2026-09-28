@@ -67,6 +67,28 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
   });
 
+  it('round-trips promoted (#566, ADR 0042 decisão 1) through parseReceipt', async () => {
+    // `parseReceipt` é lista de PERMISSÃO: campo que não entra nela some no caminho de volta
+    // sem erro nenhum — é exatamente o defeito que este teste reprova para `promoted`.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { promoted: true }));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found?.promoted).toBe(true);
+  });
+
+  it('never carries `false` for promoted: the field is always absent when not promoting', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found?.promoted).toBeUndefined();
+  });
+
   it('drops an index entry whose receipt is gone, instead of returning a phantom', async () => {
     // Acontece de dois jeitos: o extrato expirou pelo TTL, ou um `remove` morreu entre
     // apagar o extrato e limpar o índice. Sem a limpeza na leitura, o conjunto de um
@@ -193,6 +215,24 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(found.find((receipt) => receipt.seq === 1)?.soul).toBe(42);
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('soul');
+  });
+
+  it('carries the blessings bitmask through Redis and back, and a receipt without one stays without (#570)', async () => {
+    // A mesma lista de PERMISSÃO. E a mesma disciplina da alma: bênção DESCE na morte, então o
+    // ledger nunca funde por máximo (ver jobs/ledger.ts) — "a chave sumiu" (extrato de sessão
+    // sem o campo, nunca tocou a linha) e "a chave voltou zero" (a morte zerou de verdade) são
+    // coisas diferentes, e este teste distingue as duas indo e voltando pelo Redis de verdade.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { blessings: 0b1010101 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2, blessings: 0 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.blessings).toBe(0b1010101);
+    expect(found.find((receipt) => receipt.seq === 2)?.blessings).toBe(0);
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('blessings');
   });
 
   it('keeps the index out of the sweep, which scans by key prefix', async () => {

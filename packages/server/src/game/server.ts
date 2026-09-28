@@ -58,6 +58,8 @@ export interface GameDependencies {
   readonly charmCatalog?: SessionHostOptions['charmCatalog'];
   /** A ficha de Bestiário de cada monstro, para a economia de Charms derivar pontos e completude. */
   readonly charmBestiaryEntries?: SessionHostOptions['charmBestiaryEntries'];
+  /** As sete bênçãos PvE, para `buy-blessing` (#570, ADR 0052). */
+  readonly blessingCatalog?: SessionHostOptions['blessingCatalog'];
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
@@ -159,6 +161,9 @@ export function createGame(
       ...(dependencies.charmBestiaryEntries === undefined
         ? {}
         : { charmBestiaryEntries: dependencies.charmBestiaryEntries }),
+      ...(dependencies.blessingCatalog === undefined
+        ? {}
+        : { blessingCatalog: dependencies.blessingCatalog }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
       ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),

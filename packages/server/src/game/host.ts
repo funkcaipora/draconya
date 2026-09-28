@@ -22,16 +22,19 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot, Skill,
-  Vocation,
+  Ammunition, Appearances, Blessing, BotConfigV2, Charm, Item, ItemSlot, Monster, RemovedBotSlot,
+  Skill, Vocation,
 } from '@draconya/content';
-import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
+import {
+  blessingCost, containerRulesFor, hasBlessing, PartyFullError, shareCostsOf, skillFactorFor,
+  splitLootOf, withBlessing,
+} from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
   CharmRemoveRefusal, CharmUnlockRefusal, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, TakeLootRefusal, TileAppearanceChange,
-  UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
+  PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
+  TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -152,6 +155,11 @@ export interface SessionHostOptions {
    */
   readonly charmBestiaryEntries?: ReadonlyMap<string, CharmBestiaryEntry>;
   /**
+   * As sete bênçãos PvE (#570, ADR 0052), para `buy-blessing`. Ausente: a compra é recusada,
+   * e a recusa é honesta — um host sem conteúdo não sabe o que é uma bênção.
+   */
+  readonly blessingCatalog?: ReadonlyMap<string, Blessing>;
+  /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
    */
@@ -244,6 +252,15 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'already-chosen': 'Você já escolheu a sua vocação.',
 };
 
+/** A recusa de `promote-vocation` (#566, ADR 0042 decisão 1), em palavras. */
+const PROMOTE_REFUSAL: Readonly<Record<PromoteRefusal, string>> = {
+  'no-vocation': 'Escolha uma vocação antes de se promover.',
+  'already-promoted': 'Você já foi promovido.',
+  'level-too-low': 'Você ainda não chegou ao level da promoção.',
+  'insufficient-gold': 'Você não tem gold suficiente para se promover.',
+  'not-promotable': 'Sua vocação não tem promoção.',
+};
+
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
 const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
   'level-too-low': 'Você ainda não tem o level dessa munição.',
@@ -307,6 +324,12 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
   // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // Magia agressiva disparada na Cidade (#792, ADR 0044 d.2): protect zone não aceita combate.
+  'protection-zone': 'Você está em uma zona de proteção.',
+  // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
+  // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
+  // `not-in-catalog` já faz para magia/supply/level/vocação.
+  'not-summonable': 'Você não pode invocar essa criatura agora.',
 };
 
 /**
@@ -481,6 +504,9 @@ function playerStatsOf(
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
     vocationId: character?.vocationId ?? null,
+    // Promovido (#566, ADR 0042 decisão 1): o HUD troca o nome exibido pelo `promotion.name`
+    // da vocação quando `true` — a resolução do nome é do cliente, que já tem o catálogo.
+    promoted: character?.promoted ?? false,
     // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
@@ -489,9 +515,10 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
-    // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD.
+    // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD. A
+    // vocação PROMOVIDA (#566) reescreve o teto quando o conteúdo declara `promotion.soulMax`.
     soul: character?.soul ?? 0,
-    soulMax: vocation?.soulMax ?? 0,
+    soulMax: (character?.promoted === true ? vocation?.promotion?.soulMax : undefined) ?? vocation?.soulMax ?? 0,
   };
 }
 
@@ -877,6 +904,12 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /**
+   * O último BITMASK de bênçãos ENTREGUE a quem olha cada personagem (#570, ADR 0052), por
+   * `characterId` — o mesmo mecanismo de `sentBestiary`: compra (sobe) e morte (zera) são as
+   * únicas mudanças, e as duas precisam chegar a quem está olhando.
+   */
+  readonly sentBlessings: Map<string, number>;
   /**
    * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
    * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
@@ -1551,6 +1584,11 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL munição; o level e o catálogo são daqui.
         this.#requestSelectAmmo(viewer, message.ammoId);
         return;
+      case 'buy-blessing':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL bênção; preço por level, saldo e "já tem
+        // esta bênção" são daqui — serviço de Cidade, dentro da sessão dona (#570, ADR 0052).
+        this.#requestBuyBlessing(viewer, message.blessingId);
+        return;
       case 'move-item':
         // INTENÇÃO (invariante 4): dois lugares; empilhar, vestir e recusar são do servidor.
         this.#requestMove(viewer, message.from, message.to);
@@ -1583,6 +1621,11 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL posição; o texto vem do conteúdo, nunca
         // do cliente (#729, ADR 0050 d.7).
         this.#requestLook(viewer, message.position);
+        return;
+      case 'promote-vocation':
+        // INTENÇÃO (invariante 4): sem payload. Vocação, level, gold e "já promovido" são do
+        // servidor. Só na Cidade (#566, ADR 0042 decisão 1 — serviço de Cidade).
+        this.#requestPromoteVocation(viewer);
         return;
       case 'charm-unlock':
         // INTENÇÃO (invariante 4): o cliente diz QUAL charm; o custo (derivado do Bestiário) e
@@ -1863,6 +1906,10 @@ export class SessionHost {
       ...(outcome.ok ? {} : { reason: SLOT_REFUSAL[outcome.reason] }),
     });
     if (!outcome.ok || hosted === undefined) return;
+    // Conjurar na Cidade muda estado durável (#792, ADR 0044 d.2) — estoque, mana e gold —, e
+    // o shard só grava no logout quem está em `dirty` (#154, a mesma marca de `equip`/
+    // `choose-vocation`). Sem isto, a carga conjurada na praça sumia ao sair.
+    if (hosted.session.ruleset.type === 'city') hosted.dirty.add(viewer.characterId);
     // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
     // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
     hosted.slotStateAtMs = 0;
@@ -2237,6 +2284,40 @@ export class SessionHost {
     this.#sendInventory(character.id);
   }
 
+  /**
+   * Promove a vocação escolhida (#566, ADR 0042 decisão 1). Serviço de Cidade: só a sessão de
+   * Cidade aceita — o mesmo padrão do ADR 0042 (decisão 1, tela de serviço) e do "obtida na
+   * Cidade" do plano de conteúdo. O preço sai por `goldDelta`, liquidado pelo MESMO
+   * `#saveDurableReceipt` que já debita `sell-items` na praça (invariante 10).
+   */
+  #requestPromoteVocation(viewer: Viewer): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para se promover.',
+      });
+      return;
+    }
+    const vocation = character.vocationId === null
+      ? undefined
+      : this.#options.vocations?.get(character.vocationId);
+    if (vocation === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL['no-vocation'] });
+      return;
+    }
+    const result = character.promote(vocation, character.gold + character.goldDelta);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+  }
+
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
@@ -2362,6 +2443,55 @@ export class SessionHost {
     }
     this.#markDirty(character.id);
     this.#sendToViewersOf(hosted, character.id, this.#charmsMessageFor(character));
+  }
+
+  /**
+   * Comprar UMA bênção (#570, ADR 0052 decisão 2). Serviço de CIDADE, nunca hunt — não existe
+   * onde comprar bênção fora do shard, e a `blessing.lua` do Canary trava o santuário em PZ
+   * pela mesma razão. INTENÇÃO: o cliente diz QUAL bênção; preço por level
+   * (`blessingCost`/`progression.blessingPricing`), saldo e "já tem esta bênção"
+   * (`hasBlessing`) são do servidor. Gold sai por `goldDelta` — o MESMO caminho de
+   * `sell-items` na Cidade (ADR 0048 d.8): a sessão de shard não zera o agregado a cada
+   * extrato, então somar ali re-creditaria a compra no próximo logout; `#saveDurableReceipt`
+   * drena e liquida `goldDelta` a cada extrato. O bit fica em `character.blessings`
+   * (bitmask), e o sucesso sai como `blessings` — não `player-stats.blessings`, porque bênção
+   * não é vital nem item.
+   */
+  #requestBuyBlessing(viewer: Viewer, blessingId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.shared !== true) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Bênçãos só se compram na Cidade.',
+      });
+      return;
+    }
+    const blessing = this.#options.blessingCatalog?.get(blessingId);
+    const pricing = this.#options.progression?.blessingPricing;
+    if (blessing === undefined || pricing === undefined) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Esse serviço não está disponível.',
+      });
+      return;
+    }
+    if (hasBlessing(character.blessings, blessing.order)) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Você já tem essa bênção.' });
+      return;
+    }
+    const cost = blessingCost(character.level, blessing.enhanced, pricing);
+    if (character.gold + character.goldDelta < cost) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Você não tem gold suficiente.' });
+      return;
+    }
+    character.goldDelta -= cost;
+    character.blessings = withBlessing(character.blessings, blessing.order);
+    this.#markDirty(viewer.characterId);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    hosted.sentBlessings.set(character.id, character.blessings);
+    viewer.send({ type: 'blessings', mask: character.blessings });
   }
 
   /**
@@ -2578,6 +2708,13 @@ export class SessionHost {
       );
     }
     this.#botByCharacter.set(characterId, decision.config);
+    // Semeia o ruleset também (#792): quem chega direto na Cidade (o caminho comum de login,
+    // invariante 8) precisa da barra de ações carregada ali para `use-slot` conjurar — sem
+    // isto, `CityRuleset#useSlot` nunca vê a config até o jogador salvar uma nova em `bot-
+    // config` (que já passava por `#applyBotConfig`). Ruleset sem `configureBot` ignora
+    // (hunt já a recebe pelo `botConfig` da própria criação — recompilar de novo aqui é
+    // idempotente, a mesma configuração).
+    (session.ruleset as Partial<HuntRuleset>).configureBot?.(session, decision.config, characterId);
     // A v1 migrada, e a config com slot sanitizado, são DADO NOVO: persiste pelo caminho
     // write-behind (ADR 0028, DT-07) — senão toda entrada repetiria a migração/sanitização e a
     // coluna seguiria com a referência morta. `saveBotConfig` só existe quando o papel aceita
@@ -2687,6 +2824,7 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      this.#presentBlessings(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
       // o próprio `tile-update` na hora (`#requestUseOnMap`); isto cobre o resto.
@@ -2914,6 +3052,9 @@ export class SessionHost {
         name: definition?.name ?? event.monsterId,
         health: event.health,
         maxHealth: event.maxHealth,
+        // A invocação do JOGADOR (#598, M38-01, ADR 0057 decisão 4): o cliente marca "sua
+        // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
+        ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
       };
     } else if (event.kind === 'creature-vanished') {
       const id = hosted.creatureIds.get(key);
@@ -3228,6 +3369,22 @@ export class SessionHost {
   }
 
   /**
+   * As bênçãos ao vivo (#570, ADR 0052), pela MESMA regra do Bestiário: só quem está olhando,
+   * só quando o bitmask mudou desde a última entrega. A compra (`#requestBuyBlessing`) já manda
+   * direto a quem comprou; isto cobre quem só está OLHANDO — e o consumo na morte, que a hunt
+   * decide sozinha sem chamar `#requestBuyBlessing`.
+   */
+  #presentBlessings(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      if (hosted.sentBlessings.get(character.id) === character.blessings) continue;
+      hosted.sentBlessings.set(character.id, character.blessings);
+      this.#sendToViewersOf(hosted, character.id, { type: 'blessings', mask: character.blessings });
+    }
+  }
+
+  /**
    * O estado dos slots do conjunto ativo, para quem olha CADA personagem (AB-09, DT-06).
    *
    * O gatilho é o par `(state, reason)`, nunca o `remainingMs`: ele decresce sempre, e compará-lo
@@ -3308,6 +3465,10 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E as bênçãos (#570, ADR 0052), pela mesma razão: quem reconecta precisa ver o que já
+    // comprou, sem esperar a próxima compra/morte para descobrir.
+    hosted.sentBlessings.set(characterId, participant?.blessings ?? 0);
+    viewer.send({ type: 'blessings', mask: participant?.blessings ?? 0 });
     // E a economia de Charms (M39-02, #602), pela mesma razão do Bestiário: sem isto, quem
     // reconecta veria os Charms zerados até a próxima intenção aceita.
     if (participant !== undefined) viewer.send(this.#charmsMessageFor(participant));
@@ -3883,6 +4044,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -4189,12 +4351,20 @@ export class SessionHost {
       // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
       // o personagem participou.
       ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
+      // As bênçãos (#570, ADR 0052): mesma regra do `fedMs` acima — sempre incluído quando o
+      // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
+      // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
+      ...(owner === undefined ? {} : { blessings: owner.blessings }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
       // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
       // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
       ...(owner === undefined ? {} : { soul: owner.soul }),
+      // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
+      // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
+      // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
+      ...(owner?.promoted ? { promoted: true } : {}),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -4255,15 +4425,28 @@ export class SessionHost {
       },
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      // A promoção (#566, ADR 0042 decisão 1): AUSENTE/`false` nunca é gravado — `promoted` só
+      // sobe no ledger (`characters.promoted OR receipt.promoted`), nunca desce.
+      ...(owner.promoted ? { promoted: true } : {}),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       // A economia de Charms (M39-02, #602, ADR 0052 d.1): a Cidade marca `dirty` como o
       // equipamento — sem isto, um `charm-unlock`/`charm-assign`/`charm-remove` feito na praça
       // sumiria no logout, porque a Cidade não gera `Receipt` de progresso (ADR 0023).
       charms: owner.charms.getState(),
+      // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
+      // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
+      // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
+      // shard nunca grava as duas fora deste extrato de estado durável.
+      ...(owner.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner.ammunitionStock.size === 0
+        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
       // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
       // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
       // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
       soul: owner.soul,
+      // As bênçãos (#570, ADR 0052): comprar na Cidade marca `dirty`, e sem este campo a compra
+      // sumiria no logout como vocação/equipamento sumiam antes do #154. ABSOLUTO, como acima.
+      blessings: owner.blessings,
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
@@ -4389,6 +4572,9 @@ export class SessionHost {
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
+        // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
+        // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
+        ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
       });
     }
 
@@ -4412,6 +4598,7 @@ export class SessionHost {
         level: self.level,
         xp: self.xp,
         vocationId: self.vocationId,
+        promoted: self.promoted,
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,
@@ -4660,6 +4847,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,

@@ -215,6 +215,40 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 - Teto de 200 por cópia; encheu, abre a próxima. Ninguém é recusado.
 - `say` de canal `local` alcança o campo de visão.
 
+## Conjurar na Cidade (#792, ADR 0044 d.2)
+
+A Cidade tem `useSlot`: a barra de ações funciona ali, mas só para **conjuração**
+(`effect.kind === 'conjure'`) — o resto do vocabulário fica de fora, e por duas razões
+diferentes:
+
+- **Magia agressiva** (`damage`/`damage-over-time`) é recusada por POLÍTICA — a Cidade é
+  protect zone (ADR 0004, §37) — com a razão tipada `protection-zone`, nunca lançada.
+- **O resto do vocabulário não-agressivo** (cura, haste, buff, mana shield, dano ao longo do
+  tempo) devolve uma `ConditionState` que só o RULESET agenda — e a Cidade não tem fila de
+  eventos (`hz` 0, `onEvent` falha alto de propósito). Fica de fora por `not-in-catalog`, a
+  mesma degradação que `use-item`/`use-item-on` já dão a comida e poção (ADR 0049 decisão 8).
+  Reabre quando a Cidade ganhar relógio — o que o ADR 0004 diz que não terá.
+
+Conjuração é a única ação do vocabulário que não precisa de nada disso: `castSpell` credita as
+cargas no estoque abstrato do próprio lançador (`supplyStock`/`ammunitionStock`) e termina no
+mesmo instante, sem mira, sem alvo e sem sorteio (ADR 0044 decisão 1) — item e supply (poção,
+runa de ataque) continuam recusados, como já eram.
+
+**Regeneração de mana/alma na Cidade: nenhuma, e é o comportamento decidido, não uma lacuna.**
+Voltar à Cidade já cura mana por completo na entrada (§26.1 acima); depois disso ela NÃO
+regenera enquanto o personagem fica na praça — o ADR 0043 (emenda de 2026-09-25) decidiu, com
+evidência direta do Huntera, que a regeneração de vida/mana é condicionada só a "estar em hunt
+agora": zero na Cidade, sem condição de comida. Pontos de alma seguem a mesma lógica por outro
+caminho: só sobem por uma condição disparada quando a XP recebida é ≥ level (ADR 0044 decisão
+3), e a Cidade nunca concede XP — então também não há ganho de alma lá. Conjurar várias vezes
+seguidas na praça, então, esgota mana e alma sem repor nada até a próxima hunt ou a próxima
+entrada na Cidade (que os enche de novo).
+
+Estado durável: `#saveDurableReceipt` (`packages/server/src/game/host.ts`) grava
+`supplyStock`/`ammunitionStock` além do que já gravava (vocação, equipamento, alma, `goldDelta`
+pelo mesmo ledger que a venda na praça usa, #724/ADR 0048 d.8) — `useSlot` marca o personagem
+`dirty` no sucesso, a mesma marca de `equip`/`choose-vocation` (#154).
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor | Onde mora |

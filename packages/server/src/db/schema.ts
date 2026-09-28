@@ -8,6 +8,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -107,6 +108,15 @@ export const characters = pgTable(
 
     // Nulável de propósito: o personagem nasce sem vocação e escolhe no level 8 (§7.4).
     vocation: text('vocation'),
+
+    /**
+     * Promoção de vocação (#566, ADR 0042 decisão 1): level 20, 20.000 gold, na Cidade.
+     * `not null default false`, diferente de `vocation` (nulável) — não precisa distinguir
+     * "nunca promovido" de `false`, os dois são o mesmo estado, e ele SÓ SOBE (nunca existe
+     * des-promoção no Tibia). Escrita pelo ledger, fundida por `OR` (nunca `coalesce`, que
+     * serve para "grava uma vez" — aqui o boolean não tem "ausente" a preencher).
+     */
+    promoted: boolean('promoted').notNull().default(false),
 
     level: integer('level').notNull().default(1),
     xp: bigint('xp', { mode: 'number' }).notNull().default(0),
@@ -229,6 +239,16 @@ export const characters = pgTable(
      */
     fedMs: bigint('fed_ms', { mode: 'number' }).notNull().default(0),
 
+    /**
+     * As sete bênçãos PvE (#570, ADR 0052): BITMASK, um bit por `order` de
+     * `content.blessings` — `packages/sim/src/blessings.ts`. Mesmo padrão de `fedMs`:
+     * `bigint`/`number`, ABSOLUTO, última escrita vence — nunca fundido por máximo, porque
+     * bênção DESCE na morte (fundir pelo maior ressuscitaria uma bênção recém-consumida se um
+     * extrato antigo, fora de ordem, chegasse depois de um mais novo já aplicado). Default 0:
+     * quem nunca comprou, ou todo personagem anterior a esta migração.
+     */
+    blessings: bigint('blessings', { mode: 'number' }).notNull().default(0),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 
@@ -330,3 +350,17 @@ export const ledger = pgTable(
     byCharacter: index('ledger_by_character').on(t.characterId, t.createdAt),
   }),
 );
+
+/**
+ * A Boosted Creature do dia (M42, #615, ADR 0054 decisão 7): uma linha por dia. `day` é a
+ * data (UTC, deslocada por `boosted.rolloverHourUtc`) em formato `YYYY-MM-DD` — chave primária
+ * de propósito: o `jobs` faz `INSERT … ON CONFLICT (day) DO NOTHING` para sortear no máximo
+ * uma vez por dia mesmo rodando a cada ciclo (idempotência sem lock a mais, a mesma trava que
+ * o índice único já dá ao ledger, invariante 10). Sem `characterId`: é do MUNDO, não de quem
+ * joga — todo mundo vê a mesma boosted no mesmo dia.
+ */
+export const worldDaily = pgTable('world_daily', {
+  day: text('day').primaryKey(),
+  boostedMonsterId: text('boosted_monster_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

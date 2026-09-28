@@ -23,10 +23,10 @@ beforeEach(async () => {
 // `PartyStore` de verdade, no Redis; ticket, banco e diretório são falsos.
 
 const character = (id: string, accountId: string, over: Partial<CharacterRecord> = {}): CharacterRecord => ({
-  id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, soul: 0, gold: 50,
+  id, accountId, name: `Hero ${id}`, vocation: null, promoted: false, level: 10, xp: 0, soul: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0,
+  ammo: null, supplyStock: null, ammunitionStock: null, charms: null, fedMs: 0, blessings: 0,
   createdAt: new Date(),
   ...over,
 });

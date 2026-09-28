@@ -1,0 +1,7 @@
+{
+  "id": "spiritual-shielding",
+  "name": "The Spiritual Shielding",
+  "order": 3,
+  "enhanced": false,
+  "_open": "#570, `Blessings.All` do Canary, id 5. Mesma regra das demais regulares: ver `wisdom-of-solitude.json`."
+}

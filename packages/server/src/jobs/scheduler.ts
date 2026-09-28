@@ -27,6 +27,8 @@ import { writePendingBotConfigs } from './bot-config.js';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
 import type { SingletonLock } from './lock.js';
+import { rollBoostedCreature } from './boosted.js';
+import type { WorldDailyStore } from '../world-daily.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
@@ -46,6 +48,16 @@ export interface JobsDependencies {
    * de antes — e o certo para um `jobs` montado à mão em teste, que não tem par para disputar.
    */
   readonly lock?: SingletonLock;
+  /**
+   * A Boosted Creature do dia (#615, ADR 0054 decisão 7). Ausente: conteúdo sem
+   * `boosted/baseline.json` ou sem Bestiário — o ciclo roda igual, só não sorteia nada, o
+   * mesmo espírito de `metrics`/`lock` ausentes.
+   */
+  readonly boosted?: {
+    readonly store: WorldDailyStore;
+    readonly rolloverHourUtc: number;
+    readonly monsterIds: readonly string[];
+  };
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -147,6 +159,20 @@ export function createJobsCycle(
         if (swept.released > 0) {
           logger.info(swept, 'Swept orphaned sessions');
         }
+      }
+
+      // #615: a primeira tarefa diária real do esqueleto. Roda todo ciclo — idempotente por
+      // construção, ver `world-daily.ts` — em vez de calcular "já é hora?" aqui: a hora certa
+      // é decidida pela CHAVE do dia (`boostedDayKey`), não por comparar o relógio com
+      // `rolloverHourUtc` a cada 10 s, o que erraria por fuso ou por ciclo perdido.
+      if (dependencies.boosted !== undefined) {
+        await rollBoostedCreature({
+          worldDaily: dependencies.boosted.store,
+          rolloverHourUtc: dependencies.boosted.rolloverHourUtc,
+          monsterIds: dependencies.boosted.monsterIds,
+          now,
+          logger,
+        });
       }
 
       metrics?.observeCycle(

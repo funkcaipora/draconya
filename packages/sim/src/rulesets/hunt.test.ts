@@ -138,7 +138,7 @@ const progression = {
   startingSpeed: 300, speedPerLevel: 0,
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 
@@ -354,7 +354,8 @@ interface Started {
 function start(
   options: { difficulty?: 'cautious' | 'bold'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
-    inventory?: InventoryState; bestiary?: BestiaryState; gold?: number } = {},
+    inventory?: InventoryState; bestiary?: BestiaryState; gold?: number;
+    boostedMonsterId?: string } = {},
 ): Started {
   // `difficulty` não seleciona mais nada no conteúdo (#583) — é só um rótulo aceito e ignorado
   // pelo `sim`. "bold" aqui é o pedido de DENSIDADE que a dificuldade costumava dar de graça
@@ -367,6 +368,7 @@ function start(
     difficulty: options.difficulty ?? 'cautious',
     createdAtMs: 0,
     ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
+    ...(options.boostedMonsterId === undefined ? {} : { boostedMonsterId: options.boostedMonsterId }),
   });
   const hero = character({
     ...(options.health === undefined ? {} : { health: options.health }),
@@ -565,6 +567,39 @@ describe('a sessão em si', () => {
     run(session, 20_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(hero.goldDelta).toBe(session.aggregates.kills * 3);
+    expect(session.aggregates.goldGained).toBe(hero.goldDelta);
+  });
+
+  it('não aplica bônus nenhum sem `boostedMonsterId`, e nenhum quando a boosted é OUTRO monstro (#615)', () => {
+    // A hunt não tem `boostedMonsterId` — sanidade do caminho de sempre.
+    const { session: plain, hero: plainHero } = start();
+    run(plain, 20_000, 100);
+    expect(plainHero.xp).toBe(plain.aggregates.kills * rat.experience);
+    expect(plainHero.goldDelta).toBe(plain.aggregates.kills * 3);
+
+    // A boosted do dia é OUTRO monstro (nenhum aqui, mas a hunt só tem `rat`) — o rato que
+    // morre nunca bate `monsterId === boostedMonsterId`, e o efeito nunca liga.
+    const { session, hero } = start({ boostedMonsterId: 'dragon' });
+    run(session, 20_000, 100);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience);
+    expect(hero.goldDelta).toBe(session.aggregates.kills * 3);
+  });
+
+  it('XP ×2 para a Boosted Creature do dia (#615, ADR 0054 decisão 7)', () => {
+    const { session, hero } = start({ boostedMonsterId: 'rat' });
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience * 2);
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('um roll extra de loot para a Boosted Creature do dia (#615, ondroploot_boosted.lua)', () => {
+    // `rat.loot.gold` é `{ chance: 1, min: 3, max: 3 }`: nunca falha e nunca sorteia
+    // quantidade (min === max, FUN-63) — o dobro é EXATO, sem depender de semente nenhuma.
+    const { session, hero } = start({ boostedMonsterId: 'rat' });
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.goldDelta).toBe(session.aggregates.kills * 3 * 2);
     expect(session.aggregates.goldGained).toBe(hero.goldDelta);
   });
 
@@ -826,6 +861,52 @@ describe('regeneração (FUN-36)', () => {
     expect(hero.mana).toBe(20);
   });
 
+  // O bloco `promotion` do Elite Knight (#566, ADR 0042 decisão 1): `vocations.xml` id 8 do
+  // Canary — `gainhpticks=4000` (mais rápido que a base 6000), `gainmanaticks=6000` (igual).
+  const promotedKnightRegen = {
+    ...knightRegen,
+    promotion: {
+      name: 'Elite Knight',
+      regen: { health: { ticksMs: 4000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+      minLevel: 20, price: 20_000,
+    },
+  };
+  const withPromotedKnightRegen = content({
+    routes: [{ ...route, spawnPoints: [] }], vocations: [promotedKnightRegen],
+  });
+
+  it('Elite Knight promovido regenera 1 vida a cada 4 000 ms, a taxa do id 8 do Canary', () => {
+    const session = createHuntSession({
+      id: 'session-1', content: withPromotedKnightRegen, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const hero = character({ health: 100 });
+    hero.vocationId = 'knight';
+    hero.promoted = true;
+    session.enter(hero);
+
+    session.advanceBy(3_999);
+    expect(hero.health).toBe(100);
+    session.advanceBy(1);
+    expect(hero.health).toBe(101);
+  });
+
+  it('sem `promoted`, a MESMA vocação com bloco `promotion` regenera pela taxa BASE', () => {
+    const session = createHuntSession({
+      id: 'session-1', content: withPromotedKnightRegen, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const hero = character({ health: 100 });
+    hero.vocationId = 'knight';
+    session.enter(hero);
+
+    // 4 000 ms bateria se a taxa promovida vazasse para quem não é promovido.
+    session.advanceBy(4_000);
+    expect(hero.health).toBe(100);
+    session.advanceBy(2_000);
+    expect(hero.health).toBe(101);
+  });
+
   it('Knight com Life Ring: o anel SOMA +2 vida e +8 mana a cada 6 s à vocação (#688)', () => {
     const { session, hero } = knightIn(lifeRing);
     session.advanceBy(5_999);
@@ -958,15 +1039,38 @@ describe('level up e penalidade de morte dentro da hunt', () => {
     expect(session.notableEvents.find((e) => e.type === 'level-down')?.detail).toBe('20 → 19');
   });
 
-  it('Premium paga menos por morrer', () => {
-    const cobrança = (premium: boolean): number => {
+  it('quem tem bênção paga menos por morrer (#570 — substitui o antigo binário Premium)', () => {
+    const cobrança = (blessings: number): number => {
       const session = createHuntSession({
         id: 's', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
-        createdAtMs: 0, premium,
+        createdAtMs: 0,
       });
       const hero = character({ health: 12 });
       hero.level = 20;
       hero.xp = totalXpForLevel(20, progression as Progression);
+      hero.blessings = blessings;
+      session.enter(hero);
+      run(session, 60_000, 100);
+      return Number(session.notableEvents.find((e) => e.type === 'xp-penalty')?.detail);
+    };
+    // 0b1111111 = 127: as sete bênçãos, todos os bits ligados.
+    expect(cobrança(127)).toBeLessThan(cobrança(0));
+  });
+
+  it('promovido (#566, ADR 0042 decisão 1) paga menos por morrer, através do CharacterRuntime real', () => {
+    // Diferente de `progression.test.ts` (que testa `applyDeathPenalty` isolado com
+    // `{ promoted: true }` passado à mão): este teste prova que `#onCharacterDied` REPASSA
+    // `character.promoted` de verdade — o defeito que a #566 corrige é o comentário morto que
+    // dizia "o parâmetro é o ponto de extensão, o estado ainda não existe".
+    const cobrança = (promoted: boolean): number => {
+      const session = createHuntSession({
+        id: 's', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
+        createdAtMs: 0,
+      });
+      const hero = character({ health: 12 });
+      hero.level = 20;
+      hero.xp = totalXpForLevel(20, progression as Progression);
+      hero.promoted = promoted;
       session.enter(hero);
       run(session, 60_000, 100);
       return Number(session.notableEvents.find((e) => e.type === 'xp-penalty')?.detail);
@@ -2389,6 +2493,92 @@ describe('cura em área — Mass Healing (#475, RF-05)', () => {
   });
 });
 
+// --- alvo de party e custo escalado (#588: Heal/Protect/Enchant/Train Party) ------------------
+
+describe('alvo de party e custo por tamanho da party (#588)', () => {
+  const healParty = {
+    id: 'heal-party', name: 'Heal Party', manaCost: { kind: 'party-scaled' as const, base: 120, decay: 0.9 },
+    cooldownMs: 1_000, group: 'support', groupCooldownMs: 1_000, minLevel: 1,
+    effect: {
+      kind: 'heal-over-time' as const, amount: 20, intervalMs: 2_000, durationMs: 120_000,
+      target: 'party' as const, range: 3,
+    },
+  };
+  const castHealParty = () => ({
+    heal: [{
+      when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+      do: { kind: 'spell' as const, spellId: 'heal-party' },
+    }],
+  });
+  const make = (id: string): CharacterRuntime => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 },
+    health: 100, maxHealth: 100, mana: 500, maxMana: 500,
+    level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+
+  it('cobra o custo do Canary escalado por quem está no alcance, e aplica a MESMA condição a cada um', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 500, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, healParty],
+    }));
+    const session = createHuntSession({
+      id: 'heal-party', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(castHealParty()),
+    });
+    const caster = make('hero');
+    session.enter(caster);
+    const near = make('near');
+    session.enter(near);
+    const far = make('far');
+    session.enter(far);
+    // Posiciona à mão DEPOIS de `enter` (que coloca "perto") — a mesma ordem do teste de Mass
+    // Healing acima. `range: 3`: `far` fica a 5 tiles — fora do alcance, nunca recebe e nunca
+    // conta para `n`.
+    near.position = { x: caster.position.x + 2, y: caster.position.y, z: caster.position.z };
+    far.position = { x: caster.position.x + 5, y: caster.position.y, z: caster.position.z };
+
+    session.advanceBy(50);
+
+    // n = 2 (hero + near; `far` não conta): ceil((0.9^1 * 120) * 2) = 216, não os 120 do `base`.
+    expect(caster.mana).toBe(500 - 216);
+    // Os dois no alcance carregam a MESMA condição — regen 20/2s por 2 minutos.
+    for (const member of [caster, near]) {
+      const condition = member.conditions.get('heal-over-time');
+      expect(condition, member.id).toMatchObject({
+        spellId: 'heal-party', tick: { amount: 20, intervalMs: 2_000 },
+      });
+    }
+    // Quem ficou fora do alcance não recebe nada.
+    expect(far.conditions.get('heal-over-time')).toBeNull();
+  });
+
+  it('recusa "no-target" com o lançador sozinho no alcance, e não gasta mana', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 500, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, healParty],
+    }));
+    const session = createHuntSession({
+      id: 'heal-party-solo', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(castHealParty()),
+    });
+    const caster = make('hero');
+    session.enter(caster);
+
+    session.advanceBy(50);
+
+    expect(caster.mana).toBe(500);
+    expect(caster.conditions.get('heal-over-time')).toBeNull();
+  });
+});
+
 // --- a contagem de "targets" usa o alcance da ARMA (#216) -------------------------------------
 
 describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desarmado (#216)', () => {
@@ -2860,6 +3050,64 @@ describe('poção abstrata: gold no uso (FUN-77, §20.1)', () => {
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.goldSpent).toBeGreaterThan(0);
     expect(rapido.kills).toBeGreaterThan(0);
+  });
+});
+
+describe('conjuração no modelo de suprimento abstrato (#594, ADR 0044)', () => {
+  const conjureTestRune = {
+    id: 'conjure-test-rune', name: 'Test Rune', manaCost: 30, soulCost: 2, cooldownMs: 1_000, minLevel: 1,
+    effect: { kind: 'conjure', supplyId: 'test-rune', charges: 5, blankPrice: 7 },
+  };
+  const testRune = {
+    id: 'test-rune', name: 'Test Rune', price: 1, group: 'potion', groupCooldownMs: 1_000,
+    requires: {}, effect: { kind: 'mana', amount: 10 },
+  };
+
+  it('credita o estoque do lançador e leva mana, alma e gold ao extrato — via o slot de magia normal', () => {
+    const { session, hero } = withSpells(
+      botConfig({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'conjure-test-rune' },
+      }] }),
+      {
+        health: 1_000, mana: 30, gold: 7, monsters: false,
+        spells: [conjureTestRune], supplies: [testRune],
+      },
+    );
+    // #593: a alma só existe depois de escolher vocação — o herói de teste nasce sem uma, e
+    // `hero.soul` começa em 0. A magia recusaria por `not-enough-soul` sem isto.
+    hero.soul = 2;
+
+    session.advanceBy(50);
+
+    expect((hero.supplyStock as Map<string, number>).get('test-rune')).toBe(5);
+    expect(hero.mana).toBe(0);
+    expect(hero.soul).toBe(0);
+    expect(hero.goldDelta).toBe(-7);
+    // O gold da runa em branco chega ao mesmo agregado que `useSupply` já alimenta — o extrato
+    // não ganha campo novo, `supplyStock` já é lista de permissão em `receipts.ts` desde o #520.
+    expect(session.aggregates.goldSpent).toBe(7);
+  });
+
+  it('não é aplicável em munição: a conjuração de flecha não toca `supplyStock`', () => {
+    const conjureAmmo = {
+      id: 'conjure-test-ammo', name: 'Test Ammo', manaCost: 10, cooldownMs: 1_000, minLevel: 1,
+      effect: { kind: 'conjure', ammunitionId: 'arrow', charges: 8 },
+    };
+    const { session, hero } = withSpells(
+      botConfig({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'conjure-test-ammo' },
+      }] }),
+      { health: 1_000, mana: 10, gold: 0, monsters: false, spells: [conjureAmmo] },
+    );
+
+    session.advanceBy(50);
+
+    expect((hero.ammunitionStock as Map<string, number>).get('arrow')).toBe(8);
+    expect((hero.supplyStock as Map<string, number>).size).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
   });
 });
 
@@ -6294,10 +6542,6 @@ describe('useItem/useItemOn (#726, ADR 0049 decisão 3)', () => {
     id: 'cheese-726', name: 'Cheese', kind: 'consumable' as const, weight: 4, value: 0,
     stackable: true, effect: { kind: 'food' as const, durationMs: 108_000 },
   };
-  const blessingItem = {
-    id: 'blessing-726', name: 'Carga de Bênção', kind: 'consumable' as const, weight: 1, value: 0,
-    stackable: false, effect: { kind: 'blessing' as const },
-  };
   const swordItem = { id: 'sword-726', name: 'Sword', kind: 'weapon' as const, slot: 'hand' as const, weight: 10, value: 0, attack: 5 };
 
   it('use-item com ref.supplyId gasta o ESTOQUE antes do gold, como o slot (RF-01)', () => {
@@ -6339,27 +6583,6 @@ describe('useItem/useItemOn (#726, ADR 0049 decisão 3)', () => {
     const outcome = ruleset.useItem(session, 'hero', { instanceId: 'i1' }, 1);
     expect(outcome).toEqual({ ok: false, reason: 'you-are-full', retryInMs: 0 });
     expect(hero.inventory.backpack.find((it) => it?.instanceId === 'i1')?.quantity).toBe(1);
-  });
-
-  it('use-item numa carga de bênção soma `blessings`, capado em 5 (RF-06)', () => {
-    const { session, hero, ruleset } = withSpells(botConfig({}), {
-      items: [blessingItem], monsters: false,
-      inventory: {
-        backpack: [
-          { instanceId: 'b1', itemId: 'blessing-726', quantity: 1 },
-          { instanceId: 'b2', itemId: 'blessing-726', quantity: 1 },
-        ],
-        satchel: [], equipped: {},
-      },
-    });
-    hero.blessings = 5;
-    const capped = ruleset.useItem(session, 'hero', { instanceId: 'b1' }, 1);
-    expect(capped).toEqual({ ok: false, reason: 'not-usable', retryInMs: 0 });
-    expect(hero.blessings).toBe(5);
-    hero.blessings = 4;
-    const ok = ruleset.useItem(session, 'hero', { instanceId: 'b2' }, 2);
-    expect(ok).toEqual({ ok: true });
-    expect(hero.blessings).toBe(5);
   });
 
   it('instância desconhecida recusa `not-carried`; item não-consumível recusa `not-usable`', () => {
@@ -8047,24 +8270,27 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     expect(session.aggregates.goldSpent).toBe(paid * 5);
   });
 
-  it('a penalidade de morte lê o Premium (bênção) do morto: perde menos XP (#521, ADR 0037)', () => {
+  it('a penalidade de morte lê as bênçãos (#570) do morto: perde menos XP, e a morte as consome', () => {
     const killer = { ...rat, health: 1_000_000, attack: 50, attackRange: 1, experience: 0 };
     const deadly = content({ monsters: [killer] });
     const stats = statsForLevel(10, null, progression as Progression);
     const startXp = totalXpForLevel(10, progression as Progression);
-    const dying = (id: string) => new CharacterRuntime({
+    const dying = (id: string, blessings?: number) => new CharacterRuntime({
       id, position: { x: 0, y: 0, z: 7 },
       health: 1, maxHealth: stats.maxHealth,
       mana: 0, maxMana: stats.maxMana, level: 10, xp: startXp, vocationId: null,
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+      ...(blessings === undefined ? {} : { blessings }),
     });
-    const { session } = make([dying('premium'), dying('free'), member('survivor', { health: 100_000 })], {
+    // Uma bênção só: `blessingReduction` deste conteúdo de teste (0.56, o mesmo valor que o
+    // antigo binário `premium` usava por inteiro) × 1 bênção reproduz os mesmos 56% de antes.
+    const blessed = dying('blessed', 1);
+    const { session } = make([blessed, dying('free'), member('survivor', { health: 100_000 })], {
       content: deadly,
       partyOptions: {
-        leaderId: 'premium',
+        leaderId: 'blessed',
         settings: { shareCosts: false, splitLoot: false, collect: null, autoSell: [] },
-        premiumByCharacter: { premium: true },
       },
     });
     run(session, 30_000, 100);
@@ -8075,13 +8301,16 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       return event.departure.receipt.aggregates.xpGained;
     };
     // Level 10 < `cubicFromLevel` (24): a perda é `flatFraction` da XP ACUMULADA (não mais uma
-    // fração de `xpToCompleteLevel`). Quem está abençoado tem a redução TETADA em 50% neste
-    // ramo (Canary `Player::getLostPercent`, `level < 24`) — `blessedReduction` (56%) é ≥ 40%,
+    // fração de `xpToCompleteLevel`). Quem tem bênção tem a redução TETADA em 50% neste ramo
+    // (Canary `Player::getLostPercent`, `level < 24`) — `blessingReduction` × 1 (56%) é ≥ 40%,
     // então o teto entra, não o valor bruto.
-    const { flatFraction, blessedReduction } = (progression as Progression).deathPenalty;
-    expect(blessedReduction).toBeGreaterThanOrEqual(0.40);
-    expect(xpOf('premium')).toBe(-Math.round(flatFraction * startXp * (1 - 0.50)));
+    const { flatFraction, blessingReduction } = (progression as Progression).deathPenalty;
+    expect(blessingReduction).toBeGreaterThanOrEqual(0.40);
+    expect(xpOf('blessed')).toBe(-Math.round(flatFraction * startXp * (1 - 0.50)));
     expect(xpOf('free')).toBe(-Math.round(flatFraction * startXp));
+    // A morte CONSOME todas as bênçãos de uma vez (#570): o personagem morreu, então o
+    // bitmask que ele carregava não sobrevive.
+    expect(blessed.blessings).toBe(0);
   });
 
   it('1 Hz == 10 Hz alternando os dois eixos no meio da corrida', () => {
@@ -8463,6 +8692,75 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
       return { present: session.participants.map((p) => p.id), left: left(session).map((e) => (e.kind === 'member-left' ? e.characterId : '')), ended: session.ended };
     };
     expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('Boosted Creature do dia (#615, ADR 0054 decisão 7)', () => {
+  // `respawnDelayMs` bem mais curto que o `route` padrão (30 s), só para os dois lados do
+  // teste caberem num tempo de execução razoável: metade é 10 s, e o teste espera no máximo
+  // 22 s de relógio LÓGICO (instantâneo — é `session.advanceBy`, não `setTimeout`).
+  const halvedRoute = {
+    ...route,
+    spawnPoints: [{ routeIndex: 4, radius: 2, monsterId: 'rat', respawnDelayMs: 20_000 }],
+  };
+
+  /** Avança em passos pequenos até o primeiro rato morrer, e devolve o instante da morte. */
+  function untilFirstDeath(session: Session, ruleset: HuntRuleset): number {
+    for (let i = 0; i < 400; i++) {
+      session.advanceBy(50);
+      if (ruleset.monsters.filter((m) => m.alive).length === 0) return session.nowMs;
+    }
+    throw new Error('o rato não morreu dentro da janela do teste');
+  }
+
+  // Não-bloqueável (o rato desta fixture não declara `blockable`) telegrafa antes de nascer de
+  // verdade (#583): `NONBLOCKABLE_SPAWN_TELEGRAPH_MS` (4 200 ms) some em cima do
+  // `respawnDelayMs` — os dois lados do teste dão a margem para ele, sem depender do número
+  // exato.
+  it('spawntime / 2 nos pontos da boosted — ainda morto na metade do prazo normal, vivo na metade do dobrado', () => {
+    const loaded = content({ routes: [halvedRoute] });
+    const { session, ruleset } = start({ loaded, boostedMonsterId: 'rat' });
+    untilFirstDeath(session, ruleset);
+    // 9 s depois da morte: nem a metade (10 s) venceu ainda.
+    session.advanceBy(9_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+    // Mais 7 s (16 s do total): a metade (10 s) mais o telegraph (4,2 s) já passaram — o
+    // dobro do prazo (20 s) ainda não teria vencido se a boosted não estivesse ligada.
+    session.advanceBy(7_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(1);
+  });
+
+  it('sem boosted, o mesmo ponto espera o `respawnDelayMs` INTEIRO', () => {
+    const loaded = content({ routes: [halvedRoute] });
+    const { session, ruleset } = start({ loaded });
+    untilFirstDeath(session, ruleset);
+    // 16 s depois da morte (o instante em que a versão boosted já teria respawnado, telegraph
+    // incluído): o prazo de 20 s inteiro ainda não venceu.
+    session.advanceBy(16_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+    // Mais 9 s (25 s do total): os 20 s inteiros mais o telegraph já passaram.
+    session.advanceBy(9_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(1);
+  });
+
+  it('fica FIXADA no snapshot: uma hunt retomada não perde nem troca a boosted com que nasceu', () => {
+    const { session, ruleset } = start({ boostedMonsterId: 'rat' });
+    run(session, 1_000, 100);
+    expect(ruleset.getState().boostedMonsterId).toBe('rat');
+
+    const snapshot = session.snapshot();
+    const restoredRuleset = huntRulesetFromSnapshot(snapshot, content());
+    expect(restoredRuleset).not.toBeNull();
+    // Reconstruído do snapshot, sem NADA do conteúdo dizer "rat" de novo — é a IDENTIDADE da
+    // instância que o `HuntRulesetState.boostedMonsterId` carrega, como `huntId`/`difficulty`.
+    expect(restoredRuleset?.getState().boostedMonsterId).toBe('rat');
+  });
+
+  it('ausente é hunt sem boosted (conteúdo sem `boosted/baseline.json`, ou ticket que não trouxe): nenhum efeito liga', () => {
+    const { session, ruleset } = start();
+    expect(ruleset.getState().boostedMonsterId).toBeUndefined();
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
   });
 });
 
@@ -9243,6 +9541,52 @@ describe('condição de velocidade com sinal — paralyze de ataque e haste de d
   });
 });
 
+describe('Paralyze Rune e imunidade de monstro (#559/#592, ADR 0041 d.2)', () => {
+  // Requisitos simplificados (`requires: {}`, como `attack-rune-726` acima) — o assunto aqui é
+  // o PORTÃO de imunidade, não o gate de level/magicLevel que `casting.test.ts` já prende.
+  const paralyzeRuneTest = {
+    id: 'paralyze-rune-test', name: 'Paralyze Rune', price: 10, group: 'support', groupCooldownMs: 2_000,
+    cooldownMs: 6_000, requires: {},
+    effect: {
+      kind: 'condition' as const, target: 'enemy' as const, range: 4,
+      condition: {
+        key: 'speed', merge: 'replace' as const, durationMs: 6_000,
+        effect: {
+          kind: 'speed' as const, type: 'paralyze' as const,
+          formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+        },
+      },
+    },
+  };
+
+  it('paralisa um monstro SEM imunidade — o alvo mirado, não o lançador', () => {
+    const { session, ruleset } = withSpells(botConfig({}), { supplies: [paralyzeRuneTest] });
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'paralyze-rune-test' }, 1, target);
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.conditions.get('speed')?.speedPercent).toBeLessThan(0);
+    expect(monster.conditions.get('speed')?.targetId).toBe(monster.subject);
+  });
+
+  it('um monstro IMUNE (`conditionImmunities: ["paralyze"]`) não recebe a condição — a runa sai igual', () => {
+    const immuneRat = { ...rat, conditionImmunities: ['paralyze'] };
+    const { session, ruleset } = withSpells(
+      botConfig({}), { supplies: [paralyzeRuneTest], monstersRaw: [immuneRat] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato imune');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'paralyze-rune-test' }, 1, target);
+    // A runa SAI (gasta gold e cooldown) — só a condição não entra, como `Monster::isImmune`.
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.conditions.get('speed')).toBeNull();
+  });
+});
+
 describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
   // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
   // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
@@ -9447,6 +9791,183 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
     run(resumed, 3_000, 100);
     const summons = (resumed.ruleset as HuntRuleset).monsters.filter((m) => m.masterId === master.id);
     expect(summons.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Invocação do PERSONAGEM (#598, M38-01, ADR 0057)', () => {
+  // `summonable: true` + `manaCost` (#598): o campo NOVO do monstro. `attack: 0`/`aggroRadius: 0`
+  // isola os testes de mecânica pura (nascimento, teto, mana) do combate — o describe seguinte,
+  // com uma invocação que BATE, cobre o alvo do mestre e a atribuição de dano.
+  const passiveMinion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 30, experience: 0, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { items: [] },
+    summonable: true, manaCost: 20,
+  };
+  const notSummonable = { ...passiveMinion, id: 'not-summonable', summonable: false, manaCost: undefined };
+  // `manaCost: 0` no CATÁLOGO da magia é de propósito (ADR 0057 decisão 3): o custo real sai do
+  // monstro, e um teste que visse a mana cair por `spell.manaCost` estaria provando o número
+  // errado por coincidência (os dois são 0 seriam indistinguíveis) — por isso o valor aqui é
+  // ausente (`0`, o default do schema) e o do monstro é 20, bem diferente.
+  const summonSpell = {
+    id: 'summon-test', name: 'Summon Creature (teste)', manaCost: 0, cooldownMs: 200,
+    effect: { kind: 'summon' as const },
+  };
+  const summonAction = (monsterId: string) =>
+    ({ kind: 'spell' as const, spellId: 'summon-test', monsterId });
+
+  it('nasce com `masterId` do PERSONAGEM, perto dele, e debita o `manaCost` do MONSTRO — nunca o da magia', () => {
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      monsters: false, spells: [...spells, summonSpell], monstersRaw: [rat, passiveMinion], mana: 200,
+    });
+    // Só UM ciclo do bot: o cooldown da magia é curto (200 ms) de propósito para o teste do
+    // teto, abaixo — aqui a janela para ANTES da segunda tentativa, para medir a PRIMEIRA
+    // invocação isolada.
+    run(session, 100, 50);
+
+    const summons = ruleset.monsters.filter((m) => m.masterId === hero.id);
+    expect(summons).toHaveLength(1);
+    const summon = summons[0];
+    if (summon === undefined) throw new Error('sem invocação');
+    expect(Math.max(
+      Math.abs(summon.position.x - hero.position.x),
+      Math.abs(summon.position.y - hero.position.y),
+    )).toBeLessThanOrEqual(1);
+    // 200 − 20 (o `manaCost` do MINION) = 180. Se o débito tivesse usado `spell.manaCost` (0),
+    // a mana continuaria em 200 — é essa a divergência que este número prende.
+    expect(hero.mana).toBe(180);
+  });
+
+  it('teto de 2 invocações vivas por personagem, contando qualquer nome (ADR 0057 decisão 3)', () => {
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      monsters: false, spells: [...spells, summonSpell], monstersRaw: [rat, passiveMinion], mana: 2_000,
+    });
+    // Cooldown de 200 ms e ciclo de bot de 1 s (o `categoryCooldownMs` do conteúdo de teste):
+    // tempo de sobra para VÁRIAS tentativas dentro de 10 s, bem além do necessário para o teto
+    // segurar na terceira.
+    run(session, 10_000, 100);
+
+    const summons = ruleset.monsters.filter((m) => m.alive && m.masterId === hero.id);
+    expect(summons).toHaveLength(2);
+    // A mana só saiu DUAS vezes (2 000 − 40): a terceira tentativa foi recusada ANTES do débito
+    // — `not-summonable` nunca chega a chamar `castSpell` genérico com sucesso.
+    expect(hero.mana).toBe(1_960);
+  });
+
+  it('recusa `not-summonable` sem `monsterId`, com monstro não-invocável, e com monstro inexistente', () => {
+    const withMonster = (monsterId: string | undefined) => {
+      const config = botConfigV2([{
+        do: monsterId === undefined
+          ? { kind: 'spell' as const, spellId: 'summon-test' }
+          : summonAction(monsterId),
+      }]);
+      const { session, hero } = withSpells(config, {
+        monsters: false, spells: [...spells, summonSpell],
+        monstersRaw: [rat, passiveMinion, notSummonable], mana: 200,
+      });
+      run(session, 300, 100);
+      return hero;
+    };
+    // Nenhum dos três gasta mana: a recusa é ANTES do débito.
+    expect(withMonster(undefined).mana).toBe(200);
+    expect(withMonster('not-summonable').mana).toBe(200);
+    expect(withMonster('does-not-exist').mana).toBe(200);
+  });
+
+  it('some quando o MESTRE sai da hunt (`Session.leave`, ADR 0057 decisão 3)', () => {
+    // Party de dois: `a` invoca, `b` só está lá para a sessão ter mais de um dono — sem isso
+    // `Session.leave` encerraria a sessão inteira (`Ruleset.shared`), e não haveria "sair"
+    // para observar, só "acabou".
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const loaded = buildContent(raw({
+      spells: [...spells, summonSpell],
+      monsters: [rat, passiveMinion],
+      routes: [{ ...route, spawnPoints: [] }],
+      progression: [{ ...progression, startingMana: 200 }],
+    }));
+    const session = createHuntSession({
+      id: 'summon-leave-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: config },
+    });
+    const a = new CharacterRuntime({
+      id: 'a', position: { x: 1, y: 1, z: 7 }, health: 100, maxHealth: 100,
+      mana: 200, maxMana: 200, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    const b = new CharacterRuntime({
+      id: 'b', position: { x: 2, y: 1, z: 7 }, health: 100, maxHealth: 100,
+      mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(a);
+    session.enter(b);
+    const ruleset = session.ruleset as HuntRuleset;
+    run(session, 300, 100);
+    expect(ruleset.monsters.filter((m) => m.masterId === 'a').length).toBeGreaterThan(0);
+
+    session.leave('a', 'manual-exit');
+    expect(session.ended).toBeNull(); // `b` continua — a sessão não acabou, só perdeu um dono.
+    expect(ruleset.monsters.filter((m) => m.masterId === 'a')).toHaveLength(0);
+  });
+});
+
+describe('Invocação do PERSONAGEM ataca o alvo do mestre, e o dano credita o MESTRE (#598, ADR 0057 decisões 1 e 2)', () => {
+  // Ao contrário do describe acima, esta invocação BATE forte o bastante para matar o rato
+  // (50 HP) num golpe — o que faz "quem matou" inequívoco: se o crédito fosse da invocação (um
+  // `m:<id>` que `xpByDamage`/`session.participants` nunca reconheceriam como participante), o
+  // XP e o Bestiário do herói ficariam em ZERO mesmo com o rato morto.
+  const fighterMinion = {
+    id: 'fighter-minion', name: 'Fighter Minion', recommendedLevel: 1,
+    health: 30, experience: 0, attack: 100, armor: 0,
+    attackIntervalMs: 200, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { items: [] },
+    summonable: true, manaCost: 20,
+  };
+  const summonSpell = {
+    id: 'summon-test', name: 'Summon Creature (teste)', manaCost: 0, cooldownMs: 200,
+    effect: { kind: 'summon' as const },
+  };
+  const summonAction = { kind: 'spell' as const, spellId: 'summon-test', monsterId: 'fighter-minion' };
+  // O herói NUNCA bate (attackPower 0): todo dano no rato — e todo o crédito de abate — só pode
+  // ter vindo da invocação.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+
+  it('a invocação segue o alvo do mestre (auto-target, #444) e o abate credita XP/Bestiário ao MESTRE', () => {
+    const config = botConfigV2([{ do: summonAction }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      spells: [...spells, summonSpell], monstersRaw: [rat, fighterMinion], mana: 200,
+      combat: [pacifist],
+    });
+    run(session, 15_000, 100);
+
+    // O rato nasceu, a invocação nasceu, seguiu o alvo (o rato — o único candidato de
+    // `#autoSelectTarget`) e o matou: a hunt segue rodando com a invocação viva ou já uma nova,
+    // mas o herói RENDEU pelo abate.
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBeGreaterThan(0);
+    expect(hero.bestiary.getState()['rat']).toBeGreaterThan(0);
+
+    const summon = ruleset.monsters.find((m) => m.masterId === hero.id);
+    if (summon === undefined) throw new Error('sem invocação viva ao fim do teste');
+    // A invocação em si NUNCA ganha nada — nem XP, nem Bestiário: ela não é um `CharacterRuntime`
+    // e não tem os dois campos, então a única forma de "ela ganhar" seria o abate ter ido para
+    // outro lugar. `session.aggregates.xpGained` é do HERÓI (solo — um só agregado na sessão).
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('o DPS da invocação soma no agregado do MESTRE (#431)', () => {
+    const config = botConfigV2([{ do: summonAction }]);
+    const { session, hero } = withSpells(config, {
+      spells: [...spells, summonSpell], monstersRaw: [rat, fighterMinion], mana: 200,
+      combat: [pacifist],
+    });
+    run(session, 15_000, 100);
+    // `damageDealt` (#431, ADR 0032 d.14) só sobe por golpe de verdade — com o herói pacifista,
+    // só a invocação bateu, e é ela quem move este número.
+    expect(session.aggregates.damageDealt ?? 0).toBeGreaterThan(0);
   });
 });
 
@@ -10718,6 +11239,54 @@ describe('dispel: cura de condição (#590, Cure Poison e afins)', () => {
   });
 });
 
+describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
+  const invisibilityTest = {
+    id: 'invisibility-test', name: 'Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'invisible' as const, durationMs: 200_000 },
+  };
+  const cancelInvisibilityTest = {
+    id: 'cancel-invisibility-test', name: 'Cancel Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: {
+      kind: 'dispel' as const, types: ['invisible'],
+      area: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+    },
+  };
+
+  it('lança e fica invisível — a chave reservada, no LANÇADOR', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'invisible', present: false }],
+        do: { kind: 'spell', spellId: 'invisibility-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [invisibilityTest], monsters: false },
+    );
+    session.advanceBy(1);
+    expect(hero.conditions.get('invisible')).not.toBeNull();
+  });
+
+  it('remove a invisibilidade dos MONSTROS na área — não dos aliados, fora do recorte (#12)', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: false }],
+        do: { kind: 'spell', spellId: 'cancel-invisibility-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [cancelInvisibilityTest] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    // O spawn da rota nasce longe do herói (routeIndex 4, radius 2) — o raio 1 desta magia sai
+    // do LANÇADOR, então o teste o reposiciona adjacente, como quem mira a mesma forma que a
+    // ability em área já usa em outros describes deste arquivo.
+    monster.position = { ...hero.position, x: hero.position.x + 1 };
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: session.nowMs + 200_000 });
+    expect(monster.invisible).toBe(true);
+    session.advanceBy(1_500); // 1 lançamento (cooldown 1 s), sem depender de "poison" nenhum.
+    expect(monster.invisible).toBe(false);
+    void hero;
+  });
+});
+
 describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic Wall/Wild Growth)', () => {
   // Cadeia sintética curta (o firefield real do Dragon Lord tem a mesma FORMA, testada em
   // `content/src/load.test.ts` contra os números reais do Canary): estágio 0 com dano, estágio
@@ -10831,6 +11400,162 @@ describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic W
 
     run(session, 20_000, 100);
     expect(monster?.position.x).toBe(4); // nunca cruzou — bloqueado como parede.
+  });
+});
+
+describe('runa de campo e parede do jogador (#591: Fire/Poison/Energy Field/Wall, Magic Wall, Wild Growth, Destroy Field)', () => {
+  const fireFieldRune = {
+    id: 'fire-field-591', name: 'Fire Field', price: 20, group: 'attack' as const,
+    effect: {
+      kind: 'field' as const, range: 8,
+      field: {
+        id: 'player-fire-591', durationMs: 20_000,
+        shape: { shape: 'point' as const },
+        condition: {
+          key: 'burning', merge: 'strongest' as const, durationMs: 20_000,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 2, intervalMs: 10_000, damage: 20 }], damageType: 'fire' as const,
+          },
+        },
+      },
+    },
+  };
+  const fireWallRune = {
+    id: 'fire-wall-591', name: 'Fire Wall', price: 32, group: 'attack' as const,
+    effect: {
+      kind: 'field' as const, range: 8,
+      field: {
+        id: 'player-fire-wall-591', durationMs: 20_000,
+        shape: { shape: 'wall' as const, width: 3 },
+        condition: fireFieldRune.effect.field.condition,
+      },
+    },
+  };
+  const magicWallRune = {
+    id: 'magic-wall-591', name: 'Magic Wall', price: 45, group: 'attack' as const,
+    effect: {
+      kind: 'field' as const, range: 8,
+      field: {
+        id: 'player-magic-wall-591', durationMs: 20_000,
+        shape: { shape: 'point' as const }, blocksMovement: true,
+      },
+    },
+  };
+  const destroyFieldRune = {
+    id: 'destroy-field-591', name: 'Destroy Field', price: 10, group: 'support' as const,
+    effect: { kind: 'destroy-field' as const, range: 5 },
+  };
+  const cast = (supplyId: string) => botConfigV2([{ do: { kind: 'supply' as const, supplyId }, auto: false }]);
+  const at = (x: number, y: number): { readonly kind: 'position'; readonly position: { x: number; y: number; z: number } } =>
+    ({ kind: 'position', position: { x, y, z: 7 } });
+
+  it('planta o FieldSpec no tile mirado, debita o preço e trava o cooldown do grupo', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    expect(hero.goldDelta).toBe(-20);
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.tiles).toEqual([{ x: 3, y: 3, z: 7 }]);
+    expect(ruleset.fields[0]?.condition?.effect.kind).toBe('damage-over-time');
+  });
+
+  it('a MESMA runa em tiles DIFERENTES abre campos independentes — o segundo não move o primeiro', () => {
+    const { session, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    session.advanceBy(1_100); // fora do cooldown de grupo (1000ms default de `supplySchema`).
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(2);
+  });
+
+  it('relançar a MESMA runa no MESMO tile reinicia — nunca duplica', () => {
+    const { session, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(3, 3))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+  });
+
+  it('sem mira recusa `no-target`, sem debitar gold nem plantar campo', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.goldDelta).toBe(0);
+    expect(ruleset.fields).toHaveLength(0);
+  });
+
+  it('fora do alcance recusa `out-of-range`, sem debitar', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-field-591'), {
+      gold: 1_000, supplies: [...supplies, fireFieldRune], monsters: false,
+    });
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(50, 50))).toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('a parede (#591) se orienta PERPENDICULAR ao lançador→alvo, centrada no tile mirado', () => {
+    const { session, hero, ruleset } = withSpells(cast('fire-wall-591'), {
+      gold: 1_000, supplies: [...supplies, fireWallRune], monsters: false,
+    });
+    // O herói entra em (1,1); mirar dois tiles ao SUL é uma linha norte-sul — a parede corre
+    // LESTE-OESTE, centrada no alvo.
+    const target = { x: hero.position.x, y: hero.position.y + 2, z: 7 };
+    expect(ruleset.useSlot(
+      session, 'hero', 0, 0, { kind: 'position', position: target },
+    )).toEqual({ ok: true });
+    const tiles = ruleset.fields[0]?.tiles ?? [];
+    expect(tiles).toHaveLength(3);
+    expect(tiles).toContainEqual(target);
+    expect(tiles.every((t) => t.y === target.y)).toBe(true);
+    expect(new Set(tiles.map((t) => t.x))).toEqual(new Set([target.x - 1, target.x, target.x + 1]));
+  });
+
+  it('Magic Wall bloqueia jogador E monstro, como parede — some ao vencer', () => {
+    const { session, hero, ruleset } = withSpells(cast('magic-wall-591'), {
+      gold: 1_000, supplies: [...supplies, magicWallRune], monsters: false,
+    });
+    const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(ahead.x, ahead.y))).toEqual({ ok: true });
+    expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+
+    session.advanceBy(21_000);
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+  });
+
+  it('Destroy Field remove campo destrutível; recusa `no-target` sem campo (sem gastar); recusa remover campo bloqueante', () => {
+    const threeRunes = botConfigV2([
+      { do: { kind: 'supply' as const, supplyId: 'fire-field-591' }, auto: false },
+      { do: { kind: 'supply' as const, supplyId: 'destroy-field-591' }, auto: false },
+      { do: { kind: 'supply' as const, supplyId: 'magic-wall-591' }, auto: false },
+    ]);
+    const { session, hero, ruleset } = withSpells(threeRunes, {
+      gold: 1_000, supplies: [...supplies, fireFieldRune, destroyFieldRune, magicWallRune],
+      monsters: false,
+    });
+    // Sem campo nenhum no tile: recusa `no-target`, e o gold não sai.
+    expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.goldDelta).toBe(0);
+
+    // Planta o fire field, depois destrói.
+    expect(ruleset.useSlot(session, 'hero', 0, 0, at(2, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(0);
+
+    // Magic Wall é bloqueante — Destroy Field recusa remover, como o Canary também não o lista.
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 2, at(2, 2))).toEqual({ ok: true });
+    expect(ruleset.fields).toHaveLength(1);
+    session.advanceBy(1_100);
+    expect(ruleset.useSlot(session, 'hero', 0, 1, at(2, 2))).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(ruleset.fields).toHaveLength(1);
   });
 });
 

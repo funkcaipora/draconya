@@ -22,6 +22,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -262,6 +266,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -427,6 +435,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.29,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -602,7 +614,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -704,6 +761,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -840,7 +901,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -914,6 +1020,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1100,6 +1209,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.07,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1478,6 +1591,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1677,6 +1794,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1943,6 +2064,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.19,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,

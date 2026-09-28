@@ -144,17 +144,23 @@ describe('mapSpell — ataques', () => {
       field: {
         id: 'test-beast-firefield', durationMs: 200000, shape: { shape: 'circle', radius: 4, centered: 'target' },
         condition: CANARY_FIELD_ITEMS['firefield']?.condition,
+        stages: CANARY_FIELD_ITEMS['firefield']?.stages,
       },
     });
     expect(map({ name: 'poisonfield', radius: 3, target: false })).toMatchObject({ kind: 'unmapped' });
   });
 
-  it('outfit, effect e strength são descartados; invisible e magia com nome não mapeiam', () => {
+  it('outfit, effect e strength são descartados; magia com nome não mapeia', () => {
     expect(map({ name: 'outfit', outfitMonster: 'Rat', duration: 5000 }).kind).toBe('dropped');
     expect(map({ name: 'effect', effect: 'CONST_ME_POFF' }).kind).toBe('dropped');
     expect(map({ name: 'strength', effect: 'CONST_ME_POFF' }).kind).toBe('dropped');
-    expect(map({ name: 'invisible', duration: 3000 }, 'defenses')).toEqual({ kind: 'unmapped', name: 'invisible', reason: 'sem mecanismo (#559)' });
     expect(map({ name: 'ice chain', chance: 10 })).toEqual({ kind: 'unmapped', name: 'ice chain', reason: 'magia com nome próprio (script Lua)' });
+  });
+
+  it('invisible FORA de defenses não mapeia (#559/#592) — o Canary só o usa em defesa própria', () => {
+    expect(map({ name: 'invisible', duration: 3000 })).toEqual({
+      kind: 'unmapped', name: 'invisible', reason: 'invisible fora de defenses',
+    });
   });
 });
 
@@ -174,6 +180,23 @@ describe('mapSpell — defesas', () => {
 
   it('cura em área cura outras criaturas — não é a defesa do Draconya', () => {
     expect(map({ name: 'combat', type: 'COMBAT_HEALING', minDamage: 1, maxDamage: 2, radius: 4 }, 'defenses').kind).toBe('unmapped');
+  });
+
+  it('invisible (Killer Rabbit) vira self-buff em defenses, com o duration declarado (#559/#592)', () => {
+    const invisible = map({ name: 'invisible', interval: 2000, chance: 30, effect: 'CONST_ME_MAGIC_BLUE' }, 'defenses');
+    expect(invisible).toEqual({
+      kind: 'defense', notes: [],
+      defense: {
+        id: 'invisible', cadenceMs: 2000, chance: 0.3,
+        condition: { key: 'invisible', durationMs: 10_000, effect: { kind: 'invisible' } },
+      },
+    });
+    if (invisible.kind === 'defense') expect(() => monsterDefenseSchema.parse(invisible.defense)).not.toThrow();
+
+    const withDuration = map({ name: 'invisible', interval: 2000, chance: 30, duration: 5_000 }, 'defenses');
+    expect(withDuration.kind === 'defense' && withDuration.defense['condition']).toEqual({
+      key: 'invisible', durationMs: 5_000, effect: { kind: 'invisible' },
+    });
   });
 });
 

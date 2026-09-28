@@ -1,0 +1,58 @@
+{
+  "id": "poison-bomb-rune",
+  "name": "Poison Bomb Rune",
+  "description": "Espalha veneno numa área 3x3 ao redor do tile mirado.",
+  "price": 85,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 25,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-poison-bomb",
+      "durationMs": 248000,
+      "shape": {
+        "shape": "circle",
+        "radius": 1,
+        "centered": "target"
+      },
+      "condition": {
+        "key": "poisoned",
+        "merge": "strongest",
+        "durationMs": 230000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "generated",
+          "totalDamage": 100,
+          "intervalMs": 5000,
+          "startDamage": 5,
+          "damageType": "earth"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 248000,
+          "condition": {
+            "key": "poisoned",
+            "merge": "strongest",
+            "durationMs": 230000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "generated",
+              "totalDamage": 100,
+              "intervalMs": 5000,
+              "startDamage": 5,
+              "damageType": "earth"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `poison_bomb.lua`: MESMO item da Poison Field (ITEM_POISONFIELD_PVP, 105), com `setArea(AREA_SQUARE1X1)` — o 3x3 centrado no alvo (`circle radius:1 centered:'target'`). Level 25, magic level 4 (rune:level/magicLevel do Lua). `price` 85 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3173 (menor `buy`, fonte alexander.lua). Sem aparência conferida."
+}

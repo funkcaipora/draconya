@@ -365,6 +365,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -485,6 +489,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.32,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -642,6 +650,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.25,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,

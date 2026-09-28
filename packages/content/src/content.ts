@@ -17,12 +17,14 @@ import {
   appearancesSchema,
   attackRange,
   packSchema,
+  blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
-  supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
+  bestiarySchema, boostedSchema, charmSchema, itemSchema, partySchema, skillSchema, spellSchema,
+  staminaSchema, supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Charm, Combat, CompiledMitigation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, Boosted, BotLimits, Charm,
+  Combat, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
@@ -61,6 +63,12 @@ export interface Content {
    * charm existe", igual a `bestiary` ausente.
    */
   readonly charms: ReadonlyMap<string, Charm>;
+  /**
+   * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
+   * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
+   * não fala de engajamento diário.
+   */
+  readonly boosted?: Boosted;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -70,6 +78,12 @@ export interface Content {
    * sem item físico nem pilha. O `group` é o grupo de cooldown do motor v2.
    */
   readonly supplies: ReadonlyMap<string, Supply>;
+  /**
+   * As sete bênçãos PvE do Tibia (#570, ADR 0052): compradas na Cidade, consumidas na morte.
+   * `order` (em cada `Blessing`) é o índice do bit que `CharacterRuntime.blessings` guarda —
+   * ver `packages/sim/src/blessings.ts`.
+   */
+  readonly blessings: ReadonlyMap<string, Blessing>;
   /** Skills que sobe por uso (§9.4). Vazio é um jogo em que nada sobe por fazer. */
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (§21.2). Atributos base fixos: item melhor é item diferente. */
@@ -129,9 +143,12 @@ export interface RawContent {
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
   readonly charms?: readonly unknown[];
+  readonly boosted?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
+  /** As sete bênçãos PvE (#570), `blessings/*.json`. */
+  readonly blessings?: readonly unknown[];
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
   /** As munições abstratas, `ammunition/*.json` (ADR 0026 d.3). */
@@ -586,6 +603,7 @@ export function buildContent(raw: RawContent): Content {
   // um documento `baseline` único como `bestiary` (aqui não há "marco global", só 25 fichas
   // independentes, cada uma com o próprio id).
   const charms = parseAll('charm', raw.charms ?? [], charmSchema, problems);
+  const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -617,6 +635,18 @@ export function buildContent(raw: RawContent): Content {
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
   // O catálogo de suprimentos (§20.1): poção e runa abstratas, gold no uso.
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
+  // As sete bênçãos PvE (#570): `order` é o índice do bit em `CharacterRuntime.blessings`, e
+  // precisa ser ÚNICO — duas bênçãos no mesmo bit fariam comprar uma marcar a outra como dona.
+  const blessings = parseAll('blessing', raw.blessings ?? [], blessingSchema, problems);
+  const blessingOrders = new Map<number, string>();
+  for (const blessing of blessings.values()) {
+    const owner = blessingOrders.get(blessing.order);
+    if (owner !== undefined) {
+      problems.push(`blessing "${blessing.id}" usa o mesmo order (${blessing.order}) de "${owner}"`);
+      continue;
+    }
+    blessingOrders.set(blessing.order, blessing.id);
+  }
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   // As famílias de arma (CMB-05) são compiladas com as skills: o `damagePerLevel` da skill
   // apontada vira o `skillFactor` da família, e rebalanceá-la rebalanceia todas as famílias.
@@ -725,6 +755,12 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
     }
+    // Dispel em área (#592, Cancel Invisibility) é sempre centrado no LANÇADOR, como a cura em
+    // grupo: forma no alvo exigiria mira e alcance que este efeito não declara.
+    if (effect.kind === 'dispel' && effect.area !== undefined
+      && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
+      problems.push(`${where}: dispel em área precisa ser centrado no lançador`);
+    }
     if (effect.kind === 'challenge') {
       const selfOrigin = effect.area !== undefined
         && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
@@ -733,6 +769,40 @@ export function buildContent(raw: RawContent): Content {
       }
       if (!selfOrigin && effect.range === undefined) {
         problems.push(`${where}: challenge no alvo precisa de range`);
+      }
+    }
+    // Alvo de party (#588: Heal/Protect/Enchant/Train Party) segue a MESMA regra de
+    // `target`/`range` da cura em outro personagem: quem mira além do lançador precisa de
+    // alcance, e quem mira só a si mesmo não declara nenhum — nos dois sentidos, para um
+    // `range` esquecido (ou sobrando) não subir mudo.
+    if (effect.kind === 'heal-over-time' || effect.kind === 'buff') {
+      if (effect.target === 'party' && effect.range === undefined) {
+        problems.push(`${where}: alvo de party precisa de range`);
+      }
+      if ((effect.target === undefined || effect.target === 'self') && effect.range !== undefined) {
+        problems.push(`${where}: alvo em si mesmo não tem alcance`);
+      }
+    }
+    // O custo por tamanho da party (#588) só faz sentido ao lado de um efeito que de fato mira
+    // a party: sem isso, `party-scaled` cobraria por um `n` que a magia nunca resolve, e o
+    // custo real nunca bateria com o anunciado (`manaCostDisplayOf`, o `base`).
+    if (typeof spell.manaCost !== 'number') {
+      const targetsParty = (effect.kind === 'heal-over-time' || effect.kind === 'buff')
+        && effect.target === 'party';
+      if (!targetsParty) {
+        problems.push(`${where}: manaCost "party-scaled" precisa de um efeito com target "party"`);
+      }
+    }
+    // Conjuração (#594, ADR 0044): o id creditado precisa existir no catálogo correspondente —
+    // sem isto, a magia subiria muda, creditando carga que `useSupply`/o tiro nunca reconhecem.
+    if (effect.kind === 'conjure') {
+      if (effect.supplyId !== undefined && !supplies.has(effect.supplyId)) {
+        problems.push(`${where}: conjure.supplyId "${effect.supplyId}" não existe no catálogo de supplies`);
+      }
+      if (effect.ammunitionId !== undefined && !ammunitionDefinitions.has(effect.ammunitionId)) {
+        problems.push(
+          `${where}: conjure.ammunitionId "${effect.ammunitionId}" não existe no catálogo de munição`,
+        );
       }
     }
   }
@@ -1446,9 +1516,12 @@ export function buildContent(raw: RawContent): Content {
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
+    // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
+    // configuração de operação — não pede uma seção de `docs/product` para justificar.
     ...openOf('spell', spells),
     ...openOf('charm', charms),
     ...openOf('supply', supplies),
+    ...openOf('blessing', blessings),
     ...openOf('skill', skills),
     ...openOf('item', items),
     ...openOf('munição', ammunition),
@@ -1467,6 +1540,7 @@ export function buildContent(raw: RawContent): Content {
     bot: bot as BotLimits,
     spells,
     supplies,
+    blessings,
     skills,
     items,
     ammunition,
@@ -1481,6 +1555,7 @@ export function buildContent(raw: RawContent): Content {
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
     charms,
+    ...(boosted === undefined ? {} : { boosted }),
     maps,
     routes,
     openValues,

@@ -937,6 +937,13 @@ body {
   letter-spacing: .04em; text-transform: uppercase;
 }
 .character-modal-vitals { display: flex; flex-direction: column; gap: 6px; }
+/* Promoção (#566, ADR 0042 decisão 1): mesmo botão gold primário do `.entry-create-submit`. */
+.character-modal-promote {
+  margin-top: 6px;
+  background: var(--gold-4); border: none; border-radius: 3px; padding: 8px 16px;
+  font: 600 11px var(--font-display); letter-spacing: 0.08em; color: var(--ash-0); cursor: pointer;
+}
+.character-modal-promote:disabled { opacity: 0.5; cursor: default; }
 
 /* ---- HuntDetailsModal: monstros, loot e descrição (#349, SV-13) ------------------------- */
 .hunt-details-modal-grid { display: grid; grid-template-columns: 250px 1fr; gap: 14px; }
@@ -1759,3 +1766,19 @@ body {
   color: var(--gold-4);
   text-transform: uppercase;
 }
+
+/* As sete bênçãos PvE (#570, ADR 0052), dentro do CharacterModal — a mesma forma de lista da
+   munição, sem o sprite (bênção não tem arte, invariante 6). */
+.blessing-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.blessing-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.blessing-name { flex: 1 1 auto; }
+.blessing-owned { color: var(--gold-5); }
+.blessing-buy {
+  background: var(--ash-3); border: 1px solid var(--gold-4); border-radius: 3px;
+  color: var(--gold-5); font: 8px var(--font-mono); padding: 2px 6px; cursor: pointer;
+}
+.blessing-buy:disabled { opacity: 0.45; cursor: default; }

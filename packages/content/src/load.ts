@@ -31,11 +31,14 @@ export function loadContent(dir: string): Content {
     bestiary: readJsonDir(join(dir, 'bestiary')),
     // Os 25 Charms do Canary (M39-02, #602) — uma entidade por arquivo/fatia, como `spells`.
     charms: readJsonDir(join(dir, 'charms')),
+    boosted: readJsonDir(join(dir, 'boosted')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
     // Suprimentos e munição ABSTRATOS (ADR 0026 d.3): poção, runa e flecha não são itens — o
     // uso/tiro debita gold, e o catálogo vive em pasta própria.
     supplies: readJsonDir(join(dir, 'supplies')),
+    // As sete bênçãos PvE (#570, ADR 0052): serviço de Cidade, nunca item de mochila.
+    blessings: readJsonDir(join(dir, 'blessings')),
     ammunition: readJsonDir(join(dir, 'ammunition')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),

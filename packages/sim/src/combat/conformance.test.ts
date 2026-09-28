@@ -359,7 +359,7 @@ const PROGRESSION: Progression = {
   regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   regeneration: { requiresFood: false },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
   rates: NEUTRAL_RATES,

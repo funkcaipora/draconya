@@ -183,11 +183,24 @@ export interface InitialCharacter {
    */
   readonly fedMs?: number;
   /**
+   * As sete bênçãos PvE (#570, ADR 0052): o BITMASK, lido de `characters.blessings`. Entra na
+   * sessão, e não só sai dela — sem isto, quem comprou na Cidade morreria na hunt seguinte sem
+   * a redução que pagou. Ausente é quem nunca comprou, ou ticket de um `api` antigo: a sessão
+   * parte de `0`.
+   */
+  readonly blessings?: number;
+  /**
    * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
    * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
    * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
    */
   readonly vocation?: string;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1), lido de `characters.promoted`. Ausente/`false` é
+   * "não promovido" — a coluna não é nulável, e o `game` só escreve `true` depois de
+   * `CharacterRuntime.promote()` aceitar (level ≥ 20, gold ≥ 20.000, ainda não promovido).
+   */
+  readonly promoted?: boolean;
   /**
    * Premium do personagem (ADR 0035 D3), já resolvido contra o relógio pelo `api` — a sessão
    * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
@@ -198,6 +211,16 @@ export interface InitialCharacter {
    * `api` antigo — nunca ticket recusado (regra do Bestiário).
    */
   readonly premium?: boolean;
+  /**
+   * A Boosted Creature do dia (M42, #615, ADR 0052 decisão 5, ADR 0054 decisão 7): o
+   * `monsterId` que o `jobs` sorteou na última virada, lido pela `api` do cache em Redis que o
+   * `jobs` publica (`packages/server/src/world-daily.ts`) na hora da EMISSÃO do ticket — nunca
+   * relido depois. Fixado no personagem daqui em diante (`characterFromTicket`), como a versão
+   * de conteúdo: a hunt que atravessa a virada continua com a boosted com que nasceu. Ausente é
+   * conteúdo sem `boosted/baseline.json`, cache ainda vazio (primeiro ciclo do `jobs` não
+   * rodou), ou `api` antigo em deploy em rolagem — nenhuma hunt aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
 }
 
 export interface IssuedTicket {
@@ -652,14 +675,27 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
       && initial['fedMs'] >= 0
       ? { fedMs: initial['fedMs'] }
       : {}),
+    // As bênçãos (#570): mesma régua — inteiro seguro não negativo, ou AUSENTE.
+    ...(typeof initial['blessings'] === 'number' && Number.isSafeInteger(initial['blessings'])
+      && initial['blessings'] >= 0
+      ? { blessings: initial['blessings'] }
+      : {}),
     // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
     // recusado — como o Bestiário.
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
       ? { vocation: initial['vocation'] }
       : {}),
+    // Promovido (#566, ADR 0042 decisão 1): booleano ou AUSENTE, nunca ticket recusado — a
+    // mesma régua do Premium. Um valor torto degrada para "não promovido" (o lado seguro).
+    ...(typeof initial['promoted'] === 'boolean' ? { promoted: initial['promoted'] } : {}),
     // O Premium (ADR 0035 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
     // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
     ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),
+    // A Boosted Creature do dia (#615): string não vazia; qualquer outra coisa vira AUSENTE,
+    // nunca ticket recusado — como a vocação.
+    ...(typeof initial['boostedMonsterId'] === 'string' && initial['boostedMonsterId'].length > 0
+      ? { boostedMonsterId: initial['boostedMonsterId'] }
+      : {}),
   };
 }
 

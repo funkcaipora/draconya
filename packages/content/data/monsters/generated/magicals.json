@@ -20,6 +20,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.02,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -220,6 +224,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -457,6 +465,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -658,6 +670,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -893,6 +908,10 @@
         "holy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1051,6 +1070,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.67,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1304,6 +1326,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1502,6 +1528,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.21,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1657,6 +1687,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.29,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1795,6 +1828,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1989,6 +2026,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.67,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2236,6 +2276,10 @@
         "holy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -2411,6 +2455,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.94,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2518,6 +2566,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -2714,6 +2766,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.38,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2819,6 +2874,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.22,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3051,6 +3110,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.19,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3167,6 +3230,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.94,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3342,6 +3409,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3561,6 +3632,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3784,6 +3859,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3964,6 +4042,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.82,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -4121,6 +4203,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4321,6 +4407,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -4529,6 +4619,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4751,6 +4845,165 @@
     }
   },
   {
+    "id": "midnight-panther",
+    "name": "Midnight Panther",
+    "class": "magical",
+    "health": 1200,
+    "experience": 900,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "fire": 0.2,
+        "death": -0.05
+      },
+      "immunities": [
+        "energy"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 1500,
+    "speed": 580,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 57
+      },
+      "items": [
+        {
+          "itemId": "life-ring",
+          "chance": 0.125
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.25,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "panther-head",
+          "chance": 0.125
+        },
+        {
+          "itemId": "panther-paw",
+          "chance": 1
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1500,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 75,
+          "max": 215
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 370
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 50,
+          "max": 125
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/magicals/midnight_panther.lua"
+    }
+  },
+  {
     "id": "nibblemaw",
     "name": "Nibblemaw",
     "class": "magical",
@@ -4773,6 +5026,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4952,6 +5209,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.7,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5143,6 +5403,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.7,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5308,6 +5571,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5655,6 +5922,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5775,6 +6046,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5962,6 +6237,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.94,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -6128,6 +6407,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -6314,6 +6597,10 @@
         "drown"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,

@@ -250,6 +250,11 @@ async function applyProgression(
   // externo monotônico a fundir, é o estado final da sessão dona. Extrato SEM o campo (Cidade
   // ou nó antigo em deploy) não toca na coluna.
   const charms = receipt.charms === undefined ? {} : { charms: receipt.charms };
+  // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
+  // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
+  // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
+  // de ordem, chegasse depois de um mais novo já aplicado.
+  const blessings = receipt.blessings === undefined ? {} : { blessings: receipt.blessings };
 
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
@@ -327,11 +332,18 @@ async function applyProgression(
       ...ammunitionStock,
       ...fedMs,
       ...charms,
+      ...blessings,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined
         ? {}
         : { vocation: sql`coalesce(${characters.vocation}, ${receipt.vocation})` }),
+      // A promoção (#566, ADR 0042 decisão 1): `OR`, não `coalesce` — o boolean não tem
+      // "ausente" a preencher uma vez só (a diferença de `vocation`, string nulável). O campo
+      // SÓ chega `true` (ver `parseReceipt`), então isto é sempre "vira `true` e não volta".
+      ...(receipt.promoted === true
+        ? { promoted: sql`${characters.promoted} OR true` }
+        : {}),
       // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),

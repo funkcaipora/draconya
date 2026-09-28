@@ -136,30 +136,52 @@ export const CLIENT_TO_SERVER = {
    */
   look: 28,
   /**
+   * Promover a vocação (#566, ADR 0042 decisão 1). INTENÇÃO sem payload: o cliente só pede;
+   * vocação escolhida, level ≥ 20, gold ≥ 20.000 e "ainda não promovido" são do servidor
+   * (invariante 4). Só na Cidade (ADR 0042 — serviço de Cidade). Sucesso é `player-stats`
+   * (`promoted: true`); recusa é `system-message`.
+   *
+   * 29: o 28 é do `look`.
+   */
+  'promote-vocation': 29,
+  /**
+   * Comprar UMA bênção na Cidade (#570, ADR 0052 decisão 2). INTENÇÃO: o cliente diz QUAL
+   * bênção (`blessingId` do catálogo `content.blessings`); preço por level, saldo e "já tem
+   * esta bênção" são conferidos pelo servidor (invariante 4), dentro da sessão de Cidade —
+   * nunca um endpoint `api` (o personagem na Cidade tem o `CharacterRuntime` quente,
+   * invariante 9). Gold sai pelo ledger (`session.credit`, invariante 10); sucesso é
+   * `blessings` refletindo o bitmask novo, e `player-stats`/`inventory` NÃO mudam — bênção
+   * não é item nem vital. Recusa é `system-message` (`not-enough-gold`, `already-blessed`,
+   * `unknown-blessing`, `blessing-service-unavailable`).
+   *
+   * 30: o 29 é do `promote-vocation` (#566).
+   */
+  'buy-blessing': 30,
+  /**
    * Desbloquear o próximo tier de um Charm (M39-02, #602; ADR 0052 d.2, ADR 0053 d.3).
    * INTENÇÃO: o cliente diz QUAL charm; quem decide se os pontos/echoes derivados do Bestiário
    * bastam é o servidor (invariante 4). Tratada pela sessão de Cidade E pela hunt — sem
    * rolagem, o mesmo caminho aceita as duas (ADR 0052 d.4). Sucesso é `charms` reenviado;
    * recusa é `system-message`.
    *
-   * 29: o 28 é do `look`.
+   * 31: o 30 é do `buy-blessing` (#570).
    */
-  'charm-unlock': 29,
+  'charm-unlock': 31,
   /**
    * Atribuir um Charm desbloqueado a um monstro (ADR 0053 d.4). INTENÇÃO: `monsterId` é o id de
    * CONTEÚDO do bestiário, não uma criatura da hunt — Charms se gerem de qualquer lugar
    * (ADR 0052 d.4), inclusive olhando o Cyclopedia fora de sessão nenhuma de combate.
    *
-   * 30: o 29 é do `charm-unlock`.
+   * 32: o 31 é do `charm-unlock`.
    */
-  'charm-assign': 30,
+  'charm-assign': 32,
   /**
    * Remover a atribuição de um Charm (ADR 0053 d.4): custa `level × 100` gold pelo ledger
    * (invariante 10) — o servidor debita, nunca o cliente informa quanto pagou.
    *
-   * 31: o 30 é do `charm-assign`.
+   * 33: o 32 é do `charm-assign`.
    */
-  'charm-remove': 31,
+  'charm-remove': 33,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -375,6 +397,16 @@ export const SERVER_TO_CLIENT = {
    */
   'field-stage-change': 42,
   /**
+   * As bênçãos do personagem (#570, ADR 0052): o BITMASK que `CharacterRuntime.blessings`
+   * guarda — um bit por `order` de `content.blessings` (invariante 6: nada de nome de bênção
+   * aqui, o cliente resolve pelo catálogo que `catalogue` já manda). Sai no attach/enter e a
+   * cada mudança: compra (`buy-blessing`) ou consumo na morte — nunca broadcast, como
+   * `slot-state`/`active-conditions`: bênção é de UM personagem, mesmo na Cidade compartilhada.
+   *
+   * 43: o 42 é do `field-stage-change` (#560).
+   */
+  blessings: 43,
+  /**
    * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): pontos/echoes gastos,
    * tier de cada charm e as atribuições por monstro — o registro cru, como `bestiary` manda os
    * abates crus. O que cada charm CUSTA e RENDE é do `catalogue` (fixado na sessão, invariante
@@ -382,9 +414,9 @@ export const SERVER_TO_CLIENT = {
    * Bestiário (`bestiary-progress.ts`). Sai no attach e sempre que uma intenção de Charm muda o
    * registro.
    *
-   * 43: o 42 é do `field-stage-change` (#560).
+   * 44: o 43 é do `blessings` (#570).
    */
-  charms: 43,
+  charms: 44,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */
