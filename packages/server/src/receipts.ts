@@ -91,6 +91,15 @@ export interface SessionReceipt {
    */
   readonly fedMs?: number;
   /**
+   * As bênçãos no fim da sessão (#570, ADR 0052): o BITMASK de `CharacterRuntime.blessings`.
+   * Valor ABSOLUTO, última escrita vence, como `fedMs` — mas ao contrário dele, este campo
+   * PODE DESCER a zero dentro da MESMA sessão (a morte consome tudo), e é exatamente por isso
+   * que o ledger (`jobs/ledger.ts`) nunca pode fundir por máximo aqui: um extrato antigo
+   * processado fora de ordem depois de um mais novo já aplicado ressuscitaria uma bênção que
+   * acabou de ser consumida.
+   */
+  readonly blessings?: number;
+  /**
    * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
    * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
    * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
@@ -361,6 +370,8 @@ function parseReceipt(raw: string): SessionReceipt | null {
       : {}),
     // Comida ativa (#726): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['fedMs'] === 'number' ? { fedMs: value['fedMs'] } : {}),
+    // As bênçãos (#570): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['blessings'] === 'number' ? { blessings: value['blessings'] } : {}),
     // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }

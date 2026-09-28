@@ -1597,6 +1597,41 @@ describe('fields on the world: field-appear, field-disappear (#561, M31-06)', ()
   });
 });
 
+describe('blessings: buy-blessing, blessings (#570, ADR 0052)', () => {
+  it('round trips buy-blessing C2S and blessings S2C', () => {
+    const buy: C2SMessage = { type: 'buy-blessing', blessingId: 'fire-of-the-suns' };
+    const blessings: S2CMessage = { type: 'blessings', mask: 0b1010101 };
+    expect(decodeC2S(encodeC2S(buy))).toEqual([buy]);
+    expect(decodeS2C(encodeS2C(blessings))).toEqual([blessings]);
+  });
+
+  it('the catalogue carries the blessing list and pricing, optional', () => {
+    const minimalCatalogue = {
+      hunts: [], items: [], ammunition: [],
+      bot: {
+        vocabularyVersion: 2,
+        setCount: 4, slotsPerSet: 24, setNames: [], hotkeys: [], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+    };
+    const withoutBlessings = S2C_SCHEMAS.catalogue.parse(minimalCatalogue);
+    expect(withoutBlessings.blessings).toBeUndefined();
+
+    const withBlessings = S2C_SCHEMAS.catalogue.parse({
+      ...minimalCatalogue,
+      blessings: {
+        list: [{ id: 'fire-of-the-suns', name: 'Fire of the Suns', order: 3, enhanced: false }],
+        pricing: {
+          freeBelowLevel: 21, flatUntilLevel: 30, flatPrice: 2000, highFromLevel: 120,
+          midOffset: 20, midMultiplier: 200, midEnhancedMultiplier: 260,
+          highBase: 20000, highEnhancedBase: 26000, highMultiplier: 75, highEnhancedMultiplier: 100,
+        },
+      },
+    });
+    expect(withBlessings.blessings?.list).toHaveLength(1);
+  });
+});
+
 describe('enter-hunt without difficulty (#584, ADR 0039 — end of pull-by-difficulty)', () => {
   it('round trips huntId alone through the codec, difficulty absent', () => {
     // Um cliente NOVO nunca manda `difficulty` — o campo virou vestigial (ADR 0039). Se ele

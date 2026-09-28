@@ -361,10 +361,21 @@ em vez de virar um slot morto que ninguém explica.
 **Suprimento é abstrato** (AB-01, ADR 0032 d.6). Poção e runa vivem em `supplies/*.json` com
 `price`, `effect`, `requires` e `group`; o uso debita gold direto (`useSupply`), sem pilha e sem
 reposição. O vocabulário v2 do bot (AB-03) usa o token `supply` com `supplyId`, e
-`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. A carga de bênção é a única
-exceção: segue item `kind: 'consumable'` **não-empilhável** em `items/blessing-charge.json`, sem
-`restock` nem `group` obrigatórios, e quem a consome é a TP-03 (M22). O motor por grupo é a AB-07
+`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. O motor por grupo é a AB-07
 (#422).
+
+A carga de bênção (`items/blessing-charge.json`, item `consumable` não-empilhável do M22) foi
+**removida pelo #570**: bênção deixou de ser item de mochila e virou serviço de Cidade (ADR
+0052) — intenção C2S tratada pela sessão de Cidade, gold pelo ledger, nunca um `use-item`. O
+catálogo novo é `data/blessings/*.json` (`blessingSchema`): sete bênçãos PvE (o `Blessings.All`
+do Canary tem 8 ids; o 1º, Twist of Fate, é PvP e fica fora), cada uma com `order` — o índice do
+BIT que `CharacterRuntime.blessings` guarda (`packages/sim/src/blessings.ts`) — e `enhanced`
+(as duas mais caras, Heart/Blood of the Mountain). O preço por level é `progression.
+blessingPricing` (`getBlessingCost` do Canary, `blessing.lua:148-166`): faixa fixa até o level
+30, faixa linear até o 119, faixa linear com base maior dali em diante — `enhanced` multiplica
+mais em cada faixa —, e GRÁTIS abaixo do level 21 (o Adventurer's Blessing, `config.lua.dist:
+496`). A redução na morte é `deathPenalty.blessingReduction` (8%) MULTIPLICADA pela contagem de
+bits — nunca mais a soma pronta de um binário `premium`.
 
 ## Skills (FUN-75)
 

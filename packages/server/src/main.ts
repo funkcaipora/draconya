@@ -211,6 +211,9 @@ async function main(): Promise<void> {
       itemCatalog: content.items,
       // A munição abstrata (#152): o `select-ammo` escolhe daqui, com o level conferido.
       ammunitionCatalog: content.ammunition,
+      // As sete bênçãos PvE (#570, ADR 0052): o `buy-blessing` compra daqui, com o preço por
+      // level em `progression.blessingPricing`.
+      blessingCatalog: content.blessings,
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,

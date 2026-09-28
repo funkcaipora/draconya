@@ -1147,7 +1147,6 @@
     "blemished-spawn-tail": 36780,
     "blessed-sceptre": 7429,
     "blessed-shield": 3423,
-    "blessing-charge": 3155,
     "blister-ring": 31621,
     "blood-goblet": 8531,
     "blood-preservation": 11449,
@@ -3487,6 +3486,53 @@
     },
     "magic-shield-potion": {
       "effect": 38
+    },
+    "fire-field-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "fire-wall-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "fire-bomb-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "poison-field-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "poison-wall-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "poison-bomb-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "energy-field-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "energy-wall-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "energy-bomb-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "magic-wall-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "wild-growth-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "destroy-field-rune": {
+      "effect": 10
     }
   },
   "hits": {

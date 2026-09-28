@@ -361,6 +361,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, bestiary: message.counts }));
       return;
 
+    case 'blessings':
+      // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
+      // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, blessings: message.mask }));
+      return;
+
     case 'bot-config-result':
       // A resposta é da TELA do bot, não do chat: ela precisa saber se o que o jogador escreveu
       // virou verdade, e uma recusa não pode descartar o que ele digitou.

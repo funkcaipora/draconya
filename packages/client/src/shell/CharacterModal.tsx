@@ -6,6 +6,7 @@ import type { C2SMessage } from '@draconya/protocol';
 import { account } from '../account/store.js';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
+import { blessingCost, hasBlessing } from './blessing-cost.js';
 import { bonusPercent } from './bestiary-progress.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
@@ -84,6 +85,8 @@ export function CharacterModal({ onClose }: { onClose: () => void }) {
   // null significa que este servidor não configurou Bestiário, não que o bônus seja zero.
   const bestiaryConfig = useHudSlice((state) => state.catalogue?.bestiary ?? null);
   const bestiaryCounts = useHudSlice((state) => state.bestiary);
+  const blessingsConfig = useHudSlice((state) => state.catalogue?.blessings ?? null);
+  const blessingsMask = useHudSlice((state) => state.blessings);
   const characters = useStoreSlice(account, (state) => state.characters);
   const name = characters.find((character) => character.id === characterId)?.name
     ?? characterId ?? '—';
@@ -153,6 +156,38 @@ export function CharacterModal({ onClose }: { onClose: () => void }) {
           >
             Promover
           </button>
+        </Box>
+      )}
+      {/* Serviço de Cidade (#570, ADR 0052): a compra manda a INTENÇÃO (invariante 4) — preço,
+          saldo e "já tem esta bênção" são conferidos pelo servidor; o botão só se desabilita
+          aqui para não oferecer o que ele vai recusar de qualquer jeito. */}
+      {blessingsConfig !== null && (
+        <Box title="Bênçãos">
+          <ul className="blessing-list">
+            {blessingsConfig.list.map((blessing) => {
+              const owned = hasBlessing(blessingsMask, blessing.order);
+              const cost = blessingCost(level, blessing.enhanced, blessingsConfig.pricing);
+              return (
+                <li key={blessing.id} className="blessing-entry">
+                  <span className="blessing-name">
+                    {blessing.name}{blessing.enhanced ? ' ✦' : ''}
+                  </span>
+                  {owned
+                    ? <span className="blessing-owned">Abençoado</span>
+                    : (
+                      <button
+                        type="button"
+                        className="blessing-buy"
+                        disabled={gold < cost}
+                        onClick={() => { sendIntent({ type: 'buy-blessing', blessingId: blessing.id }); }}
+                      >
+                        {cost === 0 ? 'Grátis' : count(cost) + ' gold'}
+                      </button>
+                    )}
+                </li>
+              );
+            })}
+          </ul>
         </Box>
       )}
     </Modal>

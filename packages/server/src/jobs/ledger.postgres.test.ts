@@ -81,7 +81,7 @@ const progression: Progression = {
   regeneration: { requiresFood: false },
   startingKit: [],
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
   rates: NEUTRAL_RATES,
@@ -109,7 +109,7 @@ const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-  ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
+  ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -122,12 +122,13 @@ const characterRow = async (
       staminaMs: characters.staminaMs,
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
+      blessings: characters.blessings,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-    ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown;
+    ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
   };
 };
 
@@ -817,6 +818,51 @@ describe.runIf(ready)('pontos de alma chegam ao Postgres pelo extrato (#593)', (
     });
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     expect((await characterRow(database, characterId)).soul).toBe(100);
+  });
+});
+
+describe.runIf(ready)('as sete bênçãos chegam ao Postgres pelo extrato, e a morte nunca ressuscita pelo merge (#570)', () => {
+  it('nasce zero, a última escrita vence, e o extrato sem o campo não toca na coluna', async () => {
+    // Como a alma (#593): ABSOLUTO, última-escrita-vence — NUNCA fundido por máximo. A morte
+    // consome TODAS as bênçãos de uma vez (`character.blessings = 0`), e é exatamente esse caso
+    // que a segunda gravação prova: 0 depois de 127 tem que PERSISTIR — se o ledger fundisse
+    // pelo maior, como faz com skill/Bestiário, a bênção consumida ressuscitaria no Postgres.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).blessings).toBe(0);
+
+    const receipts = new ReceiptStore(redis);
+    // 0b1111111 = 127: as sete bênçãos, todos os bits ligados.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), blessings: 127 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).blessings).toBe(127);
+
+    // A morte: o extrato seguinte leva ZERO, e a coluna precisa DESCER com ele.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, blessings: 0 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).blessings).toBe(0);
+
+    // Extrato de Cidade sem o campo (nada mudou ali) não toca na coluna.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).blessings).toBe(0);
+  });
+
+  it('compra na Cidade: uma bênção só sobe a coluna, e o extrato seguinte não a derruba', async () => {
+    // O caminho de COMPRA (`#requestBuyBlessing`, host.ts): sobe de 0 para uma bênção, e o
+    // extrato seguinte sem mudança nenhuma preserva o valor — última-escrita-vence não é
+    // "sempre reescreve", é "quando o extrato TEM o campo".
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), blessings: 0b0000001 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).blessings).toBe(1);
+
+    // Comprou uma segunda bênção: o bitmask sobe para 0b0000011.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, blessings: 0b0000011 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).blessings).toBe(0b0000011);
   });
 });
 

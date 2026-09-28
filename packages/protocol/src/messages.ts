@@ -144,6 +144,19 @@ export const CLIENT_TO_SERVER = {
    * 29: o 28 é do `look`.
    */
   'promote-vocation': 29,
+  /**
+   * Comprar UMA bênção na Cidade (#570, ADR 0052 decisão 2). INTENÇÃO: o cliente diz QUAL
+   * bênção (`blessingId` do catálogo `content.blessings`); preço por level, saldo e "já tem
+   * esta bênção" são conferidos pelo servidor (invariante 4), dentro da sessão de Cidade —
+   * nunca um endpoint `api` (o personagem na Cidade tem o `CharacterRuntime` quente,
+   * invariante 9). Gold sai pelo ledger (`session.credit`, invariante 10); sucesso é
+   * `blessings` refletindo o bitmask novo, e `player-stats`/`inventory` NÃO mudam — bênção
+   * não é item nem vital. Recusa é `system-message` (`not-enough-gold`, `already-blessed`,
+   * `unknown-blessing`, `blessing-service-unavailable`).
+   *
+   * 30: o 29 é do `promote-vocation` (#566).
+   */
+  'buy-blessing': 30,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -358,6 +371,16 @@ export const SERVER_TO_CLIENT = {
    * 42: o 41 é do `field-disappear`.
    */
   'field-stage-change': 42,
+  /**
+   * As bênçãos do personagem (#570, ADR 0052): o BITMASK que `CharacterRuntime.blessings`
+   * guarda — um bit por `order` de `content.blessings` (invariante 6: nada de nome de bênção
+   * aqui, o cliente resolve pelo catálogo que `catalogue` já manda). Sai no attach/enter e a
+   * cada mudança: compra (`buy-blessing`) ou consumo na morte — nunca broadcast, como
+   * `slot-state`/`active-conditions`: bênção é de UM personagem, mesmo na Cidade compartilhada.
+   *
+   * 43: o 42 é do `field-stage-change` (#560).
+   */
+  blessings: 43,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

@@ -22,9 +22,13 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, RemovedBotSlot, Skill, Vocation,
+  Ammunition, Appearances, Blessing, BotConfigV2, Item, ItemSlot, Monster, RemovedBotSlot, Skill,
+  Vocation,
 } from '@draconya/content';
-import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
+import {
+  blessingCost, containerRulesFor, hasBlessing, PartyFullError, shareCostsOf, skillFactorFor,
+  splitLootOf, withBlessing,
+} from '@draconya/sim';
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
@@ -138,6 +142,11 @@ export interface SessionHostOptions {
    * recusada, e a recusa é honesta — um host sem conteúdo não sabe o que é uma flecha.
    */
   readonly ammunitionCatalog?: ReadonlyMap<string, Ammunition>;
+  /**
+   * As sete bênçãos PvE (#570, ADR 0052), para `buy-blessing`. Ausente: a compra é recusada,
+   * e a recusa é honesta — um host sem conteúdo não sabe o que é uma bênção.
+   */
+  readonly blessingCatalog?: ReadonlyMap<string, Blessing>;
   /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
@@ -859,6 +868,12 @@ interface HostedSession {
    */
   readonly sentBestiary: Map<string, number>;
   /**
+   * O último BITMASK de bênçãos ENTREGUE a quem olha cada personagem (#570, ADR 0052), por
+   * `characterId` — o mesmo mecanismo de `sentBestiary`: compra (sobe) e morte (zera) são as
+   * únicas mudanças, e as duas precisam chegar a quem está olhando.
+   */
+  readonly sentBlessings: Map<string, number>;
+  /**
    * O último ESTADO de cada interativo ENTREGUE aos viewers da sessão (#734, ADR 0050 d.6 T3),
    * por `interactableId`. Cenário é COMPARTILHADO (DT-01 do #729) — uma entrada por sessão, não
    * por personagem, como `sentParty`. É o gatilho de `#presentTileOverrides`: fecha a lacuna que
@@ -1522,6 +1537,11 @@ export class SessionHost {
       case 'select-ammo':
         // INTENÇÃO (invariante 4): o cliente diz QUAL munição; o level e o catálogo são daqui.
         this.#requestSelectAmmo(viewer, message.ammoId);
+        return;
+      case 'buy-blessing':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL bênção; preço por level, saldo e "já tem
+        // esta bênção" são daqui — serviço de Cidade, dentro da sessão dona (#570, ADR 0052).
+        this.#requestBuyBlessing(viewer, message.blessingId);
         return;
       case 'move-item':
         // INTENÇÃO (invariante 4): dois lugares; empilhar, vestir e recusar são do servidor.
@@ -2280,6 +2300,55 @@ export class SessionHost {
   }
 
   /**
+   * Comprar UMA bênção (#570, ADR 0052 decisão 2). Serviço de CIDADE, nunca hunt — não existe
+   * onde comprar bênção fora do shard, e a `blessing.lua` do Canary trava o santuário em PZ
+   * pela mesma razão. INTENÇÃO: o cliente diz QUAL bênção; preço por level
+   * (`blessingCost`/`progression.blessingPricing`), saldo e "já tem esta bênção"
+   * (`hasBlessing`) são do servidor. Gold sai por `goldDelta` — o MESMO caminho de
+   * `sell-items` na Cidade (ADR 0048 d.8): a sessão de shard não zera o agregado a cada
+   * extrato, então somar ali re-creditaria a compra no próximo logout; `#saveDurableReceipt`
+   * drena e liquida `goldDelta` a cada extrato. O bit fica em `character.blessings`
+   * (bitmask), e o sucesso sai como `blessings` — não `player-stats.blessings`, porque bênção
+   * não é vital nem item.
+   */
+  #requestBuyBlessing(viewer: Viewer, blessingId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.shared !== true) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Bênçãos só se compram na Cidade.',
+      });
+      return;
+    }
+    const blessing = this.#options.blessingCatalog?.get(blessingId);
+    const pricing = this.#options.progression?.blessingPricing;
+    if (blessing === undefined || pricing === undefined) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Esse serviço não está disponível.',
+      });
+      return;
+    }
+    if (hasBlessing(character.blessings, blessing.order)) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Você já tem essa bênção.' });
+      return;
+    }
+    const cost = blessingCost(character.level, blessing.enhanced, pricing);
+    if (character.gold + character.goldDelta < cost) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Você não tem gold suficiente.' });
+      return;
+    }
+    character.goldDelta -= cost;
+    character.blessings = withBlessing(character.blessings, blessing.order);
+    this.#markDirty(viewer.characterId);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    hosted.sentBlessings.set(character.id, character.blessings);
+    viewer.send({ type: 'blessings', mask: character.blessings });
+  }
+
+  /**
    * Traduz a recusa do `sim` em algo que o jogador entenda, ou manda o inventário novo.
    *
    * O sucesso NÃO vira mensagem de sistema — vira o estado. "Equipado com sucesso" é ruído; o
@@ -2609,6 +2678,7 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      this.#presentBlessings(hosted);
       // E o cenário, se algo mudou de estado PASSIVAMENTE (#734, ADR 0050 d.6 T3) — o walker
       // abrindo uma porta sozinho, uma placa de pressão, um `TILE_REVERT`. `useOnMap` já manda
       // o próprio `tile-update` na hora (`#requestUseOnMap`); isto cobre o resto.
@@ -3153,6 +3223,22 @@ export class SessionHost {
   }
 
   /**
+   * As bênçãos ao vivo (#570, ADR 0052), pela MESMA regra do Bestiário: só quem está olhando,
+   * só quando o bitmask mudou desde a última entrega. A compra (`#requestBuyBlessing`) já manda
+   * direto a quem comprou; isto cobre quem só está OLHANDO — e o consumo na morte, que a hunt
+   * decide sozinha sem chamar `#requestBuyBlessing`.
+   */
+  #presentBlessings(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      if (hosted.sentBlessings.get(character.id) === character.blessings) continue;
+      hosted.sentBlessings.set(character.id, character.blessings);
+      this.#sendToViewersOf(hosted, character.id, { type: 'blessings', mask: character.blessings });
+    }
+  }
+
+  /**
    * O estado dos slots do conjunto ativo, para quem olha CADA personagem (AB-09, DT-06).
    *
    * O gatilho é o par `(state, reason)`, nunca o `remainingMs`: ele decresce sempre, e compará-lo
@@ -3233,6 +3319,10 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E as bênçãos (#570, ADR 0052), pela mesma razão: quem reconecta precisa ver o que já
+    // comprou, sem esperar a próxima compra/morte para descobrir.
+    hosted.sentBlessings.set(characterId, participant?.blessings ?? 0);
+    viewer.send({ type: 'blessings', mask: participant?.blessings ?? 0 });
     // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
     // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
     const slotStates = participant === undefined
@@ -3805,6 +3895,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,
@@ -4108,6 +4199,10 @@ export class SessionHost {
       // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
       // o personagem participou.
       ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
+      // As bênçãos (#570, ADR 0052): mesma regra do `fedMs` acima — sempre incluído quando o
+      // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
+      // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
+      ...(owner === undefined ? {} : { blessings: owner.blessings }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
@@ -4193,6 +4288,9 @@ export class SessionHost {
       // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
       // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
       soul: owner.soul,
+      // As bênçãos (#570, ADR 0052): comprar na Cidade marca `dirty`, e sem este campo a compra
+      // sumiria no logout como vocação/equipamento sumiam antes do #154. ABSOLUTO, como acima.
+      blessings: owner.blessings,
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
@@ -4591,6 +4689,7 @@ export class SessionHost {
       lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentBlessings: new Map(),
       sentTileOverrides: new Map(),
       sentParty: null,
       lastPartyBag: null,

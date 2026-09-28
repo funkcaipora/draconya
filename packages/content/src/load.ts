@@ -35,6 +35,8 @@ export function loadContent(dir: string): Content {
     // Suprimentos e munição ABSTRATOS (ADR 0026 d.3): poção, runa e flecha não são itens — o
     // uso/tiro debita gold, e o catálogo vive em pasta própria.
     supplies: readJsonDir(join(dir, 'supplies')),
+    // As sete bênçãos PvE (#570, ADR 0052): serviço de Cidade, nunca item de mochila.
+    blessings: readJsonDir(join(dir, 'blessings')),
     ammunition: readJsonDir(join(dir, 'ammunition')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),
