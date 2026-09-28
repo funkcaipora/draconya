@@ -1,0 +1,65 @@
+{
+  "id": "energy-wall-rune",
+  "name": "Energy Wall Rune",
+  "description": "Planta uma parede de energia perpendicular à mira, cruzando o tile alvo.",
+  "price": 85,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 41,
+    "magicLevel": 9
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-energy-wall",
+      "durationMs": 98000,
+      "shape": {
+        "shape": "wall",
+        "width": 3
+      },
+      "condition": {
+        "key": "electrified",
+        "merge": "strongest",
+        "durationMs": 10000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "rounds",
+          "rounds": [
+            {
+              "count": 1,
+              "intervalMs": 10000,
+              "damage": 25
+            }
+          ],
+          "damageType": "energy"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 98000,
+          "condition": {
+            "key": "electrified",
+            "merge": "strongest",
+            "durationMs": 10000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 1,
+                  "intervalMs": 10000,
+                  "damage": 25
+                }
+              ],
+              "damageType": "energy"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `energy_wall.lua`: MESMO item da Energy Field (ITEM_ENERGYFIELD_PVP, 2122), com `setArea(AREA_WALLFIELD_ENERGY, AREADIAGONAL_WALLFIELD_ENERGY)` — só a contagem de 3 tiles é transcrita (ADR 0019). Level 41, magic level 9 (rune:level/magicLevel do Lua). `price` 85 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3166 (menor `buy`, fonte asima.lua). Sem aparência conferida."
+}

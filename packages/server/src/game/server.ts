@@ -54,6 +54,8 @@ export interface GameDependencies {
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
   /** O catálogo de munição abstrata, para `select-ammo` (#152). */
   readonly ammunitionCatalog?: SessionHostOptions['ammunitionCatalog'];
+  /** As sete bênçãos PvE, para `buy-blessing` (#570, ADR 0052). */
+  readonly blessingCatalog?: SessionHostOptions['blessingCatalog'];
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
@@ -149,6 +151,9 @@ export function createGame(
       ...(dependencies.ammunitionCatalog === undefined
         ? {}
         : { ammunitionCatalog: dependencies.ammunitionCatalog }),
+      ...(dependencies.blessingCatalog === undefined
+        ? {}
+        : { blessingCatalog: dependencies.blessingCatalog }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
       ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),

@@ -52,6 +52,13 @@ export interface TicketRouteDependencies {
    */
   readonly listItemInstances?: GameRepository['listItemInstances'];
   /**
+   * A Boosted Creature do dia (#615, ADR 0054 decisão 7), lida do cache em Redis que o `jobs`
+   * publica (`world-daily.ts`) — nunca do Postgres, que é mais caro pela mesma resposta.
+   * Ausente é `api` montado sem Redis (não deveria acontecer em produção) ou conteúdo sem
+   * `boosted/baseline.json`: nenhuma hunt deste ticket aplica o bônus.
+   */
+  readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
+  /**
    * Os storages do personagem (#731, ADR 0050 d.6 T2), para o ticket carregar — mesma razão e
    * mesma degradação de `listItemInstances`: ausente é personagem sem storage nenhum setado.
    */
@@ -147,6 +154,11 @@ export function createTicketHandler(
       return reply.code(503).send({ error: 'progress-not-settled' });
     }
 
+    // A boosted do dia (#615) não depende de posse nem de linha nenhuma — é do MUNDO —, então
+    // sai da trava, como a resolução de nó (FUN-53): uma lentidão do Redis aqui não segura a
+    // linha do personagem.
+    const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
     // verificador de nomes de personagem para qualquer conta autenticada.
     const issued = await withOwnedCharacter(
@@ -159,6 +171,7 @@ export function createTicketHandler(
           character,
           await deps.listItemInstances?.(character.id) ?? [],
           await deps.listCharacterStorages?.(character.id) ?? [],
+          boostedMonsterId,
         ),
         resolution.node,
       ),
@@ -192,6 +205,8 @@ export function initialCharacterOf(
   instances: Parameters<typeof inventoryOf>[0],
   /** Os storages do personagem (#731), como `listCharacterStorages` os devolve. */
   storages: readonly { readonly storageKey: string; readonly value: number }[] = [],
+  /** A Boosted Creature do dia (#615), do cache em Redis. Ver `TicketRouteDependencies`. */
+  boostedMonsterId?: string,
 ): InitialCharacter {
   return {
     level: character.level,
@@ -199,6 +214,7 @@ export function initialCharacterOf(
     name: character.name,
     gold: character.gold,
     soul: character.soul,
+    ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
@@ -225,8 +241,14 @@ export function initialCharacterOf(
     // Comida ativa (#726, ADR 0049 decisão 5): sem isto, quem comeu antes de deslogar voltaria
     // em jejum na hunt seguinte.
     fedMs: character.fedMs,
+    // As bênçãos (#570, ADR 0052): sem isto, quem comprou na Cidade entraria na hunt sem elas
+    // e morreria sem redução nenhuma, apesar de ter pago.
+    blessings: character.blessings,
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
+    // E a promoção (#566, ADR 0042 decisão 1): lida aqui a cada entrada, como a vocação.
+    // Ausente quando `false` — a coluna não é nulável, e "não promovido" é o normal.
+    ...(character.promoted ? { promoted: true } : {}),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
     // só lê um boolean já resolvido. `null` ou vencido é Free, e ausente é o que o ticket
     // carrega: a sessão trata ausência como `false` (a regra do Bestiário, degradação).

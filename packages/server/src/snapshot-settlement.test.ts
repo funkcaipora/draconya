@@ -46,6 +46,8 @@ describe('settleSnapshotAsReceipt (#527)', () => {
       storages: {},
       // Comida ativa (#726): mesma regra acima — `0` é "sem comida", nunca a chave omitida.
       fedMs: 0,
+      // As bênçãos (#570): mesma regra — `0` é "nenhuma", nunca a chave omitida.
+      blessings: 0,
     }]);
   });
 

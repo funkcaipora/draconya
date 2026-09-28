@@ -179,6 +179,9 @@ export function buildApi(
       snapshots: partySnapshots,
       limits: partyLimits,
       ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
+      ...(dependencies.currentBoostedMonsterId === undefined
+        ? {}
+        : { currentBoostedMonsterId: dependencies.currentBoostedMonsterId }),
     });
   }
 

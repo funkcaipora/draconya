@@ -16,19 +16,22 @@
 
 import { matchesVocationRequirement, SPECIALIZED_MAGIC_ELEMENTS } from '@draconya/content';
 import type {
-  Combat, CompiledMitigation, DamageModifiers, DamageType, SpecializedMagicElement, Spell,
-  SpellFormula, Supply,
+  Combat, CompiledMitigation, DamageModifiers, DamageType, FieldSpec, SpecializedMagicElement,
+  Spell, SpellFormula, Supply,
 } from '@draconya/content';
 import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
+import { partyScaledManaCost } from './party.js';
 import { resolveDamage } from './combat/damage.js';
 import type { DamageOutcome, Defender } from './combat/damage.js';
 import type { DefenderReflect, ReflectAttacker } from './combat/reflect.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
+import { isV3OrLater } from './combat/profile.js';
 import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
+import type { WorldPoint } from './movement.js';
 import type { Rng } from './rng.js';
 
 /** Por que a ação não aconteceu. Tipada porque o jogador merece saber qual das sete foi. */
@@ -55,6 +58,14 @@ export type CastRefusal =
   | 'group-cooldown'
   /** A runa pede magic level que este personagem não tem (#165). */
   | 'magic-level-too-low'
+  /**
+   * A invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId` (a barra não passou
+   * parâmetro nenhum), monstro fora do catálogo, monstro `summonable: false`, ou o TETO de
+   * invocações vivas do mestre já atingido (2, contando qualquer nome). Quem confere é o
+   * RULESET (`HuntRuleset#castSpell`) — `casting.ts` não conhece catálogo nem a lista de
+   * monstros da sessão (invariante 1); esta função só devolve a recusa tipada.
+   */
+  | 'not-summonable'
   /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
    * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
@@ -110,12 +121,27 @@ export interface CastSuccess {
    */
   readonly dispel?: readonly string[];
   /**
+   * A magia é uma invocação (#598, M38-01, ADR 0057) que SAIU — mana debitada, cooldown
+   * iniciado. Devolvido, não aplicado: `casting.ts` não conhece Session nem mapa, e quem nasce
+   * a invocação de fato é o RULESET (`HuntRuleset#spawnPlayerSummon`), a mesma divisão de
+   * `condition`/`dispel` acima.
+   */
+  readonly summon?: true;
+  /**
    * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
    * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
    * remove algo, nunca as duas. Quem tem a `Conditions` do lançador (o ruleset) chama
    * `conditions.remove(key)` direto — não há vencimento para uma remoção.
    */
   readonly removeConditionKey?: string;
+  /**
+   * A runa de campo (#591): o `FieldSpec` do conteúdo e o tile onde plantar — devolvidos, não
+   * aplicados, como `condition` acima. Quem tem a fila de eventos e o índice `Fields` é o
+   * ruleset (`HuntRuleset#applyField`); este arquivo só decide QUE a runa saiu e ONDE.
+   */
+  readonly field?: { readonly spec: FieldSpec; readonly at: WorldPoint };
+  /** Destroy Field (#591): o tile onde remover um campo — ver `field` acima. */
+  readonly destroyFieldAt?: WorldPoint;
 }
 
 export interface CastRefused {
@@ -156,6 +182,18 @@ export interface SpellTarget {
    * reflexo precisa (`ReflectAttacker`). Ausente, nada reflete.
    */
   readonly attacker?: ReflectAttacker | undefined;
+  /**
+   * Id de CONTEÚDO do alvo (#592, Paralyze Rune) — o `subject` que `ConditionState.targetId`
+   * carrega. Só o efeito `condition` com `target: 'enemy'` lê; dano/cura não precisam, porque
+   * quem aplica o resultado já tem o `MonsterRuntime` pela mesma ordem da mira.
+   */
+  readonly creatureId?: string | undefined;
+  /**
+   * A velocidade BASE do alvo (#592) — o `baseSpeed` que `resolveSpeedPercent`/`SpeedContext`
+   * precisam para a fórmula da runa de paralyze (`ConditionSpeed` do Canary). Só o mesmo efeito
+   * acima lê; ausente em qualquer outro caminho (dano, cura), que nunca precisou de velocidade.
+   */
+  readonly speed?: number | undefined;
 }
 
 /**
@@ -182,6 +220,12 @@ function spellTargetDefender(target: SpellTarget): Defender {
 export interface SpellAim {
   readonly distance: number;
   readonly targets: readonly SpellTarget[];
+  /**
+   * O tile mirado (#591), quando a mira é de CHÃO — runa de campo/Destroy Field, que não
+   * precisam de criatura nenhuma no alvo. Ausente em toda mira de criatura de antes desta
+   * issue (dano/cura): ninguém além delas lê este campo.
+   */
+  readonly point?: WorldPoint;
 }
 
 const NO_HITS: readonly number[] = [];
@@ -202,10 +246,11 @@ export function groupCooldownKey(group: string): string {
 }
 
 /**
- * A chave do cooldown individual de um supply SEM grupo declarado.
- *
- * O supply de grupo usa `group:<g>`; o supply sem grupo cai no livro próprio, para não
- * inventar prioridade compartilhada que o conteúdo não declarou (DT-06).
+ * A chave do cooldown INDIVIDUAL de um supply — hoje só usada quando o conteúdo declara
+ * `cooldownMs` PRÓPRIO (#592, a Paralyze Rune: `groupCooldownMs` 2 s ao lado de `cooldownMs`
+ * 6 s, os dois iniciados e conferidos juntos). O supply de grupo usa `group:<g>`; este livro
+ * soma ao dele, nunca o substitui — dois livros trancando ao mesmo uso, não prioridade
+ * compartilhada nenhuma (DT-06).
  */
 export function supplyCooldownKey(supplyId: string): string {
   return `supply:${supplyId}`;
@@ -389,6 +434,14 @@ export const NOT_IN_CATALOG: CastRefused = {
 };
 
 /**
+ * A recusa da invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId`, monstro fora do
+ * catálogo, `summonable: false`, ou teto de 2 já atingido. Congelada, como `NOT_IN_CATALOG`.
+ */
+export const NOT_SUMMONABLE: CastRefused = {
+  ok: false, reason: 'not-summonable', retryInMs: NOT_WAITING,
+};
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -427,6 +480,29 @@ export function castSpell(
    * básico) —, e é isso que este parâmetro passa adiante para `resolveDamage`.
    */
   modifiers: DamageModifiers | undefined = undefined,
+  /**
+   * Os membros da party já colhidos por `hunt.ts` (#588: Heal/Protect/Enchant/Train Party) —
+   * só quem tem `session.participants` sabe quem está no alcance, este arquivo não conhece
+   * sessão. `null` é "não é magia de party": nenhuma checagem de alvo/custo de party roda, e
+   * `heal-over-time`/`buff` com `target` ausente ou `'self'` continua valendo só para o
+   * lançador, como sempre. Presente, é a lista NA ORDEM de `session.participants` — a mesma
+   * ordem que `hunt.ts` usa para aplicar a condição a cada um.
+   */
+  partyTargets: readonly CharacterRuntime[] | null = null,
+  /**
+   * Quem paga o gold da conjuração (#594, ADR 0044) — a runa em branco, `effect.blankPrice`.
+   * NENHUM outro efeito de magia lê `purse`: mana e alma bastam para todo o resto do catálogo.
+   * Ausente: a bolsa do próprio lançador — o solo de sempre, como `useSupply`.
+   */
+  purse: Purse = ownPurse(caster),
+  /**
+   * O custo de mana REAL, quando ele não é `spell.manaCost` (#598, M38-01, ADR 0057 decisão 3):
+   * a Summon Creature custa o `manaCost` do MONSTRO invocado — o mesmo mecanismo do Canary
+   * (`MonsterType::getManaCost()`), variável por monstro, não um número fixo do catálogo de
+   * magia. `spell.manaCost` continua sendo o número de EXIBIÇÃO/ADR 0033 para o resto do
+   * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
+   */
+  manaCostOverride?: number,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -462,7 +538,7 @@ export function castSpell(
   // dele, e a checagem nunca dispara.
   if (
     (effect.kind === 'damage' || effect.kind === 'damage-over-time')
-    && combat.compatibilityProfile === 'combat-v3'
+    && isV3OrLater(combat.compatibilityProfile)
     && caster.attackLockedUntil > nowMs
   ) {
     return { ok: false, reason: 'attack-locked', retryInMs: caster.attackLockedUntil - nowMs };
@@ -481,7 +557,24 @@ export function castSpell(
       return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
     }
   }
-  if (caster.mana < spell.manaCost) {
+  // Alvo de party (#588: Heal/Protect/Enchant/Train Party) — `hunt.ts` já colheu quem está no
+  // alcance (só ele conhece `session.participants`) e devolve `null` para "não é magia de
+  // party"; `<= 1` (o lançador sozinho) é a MESMA recusa "No party members in range" do Canary
+  // — ANTES da mana, pela mesma posição relativa do `tmp <= 1` dos scripts.
+  if (
+    (effect.kind === 'heal-over-time' || effect.kind === 'buff') && effect.target === 'party'
+    && (partyTargets === null || partyTargets.length <= 1)
+  ) {
+    return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+  }
+  // O custo escalado (#588) só existe com `partyTargets` resolvido — o número de afetados que
+  // `spell.manaCost` (`party-scaled`) escala é o MESMO `partyTargets.length` da checagem acima,
+  // nunca uma segunda contagem.
+  // A invocação (#598) paga o `manaCost` do MONSTRO — `manaCostOverride` vence o catálogo.
+  const manaCost = manaCostOverride ?? (typeof spell.manaCost === 'number'
+    ? spell.manaCost
+    : partyScaledManaCost(spell.manaCost, partyTargets?.length ?? 0));
+  if (caster.mana < manaCost) {
     return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
   }
   // Alma sai pela MESMA regra da mana (#593): recusa sem lançar nada, nunca fica devendo. Só
@@ -492,9 +585,17 @@ export function castSpell(
   if (caster.soul < soulCost) {
     return { ok: false, reason: 'not-enough-soul', retryInMs: NOT_WAITING };
   }
+  // O preço da runa em branco (#594, ADR 0044) sai pela MESMA regra: recusa sem lançar nada,
+  // ao lado de mana/alma — os três são custo do LANÇADOR, e a conjuração é o único efeito que
+  // soma gold aos dois. Ausente/zero (toda magia que não conjura munição-runa) não confere nada.
+  const blankPrice = effect.kind === 'conjure' ? effect.blankPrice : 0;
+  if (blankPrice > 0 && !purse.canAfford(blankPrice)) {
+    return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+  }
 
-  caster.mana -= spell.manaCost;
+  caster.mana -= manaCost;
   caster.soul -= soulCost;
+  if (blankPrice > 0) purse.pay(blankPrice);
   // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
   caster.cooldowns.start(key, nowMs, spell.cooldownMs);
   if (groupKey !== null && spell.groupCooldownMs !== undefined) {
@@ -561,6 +662,10 @@ export function castSpell(
     // Dispel puro (#590: Cure Poison e afins) — sem cura, sem sorteio: a magia só remove.
     case 'dispel':
       return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, dispel: effect.types };
+    // Invocação (#598, M38-01, ADR 0057): sem sorteio, sem alvo — a magia SAIU (mana e cooldown
+    // já debitados acima), e quem nasce a invocação de fato é o ruleset (`summon: true`).
+    case 'summon':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, summon: true };
     case 'heal-over-time':
       return cast({
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
@@ -577,9 +682,16 @@ export function castSpell(
         key: 'buff', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
         ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
         ...(effect.damageTakenPercent === undefined ? {} : { damageTakenPercent: effect.damageTakenPercent }),
+        // Protect/Enchant/Train Party (#588): o MESMO `Conditions.skillBonus` que já soma o
+        // delta de ability/defesa de monstro soma este, sem consumo novo a escrever.
+        ...(effect.skillDeltas === undefined ? {} : { skillDeltas: effect.skillDeltas }),
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    // Invisibilidade (#592, Invisibility): sem campo além do prazo — a chave RESERVADA
+    // (`INVISIBLE_CONDITION_KEY`) é o que `Conditions.hasInvisible` reconhece, como mana-shield.
+    case 'invisible':
+      return cast({ key: 'invisible', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
     // Provocação (#589): não devolve condição do LANÇADOR — quem recebe o efeito é o(s)
     // monstro(s) atingido(s), e é o ruleset (que tem `#spellHits` e escreve `MonsterRuntime`)
     // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
@@ -605,6 +717,18 @@ export function castSpell(
           damageType: effect.damageType, source: 'spell',
         },
       });
+    /**
+     * Conjuração (#594, ADR 0044): credita CARGAS no estoque abstrato do próprio lançador —
+     * nunca item físico, nunca sorteio (o Canary credita um número FIXO por lançamento, sem
+     * `Rng` nenhum). `goldSpent` é o preço da runa em branco, já debitado acima — o mesmo campo
+     * que `useSupply` usa para o extrato, só que aqui é gold GASTO CRIANDO carga, não gastando.
+     */
+    case 'conjure': {
+      const stock = effect.supplyId !== undefined ? caster.supplyStock : caster.ammunitionStock;
+      const id = (effect.supplyId ?? effect.ammunitionId) as string;
+      stock.set(id, (stock.get(id) ?? 0) + effect.charges);
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: blankPrice };
+    }
   }
 }
 
@@ -688,6 +812,15 @@ export function useSupply(
    */
   modifiers?: DamageModifiers,
 ): CastResult {
+  // O cooldown PRÓPRIO do supply (#592, Paralyze Rune: 6 s ao lado do grupo de 2 s) — ANTES de
+  // qualquer outra recusa, como o `spellCooldownKey` de `castSpell`: sem `nowMs` (fixture) o
+  // relógio lógico não existe, e a checagem é pulada — a mesma degradação de `startSupplyCooldown`.
+  if (supply.cooldownMs !== undefined && nowMs !== undefined) {
+    const ownKey = supplyCooldownKey(supply.id);
+    if (!user.cooldowns.isReady(ownKey, nowMs)) {
+      return { ok: false, reason: 'on-cooldown', retryInMs: user.cooldowns.remainingMs(ownKey, nowMs) };
+    }
+  }
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
   if (supply.effect.kind === 'damage') {
@@ -842,6 +975,47 @@ export function useSupply(
     };
   }
 
+  // Runa de condição a DISTÂNCIA (#592, Paralyze Rune: `rune:needTarget(true)`/
+  // `allowFarUse(true)`) — a mesma ordem da runa de ataque: requisitos, alvo, alcance, e só
+  // então o gold. `conditionFromSpec` aqui precisa do `SpeedContext` do ALVO (a velocidade dele,
+  // não a do usuário) para a fórmula `ConditionSpeed` do efeito `speed` — por isso só existe com
+  // `rng` no contexto, como a runa de dano nunca causa dano sem ele.
+  if (supply.effect.kind === 'condition' && supply.effect.target === 'enemy') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined && (scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    // `effect.range` é obrigatório com `target: 'enemy'` (o `.refine` do schema já garante) —
+    // o `?? 0` é só para o TypeScript, nunca alcançado com conteúdo válido.
+    if (aim.distance > (effect.range ?? 0)) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const hasStockCondition = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockCondition && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    // Sem `rng` a condição não existe — nunca um efeito de velocidade sem o sorteio da fórmula
+    // (a mesma regra que barra dano sem `rng`/`combat`/`scaling` acima).
+    if (rng === undefined) return NOT_IN_CATALOG;
+    const paidFromStockCondition = hasStockCondition && spendStock(user, supply.id);
+    if (!paidFromStockCondition) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    const target = aim.targets[0] as SpellTarget;
+    const condition = conditionFromSpec(
+      effect.condition, target.creatureId ?? '', user.id, nowMs ?? 0, 'rune',
+      effect.condition.effect.kind === 'speed' ? { baseSpeed: target.speed ?? 0, rng } : undefined,
+    );
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockCondition ? 0 : supply.price, condition,
+    };
+  }
+
   // Poção de BUFF (#576: Berserk, Mastermind, Bullseye, Magic Shield). Auto-alvo SEMPRE — nunca
   // o `recipient` (as quatro do Tibia não têm alcance nem alvo, ao contrário da runa de cura) —,
   // e a mesma ordem de sempre: level, vocação, e só então o gold. Sem estoque (#520): nenhuma
@@ -868,6 +1042,64 @@ export function useSupply(
     return {
       ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
       goldSpent: paidFromStockBuff ? 0 : supply.price, condition,
+    };
+  }
+
+  // Runa de CAMPO (#591: Fire/Poison/Energy Field/Wall, Magic Wall, Wild Growth) — mesma ordem
+  // de sempre: requisitos, alvo/alcance, e só então o gold. `aim.point` vem de `#groundAimFor`
+  // (o ruleset já resolveu andar e linha de visão); sem mira, `no-target`, como a runa de dano.
+  if (supply.effect.kind === 'field') {
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.point === undefined) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const hasStockField = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockField && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockField = hasStockField && spendStock(user, supply.id);
+    if (!paidFromStockField) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockField ? 0 : supply.price,
+      field: { spec: supply.effect.field, at: aim.point },
+    };
+  }
+
+  // Destroy Field (#591): sem vocação nem magic level no Canary (`destroy_field_rune.lua` não
+  // declara nenhum dos dois) — só level. A PRESENÇA de um campo destrutível no tile é conferida
+  // por quem chama (`HuntRuleset#useSupply`), ANTES desta função: o Lua só gasta carga em
+  // sucesso, e aqui não temos `Fields` para conferir (invariante 1 — este arquivo não tem
+  // estado de sessão).
+  if (supply.effect.kind === 'destroy-field') {
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.point === undefined) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const hasStockDestroy = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockDestroy && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockDestroy = hasStockDestroy && spendStock(user, supply.id);
+    if (!paidFromStockDestroy) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockDestroy ? 0 : supply.price,
+      destroyFieldAt: aim.point,
     };
   }
 
@@ -907,6 +1139,11 @@ export function useSupply(
 function startSupplyCooldown(user: CharacterRuntime, supply: Supply, nowMs: number | undefined): void {
   if (nowMs === undefined) return;
   user.cooldowns.start(groupCooldownKey(supply.group), nowMs, supply.groupCooldownMs);
+  // O livro PRÓPRIO (#592, Paralyze Rune) inicia AO LADO do grupo, nunca no lugar dele — os dois
+  // trancam ao mesmo uso, e o gate no topo desta função confere os dois antes de agir.
+  if (supply.cooldownMs !== undefined) {
+    user.cooldowns.start(supplyCooldownKey(supply.id), nowMs, supply.cooldownMs);
+  }
   // A exaustão de ação compartilhada (#690) só AVANÇA, como o `setNextPotionAction` do Canary:
   // `Cooldowns.start` sobrescreve o prazo, então só se grava quando o novo é MAIOR que o que
   // falta — um supply de exaustão curta nunca encurta a de outro.

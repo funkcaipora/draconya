@@ -19,7 +19,10 @@ const baseline: Progression = {
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   regeneration: { requiresFood: false },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
+  // blessingReduction é POR BÊNÇÃO (#570): 0.08 × 7 = 0.56, o mesmo total que o binário
+  // `premium: true` dava antes — os testes abaixo passam `{ blessings: 7 }` para reproduzir
+  // exatamente os números de antes, e `{ blessings: 0 }` no lugar de `premium: false`.
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.08, promotionReduction: 0.3 },
   experienceBonusByLevel: [],
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
@@ -195,27 +198,28 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes);
-    expect(applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS).xpLost)
+    expect(applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
-  it('abençoado (premium) perde menos — TETADO em 50%, não os 56% crus, abaixo do limiar cúbico', () => {
+  it('com sete bênçãos perde menos — TETADO em 50%, não os 56% crus, abaixo do limiar cúbico (#570)', () => {
     // `Player::getLostPercent` do Canary (ramo `level < 24`):
     // `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`. Sete bênçãos
     // dão 56% — ≥ 40% —, e o Tibia teta isso em exatamente 50% NESTE ramo, não o valor bruto.
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.50));
-    expect(applyDeathPenalty(character, { premium: true }, null, baseline, NO_SKILLS).xpLost)
+    expect(applyDeathPenalty(character, { blessings: 7 }, null, baseline, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
   it('abaixo de 40% cru, o teto não mexe em nada — só entra quando a redução bateria 40% ou mais', () => {
-    const gentle: Progression = { ...baseline, deathPenalty: { ...baseline.deathPenalty, blessedReduction: 0.30 } };
+    // Uma bênção só, a 30% de redução: abaixo do limiar de 40% que aciona o teto.
+    const gentle: Progression = { ...baseline, deathPenalty: { ...baseline.deathPenalty, blessingReduction: 0.30 } };
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(gentle.deathPenalty.flatFraction * antes * (1 - 0.30));
-    expect(applyDeathPenalty(character, { premium: true }, null, gentle, NO_SKILLS).xpLost)
+    expect(applyDeathPenalty(character, { blessings: 1 }, null, gentle, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
@@ -225,8 +229,8 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     const character = atLevel(24);
     const level = character.level; // atLevel deixa o personagem exatamente na fronteira do level.
     const rawLoss = ((level + 50) / 100) * 50 * (level * level - 5 * level + 8);
-    const esperado = Math.round(rawLoss * (1 - baseline.deathPenalty.blessedReduction));
-    expect(applyDeathPenalty(character, { premium: true }, null, baseline, NO_SKILLS).xpLost)
+    const esperado = Math.round(rawLoss * (1 - baseline.deathPenalty.blessingReduction * 7));
+    expect(applyDeathPenalty(character, { blessings: 7 }, null, baseline, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
@@ -236,22 +240,22 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     const character = atLevel(20);
     const antes = character.xp;
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.30));
-    expect(applyDeathPenalty(character, { premium: false, promoted: true }, null, baseline, NO_SKILLS).xpLost)
+    expect(applyDeathPenalty(character, { blessings: 0, promoted: true }, null, baseline, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
   it('bênção TETADA em 50% mais promoção somam 80%, sem re-tetar o total', () => {
     const character = atLevel(20);
     const antes = character.xp;
-    // blessedReduction (0.56) ≥ 0.40 → teto 50%; + 30% de promoção = 80% total.
+    // blessingReduction × 7 (0.56) ≥ 0.40 → teto 50%; + 30% de promoção = 80% total.
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes * (1 - 0.80));
-    expect(applyDeathPenalty(character, { premium: true, promoted: true }, null, baseline, NO_SKILLS).xpLost)
+    expect(applyDeathPenalty(character, { blessings: 7, promoted: true }, null, baseline, NO_SKILLS).xpLost)
       .toBe(esperado);
   });
 
   it('pode rebaixar o level', () => {
     const character = atLevel(20);
-    expect(applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS).levelChange)
+    expect(applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS).levelChange)
       .toEqual({ from: 20, to: 19 });
   });
 
@@ -259,7 +263,7 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     const character = atLevel(20);
     character.health = 10;
     character.mana = 3;
-    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    const penalidade = applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS);
     expect(penalidade.levelChange).toEqual({ from: 20, to: 19 });
     expect(character.health).toBeLessThan(character.maxHealth);
     expect(character.health).toBeLessThanOrEqual(10);
@@ -273,7 +277,7 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     // ultrapassar o termo do level anterior. O código trata cascata mesmo assim (abaixo), com
     // uma curva onde o modelo cúbico (level ≥ 24) domina.
     const character = atLevel(9);
-    applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS);
     expect(character.level).toBe(8);
     expect(character.xp).toBeGreaterThan(totalXpForLevel(8, baseline));
   });
@@ -288,7 +292,7 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
   it('CASCATEIA por mais de um level quando a perda passa do level inteiro', () => {
     // O caso que passa despercebido e só aparece com um jogador reclamando.
     const character = hero({ level: 24, xp: totalXpForLevel(24, íngreme) });
-    const penalidade = applyDeathPenalty(character, { premium: false }, null, íngreme, NO_SKILLS);
+    const penalidade = applyDeathPenalty(character, { blessings: 0 }, null, íngreme, NO_SKILLS);
     expect(penalidade.levelChange?.to).toBeLessThan(23);
     expect(character.level).toBe(levelForXp(character.xp, íngreme));
   });
@@ -298,7 +302,7 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     // Tibia não tem esse piso (`Player::death`/`getLostPercent`, sem `levelFloor` nenhum), e a
     // #569 alinhou o Draconya a isso: a curva agressiva agora derruba até o level 1.
     const character = hero({ level: 24, xp: totalXpForLevel(24, profunda) });
-    applyDeathPenalty(character, { premium: false }, null, profunda, NO_SKILLS);
+    applyDeathPenalty(character, { blessings: 0 }, null, profunda, NO_SKILLS);
     expect(character.level).toBe(1);
     expect(character.xp).toBe(0);
   });
@@ -309,7 +313,7 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     const character = atLevel(5);
     const antes = character.xp;
     const esperado = Math.round(baseline.deathPenalty.flatFraction * antes);
-    const penalidade = applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    const penalidade = applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS);
     expect(penalidade.xpLost).toBe(esperado);
     expect(penalidade.xpLost).toBeGreaterThan(0);
   });
@@ -320,7 +324,7 @@ describe('penalidade de morte (#521/#569, ADR 0037 — a fórmula do Tibia)', ()
     // XP, level, skill e stats derivados, e em mais nada.
     const character = atLevel(20);
     character.goldDelta = 500;
-    applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS);
     expect(character.goldDelta).toBe(500);
   });
 });
@@ -362,7 +366,7 @@ describe('perda de skill e de mana gasta na morte (#569, `Player::death` do Cana
     // magia — `startingLevel`), pontos recarregam para pointsForLevel(0) = 1600, sobra 160:
     // 1600 − 160 = 1440.
     const character = withSkills({ fist: { level: 12, points: 10 }, magic: { level: 1, points: 0 } });
-    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, skillCatalog);
+    const penalty = applyDeathPenalty(character, { blessings: 0 }, null, baseline, skillCatalog);
 
     const fistLoss = penalty.skillLosses.find((loss) => loss.skillId === 'fist');
     expect(fistLoss).toEqual({ skillId: 'fist', triesLost: 13, levelChange: { from: 12, to: 11 } });
@@ -379,7 +383,7 @@ describe('perda de skill e de mana gasta na morte (#569, `Player::death` do Cana
     // fist no level 20 com 1000 pontos: perder uma fração pequena de um total grande não chega
     // a esvaziar os pontos correntes.
     const character = withSkills({ fist: { level: 20, points: 1000 }, magic: { level: 0, points: 0 } });
-    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, skillCatalog);
+    const penalty = applyDeathPenalty(character, { blessings: 0 }, null, baseline, skillCatalog);
     const fistLoss = penalty.skillLosses.find((loss) => loss.skillId === 'fist');
     expect(fistLoss?.levelChange).toBeNull();
     expect(character.skills.levelOf(fist)).toBe(20);
@@ -389,7 +393,7 @@ describe('perda de skill e de mana gasta na morte (#569, `Player::death` do Cana
   it('skill no piso (`startingLevel`) não desce mais: os pontos zeram e param', () => {
     // fist já no level inicial (10), sem pontos: não há para onde descer.
     const character = withSkills({ fist: { level: 10, points: 0 }, magic: { level: 0, points: 0 } });
-    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, skillCatalog);
+    const penalty = applyDeathPenalty(character, { blessings: 0 }, null, baseline, skillCatalog);
     const fistLoss = penalty.skillLosses.find((loss) => loss.skillId === 'fist');
     expect(fistLoss).toBeUndefined(); // nada para perder: total acumulado × fração dá zero.
     expect(character.skills.levelOf(fist)).toBe(10);
@@ -398,7 +402,7 @@ describe('perda de skill e de mana gasta na morte (#569, `Player::death` do Cana
 
   it('sem skill no catálogo, `skillLosses` é uma lista vazia — a XP continua sendo tirada normalmente', () => {
     const character = atLevel(20);
-    const penalty = applyDeathPenalty(character, { premium: false }, null, baseline, NO_SKILLS);
+    const penalty = applyDeathPenalty(character, { blessings: 0 }, null, baseline, NO_SKILLS);
     expect(penalty.skillLosses).toEqual([]);
     expect(penalty.xpLost).toBeGreaterThan(0);
   });

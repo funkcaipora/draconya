@@ -18,7 +18,8 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
-  SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt, floorChangeToward, isBlocked, migrateBotConfigV1,
+  SPEED_CONDITION_KEY, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt, floorChangeToward, isBlocked,
+  migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
@@ -29,10 +30,10 @@ import type {
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
-import type { AreaSource } from '../area.js';
+import type { AreaSource, Direction } from '../area.js';
 import {
-  NOT_IN_CATALOG, actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey,
-  ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
+  NOT_IN_CATALOG, NOT_SUMMONABLE, actionExhaustKey, balanceOf, castSpell, executeHealing,
+  groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
@@ -79,12 +80,12 @@ import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
 } from '../rates.js';
 import {
-  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
-  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
-  xpByDamage, xpShare,
+  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, partyScaledManaCost,
+  reserveProportionally, settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually,
+  splitLootOf, uniqueVocations, xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
-import type { LootAmmunition, LootItem, LootSupply } from '../loot.js';
+import type { LootAmmunition, LootItem, LootResult, LootSupply } from '../loot.js';
 import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
 import { compileBot, percentOf } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
@@ -119,7 +120,8 @@ import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
-import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS, MAX_BLESSINGS } from '../food.js';
+import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
+import { blessingCount } from '../blessings.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -180,6 +182,14 @@ const monsterSummonSubject = (id: number, monsterId: string): string =>
  * desta entrada tenta de novo, como o respawn adiado do Spawner.
  */
 const SUMMON_SPAWN_RADIUS = 1;
+/**
+ * O teto de invocações VIVAS por PERSONAGEM (#598, M38-01, ADR 0057 decisão 3): "Teto de 2" —
+ * `summon_creature.lua` do Canary confere `player:getSummonCount() >= 2` antes de invocar,
+ * somando invocação normal e familiar no MESMO contador (`Player::getSummonCount`,
+ * `player.cpp`). O familiar (#599) soma no mesmo teto quando existir; hoje só a Summon Creature
+ * o usa.
+ */
+const PLAYER_SUMMON_CAP = 2;
 /**
  * A troca de alvo por tempo (#518). Só existe UMA por monstro — o subject é o `m:<id>` de
  * sempre, e `resolveDeath` já a cancela junto do resto ao matar (`cancelEvents(subject)`).
@@ -315,6 +325,18 @@ const FIELD_EXPIRE = 'field-expire';
  */
 const FIELD_STAGE_ADVANCE = 'field-stage-advance';
 const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
+
+/**
+ * O id de UMA instância de campo lançado por JOGADOR (#591) — `Fields` indexa por id de
+ * conteúdo (`fields.ts`), então reaproveitar `spec.id` cru faria a mesma runa em tiles
+ * diferentes se substituir (a segunda plantação MOVERIA a primeira) em vez de abrir campos
+ * independentes, como o Tibia permite (várias Fire Field lado a lado). O id é o TILE: relançar
+ * a MESMA runa no MESMO tile reinicia — a mesma semântica que `applyField` já documenta —, e
+ * é determinístico (sem contador para persistir no snapshot).
+ */
+function fieldInstanceId(specId: string, at: WorldPoint): string {
+  return `${specId}@${at.x},${at.y},${at.z}`;
+}
 /**
  * No MESMO instante, o vencimento roda ANTES do tique — de condição e de campo. É a ordem
  * documentada e testada: o tique do instante de expiração não acontece. A prioridade é explícita
@@ -400,7 +422,18 @@ export type SlotRefusal =
   | 'not-enough-mana' | 'not-enough-soul' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown'
   /** Stairhop (#554, M30-07): a magia é agressiva e a trava de ataque ainda não venceu. */
-  | 'attack-locked';
+  | 'attack-locked'
+  /**
+   * Magia AGRESSIVA (`damage`/`damage-over-time`) disparada na Cidade (#792, ADR 0044 d.2): a
+   * Cidade é protect zone (ADR 0004, §37) — combate nunca sai dali, só conjuração e o resto do
+   * vocabulário não-agressivo. Nenhuma hunt devolve esta razão: só `CityRuleset#useSlot`.
+   */
+  | 'protection-zone'
+  /**
+   * A invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId`, monstro fora do catálogo,
+   * não `summonable`, ou teto de 2 invocações vivas já atingido.
+   */
+  | 'not-summonable';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -510,8 +543,11 @@ export interface SlotState {
 /**
  * Traduz a recusa do atuador para a recusa do slot. É a salvaguarda de DT-08: `slotStates`
  * calcula o mesmo motivo por outro caminho, e o teste prende que os dois coincidem.
+ *
+ * Exportada para `CityRuleset#useSlot` (#792) reusar a MESMA tradução — duplicá-la é como as
+ * duas rotas de refusal divergem no dia em que uma delas ganha um `case` novo e a outra não.
  */
-function refusalOf(result: CastRefused): SlotRefusal {
+export function refusalOf(result: CastRefused): SlotRefusal {
   switch (result.reason) {
     case 'not-in-catalog':
     case 'level-too-low':
@@ -530,6 +566,7 @@ function refusalOf(result: CastRefused): SlotRefusal {
     // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
     case 'not-enough-gold': return 'not-enough-gold';
     case 'attack-locked': return 'attack-locked';
+    case 'not-summonable': return 'not-summonable';
   }
 }
 
@@ -788,6 +825,10 @@ const NO_MEMBERS: readonly CharacterRuntime[] = [];
 const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
 /** Nenhum candidato de party para a regra (alvo inválido, fora de alcance ou efeito self-only). */
 const NO_CANDIDATES: readonly CharacterRuntime[] = [];
+/** Nenhuma invocação de personagem viva (#598) — o caso comum, hoje sempre. */
+const NO_PLAYER_SUMMONS: readonly Prey[] = [];
+/** O mesmo, com a entidade REAL em vez da forma `Prey` — ver `#livePlayerSummons`. */
+const NO_LIVE_PLAYER_SUMMONS: readonly MonsterRuntime[] = [];
 
 /**
  * O nome de dificuldade que ainda chega no protocolo (`enter-hunt.difficulty`, #584). Aceito e
@@ -993,6 +1034,16 @@ export interface HuntRulesetOptions {
    * personagem, e por isso entra por aqui em vez de morar no `CharacterRuntime`.
    */
   readonly premium?: boolean;
+  /**
+   * A Boosted Creature do dia (M42, #615, ADR 0054 decisão 7): o `monsterId` sorteado pelo
+   * `jobs`, FIXADO nesta instância como a versão de conteúdo (invariante 7) — nunca relido do
+   * mundo depois de criada, para a hunt que atravessa a virada continuar com a boosted com
+   * que nasceu. Efeitos: `spawntime / 2` nos lugares deste monstro, XP ×2, e um roll extra de
+   * loot inteiro (`ondroploot_boosted.lua`, ADR 0054 decisão 7). Ausente é dia sem sorteio
+   * (conteúdo sem `boosted/baseline.json`, ou personagem cujo ticket não o carregava): nenhum
+   * efeito aplica.
+   */
+  readonly boostedMonsterId?: string;
 }
 
 /**
@@ -1220,6 +1271,15 @@ const isLegacyBag = (bag: unknown): bag is LegacyPartyBagState =>
 export interface HuntRulesetState {
   readonly huntId: string;
   readonly difficulty: HuntDifficultyName;
+  /**
+   * A Boosted Creature FIXADA nesta instância (#615). Como `huntId`/`difficulty`, é IDENTIDADE
+   * da instância, e não estado mutável: `huntRulesetFromSnapshot` a lê daqui para reconstruir o
+   * ruleset com o mesmo `HuntRulesetOptions.boostedMonsterId` de antes da queda — é o que faz a
+   * hunt retomada depois da virada continuar com a boosted com que nasceu (ADR 0054 decisão 7),
+   * em vez de herdar a do dia em que o `game` reiniciou. Ausente é sessão sem boosted (mesma
+   * regra de `botConfig`).
+   */
+  readonly boostedMonsterId?: string;
   readonly route: RouteState;
   readonly spawner: SpawnerState;
   /**
@@ -1667,6 +1727,7 @@ export class HuntRuleset implements Ruleset {
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
     self: null as unknown as CharacterRuntime, targetCount: 0, target: null, partyTarget: null,
+    summonCount: 0,
   };
 
   /**
@@ -1953,9 +2014,10 @@ export class HuntRuleset implements Ruleset {
    * A execução DE VERDADE de `use-item`/`use-item-on`, sem checar exaustão (o chamador já
    * checou, ou é o vencimento do adiamento). Resolve `ref` pelo catálogo — `supply` reaproveita
    * `#useSupply`/`casting.ts` por inteiro (ADR 0049 decisão 3: "o mesmo caminho do slot, sem
-   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5) ou a carga de
-   * bênção (consome, soma `blessings` — o executor que a TP-03/M22 esperava; ligar a bênção à
-   * redução de perda de item na morte é o ADR 0042, fora do escopo desta issue).
+   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5). A carga de
+   * bênção (`blessing-charge`) foi REMOVIDA pelo #570: bênção virou serviço de Cidade (ADR
+   * 0052), nunca item de mochila — ver `#onCharacterDied` para o consumo e `rulesets/city.ts`
+   * para a compra.
    */
   #performItemUse(
     session: Session, character: CharacterRuntime, ref: ItemRef, target: UseSlotTarget | undefined,
@@ -2010,14 +2072,6 @@ export class HuntRuleset implements Ruleset {
       character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
       return { ok: true };
     }
-    if (item.effect.kind === 'blessing') {
-      if (character.blessings >= MAX_BLESSINGS) return refuseItem('not-usable', 0);
-      character.inventory.consumeOne(instanceId);
-      character.blessings += 1;
-      session.emit({ kind: 'equipment-changed', characterId: character.id });
-      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
-      return { ok: true };
-    }
     // `heal`/`mana`/`damage` num item de mochila não têm executor hoje: nenhum item real do
     // catálogo declara isso (só a runa/poção do ESTOQUE, via `'supplyId' in ref`, executa
     // dano/cura) — chegar aqui é conteúdo futuro sem mecanismo ainda, e a recusa é a certa.
@@ -2047,7 +2101,7 @@ export class HuntRuleset implements Ruleset {
         out.push({ set, slot, state: 'cooldown', remainingMs: wait, reason: 'on-cooldown' });
         continue;
       }
-      out.push(this.#naturalStateOf(set, slot, character, entry.do));
+      out.push(this.#naturalStateOf(session, set, slot, character, entry.do));
     }
     return out;
   }
@@ -2062,6 +2116,11 @@ export class HuntRuleset implements Ruleset {
     if (monster === undefined || !monster.alive) return false;
     const character = findById(session.participants, characterId);
     if (character === null) return false;
+    // A invocação de personagem nunca é alvo de ataque válido — nem a própria, nem a de um
+    // companheiro de party (#598, ADR 0057): fogo amigo não é intenção que o cliente devesse
+    // conseguir expressar clicando, e o servidor recusa em silêncio, como o clique num monstro
+    // morto.
+    if (typeof monster.masterId === 'string') return false;
     this.setAttackTarget(character, monster);
     return true;
   }
@@ -2823,6 +2882,14 @@ export class HuntRuleset implements Ruleset {
     character.inventory.setEquipmentObserver(null);
     // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
     this.#cancelConditions(session, character);
+    // As invocações dele somem JUNTO (#598, M38-01, ADR 0057 decisão 3 — "some ao sair da
+    // hunt"): mesmo `#removeSummon` que o mestre MONSTRO já usa quando morre (#546) — sem
+    // golpe, sem cadáver, sem abate; nunca pagou nada enquanto viva. `filter` ANTES de remover
+    // qualquer uma, pela mesma cautela da FUN-92 (`#removeSummon` troca `#monsters` a cada
+    // chamada).
+    for (const summon of this.#monsters.filter((m) => m.masterId === character.id)) {
+      this.#removeSummon(session, summon);
+    }
     // A bolsa é vendida e dividida COM quem sai (#192, ADR 0027 decisão 5): ele leva a parte
     // do que caiu enquanto estava — `Session.leave` emite o extrato dele depois disto, e é o
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
@@ -3107,18 +3174,26 @@ export class HuntRuleset implements Ruleset {
     this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
-    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
-    // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
-    const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
-    // `promoted` ainda não existe como estado do personagem (#566/ADR 0042) — o parâmetro é o
-    // ponto de extensão que a promoção vai acionar quando o estado existir (#569).
+    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). A contagem de
+    // bênçãos (#570) é do PERSONAGEM morto — bênção é comprada por personagem, nunca por
+    // sessão/party, ao contrário do antigo `premium` binário que este parâmetro substituiu.
+    const blessings = blessingCount(character.blessings);
+    // Promovido (#566, ADR 0042 decisão 1) soma os 30% adicionais de redução, aditivos, nunca
+    // tetados — ver o comentário de `promotionReduction` em `progression.ts`.
     const penalty = applyDeathPenalty(
       character,
-      { premium },
+      { blessings, promoted: character.promoted },
       this.#vocationOf(character),
       this.#options.progression,
       this.#options.skills,
     );
+    // Morrer CONSOME todas as bênçãos de uma vez (#570, `Player::death` do Canary) — nunca uma
+    // de cada vez, e nunca proporcional à perda. Depois daqui `character.blessings` é `0`
+    // até a próxima compra na Cidade.
+    if (blessings > 0) {
+      character.blessings = 0;
+      session.record('blessings-consumed', String(blessings));
+    }
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
       // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.
@@ -3214,6 +3289,9 @@ export class HuntRuleset implements Ruleset {
     return {
       huntId: this.#options.hunt.id,
       difficulty: this.#options.difficulty,
+      ...(this.#options.boostedMonsterId === undefined
+        ? {}
+        : { boostedMonsterId: this.#options.boostedMonsterId }),
       route: state.route,
       spawner: this.#spawner.getState(),
       pendingSpawns: [...this.#pendingSpawns].map(([slot, p]) => ({ slot, ...p })),
@@ -3424,6 +3502,18 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O intervalo de respawn deste monstro, pela metade quando ele é a Boosted Creature do dia
+   * (#615, ADR 0054 decisão 7, `SpawnMonster::addMonster`, `spawn_monster.cpp:379-386`: o
+   * intervalo é dividido por `rateSpawn × 2` para a boosted — o Draconya não tem `rateSpawn`
+   * global, então aqui é só `/ 2`). `Math.max(1, …)` porque zero viraria evento imediato, e um
+   * "respawn instantâneo" não é o que a boosted promete — só o dobro de frequência.
+   */
+  #respawnDelayFor(monsterId: string, baseDelayMs: number): number {
+    if (monsterId !== this.#options.boostedMonsterId) return baseDelayMs;
+    return Math.max(1, Math.floor(baseDelayMs / 2));
+  }
+
+  /**
    * A população INICIAL de um lugar (#583, `SpawnMonster::startup` do Canary — `scheduleSpawn`
    * chamado com `interval: 0`, que pula direto para `spawnMonster` sem passar por
    * `checkSpawnMonster`): nasce na hora, sem checar `blockable` nem telegraph. As duas regras
@@ -3492,7 +3582,10 @@ export class HuntRuleset implements Ruleset {
       if (this.#hasVisibleParticipant(session, point.at, point.at.z)) {
         // À vista: o relógio REINICIA — a próxima checagem só vence dali a `respawnDelayMs`
         // inteiro, nunca um retry curto (`spawn_monster.cpp`, `sb.lastSpawn = OTSYS_TIME()`).
-        session.scheduleIn(SPAWN, point.respawnDelayMs, { priority: EventPriority.Spawn, subject });
+        // Metade para a Boosted Creature do dia (#615, ADR 0054 decisão 7).
+        session.scheduleIn(SPAWN, this.#respawnDelayFor(monsterId, point.respawnDelayMs), {
+          priority: EventPriority.Spawn, subject,
+        });
         return;
       }
     }
@@ -3554,7 +3647,7 @@ export class HuntRuleset implements Ruleset {
    * `Movement` e `Attack`, isso acontece neste mesmo instante lógico, na ordem certa.
    */
   #spawnMonster(
-    session: Session, definition: Monster, at: FloorPoint, masterId: number | null,
+    session: Session, definition: Monster, at: FloorPoint, masterId: number | string | null,
   ): MonsterRuntime {
     const monster = new MonsterRuntime({
       id: this.#nextCreatureId++,
@@ -3581,6 +3674,9 @@ export class HuntRuleset implements Ruleset {
       kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
       position: this.#at(monster),
       health: monster.health, maxHealth: definition.health,
+      // `masterId` (#598) só para invocação de PERSONAGEM — a de MONSTRO (#546, `masterId`
+      // numérico) não marca nada para a apresentação.
+      ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
     });
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
@@ -3723,6 +3819,148 @@ export class HuntRuleset implements Ruleset {
     if (at === null) return;
 
     this.#spawnMonster(session, definition, at, master.id);
+  }
+
+  /**
+   * Nasce a invocação de um PERSONAGEM (#598, M38-01, ADR 0057 decisões 1 e 3). Mesmo mecanismo
+   * de `#spawnSummon` — busca um vizinho livre pelo mesmo raio e a mesma ordem fixa de
+   * varredura, nunca `spawnClearRadius`/`blockable` (a mesma nota de proveniência de lá vale
+   * aqui) —, com o MESTRE sendo o `characterId`, não outro monstro. `null` sem tile livre: quem
+   * chama já debitou mana e cooldown pelo `castSpell` genérico, então a magia SAI (o jogador
+   * sente o custo, como o Canary sente a mesma falha de `Map::placeCreature`) mesmo sem a
+   * invocação nascer — o mesmo contrato de "recusar não é falhar" não se aplica aqui porque a
+   * falha é de GEOMETRIA (tile cheio), depois que a magia já confirmou tudo o resto.
+   */
+  #spawnPlayerSummon(session: Session, master: CharacterRuntime, definition: Monster): MonsterRuntime | null {
+    const blocked = this.#summonBlockedFor();
+    let at: FloorPoint | null = null;
+    for (const tile of tilesAround(master.position, SUMMON_SPAWN_RADIUS)) {
+      if (blocked(tile.x, tile.y, tile.z)) continue;
+      at = tile;
+      break;
+    }
+    if (at === null) return null;
+    return this.#spawnMonster(session, definition, at, master.id);
+  }
+
+  /**
+   * Quantas invocações deste PERSONAGEM estão vivas agora (#598, ADR 0057 decisão 3 — "teto de
+   * 2"). Linear sobre `#monsters`: o teto é baixo (2) e a lista de monstros da hunt já é
+   * percorrida por golpe em vários lugares deste arquivo — não vale a pena um índice à parte
+   * para uma contagem tão pequena.
+   */
+  #playerSummonCountOf(characterId: string): number {
+    let count = 0;
+    for (const monster of this.#monsters) {
+      if (monster.alive && monster.masterId === characterId) count += 1;
+    }
+    return count;
+  }
+
+  /**
+   * As invocações VIVAS de personagem, as entidades REAIS (#598, ADR 0057 decisão 1 — "monstros
+   * a atacam"): quem precisa aplicar dano de verdade (`#executeMonsterAbility`) usa esta;
+   * `#playerSummonPrey`, abaixo, é a mesma lista na forma estreita que `chooseTarget` conhece.
+   *
+   * Devolve a lista VAZIA compartilhada quando não há nenhuma — o caminho comum, hoje sempre
+   * (nenhum monstro do catálogo declara `summonable` ainda): quem chama preserva a MESMA
+   * referência de `session.participants`/`session.participants` combinado, e o comportamento (e
+   * o consumo de `session.rng`) não muda em nada — a garantia que os testes de conformance §11
+   * prendem.
+   */
+  #livePlayerSummons(): readonly MonsterRuntime[] {
+    let list: MonsterRuntime[] | null = null;
+    for (const monster of this.#monsters) {
+      if (!monster.alive || typeof monster.masterId !== 'string') continue;
+      (list ??= []).push(monster);
+    }
+    return list ?? NO_LIVE_PLAYER_SUMMONS;
+  }
+
+  /**
+   * `#livePlayerSummons`, na forma `Prey` — é o que estende o alvo de um monstro HOSTIL
+   * (`masterId === null`, ou invocado por OUTRO monstro, #546) para além de
+   * `session.participants`, como o Canary trata a invocação como QUALQUER outro oponente
+   * (`isOpponent`) na lista de alvos.
+   */
+  #playerSummonPrey(): readonly Prey[] {
+    const summons = this.#livePlayerSummons();
+    if (summons.length === 0) return NO_PLAYER_SUMMONS;
+    return summons.map((monster) => ({
+      id: monster.subject, position: monster.position, alive: monster.alive, health: monster.health,
+    }));
+  }
+
+  /**
+   * `#monsters`, MENOS as invocações de personagem VIVAS (#598, ADR 0057 decisão 1) — é o que
+   * um PERSONAGEM pode escolher como alvo: `selectTarget`/`countTargets`/`countAreaTargets` não
+   * sabem "isto é minha invocação", e sem este filtro o auto-target (#444) e a mira de área
+   * tratariam a própria invocação (ou a de um companheiro de party) como qualquer monstro comum
+   * — o personagem mataria o que acabou de invocar no primeiro golpe engatilhado. Devolve a
+   * MESMA referência de `#monsters` quando não há invocação nenhuma (o caso comum, hoje sempre):
+   * zero alocação e zero mudança de comportamento para quem nunca invoca.
+   */
+  #hostileMonsters(): readonly MonsterRuntime[] {
+    if (this.#livePlayerSummons().length === 0) return this.#monsters;
+    return this.#monsters.filter((m) => typeof m.masterId !== 'string');
+  }
+
+  /**
+   * Resolve um `targetId` — de PERSONAGEM ou de invocação (`m:<id>`, #598) — na entidade real,
+   * para quem precisa de mais que a forma `Prey` (aplicar dano, ler inventário, decidir morte).
+   * `session.participants` primeiro: é a lista pequena e o caso comum, contra `#monsterBySubject`
+   * (todo monstro da hunt, muito maior em hunts cheias).
+   */
+  #creatureById(session: Session, id: string | null): CharacterRuntime | MonsterRuntime | null {
+    if (id === null) return null;
+    const character = findById(session.participants, id);
+    if (character !== null) return character;
+    return this.#monsterBySubject.get(id) ?? null;
+  }
+
+  /**
+   * A mesma resolução de `#creatureById`, na forma `Prey` — para `chooseTarget`/
+   * `decideMonsterAction` (`monster.ts`, puros e agnósticos de classe concreta), que só
+   * conhecem a forma estreita. `CharacterRuntime` já satisfaz `Prey` e sai sem alocação; só o
+   * caso NOVO (alvo é invocação de personagem, #598) monta o envelope.
+   */
+  #preyById(session: Session, id: string | null): Prey | null {
+    if (id === null) return null;
+    const character = findById(session.participants, id);
+    if (character !== null) return character;
+    const monster = this.#monsterBySubject.get(id);
+    if (monster === undefined) return null;
+    return {
+      id: monster.subject, position: monster.position, alive: monster.alive, health: monster.health,
+    };
+  }
+
+  /**
+   * O alvo de UM monstro nesta reavaliação (#598, ADR 0057 decisão 1) — separa os dois
+   * mecanismos que `masterId` agora cobre:
+   *
+   * - **Invocação do PERSONAGEM** (`masterId` é `string`, um `characterId`): NUNCA escolhe
+   *   sozinha — herda o alvo do MESTRE (`attackTargetOf`, a mesma resolução que já limpa alvo
+   *   morto/fora de alcance) a cada reavaliação, e troca junto quando ele troca. Sem mestre
+   *   (saiu/morreu — o cascade de `#removeSummon` ainda não rodou neste instante exato) ou
+   *   mestre sem alvo, o resultado é `null`: a invocação fica parada, sem sortear nada.
+   * - **Qualquer outro monstro** (hostil do Spawner, ou invocação de OUTRO monstro, #546):
+   *   `chooseTarget` de sempre, com a lista de presas estendida pelas invocações de personagem
+   *   VIVAS (`#playerSummonPrey`) — o Canary trata a invocação como qualquer oponente
+   *   (`isOpponent`). Vazio, é a MESMA referência de `session.participants` de antes desta
+   *   issue: zero alocação e zero sorteio a mais quando ninguém invocou.
+   */
+  #chooseMonsterTarget(session: Session, monster: MonsterRuntime, definition: Monster): string | null {
+    if (typeof monster.masterId === 'string') {
+      const owner = findById(session.participants, monster.masterId);
+      if (owner === null || !owner.alive) return null;
+      return this.attackTargetOf(owner)?.subject ?? null;
+    }
+    const summons = this.#playerSummonPrey();
+    const prey: readonly Prey[] = summons.length === 0
+      ? session.participants
+      : [...session.participants, ...summons];
+    return chooseTarget(monster, prey, definition, session.rng, session.nowMs);
   }
 
   /**
@@ -4907,7 +5145,7 @@ export class HuntRuleset implements Ruleset {
     // `weapon()` como sempre, e a arma abaixo do level segue virando mão vazia (ADR 0031).
     let weapon: Item | null;
     let damagePercent = 100;
-    if (this.#options.combat.compatibilityProfile === 'combat-v3') {
+    if (this.#isV3()) {
       const held = character.inventory.heldWeapon(this.#options.items, character);
       if (held !== null && held.damagePercent === 0) return;
       weapon = held?.item ?? null;
@@ -5062,12 +5300,17 @@ const slots = bot.groups.get(group);
    * nada em troca.
    */
   #perform(
-    session: Session, character: CharacterRuntime, action: BotAction,
+    session: Session, character: CharacterRuntime, action: BotAction | BotActionV2,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
   ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId, recipient, explicit);
+      // `monsterId` (#598, M38-01, ADR 0057 decisão 4) só existe no vocabulário v2 — a v1 não
+      // sabe invocar, e `'monsterId' in action` é o que deixa a v1 passar por aqui sem o campo.
+      case 'spell': return this.#castSpell(
+        session, character, action.spellId, recipient, explicit,
+        'monsterId' in action ? action.monsterId : undefined,
+      );
       case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
@@ -5138,6 +5381,12 @@ const slots = bot.groups.get(group);
     if (target.kind === 'monster') {
       const monster = this.#monsterBySubject.get(target.subject);
       if (monster === undefined || !monster.alive) return { ok: false, reason: 'no-target' };
+      // A invocação (#598, ADR 0057) nunca é alvo válido de fogo amigo — nem por
+      // auto-target (`#hostileMonsters`), nem por clique explícito: o cliente manda intenção
+      // (invariante 4), e a mira num aliado é sempre inválida, o mesmo `no-target` de "sem
+      // alvo" — não "recusado", porque a invocação de outro dono é invisível para este gate
+      // por design (só a masterId string do PRÓPRIO personagem importa aqui).
+      if (monster.masterId === character.id) return { ok: false, reason: 'no-target' };
       return { ok: true, explicit: monster };
     }
     return { ok: true, explicit: target.position };
@@ -5201,32 +5450,72 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, spellId: string,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /**
+     * O PARÂMETRO da invocação (#598, M38-01, ADR 0057 decisão 4) — "Summon Creature com
+     * parâmetro": qual `summonable` a barra pediu. Sem uso em qualquer outra magia.
+     */
+    monsterId?: string,
   ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
+    // A invocação (#598) sai do caminho genérico ANTES da mira/cura em área — nenhuma das duas
+    // se aplica a `summon` — e confere o que só o RULESET sabe (catálogo de monstro, teto de
+    // invocações vivas): `casting.ts` não conhece nem um nem o outro (invariante 1).
+    let summonMonster: Monster | undefined;
+    if (spell.effect.kind === 'summon') {
+      summonMonster = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (summonMonster === undefined || !summonMonster.summonable) return NOT_SUMMONABLE;
+      if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return NOT_SUMMONABLE;
+    }
+
+    // Dispel em ÁREA (#592, Cancel Invisibility): a forma sai do LANÇADOR, como a cura em grupo
+    // — `#aimFor` entra pelo ramo self-origin e colhe os MONSTROS na forma em `#spellHits`, sem
+    // mirar ninguém (sem alvo válido, `aim` vem `null`, e o dispel do lançador de sempre segue).
     const aim = spell.effect.kind === 'damage'
       ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
         ? this.#aimFor(character, spell.effect.range, undefined, explicit)
-        : spell.effect.kind === 'challenge'
-          ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
-          : null;
+        : (spell.effect.kind === 'dispel' && spell.effect.area !== undefined)
+          ? this.#aimFor(character, undefined, spell.effect.area)
+          : spell.effect.kind === 'challenge'
+            ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
+            : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
     const healArea = spell.effect.kind === 'heal'
       && spell.effect.area !== undefined && isSelfOrigin(spell.effect.area)
       ? this.#collectHealAllies(session, character, spell.effect.area)
       : null;
+    // Alvo de party (#588: Heal/Protect/Enchant/Train Party) — o RAIO, não uma forma: quem cai
+    // dentro dele é o roster inteiro da sessão (líder incluso), como `Party::onCastSpell` do
+    // Canary. Colhido ANTES de `castSpell` pela MESMA razão da área de cura: só quem tem
+    // `session.participants` sabe quem está no alcance.
+    const partyAllies = (spell.effect.kind === 'heal-over-time' || spell.effect.kind === 'buff')
+      && spell.effect.target === 'party'
+      ? this.#collectPartyAllies(session, character, spell.effect.range ?? 0)
+      : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      this.#spellScaling(character), recipient, this.#attackerModifiers(character),
+      this.#spellScaling(character), recipient, this.#attackerModifiers(character), partyAllies,
+      // Bolsa default (solo); o `manaCost` REAL da invocação é do MONSTRO (ADR 0057 d.3).
+      undefined, summonMonster?.manaCost,
     );
     if (!result.ok) return result;
-    // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
-    // não gastou mana, não praticou.
-    this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
+    // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
+    // MONSTRO na invocação (#598), escalado pela party quando for o caso (#588), nunca o
+    // `base` de exibição do catálogo. Recusa não rende nada — não gastou mana, não praticou.
+    const manaCost = summonMonster?.manaCost ?? (typeof spell.manaCost === 'number'
+      ? spell.manaCost
+      : partyScaledManaCost(spell.manaCost, partyAllies?.length ?? 0));
+    this.#gainSkills(session, character, 'spell-cast', manaCost);
+    // O gold da runa em branco (#594, ADR 0044) é agregado da SESSÃO.
+    if (result.goldSpent > 0) session.credit(character.id, 'goldSpent', result.goldSpent);
+    // A invocação nasce AQUI, depois que tudo o resto já confirmou (#598).
+    if (result.summon === true && summonMonster !== undefined) {
+      this.#spawnPlayerSummon(session, character, summonMonster);
+    }
 
     // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
     // e só depois faz cada número cair. A ordem é contrato.
@@ -5238,23 +5527,45 @@ const slots = bot.groups.get(group);
     session.emit({
       kind: 'spell-cast', casterId: character.id, spellId: spell.id,
       casterPosition: this.#at(character),
-      targets: aim === null
-        ? (healArea === null
-          ? NO_SPELL_TARGETS
-          : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })))
-        : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
-      // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
+      targets: aim !== null
+        ? this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) }))
+        : partyAllies !== null
+          ? partyAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) }))
+          : healArea === null
+            ? NO_SPELL_TARGETS
+            : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })),
+      // Os tiles da forma (#155): vetor NOVO pela razão de `targets`. Alvo de party não tem
+      // forma — é raio, não área — e não desenha tile nenhum.
       tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
     });
     // Dispel (#590): o `castSpell` devolve as CHAVES a remover, e quem tem a fila (para
     // cancelar `condition-expire`/`condition-tick`) é o ruleset — a mesma divisão da condição
     // abaixo. Vale para o RECIPIENTE: o mesmo alvo que a cura composta cura, quando há cura.
+    // Dispel em ÁREA (#592, Cancel Invisibility) vale para os MONSTROS colhidos na forma —
+    // nunca aliados, fora do recorte desta issue (§12) — em vez do recipiente único de sempre.
     if (result.dispel !== undefined) {
-      this.#dispelConditions(session, recipient, result.dispel);
+      if (spell.effect.kind === 'dispel' && spell.effect.area !== undefined) {
+        for (const monster of this.#spellHits) this.#dispelConditions(session, monster, result.dispel);
+      } else {
+        this.#dispelConditions(session, recipient, result.dispel);
+      }
     }
     // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
-    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
+    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR
+    // — ou em CADA membro da party colhido acima (#588), a MESMA condição, sem sorteio por
+    // membro (os números do script são fixos: regen 20/2s, shielding +3, magic +1, melee/
+    // distance +3).
     if (result.condition !== undefined) {
+      if (partyAllies !== null) {
+        for (const ally of partyAllies) {
+          this.#applyConditionTo(session, ally, {
+            ...result.condition,
+            targetId: this.#subjectOf(ally),
+            sourceId: character.id,
+          });
+        }
+        return result;
+      }
       const target: ConditionTarget | undefined = result.condition.tick?.kind === 'damage'
         ? this.#spellHits[0]
         : character;
@@ -5289,6 +5600,13 @@ const slots = bot.groups.get(group);
             character, ally, spell.effect, scaling, this.#options.combat, session.rng,
           );
           this.#emitHealed(session, ally, healed, 'spell', character.id);
+          // Cura composta em área (#592, Mass Healing): CADA aliado curado perde as MESMAS
+          // chaves que o `recipient` principal perdeu — a mesma regra de dispel de sempre, só
+          // que aplicada de novo por aliado, porque o `result.dispel` do lançamento só cobre o
+          // recipiente único.
+          if (spell.effect.dispel !== undefined) {
+            this.#dispelConditions(session, ally, spell.effect.dispel.types);
+          }
         }
       }
       return result;
@@ -5324,6 +5642,31 @@ const slots = bot.groups.get(group);
         expiresAtMs: session.nowMs + durationMs,
       });
     }
+  }
+
+  /**
+   * Colhe os membros da party no RAIO (#588: Heal/Protect/Enchant/Train Party) — `Party::
+   * onCastSpell` do Canary: o roster inteiro da MESMA sessão (líder incluso — o lançador está a
+   * distância 0 de si mesmo), vivos, no MESMO andar, dentro de `radius` tiles em distância
+   * Chebyshev (`getDistance` do Canary, `distance()` deste motor — nunca Manhattan). Ordem de
+   * `session.participants`, a mesma ordem-contrato de `#collectHealAllies`.
+   *
+   * Sem forma nenhuma — é raio, não área — e por isso não usa `areaTiles`/`isSelfOrigin`: as
+   * quatro magias do Canary aplicam a condição a quem está no alcance, não a quem cai numa
+   * geometria desenhada no chão (`AREA_CIRCLE5X5` do script é só o EFEITO visual, nunca lido
+   * para decidir quem recebe).
+   */
+  #collectPartyAllies(
+    session: Session, character: CharacterRuntime, radius: number,
+  ): readonly CharacterRuntime[] {
+    const allies: CharacterRuntime[] = [];
+    for (const participant of session.participants) {
+      if (!participant.alive) continue;
+      if (!sameFloor(character.position.z, participant.position.z)) continue;
+      if (distance(character.position, participant.position) > radius) continue;
+      allies.push(participant);
+    }
+    return allies;
   }
 
   /**
@@ -5539,6 +5882,31 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * A mira de CHÃO da runa de campo (#591: Fire/Poison/Energy Field/Wall, Magic Wall, Wild
+   * Growth, Destroy Field) — DIFERENTE de `#aimFor`: não exige criatura nenhuma no tile (o
+   * campo nasce no CHÃO), então não usa `#collect`/`#spellHits`. Exige mira EXPLÍCITA (`#725`/
+   * `#726`, `target.position` já resolvido pelo host em `explicit`): sem "alvo atual" — campo
+   * não tem alvo selecionado, só tile apontado. `FloorPoint` mira o tile direto; `MonsterRuntime`
+   * mira o tile dela (útil no clique em cima de um monstro). Mesmo andar (#519) e linha de
+   * visão livre (a mesma checagem que `#aimFor` já aplica à mira manual).
+   */
+  #groundAimFor(
+    character: CharacterRuntime, explicit: MonsterRuntime | FloorPoint | undefined,
+  ): SpellAim | null {
+    if (explicit === undefined) return null;
+    let point: WorldPoint;
+    if ('position' in explicit) {
+      if (!explicit.alive || !sameFloor(character.position.z, explicit.position.z)) return null;
+      point = this.#at(explicit);
+    } else {
+      if (!sameFloor(character.position.z, explicit.z)) return null;
+      point = { x: explicit.x, y: explicit.y, z: explicit.z ?? this.#world.map.z };
+    }
+    if (!isSightClear(this.#world.map, character.position, point)) return null;
+    return { distance: distance(character.position, point), targets: [], point };
+  }
+
+  /**
    * O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o
    * BP já a conta), MAIS o bônus de equipamento (#524: Hat of the Mad, Focus Cape, Spellbook of
    * Mind Control) MAIS o de condição (#576: Mastermind Potion soma 3 — `CONDITION_PARAM_BUFF_SPELL`
@@ -5595,6 +5963,21 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * Teto e cadência de alma do personagem (#593 + #566): a vocação PROMOVIDA reescreve os dois
+   * (Canary: 100/120000 base, 200/15000 promovida) quando o conteúdo declara `promotion.soulMax`/
+   * `soulGainTicksMs`; sem vocação não há alma (`null`).
+   */
+  #soulParamsOf(member: CharacterRuntime): { readonly max: number; readonly gainTicksMs: number } | null {
+    const vocation = this.#vocationOf(member);
+    if (vocation === null) return null;
+    const promoted = member.promoted ? vocation.promotion : undefined;
+    return {
+      max: promoted?.soulMax ?? vocation.soulMax,
+      gainTicksMs: promoted?.soulGainTicksMs ?? vocation.soulGainTicksMs,
+    };
+  }
+
+  /**
    * O ganho passivo de alma (#593, `Player::onGainExperience` do Canary): com vocação escolhida,
    * alma abaixo do teto e esta XP (JÁ com bônus) ≥ o level que o personagem tinha ANTES do
    * ganho, (re)aplica `CONDITION_SOUL` por quatro minutos — um ponto a cada
@@ -5607,16 +5990,16 @@ const slots = bot.groups.get(group);
   #gainSoulFromExperience(
     session: Session, member: CharacterRuntime, experience: number, levelBeforeGain: number,
   ): void {
-    const vocation = this.#vocationOf(member);
-    if (vocation === null) return;
-    if (member.soul >= vocation.soulMax) return;
+    const soul = this.#soulParamsOf(member);
+    if (soul === null) return;
+    if (member.soul >= soul.max) return;
     if (experience < levelBeforeGain) return;
     this.#applyConditionTo(session, member, {
       key: SOUL_CONDITION_KEY,
       targetId: member.id,
       expiresAtMs: session.nowMs + SOUL_CONDITION_DURATION_MS,
       merge: 'refresh',
-      tick: { kind: 'soul', amount: 1, intervalMs: vocation.soulGainTicksMs },
+      tick: { kind: 'soul', amount: 1, intervalMs: soul.gainTicksMs },
     });
   }
 
@@ -5634,6 +6017,21 @@ const slots = bot.groups.get(group);
     // `Creature::addCondition` do Canary. Só personagem veste item; monstro fica como estava.
     if (condition.key === DRUNK_CONDITION_KEY && target instanceof CharacterRuntime
       && target.inventory.suppresses(this.#options.items, DRUNK_CONDITION_KEY)) return;
+    // Imunidade de monstro por CONDIÇÃO (#559, ADR 0041 d.2): `Monster::isImmune` do Canary/TFS
+    // — quem o conteúdo declara imune não recebe a condição, ponto de aplicação único, nunca
+    // policiado por golpe. Personagem nunca é imune por conteúdo (só item, acima). `paralyze` é
+    // um CASO à parte: a chave de estado é `speed` (haste e paralyze compartilham a mesma, CMB-11),
+    // e só o sinal NEGATIVO (paralyze) é bloqueável — haste nunca é. `drunk` casa DIRETO com o
+    // nome da imunidade. `invisible` NUNCA entra aqui: a mesma imunidade, no Canary, é
+    // repropositada para "enxerga invisível" (`Monster::canSeeInvisibility`, ADR 0041 d.2) — ela
+    // filtra quem o monstro consegue MIRAR (`chooseTarget`, `monster/monster.ts`), nunca bloqueia
+    // o monstro de ficar invisível por conta própria (`monster.defenses`).
+    if (!(target instanceof CharacterRuntime)) {
+      const immunities = this.#options.monsters.get(target.monsterId)?.conditionImmunities;
+      const paralyzed = condition.key === SPEED_CONDITION_KEY && (condition.speedPercent ?? 0) < 0;
+      const blockable = paralyzed ? 'paralyze' : condition.key === DRUNK_CONDITION_KEY ? 'drunk' : null;
+      if (blockable !== null && immunities?.includes(blockable)) return;
+    }
     const subject = conditionSubject(this.#subjectOf(target), condition.key);
     const previous = target.conditions.get(condition.key);
     const tick = tickOf(condition);
@@ -5754,7 +6152,7 @@ const slots = bot.groups.get(group);
       // `soulMax` da vocação — sem uma, não há teto e o tique não faz nada (não deveria
       // acontecer: só `#grantPartyXp` aplica esta condição, e só com vocação escolhida).
       if (target instanceof CharacterRuntime) {
-        const soulMax = this.#vocationOf(target)?.soulMax;
+        const soulMax = this.#soulParamsOf(target)?.max;
         if (soulMax !== undefined) target.gainSoul(tick.amount, soulMax);
       }
       return;
@@ -5871,8 +6269,15 @@ const slots = bot.groups.get(group);
    * antes, sem órfão. É a porta ÚNICA — a ability de monstro e o teste passam por aqui.
    *
    * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
+   *
+   * `direction` (#591) só importa para a forma `wall` — a fileira perpendicular precisa saber
+   * lançador→alvo para se orientar. Default `'south'`, preservando bit a bit o único chamador
+   * de antes desta issue (a ability de monstro, sempre `circle`, que ignora direção).
    */
-  applyField(session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell'): TileFieldState {
+  applyField(
+    session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell',
+    direction: Direction = 'south',
+  ): TileFieldState {
     const subject = fieldSubject(spec.id);
     const previous = this.#fields.get(spec.id);
     const stages = fieldStagesOf(spec);
@@ -5901,7 +6306,7 @@ const slots = bot.groups.get(group);
       // MESMA tabela de anéis que a área de dano dela — senão o campo de fogo do Dragon Lord
       // cobriria 69 tiles em vez dos 21 que o raio 4 do Canary de fato cobre, enquanto a bola
       // de fogo do mesmo ataque já usa os 21 certos.
-      tiles: areaTiles(spec.shape, at, 'south', at, source),
+      tiles: areaTiles(spec.shape, at, direction, at, source),
       expiresAtMs: session.nowMs + stage.durationMs,
       ...(stage.condition === undefined ? {} : { condition: stage.condition }),
       ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
@@ -5975,6 +6380,27 @@ const slots = bot.groups.get(group);
     // A tela fica sabendo (#561, M31-06): só quando de fato havia campo para remover — um
     // snapshot restaurado de formato anterior nunca teria este evento, mas a defesa é de graça.
     if (removed !== null) session.emit({ kind: 'field-vanished', fieldId });
+  }
+
+  /**
+   * Destroy Field (#591, `destroy_field_rune.lua`): remove o campo NÃO-bloqueante no tile, com
+   * a MESMA cancelação de eventos que `applyField` faz ao relançar — sem isso, o `FIELD_TICK`/
+   * `FIELD_EXPIRE`/`FIELD_STAGE_ADVANCE` órfão dispararia contra um campo que já não existe.
+   * Campo bloqueante (Magic Wall, Wild Growth) nunca é alvo — o Canary também não os lista em
+   * `fields` (`destroy_field_rune.lua`). Devolve `false` sem tocar nada quando não há o que
+   * destruir, para o chamador recusar `no-target` ANTES de gastar carga/gold (o Lua também só
+   * consome o uso em caso de sucesso).
+   */
+  #destroyFieldAt(session: Session, at: WorldPoint): boolean {
+    const field = this.#fields.at(at);
+    if (field === null || field.blocksMovement === true) return false;
+    const subject = fieldSubject(field.id);
+    session.cancelEvent(FIELD_EXPIRE, subject);
+    session.cancelEvent(FIELD_STAGE_ADVANCE, subject);
+    session.cancelEvent(FIELD_TICK, subject);
+    this.#fields.remove(field.id);
+    session.emit({ kind: 'field-vanished', fieldId: field.id });
+    return true;
   }
 
   /**
@@ -6068,6 +6494,10 @@ const slots = bot.groups.get(group);
       reflect: definition?.reflect === undefined
         ? undefined : { reflector: 'monster', table: definition.reflect },
       attacker: this.#reflectAttackerFor(character, monster),
+      // Id de conteúdo e velocidade BASE (#592, Paralyze Rune): só o efeito `condition` com
+      // `target: 'enemy'` lê os dois, para montar o `ConditionState`/`SpeedContext` do alvo.
+      creatureId: monster.subject,
+      speed: monster.speed,
     });
   }
 
@@ -6080,11 +6510,27 @@ const slots = bot.groups.get(group);
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
 
-    // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
-    // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
+    // A runa de dano (#165) mira como a magia em área — o mesmo `#aimFor`. A runa de CONDIÇÃO a
+    // distância (#592, Paralyze Rune) mira do MESMO jeito, sem área — só um alvo. A runa de CAMPO/
+    // Destroy Field (#591) mira o CHÃO — `#groundAimFor`, que não exige criatura nenhuma no
+    // tile. Escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
+    const isGroundSupply = supply.effect.kind === 'field' || supply.effect.kind === 'destroy-field';
     const aim = supply.effect.kind === 'damage'
       ? this.#aimFor(character, supply.effect.range, supply.effect.area, explicit)
-      : null;
+      : (supply.effect.kind === 'condition' && supply.effect.target === 'enemy')
+        ? this.#aimFor(character, supply.effect.range, undefined, explicit)
+        : isGroundSupply
+          ? this.#groundAimFor(character, explicit)
+          : null;
+    // Destroy Field (#591): sem campo destrutível no tile mirado, recusa ANTES de gastar gold/
+    // carga — o `useSupply` (casting.ts) não tem `Fields` para conferir (invariante 1), então a
+    // conferência é daqui, o único lugar com estado de sessão.
+    if (supply.effect.kind === 'destroy-field' && aim?.point !== undefined) {
+      const existing = this.#fields.at(aim.point);
+      if (existing === null || existing.blocksMovement === true) {
+        return { ok: false, reason: 'no-target', retryInMs: 0 };
+      }
+    }
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
     const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
@@ -6105,6 +6551,33 @@ const slots = bot.groups.get(group);
       if (result.dispel !== undefined) {
         this.#dispelConditions(session, recipient, result.dispel);
       }
+
+      // Runa de campo (#591): planta no tile que `useSupply` devolveu, com id POR INSTÂNCIA
+      // (`fieldInstanceId`) — a mesma runa em tiles diferentes abre campos independentes, em vez
+      // de o segundo cast mover o primeiro (Fields indexa por id de conteúdo, ver fields.ts). A
+      // direção lançador→alvo importa só para `wall` (Fire/Poison/Energy Wall); `directionOf`
+      // devolve `null` quando lançador e alvo caem no mesmo tile, e a direção atual do
+      // personagem é a mesma resposta honesta que o resto do arquivo já dá nesse caso.
+      if (result.field !== undefined) {
+        const direction = directionOf(character.position, result.field.at) ?? character.direction;
+        const instanced: FieldSpec = { ...result.field.spec, id: fieldInstanceId(result.field.spec.id, result.field.at) };
+        this.applyField(session, instanced, result.field.at, 'spell', direction);
+        session.emit({
+          kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+          position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.field.at],
+        });
+        return result;
+      }
+      // Destroy Field (#591): a presença já foi conferida acima — aqui só remove.
+      if (result.destroyFieldAt !== undefined) {
+        this.#destroyFieldAt(session, result.destroyFieldAt);
+        session.emit({
+          kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+          position: this.#at(character), targets: NO_SPELL_TARGETS, tiles: [result.destroyFieldAt],
+        });
+        return result;
+      }
+
       // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
       // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
       session.emit({
@@ -6118,9 +6591,16 @@ const slots = bot.groups.get(group);
       if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
       else this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
       // Poção de buff (#576, CMB-07): o `useSupply` devolve a condição já com o USUÁRIO como
-      // alvo e origem (auto-alvo sempre, nunca o `recipient`) — quem agenda o vencimento é quem
-      // tem a fila, a mesma divisão do `#castSpell`.
-      if (result.condition !== undefined) this.#applyConditionTo(session, character, result.condition);
+      // alvo e origem (auto-alvo sempre, nunca o `recipient`). A runa de condição a distância
+      // (#592, Paralyze Rune) já a devolve com o MONSTRO mirado como alvo (`casting.ts` monta o
+      // `ConditionState` com `target.creatureId`) — quem agenda o vencimento é quem tem a fila,
+      // a mesma divisão do `#castSpell`, e o alvo aqui é só de quem aplica.
+      if (result.condition !== undefined) {
+        const conditionTarget = (supply.effect.kind === 'condition' && supply.effect.target === 'enemy')
+          ? this.#spellHits[0]
+          : character;
+        if (conditionTarget !== undefined) this.#applyConditionTo(session, conditionTarget, result.condition);
+      }
       return result;
     }
 
@@ -6239,7 +6719,7 @@ const slots = bot.groups.get(group);
    * e alvo — sem executar e sem consumir sorteio.
    */
   #naturalStateOf(
-    set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
+    session: Session, set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
   ): SlotState {
     const blocked = (reason: SlotRefusal): SlotState =>
       ({ set, slot, state: 'blocked', remainingMs: 0, reason });
@@ -6251,7 +6731,20 @@ const slots = bot.groups.get(group);
       if (spell.vocationId !== undefined && character.vocationId !== spell.vocationId) {
         return blocked('not-in-catalog');
       }
-      if (character.mana < spell.manaCost) return blocked('not-enough-mana');
+      // Alvo de party (#588): o mesmo espelho, SEM consumir sorteio nem mutar nada — `<= 1` é a
+      // MESMA recusa "No party members in range" que `castSpell` daria, e vem ANTES da mana e da
+      // alma, a mesma ordem de `castSpell`.
+      const effect = spell.effect;
+      if ((effect.kind === 'heal-over-time' || effect.kind === 'buff') && effect.target === 'party') {
+        const affected = this.#collectPartyAllies(session, character, effect.range ?? 0);
+        if (affected.length <= 1) return blocked('no-target');
+        if (character.mana < partyScaledManaCost(spell.manaCost, affected.length)) {
+          return blocked('not-enough-mana');
+        }
+        if (character.soul < (spell.soulCost ?? 0)) return blocked('not-enough-soul');
+        return { set, slot, state: 'ready', remainingMs: 0 };
+      }
+      if (character.mana < (spell.manaCost as number)) return blocked('not-enough-mana');
       if (character.soul < (spell.soulCost ?? 0)) return blocked('not-enough-soul');
       if (this.#needsTarget(spell.effect)) {
         const range = 'range' in spell.effect ? spell.effect.range : undefined;
@@ -6284,8 +6777,14 @@ const slots = bot.groups.get(group);
     return { set, slot, state: 'ready', remainingMs: 0 };
   }
 
-  /** O efeito exige alvo? Forma que sai do LANÇADOR não exige (onda, cleave, explosão em volta). */
+  /**
+   * O efeito exige alvo? Forma que sai do LANÇADOR não exige (onda, cleave, explosão em volta).
+   * `field`/`destroy-field` (#591) SEMPRE exigem — campo nasce no tile mirado, nunca no
+   * lançador — é o que faz `#resolveManualTarget` repassar `target.position` como `explicit`
+   * até `#groundAimFor`, em vez de descartar a mira como "não se aplica".
+   */
   #needsTarget(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    if (effect.kind === 'field' || effect.kind === 'destroy-field') return true;
     if (effect.kind !== 'damage' && effect.kind !== 'damage-over-time') return false;
     return effect.area === undefined || !isSelfOrigin(effect.area);
   }
@@ -6310,7 +6809,7 @@ const slots = bot.groups.get(group);
       return candidate;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, maxDistance,
+      this.#targetingOf(character), this.#hostileMonsters(), character.position, maxDistance,
     );
   }
 
@@ -6332,6 +6831,8 @@ const slots = bot.groups.get(group);
     // Sem candidato até que `select` avalie uma regra de alvo != self — e `select` o reescreve a
     // cada regra, então um valor da avaliação anterior nunca vaza para a próxima.
     this.#botView.partyTarget = null;
+    // A condição `summons` (#598, M38-01): quantas invocações VIVAS este personagem tem agora.
+    this.#botView.summonCount = this.#playerSummonCountOf(character.id);
     return this.#botView;
   }
 
@@ -6356,17 +6857,17 @@ const slots = bot.groups.get(group);
   ): number {
     const targeting = this.#targetingOf(character);
     if (area === undefined) {
-      return countTargets(targeting, this.#monsters, character.position, reach);
+      return countTargets(targeting, this.#hostileMonsters(), character.position, reach);
     }
     if (isSelfOrigin(area)) {
       return countAreaTargets(
-        targeting, this.#monsters, areaTiles(area, character.position, character.direction),
+        targeting, this.#hostileMonsters(), areaTiles(area, character.position, character.direction),
       );
     }
     const primary = this.#targetInRange(character, actionRange ?? reach);
     if (primary === null) return 0;
     return countAreaTargets(
-      targeting, this.#monsters,
+      targeting, this.#hostileMonsters(),
       areaTiles(area, character.position, character.direction, this.#at(primary)),
     );
   }
@@ -6466,7 +6967,7 @@ const slots = bot.groups.get(group);
     }
 
     const perto = countTargets(
-      targetingOf(runner), this.#monsters, character.position,
+      targetingOf(runner), this.#hostileMonsters(), character.position,
       this.#options.targetSearchRadius ?? 8,
     );
     if (runner.running) {
@@ -6830,10 +7331,10 @@ const slots = bot.groups.get(group);
 
     // `CharacterRuntime` já satisfaz `Prey` — id, posição e vida. Montar um vetor novo a cada
     // evento era uma alocação por monstro por vencimento, e com 5.000 instâncias isso é o
-    // coletor rodando o tempo todo.
-    const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
-    const target = findById(prey, monster.targetId);
+    // coletor rodando o tempo todo — `#chooseMonsterTarget`/`#preyById` preservam isso quando
+    // não há invocação de personagem (#598): a mesma referência de `session.participants`.
+    monster.targetId = this.#chooseMonsterTarget(session, monster, definition);
+    const target = this.#preyById(session, monster.targetId);
     const action = decideMonsterAction(
       monster, target, definition, this.#blockedForMonster(monster, definition),
       (from, to) => isSightClear(this.#world.map, from, to),
@@ -6911,7 +7412,8 @@ const slots = bot.groups.get(group);
     if (monster === undefined || !monster.alive) return;
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined || definition.staticAttack === undefined) return;
-    const target = findById(session.participants, monster.targetId);
+    // `#preyById` (#598): o alvo pode ser uma invocação de personagem desde esta issue.
+    const target = this.#preyById(session, monster.targetId);
     const blocked = this.#blockedForMonster(monster, definition);
     const action = decideMonsterAction(
       monster, target, definition, blocked,
@@ -6955,9 +7457,8 @@ const slots = bot.groups.get(group);
       return;
     }
 
-    const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
-    const target = findById(session.participants, monster.targetId);
+    monster.targetId = this.#chooseMonsterTarget(session, monster, definition);
+    const target = this.#creatureById(session, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
       || !isSightClear(this.#world.map, monster.position, target.position)
@@ -6994,9 +7495,8 @@ const slots = bot.groups.get(group);
     if (ability === undefined) return;
 
     monster.scheduledAbilities.delete(ability.id);
-    const prey: readonly Prey[] = session.participants;
-    monster.targetId = chooseTarget(monster, prey, definition, session.rng, session.nowMs);
-    const target = findById(session.participants, monster.targetId);
+    monster.targetId = this.#chooseMonsterTarget(session, monster, definition);
+    const target = this.#creatureById(session, monster.targetId);
     if (target === null || !target.alive
       || distance(monster.position, target.position) > ability.target.range
       || !isSightClear(this.#world.map, monster.position, target.position)
@@ -7049,13 +7549,20 @@ const slots = bot.groups.get(group);
    */
   #executeMonsterAbility(
     session: Session, monster: MonsterRuntime, ability: MonsterAbility,
-    primary: CharacterRuntime,
+    primary: CharacterRuntime | MonsterRuntime,
   ): void {
     const subject = monster.subject;
+    // O conjunto de presas de uma ability em ÁREA (#598, ADR 0057 decisão 1): estendido pelas
+    // invocações de personagem VIVAS, como `#chooseMonsterTarget` — mesma referência de
+    // `session.participants` quando não há nenhuma (o caso comum hoje, sempre).
+    const summons = this.#livePlayerSummons();
+    const prey: readonly (CharacterRuntime | MonsterRuntime)[] = summons.length === 0
+      ? session.participants
+      : [...session.participants, ...summons];
     // Alvo secundário da FORMA sem visão livre do lançador não é atingido (#553, RF-05) — o
     // principal já passou pelo portão em `#onMonsterAttack`/`#onMonsterAbility`, mas a onda/
     // círculo pode cobrir alguém atrás de uma parede que o alvo principal não está.
-    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants)
+    const targets = abilityTargets(ability, this.#at(monster), primary, prey)
       .filter((target) => isSightClear(this.#world.map, this.#at(monster), this.#at(target)));
     const melee = isMeleeAbility(ability);
     const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
@@ -7066,7 +7573,10 @@ const slots = bot.groups.get(group);
         kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id,
         casterPosition: this.#at(monster),
         targets: targets.map((target) => ({
-          creatureId: target.id, position: this.#at(target),
+          // `subject` (`m:<id>`) para uma invocação de personagem (#598); `id` de sempre para
+          // um personagem — `MonsterRuntime.id` é NUMÉRICO, nunca o creatureId do protocolo.
+          creatureId: target instanceof MonsterRuntime ? target.subject : target.id,
+          position: this.#at(target),
         })),
         tiles: abilityTiles(ability, this.#at(monster), this.#at(primary)),
         ...(ability.presentation?.missileKey === undefined
@@ -7096,15 +7606,37 @@ const slots = bot.groups.get(group);
       this.#options.progression.rates, monsterDefinition?.boss ?? false,
     ).attack;
     for (const character of targets) {
-      const defender = this.#playerDefender(character);
       // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
       // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`). No
       // `combat-v3` o sorteio é a normal truncada do Canary (#681); antes, uniforme.
+      const rawDamage = applyAttackRate(
+        rollCombatValue(session.rng, ability.power.min, ability.power.max, this.#options.combat), attackRate,
+      );
+      if (character instanceof MonsterRuntime) {
+        // A invocação de personagem (#598, ADR 0057 decisão 1 — "monstros a atacam") não tem
+        // equipamento, mana shield nem skill: ela usa `#monsterDefender`, o MESMO "monstro como
+        // defensor" que já existe para o reflexo do equipamento (`#reflectOntoMonster`) — nunca
+        // o caminho do jogador, e sem `attacker` (o reflexo do #552 é de EQUIPAMENTO — uma
+        // invocação nunca reflete de volta).
+        const result = resolveDamage(
+          {
+            rawDamage, source: 'monster-attack', damageType: ability.damageType,
+            blockable: abilityBlockFlags(ability),
+            ...(resolvedMonsterModifiers === undefined ? {} : { modifiers: resolvedMonsterModifiers }),
+          },
+          this.#monsterDefender(character),
+          'pve',
+          this.#options.combat,
+          session.rng,
+          session.nowMs,
+        );
+        this.#applyMonsterHitOnSummon(session, monster, character, result, source);
+        continue;
+      }
+      const defender = this.#playerDefender(character);
       const result = resolveDamage(
         {
-          rawDamage: applyAttackRate(rollCombatValue(session.rng, ability.power.min, ability.power.max, this.#options.combat), attackRate),
-          source: 'monster-attack',
-          damageType: ability.damageType,
+          rawDamage, source: 'monster-attack', damageType: ability.damageType,
           // O TIPO DE ATAQUE decide o bloqueio no `combat-v3` (#682, a regra de
           // `Monsters::deserializeSpell` do Canary): o `melee` (a básica legada inclusive)
           // bloqueia os dois; o `combat` FÍSICO passa só pela armadura, em qualquer alcance ou
@@ -7136,6 +7668,11 @@ const slots = bot.groups.get(group);
       this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
+      //
+      // A invocação de personagem já saiu do laço acima (`continue`) — nunca chega aqui. Uma
+      // condição declarada numa ability que hoje só atinge invocação não seria aplicada; é o
+      // mesmo recorte de `#applyMonsterHitOnSummon` (sem mecanismo exclusivo do jogador), e
+      // fica registrado como divergência conhecida, não como pendência silenciosa.
       if (ability.condition !== undefined && character.alive) {
         this.#applyConditionTo(session, character, conditionFromSpec(
           ability.condition, character.id, subject, session.nowMs, 'monster-attack',
@@ -7255,6 +7792,45 @@ const slots = bot.groups.get(group);
     session.kill(character);
   }
 
+  /**
+   * O mesmo de `#applyMonsterHit`, para quando o ALVO é uma invocação de PERSONAGEM (#598, ADR
+   * 0057 decisão 1 — "monstros a atacam"). Sem os mecanismos exclusivos do jogador — mana
+   * shield, carga de colar/anel, prática de shielding, bot e automação: a invocação não tem
+   * equipamento, skill nem bot próprio, só vida. O corpo é o de `#reflectOntoMonster` (o mesmo
+   * "monstro como defensor" já usado quando o reflexo do jogador acerta o monstro atacante) —
+   * `applyDamageOutcome` já é genérico sobre `DamageTarget` (`CharacterRuntime | MonsterRuntime`).
+   *
+   * A morte é resolvida AQUI, e não deixada para o fim de `#executeMonsterAbility` como o dano
+   * ao próprio `monster` (reflexo): a invocação não é o atacante desta ability, e nada mais no
+   * laço por alvo depende dela continuar viva depois deste golpe.
+   *
+   * Serve os DOIS sentidos do combate monstro-contra-monstro que o #598 abre: um monstro
+   * HOSTIL golpeando a invocação do jogador (`target` é a invocação), e a invocação do jogador
+   * golpeando um monstro hostil (`target` é o hostil, `attacker` é a invocação). No segundo
+   * caso a atribuição (#598, ADR 0057 decisão 2) vai para o MESTRE, nunca para a invocação: o
+   * dano dela entra no mapa de dano em nome de quem a invocou — é o que faz a XP por razão de
+   * dano (#523) e o Bestiário renderem para o personagem, não para um `m:<id>` que `xpByDamage`
+   * nunca reconheceria como participante.
+   */
+  #applyMonsterHitOnSummon(
+    session: Session, attacker: MonsterRuntime, target: MonsterRuntime, outcome: DamageOutcome,
+    source: 'melee' | 'spell',
+  ): void {
+    const creditId = typeof attacker.masterId === 'string' ? attacker.masterId : attacker.subject;
+    const applied = applyDamageOutcome(target, outcome, null);
+    recordDamage(target.contribution, creditId, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: target.subject, attackerId: attacker.subject,
+      amount: applied.healthDamage + applied.manaDamage, source, position: this.#at(target),
+      damageType: outcome.damageType,
+    });
+    this.#emitHealth(session, target);
+    // O dano da invocação conta para o DPS do MESTRE (#431), como qualquer golpe dele.
+    if (typeof attacker.masterId === 'string') session.creditDamage(attacker.masterId, applied.healthDamage);
+    if (target.health > 0) return;
+    resolveDeath(session, { kind: 'monster', monster: target });
+  }
+
   /** O mesmo do lado do monstro, e pela mesma razão. */
   #scheduleMonsterAbility(
     session: Session, monster: MonsterRuntime, ability: MonsterAbility, delayMs: number,
@@ -7355,12 +7931,23 @@ const slots = bot.groups.get(group);
       priority: EventPriority.Attack, subject,
     });
 
+    // Invocação de PERSONAGEM (#598) nunca reavalia sozinha — o alvo é sempre o do mestre
+    // (`#chooseMonsterTarget`, chamado pelo passo/ataque/ability dela). O evento continua
+    // reagendando acima (é inofensivo, como o de `MONSTER_SUMMON` numa invocação que nunca
+    // arma a própria lista), mas não sorteia nada daqui em diante.
+    if (typeof monster.masterId === 'string') return;
+
     if (!session.rng.chance(targetChange.chance)) return;
 
     // Um alvo válido DIFERENTE do atual — trocar para o mesmo não é troca. O mesmo andar
     // primeiro (#519): um alvo em outro andar não é alvo válido — o `isTarget` do TFS confere o
-    // `z` antes da distância, como `chooseTarget` já faz.
-    const prey: readonly Prey[] = session.participants;
+    // `z` antes da distância, como `chooseTarget` já faz. Estendido pelas invocações de
+    // personagem VIVAS (#598), como `#chooseMonsterTarget` — mesma referência de
+    // `session.participants` quando não há nenhuma.
+    const summons = this.#playerSummonPrey();
+    const prey: readonly Prey[] = summons.length === 0
+      ? session.participants
+      : [...session.participants, ...summons];
     const candidates = prey.filter((candidate) => candidate.alive
       && candidate.id !== monster.targetId
       && sameFloor(monster.position.z, candidate.position.z)
@@ -7955,7 +8542,7 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, target: MonsterRuntime, profile: WeaponProfile,
     damagePercent: number,
   ): void {
-    if (this.#options.combat.compatibilityProfile !== 'combat-v3') return;
+    if (!this.#isV3()) return;
     const percent = equipmentCleavePercent(character.inventory, this.#options.items);
     if (percent <= 0) return;
     const tiles = cleaveTiles(character.position, target.position);
@@ -8248,9 +8835,17 @@ const slots = bot.groups.get(group);
     character.attackPractice = state;
   }
 
-  /** O perfil `combat-v3` (#548, ADR 0040) — congelado na sessão pelo conteúdo (invariante 7). */
+  /**
+   * O perfil `combat-v3` (#548, ADR 0040) ou o que ele acumulou por cima (`combat-v4`, ADR
+   * 0052 decisão 7) — congelado na sessão pelo conteúdo (invariante 7). O endgame (M38-M44)
+   * emenda o MESMO `combat-v4` issue a issue enquanto `tibia-parity` for a branch de
+   * integração (ele congela só no merge na `main`, ADR 0040 d.3): por isso este predicado
+   * cobre os dois ids, em vez de ganhar um `#isV4` irmão — nenhuma issue do endgame até aqui
+   * revogou mecanismo do `combat-v3`, só acrescentou em cima.
+   */
   #isV3(): boolean {
-    return this.#options.combat.compatibilityProfile === 'combat-v3';
+    const profile = this.#options.combat.compatibilityProfile;
+    return profile === 'combat-v3' || profile === 'combat-v4';
   }
 
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
@@ -8504,7 +9099,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = rollLoot(definition.loot, session.rng, this.#options.progression.rates.loot);
+        const loot = this.#rollLootFor(monster, definition.loot, session.rng);
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -8524,9 +9119,7 @@ const slots = bot.groups.get(group);
       // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
       // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
       // isso é o W3/#722.
-      const loot = rollLoot(
-        this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
-      );
+      const loot = this.#rollLootFor(monster, this.#lootTableFor(definition, recipient), session.rng);
       corpseGold = loot.gold;
       corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
       // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold —
@@ -8553,7 +9146,11 @@ const slots = bot.groups.get(group);
       const pointIndex = this.#spawner.slots[slot]?.pointIndex;
       const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
       if (point !== undefined) {
-        session.scheduleIn(SPAWN, point.respawnDelayMs, {
+        // Metade para a Boosted Creature do dia (#615, ADR 0054 decisão 7, `SpawnMonster::
+        // addMonster`, `spawn_monster.cpp:379-386`): o monstro que acabou de morrer é o mesmo
+        // que vai respawnar neste lugar, então o `monsterId` DELE decide, não o do ponto —
+        // pontos com `monsters` (peso) só sabem qual nasceu depois do sorteio.
+        session.scheduleIn(SPAWN, this.#respawnDelayFor(monster.monsterId, point.respawnDelayMs), {
           priority: EventPriority.Spawn, subject: String(slot),
         });
       }
@@ -8753,7 +9350,13 @@ const slots = bot.groups.get(group);
     credit: KillCredit,
   ): void {
     if (eligible.length === 0) return;
-    const shares = this.#xpShares(session, eligible, definition.experience, credit);
+    // Boosted Creature (#615, ADR 0054 decisão 7): XP ×2 — dobrado na BASE do pool, antes da
+    // divisão por vocações únicas e do bônus de Bestiário/level, para o dobro valer para todo
+    // elegível na mesma proporção que a XP normal já dividia entre eles.
+    const baseExperience = monster.monsterId === this.#options.boostedMonsterId
+      ? definition.experience * 2
+      : definition.experience;
+    const shares = this.#xpShares(session, eligible, baseExperience, credit);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
@@ -9072,6 +9675,29 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O sorteio de loot deste monstro — com o roll extra da Boosted Creature do dia (#615, ADR
+   * 0054 decisão 7, `ondroploot_boosted.lua`, `factor 1.0`): a mesma tabela sorteada DE NOVO,
+   * logo depois do sorteio normal, na mesma ordem (gold → itens na ordem da tabela) — nunca
+   * antes, e nunca misturado no meio, porque a ORDEM do RNG é contrato (FUN-63) e o roll extra
+   * não pode deslocar a sequência de quem não encontra a boosted. `factor 1.0` — e não um fator
+   * maior — é por quê o roll extra é uma tabela INTEIRA a mais, não uma chance melhorada na
+   * mesma tabela: dobra a EXPECTATIVA de drop, não a chance de cada linha.
+   */
+  #rollLootFor(monster: MonsterRuntime, table: Monster['loot'], rng: Rng): LootResult {
+    const first = rollLoot(table, rng, this.#options.progression.rates.loot);
+    if (monster.monsterId !== this.#options.boostedMonsterId) return first;
+    const second = rollLoot(table, rng, this.#options.progression.rates.loot);
+    return {
+      gold: first.gold + second.gold,
+      items: second.items.length === 0 ? first.items : [...first.items, ...second.items],
+      supplies: second.supplies.length === 0 ? first.supplies : [...first.supplies, ...second.supplies],
+      ammunition: second.ammunition.length === 0
+        ? first.ammunition
+        : [...first.ammunition, ...second.ammunition],
+    };
+  }
+
+  /**
    * Materializa o loot sorteado em itens do CADÁVER, com `instanceId` DETERMINÍSTICO (ADR 0048
    * decisão 1/5) — o id é gasto AQUI, mesmo que o item nunca seja coletado e apodreça com o
    * cadáver: a idempotência do invariante 10 vem da identidade previsível, não da contagem
@@ -9364,9 +9990,15 @@ const slots = bot.groups.get(group);
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
    * para todo mundo. Em pulsos desde #678.
+   *
+   * Promovido (#566, ADR 0042 decisão 1) lê o bloco `promotion.regen` da vocação quando ele
+   * existe — `vocations.xml` ids 5-8 regeneram mais rápido que as bases 1-4. Ausente o bloco
+   * (conteúdo de teste sem promoção), degrada para o `regen` normal, mesmo com `promoted: true`.
    */
   #regenOf(character: CharacterRuntime): Regen {
-    return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
+    const vocation = this.#vocationOf(character);
+    if (character.promoted && vocation?.promotion?.regen !== undefined) return vocation.promotion.regen;
+    return vocation?.regen ?? this.#options.progression.regen;
   }
 
   /**
@@ -9385,7 +10017,7 @@ const slots = bot.groups.get(group);
     const mitigation = character.inventory.mitigation(this.#options.items);
     const blockCharge = character.blockCharge;
 
-    if (this.#options.combat.compatibilityProfile === 'combat-v3') {
+    if (this.#isV3()) {
       // A fórmula REAL do jogador do 13.x (#549, M30-02) — `playerDefense`/`playerArmor`/
       // `playerMitigation` (`combat/player-defense.ts`) substituem, só aqui, os números ad hoc
       // que `combat-v1`/`v2` (no `else` abaixo) continuam usando: `combat.player.armor` (uma
@@ -9641,7 +10273,7 @@ const slots = bot.groups.get(group);
       return candidate;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
+      this.#targetingOf(character), this.#hostileMonsters(), character.position, this.#attackRangeOf(character),
     );
   }
 
@@ -9713,7 +10345,8 @@ const slots = bot.groups.get(group);
       if (attack !== null) return attack;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
+      this.#targetingOf(character), this.#hostileMonsters(), character.position,
+      this.#options.targetSearchRadius ?? 8,
     );
   }
 
@@ -9985,6 +10618,8 @@ export interface HuntSessionOptions {
   readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
+  /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
+  readonly boostedMonsterId?: string;
 }
 
 export class HuntUnavailableError extends Error {
@@ -10027,6 +10662,8 @@ export interface HuntRulesetExtras {
   readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
+  /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
+  readonly boostedMonsterId?: string;
 }
 
 export function createHuntRuleset(
@@ -10035,7 +10672,7 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator } = extras;
+  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator, boostedMonsterId } = extras;
   // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
   // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
   // de quem entrasse pela outra. Já aconteceu.
@@ -10078,6 +10715,7 @@ export function createHuntRuleset(
     ...(botConfigs === undefined ? {} : { botConfigs }),
     ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
+    ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
     // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
     botCooldownMs: content.bot.categoryCooldownMs,
@@ -10102,6 +10740,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.botConfigs === undefined ? {} : { botConfigs: options.botConfigs }),
       ...(options.partyOptions === undefined ? {} : { partyOptions: options.partyOptions }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
+      ...(options.boostedMonsterId === undefined ? {} : { boostedMonsterId: options.boostedMonsterId }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
     // que torna "por que eu morri" uma pergunta investigável.
@@ -10124,10 +10763,13 @@ export function huntRulesetFromSnapshot(
   const state = snapshot.ruleset as Partial<HuntRulesetState> | undefined;
   if (state?.huntId === undefined || state.difficulty === undefined) return null;
   try {
-    // Sem `extras`: o bot volta do próprio estado do ruleset, em `restore`, e não daqui. Quem
-    // monta o ruleset não conhece o snapshot inteiro — só a hunt e a dificuldade, que são a
-    // IDENTIDADE da instância. O resto é estado, e estado é assunto de `restore`.
-    return createHuntRuleset(content, state.huntId, state.difficulty);
+    // Sem o resto dos `extras` (bot, party…): eles voltam do próprio estado do ruleset, em
+    // `restore`, e não daqui. `boostedMonsterId` é a ÚNICA exceção — é IDENTIDADE da instância
+    // como `huntId`/`difficulty` (#615), não estado mutável, e por isso vem do snapshot aqui,
+    // não de `restore`.
+    return createHuntRuleset(content, state.huntId, state.difficulty, {
+      ...(state.boostedMonsterId === undefined ? {} : { boostedMonsterId: state.boostedMonsterId }),
+    });
   } catch {
     return null;
   }
@@ -10168,6 +10810,9 @@ export function changeDifficulty(
     huntId: state.huntId,
     difficulty: options.to,
     createdAtMs: options.nowMs,
+    // A boosted É a mesma (#615): trocar de dificuldade não é entrar de novo — o personagem
+    // continua no mesmo dia, e a instância nova herda a identidade da antiga.
+    ...(state.boostedMonsterId === undefined ? {} : { boostedMonsterId: state.boostedMonsterId }),
   });
   for (const character of characters) next.enter(character);
   return { session: next, receipts };

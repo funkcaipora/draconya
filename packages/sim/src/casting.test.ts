@@ -275,6 +275,85 @@ describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
   });
 });
 
+describe('castSpell/useSupply — Paralyze Rune e Invisibility (#592)', () => {
+  const invisibility: Spell = {
+    ...heal, id: 'invisibility-druid', manaCost: 440, minLevel: 35,
+    effect: { kind: 'invisible', durationMs: 200_000 },
+  };
+  const paralyzeRune: Supply = {
+    id: 'paralyze-rune', name: 'Paralyze Rune', price: 700, group: 'support',
+    groupCooldownMs: 2_000, cooldownMs: 6_000, requires: { level: 54, magicLevel: 18 },
+    effect: {
+      kind: 'condition', target: 'enemy', range: 3,
+      condition: {
+        key: 'speed', merge: 'strongest', durationMs: 6_000,
+        effect: { kind: 'speed', type: 'paralyze', formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 } },
+      },
+    },
+  };
+  /** A mira de um MONSTRO, com `speed`/`creatureId` — o que a runa de condição precisa. */
+  const monsterAim = (speed: number, distance = 1) => ({
+    distance,
+    targets: [{ armor: 0, dodgeChance: 0, creatureId: 'm:1', speed }],
+  });
+  const scaling: SpellScaling = { skillLevel: 20, powerScale: 1 };
+
+  it('Invisibility devolve a condição `invisible` no LANÇADOR, sem curar nem gastar sorteio', () => {
+    const caster = hero({ mana: 500, level: 40 });
+    const result = castSpell(caster, invisibility, null, 1_000, combat, rng(), scaling);
+    expect(result).toMatchObject({
+      ok: true, healed: 0, damage: 0, hits: [],
+      condition: { key: 'invisible', spellId: 'invisibility-druid', expiresAtMs: 201_000 },
+    });
+    expect(caster.mana).toBe(60); // 500 - 440 (§4.4, `invisibility.manaCost`).
+  });
+
+  it('Invisibility recusa sem mana — 440 é mais que o hero de teste tem por padrão', () => {
+    const caster = hero({ mana: 100, level: 40 });
+    const result = castSpell(caster, invisibility, null, 0, combat, rng(), scaling);
+    expect(result).toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('Paralyze Rune mira o MONSTRO: devolve a condição `speed` com o alvo dele, não o do usuário', () => {
+    const user = hero({ gold: 1_000, level: 60 });
+    const result = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 1_000,
+    );
+    expect(result).toMatchObject({
+      ok: true, healed: 0, damage: 0, hits: [], goldSpent: 700,
+      condition: { key: 'speed', targetId: 'm:1', sourceId: 'hero' },
+    });
+    // baseSpeed 220, formula (-1,0,-1,0): min=max=40-220=-180, speedDelta antes do piso
+    // = -180-220 = -400, piso 40-220=-180 vence — a mesma matemática de `conditions.test.ts`.
+    expect((result as { ok: true; condition?: { speedPercent?: number } }).condition?.speedPercent)
+      .toBeCloseTo((-180 / 220) * 100);
+  });
+
+  it('Paralyze Rune recusa sem alvo, como a runa de ataque', () => {
+    const user = hero({ gold: 1_000, level: 60 });
+    const result = useSupply(user, paralyzeRune, null, combat, rng(), scaling, undefined, undefined, 1_000);
+    expect(result).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+  });
+
+  it('Paralyze Rune tem cooldown PRÓPRIO de 6s, além do grupo de 2s (#592)', () => {
+    const user = hero({ gold: 10_000, level: 60 });
+    const first = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 0,
+    );
+    expect(first.ok).toBe(true);
+    // 3s depois: o GRUPO (2s) já venceu, mas o livro PRÓPRIO (6s) ainda tranca — sem isto a
+    // runa recarregaria no ritmo do grupo, e o #592 existe exatamente para essa diferença.
+    const second = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 3_000,
+    );
+    expect(second).toMatchObject({ ok: false, reason: 'on-cooldown' });
+    const third = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 6_000,
+    );
+    expect(third.ok).toBe(true);
+  });
+});
+
 describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
   it('debita o preço do delta da sessão e diz quanto gastou', () => {
     const user = hero({ health: 50, gold: 100 });
@@ -657,6 +736,74 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
     // `condition` — não há nada para o ruleset agendar na fila de eventos.
     expect((result as { condition?: unknown }).condition).toBeUndefined();
     expect(caster.mana).toBe(1_000 - 50);
+  });
+
+  describe('alvo de party e custo escalado (#588: Heal/Protect/Enchant/Train Party)', () => {
+    const healParty: Spell = {
+      ...heal, id: 'heal-party', manaCost: { kind: 'party-scaled', base: 120, decay: 0.9 },
+      effect: {
+        kind: 'heal-over-time', amount: 20, intervalMs: 2_000, durationMs: 120_000, target: 'party', range: 36,
+      },
+    };
+    const protectParty: Spell = {
+      ...heal, id: 'protect-party', manaCost: { kind: 'party-scaled', base: 90, decay: 0.9 },
+      effect: {
+        kind: 'buff', durationMs: 120_000, skillDeltas: { shielding: 3 }, target: 'party', range: 36,
+      },
+    };
+
+    it('refuses "no-target" with nobody else in range — the lone caster never pays', () => {
+      const caster = hero({ level: 50, mana: 1_000 });
+      // `partyTargets: []` é "colhido, e ninguém além do lançador está no alcance" — o
+      // MESMO "No party members in range" do Canary com `tmp <= 1`.
+      expect(castSpell(caster, healParty, null, 0, combat, rng(), undefined, undefined, undefined, []))
+        .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      expect(castSpell(caster, healParty, null, 0, combat, rng(), undefined, undefined, undefined, [caster]))
+        .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      // Mana intocada: a recusa vem ANTES do débito.
+      expect(caster.mana).toBe(1_000);
+    });
+
+    it('refuses "no-target" when partyTargets is absent — a non-party call never pays either', () => {
+      const caster = hero({ level: 50, mana: 1_000 });
+      expect(castSpell(caster, healParty, null, 0, combat, rng())).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+      expect(caster.mana).toBe(1_000);
+    });
+
+    it('charges the Canary formula, scaled by affectedCount — not the flat base', () => {
+      const caster = hero({ level: 50, mana: 1_000 });
+      const ally1 = hero({ level: 50, mana: 1_000 });
+      const ally2 = hero({ level: 50, mana: 1_000 });
+      // n = 3: ceil((0.9^2 * 120) * 3) = 292 — não os 120 do `base` de exibição.
+      const result = castSpell(
+        caster, healParty, null, 0, combat, rng(), undefined, undefined, undefined, [caster, ally1, ally2],
+      );
+      expect(result.ok).toBe(true);
+      expect(caster.mana).toBe(1_000 - 292);
+    });
+
+    it('applies the SAME condition to every affected member, and only to them', () => {
+      // O CHAMADOR (hunt.ts) é quem aplica a condição a cada membro — `castSpell` só a
+      // DEVOLVE, uma vez, para quem chama replicar. Aqui confere-se que a condição devolvida
+      // carrega os números certos (Protect Party: shielding +3, 2 minutos).
+      const caster = hero({ level: 50, mana: 1_000 });
+      const ally = hero({ level: 50, mana: 1_000 });
+      const result = castSpell(
+        caster, protectParty, null, 10_000, combat, rng(), undefined, undefined, undefined, [caster, ally],
+      );
+      expect(result.ok && result.condition).toEqual({
+        key: 'buff', spellId: 'protect-party', expiresAtMs: 130_000, skillDeltas: { shielding: 3 },
+      });
+    });
+
+    it('a plain numeric manaCost ignores affectedCount entirely', () => {
+      // `partyTargets` presente mas o efeito não é `target: 'party'`: nenhuma checagem de
+      // party roda, e o custo é o de sempre.
+      const caster = hero({ level: 50, mana: 1_000 });
+      const result = castSpell(caster, heal, null, 0, combat, rng(), undefined, undefined, undefined, [caster]);
+      expect(result.ok).toBe(true);
+      expect(caster.mana).toBe(1_000 - 20);
+    });
   });
 
   it('a self-origin shape needs no range and no primary distance; the posture scales the spell hit', () => {
@@ -1670,5 +1817,145 @@ describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
       // min = 10 + 40×1.403 + 8 = 74; max = 10 + 40×2.203 + 13 = 111.
       expect(result.hits[0]).toBe(normalRandomInt(clone, 74, 111));
     }
+  });
+});
+
+describe('castSpell — conjuração (#594, ADR 0044)', () => {
+  const avalancheConjure: Spell = {
+    id: 'conjure-avalanche-rune', name: 'Avalanche Rune', manaCost: 530, soulCost: 3,
+    cooldownMs: 2_000, minLevel: 30,
+    effect: { kind: 'conjure', supplyId: 'avalanche-rune', charges: 4, blankPrice: 10 },
+  };
+  const arrowConjure: Spell = {
+    id: 'conjure-arrow', name: 'Conjure Arrow', manaCost: 100, soulCost: 1,
+    cooldownMs: 2_000, minLevel: 13,
+    effect: { kind: 'conjure', ammunitionId: 'arrow', charges: 10, blankPrice: 0 },
+  };
+
+  it('credita as cargas no ESTOQUE do próprio lançador, e debita mana, alma e a runa em branco', () => {
+    const caster = hero({ mana: 530, soul: 3, gold: 10, level: 30 });
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+
+    expect(result).toMatchObject({ ok: true, healed: 0, damage: 0, goldSpent: 10 });
+    expect(caster.mana).toBe(0);
+    expect(caster.soul).toBe(0);
+    expect(balanceOf(caster)).toBe(0);
+    expect(caster.supplyStock.get('avalanche-rune')).toBe(4);
+    // A conjuração NUNCA cria item físico (ADR 0044 decisão 1) — o estoque de munição
+    // permanece vazio, e a runa só existe como carga abstrata.
+    expect(caster.ammunitionStock.size).toBe(0);
+  });
+
+  it('SOMA no estoque existente, em vez de sobrescrever — duas conjurações acumulam', () => {
+    const caster = hero({ mana: 1_060, soul: 6, gold: 20, level: 30 });
+    castSpell(caster, avalancheConjure, null, 0, combat, rng());
+    castSpell(caster, avalancheConjure, null, 2_000, combat, rng());
+    expect(caster.supplyStock.get('avalanche-rune')).toBe(8);
+  });
+
+  it('recusa sem alma, e não desconta mana nem gold — a mesma regra da mana (#593)', () => {
+    const caster = hero({ mana: 530, soul: 2, gold: 10, level: 30 });
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+
+    expect(result).toEqual({ ok: false, reason: 'not-enough-soul', retryInMs: 0 });
+    expect(caster.mana).toBe(530);
+    expect(caster.soul).toBe(2);
+    expect(balanceOf(caster)).toBe(10);
+    expect(caster.supplyStock.size).toBe(0);
+  });
+
+  it('recusa sem gold para a runa em branco — nem mana nem alma saem, e nada é creditado', () => {
+    const caster = hero({ mana: 530, soul: 3, gold: 9, level: 30 });
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+
+    expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+    expect(caster.mana).toBe(530);
+    expect(caster.soul).toBe(3);
+    expect(balanceOf(caster)).toBe(9);
+    expect(caster.supplyStock.size).toBe(0);
+  });
+
+  it('a conjuração de munição não gasta gold nenhum — `blankId` zero no Canary', () => {
+    const caster = hero({ mana: 100, soul: 1, gold: 0, level: 13 });
+    const result = castSpell(caster, arrowConjure, null, 0, combat, rng());
+
+    expect(result).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(balanceOf(caster)).toBe(0);
+    expect(caster.ammunitionStock.get('arrow')).toBe(10);
+    expect(caster.supplyStock.size).toBe(0);
+  });
+
+  it('não cura, não causa dano e não consome nenhum sorteio do Rng — quantidade é FIXA', () => {
+    const caster = hero({ mana: 530, soul: 3, gold: 10, level: 30 });
+    const source = rng();
+    const before = source.getState();
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, source);
+
+    expect(result).toMatchObject({ ok: true, healed: 0, damage: 0, hits: [] });
+    expect(source.getState()).toEqual(before);
+  });
+
+  it('respeita o cooldown/grupo como qualquer magia — a segunda tentativa no mesmo instante recusa', () => {
+    const caster = hero({ mana: 1_060, soul: 6, gold: 20, level: 30 });
+    castSpell(caster, avalancheConjure, null, 0, combat, rng());
+    const second = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+    expect(second).toMatchObject({ ok: false, reason: 'on-cooldown' });
+    expect(caster.supplyStock.get('avalanche-rune')).toBe(4);
+  });
+});
+
+describe('useSupply — runa de campo e Destroy Field (#591)', () => {
+  const groundAim = (point: { x: number; y: number; z: number }, distance = 3) => ({
+    distance, targets: [], point,
+  });
+  const fireFieldRune: Supply = {
+    id: 'fire-field-rune', name: 'Fire Field Rune', price: 20, group: 'attack', groupCooldownMs: 1_000, requires: {},
+    effect: {
+      kind: 'field', range: 8,
+      field: {
+        id: 'player-fire-field', durationMs: 20_000,
+        shape: { shape: 'point' },
+        condition: {
+          key: 'burning', merge: 'strongest', durationMs: 20_000,
+          effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 2, intervalMs: 10_000, damage: 20 }], damageType: 'fire' },
+        },
+      },
+    },
+  };
+  const destroyFieldRune: Supply = {
+    id: 'destroy-field-rune', name: 'Destroy Field', price: 10, group: 'support', groupCooldownMs: 1_000, requires: {},
+    effect: { kind: 'destroy-field', range: 5 },
+  };
+
+  it('devolve o FieldSpec e o tile — não aplica nada sozinho (o ruleset é quem planta)', () => {
+    const result = useSupply(hero({ gold: 100 }), fireFieldRune, groundAim({ x: 2, y: 2, z: 7 }));
+    if (!result.ok) throw new Error('esperava usar a runa');
+    expect(result.field).toEqual({ spec: fireFieldRune.effect.kind === 'field' ? fireFieldRune.effect.field : undefined, at: { x: 2, y: 2, z: 7 } });
+    expect(result.goldSpent).toBe(20);
+  });
+
+  it('sem mira (`aim` null ou sem `point`) recusa `no-target`, sem debitar', () => {
+    const noAim = useSupply(hero({ gold: 100 }), fireFieldRune, null);
+    expect(noAim).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    const noPoint = useSupply(hero({ gold: 100 }), fireFieldRune, { distance: 1, targets: [] });
+    expect(noPoint).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+  });
+
+  it('fora do alcance recusa `out-of-range`, sem debitar', () => {
+    const result = useSupply(hero({ gold: 100 }), fireFieldRune, groundAim({ x: 9, y: 9, z: 7 }, 9));
+    expect(result).toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+  });
+
+  it('sem gold recusa `not-enough-gold`, e nada é debitado', () => {
+    const caster = hero({ gold: 5 });
+    const result = useSupply(caster, fireFieldRune, groundAim({ x: 2, y: 2, z: 7 }));
+    expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+  });
+
+  it('Destroy Field devolve o TILE mirado — a presença de campo é conferida por quem chama, não aqui', () => {
+    const result = useSupply(hero({ gold: 100 }), destroyFieldRune, groundAim({ x: 4, y: 4, z: 7 }, 4));
+    if (!result.ok) throw new Error('esperava usar a runa');
+    expect(result.destroyFieldAt).toEqual({ x: 4, y: 4, z: 7 });
+    expect(result.goldSpent).toBe(10);
   });
 });

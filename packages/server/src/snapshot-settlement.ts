@@ -128,6 +128,9 @@ export async function settleSnapshotAsReceipt(
     ...(owner === undefined ? {} : { storages: owner.storages ?? {} }),
     // Comida ativa (#726, ADR 0049 decisão 5), pela mesma regra do estoque acima.
     ...(owner === undefined ? {} : { fedMs: owner.fedMs ?? 0 }),
+    // As bênçãos (#570, ADR 0052): ABSOLUTO, nunca gateado por zero — a morte zera DENTRO da
+    // sessão, e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login.
+    ...(owner === undefined ? {} : { blessings: owner.blessings ?? 0 }),
     // Vocação e o que a sessão criou (#154): sem isto, um item equipado numa sessão liquidada
     // por fora se perdia, e a arma de vocação com ele.
     ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),

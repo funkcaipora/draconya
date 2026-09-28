@@ -239,6 +239,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // A munição escolhida por família (#152): `null` é "nenhuma", e a tela mostra o que veio.
         ammo: message.ammo,
         vocationId: message.vocationId,
+        // Promovido (#566, ADR 0042 decisão 1): a tela troca o nome exibido pelo
+        // `promotion.name` da vocação quando `true`.
+        promoted: message.promoted,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
         soul: message.soul,
@@ -358,6 +361,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, bestiary: message.counts }));
       return;
 
+    case 'blessings':
+      // O BITMASK inteiro (#570, ADR 0052) — nunca um delta. Compra e consumo na morte chegam
+      // pela mesma mensagem, e a tela resolve os nomes pelo catálogo (invariante 6).
+      hud.set((state) => ({ ...state, blessings: message.mask }));
+      return;
+
     case 'bot-config-result':
       // A resposta é da TELA do bot, não do chat: ela precisa saber se o que o jogador escreveu
       // virou verdade, e uma recusa não pode descartar o que ele digitou.
@@ -465,6 +474,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
         vocationId: message.self.vocationId,
+        promoted: message.self.promoted,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
         soul: message.self.soul,

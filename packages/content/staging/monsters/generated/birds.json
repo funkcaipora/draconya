@@ -96,6 +96,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.28,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -228,6 +232,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.15,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -374,6 +382,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.48,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -521,6 +533,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.59,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -763,6 +779,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,

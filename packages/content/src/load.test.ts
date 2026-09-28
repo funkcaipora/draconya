@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { floorChangeAt, isBlocked } from './map.js';
-import { BOT_CATEGORIES, NEUTRAL_RATES } from './schemas.js';
+import { BOT_CATEGORIES, manaCostDisplayOf, NEUTRAL_RATES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -55,6 +55,13 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
+  it('carrega a Boosted Creature real: vira à meia-noite UTC (#615)', () => {
+    // Opcional no `buildContent` (fixture): sem ele o `jobs` não sorteia nada. Mutação que
+    // mata: apagar `boosted/` de `load.ts`.
+    const content = loadContent(DATA);
+    expect(content.boosted?.rolloverHourUtc).toBe(0);
+  });
+
   it('carrega a party real, e todo item do repositório tem preço de venda (#188)', () => {
     // O multiplicador de XP saiu do conteúdo no #525 (ADR 0027 emenda 2026-09-24/25) — é
     // `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary. E `value`
@@ -86,14 +93,16 @@ describe('loadContent', () => {
     expect(config?.potion.map((rule) => rule.do)).toEqual([{ kind: 'supply', supplyId: 'health-potion' }]);
     expect(config?.attack).toEqual([]);
     // E cada `defaultConfigByVocation` aponta uma magia REAL de mana acessível no level em que a
-    // vocação é escolhida (level 8, §7.4) — nunca um id que o #596 removeu.
+    // vocação é escolhida (level 8, §7.4) — nunca um id que o #596 removeu. `manaCostDisplayOf`
+    // (#588): magia de party tem `manaCost` escalado pelo tamanho da party, não um número — o
+    // que se compara aqui é o custo de EXIBIÇÃO (o `base`), como o catálogo mostra.
     for (const [vocationId, vocationConfig] of Object.entries(content.bot.defaultConfigByVocation ?? {})) {
       for (const slot of vocationConfig.sets[0]?.slots ?? []) {
         if (slot?.do.kind !== 'spell') continue;
         const spell = content.spells.get(slot.do.spellId);
         expect(spell, `${vocationId}: ${slot.do.spellId}`).toBeDefined();
         expect(content.progression.startingMana, `${vocationId}: ${slot.do.spellId}`)
-          .toBeGreaterThanOrEqual(spell?.manaCost ?? Infinity);
+          .toBeGreaterThanOrEqual(spell === undefined ? Infinity : manaCostDisplayOf(spell.manaCost));
       }
     }
   });
@@ -140,23 +149,28 @@ describe('loadContent', () => {
     const map = content.maps.get('rat-cellars');
     const route = content.routes.get('rat-cellars');
     // O bueiro real (FUN-123, ADR 0025): importado, um andar (o 8), e a rota traçada por
-    // `pnpm route:trace` sobre ele — um laço de 160 tiles com um spawn por corredor de rato.
+    // `pnpm route:trace` sobre ele — um laço de 160 tiles. Os 56 pontos de spawn (#586) são os
+    // reais do recorte do Canary, não um por corredor escolhido à mão.
     expect(map?.source?.file).toBe('otservbr.otbm');
     expect(map?.width).toBe(118);
     expect(map?.height).toBe(80);
     expect(map?.z).toBe(8);
     expect(route?.tiles.length).toBe(160);
-    expect(route?.spawnPoints.length).toBe(14);
+    expect(route?.spawnPoints.length).toBe(56);
   });
 
-  it('a Rat Cellars é o bueiro real, com um rato por ponto de spawn (#583), o rato do Tibia e o queijo (FUN-123)', () => {
+  it('a Rat Cellars é o bueiro real, com os spawns reais do Canary (#586), o rato do Tibia e o queijo (FUN-123)', () => {
     const content = loadContent(DATA);
     const hunt = content.hunts.get('rat-cellars');
     const route = content.routes.get('rat-cellars');
-    // Fim do pull por dificuldade (#583, ADR 0039): os 14 pontos da rota nascem TODOS, cada um
-    // declarando o próprio `rat` — não há mais `difficulties`/`monsterCount` para escolher
-    // quantos nascem.
-    expect(route?.spawnPoints.every((point) => point.monsterId === 'rat')).toBe(true);
+    // Fim do pull por dificuldade (#583, ADR 0039), com a composição REAL do Canary desde o
+    // #586: o recorte não é monotemático — rato é a maioria (48/56), mas o corte também tem
+    // spider, rabbit, bug e cave-rat, exatamente como `otservbr-monster.xml` declara.
+    const monsterIds = new Set(
+      route?.spawnPoints.map((point) => point.monsterId).filter((id) => id !== undefined),
+    );
+    expect(monsterIds).toEqual(new Set(['rat', 'spider', 'rabbit', 'bug', 'cave-rat']));
+    expect(route?.spawnPoints.filter((point) => point.monsterId === 'rat')).toHaveLength(48);
     expect(hunt?.ambience).toBe('cavern');
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
@@ -178,7 +192,7 @@ describe('loadContent', () => {
     expect(content.items.get('cheese')?.appearanceId).toBe(3607);
   });
 
-  it('a Rotworm Caves é a caverna de Darashia do Huntera, com os três pulls e o rotworm do Canary (#515)', () => {
+  it('a Rotworm Caves é a caverna de Darashia do Huntera, com os spawns reais do Canary (#586) e o rotworm do Canary (#515)', () => {
     const content = loadContent(DATA);
     const map = content.maps.get('rotworm-caves');
     const route = content.routes.get('rotworm-caves');
@@ -187,11 +201,18 @@ describe('loadContent', () => {
     expect(map?.height).toBe(73);
     expect(map?.z).toBe(8);
     expect(route?.tiles.length).toBe(444);
-    expect(route?.spawnPoints.length).toBe(13);
+    expect(route?.spawnPoints.length).toBe(42);
     // A caixa importada tem duas componentes andáveis (Huntera Parte VI §38): a principal, de
     // 823 tiles, e um corredor isolado de 79 na borda direita (a partir de x === 78). A rota
     // nunca visita o corredor isolado — só a componente principal.
     expect(route?.tiles.every((t) => t.x < 80)).toBe(true);
+    // Composição real do Canary (#586): não é só rotworm — 35 rotworm e 7 terramite.
+    const monsterIds = new Set(
+      route?.spawnPoints.map((point) => point.monsterId).filter((id) => id !== undefined),
+    );
+    expect(monsterIds).toEqual(new Set(['rotworm', 'terramite']));
+    expect(route?.spawnPoints.filter((point) => point.monsterId === 'rotworm')).toHaveLength(35);
+    expect(route?.spawnPoints.filter((point) => point.monsterId === 'terramite')).toHaveLength(7);
     const rotworm = content.monsters.get('rotworm');
     expect(rotworm?.class).toBe('vermin');
     // data-otservbr-global/monster/vermins/rotworm.lua (Canary local 47dfd51): attack 0-40,
@@ -400,7 +421,20 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // Toda magia e todo supply do repositório TÊM efeito. Não é regra do carregador — magia
     // muda é válida —, é o estado do conteúdo hoje, e a asserção existe para a magia nova
     // que nascer sem efeito ser uma decisão, e não um esquecimento.
+    //
+    // As 14 magias de conjuração do #594 (ADR 0044) ainda não têm entrada: a auditoria visual
+    // (CMB-09, `docs/combat-presentation-audit.md`) já está bloqueada pela biblioteca parcial
+    // (nenhum sprite de efeito/projétil tem PNG nesta máquina) e não foi feita para elas — magia
+    // MUDA é válida, e ficam de fora desta asserção até a auditoria acontecer.
+    const MUTE_UNTIL_PRESENTATION_AUDIT = new Set([
+      'conjure-avalanche-rune', 'conjure-explosion-rune-druid', 'conjure-explosion-rune-sorcerer',
+      'conjure-great-fireball-rune', 'conjure-heavy-magic-missile-rune-druid',
+      'conjure-heavy-magic-missile-rune-sorcerer', 'conjure-stone-shower-rune',
+      'conjure-sudden-death-rune', 'conjure-thunderstorm-rune', 'conjure-intense-healing-rune',
+      'conjure-ultimate-healing-rune', 'conjure-arrow', 'conjure-sniper-arrow', 'conjure-power-bolt',
+    ]);
     for (const id of content.spells.keys()) {
+      if (MUTE_UNTIL_PRESENTATION_AUDIT.has(id)) continue;
       expect(content.appearances?.spells[id]?.effect, `spell "${id}"`).toBeGreaterThan(0);
     }
     for (const id of content.supplies.keys()) {
@@ -501,18 +535,16 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
-  it('blessing-charge é o ÚNICO item consumable NÃO-EMPILHÁVEL, sem group nem restock (ADR 0026 d.3)', () => {
+  it('a comida é o único consumable, EMPILHÁVEL — a carga de bênção saiu no #570 (ADR 0026 d.3, emenda)', () => {
     const content = loadContent(DATA);
     const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
-    // A comida (#726, ADR 0049 d.5) entrou como `consumable` também — cheese, ham, meat,
-    // dragon-ham, green-mushroom —, mas EMPILHÁVEL, ao contrário da carga de bênção.
+    // `blessing-charge` foi REMOVIDO pelo #570: bênção é serviço de Cidade (ADR 0052), nunca
+    // item de mochila. Sobra só a comida (#726, ADR 0049 d.5) — cheese, ham, meat, dragon-ham,
+    // green-mushroom —, todas EMPILHÁVEIS.
     expect(consumables.map((item) => item.id).sort()).toEqual(
-      ['blessing-charge', 'cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
+      ['cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
     );
-    const blessing = content.items.get('blessing-charge');
-    expect(blessing?.stackable).toBe(false);
-    expect(blessing?.effect).toEqual({ kind: 'blessing' });
-    expect(blessing?.weight).toBeGreaterThan(0);
+    expect(content.items.has('blessing-charge')).toBe(false);
     const cheese = content.items.get('cheese');
     expect(cheese?.stackable).toBe(true);
     expect(cheese?.effect).toEqual({ kind: 'food', durationMs: 108_000 });
@@ -766,8 +798,8 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 
 /** As excluídas por nome (ADR 0026 decisão 5) — em kebab-case, como um id seria. */
 const EXCLUDED_SPELLS = [
-  'invisible', 'cancel-invisibility', 'creature-illusion',
-  // Cure Poison/Burning/Electrification/Bleeding/Curse entraram no #590 — a cura de condição
+  'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
+  'creature-illusion',
   // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
   // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
   // `spellEffectSchema.damage-over-time` não modela (um valor fixo só). Fica fora, reportada na
@@ -776,9 +808,16 @@ const EXCLUDED_SPELLS = [
   // as trouxe. `challenge`/`chivalrous-challenge` (#589) também saíram — ver
   // `VOCATION_SPELLS.knight`, acima.
   'curse',
-  'shield-bash', 'shield-slam', 'train-party', 'protect-party', 'enchant-party',
-  'heal-party', 'elemental-synthesis', 'shared-conservation',
-  'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
+  // Invisibility/Cancel Invisibility entraram no #592 (`invisibility-druid`,
+  // `invisibility-sorcerer`, `cancel-invisibility`) — a condição `invisible` (CMB-07) e o
+  // dispel em área agora existem, e por isso saem desta allowlist.
+  // Heal/Protect/Enchant/Train Party entraram no #588 (alvo de party e custo escalado) — saem
+  // da lista de excluídas, e a golden table acima não as cobre porque `manaCost` delas é
+  // `party-scaled` (objeto, não número): ver o teste dedicado mais abaixo.
+  'shield-bash', 'shield-slam', 'elemental-synthesis', 'shared-conservation',
+  // 'conjure-arrow' saiu daqui na #594 (ADR 0044): a conjuração de munição do Paladin existe
+  // agora (`packages/content/data/spells/conjure-arrow.json`), no modelo de estoque abstrato.
+  'arrow-call', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
 ];
@@ -811,7 +850,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 20 + 15 + 29 + 31 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 21 + 20 + 37 + 40 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -825,15 +864,25 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // 17−2=15; Sorcerer +5 (Ultimate Flame Strike, Ignite, Electrify, Strong Haste, Cancel
     // Magic Shield) → 29; Druid −1 (Forked Thorns removida) +5 (Ultimate Ice/Terra Strike,
     // Envenom, Strong Haste, Cancel Magic Shield) → 27+4=31. As três genéricas pré-vocação
-    // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`.
+    // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`. #592
+    // acrescentou: Cancel Invisibility no Paladin (15+1=16), Invisibility no Sorcerer (29+1=30)
+    // e no Druid (31+1=32). #588 acrescentou uma magia de PARTY por vocação: Train Party
+    // (Knight, 20+1=21), Protect Party (Paladin, 16+1=17), Enchant Party (Sorcerer, 30+1=31),
+    // Heal Party (Druid, 32+1=33) — a golden table acima não as cobre (`manaCost` delas é
+    // `party-scaled`, não um número); ver o teste dedicado mais abaixo.
+    // #594 (conjuração, ADR 0044) acrescentou por cima disso: Paladin +3 (Conjure Arrow/Sniper
+    // Arrow/Power Bolt, 17→20), Sorcerer +5 (Great Fireball, Sudden Death, Thunderstorm, a
+    // metade Sorcerer de Explosion e de Heavy Magic Missile, 31→36), Druid +6 (Avalanche,
+    // Intense/Ultimate Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic
+    // Missile, 33→39); Knight não ganhou conjuração nenhuma nesta issue.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(20);
-    expect(byVocation.get('paladin')).toBe(15);
-    expect(byVocation.get('sorcerer')).toBe(29);
-    expect(byVocation.get('druid')).toBe(31);
+    expect(byVocation.get('knight')).toBe(21);
+    expect(byVocation.get('paladin')).toBe(20);
+    expect(byVocation.get('sorcerer')).toBe(37);
+    expect(byVocation.get('druid')).toBe(40);
     expect(byVocation.get(undefined)).toBe(1);
   });
 
@@ -861,6 +910,44 @@ describe('the vocation spell catalogues (#156–#159)', () => {
       'strike', 'blast', 'heal', 'divine-defiance', 'divine-barrage', 'ethereal-barrage', 'forked-thorns',
     ]) {
       expect(content.spells.has(removed), removed).toBe(false);
+    }
+  });
+
+  it('the four party spells carry the Canary numbers (#588)', () => {
+    // `data/scripts/spells/party/*.lua`, main, 2026-09-28: level 32, cooldown/groupCooldown
+    // 2000 ms, grupo "support", `manaCost` escalado (`party-scaled`) com o `base`/`decay` de
+    // cada script — nunca um número fixo, e nunca a comparação direta da golden table acima
+    // (que espera `toBe(row.mana)`, um NÚMERO).
+    const rows: Record<string, {
+      vocationId: string; base: number; decay: number; effect: 'heal-over-time' | 'buff';
+      skillDeltas?: Record<string, number>; amount?: number;
+    }> = {
+      'heal-party': { vocationId: 'druid', base: 120, decay: 0.9, effect: 'heal-over-time', amount: 20 },
+      'protect-party': { vocationId: 'paladin', base: 90, decay: 0.9, effect: 'buff', skillDeltas: { shielding: 3 } },
+      'enchant-party': { vocationId: 'sorcerer', base: 120, decay: 0.9, effect: 'buff', skillDeltas: { magic: 1 } },
+      'train-party': {
+        vocationId: 'knight', base: 60, decay: 0.9, effect: 'buff',
+        skillDeltas: { axe: 3, club: 3, sword: 3, fist: 3, distance: 3 },
+      },
+    };
+    for (const [id, row] of Object.entries(rows)) {
+      const spell = content.spells.get(id);
+      expect(spell, id).toBeDefined();
+      if (spell === undefined) continue;
+      expect(spell.vocationId, id).toBe(row.vocationId);
+      expect(spell.minLevel, id).toBe(32);
+      expect(spell.group, id).toBe('support');
+      expect(spell.groupCooldownMs, id).toBe(2000);
+      expect(spell.cooldownMs, id).toBe(2000);
+      expect(spell.manaCost, id).toEqual({ kind: 'party-scaled', base: row.base, decay: row.decay });
+      expect(spell.effect.kind, id).toBe(row.effect);
+      expect((spell.effect as { target?: string }).target, id).toBe('party');
+      expect((spell.effect as { range?: number }).range, id).toBe(36);
+      expect((spell.effect as { durationMs?: number }).durationMs, id).toBe(120_000);
+      if (row.amount !== undefined) expect((spell.effect as { amount?: number }).amount, id).toBe(row.amount);
+      if (row.skillDeltas !== undefined) {
+        expect((spell.effect as { skillDeltas?: Record<string, number> }).skillDeltas, id).toEqual(row.skillDeltas);
+      }
     }
   });
 
@@ -1310,6 +1397,18 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
     expect(catalogue.length).toBeGreaterThan(0);
     for (const entry of catalogue) {
       expect(JSON.stringify(entry), entry.id).not.toMatch(/"shape":"wave"/);
+    }
+  });
+});
+
+describe('alma da vocação promovida (#566 + #593)', () => {
+  it('as quatro vocações promovidas carregam o teto e a cadência de alma do Canary (200 / 15 s)', () => {
+    const content = loadContent(DATA);
+    for (const id of ['knight', 'paladin', 'sorcerer', 'druid']) {
+      const vocation = content.vocations.get(id);
+      expect(vocation?.soulMax).toBe(100);
+      expect(vocation?.promotion?.soulMax).toBe(200);
+      expect(vocation?.promotion?.soulGainTicksMs).toBe(15_000);
     }
   });
 });

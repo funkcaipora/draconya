@@ -99,6 +99,15 @@ const CreatureState = z.object({
    * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
    */
   colors: OutfitColors.optional(),
+  /**
+   * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
+   * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
+   * isto, e um cliente que exigisse recusaria a mensagem inteira em silêncio. Ausente é "não é
+   * invocação de personagem" — o de sempre, inclusive para toda invocação de MONSTRO (#546),
+   * que o cliente não precisa marcar. O cliente usa isto só para destacar "sua invocação" —
+   * nunca para decidir dono de loot, alvo ou qualquer resultado (invariante 4).
+   */
+  masterId: z.string().optional(),
 });
 
 /** Os agregados da sessão — o que o §16.2 chama de "quanto rendeu". */
@@ -366,6 +375,17 @@ export const C2S_SCHEMAS = {
    * `instanceId` nesta entrega — sem gatilho de UI hoje (spec da #729, DT-04).
    */
   look: z.object({ position: Point }),
+  /**
+   * Promover a vocação (#566, ADR 0042 decisão 1). Sem payload: o cliente só pede; vocação
+   * escolhida, level ≥ 20, gold ≥ 20.000 e "ainda não promovido" são conferidos pelo servidor
+   * (invariante 4). `.strict()` porque não há campo nenhum para o cliente mandar.
+   */
+  'promote-vocation': z.object({}).strict(),
+  /**
+   * Comprar UMA bênção na Cidade (#570, ADR 0052 decisão 2). INTENÇÃO: só o id do catálogo
+   * (`content.blessings`); preço, saldo e "já tem esta bênção" são do servidor (invariante 4).
+   */
+  'buy-blessing': z.object({ blessingId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -552,6 +572,10 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('rows'), widths: z.array(z.number().int().positive()).min(1) }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+  /** Um tile só, no alvo (#591: runa de campo simples, Destroy Field). */
+  z.object({ shape: z.literal('point') }),
+  /** A fileira perpendicular centrada no alvo (#591: Fire/Poison/Energy Wall). */
+  z.object({ shape: z.literal('wall'), width: z.number().int().positive() }),
 ]);
 
 /** Uma faixa `[min, max]` de exibição (#524) — a poção do Tibia, que sorteia dentro dela sem escalar por level/ML. */
@@ -626,6 +650,8 @@ export const S2C_SCHEMAS = {
       level: z.number().int(), xp: z.number(),
       /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
       vocationId: z.string().nullable().default(null),
+      /** Promovido (#566, ADR 0042 decisão 1). `default(false)`: nó anterior manda sem. */
+      promoted: z.boolean().default(false),
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
@@ -1090,6 +1116,16 @@ export const S2C_SCHEMAS = {
       manaPerLevel: z.number().int().nonnegative(),
       capacityPerLevel: z.number().int().nonnegative(),
       startingWeaponItemId: z.string().min(1),
+      /**
+       * A promoção (#566, ADR 0042 decisão 1), para a tela de serviço da Cidade mostrar nome,
+       * level e preço antes de mandar `promote-vocation`. Ausente é vocação sem promoção (o
+       * conteúdo de teste) ou nó anterior a esta issue.
+       */
+      promotion: z.object({
+        name: z.string().min(1),
+        minLevel: z.number().int().nonnegative(),
+        price: z.number().int().nonnegative(),
+      }).optional(),
     })).default([]),
     /** O level da escolha (#154): a tela não pode ter o 8 em código. `default(0)`: nó anterior — sem diálogo. */
     vocationLevel: z.number().int().nonnegative().default(0),
@@ -1114,6 +1150,33 @@ export const S2C_SCHEMAS = {
       regen: z.object({
         healthPerSecond: z.number().nonnegative(),
         manaPerSecond: z.number().nonnegative(),
+      }),
+    }).optional(),
+    /**
+     * As sete bênçãos PvE (#570, ADR 0052): catálogo (nome, `order` — o bit — e `enhanced`) e
+     * o preço por level, para a tela de compra da Cidade calcular o valor localmente sem
+     * perguntar ao servidor a cada dígito do level. `.optional()`, como `progression` acima:
+     * conteúdo sem bênção/Cidade manda `catalogue` sem a chave, e a tela de compra não aparece.
+     */
+    blessings: z.object({
+      list: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        order: z.number().int().min(0).max(6),
+        enhanced: z.boolean(),
+      })),
+      pricing: z.object({
+        freeBelowLevel: z.number().int().nonnegative(),
+        flatUntilLevel: z.number().int().positive(),
+        flatPrice: z.number().int().nonnegative(),
+        highFromLevel: z.number().int().positive(),
+        midOffset: z.number().int().nonnegative(),
+        midMultiplier: z.number().int().positive(),
+        midEnhancedMultiplier: z.number().int().positive(),
+        highBase: z.number().int().nonnegative(),
+        highEnhancedBase: z.number().int().nonnegative(),
+        highMultiplier: z.number().int().positive(),
+        highEnhancedMultiplier: z.number().int().positive(),
       }),
     }).optional(),
   }),
@@ -1171,6 +1234,11 @@ export const S2C_SCHEMAS = {
       .default({ arrow: null, bolt: null }),
     /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
     vocationId: z.string().nullable().default(null),
+    /**
+     * Promovido (#566, ADR 0042 decisão 1). `default(false)`: nó `game` anterior manda sem, e
+     * o HUD mostra a vocação base — nunca uma promoção que não existiu.
+     */
+    promoted: z.boolean().default(false),
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
@@ -1317,6 +1385,11 @@ export const S2C_SCHEMAS = {
     id: z.string().min(1),
     appearanceId: z.number().int().positive(),
   }),
+  /**
+   * As bênçãos do personagem (#570, ADR 0052): o BITMASK — o cliente resolve os nomes pelo
+   * catálogo (`catalogue.blessings`, invariante 6). Só para o dono, como `slot-state`.
+   */
+  blessings: z.object({ mask: z.number().int().nonnegative() }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;
