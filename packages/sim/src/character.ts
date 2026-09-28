@@ -243,6 +243,12 @@ export interface CharacterState {
    * `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
    */
   readonly attackLockedUntil?: number;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
+   * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
+   */
+  readonly promoted?: boolean;
 }
 
 /** Ver `CharacterState.pendingManualAction`. */
@@ -263,6 +269,11 @@ export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly 
 
 /** Por que a vocação não foi escolhida (#154). Tipada: o jogador merece saber qual foi. */
 export type VocationRefusal = 'level-too-low' | 'already-chosen';
+
+/** Por que a promoção não aconteceu (#566, ADR 0042 decisão 1). Tipada, como o resto. */
+export type PromoteRefusal =
+  | 'no-vocation' | 'already-promoted' | 'level-too-low' | 'insufficient-gold' | 'not-promotable';
+export type PromoteResult = { readonly ok: true } | { readonly ok: false; readonly reason: PromoteRefusal };
 
 /**
  * Como uma peça do kit inicial acabou (#496). `equipped` vestiu; `in-backpack` coube no
@@ -379,6 +390,11 @@ export class CharacterRuntime {
    * A trava de stairhop (#554). Só `HuntRuleset#step` escreve — ver `CharacterState.attackLockedUntil`.
    */
   attackLockedUntil: number;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
+   * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
+   */
+  promoted: boolean;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -422,6 +438,7 @@ export class CharacterRuntime {
     this.blessings = state.blessings ?? 0;
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.attackLockedUntil = state.attackLockedUntil ?? 0;
+    this.promoted = state.promoted ?? false;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
@@ -569,6 +586,28 @@ export class CharacterRuntime {
     return equipped.ok ? 'equipped' : 'in-backpack';
   }
 
+  /**
+   * Promove a vocação escolhida (#566, ADR 0042 decisão 1). `vocation` é a do PRÓPRIO
+   * personagem (`this.vocationId`) — quem resolve isso é o chamador (`host.ts`, como em
+   * `chooseVocation`). `vocation.promotion` ausente é `not-promotable` (conteúdo de teste sem
+   * o bloco). `nowGold` é o saldo DISPONÍVEL — `gold + goldDelta` —, porque um gasto anterior
+   * na mesma sessão de Cidade já baixou o que sobra para promover.
+   *
+   * O preço sai por `goldDelta`, liquidado pelo MESMO canal que já debita venda de item
+   * (`#saveDurableReceipt`/`applyProgression` do `server`) — nenhum ledger novo (invariante 10).
+   */
+  promote(vocation: Vocation, nowGold: number): PromoteResult {
+    if (this.vocationId === null) return { ok: false, reason: 'no-vocation' };
+    if (this.promoted) return { ok: false, reason: 'already-promoted' };
+    const promotion = vocation.promotion;
+    if (promotion === undefined) return { ok: false, reason: 'not-promotable' };
+    if (this.level < promotion.minLevel) return { ok: false, reason: 'level-too-low' };
+    if (nowGold < promotion.price) return { ok: false, reason: 'insufficient-gold' };
+    this.promoted = true;
+    this.goldDelta -= promotion.price;
+    return { ok: true };
+  }
+
   getState(): CharacterState {
     return {
       id: this.id,
@@ -624,6 +663,7 @@ export class CharacterRuntime {
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
       ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
+      ...(this.promoted ? { promoted: true } : {}),
     };
   }
 

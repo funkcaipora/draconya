@@ -2737,6 +2737,25 @@ export const vocationSchema = z.object({
   soulMax: z.number().int().positive().default(100),
   soulGainTicksMs: z.number().int().positive().default(120_000),
   /**
+   * O bloco da vocação PROMOVIDA (#566, ADR 0042 decisão 1): `vocations.xml` ids 5–8 do Canary,
+   * comparados às bases 1–4, verificado contra o checkout local em 2026-09-28. `name` é o nome
+   * de exibição ("Elite Knight"); `regen` reescreve as taxas de vida/mana desta vocação quando
+   * `CharacterRuntime.promoted` é `true` — ausente cai no `regen` da base, normal. `soulMax`/
+   * `soulGainTicksMs` são os mesmos números do soul (#593): têm efeito só quando o consumidor do
+   * soul existir (ainda não mesclado) — até lá ficam prontos e ignorados, sem quebrar nada.
+   * `minLevel`/`price` são `data-otservbr-global/npc/king_tibianus.lua:194-204` (`level = 20`,
+   * `cost = 20000`) — o NPC-padrão de promoção, não o `emperor_kruzak.lua` (Monk-only).
+   * Opcional: vocação de conteúdo de teste não promove.
+   */
+  promotion: z.object({
+    name: z.string().min(1),
+    regen: regenSchema.optional(),
+    soulMax: z.number().int().positive().optional(),
+    soulGainTicksMs: z.number().int().positive().optional(),
+    minLevel: z.number().int().nonnegative(),
+    price: z.number().int().nonnegative(),
+  }).optional(),
+  /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.
    */

@@ -3182,11 +3182,11 @@ export class HuntRuleset implements Ruleset {
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
     // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
     const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
-    // `promoted` ainda não existe como estado do personagem (#566/ADR 0042) — o parâmetro é o
-    // ponto de extensão que a promoção vai acionar quando o estado existir (#569).
+    // Promovido (#566, ADR 0042 decisão 1) soma os 30% adicionais de redução, aditivos, nunca
+    // tetados — ver o comentário de `promotionReduction` em `progression.ts`.
     const penalty = applyDeathPenalty(
       character,
-      { premium },
+      { premium, promoted: character.promoted },
       this.#vocationOf(character),
       this.#options.progression,
       this.#options.skills,
@@ -5956,6 +5956,21 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * Teto e cadência de alma do personagem (#593 + #566): a vocação PROMOVIDA reescreve os dois
+   * (Canary: 100/120000 base, 200/15000 promovida) quando o conteúdo declara `promotion.soulMax`/
+   * `soulGainTicksMs`; sem vocação não há alma (`null`).
+   */
+  #soulParamsOf(member: CharacterRuntime): { readonly max: number; readonly gainTicksMs: number } | null {
+    const vocation = this.#vocationOf(member);
+    if (vocation === null) return null;
+    const promoted = member.promoted ? vocation.promotion : undefined;
+    return {
+      max: promoted?.soulMax ?? vocation.soulMax,
+      gainTicksMs: promoted?.soulGainTicksMs ?? vocation.soulGainTicksMs,
+    };
+  }
+
+  /**
    * O ganho passivo de alma (#593, `Player::onGainExperience` do Canary): com vocação escolhida,
    * alma abaixo do teto e esta XP (JÁ com bônus) ≥ o level que o personagem tinha ANTES do
    * ganho, (re)aplica `CONDITION_SOUL` por quatro minutos — um ponto a cada
@@ -5968,16 +5983,16 @@ const slots = bot.groups.get(group);
   #gainSoulFromExperience(
     session: Session, member: CharacterRuntime, experience: number, levelBeforeGain: number,
   ): void {
-    const vocation = this.#vocationOf(member);
-    if (vocation === null) return;
-    if (member.soul >= vocation.soulMax) return;
+    const soul = this.#soulParamsOf(member);
+    if (soul === null) return;
+    if (member.soul >= soul.max) return;
     if (experience < levelBeforeGain) return;
     this.#applyConditionTo(session, member, {
       key: SOUL_CONDITION_KEY,
       targetId: member.id,
       expiresAtMs: session.nowMs + SOUL_CONDITION_DURATION_MS,
       merge: 'refresh',
-      tick: { kind: 'soul', amount: 1, intervalMs: vocation.soulGainTicksMs },
+      tick: { kind: 'soul', amount: 1, intervalMs: soul.gainTicksMs },
     });
   }
 
@@ -6130,7 +6145,7 @@ const slots = bot.groups.get(group);
       // `soulMax` da vocação — sem uma, não há teto e o tique não faz nada (não deveria
       // acontecer: só `#grantPartyXp` aplica esta condição, e só com vocação escolhida).
       if (target instanceof CharacterRuntime) {
-        const soulMax = this.#vocationOf(target)?.soulMax;
+        const soulMax = this.#soulParamsOf(target)?.max;
         if (soulMax !== undefined) target.gainSoul(tick.amount, soulMax);
       }
       return;
@@ -9946,9 +9961,15 @@ const slots = bot.groups.get(group);
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
    * para todo mundo. Em pulsos desde #678.
+   *
+   * Promovido (#566, ADR 0042 decisão 1) lê o bloco `promotion.regen` da vocação quando ele
+   * existe — `vocations.xml` ids 5-8 regeneram mais rápido que as bases 1-4. Ausente o bloco
+   * (conteúdo de teste sem promoção), degrada para o `regen` normal, mesmo com `promoted: true`.
    */
   #regenOf(character: CharacterRuntime): Regen {
-    return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
+    const vocation = this.#vocationOf(character);
+    if (character.promoted && vocation?.promotion?.regen !== undefined) return vocation.promotion.regen;
+    return vocation?.regen ?? this.#options.progression.regen;
   }
 
   /**

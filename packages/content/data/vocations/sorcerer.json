@@ -35,5 +35,16 @@
     "multiplier": 1.26,
     "primaryShield": 2.0,
     "secondaryShield": 1.2
+  },
+  "promotion": {
+    "name": "Master Sorcerer",
+    "regen": {
+      "health": { "ticksMs": 12000, "amount": 1 },
+      "mana": { "ticksMs": 2000, "amount": 2 }
+    },
+    "soulMax": 200,
+    "soulGainTicksMs": 15000,
+    "minLevel": 20,
+    "price": 20000
   }
 }

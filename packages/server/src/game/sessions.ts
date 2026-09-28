@@ -259,6 +259,9 @@ export function characterFromTicket(
       xp: initialCharacter.xp,
       soul: initialCharacter.soul ?? 0,
       vocationId,
+      // Promovido (#566, ADR 0042 decisão 1): vem do ticket, como a vocação. Ausente é `false`
+      // no construtor de `CharacterRuntime` — o normal de quem nunca promoveu.
+      ...(initialCharacter.promoted === true ? { promoted: true } : {}),
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
       capacity: stats.capacity,

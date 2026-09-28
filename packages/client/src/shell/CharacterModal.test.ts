@@ -27,6 +27,17 @@ const CATALOGUE_WITHOUT_BESTIARY = {
   bestiary: undefined,
 } as unknown as Catalogue;
 
+const CATALOGUE_WITH_PROMOTION = {
+  ...CATALOGUE_WITH_BESTIARY,
+  vocations: [
+    {
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      startingWeaponItemId: 'steel-axe',
+      promotion: { name: 'Elite Knight', minLevel: 20, price: 20_000 },
+    },
+  ],
+} as unknown as Catalogue;
+
 async function render(): Promise<string> {
   const { prelude } = await prerender(createElement(CharacterModal, { onClose: () => {} }));
   return new Response(prelude).text();
@@ -119,5 +130,56 @@ describe('CharacterModal', () => {
 
     const html = await render();
     expect(html).not.toMatch(/guild|premium/i);
+  });
+
+  describe('promoção (#566, ADR 0042 decisão 1)', () => {
+    it('shows the service box with requirement and price when the vocation can promote', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 20, gold: 20_000, vocationId: 'knight', catalogue: CATALOGUE_WITH_PROMOTION,
+      }));
+
+      const html = await render();
+      expect(html).toContain('Promoção');
+      expect(html).toContain('Elite Knight');
+      expect(html).toContain('Level 20');
+      expect(html).toContain('20.000 gold');
+      expect(html).toContain('Promover');
+      expect(html).not.toContain('disabled');
+    });
+
+    it('disables the button below the level or gold requirement', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 19, gold: 20_000, vocationId: 'knight', catalogue: CATALOGUE_WITH_PROMOTION,
+      }));
+      const lowLevel = await render();
+      expect(lowLevel).toContain('disabled');
+
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 20, gold: 100, vocationId: 'knight', catalogue: CATALOGUE_WITH_PROMOTION,
+      }));
+      const poor = await render();
+      expect(poor).toContain('disabled');
+    });
+
+    it('hides the service box once promoted, and shows the promoted name instead', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 20, gold: 20_000, vocationId: 'knight', promoted: true,
+        catalogue: CATALOGUE_WITH_PROMOTION,
+      }));
+
+      const html = await render();
+      expect(html).not.toContain('Promoção');
+      expect(html).toContain('Elite Knight');
+      expect(html).not.toMatch(/>Knight ·/);
+    });
+
+    it('hides the box for a vocation without a promotion block', async () => {
+      hud.set(() => ({
+        ...INITIAL_HUD, level: 20, gold: 20_000, vocationId: 'knight', catalogue: CATALOGUE_WITH_BESTIARY,
+      }));
+
+      const html = await render();
+      expect(html).not.toContain('Promoção');
+    });
   });
 });

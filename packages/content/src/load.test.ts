@@ -1402,3 +1402,15 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
     }
   });
 });
+
+describe('alma da vocação promovida (#566 + #593)', () => {
+  it('as quatro vocações promovidas carregam o teto e a cadência de alma do Canary (200 / 15 s)', () => {
+    const content = loadContent(DATA);
+    for (const id of ['knight', 'paladin', 'sorcerer', 'druid']) {
+      const vocation = content.vocations.get(id);
+      expect(vocation?.soulMax).toBe(100);
+      expect(vocation?.promotion?.soulMax).toBe(200);
+      expect(vocation?.promotion?.soulGainTicksMs).toBe(15_000);
+    }
+  });
+});

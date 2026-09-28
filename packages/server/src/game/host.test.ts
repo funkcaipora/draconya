@@ -4726,6 +4726,101 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     });
   });
 
+  describe('promover a vocação pelo socket, só na Cidade (#566, ADR 0042 decisão 1)', () => {
+    const shard = (): Ruleset => ({
+      type: 'city', shared: true, hz: () => 0,
+      onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+    });
+    const promotableKnight = {
+      ...knight,
+      promotion: {
+        name: 'Elite Knight',
+        regen: { health: { ticksMs: 4000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+        minLevel: 20, price: 20_000,
+      },
+    };
+    const promotableVocations = new Map([[promotableKnight.id, promotableKnight]]);
+
+    it('promove na Cidade: debita o gold, marca promoted, e player-stats reflete', () => {
+      const { host, viewer, socket, hero, before } = atLevel(
+        20, shard(), { vocations: promotableVocations },
+      );
+      hero.vocationId = 'knight';
+      hero.goldDelta = 20_000;
+
+      host.handle(viewer, { type: 'promote-vocation' });
+      host.flush();
+
+      expect(hero.promoted).toBe(true);
+      expect(hero.goldDelta).toBe(0);
+      expect(warnings(socket)).toHaveLength(0);
+      const after = socket.received().slice(before);
+      const stats = after.filter((m) => m.type === 'player-stats').at(-1);
+      expect(stats?.type === 'player-stats' && stats.promoted).toBe(true);
+    });
+
+    it('recusa fora da Cidade, mesmo com level e gold', () => {
+      const { host, viewer, socket, hero } = atLevel(
+        20, countingRuleset().ruleset, { vocations: promotableVocations },
+      );
+      hero.vocationId = 'knight';
+      hero.goldDelta = 20_000;
+
+      host.handle(viewer, { type: 'promote-vocation' });
+      host.flush();
+
+      expect(hero.promoted).toBe(false);
+      expect(warnings(socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você precisa estar na Cidade para se promover.',
+      ]);
+    });
+
+    it('recusa sem vocação, level baixo, gold insuficiente, já promovido e vocação sem bloco', () => {
+      const noVocation = atLevel(20, shard(), { vocations: promotableVocations });
+      noVocation.host.handle(noVocation.viewer, { type: 'promote-vocation' });
+      noVocation.host.flush();
+      expect(warnings(noVocation.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Escolha uma vocação antes de se promover.',
+      ]);
+
+      const tooLow = atLevel(19, shard(), { vocations: promotableVocations });
+      tooLow.hero.vocationId = 'knight';
+      tooLow.hero.goldDelta = 20_000;
+      tooLow.host.handle(tooLow.viewer, { type: 'promote-vocation' });
+      tooLow.host.flush();
+      expect(warnings(tooLow.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você ainda não chegou ao level da promoção.',
+      ]);
+
+      const poor = atLevel(20, shard(), { vocations: promotableVocations });
+      poor.hero.vocationId = 'knight';
+      poor.host.handle(poor.viewer, { type: 'promote-vocation' });
+      poor.host.flush();
+      expect(warnings(poor.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você não tem gold suficiente para se promover.',
+      ]);
+
+      const already = atLevel(20, shard(), { vocations: promotableVocations });
+      already.hero.vocationId = 'knight';
+      already.hero.goldDelta = 20_000;
+      already.hero.promoted = true;
+      already.host.handle(already.viewer, { type: 'promote-vocation' });
+      already.host.flush();
+      expect(warnings(already.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Você já foi promovido.',
+      ]);
+
+      const notPromotable = atLevel(20, shard(), { vocations });
+      notPromotable.hero.vocationId = 'knight';
+      notPromotable.hero.goldDelta = 20_000;
+      notPromotable.host.handle(notPromotable.viewer, { type: 'promote-vocation' });
+      notPromotable.host.flush();
+      expect(warnings(notPromotable.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+        'Sua vocação não tem promoção.',
+      ]);
+    });
+  });
+
   describe('vender e descartar pelo socket (#724, ADR 0048 d.8)', () => {
     const gem = {
       ...compileItem(itemSchema.parse({ id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 30 })),

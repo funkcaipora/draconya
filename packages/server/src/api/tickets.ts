@@ -243,6 +243,9 @@ export function initialCharacterOf(
     fedMs: character.fedMs,
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
+    // E a promoção (#566, ADR 0042 decisão 1): lida aqui a cada entrada, como a vocação.
+    // Ausente quando `false` — a coluna não é nulável, e "não promovido" é o normal.
+    ...(character.promoted ? { promoted: true } : {}),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
     // só lê um boolean já resolvido. `null` ou vencido é Free, e ausente é o que o ticket
     // carrega: a sessão trata ausência como `false` (a regra do Bestiário, degradação).

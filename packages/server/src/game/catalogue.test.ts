@@ -159,6 +159,36 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     ]);
   });
 
+  it('leva o bloco de promoção — nome, level e preço — para a tela de serviço da Cidade (#566, ADR 0042 decisão 1)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withPromotion = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
+      ],
+      vocations: [
+        {
+          id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+          startingWeaponItemId: 'steel-axe',
+          promotion: { name: 'Elite Knight', minLevel: 20, price: 20_000 },
+        },
+        { id: 'monk', name: 'Monk', healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10 },
+      ],
+    };
+    const content = buildContent({ ...withPromotion, appearances: [placeholderAppearances(withPromotion)] });
+
+    const { vocations } = buildCatalogue(content);
+
+    expect(vocations).toEqual([
+      {
+        id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+        startingWeaponItemId: 'steel-axe',
+        promotion: { name: 'Elite Knight', minLevel: 20, price: 20_000 },
+      },
+    ]);
+  });
+
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
     // O contador chega por id; a tela de detalhes ganha vida e XP (SV-02, #338).
     // Mutação que mata: devolver `[]`, vazar o monstro inteiro, ou não ordenar.

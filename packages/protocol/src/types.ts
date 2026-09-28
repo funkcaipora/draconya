@@ -375,6 +375,12 @@ export const C2S_SCHEMAS = {
    * `instanceId` nesta entrega — sem gatilho de UI hoje (spec da #729, DT-04).
    */
   look: z.object({ position: Point }),
+  /**
+   * Promover a vocação (#566, ADR 0042 decisão 1). Sem payload: o cliente só pede; vocação
+   * escolhida, level ≥ 20, gold ≥ 20.000 e "ainda não promovido" são conferidos pelo servidor
+   * (invariante 4). `.strict()` porque não há campo nenhum para o cliente mandar.
+   */
+  'promote-vocation': z.object({}).strict(),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -639,6 +645,8 @@ export const S2C_SCHEMAS = {
       level: z.number().int(), xp: z.number(),
       /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
       vocationId: z.string().nullable().default(null),
+      /** Promovido (#566, ADR 0042 decisão 1). `default(false)`: nó anterior manda sem. */
+      promoted: z.boolean().default(false),
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
@@ -1103,6 +1111,16 @@ export const S2C_SCHEMAS = {
       manaPerLevel: z.number().int().nonnegative(),
       capacityPerLevel: z.number().int().nonnegative(),
       startingWeaponItemId: z.string().min(1),
+      /**
+       * A promoção (#566, ADR 0042 decisão 1), para a tela de serviço da Cidade mostrar nome,
+       * level e preço antes de mandar `promote-vocation`. Ausente é vocação sem promoção (o
+       * conteúdo de teste) ou nó anterior a esta issue.
+       */
+      promotion: z.object({
+        name: z.string().min(1),
+        minLevel: z.number().int().nonnegative(),
+        price: z.number().int().nonnegative(),
+      }).optional(),
     })).default([]),
     /** O level da escolha (#154): a tela não pode ter o 8 em código. `default(0)`: nó anterior — sem diálogo. */
     vocationLevel: z.number().int().nonnegative().default(0),
@@ -1184,6 +1202,11 @@ export const S2C_SCHEMAS = {
       .default({ arrow: null, bolt: null }),
     /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
     vocationId: z.string().nullable().default(null),
+    /**
+     * Promovido (#566, ADR 0042 decisão 1). `default(false)`: nó `game` anterior manda sem, e
+     * o HUD mostra a vocação base — nunca uma promoção que não existiu.
+     */
+    promoted: z.boolean().default(false),
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
