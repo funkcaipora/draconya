@@ -97,6 +97,14 @@ export interface SessionReceipt {
    */
   readonly vocation?: string;
   /**
+   * Promovido (#566, ADR 0042 decisão 1). Só `true` viaja — o campo NUNCA carrega `false`
+   * (ver `#requestPromoteVocation`/`#saveDurableReceipt`, `game/host.ts`). O `jobs` funde por
+   * `OR` (`characters.promoted OR receipt.promoted`): um extrato fora de ordem nunca desce o
+   * estado, a mesma garantia que `coalesce` dá à vocação, mas sem precisar de instante — um
+   * boolean que só sobe não tem "ausente" a preencher uma vez só.
+   */
+  readonly promoted?: boolean;
+  /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
    * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
@@ -350,6 +358,9 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }
       : {}),
+    // A promoção (#566): lista de PERMISSÃO, pela razão das skills — só `true` sobrevive à
+    // volta; `false`/ausente/torto vira ausente, o lado seguro (nunca desce o estado).
+    ...(value['promoted'] === true ? { promoted: true } : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.
     ...(typeof value['equipment'] === 'object' && value['equipment'] !== null

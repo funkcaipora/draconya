@@ -62,7 +62,7 @@ class MemoryRepository implements GameRepository {
     }
     const now = new Date('2026-09-07T12:00:00Z');
     const character: CharacterRecord = {
-      id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
+      id: `c${++this.next}`, accountId, name, vocation: null, promoted: false, level: 1, xp: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
       state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
       outfitColors: null, bestiary: null, ammo: null, supplyStock: null, ammunitionStock: null,

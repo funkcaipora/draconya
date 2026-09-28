@@ -34,5 +34,16 @@
     "multiplier": 1.28,
     "primaryShield": 2.08,
     "secondaryShield": 1.2
+  },
+  "promotion": {
+    "name": "Royal Paladin",
+    "regen": {
+      "health": { "ticksMs": 6000, "amount": 1 },
+      "mana": { "ticksMs": 3000, "amount": 2 }
+    },
+    "soulMax": 200,
+    "soulGainTicksMs": 15000,
+    "minLevel": 20,
+    "price": 20000
   }
 }

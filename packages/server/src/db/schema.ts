@@ -8,6 +8,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -107,6 +108,15 @@ export const characters = pgTable(
 
     // Nulável de propósito: o personagem nasce sem vocação e escolhe no level 8 (§7.4).
     vocation: text('vocation'),
+
+    /**
+     * Promoção de vocação (#566, ADR 0042 decisão 1): level 20, 20.000 gold, na Cidade.
+     * `not null default false`, diferente de `vocation` (nulável) — não precisa distinguir
+     * "nunca promovido" de `false`, os dois são o mesmo estado, e ele SÓ SOBE (nunca existe
+     * des-promoção no Tibia). Escrita pelo ledger, fundida por `OR` (nunca `coalesce`, que
+     * serve para "grava uma vez" — aqui o boolean não tem "ausente" a preencher).
+     */
+    promoted: boolean('promoted').notNull().default(false),
 
     level: integer('level').notNull().default(1),
     xp: bigint('xp', { mode: 'number' }).notNull().default(0),

@@ -135,6 +135,15 @@ export const CLIENT_TO_SERVER = {
    * 28: o 27 é do `use-on-map`.
    */
   look: 28,
+  /**
+   * Promover a vocação (#566, ADR 0042 decisão 1). INTENÇÃO sem payload: o cliente só pede;
+   * vocação escolhida, level ≥ 20, gold ≥ 20.000 e "ainda não promovido" são do servidor
+   * (invariante 4). Só na Cidade (ADR 0042 — serviço de Cidade). Sucesso é `player-stats`
+   * (`promoted: true`); recusa é `system-message`.
+   *
+   * 29: o 28 é do `look`.
+   */
+  'promote-vocation': 29,
 } as const;
 
 export const SERVER_TO_CLIENT = {

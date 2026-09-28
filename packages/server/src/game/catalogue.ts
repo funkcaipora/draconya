@@ -210,6 +210,15 @@ export function buildCatalogue(content: Content): Catalogue {
           manaPerLevel: vocation.manaPerLevel,
           capacityPerLevel: vocation.capacityPerLevel,
           startingWeaponItemId: weaponItemId,
+          // A promoção (#566, ADR 0042 decisão 1): nome, level e preço, para a tela de serviço
+          // da Cidade — o mesmo motivo de `startingWeaponItemId` ir para o diálogo do level 8.
+          ...(vocation.promotion === undefined ? {} : {
+            promotion: {
+              name: vocation.promotion.name,
+              minLevel: vocation.promotion.minLevel,
+              price: vocation.promotion.price,
+            },
+          }),
         };
       })
       .filter((vocation) => vocation !== null),

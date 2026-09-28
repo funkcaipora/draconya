@@ -31,6 +31,14 @@ const knight: Vocation = {
   meleeDamageMultiplier: 1, distDamageMultiplier: 1,
 };
 const paladin: Vocation = { ...knight, id: 'paladin', name: 'Paladin', startingWeaponItemId: 'bow' };
+const promotableKnight: Vocation = {
+  ...knight,
+  promotion: {
+    name: 'Elite Knight',
+    regen: { health: { ticksMs: 4000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+    soulMax: 200, soulGainTicksMs: 15_000, minLevel: 20, price: 20_000,
+  },
+};
 
 const options = (over: Partial<VocationChoiceOptions> = {}): VocationChoiceOptions => ({
   catalog, vocationLevel: 8, instanceId: 'city-1:hero:vocation',
@@ -186,6 +194,41 @@ describe('chooseVocation com o kit completo da vocação (#496)', () => {
     expect(hero.chooseVocation(knight, catalog.get('steel-axe') ?? null, options()))
       .toEqual({ ok: true, weapon: 'equipped' });
     expect(hero.inventory.equippedAt('hand')?.instanceId).toBe('city-1:hero:vocation');
+  });
+});
+
+describe('promote (#566, ADR 0042 decisão 1)', () => {
+  it('refuses without a chosen vocation', () => {
+    const hero = new CharacterRuntime(state({ vocationId: null, level: 20, gold: 20_000 }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: false, reason: 'no-vocation' });
+  });
+
+  it('refuses when already promoted', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 20_000, promoted: true }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: false, reason: 'already-promoted' });
+  });
+
+  it('refuses below the vocation minLevel', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 19, gold: 20_000 }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: false, reason: 'level-too-low' });
+  });
+
+  it('refuses without enough gold', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 19_999 }));
+    expect(hero.promote(promotableKnight, 19_999)).toEqual({ ok: false, reason: 'insufficient-gold' });
+  });
+
+  it('refuses a vocation without a promotion block', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 20_000 }));
+    expect(hero.promote(knight, 20_000)).toEqual({ ok: false, reason: 'not-promotable' });
+  });
+
+  it('promotes at level 20 with 20000 gold, debiting the price and marking promoted', () => {
+    const hero = new CharacterRuntime(state({ vocationId: 'knight', level: 20, gold: 20_000 }));
+    expect(hero.promote(promotableKnight, 20_000)).toEqual({ ok: true });
+    expect(hero.promoted).toBe(true);
+    expect(hero.goldDelta).toBe(-20_000);
+    expect(hero.getState()).toMatchObject({ promoted: true });
   });
 });
 

@@ -227,6 +227,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // A munição escolhida por família (#152): `null` é "nenhuma", e a tela mostra o que veio.
         ammo: message.ammo,
         vocationId: message.vocationId,
+        // Promovido (#566, ADR 0042 decisão 1): a tela troca o nome exibido pelo
+        // `promotion.name` da vocação quando `true`.
+        promoted: message.promoted,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
       }));
@@ -451,6 +454,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
         vocationId: message.self.vocationId,
+        promoted: message.self.promoted,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo

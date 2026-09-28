@@ -17,6 +17,8 @@ export interface CharacterRecord {
   readonly accountId: string;
   readonly name: string;
   readonly vocation: string | null;
+  /** Promoção de vocação (#566, ADR 0042 decisão 1). Sempre `boolean` — a coluna não é nulável. */
+  readonly promoted: boolean;
   readonly level: number;
   readonly xp: number;
   readonly gold: number;
@@ -550,6 +552,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     accountId: row.accountId,
     name: row.name,
     vocation: row.vocation,
+    promoted: row.promoted,
     level: row.level,
     xp: row.xp,
     gold: row.gold,

@@ -28,8 +28,8 @@ import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitL
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, TakeLootRefusal, TileAppearanceChange,
-  UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
+  PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
+  TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -219,6 +219,15 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
 const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'level-too-low': 'Você ainda não chegou ao level da escolha de vocação.',
   'already-chosen': 'Você já escolheu a sua vocação.',
+};
+
+/** A recusa de `promote-vocation` (#566, ADR 0042 decisão 1), em palavras. */
+const PROMOTE_REFUSAL: Readonly<Record<PromoteRefusal, string>> = {
+  'no-vocation': 'Escolha uma vocação antes de se promover.',
+  'already-promoted': 'Você já foi promovido.',
+  'level-too-low': 'Você ainda não chegou ao level da promoção.',
+  'insufficient-gold': 'Você não tem gold suficiente para se promover.',
+  'not-promotable': 'Sua vocação não tem promoção.',
 };
 
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
@@ -433,6 +442,9 @@ function playerStatsOf(
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
     vocationId: character?.vocationId ?? null,
+    // Promovido (#566, ADR 0042 decisão 1): o HUD troca o nome exibido pelo `promotion.name`
+    // da vocação quando `true` — a resolução do nome é do cliente, que já tem o catálogo.
+    promoted: character?.promoted ?? false,
     // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
@@ -1517,6 +1529,11 @@ export class SessionHost {
         // do cliente (#729, ADR 0050 d.7).
         this.#requestLook(viewer, message.position);
         return;
+      case 'promote-vocation':
+        // INTENÇÃO (invariante 4): sem payload. Vocação, level, gold e "já promovido" são do
+        // servidor. Só na Cidade (#566, ADR 0042 decisão 1 — serviço de Cidade).
+        this.#requestPromoteVocation(viewer);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -2152,6 +2169,40 @@ export class SessionHost {
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
+  }
+
+  /**
+   * Promove a vocação escolhida (#566, ADR 0042 decisão 1). Serviço de Cidade: só a sessão de
+   * Cidade aceita — o mesmo padrão do ADR 0042 (decisão 1, tela de serviço) e do "obtida na
+   * Cidade" do plano de conteúdo. O preço sai por `goldDelta`, liquidado pelo MESMO
+   * `#saveDurableReceipt` que já debita `sell-items` na praça (invariante 10).
+   */
+  #requestPromoteVocation(viewer: Viewer): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para se promover.',
+      });
+      return;
+    }
+    const vocation = character.vocationId === null
+      ? undefined
+      : this.#options.vocations?.get(character.vocationId);
+    if (vocation === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL['no-vocation'] });
+      return;
+    }
+    const result = character.promote(vocation, character.gold + character.goldDelta);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   #ownerOf(characterId: string): CharacterRuntime | undefined {
@@ -3996,6 +4047,10 @@ export class SessionHost {
       ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
+      // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
+      // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
+      ...(owner?.promoted ? { promoted: true } : {}),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -4056,6 +4111,9 @@ export class SessionHost {
       },
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      // A promoção (#566, ADR 0042 decisão 1): AUSENTE/`false` nunca é gravado — `promoted` só
+      // sobe no ledger (`characters.promoted OR receipt.promoted`), nunca desce.
+      ...(owner.promoted ? { promoted: true } : {}),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
@@ -4205,6 +4263,7 @@ export class SessionHost {
         level: self.level,
         xp: self.xp,
         vocationId: self.vocationId,
+        promoted: self.promoted,
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,

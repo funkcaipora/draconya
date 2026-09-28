@@ -3086,11 +3086,11 @@ export class HuntRuleset implements Ruleset {
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
     // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
     const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
-    // `promoted` ainda não existe como estado do personagem (#566/ADR 0042) — o parâmetro é o
-    // ponto de extensão que a promoção vai acionar quando o estado existir (#569).
+    // Promovido (#566, ADR 0042 decisão 1) soma os 30% adicionais de redução, aditivos, nunca
+    // tetados — ver o comentário de `promotionReduction` em `progression.ts`.
     const penalty = applyDeathPenalty(
       character,
-      { premium },
+      { premium, promoted: character.promoted },
       this.#vocationOf(character),
       this.#options.progression,
       this.#options.skills,
@@ -9200,9 +9200,15 @@ const slots = bot.groups.get(group);
    * tabela base (sem vocação — Canary `vocations.xml`, id 0 "None") para quem ainda não tem
    * uma. Cada vocação regenera num ritmo diferente no Tibia; antes da #521 era um número só
    * para todo mundo. Em pulsos desde #678.
+   *
+   * Promovido (#566, ADR 0042 decisão 1) lê o bloco `promotion.regen` da vocação quando ele
+   * existe — `vocations.xml` ids 5-8 regeneram mais rápido que as bases 1-4. Ausente o bloco
+   * (conteúdo de teste sem promoção), degrada para o `regen` normal, mesmo com `promoted: true`.
    */
   #regenOf(character: CharacterRuntime): Regen {
-    return this.#vocationOf(character)?.regen ?? this.#options.progression.regen;
+    const vocation = this.#vocationOf(character);
+    if (character.promoted && vocation?.promotion?.regen !== undefined) return vocation.promotion.regen;
+    return vocation?.regen ?? this.#options.progression.regen;
   }
 
   /**

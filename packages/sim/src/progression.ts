@@ -259,11 +259,11 @@ export interface DeathPenalty {
  * cúbica (level ≥ 24) usa a redução crua, sem teto — e a parcela de PROMOÇÃO nunca passa pelo
  * teto, nos dois ramos (ver abaixo).
  *
- * **`options.promoted` (#569) soma mais 30% de redução, sempre ADITIVO e nunca tetado**
- * (`Player::getLostPercent`: o `percentReduction += 0.30` acontece DEPOIS do teto do ramo
- * `level < cubicFromLevel`, incondicional aos dois ramos). `promoted` é opcional e por padrão
- * `false` — a promoção em si (`CharacterRuntime.promoted`) ainda não existe; isto é só o
- * ponto de extensão que a #566/ADR 0042 vai acionar quando o estado existir.
+ * **`options.promoted` (#569, ligado ao estado real pelo #566) soma mais 30% de redução, sempre
+ * ADITIVO e nunca tetado** (`Player::getLostPercent`: o `percentReduction += 0.30` acontece
+ * DEPOIS do teto do ramo `level < cubicFromLevel`, incondicional aos dois ramos). `promoted` é
+ * opcional e por padrão `false` — `hunt.ts#onCharacterDied` passa `character.promoted`
+ * (`CharacterRuntime.promoted`, #566/ADR 0042).
  *
  * **Sem piso de level** (#569 removeu o `levelFloor` do Draconya): o Tibia não tem piso para
  * a penalidade de morte, e o repo alinhou a isso — o personagem pode cair até o level 1.

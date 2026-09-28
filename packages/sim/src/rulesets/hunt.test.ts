@@ -821,6 +821,52 @@ describe('regeneração (FUN-36)', () => {
     expect(hero.mana).toBe(20);
   });
 
+  // O bloco `promotion` do Elite Knight (#566, ADR 0042 decisão 1): `vocations.xml` id 8 do
+  // Canary — `gainhpticks=4000` (mais rápido que a base 6000), `gainmanaticks=6000` (igual).
+  const promotedKnightRegen = {
+    ...knightRegen,
+    promotion: {
+      name: 'Elite Knight',
+      regen: { health: { ticksMs: 4000, amount: 1 }, mana: { ticksMs: 6000, amount: 2 } },
+      minLevel: 20, price: 20_000,
+    },
+  };
+  const withPromotedKnightRegen = content({
+    routes: [{ ...route, spawnPoints: [] }], vocations: [promotedKnightRegen],
+  });
+
+  it('Elite Knight promovido regenera 1 vida a cada 4 000 ms, a taxa do id 8 do Canary', () => {
+    const session = createHuntSession({
+      id: 'session-1', content: withPromotedKnightRegen, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const hero = character({ health: 100 });
+    hero.vocationId = 'knight';
+    hero.promoted = true;
+    session.enter(hero);
+
+    session.advanceBy(3_999);
+    expect(hero.health).toBe(100);
+    session.advanceBy(1);
+    expect(hero.health).toBe(101);
+  });
+
+  it('sem `promoted`, a MESMA vocação com bloco `promotion` regenera pela taxa BASE', () => {
+    const session = createHuntSession({
+      id: 'session-1', content: withPromotedKnightRegen, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const hero = character({ health: 100 });
+    hero.vocationId = 'knight';
+    session.enter(hero);
+
+    // 4 000 ms bateria se a taxa promovida vazasse para quem não é promovido.
+    session.advanceBy(4_000);
+    expect(hero.health).toBe(100);
+    session.advanceBy(2_000);
+    expect(hero.health).toBe(101);
+  });
+
   it('Knight com Life Ring: o anel SOMA +2 vida e +8 mana a cada 6 s à vocação (#688)', () => {
     const { session, hero } = knightIn(lifeRing);
     session.advanceBy(5_999);
@@ -962,6 +1008,27 @@ describe('level up e penalidade de morte dentro da hunt', () => {
       const hero = character({ health: 12 });
       hero.level = 20;
       hero.xp = totalXpForLevel(20, progression as Progression);
+      session.enter(hero);
+      run(session, 60_000, 100);
+      return Number(session.notableEvents.find((e) => e.type === 'xp-penalty')?.detail);
+    };
+    expect(cobrança(true)).toBeLessThan(cobrança(false));
+  });
+
+  it('promovido (#566, ADR 0042 decisão 1) paga menos por morrer, através do CharacterRuntime real', () => {
+    // Diferente de `progression.test.ts` (que testa `applyDeathPenalty` isolado com
+    // `{ promoted: true }` passado à mão): este teste prova que `#onCharacterDied` REPASSA
+    // `character.promoted` de verdade — o defeito que a #566 corrige é o comentário morto que
+    // dizia "o parâmetro é o ponto de extensão, o estado ainda não existe".
+    const cobrança = (promoted: boolean): number => {
+      const session = createHuntSession({
+        id: 's', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
+        createdAtMs: 0,
+      });
+      const hero = character({ health: 12 });
+      hero.level = 20;
+      hero.xp = totalXpForLevel(20, progression as Progression);
+      hero.promoted = promoted;
       session.enter(hero);
       run(session, 60_000, 100);
       return Number(session.notableEvents.find((e) => e.type === 'xp-penalty')?.detail);

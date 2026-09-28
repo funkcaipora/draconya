@@ -174,6 +174,12 @@ export interface InitialCharacter {
    */
   readonly vocation?: string;
   /**
+   * Promovido (#566, ADR 0042 decisão 1), lido de `characters.promoted`. Ausente/`false` é
+   * "não promovido" — a coluna não é nulável, e o `game` só escreve `true` depois de
+   * `CharacterRuntime.promote()` aceitar (level ≥ 20, gold ≥ 20.000, ainda não promovido).
+   */
+  readonly promoted?: boolean;
+  /**
    * Premium do personagem (ADR 0035 D3), já resolvido contra o relógio pelo `api` — a sessão
    * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
    * LÍDER e a penalidade de morte de cada membro.
@@ -639,6 +645,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
       ? { vocation: initial['vocation'] }
       : {}),
+    // Promovido (#566, ADR 0042 decisão 1): booleano ou AUSENTE, nunca ticket recusado — a
+    // mesma régua do Premium. Um valor torto degrada para "não promovido" (o lado seguro).
+    ...(typeof initial['promoted'] === 'boolean' ? { promoted: initial['promoted'] } : {}),
     // O Premium (ADR 0035 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
     // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
     ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),

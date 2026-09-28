@@ -319,6 +319,12 @@ async function applyProgression(
       ...(receipt.vocation === undefined
         ? {}
         : { vocation: sql`coalesce(${characters.vocation}, ${receipt.vocation})` }),
+      // A promoção (#566, ADR 0042 decisão 1): `OR`, não `coalesce` — o boolean não tem
+      // "ausente" a preencher uma vez só (a diferença de `vocation`, string nulável). O campo
+      // SÓ chega `true` (ver `parseReceipt`), então isto é sempre "vira `true` e não volta".
+      ...(receipt.promoted === true
+        ? { promoted: sql`${characters.promoted} OR true` }
+        : {}),
       // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),

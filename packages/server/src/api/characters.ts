@@ -183,6 +183,8 @@ function toDto(
     id: character.id,
     name: character.name,
     vocation: character.vocation,
+    // Promoção (#566, ADR 0042 decisão 1): a tela de personagem exibe a vocação promovida.
+    promoted: character.promoted,
     level: character.level,
     xp: character.xp,
     gold: character.gold,

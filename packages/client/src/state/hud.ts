@@ -224,6 +224,11 @@ export interface HudState {
   readonly skills: PlayerSkills;
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
   readonly vocationId: string | null;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). A tela troca o nome exibido pelo `promotion.name` da
+   * vocação (`catalogue.vocations`) quando `true`. Chega em `player-stats`/`session-state`.
+   */
+  readonly promoted: boolean;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -342,6 +347,7 @@ export const INITIAL_HUD: HudState = {
     magic: { level: 0, percent: 0 },
   },
   vocationId: null,
+  promoted: false,
   latencyMs: null,
   connection: 'idle',
   onlinePlayers: null,
