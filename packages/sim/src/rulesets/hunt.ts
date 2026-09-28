@@ -46,6 +46,7 @@ import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../t
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
+import { IN_FIGHT_WINDOW_MS, isInFight } from '../combat/in-fight.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { reflectedDamageIntent } from '../combat/reflect.js';
 import { cleavePower, cleaveTiles } from '../combat/cleave.js';
@@ -5421,6 +5422,10 @@ const slots = bot.groups.get(group);
       session.creditDamage(character.id, applied.healthDamage);
       recordDamage(monster.contribution, character.id, applied.healthDamage);
       this.#markCombatActive(session, character.id);
+      // A definição única de "em combate" (#625): ataque DADO, ao contrário de
+      // `Runner.lastCombatActionAtMs` (linha acima) que exclui self-heal — aqui não há cura
+      // nenhuma para excluir, é sempre dano de magia num monstro.
+      character.lastCombatActionAtMs = session.nowMs;
       // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
       // (#479) vai junto sempre: o efeito de dano SEMPRE declara um tipo.
       session.emit({
@@ -7195,6 +7200,11 @@ const slots = bot.groups.get(group);
       this.#hasEnergyShield(character),
     );
     recordDamage(character.contribution, subject, applied.healthDamage);
+    // A definição única de "em combate" (#625): ataque RECEBIDO — básico e ability declarada
+    // passam os dois por aqui (`#onMonsterAttack`/`#onMonsterAbility` chamam
+    // `#executeMonsterAbility`, que termina em cada alvo aqui). O espelho é `#land`/`#applyHits`,
+    // que marcam o DADO.
+    character.lastCombatActionAtMs = session.nowMs;
     // O colar gasta UMA carga por golpe do tipo que ele protege (ADR 0032 d.8), mesmo esquivado
     // (DT-03). A proteção vale NESTE golpe; a destruição, se zerou, é para o próximo.
     this.#consumeAmuletCharge(session, character, ability.damageType);
@@ -7715,6 +7725,20 @@ const slots = bot.groups.get(group);
     const runner = this.#runners.get(characterId);
     const reason = runner?.pendingExit ?? null;
     if (runner === undefined || reason === null) return;
+    // A trava de combate (#625, CONDITION_INFIGHT do Canary): a saída — manual ou por regra do
+    // bot, as duas passam por `#beginExit`/`#finishExit` — só CONCLUI fora de combate. O
+    // `exitDelayMs` continua a contagem VISUAL (o `#beginExit` acima); isto é uma segunda trava,
+    // por cima, que reagenda para o instante em que o combate vence em vez de completar a
+    // saída — `pendingExit` continua marcado, e nenhum novo `#beginExit` se soma por cima
+    // (`#applyExitRules`/`requestExit` já recusam reentrar enquanto ele não é `null`).
+    const character = findById(session.participants, characterId);
+    if (character !== null && isInFight(session.nowMs, character.lastCombatActionAtMs)) {
+      const unlockAtMs = character.lastCombatActionAtMs! + IN_FIGHT_WINDOW_MS;
+      session.scheduleIn(EXIT_COUNTDOWN, unlockAtMs - session.nowMs, {
+        priority: EventPriority.Housekeeping, subject: characterId,
+      });
+      return;
+    }
     runner.pendingExit = null;
     if (session.participants.length <= 1) {
       if (session.ended === null) session.end(reason);
@@ -8244,6 +8268,9 @@ const slots = bot.groups.get(group);
     // pelo caminho de golpe corpo a corpo/wand.
     if (monster.lastStepBlocked && applied.healthDamage > 0) monster.ignoresFieldDamage = true;
     this.#markCombatActive(session, character.id);
+    // A definição única de "em combate" (#625): ataque DADO — o espelho de `#applyMonsterHit`,
+    // que marca o RECEBIDO. Ver a nota de distinção com `Runner.lastCombatActionAtMs` acima.
+    character.lastCombatActionAtMs = session.nowMs;
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
     // cliente contando uma história que a barra desmente.

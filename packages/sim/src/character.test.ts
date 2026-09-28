@@ -249,6 +249,25 @@ describe('storages (#731)', () => {
   });
 });
 
+describe('lastCombatActionAtMs (#625)', () => {
+  it('starts null — "never fought this session" —, and is omitted from getState', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.lastCombatActionAtMs).toBeNull();
+    expect(hero.getState()).not.toHaveProperty('lastCombatActionAtMs');
+  });
+
+  it('round-trips through a snapshot once written', () => {
+    const hero = new CharacterRuntime(state());
+    hero.lastCombatActionAtMs = 12_345;
+
+    expect(hero.getState()).toMatchObject({ lastCombatActionAtMs: 12_345 });
+    const restored = new CharacterRuntime(
+      JSON.parse(JSON.stringify(hero.getState())) as CharacterState,
+    );
+    expect(restored.lastCombatActionAtMs).toBe(12_345);
+  });
+});
+
 describe('drainRemovedInstances (#724, ADR 0048 d.8)', () => {
   it('returns what sell-items/discard-item destroyed and empties the list', () => {
     const hero = new CharacterRuntime(state());

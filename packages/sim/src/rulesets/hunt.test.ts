@@ -1085,10 +1085,26 @@ describe('encerramento', () => {
   it('por regra automática de saída, dizendo QUAL regra', () => {
     // "Sua hunt encerrou por uma regra de saída" sem dizer qual é a mensagem que faz o
     // jogador desconfiar do bot que ele mesmo configurou.
+    //
+    // DOIS pontos de spawn — os dois nascem juntos na população INICIAL (#583), sem esperar
+    // nenhum respawn — e respawn ENORME de propósito (#625): a trava de combate (60 s desde o
+    // último ataque, dado OU recebido) só libera fora de combate, e um respawn mais cedo
+    // reengajaria o herói antes dos 60 s vencerem — a saída nunca completaria, e o teste
+    // deixaria de ser determinístico. Sem um terceiro rato, o herói fica parado depois do
+    // segundo abate — exatamente o cenário que a trava existe para permitir.
     const rule: HuntExitRule = { id: 'two-kills', when: (view) => view.aggregates.kills >= 2 };
-    const { session } = start({ exitRules: [rule] });
+    const loaded = content({
+      routes: [{
+        ...route,
+        spawnPoints: [
+          { ...route.spawnPoints[0]!, respawnDelayMs: 1_000_000 },
+          { ...route.spawnPoints[0]!, respawnDelayMs: 1_000_000 },
+        ],
+      }],
+    });
+    const { session } = start({ exitRules: [rule], loaded });
 
-    run(session, 60_000, 100);
+    run(session, 130_000, 100);
 
     expect(session.ended).toBe('exit-rule');
     expect(session.aggregates.kills).toBe(2);
@@ -3918,6 +3934,97 @@ describe('contagem regressiva de saída solo (#360)', () => {
   });
 });
 
+// --- trava de combate na saída (#625, CONDITION_INFIGHT/pzLocked do Canary) ------------------
+
+describe('trava de combate na saída (#625)', () => {
+  it('o golpe do personagem no monstro marca `lastCombatActionAtMs` — a definição única lida por `isInFight`', () => {
+    // Combate DE VERDADE (`start()` traz o rato de sempre), não o carimbo manual dos testes
+    // abaixo: prova que `#land`/`#strike` de fato escrevem o campo, não só a trava que o lê.
+    const { session, hero } = start();
+    expect(hero.lastCombatActionAtMs).toBeNull();
+    run(session, 3_000, 100);
+    expect(hero.lastCombatActionAtMs).not.toBeNull();
+    expect(hero.lastCombatActionAtMs).toBeLessThanOrEqual(session.nowMs);
+  });
+
+  it('saída manual em combate espera os 60 s desde o último ataque, mesmo sem exitDelayMs', () => {
+    const { session, hero, ruleset } = withExit([]);
+    session.advanceBy(1_000);
+    // Simula o último ataque dado/recebido (a hunt de `withExit` não tem monstro, de propósito
+    // — o assunto aqui é a trava, não o combate em si).
+    hero.lastCombatActionAtMs = session.nowMs;
+
+    ruleset.requestExit(session, hero.id);
+    // Sem `exitDelayMs`, `#beginExit` chamaria `#finishExit` na hora — mas em combate ela não
+    // conclui, MESMO sem contagem visual nenhuma configurada.
+    expect(session.ended).toBeNull();
+
+    // A 59 999ms do último ataque, ainda em combate.
+    session.advanceBy(59_999);
+    expect(session.ended).toBeNull();
+
+    // A 60 000ms do último ataque, a trava vence e a saída conclui.
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('fora de combate, a saída manual usa só o delay normal — a trava não atrasa quem não lutou', () => {
+    const { session, hero, ruleset } = withExit([], { exitDelayMs: 5_000 });
+    session.advanceBy(1_000);
+    expect(hero.lastCombatActionAtMs).toBeNull();
+
+    ruleset.requestExit(session, hero.id);
+    session.advanceBy(4_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('um novo ataque durante a espera empurra a trava — a saída só conclui 60 s depois do ÚLTIMO', () => {
+    const { session, hero, ruleset } = withExit([]);
+    session.advanceBy(1_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+    ruleset.requestExit(session, hero.id);
+
+    // Apanha de novo a 30 000ms do primeiro ataque — a trava reagendaria para 60 000ms do
+    // primeiro, mas o ataque novo empurra para 90 000ms do início.
+    session.advanceBy(30_000);
+    hero.lastCombatActionAtMs = session.nowMs;
+
+    // Nos 60 000ms do PRIMEIRO ataque (quando a trava antiga venceria), ainda em combate.
+    session.advanceBy(30_000);
+    expect(session.ended).toBeNull();
+
+    // Nos 60 000ms do SEGUNDO ataque, a trava libera.
+    session.advanceBy(29_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('a regra do bot (automação) respeita a mesma trava', () => {
+    // Hunt sem monstro (o mesmo desenho de `withExit`), mas pela porta de `start()` — é ela
+    // que aceita `HuntExitRule` cru, como o teste `por regra automática de saída…` acima.
+    const rule: HuntExitRule = { id: 'always', when: () => true };
+    const loaded = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({ exitRules: [rule], loaded });
+    // ANTES de qualquer avanço: a regra "always" já dispara no primeiro `EXIT_RULES`, em
+    // t = 250ms (`EXIT_RULE_INTERVAL_MS`) — o carimbo precisa existir antes disso para a
+    // trava valer nesse primeiro disparo.
+    hero.lastCombatActionAtMs = session.nowMs;
+
+    session.advanceBy(1_000);
+    expect(session.ended).toBeNull();
+    expect(session.notableEvents.find((e) => e.type === 'exit-rule')?.detail).toBe('always');
+
+    // 60 000ms do ataque simulado, fora de combate: a mesma trava do manual libera a regra.
+    session.advanceBy(58_999);
+    expect(session.ended).toBeNull();
+    session.advanceBy(1);
+    expect(session.ended).toBe('exit-rule');
+  });
+});
+
 // --- a configuração sobrevive ao snapshot e à troca ao vivo (FUN-81) -------------------------
 
 describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
@@ -4011,6 +4118,13 @@ describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
     // não tivesse voltado, ele ficaria caçando com 5% de vida até morrer.
     const eu = retomado.participants[0] as CharacterRuntime;
     eu.health = Math.round(hero.maxHealth * 0.05);
+    // A trava de combate (#625) lê o carimbo do combate que já rolou ANTES da restauração —
+    // este teste é sobre o MOTIVO da saída sobreviver ao snapshot, não sobre a trava em si (que
+    // tem teste próprio); zera o carimbo para não depender de quando, na hunt original, o herói
+    // levou o primeiro golpe. Mata os ratos vivos também: o `ignore: ['rat']` da `curar` só tira
+    // o rato da MIRA do bot — ele continua batendo, e sem isto a trava reabriria sozinha.
+    eu.lastCombatActionAtMs = null;
+    for (const monster of (retomado.ruleset as HuntRuleset).monsters) monster.health = 0;
     run(retomado, 2_000, 100);
 
     expect(retomado.ended).toBe('exit-rule');

@@ -211,6 +211,33 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **`out-of-gold` olha o SALDO, nunca o delta.** Delta negativo é qualquer um que gastou uma
   poção; saldo zero é quem não consegue comprar a próxima. E `hp-below` compara ESTRITO: com
   `<=`, "sair abaixo de 100%" encerraria a hunt de quem entrou de vida cheia.
+- **"Em combate" tem UMA definição, `isInFight` (`combat/in-fight.ts`, #625), e é ela que
+  conclui a saída da hunt.** Último ataque DADO ou RECEBIDO há menos de `IN_FIGHT_WINDOW_MS`
+  (60 000 ms — o `pzLocked`/`CONDITION_INFIGHT` do Canary), lido de
+  `CharacterRuntime.lastCombatActionAtMs`. **Não confundir com `Runner.lastCombatActionAtMs`**
+  (a atividade de `canShareExperience`, §16 acima): aquele é só DADO e exclui self-heal, porque
+  o que ele mede é engajamento com a party; este soma o RECEBIDO e não exclui nada, porque
+  apanhar também deveria travar a saída no Tibia — dois campos com o mesmo nome, em classes
+  diferentes, por propósitos genuinamente diferentes. Escrito em `#land`/`#applyHits` (dado, ao
+  monstro) e `#applyMonsterHit` (recebido, do monstro — básico e ability declarada passam os
+  dois por ali); NÃO em `#reflectOntoMonster`/`#reflectOntoCharacter` (a segunda resolução do
+  reflexo já acontece no MESMO golpe já marcado) nem em cura (curar não é atacar,
+  `Player::onAttacked`/`onAttackedCreature` do Canary também não contam). `#beginExit`/
+  `#finishExit` (saída manual via `requestExit` E saída por regra do bot via
+  `#applyExitRules` — as duas passam pelas duas) continuam iniciando com `exitDelayMs`, a
+  contagem VISUAL de sempre; a trava de combate é uma SEGUNDA barreira, por cima: se
+  `#finishExit` encontra o personagem em combate, ela NÃO conclui — reagenda `EXIT_COUNTDOWN`
+  para o instante exato em que a janela do carimbo MAIS RECENTE vence (`lastCombatActionAtMs +
+  IN_FIGHT_WINDOW_MS`), e `pendingExit` continua marcado, então nenhum `#beginExit` novo se
+  soma por cima enquanto ela espera. Um ataque NOVO durante a espera não é observado até o
+  evento agendado vencer — é aí que `#finishExit` relê o carimbo mais recente e, se ele
+  avançou, reagenda de novo a partir dele; é assim que "o último" continua sendo o último, sem
+  polling. `party-member-lost` (saída em cascata quando outro membro sai/morre) CONTINUA
+  imediata, sem exitDelayMs nem esta trava — ela nunca passa por `#beginExit`/`#finishExit`,
+  chama `#depart` direto, e não é a INTENÇÃO de sair que o invariante 3 protege. Alimenta
+  também o decaimento de imbuement fora de combate (#606): uma segunda fórmula de "em combate"
+  em outro lugar seria a mesma divergência que `Skills.merge`/`Bestiary.merge` evitam vivendo
+  cada um num arquivo só.
 - **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
   posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
   guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
