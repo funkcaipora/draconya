@@ -4,7 +4,11 @@
 // não couber nela sem gambiarra, a interface nasceu modelada em cima de hunt, e Guild War
 // não vai caber depois.
 
-import type { Item, Progression, Tilemap, Vocation } from '@draconya/content';
+import type {
+  BotConfig, BotConfigV2, Combat, Item, Progression, Spell, Tilemap, Vocation,
+} from '@draconya/content';
+import { migrateBotConfigV1 } from '@draconya/content';
+import { castSpell, ownPurse } from '../casting.js';
 import { containerRulesFor } from '../inventory.js';
 import { statsForLevel } from '../progression.js';
 import type { EndReason, Ruleset, Session } from '../session.js';
@@ -12,6 +16,11 @@ import type { CharacterRuntime } from '../character.js';
 import type { GridPoint } from '../monster/step.js';
 import { TileOccupancy, move, placeReachable } from '../movement.js';
 import type { MoveResult } from '../movement.js';
+import { refusalOf } from './hunt.js';
+import type { SlotOutcome, SlotRefusal, UseSlotTarget } from './hunt.js';
+
+/** A mesma entrada crua que `HuntRuleset#configureBot` aceita — v1 ou v2, migrada ao guardar. */
+type BotConfigInput = BotConfigV2 | BotConfig;
 
 export interface CityRulesetOptions {
   /**
@@ -40,6 +49,17 @@ export interface CityRulesetOptions {
    * Ausente: a tabela base, sem bônus de vocação (hoje nenhuma vocação altera velocidade).
    */
   readonly vocations?: ReadonlyMap<string, Vocation>;
+  /**
+   * Catálogo de magias (#792, ADR 0044 d.2): sem ele, `useSlot` sempre recusa `not-in-catalog`
+   * — a mesma degradação de uma hunt sem `spells` (FUN-74). Só QUEM CONJURA sai daqui; o resto
+   * do vocabulário (dano, cura, condição) continua fora da Cidade (ver `useSlot`).
+   */
+  readonly spells?: ReadonlyMap<string, Spell>;
+  /**
+   * Coeficientes de combate (§12.1), exigidos por `castSpell` mesmo para conjuração — que não
+   * rola nada. Ausente é a mesma recusa de `spells` ausente.
+   */
+  readonly combat?: Combat;
 }
 
 /**
@@ -56,6 +76,14 @@ export interface CityRulesetOptions {
  */
 const ENTRY_TILES = 1_089;
 
+/**
+ * O tipo de retorno é mais largo que `Ruleset` de propósito (#792): `useSlot`/`configureBot` não
+ * são membros da interface (ver `session.ts`) — o host os alcança com `ruleset as
+ * Partial<HuntRuleset>`, a MESMA gambiarra estrutural que já usa para a hunt. Sem a variável
+ * `ruleset` abaixo, o literal de retorno tipado como `Ruleset` recusaria essas duas chaves por
+ * excesso de propriedade; passando por uma `const` sem anotação, o TypeScript só confere a
+ * atribuição — mais larga cabe em mais estreita.
+ */
 export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
   const world = options.map === undefined
     ? null
@@ -63,6 +91,11 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       ? {}
       : { fixedStepMs: options.stepDurationMs });
   let occupancyStale = true;
+  // A configuração de bot de cada personagem (#792): só para LER a barra de ações no
+  // `useSlot` manual — a Cidade não roda bot nenhum (hz 0, sem fila de eventos). Semeada por
+  // `configureBot` (ticket na entrada, ou `bot-config` salvo ao vivo — o host chama os dois
+  // pelo MESMO método, como já faz para a hunt).
+  const configs = new Map<string, BotConfigV2>();
 
   /**
    * Remonta a ocupação a partir de quem está na sessão — MENOS quem está entrando agora. O
@@ -77,8 +110,8 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
     world?.reset(session.participants.filter((p) => p !== arriving));
   };
 
-  return {
-    type: 'city',
+  const ruleset = {
+    type: 'city' as const,
     // O mapa que o cliente desenha (FUN-120). Cidade sem mapa é só fixture.
     ...(options.map === undefined ? {} : { mapId: options.map.id }),
 
@@ -177,5 +210,78 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       }
       return result;
     },
+
+    /**
+     * A configuração de bot do personagem (#792), pelo MESMO método que `HuntRuleset` expõe —
+     * é como `#requestUseSlot`/`#configureBot`/`#adoptTicketBotConfig` do host chegam aqui, via
+     * `ruleset as Partial<HuntRuleset>` e `configureBot?.(...)`, sem precisar saber que ruleset
+     * é este. A Cidade NÃO compila bot (`compileBot`/`#armBot` são coisa de hunt): guarda só a
+     * v2 migrada, para `useSlot` achar o que está em cada slot.
+     *
+     * `characterId` ausente é NO-OP — diferente da hunt (que cai no primeiro participante, o
+     * caminho solo), a Cidade é SHARD (FUN-71): "o primeiro da lista" não identifica ninguém
+     * aqui, e adivinhar escreveria a configuração de uma pessoa na conta de outra.
+     */
+    configureBot(_session: Session, config: BotConfigInput, characterId?: string): void {
+      if (characterId === undefined) return;
+      configs.set(characterId, migrateBotConfigV1(config));
+    },
+
+    /**
+     * O disparo manual de um slot na Cidade (#792, ADR 0044 d.2): só CONJURAÇÃO sai daqui.
+     *
+     * A Cidade é protect zone (ADR 0004, §37) — magia agressiva (`damage`/`damage-over-time`)
+     * é recusada por POLÍTICA, antes de tocar mana, cooldown ou RNG (`protection-zone`, nunca
+     * devolvida por uma hunt). O resto do vocabulário não-agressivo (cura, condição de haste/
+     * buff/mana-shield/dano-ao-longo-do-tempo) ficaria de FORA por um motivo mais estrutural:
+     * ele devolve uma `ConditionState` que só o RULESET agenda (`condition-expire`/`-tick` na
+     * fila de eventos), e a Cidade não tem fila — `onEvent` acima falha alto de propósito se
+     * algo cair nela (a mesma razão de `use-item`/`use-item-on` recusarem comida e poção aqui,
+     * ADR 0049 d.8). `conjure` é o único efeito que não agenda nada: credita o estoque e
+     * termina no mesmo instante, e é por isso que só ele sai desta lista — o resto fica para
+     * quando a Cidade ganhar relógio, o que o ADR 0004 diz que não terá.
+     *
+     * `target` é ignorado de propósito (RF-12 da #725/#726): conjuração não mira ninguém, e
+     * nenhum efeito liberado aqui lê `recipient` além do próprio lançador.
+     */
+    useSlot(
+      session: Session, characterId: string, set: number, slotIndex: number,
+      _target?: UseSlotTarget,
+    ): SlotOutcome {
+      const character = session.participants.find((p) => p.id === characterId);
+      if (character === undefined || !character.alive) return refuse('not-in-catalog', 0);
+      const config = configs.get(characterId);
+      if (config === undefined) return refuse('empty-slot', 0);
+      if (set !== config.activeSet) return refuse('wrong-set', 0);
+      const entry = config.sets[set]?.slots[slotIndex];
+      if (entry === null || entry === undefined) return refuse('empty-slot', 0);
+      if (entry.enabled === false) return refuse('disabled', 0);
+      // Item e supply (poção, runa de ataque) continuam recusados na Cidade (ADR 0049 d.8):
+      // só `spell` chega a ser considerado aqui.
+      if (entry.do.kind !== 'spell') return refuse('not-in-catalog', 0);
+      const spell = options.spells?.get(entry.do.spellId);
+      if (spell === undefined) return refuse('not-in-catalog', 0);
+      if (spell.effect.kind === 'damage' || spell.effect.kind === 'damage-over-time') {
+        return refuse('protection-zone', 0);
+      }
+      if (spell.effect.kind !== 'conjure' || options.combat === undefined) {
+        return refuse('not-in-catalog', 0);
+      }
+      const result = castSpell(
+        character, spell, null, session.nowMs, options.combat, session.rng,
+        undefined, character, undefined, ownPurse(character),
+      );
+      if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
+      // O gold da runa em branco (#594, ADR 0044), pela MESMA conta da hunt (`#castSpell`):
+      // `goldSpent` é 0 em toda conjuração de munição — só a de supply cobra a runa.
+      if (result.goldSpent > 0) session.credit(character.id, 'goldSpent', result.goldSpent);
+      return { ok: true };
+    },
   };
+  return ruleset;
+}
+
+/** A recusa do manual, montada num lugar só — espelha `refuse` de `hunt.ts` (DT-08). */
+function refuse(reason: SlotRefusal, retryInMs: number): SlotOutcome {
+  return { ok: false, reason, retryInMs };
 }

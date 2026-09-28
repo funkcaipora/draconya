@@ -391,7 +391,13 @@ export type SlotRefusal =
   | 'not-enough-mana' | 'not-enough-soul' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown'
   /** Stairhop (#554, M30-07): a magia é agressiva e a trava de ataque ainda não venceu. */
-  | 'attack-locked';
+  | 'attack-locked'
+  /**
+   * Magia AGRESSIVA (`damage`/`damage-over-time`) disparada na Cidade (#792, ADR 0044 d.2): a
+   * Cidade é protect zone (ADR 0004, §37) — combate nunca sai dali, só conjuração e o resto do
+   * vocabulário não-agressivo. Nenhuma hunt devolve esta razão: só `CityRuleset#useSlot`.
+   */
+  | 'protection-zone';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -501,8 +507,11 @@ export interface SlotState {
 /**
  * Traduz a recusa do atuador para a recusa do slot. É a salvaguarda de DT-08: `slotStates`
  * calcula o mesmo motivo por outro caminho, e o teste prende que os dois coincidem.
+ *
+ * Exportada para `CityRuleset#useSlot` (#792) reusar a MESMA tradução — duplicá-la é como as
+ * duas rotas de refusal divergem no dia em que uma delas ganha um `case` novo e a outra não.
  */
-function refusalOf(result: CastRefused): SlotRefusal {
+export function refusalOf(result: CastRefused): SlotRefusal {
   switch (result.reason) {
     case 'not-in-catalog':
     case 'level-too-low':
