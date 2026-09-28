@@ -78,9 +78,9 @@ import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
 } from '../rates.js';
 import {
-  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, reserveProportionally,
-  settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually, splitLootOf, uniqueVocations,
-  xpByDamage, xpShare,
+  autoSellLimit, bagValue, canShareExperience, DEFAULT_SHARED_EXPERIENCE_RULES, partyScaledManaCost,
+  reserveProportionally, settleEntries, shareCostsOf, sharedExperiencePercent, splitEqually,
+  splitLootOf, uniqueVocations, xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootAmmunition, LootItem, LootSupply } from '../loot.js';
@@ -2024,7 +2024,7 @@ export class HuntRuleset implements Ruleset {
         out.push({ set, slot, state: 'cooldown', remainingMs: wait, reason: 'on-cooldown' });
         continue;
       }
-      out.push(this.#naturalStateOf(set, slot, character, entry.do));
+      out.push(this.#naturalStateOf(session, set, slot, character, entry.do));
     }
     return out;
   }
@@ -5190,15 +5190,27 @@ const slots = bot.groups.get(group);
       && spell.effect.area !== undefined && isSelfOrigin(spell.effect.area)
       ? this.#collectHealAllies(session, character, spell.effect.area)
       : null;
+    // Alvo de party (#588: Heal/Protect/Enchant/Train Party) — o RAIO, não uma forma: quem cai
+    // dentro dele é o roster inteiro da sessão (líder incluso), como `Party::onCastSpell` do
+    // Canary. Colhido ANTES de `castSpell` pela MESMA razão da área de cura: só quem tem
+    // `session.participants` sabe quem está no alcance.
+    const partyAllies = (spell.effect.kind === 'heal-over-time' || spell.effect.kind === 'buff')
+      && spell.effect.target === 'party'
+      ? this.#collectPartyAllies(session, character, spell.effect.range ?? 0)
+      : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      this.#spellScaling(character), recipient, this.#attackerModifiers(character),
+      this.#spellScaling(character), recipient, this.#attackerModifiers(character), partyAllies,
     );
     if (!result.ok) return result;
-    // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
-    // não gastou mana, não praticou.
-    this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
+    // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL, escalado
+    // pela party quando for o caso, nunca o `base` de exibição do catálogo. Recusa não rende
+    // nada — não gastou mana, não praticou.
+    const manaCost = typeof spell.manaCost === 'number'
+      ? spell.manaCost
+      : partyScaledManaCost(spell.manaCost, partyAllies?.length ?? 0);
+    this.#gainSkills(session, character, 'spell-cast', manaCost);
 
     // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
     // e só depois faz cada número cair. A ordem é contrato.
@@ -5210,12 +5222,15 @@ const slots = bot.groups.get(group);
     session.emit({
       kind: 'spell-cast', casterId: character.id, spellId: spell.id,
       casterPosition: this.#at(character),
-      targets: aim === null
-        ? (healArea === null
-          ? NO_SPELL_TARGETS
-          : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })))
-        : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
-      // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
+      targets: aim !== null
+        ? this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) }))
+        : partyAllies !== null
+          ? partyAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) }))
+          : healArea === null
+            ? NO_SPELL_TARGETS
+            : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })),
+      // Os tiles da forma (#155): vetor NOVO pela razão de `targets`. Alvo de party não tem
+      // forma — é raio, não área — e não desenha tile nenhum.
       tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
     });
     // Dispel (#590): o `castSpell` devolve as CHAVES a remover, e quem tem a fila (para
@@ -5225,8 +5240,21 @@ const slots = bot.groups.get(group);
       this.#dispelConditions(session, recipient, result.dispel);
     }
     // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
-    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
+    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR
+    // — ou em CADA membro da party colhido acima (#588), a MESMA condição, sem sorteio por
+    // membro (os números do script são fixos: regen 20/2s, shielding +3, magic +1, melee/
+    // distance +3).
     if (result.condition !== undefined) {
+      if (partyAllies !== null) {
+        for (const ally of partyAllies) {
+          this.#applyConditionTo(session, ally, {
+            ...result.condition,
+            targetId: this.#subjectOf(ally),
+            sourceId: character.id,
+          });
+        }
+        return result;
+      }
       const target: ConditionTarget | undefined = result.condition.tick?.kind === 'damage'
         ? this.#spellHits[0]
         : character;
@@ -5262,6 +5290,31 @@ const slots = bot.groups.get(group);
 
     this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
     return result;
+  }
+
+  /**
+   * Colhe os membros da party no RAIO (#588: Heal/Protect/Enchant/Train Party) — `Party::
+   * onCastSpell` do Canary: o roster inteiro da MESMA sessão (líder incluso — o lançador está a
+   * distância 0 de si mesmo), vivos, no MESMO andar, dentro de `radius` tiles em distância
+   * Chebyshev (`getDistance` do Canary, `distance()` deste motor — nunca Manhattan). Ordem de
+   * `session.participants`, a mesma ordem-contrato de `#collectHealAllies`.
+   *
+   * Sem forma nenhuma — é raio, não área — e por isso não usa `areaTiles`/`isSelfOrigin`: as
+   * quatro magias do Canary aplicam a condição a quem está no alcance, não a quem cai numa
+   * geometria desenhada no chão (`AREA_CIRCLE5X5` do script é só o EFEITO visual, nunca lido
+   * para decidir quem recebe).
+   */
+  #collectPartyAllies(
+    session: Session, character: CharacterRuntime, radius: number,
+  ): readonly CharacterRuntime[] {
+    const allies: CharacterRuntime[] = [];
+    for (const participant of session.participants) {
+      if (!participant.alive) continue;
+      if (!sameFloor(character.position.z, participant.position.z)) continue;
+      if (distance(character.position, participant.position) > radius) continue;
+      allies.push(participant);
+    }
+    return allies;
   }
 
   /**
@@ -6076,7 +6129,7 @@ const slots = bot.groups.get(group);
    * e alvo — sem executar e sem consumir sorteio.
    */
   #naturalStateOf(
-    set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
+    session: Session, set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
   ): SlotState {
     const blocked = (reason: SlotRefusal): SlotState =>
       ({ set, slot, state: 'blocked', remainingMs: 0, reason });
@@ -6088,7 +6141,18 @@ const slots = bot.groups.get(group);
       if (spell.vocationId !== undefined && character.vocationId !== spell.vocationId) {
         return blocked('not-in-catalog');
       }
-      if (character.mana < spell.manaCost) return blocked('not-enough-mana');
+      // Alvo de party (#588): o mesmo espelho, SEM consumir sorteio nem mutar nada — `<= 1` é a
+      // MESMA recusa "No party members in range" que `castSpell` daria.
+      const effect = spell.effect;
+      if ((effect.kind === 'heal-over-time' || effect.kind === 'buff') && effect.target === 'party') {
+        const affected = this.#collectPartyAllies(session, character, effect.range ?? 0);
+        if (affected.length <= 1) return blocked('no-target');
+        if (character.mana < partyScaledManaCost(spell.manaCost, affected.length)) {
+          return blocked('not-enough-mana');
+        }
+        return { set, slot, state: 'ready', remainingMs: 0 };
+      }
+      if (character.mana < (spell.manaCost as number)) return blocked('not-enough-mana');
       if (this.#needsTarget(spell.effect)) {
         const range = 'range' in spell.effect ? spell.effect.range : undefined;
         if (this.#targetInRange(character, range) === null) return blocked('no-target');

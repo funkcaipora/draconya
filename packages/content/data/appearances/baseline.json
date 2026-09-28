@@ -2977,6 +2977,9 @@
     "blood-rage": {
       "effect": 14
     },
+    "train-party": {
+      "effect": 14
+    },
     "protector": {
       "effect": 13
     },
@@ -3167,6 +3170,12 @@
     "haste-druid": {
       "effect": 14
     },
+    "protect-party": {
+      "effect": 14
+    },
+    "enchant-party": {
+      "effect": 14
+    },
     "magic-shield-druid": {
       "effect": 13
     },
@@ -3187,6 +3196,9 @@
       "effect": 13
     },
     "heal-friend-druid": {
+      "effect": 13
+    },
+    "heal-party": {
       "effect": 13
     },
     "terra-wave": {

@@ -2338,6 +2338,92 @@ describe('cura em área — Mass Healing (#475, RF-05)', () => {
   });
 });
 
+// --- alvo de party e custo escalado (#588: Heal/Protect/Enchant/Train Party) ------------------
+
+describe('alvo de party e custo por tamanho da party (#588)', () => {
+  const healParty = {
+    id: 'heal-party', name: 'Heal Party', manaCost: { kind: 'party-scaled' as const, base: 120, decay: 0.9 },
+    cooldownMs: 1_000, group: 'support', groupCooldownMs: 1_000, minLevel: 1,
+    effect: {
+      kind: 'heal-over-time' as const, amount: 20, intervalMs: 2_000, durationMs: 120_000,
+      target: 'party' as const, range: 3,
+    },
+  };
+  const castHealParty = () => ({
+    heal: [{
+      when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+      do: { kind: 'spell' as const, spellId: 'heal-party' },
+    }],
+  });
+  const make = (id: string): CharacterRuntime => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 },
+    health: 100, maxHealth: 100, mana: 500, maxMana: 500,
+    level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+
+  it('cobra o custo do Canary escalado por quem está no alcance, e aplica a MESMA condição a cada um', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 500, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, healParty],
+    }));
+    const session = createHuntSession({
+      id: 'heal-party', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(castHealParty()),
+    });
+    const caster = make('hero');
+    session.enter(caster);
+    const near = make('near');
+    session.enter(near);
+    const far = make('far');
+    session.enter(far);
+    // Posiciona à mão DEPOIS de `enter` (que coloca "perto") — a mesma ordem do teste de Mass
+    // Healing acima. `range: 3`: `far` fica a 5 tiles — fora do alcance, nunca recebe e nunca
+    // conta para `n`.
+    near.position = { x: caster.position.x + 2, y: caster.position.y, z: caster.position.z };
+    far.position = { x: caster.position.x + 5, y: caster.position.y, z: caster.position.z };
+
+    session.advanceBy(50);
+
+    // n = 2 (hero + near; `far` não conta): ceil((0.9^1 * 120) * 2) = 216, não os 120 do `base`.
+    expect(caster.mana).toBe(500 - 216);
+    // Os dois no alcance carregam a MESMA condição — regen 20/2s por 2 minutos.
+    for (const member of [caster, near]) {
+      const condition = member.conditions.get('heal-over-time');
+      expect(condition, member.id).toMatchObject({
+        spellId: 'heal-party', tick: { amount: 20, intervalMs: 2_000 },
+      });
+    }
+    // Quem ficou fora do alcance não recebe nada.
+    expect(far.conditions.get('heal-over-time')).toBeNull();
+  });
+
+  it('recusa "no-target" com o lançador sozinho no alcance, e não gasta mana', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 500, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, healParty],
+    }));
+    const session = createHuntSession({
+      id: 'heal-party-solo', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(castHealParty()),
+    });
+    const caster = make('hero');
+    session.enter(caster);
+
+    session.advanceBy(50);
+
+    expect(caster.mana).toBe(500);
+    expect(caster.conditions.get('heal-over-time')).toBeNull();
+  });
+});
+
 // --- a contagem de "targets" usa o alcance da ARMA (#216) -------------------------------------
 
 describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desarmado (#216)', () => {

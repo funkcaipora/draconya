@@ -713,6 +713,28 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
     }
+    // Alvo de party (#588: Heal/Protect/Enchant/Train Party) segue a MESMA regra de
+    // `target`/`range` da cura em outro personagem: quem mira além do lançador precisa de
+    // alcance, e quem mira só a si mesmo não declara nenhum — nos dois sentidos, para um
+    // `range` esquecido (ou sobrando) não subir mudo.
+    if (effect.kind === 'heal-over-time' || effect.kind === 'buff') {
+      if (effect.target === 'party' && effect.range === undefined) {
+        problems.push(`${where}: alvo de party precisa de range`);
+      }
+      if ((effect.target === undefined || effect.target === 'self') && effect.range !== undefined) {
+        problems.push(`${where}: alvo em si mesmo não tem alcance`);
+      }
+    }
+    // O custo por tamanho da party (#588) só faz sentido ao lado de um efeito que de fato mira
+    // a party: sem isso, `party-scaled` cobraria por um `n` que a magia nunca resolve, e o
+    // custo real nunca bateria com o anunciado (`manaCostDisplayOf`, o `base`).
+    if (typeof spell.manaCost !== 'number') {
+      const targetsParty = (effect.kind === 'heal-over-time' || effect.kind === 'buff')
+        && effect.target === 'party';
+      if (!targetsParty) {
+        problems.push(`${where}: manaCost "party-scaled" precisa de um efeito com target "party"`);
+      }
+    }
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
