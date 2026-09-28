@@ -1503,6 +1503,56 @@ máquina com `THINGS_DIR` apontando para o pacote 13.x; arremesso livre de item 
 (mecânica que o Draconya não tem); e uma IA de monstro "persegue e recua sozinho" além do que
 `targetDistance` já cobre.
 
+## Trava de ataque ao trocar de andar (stairhop, #554, M30-07, ADR 0040 decisão 1)
+
+O TFS/Canary aplicam `CONDITION_PACIFIED` por `STAIRHOP_DELAY` (`stairJumpExhaustion`,
+`config.lua.dist:45`, `2 * 1000`) toda vez que a posição de um JOGADOR muda de andar ou é
+redirecionada por teleporte (`Player::internalCreatureChangeOutfit`/`onChangeZone`,
+`player.cpp:2857-2866` e `player.cpp:12417-12423`: `if (teleport || oldPos.z != newPos.z)`).
+Enquanto a condição vale, `Player::doAttacking` recusa o golpe corpo a corpo/distância inteiro
+(`player.cpp:3982`), e toda magia AGRESSIVA recusa com `RETURNVALUE_YOUAREEXHAUSTED`
+(`Spell::playerSpellCheck`, `spells.cpp:517`: `if (aggressive && player->hasCondition
+(CONDITION_PACIFIED))`) — `Spell::aggressive` é `true` por padrão, e só as magias que não
+precisam de alvo hostil (cura, condição própria) o desligam. Vale **só para jogador**: o monstro
+não conhece a condição.
+
+**O Draconya reproduz o MECANISMO, não a condição.** A `pacified` de verdade (M44-04) ainda não
+existe — `Conditions` (`packages/sim/src/conditions.ts`) é o vocabulário de haste/postura/magic
+shield/cura contínua, e nenhum deles é "recusa golpe". Migrar para lá é aditivo quando a
+condição existir; até então, `CharacterRuntime.attackLockedUntil` (opcional no `CharacterState`,
+`0` ausente, sem bump de `SNAPSHOT_FORMAT_VERSION`) é um instante ABSOLUTO do relógio lógico —
+como o cooldown de magia — escrito só por `HuntRuleset#step`, o ÚNICO lugar que escreve posição
+de criatura (FUN-69): pisar numa escada ou num teleporte (#734) redireciona o passo para um tile
+que não é o adjacente pedido — `z` diferente, ou a distância pedida — e é ESSE sinal (não um
+booleano "é escada?" separado) que dispara `attackLockedUntil = session.nowMs +
+stairhopDelayMs`. Um passo comum, adjacente e no mesmo andar, nunca grava nada.
+
+**`combat.stairhopDelayMs` é conteúdo, opcional, e só o `combat-v3` lê** (`HuntRuleset#isV3`,
+`packages/content/src/schemas.ts`) — a mesma disciplina aditiva do ADR 0031/0040: ausente é
+IDENTIDADE, e todo conteúdo `combat-v1`/`v2`, ou um `combat-v3` que não declare o campo, segue
+bit a bit sem trava nenhuma. A baseline real declara `2000` (o `stairJumpExhaustion` do Canary).
+
+**Dois portões conferem a trava, e os dois carregam o prazo exato de volta — como o
+cooldown:**
+
+1. **O golpe básico** (`#onPlayerAttack`): com `attackLockedUntil > nowMs`, o golpe engatilhado
+   NÃO sai — reagenda para o instante EXATO do destravamento (`attackLockedUntil - nowMs`), não
+   para o intervalo normal de ataque nem para o próximo vencimento do mundo. É a mesma
+   invariante de "engatilhado OU agendado, nunca os dois" que já vale para o cooldown de ataque:
+   a trava não some do relógio, ela move o vencimento.
+2. **A magia AGRESSIVA** (`castSpell`, `packages/sim/src/casting.ts`): `effect.kind === 'damage'`
+   ou `'damage-over-time'` recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
+   conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. Cura,
+   cura contínua, haste, postura e magic shield **não conferem a trava**: são o vocabulário que
+   não precisa de alvo hostil, a mesma exceção que `Spell::aggressive` já declara.
+
+`attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
+slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
+
+**Fora do escopo**: migrar para a condição `pacified` de verdade (M44-04); o `skull`/PvP do
+Canary que também gate a magia agressiva (o Draconya não tem PvP nem sistema de skull ainda);
+qualquer travamento fora de hunt/quest/boss/guild war — a Cidade não simula combate.
+
 ## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
 
 O M29-02 dá ao monstro um segundo número de alcance, distinto de `attackRange`: `monster.

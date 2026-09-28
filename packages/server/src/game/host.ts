@@ -256,6 +256,9 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
+  // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
+  // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
+  'attack-locked': 'Você está exausto.',
 };
 
 /**

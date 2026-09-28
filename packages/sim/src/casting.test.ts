@@ -108,6 +108,39 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
     expect(castSpell(caster, heal, null, 0, combat, rng()))
       .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
   });
+
+  describe('stairhop (#554, M30-07, ADR 0040 decisão 1): trava de ataque ao trocar de andar', () => {
+    const combatV3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+
+    it('magia AGRESSIVA recusa com `attack-locked` e o prazo exato — antes do alvo, e sem gastar mana', () => {
+      const caster = hero();
+      caster.attackLockedUntil = 2_000;
+      // Sem mira nenhuma (`null`): se a checagem de alcance/alvo viesse primeiro, a recusa
+      // seria `no-target`, não `attack-locked` — a ordem é a mesma do `playerSpellCheck` do
+      // Canary, que confere `CONDITION_PACIFIED` antes do alvo.
+      expect(castSpell(caster, strike, null, 500, combatV3, rng()))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(caster.mana).toBe(100);
+    });
+
+    it('vencida a trava, a magia agressiva sai normalmente', () => {
+      const caster = hero();
+      caster.attackLockedUntil = 2_000;
+      expect(castSpell(caster, strike, near(), 2_000, combatV3, rng()).ok).toBe(true);
+    });
+
+    it('cura NÃO é bloqueada pela MESMA trava — só `damage`/`damage-over-time` são agressivas', () => {
+      const caster = hero({ health: 10 });
+      caster.attackLockedUntil = 2_000;
+      expect(castSpell(caster, heal, null, 0, combatV3, rng()).ok).toBe(true);
+    });
+
+    it('só o `combat-v3` lê: sob `combat-v1`/`v2` a mesma trava não bloqueia a magia agressiva', () => {
+      const caster = hero();
+      caster.attackLockedUntil = 2_000;
+      expect(castSpell(caster, strike, near(), 0, combat, rng()).ok).toBe(true);
+    });
+  });
 });
 
 describe('castSpell — o efeito', () => {

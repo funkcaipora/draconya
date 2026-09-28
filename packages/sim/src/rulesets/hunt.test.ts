@@ -12063,6 +12063,152 @@ describe('hunt multiandar (#519)', () => {
   });
 });
 
+describe('stairhop: trava de ataque ao trocar de andar (#554, M30-07, ADR 0040 decisão 1)', () => {
+  // O mesmo par de andares e a mesma geometria do #519: descer em (2,1,7) pousa em (3,1,6),
+  // subir em (3,2,6) pousa em (2,2,7). O rato nasce EM CIMA do degrau de subida — é o segundo
+  // tile que o walker persegue depois de descer, e ele fica permanentemente ocupado, então a
+  // travessia de volta nunca acontece dentro da janela deste teste (bem menor que os ~500 ms
+  // que o walker levaria para sequer tentar o segundo passo).
+  const stairsMap = {
+    id: 'casa-554', z: 7,
+    floors: {
+      '7': { grid: ['######', '#....#', '#....#', '######'] },
+      '6': { grid: ['######', '#....#', '#....#', '######'] },
+    },
+    floorChanges: [
+      { from: { x: 2, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } },
+      { from: { x: 3, y: 2, z: 6 }, to: { x: 2, y: 2, z: 7 } },
+    ],
+  };
+  const stairsRoute = {
+    id: 'casa-554-loop', mapId: 'casa-554',
+    tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 3, y: 2, z: 6 }],
+    spawnPoints: [{ routeIndex: 2, radius: 1, at: { x: 3, y: 2, z: 6 }, monsterId: 'rat' }],
+  };
+  const stairsHunt = {
+    // `id: 'arena'` porque `start()` (o helper deste arquivo) sempre pede `huntId: 'arena'` —
+    // `content({ hunts: [...] })` SUBSTITUI a lista inteira, então não há colisão com a hunt
+    // padrão do topo do arquivo.
+    id: 'arena', name: 'Casa', recommendedLevel: 1, mapId: 'casa-554', routeId: 'casa-554-loop',
+    difficulties: {
+      cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 300_000 },
+    },
+  };
+  // O mesmo `combatV3` do #548 acima (`weaponDamage`/`distanceHitChance` mínimos exigidos pelo
+  // perfil), com `stairhopDelayMs` — a issue declara 2000, o número real da baseline.
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    stairhopDelayMs: 2_000,
+  };
+  const stairsContent = (): Content => content({
+    maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt], combat: [combatV3],
+  });
+
+  it('descer a escada trava o golpe por 2 s: nada antes, sai no instante exato do destravamento', () => {
+    const { session, hero, ruleset } = start({ loaded: stairsContent() });
+    // t=0: SPAWN e o primeiro PLAYER_STEP vencem no mesmo instante (a hunt entra pronta) — o
+    // rato já nasceu no degrau de subida, adjacente ao pouso da descida, e o walker já desceu.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+    expect(hero.attackLockedUntil).toBe(2_000);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    const fullHealth = monster.health;
+
+    // Ainda travado: avança quase até o destravamento e o rato continua intacto.
+    session.advanceBy(1_998);
+    expect(monster.health).toBe(fullHealth);
+
+    // Destravado: o golpe engatilhado sai no PRÓXIMO evento — o instante exato do
+    // destravamento, sem esperar o intervalo normal de ataque nem o mundo mudar de novo.
+    session.advanceBy(2);
+    expect(monster.health).toBeLessThan(fullHealth);
+  });
+
+  it('sem `stairhopDelayMs` declarado, a travessia não trava nada (ausente é identidade)', () => {
+    const combatV3SemStairhop = { ...combatV3, stairhopDelayMs: undefined };
+    const { session, hero, ruleset } = start({
+      loaded: content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt], combat: [combatV3SemStairhop],
+      }),
+    });
+    // Sem trava, o golpe SAI dentro deste mesmo `advanceBy` — a asserção compara com a vida
+    // CHEIA do conteúdo (`rat.health`), não com uma leitura de DEPOIS do golpe já ter saído.
+    session.advanceBy(1);
+    expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
+    expect(hero.attackLockedUntil).toBe(0);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    expect(monster.health).toBeLessThan(rat.health);
+  });
+
+  it('sob combat-v1/v2, a travessia não trava nada mesmo com `stairhopDelayMs` no conteúdo', () => {
+    // Defensivo: só o `combat-v3` lê o campo. Um conteúdo v1/v2 que o declarasse por engano
+    // continua bit a bit.
+    const { session, hero, ruleset } = start({
+      loaded: content({
+        maps: [stairsMap], routes: [stairsRoute], hunts: [stairsHunt],
+        combat: [{ ...combat, stairhopDelayMs: 2_000 }],
+      }),
+    });
+    session.advanceBy(1);
+    expect(hero.attackLockedUntil).toBe(0);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    expect(monster.health).toBeLessThan(rat.health);
+  });
+});
+
+describe('stairhop: magia agressiva recusa, cura não (#554, M30-07)', () => {
+  const combatV3 = {
+    ...combat, compatibilityProfile: 'combat-v3',
+    weaponDamage: { meleeCoefficient: 0.085, distanceCoefficient: 0.09, attackFactor: 1 },
+    distanceHitChance: { defaultMaxHitChance: 90, buckets: [] },
+    stairhopDelayMs: 2_000,
+  };
+
+  it('`strike` (dano) recusa com `attack-locked` e o prazo exato — a mana não sai', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
+      { mana: 200, monsters: false, combat: [combatV3] },
+    );
+    hero.attackLockedUntil = 1_500;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+    expect(hero.mana).toBe(200);
+  });
+
+  it('`heal` continua liberada com a MESMA trava ativa — a exceção do Canary para o que não é agressivo', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'heal' }, auto: false }]),
+      { health: 100, mana: 200, monsters: false, combat: [combatV3] },
+    );
+    hero.attackLockedUntil = 1_500;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(hero.health).toBe(160);
+    expect(hero.mana).toBe(180);
+  });
+
+  it('sob combat-v1/v2, `attackLockedUntil` não bloqueia a magia agressiva (só o combat-v3 lê)', () => {
+    // Sem monstro (`monsters: false`), `strike` recusa por falta de alvo — e é EXATAMENTE essa
+    // recusa, não `attack-locked`, que prova que o portão do stairhop nunca chegou a ser
+    // conferido fora do `combat-v3`: se conferisse, a recusa seria `attack-locked` primeiro.
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'strike' }, auto: false }]),
+      { mana: 200, monsters: false },
+    );
+    hero.attackLockedUntil = 1_500;
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(hero.mana).toBe(200);
+  });
+});
+
 describe('drunk: desvio de passo (M31-03, #558, ADR 0041)', () => {
   /** Conta toda rolagem de `Rng.integer` — o mesmo mecanismo do `CountingRng` acima, usado aqui
    * para provar "a criatura sem drunk não consome sorteio" e "cada passo com drunk rola UMA vez
