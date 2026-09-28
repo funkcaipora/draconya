@@ -308,3 +308,17 @@ export const ledger = pgTable(
     byCharacter: index('ledger_by_character').on(t.characterId, t.createdAt),
   }),
 );
+
+/**
+ * A Boosted Creature do dia (M42, #615, ADR 0054 decisão 7): uma linha por dia. `day` é a
+ * data (UTC, deslocada por `boosted.rolloverHourUtc`) em formato `YYYY-MM-DD` — chave primária
+ * de propósito: o `jobs` faz `INSERT … ON CONFLICT (day) DO NOTHING` para sortear no máximo
+ * uma vez por dia mesmo rodando a cada ciclo (idempotência sem lock a mais, a mesma trava que
+ * o índice único já dá ao ledger, invariante 10). Sem `characterId`: é do MUNDO, não de quem
+ * joga — todo mundo vê a mesma boosted no mesmo dia.
+ */
+export const worldDaily = pgTable('world_daily', {
+  day: text('day').primaryKey(),
+  boostedMonsterId: text('boosted_monster_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

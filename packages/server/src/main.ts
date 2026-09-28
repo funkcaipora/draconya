@@ -31,6 +31,7 @@ import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
+import { readCachedBoostedMonsterId, WorldDailyStore } from './world-daily.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -119,6 +120,9 @@ async function main(): Promise<void> {
       const apiLogger = logger.child({ role: 'api' });
       return createApi(configuration, apiLogger, {
         tickets,
+        // A Boosted Creature do dia (#615): só Redis, nunca Postgres (ADR 0054 decisão 7) —
+        // é a cópia que o `jobs` publica para a `api` ler barato a cada ticket emitido.
+        currentBoostedMonsterId: () => readCachedBoostedMonsterId(redis),
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}
@@ -229,6 +233,18 @@ async function main(): Promise<void> {
       // achariam líderes — que é exatamente o que o lock existe para impedir.
       lock: createSingletonLock(redis, `${configuration.NODE_ID}:${randomUUID()}`),
       ...(database === null ? {} : { database: database.db }),
+      // A Boosted Creature do dia (#615): candidato é o Bestiário INTEIRO — todo monstro com
+      // ficha, nunca uma lista separada de conteúdo (ADR 0054 decisão 7). Ausente sem
+      // `boosted/baseline.json` ou sem Postgres: o ciclo roda igual, só não sorteia nada.
+      ...(database === null || content.boosted === undefined || content.bestiary === undefined
+        ? {}
+        : {
+            boosted: {
+              store: new WorldDailyStore(redis, database.db),
+              rolloverHourUtc: content.boosted.rolloverHourUtc,
+              monsterIds: Object.keys(content.bestiary.entries),
+            },
+          }),
     }),
   };
 

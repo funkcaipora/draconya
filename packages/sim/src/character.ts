@@ -48,6 +48,15 @@ export interface CharacterState {
    */
   readonly vocationId?: string | null;
   /**
+   * A Boosted Creature do dia em que este personagem entrou no jogo (M42, #615, ADR 0052
+   * decisão 5): vem do ticket, FIXADA aqui como a versão de conteúdo (invariante 7) — e não
+   * relida do mundo a cada transição Cidade↔hunt, para a hunt que atravessa a virada continuar
+   * com a boosted com que nasceu (ADR 0054 decisão 7). Ausente é ticket sem o dado (conteúdo
+   * sem `boosted/baseline.json`, ou `api` antigo em deploy em rolagem): nenhuma hunt deste
+   * personagem aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
+  /**
    * Stamina que sobrava em `staminaUpdatedAtMs`, em milissegundos (§10). NÃO é decrementada
    * por ninguém fora da hunt: o valor de agora é calculado na leitura (ver `stamina.ts`).
    *
@@ -298,6 +307,8 @@ export class CharacterRuntime {
   level: number;
   xp: number;
   vocationId: string | null;
+  /** Ver `CharacterState.boostedMonsterId`. Nunca escrito depois da construção — fixado. */
+  readonly boostedMonsterId?: string;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
   /** Saldo-base privado; só `settleGoldDelta` pode incorporá-lo ao extrato já aceito. */
@@ -367,6 +378,7 @@ export class CharacterRuntime {
     this.level = state.level;
     this.xp = state.xp;
     this.vocationId = state.vocationId ?? null;
+    if (state.boostedMonsterId !== undefined) this.boostedMonsterId = state.boostedMonsterId;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.#gold = state.gold ?? 0;
@@ -542,6 +554,7 @@ export class CharacterRuntime {
       level: this.level,
       xp: this.xp,
       vocationId: this.vocationId,
+      ...(this.boostedMonsterId === undefined ? {} : { boostedMonsterId: this.boostedMonsterId }),
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       speed: this.speed,

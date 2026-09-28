@@ -3339,6 +3339,21 @@ export const bestiarySchema = z.object({
 export type Bestiary = z.infer<typeof bestiarySchema>;
 
 /**
+ * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): quando o dia troca no relógio de
+ * parede. `rolloverHourUtc` é a hora UTC (0–23) em que o `jobs` sorteia o monstro do próximo
+ * dia — o mesmo instante em que o Canary vira o server-save (`SpawnMonster::addMonster`,
+ * `spawn_monster.cpp:379-386`, e `data/globalevents/scripts/serverlog.lua` para o horário).
+ * Sem outro parâmetro: o CANDIDATO é o bestiário inteiro (`content.bestiary.entries`), não uma
+ * lista separada — todo monstro com ficha de Bestiário é elegível, como o Canary faz com
+ * `g_game().getBestiaryList()`.
+ */
+export const boostedSchema = z.object({
+  id: z.literal('baseline'),
+  rolloverHourUtc: z.number().int().min(0).max(23),
+});
+export type Boosted = z.infer<typeof boostedSchema>;
+
+/**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).
  *
  * **Fechado** porque o compilador só transforma em predicado o que conhece: uma linguagem de

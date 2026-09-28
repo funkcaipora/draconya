@@ -52,6 +52,13 @@ export interface TicketRouteDependencies {
    */
   readonly listItemInstances?: GameRepository['listItemInstances'];
   /**
+   * A Boosted Creature do dia (#615, ADR 0054 decisão 7), lida do cache em Redis que o `jobs`
+   * publica (`world-daily.ts`) — nunca do Postgres, que é mais caro pela mesma resposta.
+   * Ausente é `api` montado sem Redis (não deveria acontecer em produção) ou conteúdo sem
+   * `boosted/baseline.json`: nenhuma hunt deste ticket aplica o bônus.
+   */
+  readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
+  /**
    * Os storages do personagem (#731, ADR 0050 d.6 T2), para o ticket carregar — mesma razão e
    * mesma degradação de `listItemInstances`: ausente é personagem sem storage nenhum setado.
    */
@@ -147,6 +154,11 @@ export function createTicketHandler(
       return reply.code(503).send({ error: 'progress-not-settled' });
     }
 
+    // A boosted do dia (#615) não depende de posse nem de linha nenhuma — é do MUNDO —, então
+    // sai da trava, como a resolução de nó (FUN-53): uma lentidão do Redis aqui não segura a
+    // linha do personagem.
+    const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
     // verificador de nomes de personagem para qualquer conta autenticada.
     const issued = await withOwnedCharacter(
@@ -159,6 +171,7 @@ export function createTicketHandler(
           character,
           await deps.listItemInstances?.(character.id) ?? [],
           await deps.listCharacterStorages?.(character.id) ?? [],
+          boostedMonsterId,
         ),
         resolution.node,
       ),
@@ -192,12 +205,15 @@ export function initialCharacterOf(
   instances: Parameters<typeof inventoryOf>[0],
   /** Os storages do personagem (#731), como `listCharacterStorages` os devolve. */
   storages: readonly { readonly storageKey: string; readonly value: number }[] = [],
+  /** A Boosted Creature do dia (#615), do cache em Redis. Ver `TicketRouteDependencies`. */
+  boostedMonsterId?: string,
 ): InitialCharacter {
   return {
     level: character.level,
     xp: character.xp,
     name: character.name,
     gold: character.gold,
+    ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),

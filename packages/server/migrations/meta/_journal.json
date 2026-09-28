@@ -120,6 +120,13 @@
       "when": 1790500000000,
       "tag": "0016_569-skills-updated-at",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790568450668,
+      "tag": "0017_615-boosted-creature-world-daily",
+      "breakpoints": true
     }
   ]
 }

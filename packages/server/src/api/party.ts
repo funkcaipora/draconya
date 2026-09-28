@@ -38,6 +38,8 @@ export interface PartyRouteDependencies {
   readonly listItemInstances?: GameRepository['listItemInstances'];
   /** Os storages de cada membro (#731), pela mesma razão de `listItemInstances`. */
   readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
+  /** A Boosted Creature do dia (#615). Ver `TicketRouteDependencies.currentBoostedMonsterId`. */
+  readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
   readonly settleProgress: (characterId: string) => Promise<SettlementResult>;
   /**
    * O snapshot de sessão de CADA personagem (#527, ADR 0010): um nó que reiniciou no meio de
@@ -301,6 +303,7 @@ async function joinRunningParty(
         candidate,
         await deps.listItemInstances?.(me.characterId) ?? [],
         await deps.listCharacterStorages?.(me.characterId) ?? [],
+        await deps.currentBoostedMonsterId?.(),
       ),
     }],
   };
@@ -824,6 +827,10 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       }
     }
 
+    // A boosted do dia (#615) é UMA leitura para a party inteira — todo mundo que entra na
+    // MESMA hunt agora vê a MESMA boosted, e não uma por membro lido em instantes diferentes.
+    const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+
     // As linhas, com a conta de cada um (registrada ao entrar na party).
     const members: PartyTicket['members'][number][] = [];
     for (const characterId of party.members) {
@@ -836,6 +843,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
           character,
           await deps.listItemInstances?.(characterId) ?? [],
           await deps.listCharacterStorages?.(characterId) ?? [],
+          boostedMonsterId,
         ),
       });
     }

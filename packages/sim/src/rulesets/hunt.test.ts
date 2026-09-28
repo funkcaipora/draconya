@@ -349,7 +349,8 @@ interface Started {
 function start(
   options: { difficulty?: 'cautious' | 'bold'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
-    inventory?: InventoryState; bestiary?: BestiaryState; gold?: number } = {},
+    inventory?: InventoryState; bestiary?: BestiaryState; gold?: number;
+    boostedMonsterId?: string } = {},
 ): Started {
   // `difficulty` não seleciona mais nada no conteúdo (#583) — é só um rótulo aceito e ignorado
   // pelo `sim`. "bold" aqui é o pedido de DENSIDADE que a dificuldade costumava dar de graça
@@ -362,6 +363,7 @@ function start(
     difficulty: options.difficulty ?? 'cautious',
     createdAtMs: 0,
     ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
+    ...(options.boostedMonsterId === undefined ? {} : { boostedMonsterId: options.boostedMonsterId }),
   });
   const hero = character({
     ...(options.health === undefined ? {} : { health: options.health }),
@@ -560,6 +562,39 @@ describe('a sessão em si', () => {
     run(session, 20_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(hero.goldDelta).toBe(session.aggregates.kills * 3);
+    expect(session.aggregates.goldGained).toBe(hero.goldDelta);
+  });
+
+  it('não aplica bônus nenhum sem `boostedMonsterId`, e nenhum quando a boosted é OUTRO monstro (#615)', () => {
+    // A hunt não tem `boostedMonsterId` — sanidade do caminho de sempre.
+    const { session: plain, hero: plainHero } = start();
+    run(plain, 20_000, 100);
+    expect(plainHero.xp).toBe(plain.aggregates.kills * rat.experience);
+    expect(plainHero.goldDelta).toBe(plain.aggregates.kills * 3);
+
+    // A boosted do dia é OUTRO monstro (nenhum aqui, mas a hunt só tem `rat`) — o rato que
+    // morre nunca bate `monsterId === boostedMonsterId`, e o efeito nunca liga.
+    const { session, hero } = start({ boostedMonsterId: 'dragon' });
+    run(session, 20_000, 100);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience);
+    expect(hero.goldDelta).toBe(session.aggregates.kills * 3);
+  });
+
+  it('XP ×2 para a Boosted Creature do dia (#615, ADR 0054 decisão 7)', () => {
+    const { session, hero } = start({ boostedMonsterId: 'rat' });
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience * 2);
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('um roll extra de loot para a Boosted Creature do dia (#615, ondroploot_boosted.lua)', () => {
+    // `rat.loot.gold` é `{ chance: 1, min: 3, max: 3 }`: nunca falha e nunca sorteia
+    // quantidade (min === max, FUN-63) — o dobro é EXATO, sem depender de semente nenhuma.
+    const { session, hero } = start({ boostedMonsterId: 'rat' });
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.goldDelta).toBe(session.aggregates.kills * 3 * 2);
     expect(session.aggregates.goldGained).toBe(hero.goldDelta);
   });
 
@@ -8300,6 +8335,75 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
       return { present: session.participants.map((p) => p.id), left: left(session).map((e) => (e.kind === 'member-left' ? e.characterId : '')), ended: session.ended };
     };
     expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('Boosted Creature do dia (#615, ADR 0054 decisão 7)', () => {
+  // `respawnDelayMs` bem mais curto que o `route` padrão (30 s), só para os dois lados do
+  // teste caberem num tempo de execução razoável: metade é 10 s, e o teste espera no máximo
+  // 22 s de relógio LÓGICO (instantâneo — é `session.advanceBy`, não `setTimeout`).
+  const halvedRoute = {
+    ...route,
+    spawnPoints: [{ routeIndex: 4, radius: 2, monsterId: 'rat', respawnDelayMs: 20_000 }],
+  };
+
+  /** Avança em passos pequenos até o primeiro rato morrer, e devolve o instante da morte. */
+  function untilFirstDeath(session: Session, ruleset: HuntRuleset): number {
+    for (let i = 0; i < 400; i++) {
+      session.advanceBy(50);
+      if (ruleset.monsters.filter((m) => m.alive).length === 0) return session.nowMs;
+    }
+    throw new Error('o rato não morreu dentro da janela do teste');
+  }
+
+  // Não-bloqueável (o rato desta fixture não declara `blockable`) telegrafa antes de nascer de
+  // verdade (#583): `NONBLOCKABLE_SPAWN_TELEGRAPH_MS` (4 200 ms) some em cima do
+  // `respawnDelayMs` — os dois lados do teste dão a margem para ele, sem depender do número
+  // exato.
+  it('spawntime / 2 nos pontos da boosted — ainda morto na metade do prazo normal, vivo na metade do dobrado', () => {
+    const loaded = content({ routes: [halvedRoute] });
+    const { session, ruleset } = start({ loaded, boostedMonsterId: 'rat' });
+    untilFirstDeath(session, ruleset);
+    // 9 s depois da morte: nem a metade (10 s) venceu ainda.
+    session.advanceBy(9_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+    // Mais 7 s (16 s do total): a metade (10 s) mais o telegraph (4,2 s) já passaram — o
+    // dobro do prazo (20 s) ainda não teria vencido se a boosted não estivesse ligada.
+    session.advanceBy(7_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(1);
+  });
+
+  it('sem boosted, o mesmo ponto espera o `respawnDelayMs` INTEIRO', () => {
+    const loaded = content({ routes: [halvedRoute] });
+    const { session, ruleset } = start({ loaded });
+    untilFirstDeath(session, ruleset);
+    // 16 s depois da morte (o instante em que a versão boosted já teria respawnado, telegraph
+    // incluído): o prazo de 20 s inteiro ainda não venceu.
+    session.advanceBy(16_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+    // Mais 9 s (25 s do total): os 20 s inteiros mais o telegraph já passaram.
+    session.advanceBy(9_000);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(1);
+  });
+
+  it('fica FIXADA no snapshot: uma hunt retomada não perde nem troca a boosted com que nasceu', () => {
+    const { session, ruleset } = start({ boostedMonsterId: 'rat' });
+    run(session, 1_000, 100);
+    expect(ruleset.getState().boostedMonsterId).toBe('rat');
+
+    const snapshot = session.snapshot();
+    const restoredRuleset = huntRulesetFromSnapshot(snapshot, content());
+    expect(restoredRuleset).not.toBeNull();
+    // Reconstruído do snapshot, sem NADA do conteúdo dizer "rat" de novo — é a IDENTIDADE da
+    // instância que o `HuntRulesetState.boostedMonsterId` carrega, como `huntId`/`difficulty`.
+    expect(restoredRuleset?.getState().boostedMonsterId).toBe('rat');
+  });
+
+  it('ausente é hunt sem boosted (conteúdo sem `boosted/baseline.json`, ou ticket que não trouxe): nenhum efeito liga', () => {
+    const { session, ruleset } = start();
+    expect(ruleset.getState().boostedMonsterId).toBeUndefined();
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
   });
 });
 
