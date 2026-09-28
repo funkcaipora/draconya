@@ -434,6 +434,22 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       'sudden-death-rune': { damageType: 'death', skillMin: 4.605, skillMax: 7.395, baseMin: 28, baseMax: 46, missile: 11 },
       'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59, missile: 5 },
       'explosion-rune': { damageType: 'physical', shape: 'cross', skillMin: 0, skillMax: 4.8 },
+      // #597 — as 5 runas que faltavam para as 12 do Canary (`staging/runes/generated/general.json`).
+      'fireball-rune': {
+        damageType: 'fire', skillMin: 1.81, skillMax: 3, baseMin: 10, baseMax: 18, missile: 4,
+      },
+      'icicle-rune': {
+        damageType: 'ice', skillMin: 1.81, skillMax: 3, baseMin: 10, baseMax: 18, missile: 29,
+      },
+      'light-magic-missile-rune': {
+        damageType: 'energy', skillMin: 0.4, skillMax: 0.81, baseMin: 2, baseMax: 4, missile: 5,
+      },
+      'light-stone-shower-rune': {
+        damageType: 'earth', shape: 'cross', skillMin: 0.3, skillMax: 0.45, baseMin: 2, baseMax: 3, missile: 30,
+      },
+      'stalagmite-rune': {
+        damageType: 'earth', skillMin: 0.4, skillMax: 1.59, baseMin: 2, baseMax: 10, missile: 30,
+      },
     };
     for (const [id, want] of Object.entries(expected)) {
       const effect = content.supplies.get(id)?.effect;

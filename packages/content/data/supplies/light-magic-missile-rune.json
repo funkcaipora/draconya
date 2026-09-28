@@ -1,0 +1,26 @@
+{
+  "id": "light-magic-missile-rune",
+  "name": "Light Magic Missile Rune",
+  "description": "Lança um projétil de energia no alvo selecionado.",
+  "price": 4,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 15,
+    "magicLevel": 0
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.4,
+      "skillMax": 0.81,
+      "baseMin": 2,
+      "baseMax": 4
+    },
+    "range": 8,
+    "damageType": "energy"
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#595, `staging/runes/generated/general.json`, `light_magic_missile.lua`): min = level/5 + ml*0.4 + 2, max = level/5 + ml*0.81 + 4. Level 15 e magic level 0 (`rune:level`/`rune:magicLevel`), sem área — alvo único. `price` 4: menor `buy` de `data-otservbr-global/npc/asima.lua` para o clientId 3174 (M34-03/#574, `SUPPLY_CANARY_IDS`). Aparência: efeito 12 e projétil 5, reaproveitados de `heavy-magic-missile-rune` (mesmo elemento energia) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

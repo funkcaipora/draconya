@@ -596,8 +596,20 @@ uso**, por `useSupply`, como qualquer suprimento (ADR 0032 d.6).
 | Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.605 + 28` / `level/5 + ml×7.395 + 46` |
 | Heavy Magic Missile | `energy` | **alvo único** | 25 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Explosion | `physical` | **cruz** raio 1 | 31 / 6 | `level/5` (aprox.) / `level/5 + ml×4.8` |
+| Fireball | `fire` | **alvo único** | 27 / 4 | `level/5 + ml×1.81 + 10` / `level/5 + ml×3 + 18` |
+| Icicle | `ice` | **alvo único** | 28 / 4 | `level/5 + ml×1.81 + 10` / `level/5 + ml×3 + 18` |
+| Light Magic Missile | `energy` | **alvo único** | 15 / 0 | `level/5 + ml×0.4 + 2` / `level/5 + ml×0.81 + 4` |
+| Light Stone Shower | `earth` | **cruz** raio 1 | 1 / 0 | `level/5 + ml×0.3 + 2` / `level/5 + ml×0.45 + 3` |
+| Stalagmite | `earth` | **alvo único** | 24 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Intense Healing (runa) | cura | **alvo único** | 15 / 1 | `level/5 + ml×3.2 + 20` / `level/5 + ml×5.4 + 40` |
 | Ultimate Healing (runa) | cura | **alvo único** | 24 / 4 | `level/5 + ml×7.3 + 42` / `level/5 + ml×12.4 + 90` |
+
+As 5 acima fecham o catálogo de 12 runas de ataque do Canary (#597; `data/scripts/runes/`,
+`things/sources/canary` 47dfd51). Fora desta contagem, de propósito: `lightest-magic-missile-rune`/
+`lightest-missile-rune` (dano quase nulo ou negativo — runa de treino de skill em dummy) e
+`holy-missile-rune` (restrita ao Paladin); nenhuma das três tem pedido explícito. Runas de campo
+(`fire_bomb`/`energy_bomb`/`poison_bomb`) continuam fora — mecanismo de campo lançável pelo
+jogador não existe ainda.
 
 A `formula` é a mesma da magia de dano (#474): `min = level × levelFactor + ml × skillMin +
 baseMin` (idem `max`), com `levelFactor` 0,2 — o `level / 5` da referência. Runa sem `formula`
