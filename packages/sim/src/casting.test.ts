@@ -25,6 +25,10 @@ const strike: Spell = {
   id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000, minLevel: 1,
   effect: { kind: 'damage', power: 40, range: 3, damageType: 'arcane' },
 };
+const challenge: Spell = {
+  id: 'challenge', name: 'Challenge', manaCost: 30, cooldownMs: 2_000, minLevel: 20,
+  effect: { kind: 'challenge', durationMs: 6_000, range: 3 },
+};
 
 const potion: Supply = {
   id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_000, requires: {},
@@ -36,11 +40,12 @@ const manaPotion: Supply = {
 };
 
 const hero = (over: Partial<{
-  health: number; mana: number; level: number; gold: number; goldDelta: number;
+  health: number; mana: number; soul: number; level: number; gold: number; goldDelta: number;
 }> = {}): CharacterRuntime => new CharacterRuntime({
   id: 'hero', position: { x: 1, y: 1, z: 7 },
   health: over.health ?? 100, maxHealth: 100,
   mana: over.mana ?? 100, maxMana: 100,
+  soul: over.soul ?? 100,
   level: over.level ?? 10, xp: 0, vocationId: null,
   staminaMs: null, staminaUpdatedAtMs: 0,
   gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
@@ -141,6 +146,23 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       expect(castSpell(caster, strike, near(), 0, combat, rng()).ok).toBe(true);
     });
   });
+
+  it('sem alma, recusa — pela MESMA regra da mana (#593)', () => {
+    const caster = hero({ soul: 2 });
+    const costly: Spell = { ...heal, soulCost: 3 };
+    expect(castSpell(caster, costly, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-soul', retryInMs: 0 });
+    // Nada foi gasto: a recusa não fica devendo.
+    expect(caster.mana).toBe(100);
+    expect(caster.soul).toBe(2);
+  });
+
+  it('com alma suficiente, a magia gasta o custo declarado', () => {
+    const caster = hero({ soul: 5 });
+    const costly: Spell = { ...heal, soulCost: 3 };
+    expect(castSpell(caster, costly, null, 0, combat, rng()).ok).toBe(true);
+    expect(caster.soul).toBe(2);
+  });
 });
 
 describe('castSpell — o efeito', () => {
@@ -165,6 +187,44 @@ describe('castSpell — o efeito', () => {
     // 40 de poder, 10 de armadura, efetividade mágica 1 neste conteúdo de teste.
     expect(result).toMatchObject({ ok: true, damage: 30, hits: [30], healed: 0 });
     expect(caster.mana).toBe(85);
+  });
+});
+
+describe('castSpell — Challenge (#589): o mesmo portão de dano, sem golpe nenhum', () => {
+  it('recusa abaixo do level mínimo, sem gastar mana', () => {
+    const caster = hero({ level: 1 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+  });
+
+  it('recusa em cooldown, com o prazo restante', () => {
+    const caster = hero({ level: 30 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()).ok).toBe(true);
+    expect(castSpell(caster, challenge, near(), 400, combat, rng()))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 1_600 });
+  });
+
+  it('sem alvo é `no-target`, e fora de alcance é `out-of-range` — mesma ordem de `damage`', () => {
+    const caster = hero({ level: 30 });
+    expect(castSpell(caster, challenge, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(castSpell(caster, challenge, near({ distance: 4 }), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+  });
+
+  it('sem mana suficiente, recusa depois de conferir o alvo', () => {
+    const caster = hero({ level: 30, mana: 5 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('sucesso não causa dano nem cura — o efeito é todo do ruleset, que tem os monstros atingidos', () => {
+    const caster = hero({ level: 30 });
+    const result = castSpell(caster, challenge, near(), 0, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(70);
   });
 });
 
@@ -212,6 +272,85 @@ describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
     const user = hero({ gold: 0 });
     const result = useSupply(user, antidoteRune, null, combat, rng());
     expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+  });
+});
+
+describe('castSpell/useSupply — Paralyze Rune e Invisibility (#592)', () => {
+  const invisibility: Spell = {
+    ...heal, id: 'invisibility-druid', manaCost: 440, minLevel: 35,
+    effect: { kind: 'invisible', durationMs: 200_000 },
+  };
+  const paralyzeRune: Supply = {
+    id: 'paralyze-rune', name: 'Paralyze Rune', price: 700, group: 'support',
+    groupCooldownMs: 2_000, cooldownMs: 6_000, requires: { level: 54, magicLevel: 18 },
+    effect: {
+      kind: 'condition', target: 'enemy', range: 3,
+      condition: {
+        key: 'speed', merge: 'strongest', durationMs: 6_000,
+        effect: { kind: 'speed', type: 'paralyze', formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 } },
+      },
+    },
+  };
+  /** A mira de um MONSTRO, com `speed`/`creatureId` — o que a runa de condição precisa. */
+  const monsterAim = (speed: number, distance = 1) => ({
+    distance,
+    targets: [{ armor: 0, dodgeChance: 0, creatureId: 'm:1', speed }],
+  });
+  const scaling: SpellScaling = { skillLevel: 20, powerScale: 1 };
+
+  it('Invisibility devolve a condição `invisible` no LANÇADOR, sem curar nem gastar sorteio', () => {
+    const caster = hero({ mana: 500, level: 40 });
+    const result = castSpell(caster, invisibility, null, 1_000, combat, rng(), scaling);
+    expect(result).toMatchObject({
+      ok: true, healed: 0, damage: 0, hits: [],
+      condition: { key: 'invisible', spellId: 'invisibility-druid', expiresAtMs: 201_000 },
+    });
+    expect(caster.mana).toBe(60); // 500 - 440 (§4.4, `invisibility.manaCost`).
+  });
+
+  it('Invisibility recusa sem mana — 440 é mais que o hero de teste tem por padrão', () => {
+    const caster = hero({ mana: 100, level: 40 });
+    const result = castSpell(caster, invisibility, null, 0, combat, rng(), scaling);
+    expect(result).toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('Paralyze Rune mira o MONSTRO: devolve a condição `speed` com o alvo dele, não o do usuário', () => {
+    const user = hero({ gold: 1_000, level: 60 });
+    const result = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 1_000,
+    );
+    expect(result).toMatchObject({
+      ok: true, healed: 0, damage: 0, hits: [], goldSpent: 700,
+      condition: { key: 'speed', targetId: 'm:1', sourceId: 'hero' },
+    });
+    // baseSpeed 220, formula (-1,0,-1,0): min=max=40-220=-180, speedDelta antes do piso
+    // = -180-220 = -400, piso 40-220=-180 vence — a mesma matemática de `conditions.test.ts`.
+    expect((result as { ok: true; condition?: { speedPercent?: number } }).condition?.speedPercent)
+      .toBeCloseTo((-180 / 220) * 100);
+  });
+
+  it('Paralyze Rune recusa sem alvo, como a runa de ataque', () => {
+    const user = hero({ gold: 1_000, level: 60 });
+    const result = useSupply(user, paralyzeRune, null, combat, rng(), scaling, undefined, undefined, 1_000);
+    expect(result).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+  });
+
+  it('Paralyze Rune tem cooldown PRÓPRIO de 6s, além do grupo de 2s (#592)', () => {
+    const user = hero({ gold: 10_000, level: 60 });
+    const first = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 0,
+    );
+    expect(first.ok).toBe(true);
+    // 3s depois: o GRUPO (2s) já venceu, mas o livro PRÓPRIO (6s) ainda tranca — sem isto a
+    // runa recarregaria no ritmo do grupo, e o #592 existe exatamente para essa diferença.
+    const second = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 3_000,
+    );
+    expect(second).toMatchObject({ ok: false, reason: 'on-cooldown' });
+    const third = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 6_000,
+    );
+    expect(third.ok).toBe(true);
   });
 });
 
@@ -586,6 +725,17 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
     expect(at(recovery, 1_000)).toMatchObject({
       ok: true, condition: { key: 'heal-over-time', expiresAtMs: 61_000, tick: { amount: 20, intervalMs: 3_000 } },
     });
+  });
+
+  it('remove-condition (#596: Cancel Magic Shield) devolve a chave e NÃO agenda condição nenhuma', () => {
+    const caster = hero({ level: 20, mana: 1_000 });
+    const cancel: Spell = { ...heal, id: 'cancel-magic-shield', manaCost: 50, effect: { kind: 'remove-condition', key: 'mana-shield' } };
+    const result = castSpell(caster, cancel, null, 0, combat, rng());
+    expect(result).toMatchObject({ ok: true, removeConditionKey: 'mana-shield' });
+    // Ao contrário de `mana-shield`/`haste`/`heal-over-time` (acima), esta magia NÃO devolve
+    // `condition` — não há nada para o ruleset agendar na fila de eventos.
+    expect((result as { condition?: unknown }).condition).toBeUndefined();
+    expect(caster.mana).toBe(1_000 - 50);
   });
 
   describe('alvo de party e custo escalado (#588: Heal/Protect/Enchant/Train Party)', () => {

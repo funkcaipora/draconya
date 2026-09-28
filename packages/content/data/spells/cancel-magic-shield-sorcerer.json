@@ -1,0 +1,16 @@
+{
+  "id": "cancel-magic-shield-sorcerer",
+  "name": "Cancel Magic Shield",
+  "description": "Remove o seu próprio Magic Shield imediatamente.",
+  "vocationId": "sorcerer",
+  "minLevel": 14,
+  "manaCost": 50,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "remove-condition",
+    "key": "mana-shield"
+  },
+  "_open": "Magia que faltava no catálogo (#596; ADR 0037): `exana vita` no Canary, o par de Magic Shield (`magic-shield-sorcerer.json`) — remove a condição SEM esperar o prazo vencer, para o jogador voltar a curar vida em vez de mana antes de uma cura grande. Fonte `data/scripts/spells/support/cancel_magic_shield.lua` (Canary local, 47dfd51): `spell:id(245)`, level 14, mana 50, cooldown 2s, grupo `support` 2s, `isSelfTarget`; `creature:removeCondition(CONDITION_MANASHIELD)`. Mecanismo NOVO (`spellEffectSchema.remove-condition`, `packages/sim/src/casting.ts`/`rulesets/hunt.ts`): ao contrário de toda outra `SpellEffect`, não agenda nada — `castSpell` devolve `CastSuccess.removeConditionKey`, e o ruleset chama `character.conditions.remove('mana-shield')` na hora, sem evento na fila (não há \"vencimento\" para uma remoção). Aparência: efeito 13, reaproveitado de `magic-shield-sorcerer` (o mesmo tema, cancelando o próprio efeito) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

@@ -17,6 +17,7 @@
 import type { Tilemap } from '@draconya/content';
 import { floorChangeAt, groundSpeed, isBlocked } from '@draconya/content';
 import type { GridPoint } from './monster/step.js';
+import type { Fields } from './fields.js';
 import type { TileOverrides } from './tile-overrides.js';
 
 /**
@@ -72,10 +73,12 @@ export interface MovementWorld {
   vacate(x: number, y: number, z?: number): void;
   occupy(x: number, y: number, z?: number): void;
   /**
-   * Bloqueado por geometria OU por overlay de sessão (#728, ADR 0050 d.2)? Combina o `Tilemap`
-   * (parede, fora do mapa) com `TileOverrides` (porta fechada, capim, stone pile) — UMA
+   * Bloqueado por geometria, por overlay de sessão (#728, ADR 0050 d.2) OU por campo bloqueante
+   * (#560, Magic Wall/Wild Growth)? Combina o `Tilemap` (parede, fora do mapa) com
+   * `TileOverrides` (porta fechada, capim, stone pile) e `Fields` (parede temporária) — UMA
    * pergunta para `canOccupy`/`move`, o passo guloso e o BFS do follow, em vez de cada um saber
-   * que existem dois lugares para conferir.
+   * que existem três lugares para conferir. Vale IGUAL para jogador e monstro — ao contrário do
+   * desvio de dano (`canMonsterEnterField`), que só o monstro respeita.
    */
   blockedAt(x: number, y: number, z: number): boolean;
   /** Pisar aqui muda de andar — escada do mapa OU overlay (stone pile virada buraco, #728)? */
@@ -399,15 +402,20 @@ export class TileOccupancy implements MovementWorld {
   readonly fixedStepMs?: number;
   /** O overlay de cenário usável desta sessão (#728). Ausente é "mapa sem interativo". */
   readonly overrides?: TileOverrides;
+  /** Os campos de tile desta sessão (#560). Ausente é "nenhum campo pode bloquear aqui". */
+  readonly fields?: Fields;
   readonly #occupied = new Set<number>();
 
   constructor(
     map: Tilemap,
-    options: { readonly fixedStepMs?: number; readonly overrides?: TileOverrides } = {},
+    options: {
+      readonly fixedStepMs?: number; readonly overrides?: TileOverrides; readonly fields?: Fields;
+    } = {},
   ) {
     this.map = map;
     if (options.fixedStepMs !== undefined) this.fixedStepMs = options.fixedStepMs;
     if (options.overrides !== undefined) this.overrides = options.overrides;
+    if (options.fields !== undefined) this.fields = options.fields;
   }
 
   occupied(x: number, y: number, z: number = this.map.z): boolean {
@@ -426,7 +434,12 @@ export class TileOccupancy implements MovementWorld {
   }
 
   blockedAt(x: number, y: number, z: number = this.map.z): boolean {
-    return isBlocked(this.map, x, y, z) || (this.overrides?.blockedAt(x, y, z) ?? false);
+    return isBlocked(this.map, x, y, z)
+      || (this.overrides?.blockedAt(x, y, z) ?? false)
+      // Campo bloqueante (#560, Magic Wall/Wild Growth) — a terceira fonte, igual para
+      // qualquer criatura: `canOccupy`/`move` não distinguem jogador de monstro aqui, ao
+      // contrário do desvio de dano que só o monstro respeita (`#fieldBlocksMonster`, hunt.ts).
+      || (this.fields?.blockedAt({ x, y, z }) ?? false);
   }
 
   floorChangeAt(x: number, y: number, z: number = this.map.z): WorldPoint | null {

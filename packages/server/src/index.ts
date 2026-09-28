@@ -21,6 +21,6 @@ export * from './game/viewer.js';
 export * from './game/host.js';
 export * from './game/aoi.js';
 export {
-  CITY_SHARD_CAPACITY, CityShard, createBotConfigValidator, createCitySessionFactory,
-  createSessionBuilder, createSessionRestorer,
+  CITY_SHARD_CAPACITY, CityShard, createBotConfigLoader, createBotConfigValidator,
+  createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';

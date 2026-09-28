@@ -28,7 +28,7 @@ const catalog = new Map<string, Item>([
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
   startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
-  meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+  meleeDamageMultiplier: 1, distDamageMultiplier: 1, soulMax: 100, soulGainTicksMs: 120000,
 };
 const paladin: Vocation = { ...knight, id: 'paladin', name: 'Paladin', startingWeaponItemId: 'bow' };
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { FieldSpec } from '@draconya/content';
+import type { ConditionSpec } from '@draconya/content';
 import { Fields, fieldTileKey } from './fields.js';
 import type { TileFieldState } from './fields.js';
 
 // Os campos de tile (CMB-07): o índice por tile, a sobreposição e a serialização. O que este
 // teste prende é a ESTRUTURA — a leitura é O(1) por tile e nenhum passo varre a lista.
 
-const dot = (amount: number): FieldSpec['condition'] => ({
+const dot = (amount: number): ConditionSpec => ({
   key: 'fire', merge: 'refresh', durationMs: 5_000,
   effect: {
     kind: 'damage-over-time', form: 'rounds',
@@ -67,5 +67,33 @@ describe('Fields', () => {
 
   it('a chave do tile distingue o andar', () => {
     expect(fieldTileKey(1, 2, 7)).not.toBe(fieldTileKey(1, 2, 6));
+  });
+
+  // Campo bloqueante (#560, Magic Wall/Wild Growth).
+  it('blockedAt/blocksProjectileAt só valem com a flag — o campo comum de dano não bloqueia', () => {
+    const fields = new Fields();
+    fields.apply(field('fire', [p(2, 2)]));
+    expect(fields.blockedAt(p(2, 2))).toBe(false);
+    expect(fields.blocksProjectileAt(p(2, 2))).toBe(false);
+
+    fields.apply({ id: 'wall', tiles: [p(3, 3)], expiresAtMs: 20_000, blocksMovement: true });
+    expect(fields.blockedAt(p(3, 3))).toBe(true);
+    expect(fields.blocksProjectileAt(p(3, 3))).toBe(false); // sem a flag, não bloqueia LOS
+    expect(fields.blockedAt(p(4, 4))).toBe(false); // fora do campo, nunca bloqueia
+  });
+
+  it('restoreState MUTA a mesma instância — quem já guarda a referência (TileOccupancy) vê o novo estado', () => {
+    const fields = new Fields();
+    fields.apply(field('old', [p(1, 1)]));
+    const sameInstance = fields;
+
+    fields.restoreState([{ id: 'new', tiles: [p(9, 9)], expiresAtMs: 1_000 }]);
+
+    expect(sameInstance.at(p(1, 1))).toBeNull(); // o campo velho não sobrevive à restauração
+    expect(sameInstance.at(p(9, 9))?.id).toBe('new');
+    expect(sameInstance.size).toBe(1);
+
+    fields.restoreState(undefined);
+    expect(sameInstance.size).toBe(0);
   });
 });

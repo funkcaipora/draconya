@@ -713,6 +713,22 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
     }
+    // Dispel em área (#592, Cancel Invisibility) é sempre centrado no LANÇADOR, como a cura em
+    // grupo: forma no alvo exigiria mira e alcance que este efeito não declara.
+    if (effect.kind === 'dispel' && effect.area !== undefined
+      && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
+      problems.push(`${where}: dispel em área precisa ser centrado no lançador`);
+    }
+    if (effect.kind === 'challenge') {
+      const selfOrigin = effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
+      if (selfOrigin && effect.range !== undefined) {
+        problems.push(`${where}: forma que sai do lançador não tem alcance`);
+      }
+      if (!selfOrigin && effect.range === undefined) {
+        problems.push(`${where}: challenge no alvo precisa de range`);
+      }
+    }
     // Alvo de party (#588: Heal/Protect/Enchant/Train Party) segue a MESMA regra de
     // `target`/`range` da cura em outro personagem: quem mira além do lançador precisa de
     // alcance, e quem mira só a si mesmo não declara nenhum — nos dois sentidos, para um
@@ -1553,6 +1569,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     corpses: {},
     // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
     fields: {},
+    // Sem estágio de campo: idem, campo sem cadeia de arte é válido (#560).
+    fieldStages: {},
     // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
     scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [
