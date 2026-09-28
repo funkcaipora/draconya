@@ -460,6 +460,17 @@
       "stars": 3,
       "occurrence": 0
     },
+    "brinebrute-inferniarch": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2601,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
     "broken-shaper": {
       "class": "humanoid",
       "race": "humanoid",
@@ -470,6 +481,17 @@
       "charmsPoints": 25,
       "stars": 3,
       "occurrence": 0
+    },
+    "broodrider-inferniarch": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2603,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
     },
     "brown-horse": {
       "class": "mammal",
@@ -536,6 +558,28 @@
       "charmsPoints": 15,
       "stars": 2,
       "occurrence": 1
+    },
+    "candy-floss-elemental": {
+      "class": "elemental",
+      "race": "elemental",
+      "raceId": 2533,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "candy-horror": {
+      "class": "magical",
+      "race": "magical",
+      "raceId": 2535,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
     },
     "carniphila": {
       "class": "plant",
@@ -644,6 +688,17 @@
       "firstUnlock": 10,
       "secondUnlock": 100,
       "charmsPoints": 5,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "chocolate-blob": {
+      "class": "slime",
+      "race": "slime",
+      "raceId": 2550,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
       "stars": 1,
       "occurrence": 0
     },
@@ -777,6 +832,17 @@
       "secondUnlock": 1000,
       "charmsPoints": 50,
       "stars": 4,
+      "occurrence": 0
+    },
+    "cream-blob": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2568,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
       "occurrence": 0
     },
     "crimson-frog": {
@@ -1890,6 +1956,17 @@
       "stars": 1,
       "occurrence": 0
     },
+    "fruit-drop": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2565,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
     "gang-member": {
       "class": "human",
       "race": "human",
@@ -1976,6 +2053,17 @@
       "secondUnlock": 500,
       "charmsPoints": 25,
       "stars": 3,
+      "occurrence": 0
+    },
+    "gingerbread-man": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 2549,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
       "occurrence": 0
     },
     "girtablilu-warrior": {
@@ -2075,6 +2163,17 @@
       "secondUnlock": 250,
       "charmsPoints": 15,
       "stars": 2,
+      "occurrence": 0
+    },
+    "goggle-cake": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 2534,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
       "occurrence": 0
     },
     "golden-servant": {
@@ -2220,6 +2319,17 @@
       "stars": 4,
       "occurrence": 0
     },
+    "hellhunter-inferniarch": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2600,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
     "hero": {
       "class": "human",
       "race": "human",
@@ -2246,6 +2356,17 @@
       "class": "elemental",
       "race": "elemental",
       "raceId": 1116,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "honey-elemental": {
+      "class": "elemental",
+      "race": "elemental",
+      "raceId": 2551,
       "toKill": 1000,
       "firstUnlock": 50,
       "secondUnlock": 500,
@@ -3098,6 +3219,17 @@
       "secondUnlock": 500,
       "charmsPoints": 25,
       "stars": 3,
+      "occurrence": 0
+    },
+    "nibblemaw": {
+      "class": "magical",
+      "race": "magical",
+      "raceId": 2531,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
       "occurrence": 0
     },
     "nightfiend": {
@@ -4178,6 +4310,17 @@
       "stars": 4,
       "occurrence": 0
     },
+    "spellreaper-inferniarch": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2599,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
     "sphinx": {
       "class": "magical",
       "race": "magical",
@@ -4331,6 +4474,28 @@
       "charmsPoints": 25,
       "stars": 3,
       "occurrence": 1
+    },
+    "sugar-cube": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2548,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "sugar-cube-worker": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2567,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
     },
     "swamp-troll": {
       "class": "humanoid",
@@ -4561,6 +4726,28 @@
       "secondUnlock": 1000,
       "charmsPoints": 50,
       "stars": 4,
+      "occurrence": 0
+    },
+    "truffle": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2547,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "truffle-cook": {
+      "class": "fey",
+      "race": "fey",
+      "raceId": 2563,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
       "occurrence": 0
     },
     "twisted-shaper": {
