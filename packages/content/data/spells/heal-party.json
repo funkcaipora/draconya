@@ -1,0 +1,24 @@
+{
+  "id": "heal-party",
+  "name": "Heal Party",
+  "description": "Regenera vida de cada membro da party no alcance, por 2 minutos.",
+  "vocationId": "druid",
+  "minLevel": 32,
+  "manaCost": {
+    "kind": "party-scaled",
+    "base": 120,
+    "decay": 0.9
+  },
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "heal-over-time",
+    "amount": 20,
+    "intervalMs": 2000,
+    "durationMs": 120000,
+    "target": "party",
+    "range": 36
+  },
+  "_open": "Canary (`data/scripts/spells/party/heal_party.lua`, main, 2026-09-28): CONDITION_REGENERATION, CONDITION_PARAM_HEALTHGAIN 20, CONDITION_PARAM_HEALTHTICKS 2000, CONDITION_PARAM_TICKS 2*60*1000; mana base 120, custo real ceil((0.9^(n-1) * 120) * n) onde n é o roster (líder incluso) dentro de getDistance <= 36; recusa 'No party members in range' com n <= 1. words 'utura mas sio', level 32, isPremium true (não modelado — sem conceito de Premium em conteúdo de magia)."
+}

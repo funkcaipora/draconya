@@ -1,0 +1,27 @@
+{
+  "id": "wild-growth-rune",
+  "name": "Wild Growth Rune",
+  "description": "Faz brotar mato denso no tile mirado, bloqueando qualquer criatura.",
+  "price": 160,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 27,
+    "magicLevel": 8,
+    "vocationId": "druid"
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-wild-growth",
+      "durationMs": 30000,
+      "shape": {
+        "shape": "point"
+      },
+      "blocksMovement": true
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `wild_growth.lua`: item ITEM_WILDGROWTH (2130, \"rush wood\", `blocking=\"1\"`, `duration 20`, sem dano) plantado na posição mirada — UM tile só (`point`), sem `setArea`, como a Magic Wall. O Lua fixa `setDuration(30)` no cast (diferente do `duration` de 20s do `items.xml` — o script SOBRESCREVE a duração base); o Draconya usa os 30s do script, o número que de fato vale em jogo. `rune:vocation(\"druid;true\", \"elder druid;true\")` — só o Druid lança (`requires.vocationId`). Level 27, magic level 8. `price` 160 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3156 (menor `buy`, fonte alexander.lua). Sem aparência conferida."
+}

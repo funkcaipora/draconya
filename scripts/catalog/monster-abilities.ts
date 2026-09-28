@@ -471,23 +471,75 @@ function mapDrunk(raw: LuaRecord, ctx: SpellContext): SpellMapping {
 }
 
 /**
+ * `invisible`: o monstro fica invisível sozinho (#559/#592, ADR 0041 d.2 — Killer Rabbit,
+ * `{ name = "invisible", interval = 2000, chance = 30, effect = CONST_ME_MAGIC_BLUE }`). Sempre
+ * self-buff, como `speed`/`drunk` do lado do ATACANTE são sempre contra o alvo: o Canary só usa
+ * este nome em `monster.defenses` (108/107 ocorrências entre ataque/defesa do bestiário, e a
+ * defesa é a forma observada), então `attacks` é recusado pela mesma regra de `drunk em defenses`
+ * ao contrário. Sem `duration` no Lua — o `deserializeSpell` cai no default de 10 s, como
+ * `speed`/`drunk`/`outfit`.
+ */
+function mapInvisible(raw: LuaRecord, ctx: SpellContext): SpellMapping {
+  if (ctx.list !== 'defenses') return unmapped('invisible', 'invisible fora de defenses');
+  const durationMs = num(raw['duration']) || DEFAULT_CONDITION_DURATION_MS;
+  return {
+    kind: 'defense',
+    notes: [],
+    defense: {
+      id: 'invisible', cadenceMs: cadence(raw), chance: chanceOf(raw),
+      condition: { key: 'invisible', durationMs, effect: { kind: 'invisible' } },
+    },
+  };
+}
+
+/**
  * Os três campos que `deserializeSpell` cria (`COMBAT_PARAM_CREATEITEM`), com os números do
  * `items.xml` do Canary: duração do ITEM no chão e o dano do `field` (`ItemParse::
  * parseFieldCombatDamage` — `count`/`ticks`/`damage` viram rodadas iguais; `start` vira a lista
- * decrescente). TODO(#560): o `decayTo` (2118 → 2119 → 2120) não existe no `FieldSpec`; o campo
- * usa o estágio mais forte pela duração inteira, como o Dragon Lord autoral.
+ * decrescente).
+ *
+ * `stages` (#591, fechando o TODO(#560) que este arquivo carregava): a cadeia `decayTo` real do
+ * item, a MESMA que o Dragon Lord autoral já declara desde o #560 — agora emitida para TODO
+ * monstro gerado que usa `firefield`/`poisonfield`/`energyfield`, não só ele. Só o fire field
+ * tem cadeia de verdade no Canary (`items.xml:4212-4246`: 2118 dano20/200s → 2119 dano10/148s →
+ * 2120 mudo/98s); poison (105) e energy (2122) têm `decayTo 0` DIRETO — um estágio só —, e
+ * `stages` com um elemento é redundante com `durationMs`/`condition` do próprio `FieldSpec`
+ * (`fieldStagesOf` normalizaria igual sem ele), mas é emitido explicitamente mesmo assim: um
+ * consumidor que só lê `stages` (em vez de cair no fallback de `fieldStagesOf`) vê a cadeia real
+ * dos três tipos, não só do fogo.
  */
-export const CANARY_FIELD_ITEMS: Readonly<Record<string, { readonly itemId: number; readonly durationMs: number; readonly condition: Record<string, unknown> }>> = {
+export const CANARY_FIELD_ITEMS: Readonly<Record<string, {
+  readonly itemId: number; readonly durationMs: number; readonly condition: Record<string, unknown>;
+  readonly stages: readonly { readonly durationMs: number; readonly condition?: Record<string, unknown> }[];
+}>> = {
   firefield: {
     itemId: 2118, durationMs: 200_000,
     condition: {
       key: 'burning', merge: 'strongest', durationMs: 70_000,
       effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 7, intervalMs: 10_000, damage: 20 }], damageType: 'fire' },
     },
+    stages: [
+      {
+        durationMs: 200_000,
+        condition: {
+          key: 'burning', merge: 'strongest', durationMs: 70_000,
+          effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 7, intervalMs: 10_000, damage: 20 }], damageType: 'fire' },
+        },
+      },
+      {
+        durationMs: 148_000,
+        condition: {
+          key: 'burning', merge: 'strongest', durationMs: 70_000,
+          effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 7, intervalMs: 10_000, damage: 10 }], damageType: 'fire' },
+        },
+      },
+      { durationMs: 98_000 },
+    ],
   },
   poisonfield: {
     itemId: 105, durationMs: 248_000,
     condition: damageCondition('CONDITION_POISON', 100, 5000, 5) as Record<string, unknown>,
+    stages: [{ durationMs: 248_000, condition: damageCondition('CONDITION_POISON', 100, 5000, 5) as Record<string, unknown> }],
   },
   energyfield: {
     itemId: 2122, durationMs: 98_000,
@@ -495,6 +547,13 @@ export const CANARY_FIELD_ITEMS: Readonly<Record<string, { readonly itemId: numb
       key: 'electrified', merge: 'strongest', durationMs: 10_000,
       effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 1, intervalMs: 10_000, damage: 25 }], damageType: 'energy' },
     },
+    stages: [{
+      durationMs: 98_000,
+      condition: {
+        key: 'electrified', merge: 'strongest', durationMs: 10_000,
+        effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 1, intervalMs: 10_000, damage: 25 }], damageType: 'energy' },
+      },
+    }],
   },
 };
 
@@ -517,7 +576,7 @@ function mapField(name: string, raw: LuaRecord, ctx: SpellContext): SpellMapping
       power: 0, damageType: ((condition['effect'] as { damageType: string }).damageType), presentation: presentationOf(raw, ctx),
       field: {
         id: `${ctx.monsterId}-${name}`, durationMs: item.durationMs,
-        shape: { shape: 'circle', radius, centered: 'target' }, condition,
+        shape: { shape: 'circle', radius, centered: 'target' }, condition, stages: item.stages,
       },
     }),
   };
@@ -539,7 +598,6 @@ export const RANDOM_TOTAL_REASON = 'condition com total sorteado (min ≠ max): 
 
 /** Nomes com mecanismo que o Draconya ainda não tem — e a issue dona. */
 export const UNMAPPED_OWNERS: Readonly<Record<string, string>> = {
-  invisible: '#559',
   fear: '#622',
   'soulwars fear': '#622',
   root: '#622',
@@ -561,6 +619,7 @@ export function mapSpell(raw: LuaValue, ctx: SpellContext): SpellMapping {
     case 'condition': return mapCondition(raw, ctx);
     case 'drunk': return mapDrunk(raw, ctx);
     case 'firefield': case 'poisonfield': case 'energyfield': return mapField(name, raw, ctx);
+    case 'invisible': return mapInvisible(raw, ctx);
     default: {
       const dropped = PRESENTATION_ONLY[name];
       if (dropped !== undefined) return { kind: 'dropped', reason: `${name}: ${dropped}` };

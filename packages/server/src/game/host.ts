@@ -269,6 +269,8 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
   // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // Magia agressiva disparada na Cidade (#792, ADR 0044 d.2): protect zone não aceita combate.
+  'protection-zone': 'Você está em uma zona de proteção.',
   // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
   // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
   // `not-in-catalog` já faz para magia/supply/level/vocação.
@@ -1804,6 +1806,10 @@ export class SessionHost {
       ...(outcome.ok ? {} : { reason: SLOT_REFUSAL[outcome.reason] }),
     });
     if (!outcome.ok || hosted === undefined) return;
+    // Conjurar na Cidade muda estado durável (#792, ADR 0044 d.2) — estoque, mana e gold —, e
+    // o shard só grava no logout quem está em `dirty` (#154, a mesma marca de `equip`/
+    // `choose-vocation`). Sem isto, a carga conjurada na praça sumia ao sair.
+    if (hosted.session.ruleset.type === 'city') hosted.dirty.add(viewer.characterId);
     // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
     // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
     hosted.slotStateAtMs = 0;
@@ -2435,6 +2441,13 @@ export class SessionHost {
       );
     }
     this.#botByCharacter.set(characterId, decision.config);
+    // Semeia o ruleset também (#792): quem chega direto na Cidade (o caminho comum de login,
+    // invariante 8) precisa da barra de ações carregada ali para `use-slot` conjurar — sem
+    // isto, `CityRuleset#useSlot` nunca vê a config até o jogador salvar uma nova em `bot-
+    // config` (que já passava por `#applyBotConfig`). Ruleset sem `configureBot` ignora
+    // (hunt já a recebe pelo `botConfig` da própria criação — recompilar de novo aqui é
+    // idempotente, a mesma configuração).
+    (session.ruleset as Partial<HuntRuleset>).configureBot?.(session, decision.config, characterId);
     // A v1 migrada, e a config com slot sanitizado, são DADO NOVO: persiste pelo caminho
     // write-behind (ADR 0028, DT-07) — senão toda entrada repetiria a migração/sanitização e a
     // coluna seguiria com a referência morta. `saveBotConfig` só existe quando o papel aceita
@@ -4110,6 +4123,13 @@ export class SessionHost {
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
+      // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
+      // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
+      // shard nunca grava as duas fora deste extrato de estado durável.
+      ...(owner.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner.ammunitionStock.size === 0
+        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
       // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
       // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
       // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.

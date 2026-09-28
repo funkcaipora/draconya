@@ -39,6 +39,14 @@ describe('a política padrão é a de sempre', () => {
     const morto = { ...at('rat', 1), alive: false };
     expect(selectTarget(targeting(), [morto, at('wolf', 3)], HERE, 5)?.monsterId).toBe('wolf');
   });
+
+  it('invisível não é alvo (#559/#592) — o bot do jogador nunca vê invisível', () => {
+    const invisivel = { ...at('rat', 1), invisible: true };
+    expect(selectTarget(targeting(), [invisivel, at('wolf', 3)], HERE, 5)?.monsterId).toBe('wolf');
+    expect(selectTarget(targeting(), [invisivel], HERE, 5)).toBeNull();
+    expect(countTargets(targeting(), [invisivel, at('wolf', 3)], HERE, 5)).toBe(1);
+    expect(countAreaTargets(targeting(), [invisivel], [{ x: 1, y: 0 }])).toBe(0);
+  });
 });
 
 describe('as três políticas do §13.6', () => {

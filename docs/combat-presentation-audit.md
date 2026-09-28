@@ -98,6 +98,8 @@ dele está na biblioteca parcial. **Nenhum tem PNG.**
 | effect | 9 | 159908 | ausente | recovery-knight, recovery-paladin |
 | effect | 10 | 159916 | ausente | lesser-front-sweep, brutal-strike, whirlwind-throw, berserk, front-sweep, physical-strike |
 | effect | 12 | 159935 | ausente | strike, buzz, energy-strike (sorcerer/druid), lightning, strong-energy-strike |
+| effect | 13 | 159951 | ausente | heal, bruise-bane, wound-cleansing, protector, intense-wound-cleansing, light/intense/divine healing, salvation, magic-patch, magic-shield, ultimate-healing, mass-healing, mana-potion, **heal-party** |
+| effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion, **protect-party, enchant-party, train-party** |
 | effect | 13 | 159951 | ausente | heal, bruise-bane, wound-cleansing, protector, intense-wound-cleansing, light/intense/divine healing, salvation, magic-patch, magic-shield, ultimate-healing, mass-healing, mana-potion |
 | effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion, **summon-creature (sorcerer/druid, #598 — placeholder: o Canary usa `CONST_ME_MAGIC_BLUE`, não conferido contra este id)** |
 | effect | 16 | 160913 | ausente | apprentices-strike, flame-strike, strong-flame-strike (#219: chama) |

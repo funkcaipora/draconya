@@ -15,6 +15,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -178,6 +182,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.25,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -226,6 +234,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.25,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -591,6 +603,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -753,6 +769,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -847,6 +867,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -981,6 +1005,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1063,6 +1091,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1215,6 +1247,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.5,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1341,6 +1377,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.5,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1543,6 +1583,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1631,6 +1675,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1711,6 +1759,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1862,6 +1914,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1965,6 +2021,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2147,6 +2207,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2318,6 +2382,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2367,6 +2435,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2425,6 +2497,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2515,6 +2591,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2659,6 +2739,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2748,6 +2832,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.3,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2907,6 +2995,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.07,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -3129,6 +3221,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3222,6 +3318,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3283,6 +3383,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3501,6 +3605,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.9,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,

@@ -1304,7 +1304,8 @@ Rat, Rotworm, Dragon e Dragon Lord ficaram fora daquela promoção por decisão
 (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`) — o #581 os regenerou à parte,
 uma única vez, direto na mesma pasta (Rat em `mammals.json`, Rotworm em `vermins.json`, Dragon e
 Dragon Lord em `dragons.json`), com override (`data/monsters/overrides/`) para o `blockable: true`
-temporário que Rat Cellars e Rotworm Caves ainda exigem até o #582+/M36-05. O que ficou de fora do
+temporário que Rat Cellars e Rotworm Caves exigiram até o #586 (M36-05) converter as duas para os
+spawns reais do Canary e apagar os dois arquivos de override. O que ficou de fora do
 corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado (#573/#574)
 — está em `docs/reference/catalog/monsters-promotion-report.md`;
 `scripts/catalog/promote-monsters.ts` é quem separa `bestiary`/`outfitId` do monstro ao promover.
@@ -1836,6 +1837,20 @@ interface FieldSpec {                     // declarado em content
 }
 ```
 
+- **Alvo de PARTY (#588: Heal/Protect/Enchant/Train Party, level 32, uma por vocação).**
+  `spellEffectSchema` ganhou `target: 'party'` nos efeitos `heal-over-time` e `buff` — um TERCEIRO
+  alvo ao lado de `self`/`friend` (a cura, §26), mas RAIO, não forma: quem está a até `range`
+  tiles (Chebyshev, mesmo andar) do lançador, roster inteiro da sessão, líder incluso, recebe a
+  MESMA condição — sem geometria desenhada no chão (`AREA_CIRCLE5X5` do Canary é só o efeito
+  visual). `HuntRuleset#collectPartyAllies` (`sim/rulesets/hunt.ts`) resolve quem está no
+  alcance; sozinho, o lançador recusa `no-target`, a mesma mensagem "No party members in range"
+  do Canary. O custo de mana também pode ser `{ kind: 'party-scaled', base, decay }`
+  (`spellSchema.manaCost`, união com o número fixo de sempre) — `ceil((decay^(n−1) × base) × n)`,
+  `n` sendo quantos estão no alcance —, resolvido em `party.ts#partyScaledManaCost` e cobrado
+  ANTES do cast, nunca o `base` do catálogo (que é só o custo de exibição,
+  `manaCostDisplayOf`). `skillDeltas` (bônus FLAT por skill, #576) chega pela primeira vez ao
+  `buff` de MAGIA — antes só o de SUPPLY o tinha —, e o consumo é o MESMO
+  `Conditions.skillBonus` já ativo, sem lógica nova. Ver `docs/product/party.md`.
 - **Alvo duplo.** O estado de runtime do #155 continua plano (compatibilidade de snapshot) e
   ganha `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais. O monstro carrega
   `conditions`, e o vencimento/tique usam o mesmo sujeito (`<id>/<chave>`, com `m:<id>` no
@@ -1977,9 +1992,37 @@ interface FieldSpec {                     // declarado em content
   rodar de verdade) — a fiação de produção fica para quando o M30-06 tiver conteúdo real e mapa
   real para testar contra.
 
-**Fora do escopo**, por decisão: runa de campo e parede jogável (Magic Wall/Wild Growth por
-mágica do jogador — #591), novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de
-buff.
+- **Runa de campo e parede do jogador (#591)**: Fire/Poison/Energy Field/Wall, Magic Wall, Wild
+  Growth, Destroy Field e as três bombas (Fire/Poison/Energy Bomb) — `supplySchema.effect`
+  ganhou os `kind`s `field` (planta o `FieldSpec` inteiro no tile mirado) e `destroy-field`
+  (remove um campo não-bloqueante no tile). Mira SEMPRE de CHÃO — `HuntRuleset#groundAimFor`,
+  distinto de `#aimFor`: não exige criatura no tile (o campo nasce vazio), só andar (#519) e
+  linha de visão (a mesma checagem de 3 argumentos que a mira manual já usa). `#needsTarget`
+  passou a reconhecer os dois `kind`s como "sempre exige alvo" — sem isso, `target.position`
+  (`#725`/`#726`) seria descartado como "não se aplica" antes de chegar ao `sim`.
+  `spellAreaSchema` ganhou duas formas: `point` (um tile só, no alvo — Fire/Poison/Energy Field,
+  Magic Wall, Wild Growth) e `wall` (a fileira perpendicular ao lançador→alvo, CENTRADA no alvo
+  — Fire/Poison/Energy Wall; só a CONTAGEM de 3 tiles é transcrita do `AREA_WALLFIELD*` do
+  Canary, nunca a matriz, ADR 0019). `applyField` ganhou um parâmetro `direction` (default
+  `'south'`, preservando bit a bit o único chamador de antes — a ability de monstro, sempre
+  `circle`) para a `wall` se orientar pela direção real lançador→alvo
+  (`directionOf(character.position, at)`). Cada cast em tile DIFERENTE é uma instância PRÓPRIA —
+  `Fields` indexa por id de conteúdo, então o `sim` deriva o id por TILE
+  (`fieldInstanceId`, `"<specId>@x,y,z"`); relançar a MESMA runa no MESMO tile reinicia, como
+  `applyField` já documentava. Destroy Field (`HuntRuleset#destroyFieldAt`) recusa remover campo
+  com `blocksMovement: true` — o mesmo corte que `destroy_field_rune.lua` faz ao listar só ids de
+  fogo/veneno/energia, nunca Magic Wall (2128) nem Wild Growth (2130); a checagem de presença
+  roda ANTES do gold sair, para não cobrar carga de uma remoção que falha (o Lua também só
+  consome o uso em sucesso). Magic Wall usa a duração BASE do `items.xml` (20 s) como número
+  fixo — o Lua sorteia `setDuration(16, 24)` por instância, e reproduzir isso exigiria um
+  mecanismo de duração aleatória em `applyField` que esta issue não pede (desvio documentado).
+  `scripts/catalog/monster-abilities.ts#CANARY_FIELD_ITEMS` ganhou `stages` para os três tipos —
+  fechando o TODO(#560) que só o Dragon Lord tinha cadeia real: fire field (2118→2119→2120,
+  a mesma cadeia do Dragon Lord) agora sai assim para TODO monstro gerado; poison (105) e energy
+  (2122) declaram `stages` de um elemento só (redundante com `fieldStagesOf`, mas explícito).
+
+**Fora do escopo**, por decisão: novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada
+de buff.
 
 ## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
 
@@ -2157,9 +2200,16 @@ do tempo, DOT); faltava como um efeito TIRA uma dessas do próprio personagem.
   faça hoje (cada Cure X do Tibia remove uma condição só).
 - **`heal` ganhou um campo `dispel` opcional** (`{ types: string[] }`), para a cura COMPOSTA que o
   Canary tem (Fair Wound Cleansing, Nature's Embrace, Restoration: cura E remove
-  `CONDITION_PARALYZE` no mesmo lançamento). O Draconya não modela paralisia (CMB-07 "Fora do
-  escopo" — ver acima), então nenhum conteúdo real usa o campo ainda; o mecanismo existe e tem
-  teste (`casting.test.ts`), pronto para o dia em que uma condição combinável com cura existir.
+  `CONDITION_PARALYZE` no mesmo lançamento). Na época do #590 o Draconya ainda não modelava
+  paralisia, e nenhum conteúdo real usava o campo — o #592 (com o `paralyze` do #556 já em pé)
+  ligou o `dispel: { types: ['paralyze'] }` em TODA cura real do catálogo cujo script do Canary
+  declara `COMBAT_PARAM_DISPEL, CONDITION_PARALYZE` ao lado da cura: Light/Intense/Ultimate
+  Healing, Heal Friend, Divine Healing, Salvation, Wound Cleansing, Intense Wound Cleansing,
+  Bruise Bane, Magic Patch, Mass Healing e as runas Intense/Ultimate Healing — praticamente toda
+  cura do jogo, exceto a Cidade genérica pré-vocação (`heal.json`, fora da conformidade Canary).
+  Mass Healing (cura em ÁREA) dispensa cada ALIADO curado, não só o lançador — o `result.dispel`
+  do lançamento cobre só o recipiente único, então `#castSpell` (`sim/rulesets/hunt.ts`) repete o
+  dispel por aliado no mesmo laço que já cura cada um.
 - **`castSpell`/`useSupply` devolvem as chaves a remover** (`CastSuccess.dispel`), nunca removem
   em si — a mesma divisão da `condition` que uma magia de haste devolve: só o ruleset tem a fila
   de eventos (`condition-expire`/`condition-tick`) para cancelar. `HuntRuleset.#dispelConditions`
@@ -2179,6 +2229,100 @@ do tempo, DOT); faltava como um efeito TIRA uma dessas do próprio personagem.
   genéricas pré-vocação. Cure Bleeding tem DUAS linhas de catálogo (`cure-bleeding-druid`/
   `cure-bleeding-knight`), como `recovery-knight`/`recovery-paladin` já fazem para a mesma magia
   em duas vocações — o Canary a dá para Druid E Knight, não uma só.
+
+## Imunidade de condição, invisibilidade e a Paralyze Rune (M31-04, #559/#592, ADR 0041 d.2)
+
+O #556 deu à condição `speed` o sinal (paralyze/haste); faltava o monstro poder ser IMUNE a ela, e
+faltava a invisibilidade — do jogador e do monstro — existir. As duas issues (#559, a
+generalização; #592, o conteúdo jogável: Paralyze Rune, Invisibility, Cancel Invisibility) saíram
+juntas na mesma PR porque uma não fecha sem a outra: a runa do jogador precisa de monstro que
+possa ser imune para o teste de aceite fazer sentido, e a imunidade sem conteúdo que a exercite é
+mecanismo morto.
+
+- **`Monster.conditionImmunities`** (`packages/content/src/schemas.ts`) é o `monster.immunities`
+  do Canary com `condition = true` (`Monster::isImmune`, `src/creatures/monsters/monsters.hpp`) —
+  distinto da imunidade de DANO (`mitigation.immunities`, `combat = true`), que já existia. Só
+  três chaves entram: `paralyze`, `drunk` e `invisible` — o resto que o Canary declara (`outfit`,
+  `bleed`…) não tem modelo de condição correspondente ainda, e o importador (`scripts/catalog/
+  monsters.ts`) os reporta em `ignoredFields` por NOME em vez de descartar com a mensagem genérica
+  de antes. Ausente é `[]`: todo monstro já importado continua sem imunidade nenhuma, bit a bit.
+- **O ponto de bloqueio é ÚNICO** — `HuntRuleset#applyConditionTo` (`sim/rulesets/hunt.ts`), o
+  mesmo lugar que já recusa `drunk` por anel (#688). `paralyze` é um caso à parte: a condição vive
+  na chave RESERVADA `speed` (haste e paralyze dividem o slot, CMB-11), então só o sinal NEGATIVO
+  é bloqueável — a imunidade nunca impede o PRÓPRIO monstro de se acelerar. `drunk` casa direto
+  pela chave. **`invisible` NUNCA entra neste portão**: no Canary, a MESMA imunidade que
+  bloquearia a condição em qualquer outro caso é repropositada —
+  `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE); }` — para "este monstro
+  ENXERGA quem está invisível", nunca "este monstro não pode ficar invisível". Bloquear a
+  aplicação teria o efeito ABSURDO de um Killer Rabbit com `canSeeInvisibility` não conseguir
+  usar a própria defesa de invisibilidade.
+- **`seesInvisible(definition)`** (`sim/monster/monster.ts`) é só `conditionImmunities.includes
+  ('invisible')` — uma função, não um campo de schema separado, para não haver dois lugares
+  guardando o mesmo bit. `chooseTarget` a lê em DOIS pontos: a RETENÇÃO do alvo atual (um alvo que
+  ficou invisível no meio da perseguição é LARGADO — `targetId` cai para a reaquisição, que também
+  filtra, e o efeito observável é "sem alvo" se não houver mais ninguém visível) e a AQUISIÇÃO
+  (tanto a busca padrão "mais perto" quanto o ramo estreito da estratégia ponderada, #645) — um
+  monstro sem a imunidade nunca SELECIONA quem está invisível como novo alvo. `Prey.invisible`
+  (opcional, ausente é `false`) é o campo que `CharacterRuntime.invisible` expõe via
+  `Conditions.hasInvisible()`.
+- **O bot do jogador nunca mira monstro invisível**, na direção oposta: `targeting.ts`
+  (`selectTarget`/`countTargets`/`countAreaTargets`) ganhou o mesmo filtro em `TargetLike.
+  invisible`, que `MonsterRuntime.invisible` expõe. Não existe "o jogador vê invisível" — só
+  monstro tem a imunidade —, então a checagem aqui é incondicional: um monstro que ficou
+  invisível sozinho (a própria defesa, abaixo) some do alcance do bot até a condição vencer.
+- **`invisible` é um `ConditionEffect` novo** (chave reservada `INVISIBLE_CONDITION_KEY =
+  'invisible'`, sem campo além do prazo — o mesmo desenho de `drunk`/`mana-shield`), com DOIS
+  pontos de entrada:
+  - **Spell do jogador** (`spellEffectSchema.kind: 'invisible'`, `{ durationMs }`): Invisibility
+    (Canary `data/scripts/spells/support/invisible.lua`, level 35, 440 mana, 200 s, Druid E
+    Sorcerer — dois arquivos de conteúdo, `invisibility-druid`/`invisibility-sorcerer`, a mesma
+    duplicação de `light-healing-druid`/`-paladin`). `castSpell` a resolve como `mana-shield`
+    (self, sem `SpeedContext` nenhum) — a chave reservada é o que `Conditions.hasInvisible`
+    reconhece depois.
+  - **Defesa de monstro** (`monsterDefenseSchema`, `invisible` somado a `DEFENSE_SELF_CONDITION_
+    KINDS`): o Killer Rabbit e ~107 outros do bestiário (`{ name = "invisible", interval, chance,
+    effect }` em `monster.defenses`) ficam invisíveis SOZINHOS — `scripts/catalog/
+    monster-abilities.ts` tinha esse nome em `UNMAPPED_OWNERS` (excluindo o monstro inteiro do
+    catálogo); `mapInvisible` agora o mapeia, restrito a `defenses` (o Canary nunca usa em
+    `attacks` — o oposto de `drunk`, que só existe do lado do ATACANTE). Sem `duration`
+    declarado, cai no mesmo default de 10 s que `speed`/`drunk` já usam.
+- **Cancel Invisibility** (paladin, level 26, 200 mana, Canary `data/scripts/spells/support/
+  cancel_invisibility.lua`) é `kind: 'dispel'` com `area` NOVO (`{ shape: 'circle', radius: 1,
+  centered: 'caster' }`, o `AREA_CIRCLE3X3` literal do Canary — a mesma convenção de raio que
+  `berserk.json` já usa, não a área "37 tiles" que o Mass Healing chama por engano de 3x3).
+  `dispel.area` é sempre centrado no LANÇADOR (`buildContent` recusa o resto, como a cura em
+  grupo); `#castSpell` entra pelo ramo self-origin de `#aimFor` — o mesmo que já colhia MONSTROS
+  para dano em área — e dispensa cada um deles em vez do recipiente único de sempre. Remove a
+  invisibilidade dos MONSTROS na área, nunca dos aliados: nenhum conteúdo do recorte atual usa
+  isso (nenhum monstro fica invisível E precisa ser "revelado" por um paladino ainda), então o
+  mecanismo é mudo em produção hoje e coberto por teste (`hunt.test.ts`) com uma condição aplicada
+  à mão, como o campo de fogo do Dragon Lord foi antes de existir conteúdo real.
+- **A Paralyze Rune** (Druid, level 54, magic level 18, Canary `data/scripts/runes/
+  paralyze_rune.lua`: `runeId(3165)`, `setFormula(-1, 0, -1, 0)`) é o primeiro supply a mirar um
+  MONSTRO com uma condição — até aqui, `kind: 'condition'` (as quatro poções de postura) era
+  SEMPRE auto-alvo. `supplySchema.effect` ganhou `target: 'enemy'` + `range` (a mesma forma de
+  `kind: 'damage'`): `useSupply` (`sim/casting.ts`) faz o MESMO portão da runa de ataque —
+  level/vocação/magicLevel, alvo, alcance, só então o gold — e resolve `conditionFromSpec` com o
+  `SpeedContext` do ALVO (`SpellTarget.speed`/`creatureId`, dois campos novos que `HuntRuleset
+  #collect` preenche do `MonsterRuntime`), não do usuário: a fórmula `-1, 0, -1, 0` sorteia sobre
+  a velocidade BASE de quem é atingido, como `ConditionSpeed::startCondition` do Canary sempre
+  fez. `#useSupply` (o wrapper do ruleset) aplica a condição ao MONSTRO mirado, não ao personagem
+  — a primeira vez que essa divisão importa, porque toda condição de supply anterior era self.
+- **Cooldown PRÓPRIO, além do grupo** (achado da auditoria de #556/#557 sobre a matemática do
+  Tibia, 2026-09-26): a Paralyze Rune tranca `group:support` por 2 s COMO qualquer supply do
+  grupo, e ADICIONALMENTE `supply:paralyze-rune` por 6 s — os dois trancam juntos, e os dois
+  precisam vencer para o próximo uso. Até aqui `supplySchema` só tinha `groupCooldownMs`
+  ("o supply não tem cooldown individual separado", o comentário que este campo revoga);
+  `cooldownMs` é o novo campo OPCIONAL, e `supplyCooldownKey` (que já existia, mas nunca era
+  iniciada por nada — só CONSULTADA pelo caminho manual de `#groupOrIndividualWaitOf`, #726) passa
+  a ser iniciada por `startSupplyCooldown` quando o supply o declara. Um supply sem `cooldownMs`
+  continua exatamente como antes: só o livro do grupo.
+- **Fora do escopo** (§12, como toda spec): a generalização de `conditionImmunities` para o resto
+  do vocabulário do Canary (`outfit`, `bleed`…) e a extração automática de imunidade de DOT por
+  elemento; Cancel Invisibility revelando ALIADOS (só monstro); a Paralyze Rune com `area` (o
+  Canary não a tem); `docs/reference/catalog/monsters-report.md` listando os `unmatchedCondition
+  Immunities` por nome (o importador já os separa de `ignoredFields` genérico, mas o relatório
+  agregado fica para quando alguém precisar da contagem).
 
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 

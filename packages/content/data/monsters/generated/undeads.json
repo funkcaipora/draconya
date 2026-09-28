@@ -166,6 +166,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -399,6 +403,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.11,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -665,6 +673,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -782,6 +793,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.37,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -901,6 +916,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.4,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1128,6 +1147,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.29,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1250,6 +1273,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1376,6 +1402,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.67,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1533,6 +1563,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.81,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1742,6 +1776,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.37,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1920,6 +1958,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.31,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2111,6 +2153,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.22,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2299,6 +2345,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2490,6 +2540,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.02,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2693,6 +2747,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2808,6 +2865,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.43,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2944,6 +3005,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.24,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3032,6 +3097,228 @@
     }
   },
   {
+    "id": "gravedigger",
+    "name": "Gravedigger",
+    "class": "undead",
+    "health": 1500,
+    "experience": 950,
+    "attack": {
+      "min": 0,
+      "max": 320
+    },
+    "armor": 58,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.05,
+        "fire": -0.1,
+        "holy": -0.05
+      },
+      "immunities": [
+        "death",
+        "energy",
+        "ice"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.68,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 137
+      },
+      "items": [
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.008
+        },
+        {
+          "itemId": "wand-of-inferno",
+          "chance": 0.0559
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.0013
+        },
+        {
+          "itemId": "death-ring",
+          "chance": 0.008
+        },
+        {
+          "itemId": "unholy-bone",
+          "chance": 0.0957
+        },
+        {
+          "itemId": "safety-pin",
+          "chance": 0.06
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 320
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 228000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 180,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 40,
+          "max": 250
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 175,
+          "max": 300
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "death"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 3,
+          "area": {
+            "shape": "circle",
+            "radius": 5,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "smallclouds"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 100,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 420
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 200,
+    "staticAttack": 0.7,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/gravedigger.lua"
+    }
+  },
+  {
     "id": "grim-reaper",
     "name": "Grim Reaper",
     "class": "undead",
@@ -3056,6 +3343,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3278,6 +3569,267 @@
     }
   },
   {
+    "id": "hand-of-cursed-fate",
+    "name": "Hand of Cursed Fate",
+    "class": "undead",
+    "health": 6600,
+    "experience": 5000,
+    "attack": {
+      "min": 0,
+      "max": 520
+    },
+    "armor": 53,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "ice": -0.1,
+        "holy": -0.25
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "fire"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.88,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 260,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "emerald-bangle",
+          "chance": 0.035
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.11,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.007
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.0594
+        },
+        {
+          "itemId": "energy-ring",
+          "chance": 0.0315
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.01005
+        },
+        {
+          "itemId": "wand-of-inferno",
+          "chance": 0.0559
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.0054
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0874
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.007
+        },
+        {
+          "itemId": "knight-armor",
+          "chance": 0.0455
+        },
+        {
+          "itemId": "crown-armor",
+          "chance": 0.014
+        },
+        {
+          "itemId": "death-ring",
+          "chance": 0.0175
+        },
+        {
+          "itemId": "demonic-essence",
+          "chance": 0.12
+        },
+        {
+          "itemId": "abyss-hammer",
+          "chance": 0.00495
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.007
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 520
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 288000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 380,
+            "intervalMs": 4000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 620
+        },
+        "damageType": "manadrain",
+        "kind": "combat"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "smallclouds"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 220,
+          "max": 880
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "smallclouds"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 1000
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "heal": {
+          "min": 100,
+          "max": 250
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 3500,
+    "staticAttack": 0.2,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/hand_of_cursed_fate.lua"
+    }
+  },
+  {
     "id": "honour-guard",
     "name": "Honour Guard",
     "class": "undead",
@@ -3298,6 +3850,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.2,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -3405,6 +3961,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3537,6 +4097,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.32,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3702,6 +4266,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3876,6 +4444,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.32,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4024,6 +4596,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4222,6 +4798,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4401,6 +4981,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.31,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4582,6 +5166,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.59,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -4749,6 +5337,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -4984,6 +5575,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5135,6 +5730,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.91,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5457,6 +6056,9 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5683,6 +6285,9 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5794,6 +6399,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.46,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5904,6 +6513,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.72,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5951,6 +6564,356 @@
     }
   },
   {
+    "id": "undead-elite-gladiator",
+    "name": "Undead Elite Gladiator",
+    "class": "undead",
+    "health": 8000,
+    "experience": 5090,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 85,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": 0.8,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 2.4,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 300,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.44,
+        "min": 100,
+        "max": 4000
+      },
+      "items": [
+        {
+          "itemId": "belted-cape",
+          "chance": 0.005
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.005
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "broken-gladiator-shield",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0023
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.0015
+        },
+        {
+          "itemId": "relic-sword",
+          "chance": 0.0015
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 0
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1500,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 300,
+          "max": 550
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 300,
+          "max": 500
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hitarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 910000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/undead_elite_gladiator.lua"
+    }
+  },
+  {
+    "id": "undead-gladiator",
+    "name": "Undead Gladiator",
+    "class": "undead",
+    "health": 1000,
+    "experience": 800,
+    "attack": {
+      "min": 0,
+      "max": 250
+    },
+    "armor": 35,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": 0.8,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 1.54,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 220,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.44,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0003
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.022
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.019
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.1128
+        },
+        {
+          "itemId": "knight-axe",
+          "chance": 0.0028
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.017
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.047
+        },
+        {
+          "itemId": "brass-legs",
+          "chance": 0.055
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.0146
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.001
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.02444
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.042
+        },
+        {
+          "itemId": "belted-cape",
+          "chance": 0.05
+        },
+        {
+          "itemId": "broken-gladiator-shield",
+          "chance": 0.052
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 250
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 135
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "whirlwindsword"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 910000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/undead_gladiator.lua"
+    }
+  },
+  {
     "id": "undead-mine-worker",
     "name": "Undead Mine Worker",
     "class": "undead",
@@ -5971,6 +6934,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.25,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -6179,6 +7146,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -6368,6 +7339,9 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -6544,6 +7518,143 @@
     }
   },
   {
+    "id": "white-shade",
+    "name": "White Shade",
+    "class": "undead",
+    "health": 260,
+    "experience": 120,
+    "attack": {
+      "min": 0,
+      "max": 8
+    },
+    "armor": 10,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.95,
+        "holy": -0.1
+      },
+      "immunities": [
+        "death",
+        "drown",
+        "earth",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 160,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 8
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "lifedrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 4,
+          "max": 6
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "yalaharighost"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "hitarea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -400
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 30,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 360000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/undeads/white_shade.lua"
+    }
+  },
+  {
     "id": "zombie",
     "name": "Zombie",
     "class": "undead",
@@ -6569,6 +7680,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.83,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,

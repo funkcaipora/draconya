@@ -50,6 +50,10 @@ function cityRulesetFor(content: Content, entryTiles?: number) {
     // Os containers ganham os tamanhos iniciais na entrada (#160), como na hunt.
     containers: { items: content.items, progression: content.progression },
     vocations: content.vocations,
+    // Conjuração na Cidade (#792, ADR 0044 d.2): `useSlot` precisa do catálogo de magias e dos
+    // coeficientes de combate para chamar `castSpell`, mesmo que conjurar não role nada.
+    spells: content.spells,
+    combat: content.combat,
   });
 }
 
@@ -210,12 +214,19 @@ const botConfigs: Record<string, BotConfigV2> = {};
     const decision = load(raw, member.initialCharacter.level);
     if (decision.ok) botConfigs[member.characterId] = decision.config;
   }
+  // A boosted do dia (#615) vem do TICKET do líder — é o mesmo valor para todo mundo que
+  // entrou no jogo no mesmo dia, e um membro que entrou véspera da virada carrega o de ontem
+  // (fixado no login dele, ADR 0052 decisão 5); o líder é quem decide a identidade da
+  // instância nova, como já decide `partyOptions.leaderId`.
+  const leaderBoostedMonsterId = party.members
+    .find((member) => member.characterId === party.leaderId)?.initialCharacter.boostedMonsterId;
   const session = createHuntSession({
     id: party.sessionId,
     content,
     huntId: party.huntId,
     difficulty: party.difficulty as HuntDifficultyName,
     createdAtMs: now(),
+    ...(leaderBoostedMonsterId === undefined ? {} : { boostedMonsterId: leaderBoostedMonsterId }),
     partyOptions: {
       leaderId: party.leaderId,
       // Coleta/venda nascem vazias — o líder configura depois de entrar, por `party-settings`.
@@ -285,6 +296,11 @@ export function characterFromTicket(
       ...(initialCharacter.staminaUpdatedAtMs === undefined
         ? {}
         : { staminaUpdatedAtMs: initialCharacter.staminaUpdatedAtMs }),
+      // A Boosted Creature do dia (#615, ADR 0052 decisão 5): fixada no personagem AGORA, como
+      // a versão de conteúdo — não relida do mundo em transição nenhuma depois do login.
+      ...(initialCharacter.boostedMonsterId === undefined
+        ? {}
+        : { boostedMonsterId: initialCharacter.boostedMonsterId }),
     });
     // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
@@ -415,6 +431,10 @@ function huntFor(
       // A configuração do bot já vem VALIDADA (FUN-81): quem a aceitou foi o host, no socket
       // ou ao ler o ticket. Aqui ela só é compilada — e é a hunt que a guarda no snapshot.
       ...(request.botConfig === undefined ? {} : { botConfig: request.botConfig }),
+      // A Boosted Creature do dia (#615) vem do PERSONAGEM, fixada nele desde o ticket que o
+      // trouxe para o jogo (ADR 0052 decisão 5) — não é relida do mundo nesta transição, para
+      // a hunt nascer com a boosted de quando ele entrou, mesmo que o dia já tenha virado.
+      ...(character.boostedMonsterId === undefined ? {} : { boostedMonsterId: character.boostedMonsterId }),
     });
     session.enter(character);
     return session;
