@@ -263,7 +263,9 @@ Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspond
 | Penalidade de morte — fração fixa (< level 24) | 10 % da XP ACUMULADA (não mais de `xpToCompleteLevel`) — o Tibia, #521, ADR 0037 | `packages/content/data/progression/baseline.json`, `deathPenalty.flatFraction` |
 | Penalidade de morte — limiar da fórmula cúbica | level 24 (o Tibia) | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
 | Penalidade de morte — redução de quem está abençoado (`premium`) | 56 % (sete bênçãos × 8 % do Tibia — mapeia o `premium` que o repo já tinha) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
-| Penalidade de morte — piso de level | 8 — **sem equivalente no Tibia** (decisão de produto do Draconya, ver "Divergências do PRD") | `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor` |
+| Penalidade de morte — redução de quem está promovido | 30 %, ADITIVA à de bênção e NUNCA tetada (`Player::getLostPercent`, #569; `promoted` ainda não é estado do personagem — ver #566/ADR 0042) | `packages/content/data/progression/baseline.json`, `deathPenalty.promotionReduction` |
+| Penalidade de morte — piso de level | **removido pelo #569** — o Tibia nunca teve piso (ver "Divergências do PRD"); o personagem pode cair até o level 1 | — |
+| Penalidade de morte — skill tries e mana gasta | o MESMO percentual que tira XP tira também os tries de cada skill (podendo derrubar o nível dela) e a mana gasta — modelada como os pontos da skill `magic`, sem campo próprio (#569, `Player::death`) | — (mecanismo em `packages/sim/src/progression.ts`, `applySkillLosses`) |
 | Rates do servidor (XP, skill, magia, loot, stages, monstro, boss) | todos 1, stages desligados — o Tibia com rate 1 (#691; ver "Rates do servidor") | `packages/content/data/progression/baseline.json`, `rates` (ausente = neutro) |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Fist/Club/Sword/Axe — início, curva (base), dano por nível | 10 / 50 / +2% `[ABERTO — dano por nível provisório]` (base = `skillBase` do Canary para os quatro tipos, #521/#567, ADR 0037; `factor` por vocação, ver acima — separadas da antiga skill única `melee` no #567) | `packages/content/data/skills/{fist,club,sword,axe}.json` |
@@ -347,13 +349,13 @@ não avisa.
   (ADR 0026, decisão 5): copiar o Tibia — Knight 15/5/25, Paladin 10/15/20, Sorcerer e Druid
   5/30/10 (HP / mana / capacidade), sem vocação 5/5/10 —, "qualquer coisa eu edito depois". Os
   números moram em `packages/content/data/vocations/*.json` e entram pela issue #151.
-- **§26.2 — piso de level da penalidade de morte (levelFloor, #521, ADR 0037).** O Draconya
-  nunca deixa a penalidade derrubar alguém abaixo do level 8 — **o Tibia real não tem esse
+- ~~§26.2 — piso de level da penalidade de morte (levelFloor, #521, ADR 0037).~~ →
+  **Removido pelo #569:** o Draconya deixou de proteger o level 8 — **o Tibia real não tem esse
   piso** (confirmado na TibiaPlan, "Tibia Death Penalty", 2026-09-24: todo mundo perde XP,
-  mesmo abaixo do level 8). É decisão de PRODUTO do Draconya, não uma lacuna: punir com perda
-  de level quem acabou de escolher vocação é ruim de onboarding, e o piso já existia antes da
-  #521 (mantido, só reimplementado sobre a fórmula nova). Mora em
-  `packages/content/data/progression/baseline.json`, `deathPenalty.levelFloor`.
+  mesmo abaixo do level 8, e `Player::death` também derruba skill tries e mana gasta sem piso
+  nenhum). O piso era decisão de PRODUTO do Draconya desde antes da #521, para não punir com
+  perda de level quem acabou de escolher vocação; o #569 alinhou o comportamento ao Tibia real,
+  e o personagem agora pode cair até o level 1.
 
 ## Como a vocação é escolhida (ADR 0026, decisões 1 e 3)
 

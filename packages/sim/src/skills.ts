@@ -27,6 +27,17 @@ export interface SkillProgress {
 export type SkillsState = Readonly<Record<string, SkillState>>;
 
 /**
+ * Mudança de nível de UMA skill — a mesma forma de `LevelChange` (`progression.ts`), duplicada
+ * aqui de propósito: `progression.ts` já importa deste arquivo (`pointsForLevel`,
+ * `skillFactorFor`), e importar `LevelChange` de volta criaria um ciclo só para reusar um
+ * `{ from, to }`. `applyDeathPenalty` (#569) devolve esta forma para cada skill que perdeu nível.
+ */
+export interface SkillLevelChange {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
  * Quantos pontos faltam para sair de `level`.
  *
  * Fórmula e não tabela: tabela precisa ter fim, e o fim vira teto acidental que ninguém
@@ -105,6 +116,17 @@ export class Skills {
    * Skill que nunca foi usada não tem entrada no mapa, e é assim de propósito: gravar o nível
    * inicial de toda skill em todo personagem é encher o snapshot com o valor padrão.
    */
+  /**
+   * Os pontos CRUS já acumulados rumo ao próximo nível — diferente de `progressOf`, que devolve
+   * um PERCENTUAL inteiro tetado em 99 (feito para HUD). A penalidade de morte (#569) precisa do
+   * valor exato para somar ao custo dos níveis já ultrapassados (`applyDeathPenalty`,
+   * `progression.ts`); arredondar por um percentual erraria a soma total em até 1% do custo do
+   * nível corrente.
+   */
+  pointsOf(definition: Skill): number {
+    return this.#points.get(definition.id) ?? 0;
+  }
+
   levelOf(definition: Skill): number {
     return this.#levels.get(definition.id) ?? definition.startingLevel;
   }
@@ -143,12 +165,58 @@ export class Skills {
   }
 
   /**
+   * Perde `amount` pontos acumulados, descendo de nível quando faltar — o oposto de `gain`
+   * (#569, `Player::death` do Canary/TFS). O piso é `definition.startingLevel`: para as skills
+   * corpo a corpo isso é 10 (o `skills[i].level <= 10` do Canary), e para `magic` é 0 (o
+   * `while (magLevel > 0)` do mesmo trecho) — o MESMO piso, generalizado pelo campo que já
+   * distingue as duas, sem precisar de um caso especial para magia.
+   *
+   * O laço espelha o C++ ponto a ponto: enquanto a perda que falta aplicar for MAIOR que os
+   * pontos que a skill tem, desconta os pontos inteiros, desce um nível e RECARREGA os pontos
+   * com o custo cheio do nível novo (`pointsForLevel`, o `vocation->getReqSkillTries` de lá) —
+   * é o que faz "cair um nível" custar exatamente o que ele custou para subir, nunca deixar um
+   * resto negativo escondido. No piso, a perda que sobra é descartada: não existe nível abaixo
+   * dele para "emprestar" pontos.
+   *
+   * **`Skills.merge` (fundir pelo maior) não protege mais o caminho durável do extrato.** A
+   * morte quebra a monotonicidade que o merge assumia, e o ledger (#569,
+   * `packages/server/src/jobs/ledger.ts`) passou a gravar o valor ABSOLUTO da sessão, guardado
+   * por instante — a mesma solução que a XP já tinha por outra via (delta aditivo, que não
+   * depende de ordem) e que a stamina já tinha por instante explícito.
+   */
+  lose(definition: Skill, amount: number, factor?: number): SkillLevelChange | null {
+    if (amount <= 0) return null;
+    const from = this.levelOf(definition);
+    let level = from;
+    let points = this.#points.get(definition.id) ?? 0;
+    let remaining = amount;
+
+    while (remaining > points && level > definition.startingLevel) {
+      remaining -= points;
+      level -= 1;
+      points = pointsForLevel(definition, level, factor);
+    }
+    points = Math.max(0, points - remaining);
+
+    this.#levels.set(definition.id, level);
+    this.#points.set(definition.id, points);
+    return level === from ? null : { from, to: level };
+  }
+
+  /**
    * Absorve o estado de outro, ficando com o MAIOR de cada skill.
    *
-   * Skill nunca desce, e é isso que torna o `max` a fusão certa — não uma escolha conservadora.
-   * Existe para o extrato: um extrato antigo, processado fora de ordem, não pode rebaixar uma
-   * skill que já subiu. É a mesma preocupação da guarda de instante da stamina, resolvida sem
-   * precisar de instante nenhum porque a grandeza é monotônica.
+   * **Não é mais usado pelo caminho durável do extrato** (`packages/server/src/jobs/ledger.ts`)
+   * desde o #569: a penalidade de morte pode DERRUBAR tries, e fundir pelo MAIOR reergueria a
+   * perda se um extrato mais antigo chegasse depois de um mais novo já aplicado. O ledger
+   * passou a gravar o valor ABSOLUTO da sessão, guardado por instante (`endedAtMs`), como a
+   * stamina já fazia — não porque skill deixou de precisar de proteção contra extrato fora de
+   * ordem, mas porque a proteção certa agora é "qual sessão terminou por último", não "qual
+   * valor é maior".
+   *
+   * Continua existindo como utilidade pura: fundir pelo maior é a operação certa sempre que se
+   * sabe, de antemão, que a grandeza só sobe (o Bestiário, por exemplo — `Bestiary.merge` — que
+   * abate nunca desce). Para skill especificamente, essa premissa não vale mais.
    */
   static merge(current: SkillsState | undefined, incoming: SkillsState): SkillsState {
     const merged: Record<string, SkillState> = { ...(current ?? {}) };

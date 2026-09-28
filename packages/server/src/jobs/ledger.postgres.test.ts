@@ -81,7 +81,7 @@ const progression: Progression = {
   regeneration: { requiresFood: false },
   startingKit: [],
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
   rates: NEUTRAL_RATES,
@@ -635,34 +635,69 @@ describe.runIf(ready)('as skills chegam ao Postgres pelo extrato (FUN-75)', () =
       .toEqual({ melee: { level: 14, points: 3 } });
   });
 
-  it('um extrato ANTIGO não rebaixa uma skill que já subiu', async () => {
-    // Skill é monotônica, e é isso que torna o `max` a fusão certa — não uma escolha
-    // conservadora. É a preocupação da guarda de instante da stamina, resolvida sem instante
-    // nenhum porque a grandeza não desce.
+  it('skill NÃO é mais monotônica (#569): a penalidade de morte pode gravar um valor MENOR', async () => {
+    // Antes do #569, o ledger fundia `skills` pelo MAIOR de cada uma (`Skills.merge`), porque
+    // skill só subia. A penalidade de morte passou a tirar tries (a mesma fração que já tira
+    // XP), e "fundir pelo maior" reergueria a perda — o personagem voltaria com a skill de
+    // ANTES de morrer no próximo login. A correção grava o valor ABSOLUTO da sessão (guardado
+    // por instante em `skills_updated_at`, migração 0016), como a stamina já fazia.
     const database = db as NonNullable<typeof db>;
     const characterId = await seedCharacter(database);
     const receipts = new ReceiptStore(redis);
 
+    // Sessão 1: o personagem treina e sobe `fist` para o level 20.
     await receipts.save({
       ...receiptOf(randomUUID(), characterId),
-      skills: { melee: { level: 20, points: 0 }, magic: { level: 5, points: 10 } },
+      skills: { fist: { level: 20, points: 500 } },
     });
-    await writePendingReceipts({
-      database: database.database.db, receipts, logger, progression,
-    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).skills)
+      .toEqual({ fist: { level: 20, points: 500 } });
 
+    // Sessão 2 (depois, em tempo real): o personagem MORRE, e a penalidade derruba `fist` para
+    // o level 15 — MENOS do que já estava gravado.
     await receipts.save({
       ...receiptOf(randomUUID(), characterId),
-      skills: { melee: { level: 12, points: 0 } },
+      reason: 'death',
+      skills: { fist: { level: 15, points: 10 } },
     });
-    await writePendingReceipts({
-      database: database.database.db, receipts, logger, progression,
-    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
 
-    expect((await characterRow(database, characterId)).skills).toEqual({
-      melee: { level: 20, points: 0 },
-      magic: { level: 5, points: 10 },
+    // O valor da SESSÃO vence — não o máximo. Se o bug do merge ainda estivesse aqui, este
+    // `toEqual` reprovaria com `{ fist: { level: 20, points: 500 } }` (o level 20 "ressuscitado").
+    expect((await characterRow(database, characterId)).skills)
+      .toEqual({ fist: { level: 15, points: 10 } });
+  });
+
+  it('extrato de sessão mais ANTIGA não sobrescreve o de uma mais NOVA, mesmo chegando depois', async () => {
+    // A proteção contra ordem trocou de forma (não é mais "quem tem o valor maior") mas
+    // continua existindo: a guarda agora é por INSTANTE (`endedAtMs`, o relógio de quando a
+    // sessão terminou), como a da stamina. Duas `ReceiptStore` com relógio controlado simulam
+    // a sessão mais nova sendo PROCESSADA primeiro e a mais antiga chegando depois.
+    // Os dois relógios são deslocados a partir de AGORA (não literais pequenos): a guarda
+    // compara contra `skills_updated_at`, que a linha do personagem nasce com `defaultNow()`
+    // — um literal como `1_000` estaria sempre no PASSADO da criação da linha, e o teste
+    // reprovaria por um motivo que não é o que ele quer provar.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const base = Date.now();
+    const newer = new ReceiptStore(redis, { now: () => base + 2_000 });
+    const older = new ReceiptStore(redis, { now: () => base + 1_000 });
+
+    await newer.save({
+      ...receiptOf(randomUUID(), characterId),
+      skills: { fist: { level: 20, points: 0 } },
     });
+    await writePendingReceipts({ database: database.database.db, receipts: newer, logger, progression });
+
+    await older.save({
+      ...receiptOf(randomUUID(), characterId),
+      skills: { fist: { level: 12, points: 0 } },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts: older, logger, progression });
+
+    expect((await characterRow(database, characterId)).skills)
+      .toEqual({ fist: { level: 20, points: 0 } });
   });
 
   it('extrato SEM skills não apaga as que já estavam lá', async () => {

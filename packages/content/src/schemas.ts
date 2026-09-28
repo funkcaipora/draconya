@@ -2710,7 +2710,7 @@ export const progressionSchema = z.object({
     }),
   ]),
   /**
-   * Penalidade de morte (#521, ADR 0037): a fórmula do Tibia (`Player::getLostPercent`,
+   * Penalidade de morte (#521/#569, ADR 0037): a fórmula do Tibia (`Player::getLostPercent`,
    * `Player::death` do Canary), não mais uma fração fixa de um level.
    *
    * Abaixo de `cubicFromLevel` o Tibia cobra uma fração FIXA da XP acumulada (`flatFraction`,
@@ -2718,7 +2718,9 @@ export const progressionSchema = z.object({
    * `((L+50) / 100) × 50 × (L² − 5L + 8)`, com `L` incluindo a fração de progresso dentro do
    * level, para a perda não saltar na fronteira — sobre a XP acumulada, não mais uma fração de
    * `xpToCompleteLevel`. `blessedReduction` mapeia o conceito de bênção do repo (`premium` na
-   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%.
+   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%. O
+   * MESMO percentual (menos a redução) tira também os tries de skill e a mana gasta (#569) —
+   * não só a XP.
    */
   deathPenalty: z.object({
     /** Fração fixa da XP acumulada perdida abaixo de `cubicFromLevel`. Tibia: 10%. */
@@ -2728,12 +2730,15 @@ export const progressionSchema = z.object({
     /** Redução de quem está "abençoado" (mapeia `premium`). Tibia: 56% (7 bênçãos × 8%). */
     blessedReduction: z.number().min(0).max(1),
     /**
-     * Abaixo deste level a penalidade não tira XP nenhuma. **Sem equivalente no Tibia** — lá
-     * não existe piso (TibiaPlan, "Tibia Death Penalty", 2026-09-24): é decisão de PRODUTO do
-     * Draconya, para não punir quem acabou de escolher vocação, documentada como divergência
-     * em `docs/product/progression.md`.
+     * Redução ADITIVA de quem já se promoveu (`Player::getLostPercent`: `percentReduction +=
+     * 0.30`), somada à redução de bênção — nunca tetada pelo teto de 50% do ramo
+     * `level < cubicFromLevel`, que só se aplica à parcela de bênção (#569). Tibia: 30%.
+     *
+     * `promoted` ainda não existe como estado do personagem (`applyDeathPenalty` o recebe como
+     * parâmetro, opcional, default `false`) — a promoção em si é a #566/ADR 0042, ainda aberta;
+     * este campo é o ponto de extensão que ela vai acionar.
      */
-    levelFloor: z.number().int().positive(),
+    promotionReduction: z.number().min(0).max(1),
   }),
   /**
    * O bônus de XP por FAIXA de level (#563), em faixas ORDENADAS: `maxLevel` é o teto INCLUSIVO

@@ -8,9 +8,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { Bestiary, Skills, levelForXp, readItemOverlay } from '@draconya/sim';
+import { Bestiary, levelForXp, readItemOverlay } from '@draconya/sim';
 import type {
-  BestiaryState, CharacterStorageMap, ItemInstanceOverlay, SkillsState,
+  BestiaryState, CharacterStorageMap, ItemInstanceOverlay,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
@@ -159,7 +159,7 @@ async function applyProgression(
     .select({
       xp: characters.xp,
       gold: characters.gold,
-      skills: characters.skills,
+      skillsUpdatedAt: characters.skillsUpdatedAt,
       bestiary: characters.bestiary,
       ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
@@ -195,12 +195,23 @@ async function applyProgression(
     ? { staminaMs: receipt.staminaMs, staminaUpdatedAt: new Date(receipt.staminaUpdatedAtMs) }
     : {};
 
-  // Skill nunca desce, então fundir pelo MAIOR de cada uma é a regra, não uma escolha
-  // conservadora: um extrato antigo processado fora de ordem não tem como rebaixar o que já
-  // subiu. É a preocupação da guarda de instante da stamina, resolvida sem instante nenhum.
-  const skills = receipt.skills === undefined
-    ? {}
-    : { skills: Skills.merge(current.skills as SkillsState | undefined, receipt.skills) };
+  // Skill DEIXOU de ser monotônica (#569): a penalidade de morte agora tira tries — o mesmo
+  // percentual que já tira XP —, então "fundir pelo MAIOR de cada uma" reergueria a perda se
+  // um extrato mais antigo chegasse depois de um mais novo já aplicado (a mesma janela que
+  // `Skills.merge` documenta). A escrita passa a ser ABSOLUTA e guardada por instante, como a
+  // stamina (FUN-101) — mas aqui o instante é `endedAtMs`, o relógio de quando a SESSÃO
+  // terminou, não um campo por grandeza: como um personagem só está numa sessão de cada vez
+  // (invariante 8), as sessões dele terminam em ordem cronológica real, e comparar contra o
+  // instante já gravado decide sozinho qual dos dois é o mais recente, sem precisar saber se a
+  // skill subiu ou desceu.
+  //
+  // **Os dois lados vêm de relógios DIFERENTES** (a mesma premissa da stamina): `skillsUpdatedAt`
+  // nasce de `defaultNow()` (Postgres); `receipt.endedAtMs` sai do `Date.now()` do nó `game`
+  // (`ReceiptStore.save`). Vale por folga (sessão dura segundos no mínimo, NTP mantém as
+  // máquinas a dezenas de milissegundos), não por construção.
+  const skills = receipt.skills !== undefined && receipt.endedAtMs >= current.skillsUpdatedAt.getTime()
+    ? { skills: receipt.skills, skillsUpdatedAt: new Date(receipt.endedAtMs) }
+    : {};
 
   // O Bestiário funde pelo MAIOR de cada monstro (FUN-113, DT-02), pela mesma razão das
   // skills: abate nunca desce. A coluna é nulável — `null` é quem nunca abateu nada — e o
