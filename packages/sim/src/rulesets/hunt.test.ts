@@ -9919,6 +9919,29 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     expect(ruleset.fields).toHaveLength(0);
   });
 
+  it('a tela fica sabendo: aparece ao aplicar e some ao vencer (#561, M31-06)', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    const field = ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    const appeared = session.drainEvents()
+      .find((event) => event.kind === 'field-appeared');
+    expect(appeared).toEqual({ kind: 'field-appeared', fieldId: fireField.id, tiles: field.tiles });
+
+    run(session, 21_000, 100);
+    const vanished = session.drainEvents()
+      .find((event) => event.kind === 'field-vanished');
+    expect(vanished).toEqual({ kind: 'field-vanished', fieldId: fireField.id });
+  });
+
+  it('relançar o MESMO id reinicia e emite `field-appeared` de novo, sem `field-vanished`', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    session.drainEvents();
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    const events = session.drainEvents();
+    expect(events.filter((event) => event.kind === 'field-appeared')).toHaveLength(1);
+    expect(events.some((event) => event.kind === 'field-vanished')).toBe(false);
+  });
+
   it('campo relançado depois do último tique continua tiquetando (#334)', () => {
     // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3) — irrelevante aqui de propósito:
     // `#enterField` aplica um tique a CADA passo aceito sobre o campo (independente do

@@ -3426,6 +3426,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
     // que ela vira id de arte.
     abilities: { spit: { missile: 9 }, 'spit-hit': { effect: 8 } },
+    // O campo de tile que uma ability deixa no chão (#561, M31-06): o id de CONTEÚDO do campo
+    // (`FieldSpec.id`) vira o id de arte daqui — a MESMA indireção de `corpses`.
+    fields: { flame: 2118 },
   } as const;
   /** As armas de tiro do #152, e a munição abstrata que o bow dispara. */
   const BOW = {
@@ -4302,6 +4305,84 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
     expect(hitsWithout.length).toBeGreaterThan(0);
     expect(withoutTable.hero().health).toBeLessThan(withoutTable.hero().maxHealth);
+  });
+
+  it('o campo vira field-appear com a arte da tabela, e o vencimento vira field-disappear (#561, M31-06)', () => {
+    // A MESMA ability do teste acima, com uma linha em `appearances.fields` (TABLE.fields.flame).
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 2, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    const { runFor, received } = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    runFor(3_000);
+    const all = received();
+    const appeared = ofType(all, 'field-appear');
+    expect(appeared.length).toBeGreaterThan(0);
+    expect(appeared[0]).toMatchObject({ id: 'flame', appearanceId: 2118 });
+    expect(appeared[0]?.tiles.length).toBeGreaterThan(0);
+    const gone = ofType(all, 'field-disappear');
+    expect(gone.length).toBeGreaterThan(0);
+    expect(gone[0]).toMatchObject({ id: 'flame' });
+  });
+
+  it('quem reanexa no meio da hunt vê os campos ATIVOS em session-state.world.fields', () => {
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 10_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 10_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 20, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    const { host, viewer, runFor, received } = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    runFor(1_000);
+    expect(ofType(received(), 'field-appear').length).toBeGreaterThan(0);
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    expect(state?.world.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2118 })]),
+    );
+  });
+
+  it('SEM linha em appearances.fields o campo é mudo, e a mecânica não muda (invariante 6)', () => {
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'unmapped-flame', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'unmapped-flame', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 2, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    const { runFor, received, hero } = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    runFor(3_000);
+    expect(ofType(received(), 'field-appear')).toHaveLength(0);
+    expect(ofType(received(), 'field-disappear')).toHaveLength(0);
+    // Sem arte, a chama ainda fere — a apresentação é que fica muda (invariante 6).
+    expect(hero().health).toBeLessThan(hero().maxHealth);
   });
 });
 

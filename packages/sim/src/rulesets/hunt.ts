@@ -5650,6 +5650,11 @@ const slots = bot.groups.get(group);
         priority: TICK_PRIORITY, subject,
       });
     }
+    // A tela fica sabendo (#561, M31-06): campo aparece OU reinicia, e as duas usam o MESMO
+    // evento — o hospedeiro resolve a arte pelo id de conteúdo e substitui pelo mesmo `id`, como
+    // relançar já substitui aqui. Emitido DEPOIS de indexar: o cliente nunca vê um campo que o
+    // `at()` ainda não devolveria.
+    session.emit({ kind: 'field-appeared', fieldId: field.id, tiles: field.tiles });
     return field;
   }
 
@@ -5683,7 +5688,11 @@ const slots = bot.groups.get(group);
   }
 
   #onFieldExpire(session: Session, subject: string): void {
-    this.#fields.remove(subject.slice(2));
+    const fieldId = subject.slice(2);
+    const removed = this.#fields.remove(fieldId);
+    // A tela fica sabendo (#561, M31-06): só quando de fato havia campo para remover — um
+    // snapshot restaurado de formato anterior nunca teria este evento, mas a defesa é de graça.
+    if (removed !== null) session.emit({ kind: 'field-vanished', fieldId });
   }
 
   /** Quem está sobre os tiles do campo: participantes e monstros vivos. */

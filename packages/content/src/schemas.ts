@@ -236,6 +236,13 @@ export const appearancesSchema = z.object({
    */
   corpses: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de campo de tile → appearanceId` (#561, M31-06): fogo, veneno, energia — o `sim` diz
+   * QUE campo está ativo e ONDE (`FieldSpec.id`, declarado inline em spell/ability); a arte é
+   * daqui (invariante 6). Campo sem linha não aparece — MUDO, não erro, como `spells`: um campo
+   * novo não precisa nascer com arte antes de nascer com mecânica.
+   */
+  fields: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * `appearanceKey → { estado → id }` do cenário usável (#727, ADR 0050 d.1): a mesma
    * indireção de `corpses` para porta, capim, stone pile, rope spot, ladder, alavanca. GERADO
    * por `pnpm map:import` em `appearances/generated/scenery.json` — nunca escrito à mão —,

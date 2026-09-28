@@ -15,8 +15,8 @@ const pack: Pack = packSchema.parse({
 
 const table = (over: Partial<Appearances> = {}): Appearances => ({
   id: 'baseline', pack: 'tibia-test',
-  monsters: {}, items: {}, equippedItems: {}, ammunition: {}, weapons: {}, corpses: {}, scenery: {},
-  maps: {}, spells: {}, supplies: {}, hits: {}, abilities: {},
+  monsters: {}, items: {}, equippedItems: {}, ammunition: {}, weapons: {}, corpses: {}, fields: {},
+  scenery: {}, maps: {}, spells: {}, supplies: {}, hits: {}, abilities: {},
   ...over,
 });
 
@@ -129,11 +129,13 @@ describe('packProblems', () => {
       spells: { strike: { effect: 81, missile: 43 } },
       supplies: { potion: { effect: 81 } },
       hits: { melee: 81 },
+      fields: { fire: 999 },
     }), pack);
     expect(problems).toEqual([
       'appearances.monsters.rat: outfit 999 não existe no pacote tibia-test',
       'appearances.characters.default: outfit 999 não existe no pacote tibia-test',
       'appearances.items.sword: object 168 não existe no pacote tibia-test',
+      'appearances.fields.fire: object 999 não existe no pacote tibia-test',
       'appearances.maps.cellars.floor: object 99 não existe no pacote tibia-test',
       'appearances.maps.cellars.wall.vertical: object 371 não existe no pacote tibia-test',
       'appearances.maps.cellars.wall.horizontal: object 371 não existe no pacote tibia-test',
