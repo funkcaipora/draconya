@@ -1,0 +1,19 @@
+{
+  "id": "conjure-avalanche-rune",
+  "name": "Avalanche Rune",
+  "description": "Conjura cargas da Avalanche Rune, consumindo uma runa em branco.",
+  "vocationId": "druid",
+  "minLevel": 30,
+  "manaCost": 530,
+  "soulCost": 3,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "avalanche-rune",
+    "charges": 4,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/avalanche_rune.lua` — `creature:conjureItem(3147, 3161, 4)`, `spell:level(30)`, `spell:mana(530)`, `spell:soul(3)`, vocação `druid;true`/`elder druid;true` (Draconya não tem promoção, ADR 0044 §Em aberto). `blankPrice` 10 é o `buy` da blank rune (clientId 3147) em `npc/alexander.lua`. `groupCooldownMs`/`cooldownMs` do `spell:groupCooldown(2*1000)`/`spell:cooldown(2*1000)`, iguais em toda conjuração do catálogo."
+}

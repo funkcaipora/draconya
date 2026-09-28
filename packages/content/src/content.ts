@@ -751,6 +751,18 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: manaCost "party-scaled" precisa de um efeito com target "party"`);
       }
     }
+    // Conjuração (#594, ADR 0044): o id creditado precisa existir no catálogo correspondente —
+    // sem isto, a magia subiria muda, creditando carga que `useSupply`/o tiro nunca reconhecem.
+    if (effect.kind === 'conjure') {
+      if (effect.supplyId !== undefined && !supplies.has(effect.supplyId)) {
+        problems.push(`${where}: conjure.supplyId "${effect.supplyId}" não existe no catálogo de supplies`);
+      }
+      if (effect.ammunitionId !== undefined && !ammunitionDefinitions.has(effect.ammunitionId)) {
+        problems.push(
+          `${where}: conjure.ammunitionId "${effect.ammunitionId}" não existe no catálogo de munição`,
+        );
+      }
+    }
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.

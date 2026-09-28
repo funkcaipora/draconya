@@ -1819,3 +1819,87 @@ describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
     }
   });
 });
+
+describe('castSpell — conjuração (#594, ADR 0044)', () => {
+  const avalancheConjure: Spell = {
+    id: 'conjure-avalanche-rune', name: 'Avalanche Rune', manaCost: 530, soulCost: 3,
+    cooldownMs: 2_000, minLevel: 30,
+    effect: { kind: 'conjure', supplyId: 'avalanche-rune', charges: 4, blankPrice: 10 },
+  };
+  const arrowConjure: Spell = {
+    id: 'conjure-arrow', name: 'Conjure Arrow', manaCost: 100, soulCost: 1,
+    cooldownMs: 2_000, minLevel: 13,
+    effect: { kind: 'conjure', ammunitionId: 'arrow', charges: 10, blankPrice: 0 },
+  };
+
+  it('credita as cargas no ESTOQUE do próprio lançador, e debita mana, alma e a runa em branco', () => {
+    const caster = hero({ mana: 530, soul: 3, gold: 10, level: 30 });
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+
+    expect(result).toMatchObject({ ok: true, healed: 0, damage: 0, goldSpent: 10 });
+    expect(caster.mana).toBe(0);
+    expect(caster.soul).toBe(0);
+    expect(balanceOf(caster)).toBe(0);
+    expect(caster.supplyStock.get('avalanche-rune')).toBe(4);
+    // A conjuração NUNCA cria item físico (ADR 0044 decisão 1) — o estoque de munição
+    // permanece vazio, e a runa só existe como carga abstrata.
+    expect(caster.ammunitionStock.size).toBe(0);
+  });
+
+  it('SOMA no estoque existente, em vez de sobrescrever — duas conjurações acumulam', () => {
+    const caster = hero({ mana: 1_060, soul: 6, gold: 20, level: 30 });
+    castSpell(caster, avalancheConjure, null, 0, combat, rng());
+    castSpell(caster, avalancheConjure, null, 2_000, combat, rng());
+    expect(caster.supplyStock.get('avalanche-rune')).toBe(8);
+  });
+
+  it('recusa sem alma, e não desconta mana nem gold — a mesma regra da mana (#593)', () => {
+    const caster = hero({ mana: 530, soul: 2, gold: 10, level: 30 });
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+
+    expect(result).toEqual({ ok: false, reason: 'not-enough-soul', retryInMs: 0 });
+    expect(caster.mana).toBe(530);
+    expect(caster.soul).toBe(2);
+    expect(balanceOf(caster)).toBe(10);
+    expect(caster.supplyStock.size).toBe(0);
+  });
+
+  it('recusa sem gold para a runa em branco — nem mana nem alma saem, e nada é creditado', () => {
+    const caster = hero({ mana: 530, soul: 3, gold: 9, level: 30 });
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+
+    expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+    expect(caster.mana).toBe(530);
+    expect(caster.soul).toBe(3);
+    expect(balanceOf(caster)).toBe(9);
+    expect(caster.supplyStock.size).toBe(0);
+  });
+
+  it('a conjuração de munição não gasta gold nenhum — `blankId` zero no Canary', () => {
+    const caster = hero({ mana: 100, soul: 1, gold: 0, level: 13 });
+    const result = castSpell(caster, arrowConjure, null, 0, combat, rng());
+
+    expect(result).toMatchObject({ ok: true, goldSpent: 0 });
+    expect(balanceOf(caster)).toBe(0);
+    expect(caster.ammunitionStock.get('arrow')).toBe(10);
+    expect(caster.supplyStock.size).toBe(0);
+  });
+
+  it('não cura, não causa dano e não consome nenhum sorteio do Rng — quantidade é FIXA', () => {
+    const caster = hero({ mana: 530, soul: 3, gold: 10, level: 30 });
+    const source = rng();
+    const before = source.getState();
+    const result = castSpell(caster, avalancheConjure, null, 0, combat, source);
+
+    expect(result).toMatchObject({ ok: true, healed: 0, damage: 0, hits: [] });
+    expect(source.getState()).toEqual(before);
+  });
+
+  it('respeita o cooldown/grupo como qualquer magia — a segunda tentativa no mesmo instante recusa', () => {
+    const caster = hero({ mana: 1_060, soul: 6, gold: 20, level: 30 });
+    castSpell(caster, avalancheConjure, null, 0, combat, rng());
+    const second = castSpell(caster, avalancheConjure, null, 0, combat, rng());
+    expect(second).toMatchObject({ ok: false, reason: 'on-cooldown' });
+    expect(caster.supplyStock.get('avalanche-rune')).toBe(4);
+  });
+});

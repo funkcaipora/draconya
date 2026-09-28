@@ -5244,6 +5244,11 @@ const slots = bot.groups.get(group);
       ? spell.manaCost
       : partyScaledManaCost(spell.manaCost, partyAllies?.length ?? 0);
     this.#gainSkills(session, character, 'spell-cast', manaCost);
+    // O gold da runa em branco (#594, ADR 0044) é agregado da SESSÃO, como `#useSupply` já leva
+    // o do supply — `goldSpent` é `0` em toda magia que não conjura, então isto não muda nenhum
+    // extrato de hoje. A conjuração usa a bolsa SOLO (`castSpell` default): a issue não estende
+    // o rateio de party ao gold de conjurar (§12).
+    if (result.goldSpent > 0) session.credit(character.id, 'goldSpent', result.goldSpent);
 
     // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
     // e só depois faz cada número cair. A ordem é contrato.

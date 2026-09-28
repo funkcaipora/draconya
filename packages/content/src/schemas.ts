@@ -4303,6 +4303,38 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
    * (`speed`/`drunk`/etc. usam a mesma convenção de chave reservada, CMB-11).
    */
   z.object({ kind: z.literal('remove-condition'), key: z.string().min(1) }),
+  /**
+   * Conjuração (#594, ADR 0044): `creature:conjureItem(blankId, itemId, charges)` do Canary
+   * (`data/scripts/spells/conjuring/*.lua`). SEMPRE self-only — o lançador credita CARGAS no
+   * próprio estoque abstrato de suprimento (runa) OU munição, nunca no de outro personagem, e
+   * por isso não tem `target`/`range`/`area`: a runa avulsa que a magia conjura é quem mira,
+   * depois, no uso — a conjuração em si nunca mira ninguém.
+   *
+   * Suprimento continua ABSTRATO (ADR 0026 d.8/0032 d.6/d.7, ADR 0044 decisão 1): nasce carga no
+   * `Map` de `CharacterRuntime.supplyStock`/`ammunitionStock`, nunca item físico novo — o mesmo
+   * modelo que o loot (#520) já credita, só que pela mão do lançador em vez do abate.
+   * `buildContent` confere que exatamente um entre `supplyId`/`ammunitionId` está presente E
+   * que o id aponta para o catálogo correspondente — magia de conjuração para runa/munição que
+   * não existe subiria muda, creditando um id que `useSupply`/o tiro nunca reconhecem.
+   */
+  z.object({
+    kind: z.literal('conjure'),
+    supplyId: z.string().min(1).optional(),
+    ammunitionId: z.string().min(1).optional(),
+    /** Cargas creditadas por lançamento — o terceiro argumento de `conjureItem` no Canary. */
+    charges: z.number().int().positive(),
+    /**
+     * O preço da runa em branco (10 gold, `npc/alexander.lua`), cobrado do gold JUNTO da
+     * mana/alma — nunca criada como item: é o mesmo gold que `useSupply` já debita, só que na
+     * hora de CRIAR a carga em vez de gastá-la. Ausente ou `0`: a conjuração de MUNIÇÃO
+     * (paladin) não compra runa em branco nenhuma — `conjureItem(0, …)` no Canary, `blankId`
+     * zero é "nada a consumir".
+     */
+    blankPrice: z.number().int().nonnegative().default(0),
+  }).refine(
+    (effect) => (effect.supplyId !== undefined) !== (effect.ammunitionId !== undefined),
+    { message: 'conjure precisa de exatamente um entre "supplyId" e "ammunitionId"' },
+  ),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 

@@ -414,7 +414,20 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // Toda magia e todo supply do repositório TÊM efeito. Não é regra do carregador — magia
     // muda é válida —, é o estado do conteúdo hoje, e a asserção existe para a magia nova
     // que nascer sem efeito ser uma decisão, e não um esquecimento.
+    //
+    // As 14 magias de conjuração do #594 (ADR 0044) ainda não têm entrada: a auditoria visual
+    // (CMB-09, `docs/combat-presentation-audit.md`) já está bloqueada pela biblioteca parcial
+    // (nenhum sprite de efeito/projétil tem PNG nesta máquina) e não foi feita para elas — magia
+    // MUDA é válida, e ficam de fora desta asserção até a auditoria acontecer.
+    const MUTE_UNTIL_PRESENTATION_AUDIT = new Set([
+      'conjure-avalanche-rune', 'conjure-explosion-rune-druid', 'conjure-explosion-rune-sorcerer',
+      'conjure-great-fireball-rune', 'conjure-heavy-magic-missile-rune-druid',
+      'conjure-heavy-magic-missile-rune-sorcerer', 'conjure-stone-shower-rune',
+      'conjure-sudden-death-rune', 'conjure-thunderstorm-rune', 'conjure-intense-healing-rune',
+      'conjure-ultimate-healing-rune', 'conjure-arrow', 'conjure-sniper-arrow', 'conjure-power-bolt',
+    ]);
     for (const id of content.spells.keys()) {
+      if (MUTE_UNTIL_PRESENTATION_AUDIT.has(id)) continue;
       expect(content.appearances?.spells[id]?.effect, `spell "${id}"`).toBeGreaterThan(0);
     }
     for (const id of content.supplies.keys()) {
@@ -782,7 +795,6 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 const EXCLUDED_SPELLS = [
   'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
   'creature-illusion',
-  // Cure Poison/Burning/Electrification/Bleeding/Curse entraram no #590 — a cura de condição
   // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
   // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
   // `spellEffectSchema.damage-over-time` não modela (um valor fixo só). Fica fora, reportada na
@@ -798,7 +810,9 @@ const EXCLUDED_SPELLS = [
   // da lista de excluídas, e a golden table acima não as cobre porque `manaCost` delas é
   // `party-scaled` (objeto, não número): ver o teste dedicado mais abaixo.
   'shield-bash', 'shield-slam', 'elemental-synthesis', 'shared-conservation',
-  'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
+  // 'conjure-arrow' saiu daqui na #594 (ADR 0044): a conjuração de munição do Paladin existe
+  // agora (`packages/content/data/spells/conjure-arrow.json`), no modelo de estoque abstrato.
+  'arrow-call', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
 ];
@@ -831,7 +845,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 21 + 17 + 31 + 33 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 21 + 20 + 36 + 39 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -851,14 +865,19 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // (Knight, 20+1=21), Protect Party (Paladin, 16+1=17), Enchant Party (Sorcerer, 30+1=31),
     // Heal Party (Druid, 32+1=33) — a golden table acima não as cobre (`manaCost` delas é
     // `party-scaled`, não um número); ver o teste dedicado mais abaixo.
+    // #594 (conjuração, ADR 0044) acrescentou por cima disso: Paladin +3 (Conjure Arrow/Sniper
+    // Arrow/Power Bolt, 17→20), Sorcerer +5 (Great Fireball, Sudden Death, Thunderstorm, a
+    // metade Sorcerer de Explosion e de Heavy Magic Missile, 31→36), Druid +6 (Avalanche,
+    // Intense/Ultimate Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic
+    // Missile, 33→39); Knight não ganhou conjuração nenhuma nesta issue.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
     expect(byVocation.get('knight')).toBe(21);
-    expect(byVocation.get('paladin')).toBe(17);
-    expect(byVocation.get('sorcerer')).toBe(31);
-    expect(byVocation.get('druid')).toBe(33);
+    expect(byVocation.get('paladin')).toBe(20);
+    expect(byVocation.get('sorcerer')).toBe(36);
+    expect(byVocation.get('druid')).toBe(39);
     expect(byVocation.get(undefined)).toBe(1);
   });
 
