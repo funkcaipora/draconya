@@ -74,6 +74,30 @@ describe('chooseTarget', () => {
     expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, rng, 0)).toBeNull();
   });
 
+  describe('invisibilidade (#559/#592, ADR 0041 d.2)', () => {
+    const invisiblePrey = (id: string, x: number, y: number): Prey =>
+      ({ id, position: { x, y }, alive: true, health: 100, invisible: true });
+
+    it('não seleciona um invisível na aquisição, e escolhe o outro candidato visível', () => {
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [invisiblePrey('ghost', 1, 0)], rat, rng, 0)).toBeNull();
+      expect(chooseTarget(monster, [invisiblePrey('ghost', 1, 0), prey('visible', 2, 0)], rat, rng, 0))
+        .toBe('visible');
+    });
+
+    it('larga o alvo retido que ficou invisível — a mesma semântica de "morreu"/"trocou de andar"', () => {
+      const monster = monsterAt(0, 0, { targetId: 'hero' });
+      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], rat, rng, 0)).toBeNull();
+    });
+
+    it('um monstro que "vê invisível" (`conditionImmunities: [\'invisible\']`) seleciona e retém igual', () => {
+      const seer: Monster = { ...rat, conditionImmunities: ['invisible'] };
+      expect(chooseTarget(monsterAt(0, 0), [invisiblePrey('ghost', 1, 0)], seer, rng, 0)).toBe('ghost');
+      const monster = monsterAt(0, 0, { targetId: 'hero' });
+      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], seer, rng, 0)).toBe('hero');
+    });
+  });
+
   describe('andar (#519, hunt multiandar)', () => {
     // Um monstro com `z` na posição só enxerga presa NO MESMO `z` — os três andares da
     // Darashia Dragon Lair compartilham a mesma caixa (x, y), então ignorar o andar faria um

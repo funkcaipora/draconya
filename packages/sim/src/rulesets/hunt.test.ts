@@ -9080,6 +9080,52 @@ describe('condição de velocidade com sinal — paralyze de ataque e haste de d
   });
 });
 
+describe('Paralyze Rune e imunidade de monstro (#559/#592, ADR 0041 d.2)', () => {
+  // Requisitos simplificados (`requires: {}`, como `attack-rune-726` acima) — o assunto aqui é
+  // o PORTÃO de imunidade, não o gate de level/magicLevel que `casting.test.ts` já prende.
+  const paralyzeRuneTest = {
+    id: 'paralyze-rune-test', name: 'Paralyze Rune', price: 10, group: 'support', groupCooldownMs: 2_000,
+    cooldownMs: 6_000, requires: {},
+    effect: {
+      kind: 'condition' as const, target: 'enemy' as const, range: 4,
+      condition: {
+        key: 'speed', merge: 'replace' as const, durationMs: 6_000,
+        effect: {
+          kind: 'speed' as const, type: 'paralyze' as const,
+          formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+        },
+      },
+    },
+  };
+
+  it('paralisa um monstro SEM imunidade — o alvo mirado, não o lançador', () => {
+    const { session, ruleset } = withSpells(botConfig({}), { supplies: [paralyzeRuneTest] });
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'paralyze-rune-test' }, 1, target);
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.conditions.get('speed')?.speedPercent).toBeLessThan(0);
+    expect(monster.conditions.get('speed')?.targetId).toBe(monster.subject);
+  });
+
+  it('um monstro IMUNE (`conditionImmunities: ["paralyze"]`) não recebe a condição — a runa sai igual', () => {
+    const immuneRat = { ...rat, conditionImmunities: ['paralyze'] };
+    const { session, ruleset } = withSpells(
+      botConfig({}), { supplies: [paralyzeRuneTest], monstersRaw: [immuneRat] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato imune');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'paralyze-rune-test' }, 1, target);
+    // A runa SAI (gasta gold e cooldown) — só a condição não entra, como `Monster::isImmune`.
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.conditions.get('speed')).toBeNull();
+  });
+});
+
 describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
   // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
   // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
@@ -10552,6 +10598,54 @@ describe('dispel: cura de condição (#590, Cure Poison e afins)', () => {
     // Dois lançamentos (cooldown 1 s em 1 500 ms) — a magia SAI toda vez, mesmo sem "poison"
     // nenhum para limpar: gastou a mana as duas vezes.
     expect(hero.mana).toBe(980);
+  });
+});
+
+describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
+  const invisibilityTest = {
+    id: 'invisibility-test', name: 'Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'invisible' as const, durationMs: 200_000 },
+  };
+  const cancelInvisibilityTest = {
+    id: 'cancel-invisibility-test', name: 'Cancel Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: {
+      kind: 'dispel' as const, types: ['invisible'],
+      area: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+    },
+  };
+
+  it('lança e fica invisível — a chave reservada, no LANÇADOR', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'invisible', present: false }],
+        do: { kind: 'spell', spellId: 'invisibility-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [invisibilityTest], monsters: false },
+    );
+    session.advanceBy(1);
+    expect(hero.conditions.get('invisible')).not.toBeNull();
+  });
+
+  it('remove a invisibilidade dos MONSTROS na área — não dos aliados, fora do recorte (#12)', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: false }],
+        do: { kind: 'spell', spellId: 'cancel-invisibility-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [cancelInvisibilityTest] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    // O spawn da rota nasce longe do herói (routeIndex 4, radius 2) — o raio 1 desta magia sai
+    // do LANÇADOR, então o teste o reposiciona adjacente, como quem mira a mesma forma que a
+    // ability em área já usa em outros describes deste arquivo.
+    monster.position = { ...hero.position, x: hero.position.x + 1 };
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: session.nowMs + 200_000 });
+    expect(monster.invisible).toBe(true);
+    session.advanceBy(1_500); // 1 lançamento (cooldown 1 s), sem depender de "poison" nenhum.
+    expect(monster.invisible).toBe(false);
+    void hero;
   });
 });
 

@@ -41,7 +41,7 @@ import type { DamageSource } from './combat/damage.js';
 import type { Rng } from './rng.js';
 
 export type ConditionKind =
-  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk';
+  | 'speed' | 'buff' | 'mana-shield' | 'heal-over-time' | 'damage-over-time' | 'drunk' | 'invisible';
 
 /**
  * A POLÍTICA de fusão de uma condição (CMB-07, DT-02). Declarada no conteúdo, nunca um campo
@@ -348,6 +348,10 @@ export function conditionFromSpec(
       // Sem campo próprio (M31-03, #558): a chave RESERVADA (`DRUNK_CONDITION_KEY`, exigida pelo
       // schema) é o que `Conditions.hasDrunk` reconhece — o mesmo desenho de `hasManaShield`.
       return { ...base };
+    case 'invisible':
+      // Sem campo próprio (#592): a chave RESERVADA (`INVISIBLE_CONDITION_KEY`) é o que
+      // `Conditions.hasInvisible` reconhece — o mesmo desenho de `hasDrunk`/`hasManaShield`.
+      return { ...base };
     case 'heal-over-time':
       return { ...base, tick: { kind: 'heal', amount: effect.amount, intervalMs: effect.intervalMs } };
     case 'damage-over-time': {
@@ -458,6 +462,13 @@ export class Conditions {
    * `hasManaShield` — nenhum campo do estado distingue as duas condições sem tique. */
   hasDrunk(): boolean {
     return this.#active.has('drunk');
+  }
+
+  /** A condição `invisible` (#592) está ativa? Reconhecida pela chave reservada, como
+   * `hasDrunk`/`hasManaShield` — nenhum campo do estado distingue esta condição de um `buff`
+   * vazio. É o que `chooseTarget` (`sim/monster/monster.ts`) confere via `Prey.invisible`. */
+  hasInvisible(): boolean {
+    return this.#active.has('invisible');
   }
 
   /**

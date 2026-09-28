@@ -1228,11 +1228,21 @@ export const supplySchema = z.object({
   group: z.enum(CONSUMABLE_GROUPS),
   /**
    * Por quanto tempo o uso tranca o livro do grupo (ADR 0032 d.2/d.6), como
-   * `spell.groupCooldownMs`. O supply não tem cooldown individual separado: o grupo É o livro
-   * dele. Default 1000: o passo do Tibia para poção e a cadência que o pool `potion` já
-   * respeitava; a runa de `attack` declara o dela para se alinhar às magias de ataque.
+   * `spell.groupCooldownMs`. Default 1000: o passo do Tibia para poção e a cadência que o pool
+   * `potion` já respeitava; a runa de `attack` declara o dela para se alinhar às magias de
+   * ataque. Até o #592, o supply não tinha cooldown individual separado: o grupo era o único
+   * livro dele — ver `cooldownMs` logo abaixo para a exceção.
    */
   groupCooldownMs: z.number().int().positive().default(1_000),
+  /**
+   * O cooldown PRÓPRIO do supply (#592, Canary `paralyze_rune.lua`: `rune:cooldown(6*1000)` AO
+   * LADO de `rune:groupCooldown(2*1000)`) — os dois livros trancam ao mesmo tempo, e os dois
+   * precisam vencer para o próximo uso. Ausente é o comportamento de sempre (só o grupo);
+   * `startSupplyCooldown`/`useSupply` (`sim/casting.ts`) iniciam e conferem os dois quando
+   * declarado. Diferente de `supplyCooldownKey` — que já existia para o supply SEM `group`
+   * (nenhum caso real usa isso hoje) —, aqui o livro próprio SOMA ao de grupo, nunca o substitui.
+   */
+  cooldownMs: z.number().int().positive().optional(),
   /**
    * A exaustão de AÇÃO compartilhada (`nextPotionAction` do Canary, `timeBetweenExActions`,
    * #690): todo supply que a declara trava o MESMO livro, poção ou runa — uma poção logo depois
@@ -1330,6 +1340,15 @@ export const supplySchema = z.object({
     z.object({
       kind: z.literal('condition'),
       condition: z.lazy(() => conditionSpecSchema),
+      /**
+       * O alvo à distância (#592, Paralyze Rune: `rune:needTarget(true)`/`allowFarUse(true)`).
+       * Ausente é o auto-alvo de sempre, das quatro poções acima; `'enemy'` mira o monstro
+       * selecionado como a runa de ataque (`kind: 'damage'`) — mesma ordem de recusas, mesmo
+       * `#aimFor`, e a condição só entra depois do gold sair (`useSupply`, `sim/casting.ts`).
+       * Exige `range` (`buildContent` confere as duas implicações).
+       */
+      target: z.enum(['enemy']).optional(),
+      range: z.number().int().positive().optional(),
     }),
     /**
      * Runa de dispel puro (#590, Canary `antidote_rune.lua`: só `COMBAT_PARAM_DISPEL`, sem cura
@@ -1342,7 +1361,10 @@ export const supplySchema = z.object({
       kind: z.literal('dispel'),
       types: z.array(z.string().min(1)).min(1),
     }),
-  ]),
+  ]).refine(
+    (effect) => effect.kind !== 'condition' || (effect.target === 'enemy') === (effect.range !== undefined),
+    { message: 'o efeito condition com target "enemy" exige range, e só ele (#592)' },
+  ),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
   requires: z.object({
     level: z.number().int().positive().optional(),
@@ -1480,6 +1502,13 @@ export const SPEED_CONDITION_KEY = 'speed' as const;
 export const DRUNK_CONDITION_KEY = 'drunk' as const;
 
 /**
+ * A chave RESERVADA de uma condição `invisible` (#592, `CONDITION_INVISIBLE`). Sem campo
+ * próprio, como `drunk`/`mana-shield`: `Conditions.hasInvisible` (`sim/conditions.ts`)
+ * reconhece a condição pela CHAVE — nenhum estado de runtime a distingue de um `buff` vazio.
+ */
+export const INVISIBLE_CONDITION_KEY = 'invisible' as const;
+
+/**
  * Uma RODADA do dano ao longo do tempo do Tibia (M31-02): `count` tiques do MESMO `damage`, a
  * cada `intervalMs` — o `addDamage(rounds, interval, value)` que os scripts de magia do Canary
  * usam (Ignite: `addDamage(25, 3000, -45)`) e que o campo de fogo do Dragon Lord também usa
@@ -1562,6 +1591,14 @@ export const conditionEffectSchema = z.discriminatedUnion('kind', [
    * `monsterAbilitySchema`, o mesmo mecanismo de toda ability em área — nada de novo aqui.
    */
   z.object({ kind: z.literal('drunk') }),
+  /**
+   * Invisibilidade do personagem (#592, Canary `invisible.lua`: `Condition(CONDITION_INVISIBLE)`,
+   * sem parâmetro além do prazo). Sem campo próprio, como `drunk` — `Conditions.hasInvisible`
+   * reconhece pela chave reservada (`INVISIBLE_CONDITION_KEY`). Um monstro que não "vê invisível"
+   * (`Monster.seesInvisible`) não seleciona nem retém quem carrega esta condição como alvo
+   * (`chooseTarget`, `sim/monster/monster.ts`).
+   */
+  z.object({ kind: z.literal('invisible') }),
   z.object({
     kind: z.literal('heal-over-time'),
     amount: z.number().int().positive(),
@@ -1758,6 +1795,12 @@ export const conditionSpecSchema = z.object({
 ).refine(
   (spec) => (spec.effect.kind === 'drunk') === (spec.key === DRUNK_CONDITION_KEY),
   { message: `a condição drunk precisa da chave reservada "${DRUNK_CONDITION_KEY}", e só ela` },
+).refine(
+  (spec) => (spec.effect.kind === 'invisible') === (spec.key === INVISIBLE_CONDITION_KEY),
+  {
+    message: `a condição invisible precisa da chave reservada "${INVISIBLE_CONDITION_KEY}", `
+      + 'e só ela',
+  },
 );
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
@@ -1923,10 +1966,12 @@ export type MonsterClass = (typeof MONSTER_CLASSES)[number];
  * Os `ConditionEffect.kind` que uma DEFESA de monstro pode aplicar a SI MESMA (#651): todo
  * self-buff que o bestiário do Canary/TFS usa em defesa própria, nunca um efeito que só faz
  * sentido vindo de um ATACANTE contra outra criatura — `drunk` (desvio de passo) e
- * `damage-over-time` ficam de fora por isso.
+ * `damage-over-time` ficam de fora por isso. `invisible` entrou no #559/#592 (Killer Rabbit e
+ * afins, `{ name = "invisible", ... }` em `monster.defenses` — o monstro fica invisível sozinho,
+ * o mesmo self-buff que `speed`/`buff` já são).
  */
 const DEFENSE_SELF_CONDITION_KINDS = new Set<ConditionEffect['kind']>([
-  'speed', 'buff', 'mana-shield', 'heal-over-time',
+  'speed', 'buff', 'mana-shield', 'heal-over-time', 'invisible',
 ]);
 
 /**
@@ -2127,6 +2172,20 @@ export const monsterSchema = z.strictObject({
    * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
    */
   mitigation: monsterMitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /**
+   * As condições a que o monstro é IMUNE (#559/#592, ADR 0041 decisão 2 — `Monster::isImmune`
+   * do Canary/TFS, `monster.immunities[].condition`). `paralyze`/`drunk`: a condição não é
+   * ADICIONADA — `#applyConditionTo` (`sim/rulesets/hunt.ts`) recusa antes de entrar, a mesma
+   * forma que a supressão de `drunk` por anel já usa. `invisible` é o CASO especial que o Canary
+   * também trata à parte: `Monster::canSeeInvisibility() { return isImmune(CONDITION_INVISIBLE);
+   * }` — a MESMA imunidade vira "enxerga quem está invisível", nunca "não pode ficar invisível".
+   * `chooseTarget` (`sim/monster/monster.ts`) lê esta chave para decidir se o monstro seleciona
+   * ou retém um alvo invisível. Ausente é `[]`, o monstro de sempre, sem imunidade nenhuma —
+   * preserva bit a bit todo monstro já importado. Outras chaves do Canary sem modelo aqui
+   * (`outfit`, `bleed`…) ficam de fora, e o importador as reporta em vez de descartar em
+   * silêncio (`scripts/catalog/monsters.ts`).
+   */
+  conditionImmunities: z.array(z.enum(['paralyze', 'drunk', 'invisible'])).default([]),
   /**
    * A cura por elemento (#683, M30-G6; `monster.heals` do Canary): por tipo, o PERCENTUAL
    * INTEIRO do dano que o atinge — já crítico, ANTES de qualquer bloqueio, resistência ou
@@ -4083,15 +4142,26 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
   /** Dano vira mana enquanto vale. */
   z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
   /**
+   * Invisibilidade do LANÇADOR (#592, Canary `invisible.lua`: level 35, mana 440, 200 s,
+   * `isSelfTarget(true)`). Sem campo além do prazo — a chave reservada `invisible`
+   * (`INVISIBLE_CONDITION_KEY`) é quem o `sim` reconhece, como `mana-shield`.
+   */
+  z.object({ kind: z.literal('invisible'), durationMs: z.number().int().positive() }),
+  /**
    * Remove condição do lançador, sem curar (#590, Canary `cure_{poison,burning,curse,
    * electrification,bleeding}.lua`: só `COMBAT_PARAM_DISPEL`, sem `COMBAT_PARAM_TYPE,
    * COMBAT_HEALING`). `types` são as CHAVES de `ConditionState.key` que a magia remove — o
    * mesmo vocabulário que `field.condition.key` já declara (`"burning"` no Dragon Lord). Chave
    * ausente no alvo não é erro: a magia sai igual, sem efeito nenhum a remover.
+   *
+   * `area` (#592, Cancel Invisibility: `combat:setArea(createCombatArea(AREA_CIRCLE3X3))`) é a
+   * forma centrada no LANÇADOR cujos MONSTROS perdem as chaves — nunca os aliados na área, fora
+   * do recorte desta issue (§12). Ausente é o dispel de sempre, só no `recipient`.
    */
   z.object({
     kind: z.literal('dispel'),
     types: z.array(z.string().min(1)).min(1),
+    area: spellAreaSchema.optional(),
   }),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;

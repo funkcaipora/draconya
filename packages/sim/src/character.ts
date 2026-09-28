@@ -404,6 +404,15 @@ export class CharacterRuntime {
     return this.conditions.speedScale();
   }
 
+  /**
+   * Invisível (#592) — o que `Prey.invisible` (`monster/monster.ts`) lê em `chooseTarget`: um
+   * monstro sem `seesInvisible` não seleciona nem retém este personagem como alvo enquanto isto
+   * for `true`. Reconhecida pela chave reservada da condição, como `speedScale`/`hasManaShield`.
+   */
+  get invisible(): boolean {
+    return this.conditions.hasInvisible();
+  }
+
   /** Saldo de entrada visível ao motor. A sessão só movimenta `goldDelta`. */
   get gold(): number {
     return this.#gold;

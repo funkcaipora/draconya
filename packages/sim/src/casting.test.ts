@@ -215,6 +215,85 @@ describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
   });
 });
 
+describe('castSpell/useSupply — Paralyze Rune e Invisibility (#592)', () => {
+  const invisibility: Spell = {
+    ...heal, id: 'invisibility-druid', manaCost: 440, minLevel: 35,
+    effect: { kind: 'invisible', durationMs: 200_000 },
+  };
+  const paralyzeRune: Supply = {
+    id: 'paralyze-rune', name: 'Paralyze Rune', price: 700, group: 'support',
+    groupCooldownMs: 2_000, cooldownMs: 6_000, requires: { level: 54, magicLevel: 18 },
+    effect: {
+      kind: 'condition', target: 'enemy', range: 3,
+      condition: {
+        key: 'speed', merge: 'strongest', durationMs: 6_000,
+        effect: { kind: 'speed', type: 'paralyze', formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 } },
+      },
+    },
+  };
+  /** A mira de um MONSTRO, com `speed`/`creatureId` — o que a runa de condição precisa. */
+  const monsterAim = (speed: number, distance = 1) => ({
+    distance,
+    targets: [{ armor: 0, dodgeChance: 0, creatureId: 'm:1', speed }],
+  });
+  const scaling: SpellScaling = { skillLevel: 20, powerScale: 1 };
+
+  it('Invisibility devolve a condição `invisible` no LANÇADOR, sem curar nem gastar sorteio', () => {
+    const caster = hero({ mana: 500, level: 40 });
+    const result = castSpell(caster, invisibility, null, 1_000, combat, rng(), scaling);
+    expect(result).toMatchObject({
+      ok: true, healed: 0, damage: 0, hits: [],
+      condition: { key: 'invisible', spellId: 'invisibility-druid', expiresAtMs: 201_000 },
+    });
+    expect(caster.mana).toBe(60); // 500 - 440 (§4.4, `invisibility.manaCost`).
+  });
+
+  it('Invisibility recusa sem mana — 440 é mais que o hero de teste tem por padrão', () => {
+    const caster = hero({ mana: 100, level: 40 });
+    const result = castSpell(caster, invisibility, null, 0, combat, rng(), scaling);
+    expect(result).toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('Paralyze Rune mira o MONSTRO: devolve a condição `speed` com o alvo dele, não o do usuário', () => {
+    const user = hero({ gold: 1_000, level: 60 });
+    const result = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 1_000,
+    );
+    expect(result).toMatchObject({
+      ok: true, healed: 0, damage: 0, hits: [], goldSpent: 700,
+      condition: { key: 'speed', targetId: 'm:1', sourceId: 'hero' },
+    });
+    // baseSpeed 220, formula (-1,0,-1,0): min=max=40-220=-180, speedDelta antes do piso
+    // = -180-220 = -400, piso 40-220=-180 vence — a mesma matemática de `conditions.test.ts`.
+    expect((result as { ok: true; condition?: { speedPercent?: number } }).condition?.speedPercent)
+      .toBeCloseTo((-180 / 220) * 100);
+  });
+
+  it('Paralyze Rune recusa sem alvo, como a runa de ataque', () => {
+    const user = hero({ gold: 1_000, level: 60 });
+    const result = useSupply(user, paralyzeRune, null, combat, rng(), scaling, undefined, undefined, 1_000);
+    expect(result).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+  });
+
+  it('Paralyze Rune tem cooldown PRÓPRIO de 6s, além do grupo de 2s (#592)', () => {
+    const user = hero({ gold: 10_000, level: 60 });
+    const first = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 0,
+    );
+    expect(first.ok).toBe(true);
+    // 3s depois: o GRUPO (2s) já venceu, mas o livro PRÓPRIO (6s) ainda tranca — sem isto a
+    // runa recarregaria no ritmo do grupo, e o #592 existe exatamente para essa diferença.
+    const second = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 3_000,
+    );
+    expect(second).toMatchObject({ ok: false, reason: 'on-cooldown' });
+    const third = useSupply(
+      user, paralyzeRune, monsterAim(220), combat, rng(), scaling, undefined, undefined, 6_000,
+    );
+    expect(third.ok).toBe(true);
+  });
+});
+
 describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
   it('debita o preço do delta da sessão e diz quanto gastou', () => {
     const user = hero({ health: 50, gold: 100 });

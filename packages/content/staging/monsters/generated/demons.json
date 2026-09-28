@@ -1,5 +1,397 @@
 [
   {
+    "id": "brinebrute-inferniarch",
+    "name": "Brinebrute Inferniarch",
+    "class": "demon",
+    "health": 32000,
+    "experience": 20300,
+    "attack": {
+      "min": 520,
+      "max": 600
+    },
+    "armor": 80,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "death": -0.1,
+        "earth": -0.1,
+        "ice": 0.1,
+        "energy": 0.15,
+        "physical": 0.2
+      },
+      "immunities": [
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.45,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.05,
+        "min": 100,
+        "max": 4000
+      },
+      "items": [
+        {
+          "itemId": "red-gem",
+          "chance": 0.015
+        },
+        {
+          "itemId": "green-crystal-shard",
+          "chance": 0.009,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.003
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.015,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "bloodstained-scythe",
+          "chance": 0.008
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.008
+        },
+        {
+          "itemId": "great-spirit-potion",
+          "chance": 0.015,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.003,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "green-crystal-splinter",
+          "chance": 0.003
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.005
+        },
+        {
+          "itemId": "demonic-matter",
+          "chance": 0.04761
+        },
+        {
+          "itemId": "gold-ring",
+          "chance": 0.002
+        },
+        {
+          "itemId": "demon-shield",
+          "chance": 0.0015
+        },
+        {
+          "itemId": "brinebrute-claw",
+          "chance": 0.02
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.015,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "violet-crystal-shard",
+          "chance": 0.015,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "brown-crystal-splinter",
+          "chance": 0.003
+        },
+        {
+          "itemId": "might-ring",
+          "chance": 0.009
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.009
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.003
+        },
+        {
+          "itemId": "demonic-core-essence",
+          "chance": 0.001
+        },
+        {
+          "itemId": "mummified-demon-finger",
+          "chance": 0.00155
+        },
+        {
+          "itemId": "demonrage-sword",
+          "chance": 0.003
+        }
+      ]
+    },
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "heal": {
+          "min": 100,
+          "max": 150
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/brinebrute_inferniarch.lua"
+    },
+    "bestiary": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2601,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
+    "outfitId": 1794
+  },
+  {
+    "id": "broodrider-inferniarch",
+    "name": "Broodrider Inferniarch",
+    "class": "demon",
+    "health": 9600,
+    "experience": 7400,
+    "attack": {
+      "min": 167,
+      "max": 374
+    },
+    "armor": 70,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.15,
+        "holy": -0.1,
+        "energy": -0.05,
+        "earth": 0.1,
+        "death": 0.15,
+        "fire": 0.2
+      },
+      "immunities": [
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.05,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 330,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.05,
+        "min": 100,
+        "max": 2500
+      },
+      "items": [
+        {
+          "itemId": "drill-bolt",
+          "chance": 0.009,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "broodrider-saddle",
+          "chance": 0.01
+        },
+        {
+          "itemId": "mummified-demon-finger",
+          "chance": 0.00155
+        },
+        {
+          "itemId": "blue-crystal-splinter",
+          "chance": 0.003
+        },
+        {
+          "itemId": "onyx-chip",
+          "chance": 0.015,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "magma-legs",
+          "chance": 0.008
+        },
+        {
+          "itemId": "arbalest",
+          "chance": 0.003
+        },
+        {
+          "itemId": "power-bolt",
+          "chance": 0.01,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "demonic-core-essence",
+          "chance": 0.001
+        },
+        {
+          "itemId": "demonic-matter",
+          "chance": 0.04761
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 167,
+          "max": 374
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 3000,
+        "chance": 0.2,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 402,
+          "max": 426
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "bite"
+        }
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 219,
+          "max": 261
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "bolt",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "deathstrike-2",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 400,
+          "max": 472
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/broodrider_inferniarch.lua"
+    },
+    "bestiary": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2603,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
+    "outfitId": 1796
+  },
+  {
     "id": "dawnfire-asura",
     "name": "Dawnfire Asura",
     "class": "demon",
@@ -24,6 +416,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -339,6 +735,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -766,6 +1166,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -975,6 +1379,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1363,6 +1771,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.96,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1587,6 +1999,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1853,6 +2269,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.37,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2024,6 +2443,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.75,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2446,6 +2869,313 @@
     "outfitId": 240
   },
   {
+    "id": "hellhunter-inferniarch",
+    "name": "Hellhunter Inferniarch",
+    "class": "demon",
+    "health": 11300,
+    "experience": 8100,
+    "attack": 0,
+    "armor": 73,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "death": -0.15,
+        "earth": -0.15,
+        "ice": 0.05,
+        "physical": 0.1,
+        "energy": 0.15
+      },
+      "immunities": [
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.19,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 350,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.05,
+        "min": 100,
+        "max": 3500
+      },
+      "items": [
+        {
+          "itemId": "assassin-star",
+          "chance": 0.03,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "demonic-core-essence",
+          "chance": 0.001
+        },
+        {
+          "itemId": "hellhunter-eye",
+          "chance": 0.015
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.03,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.015
+        },
+        {
+          "itemId": "sniper-arrow",
+          "chance": 0.015,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "demonic-matter",
+          "chance": 0.04761
+        },
+        {
+          "itemId": "onyx-arrow",
+          "chance": 0.01,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "death-ring",
+          "chance": 0.009
+        },
+        {
+          "itemId": "cyan-crystal-fragment",
+          "chance": 0.009
+        },
+        {
+          "itemId": "mummified-demon-finger",
+          "chance": 0.00155
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 219,
+          "max": 261
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "bolt",
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/hellhunter_inferniarch.lua"
+    },
+    "bestiary": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2600,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
+    "outfitId": 1793
+  },
+  {
+    "id": "herald-of-gloom",
+    "name": "Herald of Gloom",
+    "class": "demon",
+    "health": 340,
+    "experience": 450,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 25,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "earth": 0.7,
+        "fire": 0.4,
+        "holy": -0.1,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.32,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "midnight-shard",
+          "chance": 0.01886
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 3000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      },
+      {
+        "id": "holystrike",
+        "cadenceMs": 2000,
+        "chance": 0.24,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 90,
+          "max": 170
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallholy"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 200
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 5000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/herald_of_gloom.lua"
+    },
+    "bestiary": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 586,
+      "toKill": 5,
+      "firstUnlock": 2,
+      "secondUnlock": 3,
+      "charmsPoints": 50,
+      "stars": 3,
+      "occurrence": 3
+    },
+    "outfitId": 320
+  },
+  {
     "id": "juggernaut",
     "name": "Juggernaut",
     "class": "demon",
@@ -2469,6 +3199,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2726,6 +3460,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3105,6 +3843,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.43,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3252,6 +3994,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3345,6 +4091,144 @@
     "outfitId": 322
   },
   {
+    "id": "spellreaper-inferniarch",
+    "name": "Spellreaper Inferniarch",
+    "class": "demon",
+    "health": 11800,
+    "experience": 8350,
+    "attack": 0,
+    "armor": 74,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "death": -0.15,
+        "earth": -0.15,
+        "physical": 0.1,
+        "ice": 0.1
+      },
+      "immunities": [
+        "energy",
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.13,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 360,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.05,
+        "min": 100,
+        "max": 3400
+      },
+      "items": [
+        {
+          "itemId": "wand-of-inferno",
+          "chance": 0.015
+        },
+        {
+          "itemId": "spellbook-of-mind-control",
+          "chance": 0.003
+        },
+        {
+          "itemId": "spellreaper-staff-totem",
+          "chance": 0.015
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.015,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "itemId": "prismatic-quartz",
+          "chance": 0.01
+        },
+        {
+          "itemId": "demonic-matter",
+          "chance": 0.04761
+        },
+        {
+          "itemId": "fire-mushroom",
+          "chance": 0.02
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.01
+        },
+        {
+          "itemId": "demonic-core-essence",
+          "chance": 0.001
+        },
+        {
+          "itemId": "mummified-demon-finger",
+          "chance": 0.00155
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 150,
+          "max": 450
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyhit"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/spellreaper_inferniarch.lua"
+    },
+    "bestiary": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 2599,
+      "toKill": 2500,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 1
+    },
+    "outfitId": 1792
+  },
+  {
     "id": "true-dawnfire-asura",
     "name": "True Dawnfire Asura",
     "class": "demon",
@@ -3369,6 +4253,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3706,6 +4594,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.11,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4050,6 +4942,409 @@
       "class": "demon",
       "race": "demon",
       "raceId": 1622,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1068
+  },
+  {
+    "id": "true-midnight-asura",
+    "name": "True Midnight Asura",
+    "class": "demon",
+    "health": 9000,
+    "experience": 7313,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 75,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "fire": 0.1,
+        "ice": 0.1,
+        "holy": 0.3
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.16,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.0576,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0139
+        },
+        {
+          "itemId": "royal-star",
+          "chance": 0.0409,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "assassin-star",
+          "chance": 0.0921,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.0987,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "flask-of-demonic-blood",
+          "chance": 0.2054
+        },
+        {
+          "itemId": "demonic-essence",
+          "chance": 0.1073
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.1563,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.0775,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-ruby",
+          "chance": 0.0783,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.1269,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-topaz",
+          "chance": 0.0812,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "great-health-potion",
+          "chance": 0.1996,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.0817,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "assassin-dagger",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "blue-robe",
+          "chance": 0.009
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.009
+        },
+        {
+          "itemId": "golden-lotus-brooch",
+          "chance": 0.1244
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.0361
+        },
+        {
+          "itemId": "oriental-shoes",
+          "chance": 0.0182
+        },
+        {
+          "itemId": "peacock-feather-fan",
+          "chance": 0.1279
+        },
+        {
+          "itemId": "skullcracker-armor",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.1006
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0202
+        },
+        {
+          "itemId": "soul-orb",
+          "chance": 0.1002
+        },
+        {
+          "itemId": "spellbook-of-mind-control",
+          "chance": 0.009
+        },
+        {
+          "itemId": "tribal-mask",
+          "chance": 0.0229
+        },
+        {
+          "itemId": "underworld-rod",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.009
+        },
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "small-enchanted-amethyst",
+          "chance": 0.01441,
+          "min": 1,
+          "max": 3
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 500,
+          "max": 650
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 50,
+          "max": 280
+        },
+        "damageType": "manadrain",
+        "kind": "combat"
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 240
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "purpleenergy"
+        }
+      },
+      {
+        "id": "deathbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 700
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blacksmoke"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -100
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 320
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/true_midnight_asura.lua"
+    },
+    "bestiary": {
+      "class": "demon",
+      "race": "demon",
+      "raceId": 1621,
       "toKill": 2500,
       "firstUnlock": 100,
       "secondUnlock": 1000,
