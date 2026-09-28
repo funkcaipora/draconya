@@ -22,7 +22,7 @@ const base: RawContent = {
     vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
     regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
     xp: { kind: 'power', base: 20, exponent: 2 },
-    deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+    deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
   }],
   combat: [{
     id: 'baseline', dodgeMultiplier: 0.5,

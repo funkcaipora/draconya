@@ -1,0 +1,16 @@
+{
+  "id": "cure-electrification",
+  "name": "Cure Electrification",
+  "description": "Remove a eletrificação.",
+  "vocationId": "druid",
+  "manaCost": 30,
+  "cooldownMs": 6000,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "minLevel": 22,
+  "effect": {
+    "kind": "dispel",
+    "types": ["electrification"]
+  },
+  "_open": "Canary `data/scripts/spells/healing/cure_electrification.lua` (main, 2026-09-27): words \"exana vis\", id 146, level 22, mana 30, cooldown 6000/1000, vocação Druid/Elder Druid só. Só `COMBAT_PARAM_DISPEL` (CONDITION_ENERGY) — sem cura."
+}

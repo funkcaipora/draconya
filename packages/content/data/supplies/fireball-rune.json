@@ -1,0 +1,26 @@
+{
+  "id": "fireball-rune",
+  "name": "Fireball Rune",
+  "description": "Lança uma bola de fogo no alvo selecionado.",
+  "price": 30,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 27,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1.81,
+      "skillMax": 3,
+      "baseMin": 10,
+      "baseMax": 18
+    },
+    "range": 8,
+    "damageType": "fire"
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#595, `staging/runes/generated/general.json`, `fireball.lua`): min = level/5 + ml*1.81 + 10, max = level/5 + ml*3 + 18 — a mesma da Icicle. Level 27 e magic level 4 (`rune:level`/`rune:magicLevel`), sem área (`rune:needTarget`, sem `combat:setArea`) — alvo único, como Heavy Magic Missile/Sudden Death. `price` 30: menor `buy` de `data-otservbr-global/npc/alexander.lua` para o clientId 3189 (M34-03/#574, `SUPPLY_CANARY_IDS`). Aparência: efeito 16 e projétil 4, reaproveitados de `apprentices-strike`/`flame-strike` (mesmo elemento fogo) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

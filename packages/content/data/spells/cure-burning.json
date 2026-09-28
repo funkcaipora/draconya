@@ -1,0 +1,16 @@
+{
+  "id": "cure-burning",
+  "name": "Cure Burning",
+  "description": "Remove a queimadura.",
+  "vocationId": "druid",
+  "manaCost": 30,
+  "cooldownMs": 6000,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "minLevel": 30,
+  "effect": {
+    "kind": "dispel",
+    "types": ["burning"]
+  },
+  "_open": "Canary `data/scripts/spells/healing/cure_burning.lua` (main, 2026-09-27): words \"exana flam\", id 145, level 30, mana 30, cooldown 6000/1000, vocação Druid/Elder Druid só. Só `COMBAT_PARAM_DISPEL` (CONDITION_FIRE) — sem cura. `types: [\"burning\"]` é a MESMA chave que a firefield do Dragon Lord já usa (`packages/content/data/monsters/dragon-lord.json`)."
+}

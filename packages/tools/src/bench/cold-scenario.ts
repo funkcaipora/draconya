@@ -37,13 +37,15 @@ function loop(): Array<{ x: number; y: number; z: number }> {
 }
 
 const tiles = loop();
-// Um ponto de spawn a cada oito tiles, com 4 monstros cada: 40 monstros na instância, o topo
-// da faixa que a issue pede.
+// 40 pontos de spawn, um monstro cada (#583: cada ponto declara o próprio monstro — não há mais
+// dificuldade para espalhar `monsterCount` sozinha): a mesma contagem de 40 monstros na
+// instância, o topo da faixa que a issue pede, só que agora um ponto por rato em vez de dez
+// pontos de raio 3 tentando caber quatro cada.
 const spawnPoints = tiles
   .map((_, index) => index)
-  .filter((index) => index % 8 === 0)
-  .slice(0, 10)
-  .map((routeIndex) => ({ routeIndex, radius: 3 }));
+  .filter((index) => index % 2 === 0)
+  .slice(0, 40)
+  .map((routeIndex) => ({ routeIndex, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 }));
 
 export function scenario(): Content {
   const raw = {
@@ -54,13 +56,6 @@ export function scenario(): Content {
     }],
     hunts: [{
       id: 'cold', name: 'Cold', recommendedLevel: 1, mapId: 'cold', routeId: 'cold-loop',
-      difficulties: {
-        reckless: {
-          monsterCount: 40,
-          composition: [{ monsterId: 'rat', weight: 1 }],
-          respawnDelayMs: 30_000,
-        },
-      },
     }],
     vocations: [],
     progression: [{
@@ -68,7 +63,7 @@ export function scenario(): Content {
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
       startingSpeed: 300, speedPerLevel: 0, regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
       xp: { kind: 'power', base: 20, exponent: 2 },
-      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+      deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
     }],
     combat: [{
       id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, drown: 0, lifedrain: 0, manadrain: 0, arcane: 0 },

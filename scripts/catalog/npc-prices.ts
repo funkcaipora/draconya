@@ -206,6 +206,11 @@ export const SUPPLY_CANARY_IDS: Readonly<Record<string, number>> = {
   'stone-shower-rune': 3175,
   'thunderstorm-rune': 3202,
   'intense-healing-rune': 3152,
+  'fireball-rune': 3189,
+  'icicle-rune': 3158,
+  'light-magic-missile-rune': 3174,
+  'light-stone-shower-rune': 21351,
+  'stalagmite-rune': 3179,
 };
 
 /** slug do arquivo autoral em `data/ammunition/` → `clientId` do Canary. */

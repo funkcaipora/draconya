@@ -25,6 +25,10 @@ const strike: Spell = {
   id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000, minLevel: 1,
   effect: { kind: 'damage', power: 40, range: 3, damageType: 'arcane' },
 };
+const challenge: Spell = {
+  id: 'challenge', name: 'Challenge', manaCost: 30, cooldownMs: 2_000, minLevel: 20,
+  effect: { kind: 'challenge', durationMs: 6_000, range: 3 },
+};
 
 const potion: Supply = {
   id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_000, requires: {},
@@ -108,6 +112,39 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
     expect(castSpell(caster, heal, null, 0, combat, rng()))
       .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
   });
+
+  describe('stairhop (#554, M30-07, ADR 0040 decisão 1): trava de ataque ao trocar de andar', () => {
+    const combatV3: Combat = { ...combat, compatibilityProfile: 'combat-v3' };
+
+    it('magia AGRESSIVA recusa com `attack-locked` e o prazo exato — antes do alvo, e sem gastar mana', () => {
+      const caster = hero();
+      caster.attackLockedUntil = 2_000;
+      // Sem mira nenhuma (`null`): se a checagem de alcance/alvo viesse primeiro, a recusa
+      // seria `no-target`, não `attack-locked` — a ordem é a mesma do `playerSpellCheck` do
+      // Canary, que confere `CONDITION_PACIFIED` antes do alvo.
+      expect(castSpell(caster, strike, null, 500, combatV3, rng()))
+        .toEqual({ ok: false, reason: 'attack-locked', retryInMs: 1_500 });
+      expect(caster.mana).toBe(100);
+    });
+
+    it('vencida a trava, a magia agressiva sai normalmente', () => {
+      const caster = hero();
+      caster.attackLockedUntil = 2_000;
+      expect(castSpell(caster, strike, near(), 2_000, combatV3, rng()).ok).toBe(true);
+    });
+
+    it('cura NÃO é bloqueada pela MESMA trava — só `damage`/`damage-over-time` são agressivas', () => {
+      const caster = hero({ health: 10 });
+      caster.attackLockedUntil = 2_000;
+      expect(castSpell(caster, heal, null, 0, combatV3, rng()).ok).toBe(true);
+    });
+
+    it('só o `combat-v3` lê: sob `combat-v1`/`v2` a mesma trava não bloqueia a magia agressiva', () => {
+      const caster = hero();
+      caster.attackLockedUntil = 2_000;
+      expect(castSpell(caster, strike, near(), 0, combat, rng()).ok).toBe(true);
+    });
+  });
 });
 
 describe('castSpell — o efeito', () => {
@@ -132,6 +169,91 @@ describe('castSpell — o efeito', () => {
     // 40 de poder, 10 de armadura, efetividade mágica 1 neste conteúdo de teste.
     expect(result).toMatchObject({ ok: true, damage: 30, hits: [30], healed: 0 });
     expect(caster.mana).toBe(85);
+  });
+});
+
+describe('castSpell — Challenge (#589): o mesmo portão de dano, sem golpe nenhum', () => {
+  it('recusa abaixo do level mínimo, sem gastar mana', () => {
+    const caster = hero({ level: 1 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+  });
+
+  it('recusa em cooldown, com o prazo restante', () => {
+    const caster = hero({ level: 30 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()).ok).toBe(true);
+    expect(castSpell(caster, challenge, near(), 400, combat, rng()))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 1_600 });
+  });
+
+  it('sem alvo é `no-target`, e fora de alcance é `out-of-range` — mesma ordem de `damage`', () => {
+    const caster = hero({ level: 30 });
+    expect(castSpell(caster, challenge, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(castSpell(caster, challenge, near({ distance: 4 }), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+  });
+
+  it('sem mana suficiente, recusa depois de conferir o alvo', () => {
+    const caster = hero({ level: 30, mana: 5 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('sucesso não causa dano nem cura — o efeito é todo do ruleset, que tem os monstros atingidos', () => {
+    const caster = hero({ level: 30 });
+    const result = castSpell(caster, challenge, near(), 0, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(70);
+  });
+});
+
+describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
+  const curePoison: Spell = {
+    ...heal, id: 'cure-poison', effect: { kind: 'dispel', types: ['poison'] },
+  };
+  const fairWoundCleansing: Spell = {
+    ...heal, id: 'fair-wound-cleansing',
+    effect: { kind: 'heal', amount: 40, dispel: { types: ['paralyze'] } },
+  };
+  const antidoteRune: Supply = {
+    id: 'antidote-rune', name: 'Antidote Rune', price: 15, group: 'healing',
+    groupCooldownMs: 1_000, requires: {}, effect: { kind: 'dispel', types: ['poison'] },
+  };
+
+  it('a magia de dispel puro devolve as chaves, sem curar e sem gastar sorteio', () => {
+    const caster = hero();
+    const result = castSpell(caster, curePoison, null, 0, combat, rng());
+    expect(result).toEqual({
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0, dispel: ['poison'],
+    });
+    expect(caster.mana).toBe(80); // gastou a mana da magia (§4.4, `heal.manaCost`), como sempre.
+  });
+
+  it('a cura composta cura E devolve o dispel no MESMO lançamento', () => {
+    const caster = hero({ health: 50 });
+    const result = castSpell(caster, fairWoundCleansing, null, 0, combat, rng());
+    expect(result).toMatchObject({ ok: true, healed: 40, dispel: ['paralyze'] });
+  });
+
+  it('magia sem `dispel` declarado continua sem o campo — não inventa remoção', () => {
+    const result = castSpell(hero(), heal, null, 0, combat, rng());
+    expect(result.ok && result.dispel).toBeUndefined();
+  });
+
+  it('useSupply: a runa de dispel puro cobra gold e devolve as chaves, sem cura', () => {
+    const user = hero({ gold: 100 });
+    const result = useSupply(user, antidoteRune, null, combat, rng());
+    expect(result).toMatchObject({ ok: true, healed: 0, goldSpent: 15, dispel: ['poison'] });
+    expect(balanceOf(user)).toBe(85);
+  });
+
+  it('a runa de dispel recusa sem gold, como qualquer supply — e não devolve dispel nenhum', () => {
+    const user = hero({ gold: 0 });
+    const result = useSupply(user, antidoteRune, null, combat, rng());
+    expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
   });
 });
 

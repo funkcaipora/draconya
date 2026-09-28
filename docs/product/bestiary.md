@@ -1,11 +1,17 @@
 # Bestiário
 
-**Status:** parcial — o contador de abates por monstro é permanente, os cinco marcos fecham e
-cada um dá +1 % de XP PvE para sempre (FUN-113); a janela no cliente lista cada monstro com a
-contagem, o próximo marco e o bônus total. Faltam as recompensas especiais por monstro (§18.4)
-e a regra de Guild War (§18.5), que não tem Guild War para valer
+**Status:** parcial — dois sistemas coexistem na mesma tela (ADR 0053): a linha de XP do
+FUN-113 (o contador de abates por monstro é permanente, os cinco marcos fecham e cada um dá
++1 % de XP PvE para sempre) e, desde o #601, o Bestiário do Canary (estágio por monstro,
+estrelas de dificuldade, ocorrência e pontos de Charm — os dois primeiros DERIVADOS do mesmo
+contador, nunca guardados à parte). Faltam as recompensas especiais por monstro do PRD (§18.4),
+a regra de Guild War (§18.5, que não tem Guild War para valer) e a ECONOMIA de Charms — gastar
+pontos em runa, atribuir a um monstro, remover (#602) — e o efeito deles em combate (#603).
 **PRD:** §18
 **Épico:** E7
+**ADRs:** [0053](../adr/0053-bestiary-xp-line-kept-and-charms-added.md) (decisão sobre este
+sistema), [0052](../adr/0052-endgame-progression-state-and-city-services-through-the-owning-session.md)
+(estado durável do endgame, ainda não usado por este sistema — ver Divergências)
 
 ## Comportamento
 
@@ -28,19 +34,34 @@ sempre — uma hunt de oito horas com uma linha por rato não é lista, é log.
 **O que a tela mostra.** O ícone Cyclopedia da barra abre um modal com as abas Itens e Bestiary,
 não uma seção fixa na coluna. Na aba Bestiary, o modal traz busca por nome, ordenação
 por progresso/nome/abates e alternância entre grade e lista; cada monstro mostra o placeholder de
-sprite, abates, estrelas pelos marcos alcançados e a barra até o próximo marco (ou cheia e verde
-depois do último). A caixa "Progresso no Bestiário" soma os marcos reais dos monstros presentes no
-catálogo e mostra o bônus global de XP; ela não aparece quando o servidor não trouxe configuração
-de marcos. Bosstiary, categorias de monstro e sprite real permanecem ausentes até os respectivos
-sistemas transportarem esses dados.
+sprite, abates, estrelas do MARCO DE XP alcançado (o "★N" do FUN-113) e a barra até o próximo
+marco (ou cheia e verde depois do último). A caixa "Progresso no Bestiário" soma os marcos reais
+dos monstros presentes no catálogo e mostra o bônus global de XP; ela não aparece quando o
+servidor não trouxe configuração de marcos. Bosstiary e sprite real permanecem ausentes até os
+respectivos sistemas transportarem esses dados.
+
+**Desde o #601, cada monstro também mostra a ficha do Canary — um segundo vocabulário de
+progresso, lado a lado com o marco de XP (ADR 0053 d.2).** Quando `catalogue.monsters[].bestiary`
+traz a ficha (limiares + estrelas de DIFICULDADE + ocorrência + pontos de Charm), o cartão exibe
+o ESTÁGIO ("Bloqueado" / "1º desbloqueio" / "2º desbloqueio" / "Completo"), as estrelas de
+dificuldade (0 a 5, `★★★☆☆`) e a raridade de encontro ("Comum" a "Muito raro") — três dados
+DISTINTOS das estrelas de marco de XP, que continuam significando outra coisa na mesma tela. A
+caixa lateral ganhou uma segunda linha, "Pontos de Charm", com o total DERIVADO — a soma de
+`charmsPoints` de todo monstro cuja ficha está completa (`kills >= toKill`), calculada em
+`shell/bestiary-progress.ts` (`bestiaryStageOf`/`charmPointsEarned`) do MESMO jeito que o marco de
+XP: apresentação pura sobre o contador que o servidor manda, nunca um segundo contador. Sem a
+ficha (monstro sem entrada em `content.bestiary.entries`, ou nó `game` anterior a esta issue), o
+cartão mostra só o que já mostrava — nenhuma das três linhas novas aparece.
+
 Num servidor sem monstros no catálogo, o modal diz "Este servidor não tem Bestiário" em vez de uma
 lista vazia com "+0 %". Os contadores chegam inteiros do servidor (`bestiary`, no attach e sempre
 que um muda); os marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7).
-O cliente não conta nada — o que ele calcula é apresentação do próximo marco e do progresso; se
-divergisse do `sim`, a conta do `sim` é a verdadeira. Desde a SV-20, `catalogue.monsters[]` também
-carrega `class` quando o conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`: desde o
-#578, as 20 classes do Bestiário do Canary, de `amphibic` a `vermin`); é o dado que a `SideList` de
-categorias da Cyclopedia usa para agrupar.
+O cliente não conta nada — o que ele calcula é apresentação do próximo marco, do progresso, do
+estágio do Canary e dos pontos de Charm; se divergisse do `sim`, a conta do `sim` é a verdadeira
+(hoje o `sim` não calcula estágio nem pontos — ver Divergências). Desde a SV-20, `catalogue.
+monsters[]` também carrega `class` quando o conteúdo define uma (vocabulário fechado em
+`MONSTER_CLASSES`: desde o #578, as 20 classes do Bestiário do Canary, de `amphibic` a `vermin`);
+é o dado que a `SideList` de categorias da Cyclopedia usa para agrupar.
 
 Desde a #344, o modal ganhou a aba "Itens": a lista de `catalogue.items`, com sprite, nome,
 categoria (derivada de onde o item veste — o mesmo rótulo do painel do set) e peso; Atq/Def só
@@ -49,17 +70,20 @@ protocolo). A busca do modal é uma só, fica acima das abas e filtra a aba que 
 Descrição e "dropado por" não aparecem: nenhum dos dois existe em
 `content` hoje (ver `docs/reviews/kit-fidelity-audit-2026-09-16.md`, achado R8-22b).
 
-**A ficha de Bestiário por monstro chegou como DADO antes de ter leitor (#520).**
-`bestiary/baseline.json` ganhou `entries` — uma linha por `monsterId` com `class`/`race`, os
-três limiares de desbloqueio (`firstUnlock` ≤ `secondUnlock` ≤ `toKill`, crescentes por
+**A ficha de Bestiário por monstro chegou como DADO antes de ter leitor (#520), e o #601 é o
+leitor.** `bestiary/baseline.json` tem `entries` — uma linha por `monsterId` com `class`/`race`,
+os três limiares de desbloqueio (`firstUnlock` ≤ `secondUnlock` ≤ `toKill`, crescentes por
 `.refine`) e `charmsPoints`/`stars`/`occurrence`, os mesmos números que o Bestiário real do
 Tibia mostra por monstro (Canary `Bestiary`/TFS `bestiary`, conferido monstro a monstro).
 `buildContent` confere que a chave é um monstro que existe e que o `class` da ficha bate com o
 `class` do próprio monstro — duas fontes da mesma categoria divergiriam na primeira mudança em
-uma delas. **Nenhum caminho do `sim`, do `server` nem do cliente lê `entries` ainda**: a mesma
-decisão do `staticAttack` do monstro (#518) — aceito e persistido, registrado aqui como
-divergência em vez de fingir que a tela de "%" de desbloqueio, estrelas de dificuldade e
-Charms já existe. Quando o Cyclopedia (#321) ganhar essa tela, o dado já está no lugar certo.
+uma delas. `packages/server/src/game/catalogue.ts` publica a ficha em
+`catalogue.monsters[].bestiary` (os seis campos que a tela precisa; `class`/`race`/`raceId` ficam
+de fora — `class` já viaja solto no monstro, e `race`/`raceId` seguem sem consumidor); o cliente
+DERIVA estágio e pontos, nunca guarda os dois (`shell/bestiary-progress.ts`). **`sim` continua sem
+ler `entries`**, porque estágio e pontos de Charm não mudam resultado de jogo nenhum ainda — só a
+ECONOMIA de Charms (gastar ponto, atribuir a um monstro, remover, #602) e o efeito deles em
+combate (#603) vão precisar do `sim`.
 
 **O leitor de monstros do Canary (#578) gera a ficha junto com o monstro.** `scripts/catalog/
 monsters.ts` converte `monster.Bestiary` e `monster.raceId` para a forma de `bestiaryEntrySchema`
@@ -113,6 +137,17 @@ de antes, e os números batiam com o que o leitor do Canary produz, então conti
   ser testado.
 - Recompensas especiais por monstro **não existem** (DT-05): todo monstro usa a recompensa
   padrão.
+- **O estágio da ficha do Canary é DERIVADO do MESMO contador de abates**, nunca uma segunda
+  contagem: `0` (bloqueado) abaixo de `firstUnlock`, `1` (1º desbloqueio) a partir dele, `2`
+  (2º desbloqueio) a partir de `secondUnlock`, `3` (completo) a partir de `toKill` — cada limiar
+  por `>=`, como "quantos marcos já alcançou" (`bestiaryStageOf`, `shell/bestiary-progress.ts`).
+- **Os pontos de Charm ganhos também são DERIVADOS**: a soma de `charmsPoints` de todo monstro
+  cuja ficha está COMPLETA (`kills >= toKill`), recalculada a cada abate — nada persiste além do
+  contador que já existia (ADR 0053 d.1). Só o GASTO de pontos, quando a economia de Charms
+  entrar (#602), vai persistir, no registro `charms` que o ADR 0052 descreve.
+- **Os limiares do Canary e os marcos de XP são de ORDENS DIFERENTES, e não disparam juntos**: o
+  Dragon completa a ficha em 1 000 abates, o primeiro marco de XP são 10 000 — dois relógios
+  independentes sobre o mesmo contador, nunca a mesma condição.
 
 ## Parâmetros de balanceamento
 
@@ -122,6 +157,7 @@ de antes, e os números batiam com o que o leitor do Canary produz, então conti
 | Recompensa por marco | +1 ponto percentual de XP PvE | `packages/content/data/bestiary/baseline.json`, `xpBonusPercentPerMilestone` |
 | Recompensas especiais por monstro | não implementado (DT-05) | sem entrada — entram com o primeiro monstro que as pedir |
 | Ficha do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0, class/race `dragon` — os dois iguais | `packages/content/data/bestiary/baseline.json`, `entries.dragon` / `entries.dragon-lord` |
+| Fichas importadas do Canary (#578/#580/#581) | 451 monstros com `entries` hoje (o corte de `content/data/monsters` — ver `docs/reference/catalog/monsters-promotion-report.md` para o que ficou de fora) | `packages/content/data/bestiary/baseline.json`, `entries` |
 
 O schema (`bestiarySchema`, em `packages/content/src/schemas.ts`) exige os marcos em ordem
 crescente: o `sim` para de contar no primeiro que o contador não alcança, e uma lista fora de
@@ -129,28 +165,35 @@ ordem faria o terceiro marco fechar antes do segundo.
 
 ## Em aberto
 
-- **Remoção do bônus de +1 % de XP por marco (FUN-113)** `[ABERTO]`: o [ADR 0045](../adr/0045-tibia-bestiary-charms-prey-and-training.md)
-  propõe substituir este bônus por estágios + Charms puros, sem XP direta. A resposta do dono de
-  2026-09-25 ("copie do Huntera") CONTESTA essa remoção: a tela de personagem do Huntera lista
-  "Progresso no Bestiary" como uma das cinco fontes que somam o bônus de XP total do personagem
-  (ao lado de level/guild/Premium/Experience Scroll), não como um sistema de Charm points sem XP
-  — o mesmo formato que o Draconya já usa. Isto é um conflito genuíno para o dono resolver, não
-  uma resposta fechada: manter o bônus, manter e somar Charms por cima, ou seguir o ADR 0045 como
-  proposto. **Até essa decisão, o bônus de +1 %/marco NÃO é removido.** Ver a emenda
-  "2026-09-25: decisões do dono" no fim do ADR 0045 e `docs/tibia-parity-plan.md` questão 7.
+- **O valor do +1 % de XP por marco** `[ABERTO — provisório]` (ADR 0053 d.2): o ADR 0045 propunha
+  remover o bônus de XP do Bestiário; o Huntera observado (2026-09-25) mostra a MESMA forma que o
+  Draconya já usa ("Progresso no Bestiary" como uma das cinco fontes do bônus de XP total), o que
+  pesa contra remover — mas o número exato (`1 %`) nunca foi observado numa conta com marco
+  alcançado (a conta capturada estava no level 1, sem nenhum marco — "—"). O ADR 0053 resolveu a
+  FORMA (o bônus FICA, coexistindo com os Charms) e deixou só o NÚMERO provisório, até a captura 7
+  de #643 ler uma conta do Huntera com progresso real. Ver a emenda "2026-09-25" do ADR 0045,
+  `docs/tibia-parity-plan.md` §5 questão 7 (agora "decidida, ADR 0053; captura pendente") e o ADR
+  0053 inteiro.
 - **Recompensas especiais por monstro** (§18.4, DT-05): loot PvE, Dodge PvE, resistência
   física e elemental PvE, redução de penalidade de morte. O conteúdo não tem monstro que as
   peça, e o formato — qual marco de qual monstro troca a XP por qual bônus — entra com o
   primeiro que pedir, não antes.
 - **Guild War** (§18.5): "os bônus valem só em PvE" é verdade por falta de PvP, não por regra
   escrita. A regra entra com a Guild War.
-- **A ficha por monstro (`bestiary.entries`, #520) não tem tela nem protocolo.** O `catalogue`
-  não a manda ao cliente, e o Cyclopedia (#321) não lê `firstUnlock`/`secondUnlock`/`stars`/
-  `occurrence`/`charmsPoints` — a barra de progresso de hoje é só o marco global (`milestones`).
-  O dado existe para o dia em que a tela de desbloqueio por monstro entrar, sem precisar voltar
-  a `packages/content` para descobrir os números do Tibia de novo.
+- **A economia de Charms** (gastar pontos numa runa, atribuir a um monstro, remover) e o efeito
+  deles em combate são o #602 e o #603, ainda não implementados. Este sistema (#601) só mostra o
+  estágio e os pontos GANHOS; não há como gastá-los ainda, e nenhum Charm altera combate.
 
 ## Divergências do PRD
+
+**A linha de XP FICA, como exceção de produto (ADR 0053 d.2), em vez de ser removida.** O ADR
+0045 propunha trocar o Bestiário do PRD (marcos globais de XP) pelo do Canary (estágios + Charms,
+sem XP direta) inteiro. O Huntera observado mostra a MESMA forma que o Draconya (linha "Progresso
+no Bestiary" somada às demais fontes de XP), o que contesta a remoção — então os DOIS sistemas
+coexistem: os marcos de XP do FUN-113 (abaixo) e o Bestiário do Canary (estágio/estrelas/
+ocorrência/pontos, acima) são independentes, sobre o MESMO contador de abates, sem disparar
+juntos (os limiares são de ordens diferentes). O `1 %` por marco continua provisório — ver Em
+aberto.
 
 **O bônus é global, não por monstro (DT-01).** O §18 diz "+1 % de XP PvE permanente" por
 marco, e não diz de qual XP. A leitura literal é a global — a XP PvE do personagem, de

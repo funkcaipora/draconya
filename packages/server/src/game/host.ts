@@ -256,6 +256,9 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
+  // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
+  // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
+  'attack-locked': 'Você está exausto.',
 };
 
 /**
@@ -1430,10 +1433,12 @@ export class SessionHost {
         return;
       }
       case 'enter-hunt':
-        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt e qual
-        // dificuldade, e quem decide se cabe, cria a instância e credita é o servidor.
+        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt, e quem decide se
+        // cabe, cria a instância e credita é o servidor. `difficulty` é aceito e IGNORADO
+        // desde o #584 (ADR 0039) — mantido no protocolo só por compatibilidade (ADR 0014).
         void this.#requestTransition(viewer, {
-          to: 'hunt', huntId: message.huntId, difficulty: message.difficulty,
+          to: 'hunt', huntId: message.huntId,
+          ...(message.difficulty === undefined ? {} : { difficulty: message.difficulty }),
           // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
           // da última `bot-config` desta conexão.
           ...(this.#botByCharacter.has(viewer.characterId)

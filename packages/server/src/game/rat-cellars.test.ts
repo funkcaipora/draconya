@@ -20,7 +20,7 @@ const real = (): Content => {
   return cached;
 };
 
-function enter(content: Content, difficulty: 'cautious' | 'bold' | 'reckless'): { session: Session; ruleset: HuntRuleset } {
+function enter(content: Content, difficulty = 'default'): { session: Session; ruleset: HuntRuleset } {
   const session = createHuntSession({
     id: 'cellars', content, huntId: 'rat-cellars', difficulty, createdAtMs: 0,
   });
@@ -37,27 +37,26 @@ function run(session: Session, durationMs: number, stepMs: number): void {
   for (let t = 0; t < durationMs && session.ended === null; t += stepMs) session.advanceBy(stepMs);
 }
 
-describe('a Rat Cellars real (FUN-123)', () => {
-  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 2, 5 e 8', () => {
-    for (const [difficulty, count] of [['cautious', 2], ['bold', 5], ['reckless', 8]] as const) {
-      const { session, ruleset } = enter(real(), difficulty);
-      // O lugar do ponto 0 é o tile em que o herói entra: com `spawnClearRadius` (#236) ele
-      // só nasce quando o herói se afasta, e pelo laço inteiro um lugar recém-vagado espera
-      // o herói sair de perto. A densidade é a da dificuldade — alcançada, e nunca excedida —,
-      // mas num instante qualquer pode faltar o lugar que o herói está pisando.
-      let most = 0;
-      for (let t = 0; t < 10_000; t += 100) {
-        session.advanceBy(100);
-        const alive = ruleset.monsters.filter((m) => m.alive).length;
-        expect(alive, difficulty).toBeLessThanOrEqual(count);
-        most = Math.max(most, alive);
-      }
-      expect(most, difficulty).toBe(count);
+describe('a Rat Cellars real (FUN-123, #583)', () => {
+  it('todos os 14 pontos de spawn nascem — sem pull, sem escolha de tamanho (ADR 0039)', () => {
+    // Fim do pull por dificuldade: os 14 pontos da rota nascem juntos, na entrada — a
+    // densidade não é mais 2/5/8 escolhidos, é o total de pontos que a rota declara. `blockable`
+    // (o rato declara `true`, #519) segura o ponto onde o herói está em cima, então o teto
+    // observável é 14, mas o instante inicial pode ficar um a menos enquanto esse ponto espera
+    // a vista limpar.
+    const { session, ruleset } = enter(real());
+    let most = 0;
+    for (let t = 0; t < 10_000; t += 100) {
+      session.advanceBy(100);
+      const alive = ruleset.monsters.filter((m) => m.alive).length;
+      expect(alive).toBeLessThanOrEqual(14);
+      most = Math.max(most, alive);
     }
+    expect(most).toBeGreaterThanOrEqual(13);
   });
 
   it('o herói percorre o laço e o bueiro rende: abates, XP, gold e queijo em dez minutos', () => {
-    const { session, ruleset } = enter(real(), 'bold');
+    const { session, ruleset } = enter(real());
     run(session, 600_000, 100);
     expect(session.ended).toBeNull();
     expect(session.aggregates.kills).toBeGreaterThan(20);
@@ -82,8 +81,8 @@ describe('a Rat Cellars real (FUN-123)', () => {
   it('dez minutos a 1 Hz e a 10 Hz dão o MESMO resultado no bueiro real', () => {
     // O teste que define o projeto (ADR 0003), agora sobre o conteúdo de verdade: nada aqui é
     // escrito por tick, então o extrato e a posição de cada rato não dependem da taxa.
-    const slow = enter(real(), 'bold');
-    const fast = enter(real(), 'bold');
+    const slow = enter(real());
+    const fast = enter(real());
     run(slow.session, 600_000, 1_000);
     run(fast.session, 600_000, 100);
     expect(slow.session.aggregates).toEqual(fast.session.aggregates);
@@ -95,11 +94,12 @@ describe('a Rat Cellars real (FUN-123)', () => {
 });
 
 describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {
-  // Um personagem de level 100 de cada vocação lança UMA magia de cada tipo da vocação dele:
+  // Um personagem de level 150 de cada vocação lança UMA magia de cada tipo da vocação dele:
   // sai com `ok`, paga a mana e tranca os livros de cooldown certos. Outra vocação leva
   // `wrong-vocation`; um level abaixo, `level-too-low`. São os NÚMEROS reais passando pelo
-  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 100 (não mais 80,
-  // #523): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100.
+  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 150 (não mais 100,
+  // #589): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100,
+  // Chivalrous Challenge pede 150 — o novo teto do Knight.
   const caster = (content: Content, vocationId: string, level: number): CharacterRuntime => {
     const vocation = content.vocations.get(vocationId) ?? null;
     const stats = statsForLevel(level, vocation, content.progression);
@@ -119,10 +119,12 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       const oneOfEach = new Map(mine.map((s) => [s.effect.kind, s]));
       let now = 0;
       for (const spell of oneOfEach.values()) {
-        const hero = caster(content, vocationId, 100);
+        const hero = caster(content, vocationId, 150);
         // Self-origin ou no alvo: a mira sintética serve às duas — `distance` 1 cabe em todo
-        // alcance, e a forma que sai do lançador ignora a distância.
-        const result = castSpell(hero, spell, spell.effect.kind === 'damage' ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
+        // alcance, e a forma que sai do lançador ignora a distância. Challenge (#589) mira
+        // como dano — precisa de alvo — mas não tem `formula`/`basePower`/`power` nenhum.
+        const needsAim = spell.effect.kind === 'damage' || spell.effect.kind === 'challenge';
+        const result = castSpell(hero, spell, needsAim ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
         expect(result.ok, spell.id).toBe(true);
         expect(hero.mana, spell.id).toBe(100_000 - spell.manaCost);
         expect(hero.cooldowns.isReady(spellCooldownKey(spell.id), now), spell.id).toBe(false);

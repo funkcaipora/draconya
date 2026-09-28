@@ -52,7 +52,14 @@ export type CastRefusal =
   /** O grupo (ou o secundário) da magia ainda está trancado (#155). Carrega prazo, como `on-cooldown`. */
   | 'group-cooldown'
   /** A runa pede magic level que este personagem não tem (#165). */
-  | 'magic-level-too-low';
+  | 'magic-level-too-low'
+  /**
+   * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
+   * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
+   * `Spell::getAggressive` do Canary é `true` por padrão). Carrega prazo, como `on-cooldown`: o
+   * bot volta sozinho no instante do destravamento, sem reagendar no vazio (FUN-84).
+   */
+  | 'attack-locked';
 
 export interface CastSuccess {
   readonly ok: true;
@@ -93,6 +100,13 @@ export interface CastSuccess {
    * ele quem agenda o vencimento — a mesma divisão do dano resolvido.
    */
   readonly condition?: ConditionState;
+  /**
+   * As CHAVES de condição que este efeito remove do recipiente (#590: Cure Poison e afins, puras
+   * ou combinadas com cura — Fair Wound Cleansing). Devolvida, não removida: só o ruleset tem a
+   * fila de eventos, e cancelar `condition-expire`/`condition-tick` do que foi removido é dele —
+   * a mesma divisão de `condition` acima.
+   */
+  readonly dispel?: readonly string[];
 }
 
 export interface CastRefused {
@@ -248,6 +262,11 @@ export interface HealEffect {
   readonly basePower?: number | undefined;
   readonly amount?: number | undefined;
   readonly formula?: SpellFormula | undefined;
+  /**
+   * A cura COMPOSTA (#590: Fair Wound Cleansing, Nature's Embrace, Restoration no Canary) — as
+   * chaves de condição que o MESMO lançamento remove do recipiente, ao lado da cura.
+   */
+  readonly dispel?: { readonly types: readonly string[] } | undefined;
 }
 
 /** O efeito que `powerOf` resolve: magia, supply ou cura. `damageType` só existe no de dano. */
@@ -426,11 +445,24 @@ export function castSpell(
   }
 
   const effect = spell.effect;
+  // Stairhop (#554, M30-07, ADR 0040 decisão 1): magia AGRESSIVA recusa enquanto a trava do
+  // lançador não vencer — cura, condição e o resto do vocabulário continuam liberados, como o
+  // Canary libera tudo que não é `aggressive` sob `CONDITION_PACIFIED` (`spells.cpp:517`). Antes
+  // do alcance/mana, pela mesma posição relativa do checklist do Canary (`playerSpellCheck`,
+  // antes de `CastSpell`). Só o `combat-v3` lê — `caster.attackLockedUntil` é sempre `0` fora
+  // dele, e a checagem nunca dispara.
+  if (
+    (effect.kind === 'damage' || effect.kind === 'damage-over-time')
+    && combat.compatibilityProfile === 'combat-v3'
+    && caster.attackLockedUntil > nowMs
+  ) {
+    return { ok: false, reason: 'attack-locked', retryInMs: caster.attackLockedUntil - nowMs };
+  }
   // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
   // e `range` não existe nela (o boot recusa). O dano ao longo do tempo (CMB-07) mira como o
   // dano: ele precisa de alvo, e o tique é que passa pelo resolver depois.
-  if (effect.kind === 'damage' || effect.kind === 'damage-over-time') {
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time' || effect.kind === 'challenge') {
     if (aim === null || aim.targets.length === 0) {
       return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     }
@@ -506,7 +538,11 @@ export function castSpell(
         ok: true,
         healed: executeHealing(caster, recipient, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        ...(effect.dispel === undefined ? {} : { dispel: effect.dispel.types }),
       };
+    // Dispel puro (#590: Cure Poison e afins) — sem cura, sem sorteio: a magia só remove.
+    case 'dispel':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, dispel: effect.types };
     case 'heal-over-time':
       return cast({
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
@@ -526,6 +562,11 @@ export function castSpell(
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    // Provocação (#589): não devolve condição do LANÇADOR — quem recebe o efeito é o(s)
+    // monstro(s) atingido(s), e é o ruleset (que tem `#spellHits` e escreve `MonsterRuntime`)
+    // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
+    case 'challenge':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
      * aplica (o ruleset) agenda o tique. O `targetId` fica vazio aqui porque o lançador não
@@ -726,6 +767,7 @@ export function useSupply(
         ok: true,
         healed: executeHealing(user, recipient, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paidFromStockRune ? 0 : supply.price,
+        ...(effect.dispel === undefined ? {} : { dispel: effect.dispel.types }),
       };
     }
     if (!hasStockHeal && !purse.canAfford(supply.price)) {
@@ -745,6 +787,35 @@ export function useSupply(
         ? 0
         : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng, combat)),
       damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
+      ...(effect.dispel === undefined ? {} : { dispel: effect.dispel.types }),
+    };
+  }
+
+  // Dispel puro (#590, Antidote Rune): sem cura, sem sorteio — o uso só remove condição do
+  // recipiente. Mesma ordem de sempre: level, vocação, e só então o gold.
+  if (supply.effect.kind === 'dispel') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+    const hasStockDispel = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockDispel && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    const paidFromStockDispel = hasStockDispel && spendStock(user, supply.id);
+    if (!paidFromStockDispel) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockDispel ? 0 : supply.price, dispel: effect.types,
     };
   }
 
