@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "docs-check": "tsx scripts/docs-check.ts",
     "source-policy": "tsx scripts/source-policy.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check && pnpm catalog:import --check && pnpm catalog:npc-prices --check && pnpm catalog:promote-items --check && pnpm catalog:promote-monsters --check && pnpm catalog:spawns --map darashia-dragon-lair --check && pnpm catalog:spawns --map dwarf-mines --check && pnpm catalog:spawns --map cyclopolis --check && pnpm catalog:spawns --map minotaur-camp --check && pnpm catalog:spawns --map bone-crypt --check && pnpm catalog:spawns --map hydra-mountain --check && pnpm catalog:spawns --map hellhound-den --check",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy && pnpm assets:inventory --check && pnpm map:import --check && pnpm catalog:import --check && pnpm catalog:npc-prices --check && pnpm catalog:promote-items --check && pnpm catalog:promote-monsters --check && pnpm catalog:spawns --map darashia-dragon-lair --check && pnpm catalog:spawns --map rat-cellars --check && pnpm catalog:spawns --map rotworm-caves --check && pnpm catalog:spawns --map dwarf-mines --check && pnpm catalog:spawns --map cyclopolis --check && pnpm catalog:spawns --map minotaur-camp --check && pnpm catalog:spawns --map bone-crypt --check && pnpm catalog:spawns --map hydra-mountain --check && pnpm catalog:spawns --map hellhound-den --check",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "tsc -b && pnpm --filter @draconya/tools content:check",
     "assets:library": "tsx scripts/build-asset-library.ts",

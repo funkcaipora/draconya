@@ -245,44 +245,45 @@ export interface DeathPenalty {
  * `sumSkillTries`/`sumMana` do Canary (soma de todo `getReqSkillTries`/`getReqMana` até o nível
  * atual, mais o progresso corrente).
  *
- * `options.premium` continua o nome do parâmetro (não é renomeado para não recascatear pelos
- * chamadores existentes), mas o que ele representa agora é "está abençoado" — mapeia o conceito
- * de bênção do Tibia (`blessedReduction`, sete bênçãos × 8% = 56%) no binário que o repo já
- * tinha. O gradiente por NÚMERO de bênçãos fica fora — é a #570, e o parâmetro `premium` É o
- * ponto de extensão que ela vai substituir por uma contagem real.
+ * `options.blessings` (#570) é a CONTAGEM de bênçãos que o morto tinha —
+ * `blessingCount(character.blessings)`, nunca mais o binário `premium` que a #569 deixou como
+ * ponto de extensão. Cada bênção soma `blessingReduction` (8% no Tibia): sete bênçãos dão os
+ * mesmos 56% que o binário `premium: true` dava antes, mas agora o gradiente é de verdade —
+ * quem morre com três bênçãos perde menos que quem não comprou nenhuma, e mais que quem
+ * comprou as sete.
  *
- * **Abaixo de `cubicFromLevel` a redução do abençoado é TETADA em 50%, não os 56% crus**
- * (correção de revisão — `Player::getLostPercent` do Canary, ramo `else` do `if (level >= 24)`:
+ * **Abaixo de `cubicFromLevel` a redução de bênção é TETADA em 50%, não o valor cru** (correção
+ * de revisão — `Player::getLostPercent` do Canary, ramo `else` do `if (level >= 24)`:
  * `percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction)`). Sete bênçãos dão
  * 56%, que é ≥ 40%, e o Tibia arredonda isso para exatamente 50% NESSE ramo — não é o valor
- * bruto. O teto só existe no ramo da fração fixa e só sobre a parcela de BÊNÇÃO; a fórmula
- * cúbica (level ≥ 24) usa a redução crua, sem teto — e a parcela de PROMOÇÃO nunca passa pelo
- * teto, nos dois ramos (ver abaixo).
+ * bruto; CINCO bênçãos (40%) já cruzam o mesmo teto, pela mesma conta. O teto só existe no
+ * ramo da fração fixa e só sobre a parcela de BÊNÇÃO; a fórmula cúbica (level ≥ 24) usa a
+ * redução crua, sem teto — e a parcela de PROMOÇÃO nunca passa pelo teto, nos dois ramos (ver
+ * abaixo).
  *
- * **`options.promoted` (#569) soma mais 30% de redução, sempre ADITIVO e nunca tetado**
- * (`Player::getLostPercent`: o `percentReduction += 0.30` acontece DEPOIS do teto do ramo
- * `level < cubicFromLevel`, incondicional aos dois ramos). `promoted` é opcional e por padrão
- * `false` — a promoção em si (`CharacterRuntime.promoted`) ainda não existe; isto é só o
- * ponto de extensão que a #566/ADR 0042 vai acionar quando o estado existir.
+ * **`options.promoted` (#569, ligado ao estado real pelo #566) soma mais 30% de redução, sempre
+ * ADITIVO e nunca tetado** (`Player::getLostPercent`: o `percentReduction += 0.30` acontece
+ * DEPOIS do teto do ramo `level < cubicFromLevel`, incondicional aos dois ramos). `promoted` é
+ * opcional e por padrão `false` — `hunt.ts#onCharacterDied` passa `character.promoted`
+ * (`CharacterRuntime.promoted`, #566/ADR 0042).
  *
  * **Sem piso de level** (#569 removeu o `levelFloor` do Draconya): o Tibia não tem piso para
  * a penalidade de morte, e o repo alinhou a isso — o personagem pode cair até o level 1.
  */
 export function applyDeathPenalty(
   character: CharacterRuntime,
-  options: { readonly premium: boolean; readonly promoted?: boolean },
+  options: { readonly blessings: number; readonly promoted?: boolean },
   vocation: Vocation | null,
   progression: Progression,
   skills: ReadonlyMap<string, Skill>,
 ): DeathPenalty {
-  const { flatFraction, cubicFromLevel, blessedReduction, promotionReduction } = progression.deathPenalty;
+  const { flatFraction, cubicFromLevel, blessingReduction, promotionReduction } = progression.deathPenalty;
   const level = character.level;
   const belowCubic = level < cubicFromLevel;
   // O teto de 50% é só da parcela de BÊNÇÃO, e só no ramo `level < cubicFromLevel` (comentário
   // da função). A promoção soma DEPOIS, sem passar pelo teto — como no Canary.
-  const blessing = options.premium
-    ? (belowCubic && blessedReduction >= 0.40 ? 0.50 : blessedReduction)
-    : 0;
+  const blessingFraction = blessingReduction * options.blessings;
+  const blessing = belowCubic && blessingFraction >= 0.40 ? 0.50 : blessingFraction;
   const reduction = blessing + (options.promoted ? promotionReduction : 0);
 
   const raw = belowCubic

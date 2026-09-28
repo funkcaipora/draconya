@@ -118,6 +118,9 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
+export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
+export type BlessingDefinition = BlessingsConfig['list'][number];
 /** A party (#196): quem está nela, do `session-state` e do `party-state`. */
 export type PartyView = Readonly<S2CProps<'party-state'>>;
 export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
@@ -231,6 +234,11 @@ export interface HudState {
   readonly soulMax: number;
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
   readonly vocationId: string | null;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). A tela troca o nome exibido pelo `promotion.name` da
+   * vocação (`catalogue.vocations`) quando `true`. Chega em `player-stats`/`session-state`.
+   */
+  readonly promoted: boolean;
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -289,6 +297,13 @@ export interface HudState {
    * o `sim` não grava zero para todo monstro do conteúdo.
    */
   readonly bestiary: BestiaryCounts | null;
+  /**
+   * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
+   * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
+   * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
+   * também "nenhuma bênção", o estado real de quem nunca comprou.
+   */
+  readonly blessings: number;
   /**
    * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
    * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
@@ -351,6 +366,7 @@ export const INITIAL_HUD: HudState = {
   soul: 0,
   soulMax: 0,
   vocationId: null,
+  promoted: false,
   latencyMs: null,
   connection: 'idle',
   onlinePlayers: null,
@@ -362,6 +378,7 @@ export const INITIAL_HUD: HudState = {
   slotStates: {},
   slotResults: {},
   bestiary: null,
+  blessings: 0,
   party: null,
   partyBag: null,
   lastSettlement: null,

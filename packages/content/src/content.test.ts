@@ -26,7 +26,7 @@ const baseline = {
   vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
 };
 
 const combat = {
@@ -2794,6 +2794,61 @@ describe('condição de velocidade com sinal — speed (CMB-11, #556)', () => {
     expect(() => buildContent(base({
       monsters: [{ ...rat, defenses: [selfDrunk] }],
     }))).toThrow(ContentError);
+  });
+});
+
+describe('imunidade de condição, invisibilidade e a Paralyze Rune (#559/#592, ADR 0041 d.2)', () => {
+  const invisibleSelfDefense = {
+    id: 'inv', cadenceMs: 2_000, chance: 0.3,
+    condition: { key: 'invisible', merge: 'refresh' as const, durationMs: 10_000, effect: { kind: 'invisible' as const } },
+  };
+
+  it('monsterDefenseSchema aceita `invisible` como self-buff (Killer Rabbit)', () => {
+    const content = buildContent(base({ monsters: [{ ...rat, defenses: [invisibleSelfDefense] }] }));
+    expect(content.monsters.get('rat')?.defenses[0]?.condition).toEqual(invisibleSelfDefense.condition);
+  });
+
+  it('recusa a chave errada — invisible exige a chave reservada "invisible"', () => {
+    const chaveErrada = { ...invisibleSelfDefense, condition: { ...invisibleSelfDefense.condition, key: 'oculto' } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, defenses: [chaveErrada] }] }))).toThrow(ContentError);
+  });
+
+  it('monsterSchema.conditionImmunities aceita paralyze/drunk/invisible, e só eles', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, conditionImmunities: ['paralyze', 'invisible'] }],
+    }));
+    expect(content.monsters.get('rat')?.conditionImmunities).toEqual(['paralyze', 'invisible']);
+    expect(() => buildContent(base({
+      // `outfit`/`bleed` não têm modelo ainda (#559) — o importador os reporta, o schema recusa.
+      monsters: [{ ...rat, conditionImmunities: ['outfit'] }],
+    }))).toThrow(ContentError);
+  });
+
+  it('monsterSchema.conditionImmunities é [] por padrão — preserva bit a bit todo monstro sem o campo', () => {
+    const content = buildContent(base({ monsters: [rat] }));
+    expect(content.monsters.get('rat')?.conditionImmunities).toEqual([]);
+  });
+
+  it('supplySchema: `condition.target: "enemy"` exige `range`, e só ele', () => {
+    const paralyzeRune = {
+      id: 'paralyze-rune', name: 'Paralyze Rune', price: 700, group: 'support' as const,
+      groupCooldownMs: 2_000, cooldownMs: 6_000,
+      effect: {
+        kind: 'condition' as const, target: 'enemy' as const, range: 3,
+        condition: {
+          key: 'speed', merge: 'replace' as const, durationMs: 6_000,
+          effect: { kind: 'speed' as const, type: 'paralyze' as const, formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 } },
+        },
+      },
+    };
+    expect(() => buildContent(base({ supplies: [paralyzeRune] }))).not.toThrow();
+    const semRange = { ...paralyzeRune, effect: { ...paralyzeRune.effect, range: undefined } };
+    expect(() => buildContent(base({ supplies: [semRange] }))).toThrow(ContentError);
+    const rangeSemAlvo = {
+      ...paralyzeRune,
+      effect: { ...paralyzeRune.effect, target: undefined },
+    };
+    expect(() => buildContent(base({ supplies: [rangeSemAlvo] }))).toThrow(ContentError);
   });
 });
 

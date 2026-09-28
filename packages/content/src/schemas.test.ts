@@ -146,18 +146,21 @@ describe('itemSchema — ML especializado por elemento (#680)', () => {
   });
 });
 
-describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)', () => {
+describe('itemSchema — o consumível é a comida (ADR 0026 d.3, emenda #570)', () => {
+  // A carga de bênção (`kind: 'blessing'`) foi REMOVIDA pelo #570: bênção virou serviço de
+  // Cidade (ADR 0052), nunca item de mochila. A comida é o consumível real que sobrou, e o
+  // catálogo passa a ter EMPILHÁVEL como o comum, não a exceção.
   const consumable = {
-    id: 'blessing-charge', name: 'Carga de Bênção', kind: 'consumable',
-    stackable: false, weight: 1, value: 0, effect: { kind: 'blessing' },
+    id: 'cheese', name: 'Queijo', kind: 'consumable',
+    stackable: true, weight: 1, value: 0, effect: { kind: 'food', durationMs: 12_000 },
   };
 
-  it('aceita o consumível sem group, sem restock, sem price e sem empilhar', () => {
-    // O suprimento virou abstrato: só a bênção (M22) permanece como item consumível, e ela
-    // não tem preço, grupo nem reposição. Mutação que mata: exigir `stackable`/`group`.
+  it('aceita o consumível sem group, sem restock e sem price', () => {
+    // O suprimento virou abstrato: só comida permanece como item consumível, e ela não tem
+    // preço, grupo nem reposição. Mutação que mata: exigir `group`.
     const parsed = itemSchema.parse(consumable);
     expect(parsed.kind).toBe('consumable');
-    expect(parsed.stackable).toBe(false);
+    expect(parsed.stackable).toBe(true);
     expect(itemSchema.parse(parsed)).toEqual(parsed);
   });
 

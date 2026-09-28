@@ -39,12 +39,14 @@ item não existe, ou que pede pilha de item que não empilha — contada, nunca 
 `docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
 são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
 — o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
-Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`), com override próprio
-(`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true` temporário que as
-duas hunts antigas ainda exigem (até o #582+/M36-05 as converter para o comportamento real do
-Canary). `pnpm catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro
-entradas numa reimportação futura — elas só mudam de novo por decisão deliberada, como o #581.
-`load.ts` não lê `staging/`, e nada do jogo deve ler.
+Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`). O #581 tinha dado aos dois um
+override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
+temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
+(M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
+Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
+`staging/`, e nada do jogo deve ler.
 
 **`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
 escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
@@ -86,7 +88,7 @@ data/items/backpack.json             # autoral, uma entidade por arquivo (de sem
 data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
 data/monsters/generated/mammals.json # promovido/regenerado — um ARRAY (Rat mora aqui desde o #581)
-data/monsters/overrides/rat.json     # correção nossa: { id, reason, patch } — blockable temporário
+data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — nenhuma hoje (#586 apagou as duas que existiam)
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto
@@ -359,10 +361,21 @@ em vez de virar um slot morto que ninguém explica.
 **Suprimento é abstrato** (AB-01, ADR 0032 d.6). Poção e runa vivem em `supplies/*.json` com
 `price`, `effect`, `requires` e `group`; o uso debita gold direto (`useSupply`), sem pilha e sem
 reposição. O vocabulário v2 do bot (AB-03) usa o token `supply` com `supplyId`, e
-`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. A carga de bênção é a única
-exceção: segue item `kind: 'consumable'` **não-empilhável** em `items/blessing-charge.json`, sem
-`restock` nem `group` obrigatórios, e quem a consome é a TP-03 (M22). O motor por grupo é a AB-07
+`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. O motor por grupo é a AB-07
 (#422).
+
+A carga de bênção (`items/blessing-charge.json`, item `consumable` não-empilhável do M22) foi
+**removida pelo #570**: bênção deixou de ser item de mochila e virou serviço de Cidade (ADR
+0052) — intenção C2S tratada pela sessão de Cidade, gold pelo ledger, nunca um `use-item`. O
+catálogo novo é `data/blessings/*.json` (`blessingSchema`): sete bênçãos PvE (o `Blessings.All`
+do Canary tem 8 ids; o 1º, Twist of Fate, é PvP e fica fora), cada uma com `order` — o índice do
+BIT que `CharacterRuntime.blessings` guarda (`packages/sim/src/blessings.ts`) — e `enhanced`
+(as duas mais caras, Heart/Blood of the Mountain). O preço por level é `progression.
+blessingPricing` (`getBlessingCost` do Canary, `blessing.lua:148-166`): faixa fixa até o level
+30, faixa linear até o 119, faixa linear com base maior dali em diante — `enhanced` multiplica
+mais em cada faixa —, e GRÁTIS abaixo do level 21 (o Adventurer's Blessing, `config.lua.dist:
+496`). A redução na morte é `deathPenalty.blessingReduction` (8%) MULTIPLICADA pela contagem de
+bits — nunca mais a soma pronta de um binário `premium`.
 
 ## Skills (FUN-75)
 

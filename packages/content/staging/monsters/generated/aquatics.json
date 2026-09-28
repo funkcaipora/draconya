@@ -20,6 +20,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.36,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -235,6 +239,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.36,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -411,6 +418,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -526,6 +537,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -745,6 +760,9 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -977,6 +995,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.72,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1110,6 +1132,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.37,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1295,6 +1321,9 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.57,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1495,6 +1524,9 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.56,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1640,6 +1672,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.65,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1841,6 +1877,9 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -2023,6 +2062,9 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -2252,6 +2294,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2298,6 +2343,116 @@
     "outfitId": 455
   },
   {
+    "id": "jellyfish",
+    "name": "Jellyfish",
+    "class": "aquatic",
+    "health": 55,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 10
+    },
+    "armor": 11,
+    "defense": 10,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.05
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 168,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "shrimp",
+          "chance": 0.08333,
+          "min": 1,
+          "max": 2
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 10
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 430000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/jellyfish.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 781,
+      "toKill": 500,
+      "firstUnlock": 25,
+      "secondUnlock": 250,
+      "charmsPoints": 15,
+      "stars": 2,
+      "occurrence": 1
+    },
+    "outfitId": 452
+  },
+  {
     "id": "manta-ray",
     "name": "Manta Ray",
     "class": "aquatic",
@@ -2322,6 +2477,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.37,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2466,6 +2624,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.1,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2536,6 +2697,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.86,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -2678,6 +2842,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -2963,6 +3131,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3230,6 +3402,174 @@
     "outfitId": 47
   },
   {
+    "id": "quara-mantassin",
+    "name": "Quara Mantassin",
+    "class": "aquatic",
+    "health": 800,
+    "experience": 600,
+    "attack": {
+      "min": 0,
+      "max": 138
+    },
+    "armor": 16,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice",
+        "lifedrain"
+      ]
+    },
+    "defenseMitigation": 0.7,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 590,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.05,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "mantassin-tail",
+          "chance": 0.126
+        },
+        {
+          "itemId": "shrimp",
+          "chance": 0.0517,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "halberd",
+          "chance": 0.0497
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0113
+        },
+        {
+          "itemId": "cape",
+          "chance": 0.0109
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0105
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0061
+        },
+        {
+          "itemId": "strange-helmet",
+          "chance": 0.001
+        },
+        {
+          "itemId": "blue-robe",
+          "chance": 0.0006
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 138
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 400
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 40,
+    "staticAttack": 0.8,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/quara_mantassin.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 241,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 0
+    },
+    "outfitId": 72
+  },
+  {
     "id": "quara-mantassin-scout",
     "name": "Quara Mantassin Scout",
     "class": "aquatic",
@@ -3375,6 +3715,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3535,6 +3878,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3675,6 +4021,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3854,6 +4203,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3982,6 +4334,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -4178,6 +4534,162 @@
     "outfitId": 47
   },
   {
+    "id": "renegade-quara-mantassin",
+    "name": "Renegade Quara Mantassin",
+    "class": "aquatic",
+    "health": 1200,
+    "experience": 1000,
+    "attack": {
+      "min": 0,
+      "max": 138
+    },
+    "armor": 16,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.25,
+        "earth": -0.1
+      },
+      "immunities": [
+        "drown",
+        "fire",
+        "ice"
+      ]
+    },
+    "conditionImmunities": [
+      "paralyze"
+    ],
+    "defenseMitigation": 0.7,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 590,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": [
+        {
+          "itemId": "mantassin-tail",
+          "chance": 0.1449
+        },
+        {
+          "itemId": "mind-stone",
+          "chance": 0.1037
+        },
+        {
+          "itemId": "shrimp",
+          "chance": 0.0395,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0354,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0329
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0206
+        },
+        {
+          "itemId": "blue-crystal-shard",
+          "chance": 0.0189
+        },
+        {
+          "itemId": "strange-helmet",
+          "chance": 0.0132
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.0082
+        },
+        {
+          "itemId": "fish-fin",
+          "chance": 0.0074
+        },
+        {
+          "itemId": "blue-robe",
+          "chance": 0.0066
+        },
+        {
+          "itemId": "energy-ring",
+          "chance": 0.0058
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 138
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/aquatics/renegade_quara_mantassin.lua"
+    },
+    "bestiary": {
+      "class": "aquatic",
+      "race": "aquatic",
+      "raceId": 1099,
+      "toKill": 1000,
+      "firstUnlock": 50,
+      "secondUnlock": 500,
+      "charmsPoints": 25,
+      "stars": 3,
+      "occurrence": 2
+    },
+    "outfitId": 72
+  },
+  {
     "id": "renegade-quara-pincher",
     "name": "Renegade Quara Pincher",
     "class": "aquatic",
@@ -4201,6 +4713,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -4400,6 +4916,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -4595,6 +5115,9 @@
         "drown"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.43,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,

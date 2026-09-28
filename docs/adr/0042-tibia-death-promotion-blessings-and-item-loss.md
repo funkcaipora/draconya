@@ -152,3 +152,17 @@ Confiança: baixa nas duas — a ausência é ausência de captura, não confirm
 (Evidência: grep completo de `docs/reference/huntera-observed.md` para
 `morte|death|skull|item loss|perda de item|morr` e para `blessing|bênção|promotion|promoção`,
 zero ocorrências relevantes; Parte IV linhas 474-475; Parte II, personagem level 328.)
+
+## Emenda — 2026-09-28: bênçãos implementadas (#570), tela de serviço resolvida por decisão direta
+
+A questão "tela de serviço vs. NPC dialogável" (acima) foi resolvida por decisão direta do dono,
+sem depender de captura do Huntera: **tela de serviço**, como o plano já recomendava. A #570
+implementa a decisão 2 inteira (as sete bênçãos PvE, preço por level do `getBlessingCost`,
+consumo na morte) e a metade "serviço de Cidade" da decisão 2/questão acima — ver
+[ADR 0052](0052-endgame-progression-state-and-city-services-through-the-owning-session.md) para
+o mecanismo genérico (intenção C2S tratada pela sessão de Cidade, gold pelo ledger) e
+`docs/product/blessings.md` para o comportamento. A promoção (a outra metade da decisão 1/2)
+continua em aberto — `options.promoted` em `applyDeathPenalty` segue como ponto de extensão sem
+estado por trás.
+
+A questão de perda de item (decisão 4) não muda: segue aberta, sem captura aplicável.

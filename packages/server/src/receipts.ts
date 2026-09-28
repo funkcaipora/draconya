@@ -91,6 +91,15 @@ export interface SessionReceipt {
    */
   readonly fedMs?: number;
   /**
+   * As bênçãos no fim da sessão (#570, ADR 0052): o BITMASK de `CharacterRuntime.blessings`.
+   * Valor ABSOLUTO, última escrita vence, como `fedMs` — mas ao contrário dele, este campo
+   * PODE DESCER a zero dentro da MESMA sessão (a morte consome tudo), e é exatamente por isso
+   * que o ledger (`jobs/ledger.ts`) nunca pode fundir por máximo aqui: um extrato antigo
+   * processado fora de ordem depois de um mais novo já aplicado ressuscitaria uma bênção que
+   * acabou de ser consumida.
+   */
+  readonly blessings?: number;
+  /**
    * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
    * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
    * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
@@ -103,6 +112,14 @@ export interface SessionReceipt {
    * Cidade que não tocou alma, ou nó `game` anterior a esta issue.
    */
   readonly soul?: number;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). Só `true` viaja — o campo NUNCA carrega `false`
+   * (ver `#requestPromoteVocation`/`#saveDurableReceipt`, `game/host.ts`). O `jobs` funde por
+   * `OR` (`characters.promoted OR receipt.promoted`): um extrato fora de ordem nunca desce o
+   * estado, a mesma garantia que `coalesce` dá à vocação, mas sem precisar de instante — um
+   * boolean que só sobe não tem "ausente" a preencher uma vez só.
+   */
+  readonly promoted?: boolean;
   /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
@@ -353,12 +370,17 @@ function parseReceipt(raw: string): SessionReceipt | null {
       : {}),
     // Comida ativa (#726): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['fedMs'] === 'number' ? { fedMs: value['fedMs'] } : {}),
+    // As bênçãos (#570): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['blessings'] === 'number' ? { blessings: value['blessings'] } : {}),
     // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
       ? { vocation: value['vocation'] }
       : {}),
     // Pontos de alma (#593): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['soul'] === 'number' ? { soul: value['soul'] } : {}),
+    // A promoção (#566): lista de PERMISSÃO, pela razão das skills — só `true` sobrevive à
+    // volta; `false`/ausente/torto vira ausente, o lado seguro (nunca desce o estado).
+    ...(value['promoted'] === true ? { promoted: true } : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.
     ...(typeof value['equipment'] === 'object' && value['equipment'] !== null

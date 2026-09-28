@@ -1,0 +1,18 @@
+{
+  "id": "destroy-field-rune",
+  "name": "Destroy Field Rune",
+  "description": "Remove um campo elemental no tile mirado — não afeta parede mágica nem mato denso.",
+  "price": 15,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 17,
+    "magicLevel": 3
+  },
+  "effect": {
+    "kind": "destroy-field",
+    "range": 5
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `destroy_field_rune.lua`: remove qualquer campo cujo id esteja em `fields = {105, 2118..2126, 2132..2135, 21465}` — todas variantes de fogo/veneno/energia, NUNCA Magic Wall (2128) nem Wild Growth (2130). O equivalente aqui é `blocksMovement`: `HuntRuleset#destroyFieldAt` recusa remover campo bloqueante. `rune:range(5)` é o único range EXPLÍCITO entre as runas desta issue (as outras usam a convenção de alcance 8 deste catálogo, sem `range()` no Lua). `rune:isAggressive(false)` — sem `setPzLocked`, mas isso não tem contraparte no Draconya hoje (zona protegida não é assunto desta issue). Level 17, magic level 3; sem vocação (o Lua não declara `rune:vocation`). `group` é `support`, como toda runa não-agressiva deste catálogo (nenhuma outra ainda usa o rótulo, mas é o mesmo vocabulário de `CONSUMABLE_GROUPS`). `price` 15 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3148 (menor `buy`, fonte asima.lua). Sem aparência conferida."
+}

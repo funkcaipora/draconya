@@ -1,0 +1,87 @@
+{
+  "id": "fire-field-rune",
+  "name": "Fire Field Rune",
+  "description": "Planta um campo de fogo no tile mirado.",
+  "price": 28,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 15,
+    "magicLevel": 1
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-fire-field",
+      "durationMs": 200000,
+      "shape": {
+        "shape": "point"
+      },
+      "condition": {
+        "key": "burning",
+        "merge": "strongest",
+        "durationMs": 70000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "rounds",
+          "rounds": [
+            {
+              "count": 7,
+              "intervalMs": 10000,
+              "damage": 20
+            }
+          ],
+          "damageType": "fire"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 200000,
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        },
+        {
+          "durationMs": 148000,
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 10
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        },
+        {
+          "durationMs": 98000
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `fire_field.lua`: item ITEM_FIREFIELD_PVP_FULL (2118), a MESMA cadeia de decayTo que o Dragon Lord já usa desde o #560 (2118 dano20/200s → 2119 dano10/148s → 2120 mudo/98s, `items.xml:4212-4246`). Level 15, magic level 1 (rune:level/magicLevel do Lua) — sem `charges` no schema, porque runa é suprimento abstrato, não item físico. `range` 8: a mesma convenção de alcance que toda runa deste catálogo usa (great-fireball-rune etc.), não um `range()` explícito do Lua (nenhuma das field/wall/bomb runes declara um). `price` 28 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3188 (menor `buy`, fonte asima.lua). Sem aparência conferida (efeito/projétil) — pendente, como toda runa nova deste catálogo."
+}
