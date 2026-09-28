@@ -854,14 +854,13 @@ body {
 }
 
 /* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
-/* Duas colunas desde a #503: a formação embutida saiu (PartyPanel aposentado) — a party tem
-   superfície própria em PartyModal.tsx, e daqui saem só as duas pontes ("Encontrar Party" e
-   "Iniciar com o time"). */
-.hunts-modal-body {
-  display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 12px; height: 430px;
-}
-/* Busca, contador e lista compartilham a coluna de 230 px; a lista ocupa só o espaço restante. */
-.hunts-modal-list-col { display: flex; flex-direction: column; min-height: 0; }
+/* UMA coluna desde o #584 (fim do pull por dificuldade): a coluna de detalhe (tamanhos de
+   pull) saiu — a composição de monstros já está na linha da lista e em HuntDetailsModal.tsx,
+   aberto à parte. A formação embutida já tinha saído antes (#503, PartyPanel aposentado): a
+   party tem superfície própria em PartyModal.tsx, e daqui saem só as duas pontes
+   ("Encontrar Party" e "Iniciar com o time"). */
+.hunts-modal-body { display: flex; flex-direction: column; height: 430px; }
+.hunts-modal-list-col { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 /* `Input` traz 18 px por padrão; nesta lista densa a distância do kit é 6 px. */
 .hunts-modal-search { margin-bottom: 6px; }
 .hunts-modal-list { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 5px;
@@ -874,16 +873,13 @@ body {
 .hunts-modal-row-selected button { border-color: var(--gold-4); background: var(--surface-selected); }
 .hunts-modal-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
 .hunts-modal-row-selected .hunts-modal-row-text strong { color: var(--gold-5); }
-/* Os dois metadados da linha ("level N+" e "M tamanhos de pull · K drops de loot") são spans
+/* Os dois metadados da linha ("level N+" e "criaturas · K drops de loot") são spans
    inline no JSX e saíam colados (#290): cada um vira bloco, abaixo do nome. */
 .hunts-modal-row-text > span { display: block; }
 /* `.item-sprite` (herdada de `ItemSprite`/`OutfitSprite`) é `position: absolute; inset: 1px`
    sobre um ancestral quadrado — o mesmo contrato que `.ui-slot` cumpre para o inventário; este
    span é esse ancestral aqui, do lado da lista de hunts (42 px, a largura da coluna do grid). */
 .hunts-modal-sprite { position: relative; width: 42px; height: 42px; }
-.hunts-modal-detail { min-width: 0; overflow: auto; }
-.hunts-modal-detail h2 { margin: 0 0 8px; font: 600 15px var(--font-display); color: var(--gold-5); }
-.hunts-modal-pulls { display: flex; gap: 6px; flex-wrap: wrap; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
@@ -947,11 +943,6 @@ body {
 .hunt-details-col-left { min-width: 0; }
 .hunt-details-col-right { min-width: 0; }
 .hunt-details-kicker { display: block; margin: 10px 0 4px; }
-.hunt-details-pulls {
-  display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px;
-  font: 8px var(--font-mono); color: var(--text-muted);
-}
-.hunt-details-pull { white-space: nowrap; }
 .hunt-details-monsters { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
 .hunt-details-monster {
   display: flex; flex-direction: column; align-items: center; width: 60px; gap: 2px;

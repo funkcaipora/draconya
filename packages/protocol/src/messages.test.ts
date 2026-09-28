@@ -1471,3 +1471,21 @@ describe('usable scenery: use-on-map, look, tile-update (#729, ADR 0050 d.7)', (
     ]);
   });
 });
+
+describe('enter-hunt without difficulty (#584, ADR 0039 — end of pull-by-difficulty)', () => {
+  it('round trips huntId alone through the codec, difficulty absent', () => {
+    // Um cliente NOVO nunca manda `difficulty` — o campo virou vestigial (ADR 0039). Se ele
+    // voltar a ser obrigatório, este parse falha primeiro.
+    const withoutDifficulty: C2SMessage = { type: 'enter-hunt', huntId: 'rat-cellars' };
+    expect(decodeC2S(encodeC2S(withoutDifficulty))).toEqual([withoutDifficulty]);
+    const parsed = C2S_SCHEMAS['enter-hunt'].safeParse({ huntId: 'rat-cellars' });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('still accepts a legacy client that sends an old difficulty name', () => {
+    // Compat (ADR 0014): um cliente anterior ao #583 manda um nome que não existe mais no
+    // conteúdo (`'cautious'`/`'bold'`/`'reckless'`) — o protocolo aceita, sem validar o valor.
+    const legacy: C2SMessage = { type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' };
+    expect(decodeC2S(encodeC2S(legacy))).toEqual([legacy]);
+  });
+});
