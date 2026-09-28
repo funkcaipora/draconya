@@ -32,7 +32,7 @@ const hero = (health: number, maxHealth = 100, mana = 100, maxMana = 100) =>
   });
 
 const view = (over: Partial<BotView> = {}): BotView => ({
-  self: hero(100), targetCount: 0, target: null, partyTarget: null, ...over,
+  self: hero(100), targetCount: 0, target: null, partyTarget: null, summonCount: 0, ...over,
 });
 
 /** Um conjunto da barra: 24 posições, com as dadas na frente e o resto vazio. */

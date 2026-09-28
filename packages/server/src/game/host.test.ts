@@ -6733,7 +6733,10 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     return config;
   };
 
-  it('na Cidade (ruleset sem `useSlot`) responde ok:false com motivo, nunca em silêncio (RF-02)', async () => {
+  it('na Cidade, sem configuração de bot, responde ok:false com motivo, nunca em silêncio (RF-02, #792)', async () => {
+    // Desde o #792 a Cidade TEM `useSlot` (conjuração, ADR 0044 d.2): a recusa genérica "Você
+    // não está numa caçada." só sai quando o ruleset não tem o método nenhum — aqui ela dá
+    // lugar a uma recusa tipada de verdade. Sem `bot-config`, o slot 0 nunca foi preenchido.
     const content = testContent();
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: content.version, logger,
@@ -6746,7 +6749,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     host.flush();
 
     expect(socket.received()).toContainEqual({
-      type: 'slot-result', set: 0, slot: 0, ok: false, reason: 'Você não está numa caçada.',
+      type: 'slot-result', set: 0, slot: 0, ok: false, reason: 'Este slot está vazio.',
     });
   });
 

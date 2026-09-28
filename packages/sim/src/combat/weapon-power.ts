@@ -22,6 +22,7 @@
 
 import type { Combat, WeaponProfile } from '@draconya/content';
 import type { Rng } from '../rng.js';
+import { isV3OrLater } from './profile.js';
 
 /**
  * Uma amostra da normal truncada do Canary (`normal_random`, `src/utils/tools.cpp`): média 0,5,
@@ -160,8 +161,9 @@ export function resolveWeaponPower(
   combat?: Combat,
   vocationMultiplier = 1,
 ): number {
-  const usesCanaryWeaponFormula = (combat?.compatibilityProfile === 'combat-v2'
-    || combat?.compatibilityProfile === 'combat-v3') && combat.weaponDamage !== undefined;
+  const usesCanaryWeaponFormula = combat !== undefined
+    && (combat.compatibilityProfile === 'combat-v2' || isV3OrLater(combat.compatibilityProfile))
+    && combat.weaponDamage !== undefined;
   if (profile.fixedDamage !== undefined) {
     // `combat-v2`/`combat-v3`: `WeaponWand::getWeaponDamage` do Canary também sorteia pela
     // normal truncada (`normal_random(minChange, maxChange)`), não uma faixa uniforme — a
@@ -212,7 +214,7 @@ export function resolveWeaponHit(
   combat: Combat | undefined, vocationMultiplier: number, damagePercent: number,
 ): WeaponHit {
   const element = profile.element;
-  if (combat?.compatibilityProfile !== 'combat-v3' || element === undefined
+  if (combat === undefined || !isV3OrLater(combat.compatibilityProfile) || element === undefined
     || profile.power === undefined || combat.weaponDamage === undefined) {
     const power = resolveWeaponPower(profile, level, skillLevel, rng, combat, vocationMultiplier);
     // `damagePercent` 100 devolve o poder intacto — inclusive o valor FRACIONÁRIO do v1, que

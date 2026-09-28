@@ -28,6 +28,7 @@ import type { DefenderReflect, ReflectAttacker } from './combat/reflect.js';
 import { MAGIC_BLOCK_FLAGS } from './combat/blockhit.js';
 import { rollCombatValue } from './combat/combat-value.js';
 import { rollSharedCriticalOutcome } from './combat/modifiers.js';
+import { isV3OrLater } from './combat/profile.js';
 import { conditionFromSpec } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import type { WorldPoint } from './movement.js';
@@ -57,6 +58,14 @@ export type CastRefusal =
   | 'group-cooldown'
   /** A runa pede magic level que este personagem não tem (#165). */
   | 'magic-level-too-low'
+  /**
+   * A invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId` (a barra não passou
+   * parâmetro nenhum), monstro fora do catálogo, monstro `summonable: false`, ou o TETO de
+   * invocações vivas do mestre já atingido (2, contando qualquer nome). Quem confere é o
+   * RULESET (`HuntRuleset#castSpell`) — `casting.ts` não conhece catálogo nem a lista de
+   * monstros da sessão (invariante 1); esta função só devolve a recusa tipada.
+   */
+  | 'not-summonable'
   /**
    * Stairhop (#554, M30-07, ADR 0040 decisão 1): o lançador trocou de andar ou foi
    * redirecionado por teleporte há pouco, e a magia é AGRESSIVA (`damage`/`damage-over-time` —
@@ -111,6 +120,13 @@ export interface CastSuccess {
    * a mesma divisão de `condition` acima.
    */
   readonly dispel?: readonly string[];
+  /**
+   * A magia é uma invocação (#598, M38-01, ADR 0057) que SAIU — mana debitada, cooldown
+   * iniciado. Devolvido, não aplicado: `casting.ts` não conhece Session nem mapa, e quem nasce
+   * a invocação de fato é o RULESET (`HuntRuleset#spawnPlayerSummon`), a mesma divisão de
+   * `condition`/`dispel` acima.
+   */
+  readonly summon?: true;
   /**
    * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
    * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
@@ -418,6 +434,14 @@ export const NOT_IN_CATALOG: CastRefused = {
 };
 
 /**
+ * A recusa da invocação (#598, M38-01, ADR 0057 decisão 3): sem `monsterId`, monstro fora do
+ * catálogo, `summonable: false`, ou teto de 2 já atingido. Congelada, como `NOT_IN_CATALOG`.
+ */
+export const NOT_SUMMONABLE: CastRefused = {
+  ok: false, reason: 'not-summonable', retryInMs: NOT_WAITING,
+};
+
+/**
  * Lança a magia, se puder.
  *
  * A ordem das recusas é deliberada: level, cooldown, alvo, alcance e só então mana. **A mana
@@ -471,6 +495,14 @@ export function castSpell(
    * Ausente: a bolsa do próprio lançador — o solo de sempre, como `useSupply`.
    */
   purse: Purse = ownPurse(caster),
+  /**
+   * O custo de mana REAL, quando ele não é `spell.manaCost` (#598, M38-01, ADR 0057 decisão 3):
+   * a Summon Creature custa o `manaCost` do MONSTRO invocado — o mesmo mecanismo do Canary
+   * (`MonsterType::getManaCost()`), variável por monstro, não um número fixo do catálogo de
+   * magia. `spell.manaCost` continua sendo o número de EXIBIÇÃO/ADR 0033 para o resto do
+   * vocabulário; só quando este parâmetro é passado ele substitui a conferência e o débito.
+   */
+  manaCostOverride?: number,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -506,7 +538,7 @@ export function castSpell(
   // dele, e a checagem nunca dispara.
   if (
     (effect.kind === 'damage' || effect.kind === 'damage-over-time')
-    && combat.compatibilityProfile === 'combat-v3'
+    && isV3OrLater(combat.compatibilityProfile)
     && caster.attackLockedUntil > nowMs
   ) {
     return { ok: false, reason: 'attack-locked', retryInMs: caster.attackLockedUntil - nowMs };
@@ -538,9 +570,10 @@ export function castSpell(
   // O custo escalado (#588) só existe com `partyTargets` resolvido — o número de afetados que
   // `spell.manaCost` (`party-scaled`) escala é o MESMO `partyTargets.length` da checagem acima,
   // nunca uma segunda contagem.
-  const manaCost = typeof spell.manaCost === 'number'
+  // A invocação (#598) paga o `manaCost` do MONSTRO — `manaCostOverride` vence o catálogo.
+  const manaCost = manaCostOverride ?? (typeof spell.manaCost === 'number'
     ? spell.manaCost
-    : partyScaledManaCost(spell.manaCost, partyTargets?.length ?? 0);
+    : partyScaledManaCost(spell.manaCost, partyTargets?.length ?? 0));
   if (caster.mana < manaCost) {
     return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
   }
@@ -629,6 +662,10 @@ export function castSpell(
     // Dispel puro (#590: Cure Poison e afins) — sem cura, sem sorteio: a magia só remove.
     case 'dispel':
       return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, dispel: effect.types };
+    // Invocação (#598, M38-01, ADR 0057): sem sorteio, sem alvo — a magia SAIU (mana e cooldown
+    // já debitados acima), e quem nasce a invocação de fato é o ruleset (`summon: true`).
+    case 'summon':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, summon: true };
     case 'heal-over-time':
       return cast({
         key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,

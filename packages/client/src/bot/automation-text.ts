@@ -27,6 +27,8 @@ export function conditionSummary(condition: BotConditionV2): string {
   }
   const op = operatorLabel(condition.op);
   if (condition.kind === 'targets') return `alvos ${op} ${String(condition.count)}`;
+  // #598, M38-01, ADR 0057 decisão 4.
+  if (condition.kind === 'summons') return `invocações ${op} ${String(condition.count)}`;
   const label = condition.kind === 'hp' ? 'HP' : condition.kind === 'mana' ? 'Mana' : 'Vida do alvo';
   return `${label} ${op} ${String(condition.percent)} %`;
 }

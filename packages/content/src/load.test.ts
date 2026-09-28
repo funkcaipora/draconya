@@ -852,7 +852,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 21 + 20 + 36 + 39 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 21 + 20 + 37 + 40 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -883,8 +883,8 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     }
     expect(byVocation.get('knight')).toBe(21);
     expect(byVocation.get('paladin')).toBe(20);
-    expect(byVocation.get('sorcerer')).toBe(36);
-    expect(byVocation.get('druid')).toBe(39);
+    expect(byVocation.get('sorcerer')).toBe(37);
+    expect(byVocation.get('druid')).toBe(40);
     expect(byVocation.get(undefined)).toBe(1);
   });
 

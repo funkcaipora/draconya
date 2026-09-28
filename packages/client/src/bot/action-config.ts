@@ -53,6 +53,8 @@ export const CONDITION_KIND_LABELS: Readonly<Record<BotConditionKindV2, string>>
   targets: 'Nº de alvos',
   'target-hp': 'Vida do alvo',
   condition: 'Condição',
+  // #598, M38-01, ADR 0057 decisão 4 — "sem invocação viva → invocar" do preset Druid/Sorcerer.
+  summons: 'Invocações vivas',
 };
 
 /**
@@ -74,12 +76,14 @@ export function operatorLabel(op: BotOperator): string {
 
 /** Os limites de um valor de condição: percentual 0–100; contagem de alvos a partir de 0. */
 export function conditionBounds(kind: BotConditionKindV2): { readonly min: number; readonly max: number | null } {
-  return kind === 'targets' || kind === 'condition' ? { min: 0, max: null } : { min: 0, max: 100 };
+  return kind === 'targets' || kind === 'condition' || kind === 'summons'
+    ? { min: 0, max: null }
+    : { min: 0, max: 100 };
 }
 
 /** O número que a condição compara — `percent` ou `count`, conforme o tipo. */
 export function conditionValue(condition: BotConditionV2): number {
-  if (condition.kind === 'targets') return condition.count;
+  if (condition.kind === 'targets' || condition.kind === 'summons') return condition.count;
   if (condition.kind === 'condition') return condition.present ? 1 : 0;
   return condition.percent;
 }
@@ -89,13 +93,15 @@ export function conditionText(condition: BotConditionV2): string {
   if (condition.kind === 'condition') {
     return `Condição ${condition.present ? 'ativa' : 'inativa'}`;
   }
-  const suffix = condition.kind === 'targets' ? '' : ' %';
+  const suffix = condition.kind === 'targets' || condition.kind === 'summons' ? '' : ' %';
   return `${CONDITION_KIND_LABELS[condition.kind]} ${operatorLabel(condition.op)} ${String(conditionValue(condition))}${suffix}`;
 }
 
 /** Uma condição nova, já com valor no meio da faixa (ou 1 alvo, quando não há teto). */
 export function blankConditionV2(kind: BotConditionKindV2): BotConditionV2 {
   if (kind === 'targets') return { kind: 'targets', op: '>=', count: 1 };
+  // #598: "sem invocação viva" é o caso de uso do preset — o rascunho nasce nesse ponto.
+  if (kind === 'summons') return { kind: 'summons', op: '<', count: 1 };
   if (kind === 'condition') return { kind: 'condition', conditionId: '', present: true };
   return { kind, op: '>=', percent: 50 };
 }

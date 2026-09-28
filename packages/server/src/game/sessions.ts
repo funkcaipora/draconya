@@ -50,6 +50,10 @@ function cityRulesetFor(content: Content, entryTiles?: number) {
     // Os containers ganham os tamanhos iniciais na entrada (#160), como na hunt.
     containers: { items: content.items, progression: content.progression },
     vocations: content.vocations,
+    // Conjuração na Cidade (#792, ADR 0044 d.2): `useSlot` precisa do catálogo de magias e dos
+    // coeficientes de combate para chamar `castSpell`, mesmo que conjurar não role nada.
+    spells: content.spells,
+    combat: content.combat,
   });
 }
 

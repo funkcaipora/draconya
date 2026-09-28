@@ -100,6 +100,8 @@ dele está na biblioteca parcial. **Nenhum tem PNG.**
 | effect | 12 | 159935 | ausente | strike, buzz, energy-strike (sorcerer/druid), lightning, strong-energy-strike |
 | effect | 13 | 159951 | ausente | heal, bruise-bane, wound-cleansing, protector, intense-wound-cleansing, light/intense/divine healing, salvation, magic-patch, magic-shield, ultimate-healing, mass-healing, mana-potion, **heal-party** |
 | effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion, **protect-party, enchant-party, train-party** |
+| effect | 13 | 159951 | ausente | heal, bruise-bane, wound-cleansing, protector, intense-wound-cleansing, light/intense/divine healing, salvation, magic-patch, magic-shield, ultimate-healing, mass-healing, mana-potion |
+| effect | 14 | 159973 | ausente | haste (4 vocações), blood-rage, charge, sharpshooter, swift-foot, health-potion, **summon-creature (sorcerer/druid, #598 — placeholder: o Canary usa `CONST_ME_MAGIC_BLUE`, não conferido contra este id)** |
 | effect | 16 | 160913 | ausente | apprentices-strike, flame-strike, strong-flame-strike (#219: chama) |
 | effect | 17 | 160017 | ausente | terra-strike, mud-attack, strong-terra-strike, death-strike, great-death-beam (#219: respingo verde) |
 | effect | 34 | 160932 | ausente | groundshaker |

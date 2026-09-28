@@ -9744,6 +9744,183 @@ describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/ma
   });
 });
 
+describe('Invocação do PERSONAGEM (#598, M38-01, ADR 0057)', () => {
+  // `summonable: true` + `manaCost` (#598): o campo NOVO do monstro. `attack: 0`/`aggroRadius: 0`
+  // isola os testes de mecânica pura (nascimento, teto, mana) do combate — o describe seguinte,
+  // com uma invocação que BATE, cobre o alvo do mestre e a atribuição de dano.
+  const passiveMinion = {
+    id: 'minion', name: 'Minion', recommendedLevel: 1,
+    health: 30, experience: 0, attack: 0, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { items: [] },
+    summonable: true, manaCost: 20,
+  };
+  const notSummonable = { ...passiveMinion, id: 'not-summonable', summonable: false, manaCost: undefined };
+  // `manaCost: 0` no CATÁLOGO da magia é de propósito (ADR 0057 decisão 3): o custo real sai do
+  // monstro, e um teste que visse a mana cair por `spell.manaCost` estaria provando o número
+  // errado por coincidência (os dois são 0 seriam indistinguíveis) — por isso o valor aqui é
+  // ausente (`0`, o default do schema) e o do monstro é 20, bem diferente.
+  const summonSpell = {
+    id: 'summon-test', name: 'Summon Creature (teste)', manaCost: 0, cooldownMs: 200,
+    effect: { kind: 'summon' as const },
+  };
+  const summonAction = (monsterId: string) =>
+    ({ kind: 'spell' as const, spellId: 'summon-test', monsterId });
+
+  it('nasce com `masterId` do PERSONAGEM, perto dele, e debita o `manaCost` do MONSTRO — nunca o da magia', () => {
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      monsters: false, spells: [...spells, summonSpell], monstersRaw: [rat, passiveMinion], mana: 200,
+    });
+    // Só UM ciclo do bot: o cooldown da magia é curto (200 ms) de propósito para o teste do
+    // teto, abaixo — aqui a janela para ANTES da segunda tentativa, para medir a PRIMEIRA
+    // invocação isolada.
+    run(session, 100, 50);
+
+    const summons = ruleset.monsters.filter((m) => m.masterId === hero.id);
+    expect(summons).toHaveLength(1);
+    const summon = summons[0];
+    if (summon === undefined) throw new Error('sem invocação');
+    expect(Math.max(
+      Math.abs(summon.position.x - hero.position.x),
+      Math.abs(summon.position.y - hero.position.y),
+    )).toBeLessThanOrEqual(1);
+    // 200 − 20 (o `manaCost` do MINION) = 180. Se o débito tivesse usado `spell.manaCost` (0),
+    // a mana continuaria em 200 — é essa a divergência que este número prende.
+    expect(hero.mana).toBe(180);
+  });
+
+  it('teto de 2 invocações vivas por personagem, contando qualquer nome (ADR 0057 decisão 3)', () => {
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      monsters: false, spells: [...spells, summonSpell], monstersRaw: [rat, passiveMinion], mana: 2_000,
+    });
+    // Cooldown de 200 ms e ciclo de bot de 1 s (o `categoryCooldownMs` do conteúdo de teste):
+    // tempo de sobra para VÁRIAS tentativas dentro de 10 s, bem além do necessário para o teto
+    // segurar na terceira.
+    run(session, 10_000, 100);
+
+    const summons = ruleset.monsters.filter((m) => m.alive && m.masterId === hero.id);
+    expect(summons).toHaveLength(2);
+    // A mana só saiu DUAS vezes (2 000 − 40): a terceira tentativa foi recusada ANTES do débito
+    // — `not-summonable` nunca chega a chamar `castSpell` genérico com sucesso.
+    expect(hero.mana).toBe(1_960);
+  });
+
+  it('recusa `not-summonable` sem `monsterId`, com monstro não-invocável, e com monstro inexistente', () => {
+    const withMonster = (monsterId: string | undefined) => {
+      const config = botConfigV2([{
+        do: monsterId === undefined
+          ? { kind: 'spell' as const, spellId: 'summon-test' }
+          : summonAction(monsterId),
+      }]);
+      const { session, hero } = withSpells(config, {
+        monsters: false, spells: [...spells, summonSpell],
+        monstersRaw: [rat, passiveMinion, notSummonable], mana: 200,
+      });
+      run(session, 300, 100);
+      return hero;
+    };
+    // Nenhum dos três gasta mana: a recusa é ANTES do débito.
+    expect(withMonster(undefined).mana).toBe(200);
+    expect(withMonster('not-summonable').mana).toBe(200);
+    expect(withMonster('does-not-exist').mana).toBe(200);
+  });
+
+  it('some quando o MESTRE sai da hunt (`Session.leave`, ADR 0057 decisão 3)', () => {
+    // Party de dois: `a` invoca, `b` só está lá para a sessão ter mais de um dono — sem isso
+    // `Session.leave` encerraria a sessão inteira (`Ruleset.shared`), e não haveria "sair"
+    // para observar, só "acabou".
+    const config = botConfigV2([{ do: summonAction('minion') }]);
+    const loaded = buildContent(raw({
+      spells: [...spells, summonSpell],
+      monsters: [rat, passiveMinion],
+      routes: [{ ...route, spawnPoints: [] }],
+      progression: [{ ...progression, startingMana: 200 }],
+    }));
+    const session = createHuntSession({
+      id: 'summon-leave-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: config },
+    });
+    const a = new CharacterRuntime({
+      id: 'a', position: { x: 1, y: 1, z: 7 }, health: 100, maxHealth: 100,
+      mana: 200, maxMana: 200, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    const b = new CharacterRuntime({
+      id: 'b', position: { x: 2, y: 1, z: 7 }, health: 100, maxHealth: 100,
+      mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(a);
+    session.enter(b);
+    const ruleset = session.ruleset as HuntRuleset;
+    run(session, 300, 100);
+    expect(ruleset.monsters.filter((m) => m.masterId === 'a').length).toBeGreaterThan(0);
+
+    session.leave('a', 'manual-exit');
+    expect(session.ended).toBeNull(); // `b` continua — a sessão não acabou, só perdeu um dono.
+    expect(ruleset.monsters.filter((m) => m.masterId === 'a')).toHaveLength(0);
+  });
+});
+
+describe('Invocação do PERSONAGEM ataca o alvo do mestre, e o dano credita o MESTRE (#598, ADR 0057 decisões 1 e 2)', () => {
+  // Ao contrário do describe acima, esta invocação BATE forte o bastante para matar o rato
+  // (50 HP) num golpe — o que faz "quem matou" inequívoco: se o crédito fosse da invocação (um
+  // `m:<id>` que `xpByDamage`/`session.participants` nunca reconheceriam como participante), o
+  // XP e o Bestiário do herói ficariam em ZERO mesmo com o rato morto.
+  const fighterMinion = {
+    id: 'fighter-minion', name: 'Fighter Minion', recommendedLevel: 1,
+    health: 30, experience: 0, attack: 100, armor: 0,
+    attackIntervalMs: 200, speed: 300, aggroRadius: 0, attackRange: 1,
+    loot: { items: [] },
+    summonable: true, manaCost: 20,
+  };
+  const summonSpell = {
+    id: 'summon-test', name: 'Summon Creature (teste)', manaCost: 0, cooldownMs: 200,
+    effect: { kind: 'summon' as const },
+  };
+  const summonAction = { kind: 'spell' as const, spellId: 'summon-test', monsterId: 'fighter-minion' };
+  // O herói NUNCA bate (attackPower 0): todo dano no rato — e todo o crédito de abate — só pode
+  // ter vindo da invocação.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 } };
+
+  it('a invocação segue o alvo do mestre (auto-target, #444) e o abate credita XP/Bestiário ao MESTRE', () => {
+    const config = botConfigV2([{ do: summonAction }]);
+    const { session, hero, ruleset } = withSpells(config, {
+      spells: [...spells, summonSpell], monstersRaw: [rat, fighterMinion], mana: 200,
+      combat: [pacifist],
+    });
+    run(session, 15_000, 100);
+
+    // O rato nasceu, a invocação nasceu, seguiu o alvo (o rato — o único candidato de
+    // `#autoSelectTarget`) e o matou: a hunt segue rodando com a invocação viva ou já uma nova,
+    // mas o herói RENDEU pelo abate.
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.xp).toBeGreaterThan(0);
+    expect(hero.bestiary.getState()['rat']).toBeGreaterThan(0);
+
+    const summon = ruleset.monsters.find((m) => m.masterId === hero.id);
+    if (summon === undefined) throw new Error('sem invocação viva ao fim do teste');
+    // A invocação em si NUNCA ganha nada — nem XP, nem Bestiário: ela não é um `CharacterRuntime`
+    // e não tem os dois campos, então a única forma de "ela ganhar" seria o abate ter ido para
+    // outro lugar. `session.aggregates.xpGained` é do HERÓI (solo — um só agregado na sessão).
+    expect(session.aggregates.xpGained).toBe(hero.xp);
+  });
+
+  it('o DPS da invocação soma no agregado do MESTRE (#431)', () => {
+    const config = botConfigV2([{ do: summonAction }]);
+    const { session, hero } = withSpells(config, {
+      spells: [...spells, summonSpell], monstersRaw: [rat, fighterMinion], mana: 200,
+      combat: [pacifist],
+    });
+    run(session, 15_000, 100);
+    // `damageDealt` (#431, ADR 0032 d.14) só sobe por golpe de verdade — com o herói pacifista,
+    // só a invocação bateu, e é ela quem move este número.
+    expect(session.aggregates.damageDealt ?? 0).toBeGreaterThan(0);
+  });
+});
+
 describe('magia em área mata o mestre E a invocação adjacente no MESMO lançamento (#546, achado pós-review)', () => {
   // O mestre fica PARADO de propósito: `attackRange` bem acima de qualquer distância possível
   // dentro da sala minúscula da fixture faz `decideMonsterAction` nunca escolher "aproximar" —
