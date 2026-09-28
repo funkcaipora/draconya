@@ -144,6 +144,7 @@ describe('mapSpell — ataques', () => {
       field: {
         id: 'test-beast-firefield', durationMs: 200000, shape: { shape: 'circle', radius: 4, centered: 'target' },
         condition: CANARY_FIELD_ITEMS['firefield']?.condition,
+        stages: CANARY_FIELD_ITEMS['firefield']?.stages,
       },
     });
     expect(map({ name: 'poisonfield', radius: 3, target: false })).toMatchObject({ kind: 'unmapped' });

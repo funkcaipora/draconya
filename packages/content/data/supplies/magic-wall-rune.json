@@ -1,0 +1,26 @@
+{
+  "id": "magic-wall-rune",
+  "name": "Magic Wall Rune",
+  "description": "Ergue uma parede mágica sólida no tile mirado, bloqueando qualquer criatura.",
+  "price": 116,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 32,
+    "magicLevel": 9
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-magic-wall",
+      "durationMs": 20000,
+      "shape": {
+        "shape": "point"
+      },
+      "blocksMovement": true
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `magic_wall.lua`: item ITEM_MAGICWALL (2128, `blocking=\"1\"`, `duration 20`, sem `field`/dano — bloqueia QUALQUER criatura, #560/PR#783) plantado na posição mirada (`setCallback(CALLBACK_PARAM_TARGETTILE,...)`, sem `setArea` — UM tile só, `point`, não `wall`). O Lua sorteia `setDuration(16, 24)` por instância no cast; o Draconya usa o `duration` base do `items.xml` (20s) como número fixo — sortear duração por cast exigiria um mecanismo novo em `applyField` que esta issue não pede, registrado como desvio. Level 32, magic level 9 (rune:level/magicLevel do Lua). `price` 116 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3180 (menor `buy`, fonte alexander.lua). Sem aparência conferida."
+}

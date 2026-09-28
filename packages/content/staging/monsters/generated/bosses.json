@@ -117,7 +117,29 @@
               ],
               "damageType": "energy"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 98000,
+              "condition": {
+                "key": "electrified",
+                "merge": "strongest",
+                "durationMs": 10000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 1,
+                      "intervalMs": 10000,
+                      "damage": 25
+                    }
+                  ],
+                  "damageType": "energy"
+                }
+              }
+            }
+          ]
         }
       },
       {
@@ -2174,7 +2196,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -4319,7 +4386,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       },
       {
@@ -5795,6 +5907,419 @@
       "path": "data-otservbr-global/monster/bosses/splasher.lua"
     },
     "outfitId": 47
+  },
+  {
+    "id": "sugar-daddy",
+    "name": "Sugar Daddy",
+    "health": 9500,
+    "experience": 15550,
+    "attack": {
+      "min": 0,
+      "max": 550
+    },
+    "armor": 55,
+    "defense": 65,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.25,
+        "earth": 0.2,
+        "fire": -0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 500,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 95
+      },
+      "items": [
+        {
+          "itemId": "small-enchanted-sapphire",
+          "chance": 0.089
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.94465
+        },
+        {
+          "itemId": "white-gem",
+          "chance": 0.056
+        },
+        {
+          "itemId": "peppermint-backpack",
+          "chance": 0.01
+        },
+        {
+          "itemId": "biscuit-barrier",
+          "chance": 0.00555
+        },
+        {
+          "itemId": "candy-coated-quiver",
+          "chance": 0.01009
+        },
+        {
+          "itemId": "cocoa-grimoire",
+          "chance": 0.00555
+        },
+        {
+          "itemId": "creamy-grimoire",
+          "chance": 0.00555
+        },
+        {
+          "itemId": "candy-necklace",
+          "chance": 0.023
+        },
+        {
+          "itemId": "ring-of-temptation",
+          "chance": 0.0765
+        },
+        {
+          "itemId": "churro-heart",
+          "chance": 0.11655
+        },
+        {
+          "itemId": "dark-chocolate-coin",
+          "chance": 0.46555
+        },
+        {
+          "itemId": "brigadeiro",
+          "chance": 0.153
+        },
+        {
+          "itemId": "ring-of-temptation",
+          "chance": 0.1465
+        },
+        {
+          "itemId": "milk-chocolate-coin",
+          "chance": 0.54465
+        },
+        {
+          "itemId": "pastry-dragon",
+          "chance": 0.02367
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 550
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 300,
+          "max": 500
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 12,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 200,
+          "max": 300
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "pixie-explosion"
+        }
+      },
+      {
+        "id": "earthburst",
+        "cadenceMs": 2000,
+        "chance": 0.18,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 12,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 410
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "hearts"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "heal": {
+          "min": 400,
+          "max": 1500
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 320
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.98,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/sugar_daddy.lua"
+    },
+    "outfitId": 1764
+  },
+  {
+    "id": "sugar-mommy",
+    "name": "Sugar Mommy",
+    "health": 6000,
+    "experience": 6800,
+    "attack": {
+      "min": 0,
+      "max": 350
+    },
+    "armor": 55,
+    "defense": 65,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.1,
+        "earth": -0.05,
+        "fire": -0.05,
+        "ice": 0.15
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 500,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 3,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 100,
+        "max": 1100
+      },
+      "items": [
+        {
+          "itemId": "cherry",
+          "chance": 1,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.11465
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.095
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.0476
+        },
+        {
+          "itemId": "dark-chocolate-coin",
+          "chance": 0.28555,
+          "min": 1,
+          "max": 11
+        },
+        {
+          "itemId": "milk-chocolate-coin",
+          "chance": 0.26465,
+          "min": 1,
+          "max": 12
+        },
+        {
+          "itemId": "taiyaki-ice-cream",
+          "chance": 0.16465
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 350
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.5,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 70,
+          "max": 180
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "cherrybomb"
+        }
+      },
+      {
+        "id": "energyburst",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 170,
+          "max": 280
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "purpleenergy"
+        }
+      },
+      {
+        "id": "energyburst-2",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 250,
+          "max": 310
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "powerful-hearts"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "heal": {
+          "min": 400,
+          "max": 600
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.98,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/sugar_mommy.lua"
+    },
+    "outfitId": 1764
   },
   {
     "id": "teleskor",
@@ -7286,6 +7811,222 @@
       "path": "data-otservbr-global/monster/bosses/the_frog_prince.lua"
     },
     "outfitId": 224
+  },
+  {
+    "id": "the-rootkraken",
+    "name": "The Rootkraken",
+    "health": 360000,
+    "experience": 600000,
+    "attack": {
+      "min": 800,
+      "max": 1200
+    },
+    "armor": 85,
+    "defense": 85,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.15,
+        "earth": -0.1,
+        "fire": -0.15
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 2,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 360,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 10000,
+        "max": 30000
+      },
+      "items": [
+        {
+          "itemId": "amber",
+          "chance": 0.44444
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.42593,
+          "min": 1,
+          "max": 20
+        },
+        {
+          "itemId": "great-spirit-potion",
+          "chance": 0.42593,
+          "min": 1,
+          "max": 14
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.31481,
+          "min": 1,
+          "max": 14
+        },
+        {
+          "itemId": "supreme-health-potion",
+          "chance": 0.31481,
+          "min": 1,
+          "max": 8
+        },
+        {
+          "itemId": "ultimate-spirit-potion",
+          "chance": 0.25926,
+          "min": 1,
+          "max": 15
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.25926,
+          "min": 1,
+          "max": 20
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.24074,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "white-gem",
+          "chance": 0.2037,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "amber-slayer",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-greataxe",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-bludgeon",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-sabre",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-axe",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-cudgel",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-crossbow",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-kusarigama",
+          "chance": 0.2
+        },
+        {
+          "itemId": "amber-with-a-bug",
+          "chance": 0.18519
+        },
+        {
+          "itemId": "amber-with-a-dragonfly",
+          "chance": 0.18519
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.18519,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "giant-topaz",
+          "chance": 0.07407
+        },
+        {
+          "itemId": "root-tentacle",
+          "chance": 0.05556
+        },
+        {
+          "itemId": "giant-amethyst",
+          "chance": 0.05556
+        },
+        {
+          "itemId": "giant-sapphire",
+          "chance": 0.03704
+        },
+        {
+          "itemId": "fish-eye",
+          "chance": 0.01852
+        },
+        {
+          "itemId": "giant-emerald",
+          "chance": 0.01852
+        },
+        {
+          "itemId": "strange-inedible-fruit",
+          "chance": 0.01852
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 800,
+          "max": 1200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.4,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 450,
+          "max": 700
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "death"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.25
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_rootkraken.lua"
+    },
+    "outfitId": 1765
   },
   {
     "id": "vemiath",

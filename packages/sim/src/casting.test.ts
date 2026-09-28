@@ -1521,3 +1521,59 @@ describe('a normal truncada do Canary no `combat-v3` (#681)', () => {
     }
   });
 });
+
+describe('useSupply — runa de campo e Destroy Field (#591)', () => {
+  const groundAim = (point: { x: number; y: number; z: number }, distance = 3) => ({
+    distance, targets: [], point,
+  });
+  const fireFieldRune: Supply = {
+    id: 'fire-field-rune', name: 'Fire Field Rune', price: 20, group: 'attack', groupCooldownMs: 1_000, requires: {},
+    effect: {
+      kind: 'field', range: 8,
+      field: {
+        id: 'player-fire-field', durationMs: 20_000,
+        shape: { shape: 'point' },
+        condition: {
+          key: 'burning', merge: 'strongest', durationMs: 20_000,
+          effect: { kind: 'damage-over-time', form: 'rounds', rounds: [{ count: 2, intervalMs: 10_000, damage: 20 }], damageType: 'fire' },
+        },
+      },
+    },
+  };
+  const destroyFieldRune: Supply = {
+    id: 'destroy-field-rune', name: 'Destroy Field', price: 10, group: 'support', groupCooldownMs: 1_000, requires: {},
+    effect: { kind: 'destroy-field', range: 5 },
+  };
+
+  it('devolve o FieldSpec e o tile — não aplica nada sozinho (o ruleset é quem planta)', () => {
+    const result = useSupply(hero({ gold: 100 }), fireFieldRune, groundAim({ x: 2, y: 2, z: 7 }));
+    if (!result.ok) throw new Error('esperava usar a runa');
+    expect(result.field).toEqual({ spec: fireFieldRune.effect.kind === 'field' ? fireFieldRune.effect.field : undefined, at: { x: 2, y: 2, z: 7 } });
+    expect(result.goldSpent).toBe(20);
+  });
+
+  it('sem mira (`aim` null ou sem `point`) recusa `no-target`, sem debitar', () => {
+    const noAim = useSupply(hero({ gold: 100 }), fireFieldRune, null);
+    expect(noAim).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    const noPoint = useSupply(hero({ gold: 100 }), fireFieldRune, { distance: 1, targets: [] });
+    expect(noPoint).toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+  });
+
+  it('fora do alcance recusa `out-of-range`, sem debitar', () => {
+    const result = useSupply(hero({ gold: 100 }), fireFieldRune, groundAim({ x: 9, y: 9, z: 7 }, 9));
+    expect(result).toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+  });
+
+  it('sem gold recusa `not-enough-gold`, e nada é debitado', () => {
+    const caster = hero({ gold: 5 });
+    const result = useSupply(caster, fireFieldRune, groundAim({ x: 2, y: 2, z: 7 }));
+    expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+  });
+
+  it('Destroy Field devolve o TILE mirado — a presença de campo é conferida por quem chama, não aqui', () => {
+    const result = useSupply(hero({ gold: 100 }), destroyFieldRune, groundAim({ x: 4, y: 4, z: 7 }, 4));
+    if (!result.ok) throw new Error('esperava usar a runa');
+    expect(result.destroyFieldAt).toEqual({ x: 4, y: 4, z: 7 });
+    expect(result.goldSpent).toBe(10);
+  });
+});

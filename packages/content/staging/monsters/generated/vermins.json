@@ -2781,7 +2781,25 @@
               "damageType": "earth",
               "startDamage": 5
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 248000,
+              "condition": {
+                "key": "poisoned",
+                "merge": "strongest",
+                "durationMs": 230000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "generated",
+                  "totalDamage": 100,
+                  "intervalMs": 5000,
+                  "damageType": "earth",
+                  "startDamage": 5
+                }
+              }
+            }
+          ]
         }
       },
       {

@@ -134,6 +134,10 @@ function areaLabel(area: Area | undefined): string {
     case 'beam': return `Feixe ${String(area.length)}`;
     case 'cleave': return 'Frontal 3';
     case 'cross': return `Cruz ${String(area.radius)}`;
+    // #591: runa de campo (Fire/Poison/Energy Field, Destroy Field) mira um tile só.
+    case 'point': return 'Single';
+    // #591: Fire/Poison/Energy Wall — a fileira perpendicular ao alvo.
+    case 'wall': return `Parede ${String(area.width)}`;
   }
 }
 

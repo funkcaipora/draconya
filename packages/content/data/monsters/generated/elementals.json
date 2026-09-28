@@ -1,5 +1,169 @@
 [
   {
+    "id": "candy-floss-elemental",
+    "name": "Candy Floss Elemental",
+    "class": "elemental",
+    "health": 3700,
+    "experience": 3850,
+    "attack": {
+      "min": 0,
+      "max": 350
+    },
+    "armor": 45,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.4,
+        "energy": 0.15,
+        "earth": -0.1,
+        "fire": -0.15,
+        "ice": 0.15,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.26,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9586,
+        "min": 1,
+        "max": 149
+      },
+      "items": [
+        {
+          "itemId": "fairy-wings",
+          "chance": 0.064
+        },
+        {
+          "itemId": "opal",
+          "chance": 0.0326
+        },
+        {
+          "itemId": "violet-crystal-shard",
+          "chance": 0.0245
+        },
+        {
+          "itemId": "violet-gem",
+          "chance": 0.015
+        },
+        {
+          "itemId": "springsprout-rod",
+          "chance": 0.0065
+        },
+        {
+          "itemId": "club-ring",
+          "chance": 0.0031
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0012
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 350
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 150,
+          "max": 250
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "cherrybomb",
+          "impactKey": "starburst"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 160,
+          "max": 300
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallice",
+          "impactKey": "iceattack"
+        }
+      },
+      {
+        "id": "energyball",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 2,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 160,
+          "max": 300
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallice",
+          "impactKey": "pixie-explosion"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/elementals/candy_floss_elemental.lua"
+    }
+  },
+  {
     "id": "fire-elemental",
     "name": "Fire Elemental",
     "class": "elemental",
@@ -109,7 +273,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -261,6 +470,129 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/elementals/high_voltage_elemental.lua"
+    }
+  },
+  {
+    "id": "honey-elemental",
+    "name": "Honey Elemental",
+    "class": "elemental",
+    "health": 2560,
+    "experience": 2400,
+    "attack": {
+      "min": 0,
+      "max": 260
+    },
+    "armor": 34,
+    "defense": 20,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.3,
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": 0.2,
+        "ice": -0.05,
+        "holy": 0.05,
+        "death": 0.3
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 1.02,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-diamond",
+          "chance": 0.0301
+        },
+        {
+          "itemId": "honeycomb",
+          "chance": 0.0387
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.0107
+        },
+        {
+          "itemId": "magma-legs",
+          "chance": 0.00756
+        },
+        {
+          "itemId": "fire-sword",
+          "chance": 0.0043
+        },
+        {
+          "itemId": "terra-amulet",
+          "chance": 0.0054
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 260
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "fireburst",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 2,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 125,
+          "max": 235
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "yellow-rings"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/elementals/honey_elemental.lua"
     }
   },
   {

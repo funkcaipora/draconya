@@ -19,4 +19,17 @@ Fonte: `canary` em `47dfd51f45280a59a1d3e50ba7edd573d7234446`.
 
 ## Preço de supply/munição (autoral)
 
-Nenhuma mudança nesta importação — o dado commitado já confere com o Canary.
+| slug | preço anterior | preço novo | fonte |
+|---|---|---|---|
+| `destroy-field-rune` | 10 | 15 | `asima.lua` |
+| `energy-bomb-rune` | 22 | 203 | `alexander.lua` |
+| `energy-field-rune` | 12 | 38 | `asima.lua` |
+| `energy-wall-rune` | 18 | 85 | `asima.lua` |
+| `fire-bomb-rune` | 30 | 147 | `asima.lua` |
+| `fire-field-rune` | 20 | 28 | `asima.lua` |
+| `fire-wall-rune` | 32 | 61 | `asima.lua` |
+| `magic-wall-rune` | 45 | 116 | `alexander.lua` |
+| `poison-bomb-rune` | 16 | 85 | `alexander.lua` |
+| `poison-field-rune` | 8 | 21 | `asima.lua` |
+| `poison-wall-rune` | 14 | 52 | `asima.lua` |
+| `wild-growth-rune` | 25 | 160 | `alexander.lua` |

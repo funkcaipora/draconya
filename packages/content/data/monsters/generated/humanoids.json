@@ -2740,7 +2740,52 @@
               ],
               "damageType": "fire"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 200000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 20
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 148000,
+              "condition": {
+                "key": "burning",
+                "merge": "strongest",
+                "durationMs": 70000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 7,
+                      "intervalMs": 10000,
+                      "damage": 10
+                    }
+                  ],
+                  "damageType": "fire"
+                }
+              }
+            },
+            {
+              "durationMs": 98000
+            }
+          ]
         }
       }
     ],
@@ -4912,7 +4957,29 @@
               ],
               "damageType": "energy"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 98000,
+              "condition": {
+                "key": "electrified",
+                "merge": "strongest",
+                "durationMs": 10000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 1,
+                      "intervalMs": 10000,
+                      "damage": 25
+                    }
+                  ],
+                  "damageType": "energy"
+                }
+              }
+            }
+          ]
         }
       }
     ],
@@ -5079,7 +5146,29 @@
               ],
               "damageType": "energy"
             }
-          }
+          },
+          "stages": [
+            {
+              "durationMs": 98000,
+              "condition": {
+                "key": "electrified",
+                "merge": "strongest",
+                "durationMs": 10000,
+                "effect": {
+                  "kind": "damage-over-time",
+                  "form": "rounds",
+                  "rounds": [
+                    {
+                      "count": 1,
+                      "intervalMs": 10000,
+                      "damage": 25
+                    }
+                  ],
+                  "damageType": "energy"
+                }
+              }
+            }
+          ]
         }
       }
     ],

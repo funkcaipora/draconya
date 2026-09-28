@@ -583,3 +583,24 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   parâmetro existe e tem teste próprio em `line-of-sight.test.ts`, mas não está fiado à
   produção): ligá-lo de verdade é trabalho do M30-06, com mapa e conteúdo reais para testar
   contra, não desta issue.
+- **Runa de campo mira o CHÃO, e a mira de chão é uma busca SEPARADA de `#aimFor`** (#591).
+  `#groundAimFor` não colhe criatura nenhuma (`#collect`/`#spellHits` ficam de fora) — um campo
+  nasce num tile vazio, e a antiga exigência "pelo menos um alvo colhido" de `#aimFor` faria
+  toda runa de campo mirada em chão vazio recusar `no-target` por engano. `#needsTarget` precisa
+  reconhecer os `kind`s `field`/`destroy-field` como "sempre exige alvo" — sem isso,
+  `#resolveManualTarget` descarta `target.position` como "não se aplica" ANTES de a mira de chão
+  rodar, e a runa nunca recebe o tile que o jogador apontou.
+- **`Fields` indexa por id de CONTEÚDO, e uma runa de jogador cast duas vezes em tiles
+  diferentes não pode reusar o `spec.id` cru** (#591) — faria o segundo cast MOVER o campo do
+  primeiro (`Fields.apply` substitui pelo id), não abrir um segundo independente, ao contrário
+  do Tibia real (várias Fire Field lado a lado). `fieldInstanceId(specId, at)` deriva o id pelo
+  TILE (`"<specId>@x,y,z"`) — determinístico, sem contador para persistir no snapshot —, e é só
+  o `sim` (`HuntRuleset#useSupply`) quem reescreve o id antes de chamar `applyField`; `useSupply`
+  (`casting.ts`) devolve o `FieldSpec` do CONTEÚDO, cru. Relançar a MESMA runa no MESMO tile
+  ainda reinicia — o mesmo tile produz o mesmo id.
+- **`applyField` recebeu um `direction` opcional (default `'south'`) só para a forma `wall`
+  (#591) — o único chamador de antes desta issue (a ability de monstro) sempre usa `circle`, que
+  ignora direção, e por isso continua preservado bit a bit sem passar o parâmetro novo.** Quem
+  planta uma parede de jogador precisa calcular `directionOf(character.position, at)` e passar
+  explicitamente — esquecer faz a parede sempre se orientar como se o lançador estivesse ao SUL
+  do alvo, silenciosamente errado em qualquer outra direção.
