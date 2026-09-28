@@ -53,6 +53,9 @@
     "might-ring": 3048,
     "wand-of-starstorm": 8092,
     "hailstorm-rod": 3067,
+    "springsprout-rod": 8084,
+    "underworld-rod": 8082,
+    "ring-of-healing": 3098,
     "dragon-ham": 3583,
     "steel-shield": 3409,
     "crossbow": 3349,
@@ -119,6 +122,12 @@
     },
     "hailstorm-rod": {
       "missile": 29
+    },
+    "springsprout-rod": {
+      "missile": 39
+    },
+    "underworld-rod": {
+      "missile": 32
     },
     "wand-of-inferno": {
       "missile": 4

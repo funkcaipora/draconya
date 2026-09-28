@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
 import { migrateBotConfigV1 } from '../../../content/src/bot-migration.js';
 import type { Content } from '@draconya/content';
-import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
+import { CharacterRuntime, createHuntSession, RouteWalker, statsForLevel } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 
 // A Rotworm Caves REAL (#511, recorte de Darashia #515): a caverna importada, a rota traçada
@@ -45,8 +45,8 @@ function run(session: Session, durationMs: number, stepMs: number): void {
 }
 
 describe('a Rotworm Caves real (#511)', () => {
-  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 2, 5 e 8', () => {
-    for (const [difficulty, count] of [['cautious', 2], ['bold', 5], ['reckless', 8]] as const) {
+  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 13, 26 e 52', () => {
+    for (const [difficulty, count] of [['cautious', 13], ['bold', 26], ['reckless', 52]] as const) {
       const { session, ruleset } = enter(real(), difficulty);
       // O lugar do ponto 0 é o tile em que o herói entra: com `spawnClearRadius` (#236) ele
       // só nasce quando o herói se afasta, e pelo laço inteiro um lugar recém-vagado espera
@@ -141,7 +141,7 @@ describe('a Rotworm Caves real (#511)', () => {
     // carregar (2.000 gold, o bastante para dezenas de poções de 45 — medido: a caverna real
     // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena volta a valer, como
     // valia antes da #521 — só que agora sustentada do jeito certo.
-    const { session } = enter(real(), 'cautious', { gold: 2_000 });
+    const { session } = enter(real(), 'cautious', { gold: 4_000 });
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
     for (let t = 0; t < 600_000 && session.ended === null; t += 100) {
@@ -157,5 +157,38 @@ describe('a Rotworm Caves real (#511)', () => {
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);
     // Comparar com o recorde solo do Huntera (9.346 XP/h · 2.610 gp/h, §31) — sem asserção:
     // é conteúdo de conteúdo real com bot padrão, não o recorde de um jogador otimizando.
+  });
+
+  it('a rota é um caminho circular contínuo que retorna ao início e reinicia o percurso', () => {
+    const content = real();
+    const route = content.routes.get('rotworm-caves');
+    expect(route).toBeDefined();
+    if (!route) return;
+
+    expect(route.tiles.length).toBe(444);
+    const first = route.tiles[0]!;
+    const last = route.tiles[route.tiles.length - 1]!;
+
+    // Adjacência entre o último tile e o primeiro (laço fechado)
+    const dx = Math.abs(first.x - last.x);
+    const dy = Math.abs(first.y - last.y);
+    expect(dx <= 1 && dy <= 1 && dx + dy > 0).toBe(true);
+
+    // RouteWalker posicionado no fim da rota dá um passo: deve ir para o início (índice 0)
+    const walker = new RouteWalker(route, { index: route.tiles.length - 1, stopped: false });
+    expect(walker.index).toBe(route.tiles.length - 1);
+    expect(walker.current).toEqual(last);
+
+    const nextTile = walker.step();
+    expect(walker.index).toBe(0);
+    expect(nextTile).toEqual(first);
+    expect(walker.current).toEqual(first);
+
+    // O walker percorre múltiplas voltas sem travar
+    for (let i = 0; i < route.tiles.length * 3; i++) {
+      const step = walker.step();
+      expect(step).not.toBeNull();
+    }
+    expect(walker.index).toBe(0);
   });
 });

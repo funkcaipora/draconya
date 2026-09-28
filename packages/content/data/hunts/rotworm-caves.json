@@ -10,35 +10,35 @@
   "spawnClearRadius": 3,
   "difficulties": {
     "cautious": {
-      "monsterCount": 2,
+      "monsterCount": 13,
       "composition": [
         {
           "monsterId": "rotworm",
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     },
     "bold": {
-      "monsterCount": 5,
+      "monsterCount": 26,
       "composition": [
         {
           "monsterId": "rotworm",
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     },
     "reckless": {
-      "monsterCount": 8,
+      "monsterCount": 52,
       "composition": [
         {
           "monsterId": "rotworm",
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     }
   },
-  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II §15). corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius: ainda o provisório da Rat Cellars (3 tiles, #236), sem captura própria da Rotworm Caves no Huntera."
+  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 30000: 30 s de respawn após morte em todas as dificuldades. monsterCount (13 no cautious, 26 no bold, 52 no reckless): densidade proporcional aos 13 spawnPoints da rota (1 bicho por ponto no fácil, 2 no médio e 4 no hard). corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius: ainda o provisório da Rat Cellars (3 tiles, #236), sem captura própria da Rotworm Caves no Huntera."
 }

@@ -12,8 +12,7 @@ import type { ReactNode } from 'react';
 import { useStoreSlice } from '../state/useSlice.js';
 import { account } from '../account/store.js';
 import type { AccountState } from '../account/store.js';
-import { beginLogin } from '../account/api.js';
-import { create, NO_SERVER_MESSAGE, play, refresh, signOut } from '../account/actions.js';
+import { create, devLogin, NO_SERVER_MESSAGE, play, refresh, signOut, tryLogin } from '../account/actions.js';
 import { Button } from './ui/Button.js';
 import type { CharacterSummary } from '../account/api.js';
 
@@ -124,6 +123,62 @@ function Heading({ kicker, title, sub }: { kicker: string; title: string; sub?: 
 }
 
 function LoginScreen({ error }: { error: string | null }) {
+  const [devMode, setDevMode] = useState(false);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleLogin = async (register = false) => {
+    setBusy(true);
+    const result = await tryLogin(register);
+    if (result === 'dev') {
+      setDevMode(true);
+    }
+    setBusy(false);
+  };
+
+  const handleDevLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) return;
+    setBusy(true);
+    await devLogin(email.trim());
+    setBusy(false);
+  };
+
+  if (devMode) {
+    return (
+      <>
+        <Brand />
+        <EntryCard>
+          <Heading
+            kicker="Modo local"
+            title="Entre com seu e-mail"
+            sub="Qualquer e-mail funciona em desenvolvimento."
+          />
+          <form className="entry-card-actions" onSubmit={(event) => { void handleDevLogin(event); }}>
+            <input
+              type="email"
+              className="entry-dev-email"
+              placeholder="seu@email.dev"
+              value={email}
+              onChange={(event_) => { setEmail(event_.target.value); }}
+              autoFocus
+              required
+              disabled={busy}
+            />
+            <Button variant="gold" size="lg" block disabled={busy || !email.trim()} type="submit">
+              ENTRAR <span aria-hidden="true">→</span>
+            </Button>
+            <Button variant="text" size="md" block onClick={() => { setDevMode(false); }} disabled={busy}>
+              Voltar
+            </Button>
+          </form>
+        </EntryCard>
+        {error !== null && <p className="entry-error">{error}</p>}
+        <p className="entry-caption">Cada jornada deixa uma história.</p>
+      </>
+    );
+  }
+
   return (
     <>
       <Brand />
@@ -134,10 +189,10 @@ function LoginScreen({ error }: { error: string | null }) {
           sub="O próximo capítulo começa com você."
         />
         <div className="entry-card-actions">
-          <Button variant="gold" size="lg" block onClick={() => { beginLogin(); }}>
+          <Button variant="gold" size="lg" block onClick={() => { void handleLogin(); }} disabled={busy}>
             ENTRAR <span aria-hidden="true">→</span>
           </Button>
-          <Button variant="text" size="md" block onClick={() => { beginLogin(true); }}>
+          <Button variant="text" size="md" block onClick={() => { void handleLogin(true); }} disabled={busy}>
             Criar conta
           </Button>
         </div>

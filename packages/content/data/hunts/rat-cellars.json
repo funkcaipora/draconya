@@ -17,7 +17,7 @@
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     },
     "bold": {
       "monsterCount": 5,
@@ -27,7 +27,7 @@
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     },
     "reckless": {
       "monsterCount": 8,
@@ -37,8 +37,8 @@
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     }
   },
-  "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs: RESOLVIDO em 2000 ms (#510) — Huntera Parte II §15 registrou um rato novo 1,0–2,5 s depois de um sumir; 2 s é o meio da faixa observada, e a Cyclopedia (Parte V §32) não traz este número. corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius [ABERTO — valor provisório: 3 tiles (#236); fora do alcance do golpe desarmado (1) e do passo de cada lado; o bow alcança 6 e ainda pode matar no instante do nascimento]."
+  "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs: 30000 ms (30 s após abate). corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius [ABERTO — valor provisório: 3 tiles (#236); fora do alcance do golpe desarmado (1) e do passo de cada lado; o bow alcança 6 e ainda pode matar no instante do nascimento]."
 }
