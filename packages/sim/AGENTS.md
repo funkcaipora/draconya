@@ -368,9 +368,27 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
   a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
   aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
-  alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no
-  schema mas NÃO é wired: sem "pensamento" periódico separado do passo, simular o shuffle do
-  TFS exigiria um evento novo só para isso — divergência registrada em `docs/product/combat.md`.
+  alcance continuam, porque passo e ataque são decisões independentes.
+- **A dança de alvo (`staticAttack`, #543, TFS `Monster::getDanceStep`) é um evento PRÓPRIO,
+  armado e DESARMADO — não uma varredura da vida inteira do monstro, como `MONSTER_TARGET_CHANGE`
+  e as defesas.** `MONSTER_DANCE` (subject `m:<id>` exato, cancelado de graça por `resolveDeath`
+  como `MONSTER_TARGET_CHANGE`) só existe agendado enquanto `decideMonsterAction` devolve
+  `'attack'` (colado, sem passo a dar): `#onMonsterStep` arma quando essa condição nasce e
+  DESARMA ativamente (`session.cancelEvent`) quando ela cai, em vez de deixar o timer rodando à
+  toa — o custo de um monstro fora de combate importa em escala (ver "custo" no topo deste
+  arquivo). `#onMonsterDance` reavalia a MESMA condição a cada vencimento (a condição pode ter
+  caído entre o armamento e o vencimento) e só reagenda a si mesmo enquanto ela se mantém — a
+  outra metade do "cancelado". `MonsterRuntime.danceArmed` é o que impede armar duas vezes o
+  mesmo evento (`scheduleIn` não deduplica por `(kind, subject)`) e precisa sobreviver ao
+  snapshot pela mesma razão de `lastStepBlocked`. `danceStep` (`monster/step.ts`) só tenta as
+  QUATRO direções CARDINAIS — nunca diagonal, diferente do guloso/fuga — e só aceita a
+  candidata que preserva EXATAMENTE a distância Chebyshev ao alvo: é o que garante, de graça,
+  que a dança nunca aproxima, nunca afasta e nunca perde a capacidade de atacar (o `keepAttack`
+  do Canary vira identidade sob essa restrição). Ausente `staticAttack`, o monstro nunca arma o
+  evento e não sorteia nada de novo — rato e rotworm continuam bit a bit. **Não toca o resolver
+  de combate** (`resolveDamage`/`resolveDefense`): os sorteios da dança são de uma fila
+  totalmente separada da sequência de combate, o mesmo argumento que já vale para `chooseTarget`
+  — por isso não exige perfil `combat-v1`/`v2`/`v3` novo (ADR 0031/0040).
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
   munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
   lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).

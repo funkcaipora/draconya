@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { distance, fleeStep, greedyStep, isAdjacent } from './step.js';
+import { danceStep, distance, fleeStep, greedyStep, isAdjacent } from './step.js';
+
+/** Um `Rng` falso que devolve sempre o mesmo índice — só o suficiente para `danceStep`. */
+function fixedPick(index: number) {
+  return { integer: (_min: number, _max: number) => index };
+}
+
+/** Estoura se `integer` for chamado — prova que a lista vazia não consome sorteio. */
+const explodingRng = {
+  integer(): number {
+    throw new Error('rng.integer não deveria ser chamado sem candidata');
+  },
+};
 
 /** Mapa de teste como grade de caracteres: `#` bloqueia. Mesmo formato do `content`. */
 function grid(rows: readonly string[]) {
@@ -116,5 +128,45 @@ describe('fleeStep (FUN-85)', () => {
 
   it('em cima da ameaça devolve null: não há direção oposta a lugar nenhum', () => {
     expect(fleeStep({ x: 2, y: 2 }, { x: 2, y: 2 }, open)).toBeNull();
+  });
+});
+
+describe('danceStep', () => {
+  it('só considera candidatas que preservam a MESMA distância Chebyshev ao alvo', () => {
+    // Monstro colado (distância 1) diretamente ao SUL do alvo — as duas laterais (leste/oeste)
+    // preservam a distância 1; norte cairia em cima do alvo (distância 0) e sul se afastaria
+    // para distância 2, então as duas são descartadas pelo filtro de distância.
+    const candidates = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      const step = danceStep({ x: 5, y: 5 }, { x: 5, y: 4 }, open, fixedPick(i % 2));
+      if (step !== null) candidates.add(`${step.x},${step.y}`);
+      expect(distance(step ?? { x: 5, y: 5 }, { x: 5, y: 4 })).toBe(1);
+    }
+    expect(candidates).toEqual(new Set(['6,5', '4,5']));
+  });
+
+  it('nunca escolhe uma direção bloqueada', () => {
+    const wallToTheEast = (x: number, y: number) => x === 6 && y === 5;
+    const step = danceStep({ x: 5, y: 5 }, { x: 5, y: 4 }, wallToTheEast, fixedPick(0));
+    expect(step).toEqual({ x: 4, y: 5 });
+  });
+
+  it('sorteia uniformemente entre as candidatas — mesmo índice, mesma escolha', () => {
+    expect(danceStep({ x: 5, y: 5 }, { x: 5, y: 4 }, open, fixedPick(0))).toEqual({ x: 6, y: 5 });
+    expect(danceStep({ x: 5, y: 5 }, { x: 5, y: 4 }, open, fixedPick(1))).toEqual({ x: 4, y: 5 });
+  });
+
+  it('mantém a distância de quem atira à distância (kiting) — só desliza no eixo livre', () => {
+    // Monstro a 2 tiles do alvo, alinhado na mesma linha (targetDistance mantido por conteúdo).
+    // As duas candidatas verticais preservam a distância 2 (o eixo x, mais distante, domina o
+    // Chebyshev); o leste aproximaria para 1 e é descartado pelo filtro de distância.
+    const step = danceStep({ x: 1, y: 1 }, { x: 3, y: 1 }, open, fixedPick(0));
+    expect(step).toEqual({ x: 1, y: 0 });
+    expect(distance(step ?? { x: 0, y: 0 }, { x: 3, y: 1 })).toBe(2);
+  });
+
+  it('sem candidata livre, devolve null sem consumir o sorteio', () => {
+    const allBlocked = () => true;
+    expect(danceStep({ x: 5, y: 5 }, { x: 5, y: 4 }, allBlocked, explodingRng)).toBeNull();
   });
 });
