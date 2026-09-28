@@ -39,12 +39,14 @@ item não existe, ou que pede pilha de item que não empilha — contada, nunca 
 `docs/reference/catalog/monsters-promotion-report.md`. Rat, Rotworm, Dragon e Dragon Lord nunca
 são promovidos POR ESTE SCRIPT (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`)
 — o #581 os regenerou uma única vez, direto em `generated/<fatia>.json` (Rat em `mammals.json`,
-Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`), com override próprio
-(`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true` temporário que as
-duas hunts antigas ainda exigem (até o #582+/M36-05 as converter para o comportamento real do
-Canary). `pnpm catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro
-entradas numa reimportação futura — elas só mudam de novo por decisão deliberada, como o #581.
-`load.ts` não lê `staging/`, e nada do jogo deve ler.
+Rotworm em `vermins.json`, Dragon e Dragon Lord em `dragons.json`). O #581 tinha dado aos dois um
+override próprio (`data/monsters/overrides/rat.json`/`rotworm.json`) para o `blockable: true`
+temporário que Rat Cellars e Rotworm Caves ainda exigiam com o modelo antigo de pull; o #586
+(M36-05) converteu as duas hunts para os spawns reais do Canary e apagou os dois arquivos — Rat e
+Rotworm caem no `blockable: false` do próprio Canary, como o resto do bestiário. `pnpm
+catalog:promote-monsters` (`preserveHandAuthored`) NUNCA sobrescreve essas quatro entradas numa
+reimportação futura — elas só mudam de novo por decisão deliberada, como o #581. `load.ts` não lê
+`staging/`, e nada do jogo deve ler.
 
 **`staging/items/` também não é conteúdo carregado** (#573/#574): `pnpm catalog:import items`
 escreve lá — 1946 itens de caça. `items.ts` já resolve `slot: 'hand'` por default em TODA arma
@@ -86,7 +88,7 @@ data/items/backpack.json             # autoral, uma entidade por arquivo (de sem
 data/items/generated/weapons.json    # promovido por `pnpm catalog:promote-items` — um ARRAY por fatia
 data/items/overrides/*.json          # correção nossa: { id, reason, patch }
 data/monsters/generated/mammals.json # promovido/regenerado — um ARRAY (Rat mora aqui desde o #581)
-data/monsters/overrides/rat.json     # correção nossa: { id, reason, patch } — blockable temporário
+data/monsters/overrides/*.json       # correção nossa: { id, reason, patch } — nenhuma hoje (#586 apagou as duas que existiam)
 ```
 
 Um arquivo — autoral ou gerado — que contém um **array** vira várias entidades; um objeto solto

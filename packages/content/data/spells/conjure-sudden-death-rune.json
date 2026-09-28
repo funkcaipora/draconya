@@ -1,0 +1,19 @@
+{
+  "id": "conjure-sudden-death-rune",
+  "name": "Sudden Death Rune",
+  "description": "Conjura cargas da Sudden Death Rune, consumindo uma runa em branco.",
+  "vocationId": "sorcerer",
+  "minLevel": 45,
+  "manaCost": 985,
+  "soulCost": 5,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "sudden-death-rune",
+    "charges": 3,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/sudden_death_rune.lua` — `creature:conjureItem(3147, 3155, 3)`, `spell:level(45)`, `spell:mana(985)`, `spell:soul(5)`, vocação `sorcerer;true`/`master sorcerer;true` (sem promoção, ADR 0044 §Em aberto). `blankPrice` 10, como em toda runa."
+}

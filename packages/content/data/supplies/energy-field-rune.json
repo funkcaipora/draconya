@@ -1,0 +1,64 @@
+{
+  "id": "energy-field-rune",
+  "name": "Energy Field Rune",
+  "description": "Planta um campo de energia no tile mirado.",
+  "price": 38,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 18,
+    "magicLevel": 3
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-energy-field",
+      "durationMs": 98000,
+      "shape": {
+        "shape": "point"
+      },
+      "condition": {
+        "key": "electrified",
+        "merge": "strongest",
+        "durationMs": 10000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "rounds",
+          "rounds": [
+            {
+              "count": 1,
+              "intervalMs": 10000,
+              "damage": 25
+            }
+          ],
+          "damageType": "energy"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 98000,
+          "condition": {
+            "key": "electrified",
+            "merge": "strongest",
+            "durationMs": 10000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 1,
+                  "intervalMs": 10000,
+                  "damage": 25
+                }
+              ],
+              "damageType": "energy"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `energy_field.lua`: item ITEM_ENERGYFIELD_PVP (2122), `decayTo 0` direto — UM estágio só, a MESMA condição que `CANARY_FIELD_ITEMS.energyfield` já usa no campo gerado de monstro (dano 25 a cada 10s). Level 18, magic level 3 (rune:level/magicLevel do Lua). `price` 38 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3164 (menor `buy`, fonte asima.lua). Sem aparência conferida."
+}

@@ -109,7 +109,7 @@ const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
   xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-  ammo: unknown; vocation: string | null; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
+  ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -118,6 +118,7 @@ const characterRow = async (
       bestiary: characters.bestiary,
       ammo: characters.ammo,
       vocation: characters.vocation,
+      promoted: characters.promoted,
       staminaMs: characters.staminaMs,
       supplyStock: characters.supplyStock,
       ammunitionStock: characters.ammunitionStock,
@@ -127,7 +128,7 @@ const characterRow = async (
     .where(eq(characters.id, characterId));
   return row as {
     xp: number; gold: number; soul: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-    ammo: unknown; vocation: string | null; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
+    ammo: unknown; vocation: string | null; promoted: boolean; supplyStock: unknown; ammunitionStock: unknown; blessings: number;
   };
 };
 
@@ -997,6 +998,33 @@ describe.runIf(ready)('a vocação chega ao Postgres pelo extrato, UMA vez (#154
       .orderBy(asc(itemInstances.id));
     expect(rows.find((row) => row.id.endsWith(':vocation'))).toMatchObject({ origin: 'vocation-choice', slot: 'hand' });
     expect(rows.find((row) => row.id === `${sessionId}:0`)).toMatchObject({ origin: 'loot', slot: null });
+  });
+});
+
+describe.runIf(ready)('a promoção chega ao Postgres pelo extrato, e nunca desce (#566, ADR 0042 decisão 1)', () => {
+  it('grava true; um extrato sem o campo não desliga; um segundo extrato true não muda nada', async () => {
+    // `OR`, não `coalesce`: mutação que mata é trocar por atribuição direta com um extrato
+    // AUSENTE (nunca acontece de verdade — `promoted` só viaja `true` — mas provaria que a
+    // coluna desceria se algum dia um extrato chegasse com `false`).
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).promoted).toBe(false);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId) });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).promoted).toBe(false);
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, promoted: true });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).promoted).toBe(true);
+
+    // Um extrato fora de ordem SEM o campo (a Cidade, quando o personagem só mexeu em
+    // equipamento) não pode reverter a promoção já gravada.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 4, promoted: true });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).promoted).toBe(true);
   });
 });
 

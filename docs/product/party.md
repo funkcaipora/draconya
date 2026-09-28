@@ -460,6 +460,34 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   aprovação de cada presente em 60 s lógicos, `session.end('party-vote')` só com todos os sins.
   Sair sozinho continua `leave-hunt` (10), livre.
 
+### Magias de party — Heal, Protect, Enchant e Train Party (#588)
+
+Uma por vocação, level 32: Heal Party (Druid, regenera vida), Protect Party (Paladin, +shielding),
+Enchant Party (Sorcerer, +magic level) e Train Party (Knight, +skills corpo a corpo/distância).
+As quatro seguem o MESMO mecanismo do Canary (`data/scripts/spells/party/*.lua`), novo neste
+motor: alvo **raio**, não área — quem está a até `range` tiles (36, distância Chebyshev, mesmo
+andar) do lançador, incluindo ele mesmo, recebe a condição, sem forma desenhada no chão (o
+`AREA_CIRCLE5X5` do script é só o efeito visual). Content declara isso em
+`spellEffectSchema` com `target: 'party'` — nos efeitos `heal-over-time` (Heal Party) e `buff`
+(as outras três) — e `range`; `sim` (`HuntRuleset#collectPartyAllies`,
+`packages/sim/src/rulesets/hunt.ts`) resolve quem está no alcance a partir de
+`session.participants`, e aplica a MESMA condição (sem sorteio por membro) a cada um.
+
+Sozinho, o lançador recusa `no-target` — a mesma mensagem "No party members in range" do Canary,
+antes de gastar mana. Com 2+ no alcance, o custo escala pela fórmula do Canary
+(`manaCost: { kind: 'party-scaled', base, decay }`, `packages/content/src/schemas.ts`):
+`mana = ceil((decay^(n−1) × base) × n)`, `n` sendo quantos estão no alcance (líder incluso) —
+NUNCA o `base` de exibição do catálogo, que é só o custo anunciado no grimório
+(`manaCostDisplayOf`). `partyScaledManaCost` (`packages/sim/src/party.ts`) é a conta pura,
+testada por tabela nos quatro `n` (1 a 4) das quatro magias.
+
+Train Party ilustra uma divergência deliberada do Canary: `CONDITION_PARAM_SKILL_MELEE` do
+Canary é uma skill agregada que este motor não tem — o catálogo separa `axe`/`club`/`sword`/
+`fist` (#152) —, então o `skillDelta` de +3 entra nas QUATRO, para cobrir qualquer arma corpo a
+corpo que o membro estiver usando no momento; é decisão deste conteúdo, não um número do Canary.
+`skillDeltas` no `buff` de MAGIA é novo (só o `buff` de SUPPLY o tinha, #576) — o consumo é o
+MESMO `Conditions.skillBonus` já ativo (`packages/sim/src/conditions.ts`), sem lógica nova.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor atual | Caminho |
@@ -478,6 +506,9 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 | Raio de entrada do 2º+ membro | 3 tiles do ponto de entrada | `packages/sim/src/rulesets/hunt.ts`, `ENTRY_RADIUS` |
 | Janela de aprovação da votação de encerrar | 60 000 ms (lógico) | `packages/sim/src/rulesets/hunt.ts`, `END_VOTE_WINDOW_MS` |
 | Alcance provisório da poção com `target: 'friend'` | 1 tile | `packages/content/data/supplies/{health-potion,mana-potion}.json`, `effect.range` |
+| Alcance das magias de party (#588) | 36 tiles, distância Chebyshev | `packages/content/data/spells/{heal,protect,enchant,train}-party.json`, `effect.range` |
+| Custo de mana das magias de party (`base`/`decay` do Canary) | Heal 120, Protect 90, Enchant 120, Train 60 — `decay` 0,9 nas quatro | `packages/content/data/spells/{heal,protect,enchant,train}-party.json`, `manaCost` |
+| Duração e números do efeito das magias de party | 2 min (120 000 ms); Heal +20 a cada 2 s; Protect +3 shielding; Enchant +1 magic; Train +3 em axe/club/sword/fist/distance | `packages/content/data/spells/{heal,protect,enchant,train}-party.json`, `effect` |
 | Intervalo de polling de `/mine` | 2 000 ms | `packages/client/src/party/store.ts`, `PARTY_POLL_MS` — dono único do `setInterval`: `Shell.tsx` |
 | Intervalo de polling da busca de salas | 2 000 ms, só com a view de busca montada | `packages/client/src/shell/PartyModal.tsx`, `ROOMS_POLL_MS` |
 

@@ -532,6 +532,37 @@ escolhida: `#persistReceipt`/`#creditUnrestorable` (`host.ts`) escrevem no extra
 (`tickets.ts`/`api/tickets.ts`) levam de volta para o ticket da PRÓXIMA sessão — sem isso, uma
 Strong Health Potion caída do Dragon sumiria no logout mesmo sem ser gasta.
 
+### Conjuração CREDITA o mesmo estoque, pelo lançador (#594, ADR 0044)
+
+A conjuração de runa/munição do Tibia é a MESMA moeda do loot acima, na direção contrária: em
+vez de sortear e creditar quem recebeu o drop, o lançador credita a si mesmo. `spellEffectSchema`
+ganhou o `kind: 'conjure'` (`packages/content/src/schemas.ts`) — `supplyId`/`ammunitionId`
+(exatamente um dos dois, como `lootTableSchema` já exige), `charges` (o terceiro argumento de
+`conjureItem` do Canary) e `blankPrice` (o preço da runa em branco, 10 gold — `buy` do clientId
+3147 em `npc/alexander.lua` — cobrado JUNTO da mana e da alma; ausente/`0` na conjuração de
+MUNIÇÃO do Paladin, cujo `blankId` no Canary é zero: nasce sem consumir runa nenhuma). O
+`castSpell` (`casting.ts`) soma `charges` no `Map` do PRÓPRIO lançador — nunca cria item físico,
+o mesmo modelo abstrato do ADR 0026/0032 — e não sorteia nada: o Canary credita uma quantidade
+FIXA por lançamento.
+
+**O custo é mana + alma + a runa em branco, na mesma ordem de sempre: recusa antes, débito
+depois.** A alma segue a regra do #593 (`spell:soul(n)` do Canary — cerca de 50 magias de
+conjuração são as ÚNICAS a exigi-la hoje); o preço da runa em branco é a primeira vez que uma
+MAGIA (não um supply) debita gold — `castSpell` ganhou um parâmetro `purse` opcional, default a
+bolsa SOLO do lançador (o rateio de party do gold de conjuração fica fora desta issue, §12 da
+spec). `goldSpent` do resultado chega ao MESMO agregado que `useSupply` já alimenta
+(`session.aggregates.goldSpent`), e o estoque creditado é o MESMO `supplyStock`/`ammunitionStock`
+acima — sem campo novo no extrato, sem migração nova: `supplyStock`/`ammunitionStock` já eram
+lista de permissão em `receipts.ts` desde o #520.
+
+**As 14 magias de conjuração do catálogo** (`packages/content/data/spells/conjure-*.json`) usam
+os NÚMEROS do Canary (`data/scripts/spells/conjuring/*.lua`: nível, mana, alma, cargas) para as
+runas de ataque/cura e a munição já existentes no catálogo abstrato — Avalanche/Explosion/Great
+Fireball/Heavy Magic Missile/Stone Shower/Sudden Death/Thunderstorm Rune, Intense/Ultimate
+Healing Rune, e Conjure Arrow/Sniper Arrow/Power Bolt (Paladin). Runas/munição de ataque
+restantes do Tibia (M37-10) e runa de campo/parede (M37-04) reusam o mesmo `kind: 'conjure'` sem
+decisão nova.
+
 ## Estado por instância: o overlay (#604, ADR 0046)
 
 **A exceção nomeada à regra "atributos base são fixos".** O item de CATÁLOGO continua fixo pelo

@@ -2,6 +2,7 @@
 
 import type { Combat } from '@draconya/content';
 import type { Rng } from '../rng.js';
+import { isV3OrLater } from './profile.js';
 import { normalRandomInt } from './weapon-power.js';
 
 /**
@@ -17,6 +18,6 @@ import { normalRandomInt } from './weapon-power.js';
 export function rollCombatValue(
   rng: Rng, min: number, max: number, combat: Pick<Combat, 'compatibilityProfile'> | undefined,
 ): number {
-  if (combat?.compatibilityProfile === 'combat-v3') return normalRandomInt(rng, min, max);
+  if (isV3OrLater(combat?.compatibilityProfile)) return normalRandomInt(rng, min, max);
   return rng.integer(min, max);
 }

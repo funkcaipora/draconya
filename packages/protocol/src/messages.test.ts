@@ -190,7 +190,7 @@ describe('outfit colours on the creature (FUN-104)', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
         soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
@@ -249,7 +249,7 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: {
       creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       soul: 0, soulMax: 0,
     },
     world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
@@ -592,6 +592,18 @@ describe('vocation choice (#154)', () => {
   });
 });
 
+describe('promote-vocation (#566, ADR 0042 decisão 1)', () => {
+  it('is intention only, no payload, and the opcode is 29', () => {
+    // O 28 é do `look`. Mutação que mata: trocar por 28 (duplicado) ou apagar a linha (o
+    // schema fica órfão e o teste estrutural reprova).
+    expect(CLIENT_TO_SERVER.look).toBe(28);
+    expect(CLIENT_TO_SERVER['promote-vocation']).toBe(29);
+    expect(C2S_SCHEMAS['promote-vocation'].safeParse({}).success).toBe(true);
+    // Nunca preço, nem resultado, nem vocação alvo (invariante 4): o servidor decide tudo.
+    expect(C2S_SCHEMAS['promote-vocation'].safeParse({ price: 20_000 }).success).toBe(false);
+  });
+});
+
 describe('sell-items and discard-item (#724, ADR 0048 d.8)', () => {
   it('are intention only: which instances, and the opcodes are 21 and 22', () => {
     // O 20 é do `party-end-vote`. Mutação que mata: trocar por 20 (duplicado) ou apagar a
@@ -627,6 +639,9 @@ describe('vocation choice extras (#154)', () => {
     });
     expect(stats.vocationId).toBeNull();
     expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, vocationId: 'knight' }).vocationId).toBe('knight');
+    // Promovido (#566, ADR 0042 decisão 1): `default(false)`, nó `game` anterior manda sem.
+    expect(stats.promoted).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, promoted: true }).promoted).toBe(true);
     const catalogue = S2C_SCHEMAS.catalogue.parse({
       hunts: [], items: [], ammunition: [],
       bot: {
@@ -647,6 +662,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
     ammo: { arrow: null, bolt: null },
     vocationId: 'knight',
+    promoted: false,
     speed: 292,
     skills: {
       melee: { level: 15, percentToNext: 45 },
@@ -673,6 +689,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     expect(decoded).toEqual([{
       ...rawOlderNode,
       ammo: { arrow: null, bolt: null },
+      promoted: false,
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
@@ -689,6 +706,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       creatureId: 1, characterId: 'c1',
       health: 150, maxHealth: 150, mana: 20, maxMana: 20,
       level: 8, xp: 4200, vocationId: 'knight',
+      promoted: false,
       speed: 292,
       skills: {
         melee: { level: 15, percentToNext: 45 },
@@ -1118,7 +1136,7 @@ describe('the party block of the analyzer and the session state (#393)', () => {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: {
         creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
-        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
         soul: 0, soulMax: 0,
       },
       world: { mapId: null, creatures: [], groundItems: [], tileUpdates: [] },
@@ -1355,6 +1373,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
         level: 1,
         xp: 0,
         vocationId: null,
+        promoted: false,
         speed: 200,
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
@@ -1379,7 +1398,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       type: 'player-stats',
       health: 100, maxHealth: 100, mana: 50, maxMana: 50,
       level: 5, xp: 1000, capacity: 300, gold: 50, staminaMs: 50000,
-      ammo: { arrow: null, bolt: null }, vocationId: 'knight', speed: 250,
+      ammo: { arrow: null, bolt: null }, vocationId: 'knight', promoted: false, speed: 250,
       skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     };
     expect('targetId' in stats).toBe(false);

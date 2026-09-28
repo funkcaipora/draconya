@@ -132,7 +132,21 @@
       "idx": 18,
       "version": "7",
       "when": 1790700000000,
-      "tag": "0018_570-blessings",
+      "tag": "0018_615-boosted-creature-world-daily",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0019_566-promoted",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0020_570-blessings",
       "breakpoints": true
     }
   ]

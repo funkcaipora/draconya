@@ -136,6 +136,15 @@ export const CLIENT_TO_SERVER = {
    */
   look: 28,
   /**
+   * Promover a vocação (#566, ADR 0042 decisão 1). INTENÇÃO sem payload: o cliente só pede;
+   * vocação escolhida, level ≥ 20, gold ≥ 20.000 e "ainda não promovido" são do servidor
+   * (invariante 4). Só na Cidade (ADR 0042 — serviço de Cidade). Sucesso é `player-stats`
+   * (`promoted: true`); recusa é `system-message`.
+   *
+   * 29: o 28 é do `look`.
+   */
+  'promote-vocation': 29,
+  /**
    * Comprar UMA bênção na Cidade (#570, ADR 0052 decisão 2). INTENÇÃO: o cliente diz QUAL
    * bênção (`blessingId` do catálogo `content.blessings`); preço por level, saldo e "já tem
    * esta bênção" são conferidos pelo servidor (invariante 4), dentro da sessão de Cidade —
@@ -145,9 +154,9 @@ export const CLIENT_TO_SERVER = {
    * não é item nem vital. Recusa é `system-message` (`not-enough-gold`, `already-blessed`,
    * `unknown-blessing`, `blessing-service-unavailable`).
    *
-   * 29: o 28 é do `look` (#729).
+   * 30: o 29 é do `promote-vocation` (#566).
    */
-  'buy-blessing': 29,
+  'buy-blessing': 30,
 } as const;
 
 export const SERVER_TO_CLIENT = {

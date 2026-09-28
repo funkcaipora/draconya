@@ -66,6 +66,28 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
   });
 
+  it('round-trips promoted (#566, ADR 0042 decisão 1) through parseReceipt', async () => {
+    // `parseReceipt` é lista de PERMISSÃO: campo que não entra nela some no caminho de volta
+    // sem erro nenhum — é exatamente o defeito que este teste reprova para `promoted`.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { promoted: true }));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found?.promoted).toBe(true);
+  });
+
+  it('never carries `false` for promoted: the field is always absent when not promoting', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found?.promoted).toBeUndefined();
+  });
+
   it('drops an index entry whose receipt is gone, instead of returning a phantom', async () => {
     // Acontece de dois jeitos: o extrato expirou pelo TTL, ou um `remove` morreu entre
     // apagar o extrato e limpar o índice. Sem a limpeza na leitura, o conjunto de um

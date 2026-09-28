@@ -1,15 +1,21 @@
 # Progressão, vocações e level
 
 **Status:** stats por level/vocação, curva de XP, level up e skills por uso implementados; famílias
-de arma e proficiências (CMB-05) implementadas; passivas e promoção não
+de arma e proficiências (CMB-05) implementadas; promoção de vocação implementada (#566); passivas não
 **PRD:** §4.1, §9, §43.1
-**Épico:** E2 (stats por vocação/level, skills por uso); E7 (árvore de passivas, promoção de vocação por quest)
+**Épico:** E2 (stats por vocação/level, skills por uso); E7 (árvore de passivas, promoção de vocação)
 
 ## Comportamento
 
 O jogo tem quatro vocações — Cavaleiro, Druida/Curandeiro, Feiticeiro e Arqueiro — cada uma um arquétipo clássico de papel (tank, suporte/cura, dano mágico, dano à distância). HP e Mana crescem automaticamente por level, sem distribuição manual de atributos: o jogador não aloca pontos em força ou inteligência, o crescimento é inteiramente determinado pela vocação escolhida.
 
-Existe uma única promoção permanente de classe no MVP, obtida por quest. A maior parte das magias é liberada automaticamente conforme o personagem sobe de level; as magias mais fortes ficam condicionadas a essa promoção. O sistema deve ser construído de forma que promoções adicionais possam ser introduzidas futuramente sem exigir remodelagem completa do personagem.
+Existe uma única promoção permanente de classe no MVP — **implementada pelo #566 como serviço
+de Cidade, não por quest** (ver "Divergências do PRD" e "Promoção de vocação" abaixo). A maior
+parte das magias é liberada automaticamente conforme o personagem sobe de level; as magias mais
+fortes ficam condicionadas a essa promoção — ainda não ligado, porque o catálogo de magias que
+exigiria promoção não existe (ver "Em aberto"). O sistema deve ser construído de forma que
+promoções adicionais possam ser introduzidas futuramente sem exigir remodelagem completa do
+personagem.
 
 Skills sobem pelo uso, seguindo o paradigma do Tibia, e não automaticamente com o level do personagem.
 
@@ -21,8 +27,10 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 
 - Ganho de HP/Mana por level é automático e fixo por vocação (ver tabela de parâmetros).
 - A escolha de vocação ocorre no level 8 (ver `onboarding.md`).
-- Existe exatamente uma promoção de classe no MVP, obtida por quest permanente e única.
-- Magias liberadas por level: a maioria; magias mais fortes: condicionadas à promoção.
+- Existe exatamente uma promoção de classe no MVP, permanente e única — obtida na Cidade (#566),
+  não por quest.
+- Magias liberadas por level: a maioria; magias mais fortes: condicionadas à promoção (ainda não
+  ligado — ver "Em aberto").
 - Skills evoluem por uso, não por level.
 - Pontos de passiva são distribuídos em árvore própria por vocação (dano / suporte / sustain).
 - Respec de passivas é livre, ilimitado e restrito a PZ.
@@ -262,6 +270,13 @@ Fora daqui: `rateSpawn` e `rateKillingInTheNameOfPoints` (sem sistema correspond
 | Multiplicador de skill/ML sem vocação (levels 1–7) | fist 1,5 / club/sword/axe 2,0 / distância 2,0 / escudo 1,5 / magia 4,0 (a vocação `None`) | `packages/content/data/progression/baseline.json`, `skillMultipliers` |
 | Penalidade de morte — fração fixa (< level 24) | 10 % da XP ACUMULADA (não mais de `xpToCompleteLevel`) — o Tibia, #521, ADR 0037 | `packages/content/data/progression/baseline.json`, `deathPenalty.flatFraction` |
 | Penalidade de morte — limiar da fórmula cúbica | level 24 (o Tibia) | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
+| Penalidade de morte — redução de quem está abençoado (`premium`) | 56 % (sete bênçãos × 8 % do Tibia — mapeia o `premium` que o repo já tinha) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
+| Penalidade de morte — redução de quem está promovido | 30 %, ADITIVA à de bênção e NUNCA tetada (`Player::getLostPercent`, #569; ligado ao estado real do personagem pelo #566) | `packages/content/data/progression/baseline.json`, `deathPenalty.promotionReduction` |
+| Promoção — level mínimo e preço | level 20, 20.000 gold, iguais nas quatro vocações (`data-otservbr-global/npc/king_tibianus.lua:194-204`, o NPC-padrão de promoção do Canary — #566, ADR 0042 decisão 1) | `packages/content/data/vocations/*.json`, `promotion.minLevel`/`promotion.price` |
+| Promoção — regen de Elite Knight | vida/mana, `amount` a cada `ticksMs`: 1/4 000 e 2/6 000 (`vocations.xml` id 8 do Canary, mais rápido que o Knight base 1/6 000) | `packages/content/data/vocations/knight.json`, `promotion.regen` |
+| Promoção — regen de Royal Paladin | 1/6 000 e 2/3 000 (id 7, mais rápido que o Paladin base 1/8 000 e 2/4 000) | `packages/content/data/vocations/paladin.json`, `promotion.regen` |
+| Promoção — regen de Master Sorcerer / Elder Druid | vida igual à base (1/12 000); mana 2/2 000, mais rápida que a base 2/3 000 (ids 5 e 6) | `packages/content/data/vocations/{sorcerer,druid}.json`, `promotion.regen` |
+| Promoção — soul máximo e cadência | 200 / 15.000 ms, contra 100 / 120.000 ms da base (`soulmax`/`gainsoulticks` do Canary, ids 5-8) — **campo pronto, sem consumidor ainda**: depende do mecanismo de soul (#593) mesclar | `packages/content/data/vocations/*.json`, `promotion.soulMax`/`promotion.soulGainTicksMs` |
 | Penalidade de morte — redução por bênção (#570) | 8 % por bênção, sete dão 56 % — mapeia o gradiente real de `CharacterRuntime.blessings` | `packages/content/data/progression/baseline.json`, `deathPenalty.blessingReduction` |
 | Penalidade de morte — redução de quem está promovido | 30 %, ADITIVA à de bênção e NUNCA tetada (`Player::getLostPercent`, #569; `promoted` ainda não é estado do personagem — ver #566/ADR 0042) | `packages/content/data/progression/baseline.json`, `deathPenalty.promotionReduction` |
 | Penalidade de morte — piso de level | **removido pelo #569** — o Tibia nunca teve piso (ver "Divergências do PRD"); o personagem pode cair até o level 1 | — |
@@ -356,6 +371,14 @@ não avisa.
   nenhum). O piso era decisão de PRODUTO do Draconya desde antes da #521, para não punir com
   perda de level quem acabou de escolher vocação; o #569 alinhou o comportamento ao Tibia real,
   e o personagem agora pode cair até o level 1.
+- **§9.1/§43.1 — como a promoção é obtida.** O PRD (linha 12 acima) previa quest. O ADR 0042
+  (decisão 1) decidiu diferente: **serviço de Cidade** — level 20, 20.000 gold debitados pelo
+  ledger, sem diálogo de NPC nem item de quest —, porque o Draconya não tem motor de diálogo
+  (invariante 8: a Cidade não simula nada além de navegação) e uma tela de serviço é o mesmo
+  padrão já recomendado para bênçãos (M33) e para o Santuário de Imbuement (M40). O Huntera
+  confirma que a promoção EXISTE (nomes de vocação promovida observados numa party, Parte IV do
+  `docs/reference/huntera-observed.md`) mas nunca capturou o mecanismo de obtenção — level e
+  preço vêm do Canary (`king_tibianus.lua:194-204`) como valor provisório até uma captura futura.
 
 ## Como a vocação é escolhida (ADR 0026, decisões 1 e 3)
 
@@ -365,6 +388,33 @@ e a machete do kit de nascimento volta para a mochila; a vocação é escrita no
 extrato, e volta pelo ticket. Quem passa do 8 sem escolher continua crescendo pela tabela base
 (ver abaixo). Não há troca de vocação: passiva tem respec (§9.5), vocação não. Implementação na
 issue #154.
+
+## Promoção de vocação (#566, ADR 0042 decisão 1)
+
+Estado do personagem, não uma vocação nova no catálogo: `CharacterRuntime.promoted: boolean`,
+persistido em `characters.promoted` (`not null default false`). As regras que checam
+`vocationId` continuam checando a base (Knight continua `knight`, nunca vira `elite-knight`); a
+vocação ganha um bloco `promotion` opcional (`packages/content`) com o nome de exibição, o regen
+promovido e o requisito de obtenção.
+
+**Como se obtém.** Na Cidade, com vocação escolhida, level ≥ 20 e 20.000 gold disponível: o
+cliente manda `promote-vocation` (opcode 29, sem payload); o servidor confere tudo e debita o
+preço por `goldDelta`, liquidado pelo mesmo canal que já debita `sell-items` na praça
+(invariante 10). Fora da Cidade a intenção é recusada — não é possível promover numa hunt.
+`promoted` nunca desce: o ledger funde por `OR` (`characters.promoted OR receipt.promoted`), não
+por `coalesce` — a diferença é que boolean não tem "ausente" que precise ser preenchido uma vez
+só, só "nunca reverte".
+
+**O que muda ao promover.** Regeneração de vida/mana passa a usar `promotion.regen` (ver
+tabela); a penalidade de morte soma os 30% de `promotionReduction` (#569, ligado pelo #566). O
+HUD troca o nome exibido pelo `promotion.name` — "Elite Knight" em vez de "Knight" — no
+`TopBar` e no modal Personagem, que também mostra a tela de serviço (requisito, preço, botão)
+enquanto o personagem não promoveu.
+
+**O que ainda não está ligado.** `promotion.soulMax`/`promotion.soulGainTicksMs` existem no
+conteúdo (os números do Canary, 200/15.000 ms) mas não têm consumidor: dependem do mecanismo de
+soul (#593) mesclar primeiro. Liberação de magia por promoção (linha 12 acima) também não está
+ligada — depende do catálogo de magias que a exigiria.
 
 ## Skills sobem pelo USO (FUN-75)
 

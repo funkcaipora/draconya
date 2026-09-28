@@ -59,6 +59,15 @@ export interface CharacterState {
    */
   readonly vocationId?: string | null;
   /**
+   * A Boosted Creature do dia em que este personagem entrou no jogo (M42, #615, ADR 0052
+   * decisão 5): vem do ticket, FIXADA aqui como a versão de conteúdo (invariante 7) — e não
+   * relida do mundo a cada transição Cidade↔hunt, para a hunt que atravessa a virada continuar
+   * com a boosted com que nasceu (ADR 0054 decisão 7). Ausente é ticket sem o dado (conteúdo
+   * sem `boosted/baseline.json`, ou `api` antigo em deploy em rolagem): nenhuma hunt deste
+   * personagem aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
+  /**
    * Stamina que sobrava em `staminaUpdatedAtMs`, em milissegundos (§10). NÃO é decrementada
    * por ninguém fora da hunt: o valor de agora é calculado na leitura (ver `stamina.ts`).
    *
@@ -239,6 +248,12 @@ export interface CharacterState {
    * `SNAPSHOT_FORMAT_VERSION`, como `blockCharge`/`attackPractice`.
    */
   readonly attackLockedUntil?: number;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1): estado que SÓ SOBE — não existe des-promoção no
+   * Tibia. Ausente/`false` é "não promovido", o normal de todo personagem novo. Sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`, como `vocationId`/`blessings`.
+   */
+  readonly promoted?: boolean;
 }
 
 /** Ver `CharacterState.pendingManualAction`. */
@@ -259,6 +274,11 @@ export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly 
 
 /** Por que a vocação não foi escolhida (#154). Tipada: o jogador merece saber qual foi. */
 export type VocationRefusal = 'level-too-low' | 'already-chosen';
+
+/** Por que a promoção não aconteceu (#566, ADR 0042 decisão 1). Tipada, como o resto. */
+export type PromoteRefusal =
+  | 'no-vocation' | 'already-promoted' | 'level-too-low' | 'insufficient-gold' | 'not-promotable';
+export type PromoteResult = { readonly ok: true } | { readonly ok: false; readonly reason: PromoteRefusal };
 
 /**
  * Como uma peça do kit inicial acabou (#496). `equipped` vestiu; `in-backpack` coube no
@@ -315,6 +335,8 @@ export class CharacterRuntime {
   xp: number;
   soul: number;
   vocationId: string | null;
+  /** Ver `CharacterState.boostedMonsterId`. Nunca escrito depois da construção — fixado. */
+  readonly boostedMonsterId?: string;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
   /** Saldo-base privado; só `settleGoldDelta` pode incorporá-lo ao extrato já aceito. */
@@ -373,6 +395,11 @@ export class CharacterRuntime {
    * A trava de stairhop (#554). Só `HuntRuleset#step` escreve — ver `CharacterState.attackLockedUntil`.
    */
   attackLockedUntil: number;
+  /**
+   * Promovido (#566, ADR 0042 decisão 1). Só `promote()` escreve — nunca desce. Consumido pelo
+   * regen (`#regenOf`) e pela penalidade de morte (`applyDeathPenalty`), os dois em `hunt.ts`.
+   */
+  promoted: boolean;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -385,6 +412,7 @@ export class CharacterRuntime {
     this.xp = state.xp;
     this.soul = state.soul ?? 0;
     this.vocationId = state.vocationId ?? null;
+    if (state.boostedMonsterId !== undefined) this.boostedMonsterId = state.boostedMonsterId;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.#gold = state.gold ?? 0;
@@ -415,11 +443,21 @@ export class CharacterRuntime {
     this.blessings = state.blessings ?? 0;
     this.pendingManualAction = state.pendingManualAction ?? null;
     this.attackLockedUntil = state.attackLockedUntil ?? 0;
+    this.promoted = state.promoted ?? false;
   }
 
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
   get speedScale(): number {
     return this.conditions.speedScale();
+  }
+
+  /**
+   * Invisível (#592) — o que `Prey.invisible` (`monster/monster.ts`) lê em `chooseTarget`: um
+   * monstro sem `seesInvisible` não seleciona nem retém este personagem como alvo enquanto isto
+   * for `true`. Reconhecida pela chave reservada da condição, como `speedScale`/`hasManaShield`.
+   */
+  get invisible(): boolean {
+    return this.conditions.hasInvisible();
   }
 
   /** Saldo de entrada visível ao motor. A sessão só movimenta `goldDelta`. */
@@ -553,6 +591,28 @@ export class CharacterRuntime {
     return equipped.ok ? 'equipped' : 'in-backpack';
   }
 
+  /**
+   * Promove a vocação escolhida (#566, ADR 0042 decisão 1). `vocation` é a do PRÓPRIO
+   * personagem (`this.vocationId`) — quem resolve isso é o chamador (`host.ts`, como em
+   * `chooseVocation`). `vocation.promotion` ausente é `not-promotable` (conteúdo de teste sem
+   * o bloco). `nowGold` é o saldo DISPONÍVEL — `gold + goldDelta` —, porque um gasto anterior
+   * na mesma sessão de Cidade já baixou o que sobra para promover.
+   *
+   * O preço sai por `goldDelta`, liquidado pelo MESMO canal que já debita venda de item
+   * (`#saveDurableReceipt`/`applyProgression` do `server`) — nenhum ledger novo (invariante 10).
+   */
+  promote(vocation: Vocation, nowGold: number): PromoteResult {
+    if (this.vocationId === null) return { ok: false, reason: 'no-vocation' };
+    if (this.promoted) return { ok: false, reason: 'already-promoted' };
+    const promotion = vocation.promotion;
+    if (promotion === undefined) return { ok: false, reason: 'not-promotable' };
+    if (this.level < promotion.minLevel) return { ok: false, reason: 'level-too-low' };
+    if (nowGold < promotion.price) return { ok: false, reason: 'insufficient-gold' };
+    this.promoted = true;
+    this.goldDelta -= promotion.price;
+    return { ok: true };
+  }
+
   getState(): CharacterState {
     return {
       id: this.id,
@@ -565,6 +625,7 @@ export class CharacterRuntime {
       xp: this.xp,
       soul: this.soul,
       vocationId: this.vocationId,
+      ...(this.boostedMonsterId === undefined ? {} : { boostedMonsterId: this.boostedMonsterId }),
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       speed: this.speed,
@@ -607,6 +668,7 @@ export class CharacterRuntime {
       ...(this.blessings === 0 ? {} : { blessings: this.blessings }),
       ...(this.pendingManualAction === null ? {} : { pendingManualAction: this.pendingManualAction }),
       ...(this.attackLockedUntil === 0 ? {} : { attackLockedUntil: this.attackLockedUntil }),
+      ...(this.promoted ? { promoted: true } : {}),
     };
   }
 

@@ -125,6 +125,23 @@ describe('areaTiles', () => {
     expect(areaTiles({ shape: 'cross', radius: 1 }, origin, 'north')[0]).toEqual(origin);
   });
 
+  it('point (#591): a single tile, at the target — never the caster', () => {
+    const target = { x: 12, y: 8, z: 7 };
+    expect(areaTiles({ shape: 'point' }, origin, 'north', target)).toEqual([target]);
+    // Sem alvo explícito, cai na origem (o mesmo fallback de `cross`/`circle` no alvo).
+    expect(areaTiles({ shape: 'point' }, origin, 'north')).toEqual([origin]);
+  });
+
+  it('wall (#591): a perpendicular row of `width` tiles, centered on the TARGET (distance 0)', () => {
+    const target = { x: 12, y: 8, z: 7 };
+    // Lançador→alvo para leste: a parede corre norte-sul (perpendicular), centrada no alvo.
+    expect(keys(areaTiles({ shape: 'wall', width: 3 }, origin, 'east', target)))
+      .toEqual(['12,7,7', '12,8,7', '12,9,7']);
+    // Para norte: a parede corre leste-oeste.
+    expect(keys(areaTiles({ shape: 'wall', width: 3 }, origin, 'north', target)))
+      .toEqual(['11,8,7', '12,8,7', '13,8,7']);
+  });
+
   it('knows which shapes leave the caster without a target', () => {
     expect(isSelfOrigin(undefined)).toBe(false);
     expect(isSelfOrigin({ shape: 'circle', radius: 1, centered: 'target' })).toBe(false);
@@ -134,6 +151,8 @@ describe('areaTiles', () => {
     expect(isSelfOrigin({ shape: 'cleave' })).toBe(true);
     expect(isSelfOrigin({ shape: 'beam', length: 5 })).toBe(true);
     expect(isSelfOrigin({ shape: 'rows', widths: [1] })).toBe(true);
+    expect(isSelfOrigin({ shape: 'point' })).toBe(false);
+    expect(isSelfOrigin({ shape: 'wall', width: 3 })).toBe(false);
   });
 });
 

@@ -1,0 +1,88 @@
+{
+  "id": "fire-wall-rune",
+  "name": "Fire Wall Rune",
+  "description": "Planta uma parede de fogo perpendicular à mira, cruzando o tile alvo.",
+  "price": 61,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 33,
+    "magicLevel": 6
+  },
+  "effect": {
+    "kind": "field",
+    "range": 8,
+    "field": {
+      "id": "player-fire-wall",
+      "durationMs": 200000,
+      "shape": {
+        "shape": "wall",
+        "width": 3
+      },
+      "condition": {
+        "key": "burning",
+        "merge": "strongest",
+        "durationMs": 70000,
+        "effect": {
+          "kind": "damage-over-time",
+          "form": "rounds",
+          "rounds": [
+            {
+              "count": 7,
+              "intervalMs": 10000,
+              "damage": 20
+            }
+          ],
+          "damageType": "fire"
+        }
+      },
+      "stages": [
+        {
+          "durationMs": 200000,
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 20
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        },
+        {
+          "durationMs": 148000,
+          "condition": {
+            "key": "burning",
+            "merge": "strongest",
+            "durationMs": 70000,
+            "effect": {
+              "kind": "damage-over-time",
+              "form": "rounds",
+              "rounds": [
+                {
+                  "count": 7,
+                  "intervalMs": 10000,
+                  "damage": 10
+                }
+              ],
+              "damageType": "fire"
+            }
+          }
+        },
+        {
+          "durationMs": 98000
+        }
+      ]
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6; #591). Canary `fire_wall.lua`: MESMO item que a Fire Field (ITEM_FIREFIELD_PVP_FULL, 2118→2119→2120), com `setArea(AREA_WALLFIELD, AREADIAGONAL_WALLFIELD)` — a fileira perpendicular ao invés do tile único; aqui só a CONTAGEM (3 tiles) é transcrita, nunca a matriz (ADR 0019). Level 33, magic level 6 (rune:level/magicLevel do Lua). `price` 61 — resolvido por `pnpm catalog:npc-prices` contra o clientId 3190 (menor `buy`, fonte asima.lua). Sem aparência conferida."
+}

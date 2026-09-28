@@ -32,8 +32,8 @@ import {
 import type {
   AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
   InventoryRefusal, InventoryResult, InventoryState, ItemRef, PartyBagChanged, PartyEndVoteResult,
-  PartySettingsPatch, Place, SlotRefusal, SlotState, TakeLootRefusal, TileAppearanceChange,
-  UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
+  PartySettingsPatch, Place, PromoteRefusal, SlotRefusal, SlotState, TakeLootRefusal,
+  TileAppearanceChange, UseItemRefusal, UseOnMapRejection, UseSlotTarget, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
@@ -238,6 +238,15 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'already-chosen': 'Você já escolheu a sua vocação.',
 };
 
+/** A recusa de `promote-vocation` (#566, ADR 0042 decisão 1), em palavras. */
+const PROMOTE_REFUSAL: Readonly<Record<PromoteRefusal, string>> = {
+  'no-vocation': 'Escolha uma vocação antes de se promover.',
+  'already-promoted': 'Você já foi promovido.',
+  'level-too-low': 'Você ainda não chegou ao level da promoção.',
+  'insufficient-gold': 'Você não tem gold suficiente para se promover.',
+  'not-promotable': 'Sua vocação não tem promoção.',
+};
+
 /** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
 const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
   'level-too-low': 'Você ainda não tem o level dessa munição.',
@@ -278,6 +287,12 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
   // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // Magia agressiva disparada na Cidade (#792, ADR 0044 d.2): protect zone não aceita combate.
+  'protection-zone': 'Você está em uma zona de proteção.',
+  // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
+  // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
+  // `not-in-catalog` já faz para magia/supply/level/vocação.
+  'not-summonable': 'Você não pode invocar essa criatura agora.',
 };
 
 /**
@@ -452,6 +467,9 @@ function playerStatsOf(
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
     vocationId: character?.vocationId ?? null,
+    // Promovido (#566, ADR 0042 decisão 1): o HUD troca o nome exibido pelo `promotion.name`
+    // da vocação quando `true` — a resolução do nome é do cliente, que já tem o catálogo.
+    promoted: character?.promoted ?? false,
     // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
@@ -460,9 +478,10 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
-    // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD.
+    // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD. A
+    // vocação PROMOVIDA (#566) reescreve o teto quando o conteúdo declara `promotion.soulMax`.
     soul: character?.soul ?? 0,
-    soulMax: vocation?.soulMax ?? 0,
+    soulMax: (character?.promoted === true ? vocation?.promotion?.soulMax : undefined) ?? vocation?.soulMax ?? 0,
   };
 }
 
@@ -1557,6 +1576,11 @@ export class SessionHost {
         // do cliente (#729, ADR 0050 d.7).
         this.#requestLook(viewer, message.position);
         return;
+      case 'promote-vocation':
+        // INTENÇÃO (invariante 4): sem payload. Vocação, level, gold e "já promovido" são do
+        // servidor. Só na Cidade (#566, ADR 0042 decisão 1 — serviço de Cidade).
+        this.#requestPromoteVocation(viewer);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -1820,6 +1844,10 @@ export class SessionHost {
       ...(outcome.ok ? {} : { reason: SLOT_REFUSAL[outcome.reason] }),
     });
     if (!outcome.ok || hosted === undefined) return;
+    // Conjurar na Cidade muda estado durável (#792, ADR 0044 d.2) — estoque, mana e gold —, e
+    // o shard só grava no logout quem está em `dirty` (#154, a mesma marca de `equip`/
+    // `choose-vocation`). Sem isto, a carga conjurada na praça sumia ao sair.
+    if (hosted.session.ruleset.type === 'city') hosted.dirty.add(viewer.characterId);
     // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
     // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
     hosted.slotStateAtMs = 0;
@@ -2194,6 +2222,40 @@ export class SessionHost {
     this.#sendInventory(character.id);
   }
 
+  /**
+   * Promove a vocação escolhida (#566, ADR 0042 decisão 1). Serviço de Cidade: só a sessão de
+   * Cidade aceita — o mesmo padrão do ADR 0042 (decisão 1, tela de serviço) e do "obtida na
+   * Cidade" do plano de conteúdo. O preço sai por `goldDelta`, liquidado pelo MESMO
+   * `#saveDurableReceipt` que já debita `sell-items` na praça (invariante 10).
+   */
+  #requestPromoteVocation(viewer: Viewer): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    if (hosted.session.ruleset.type !== 'city') {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para se promover.',
+      });
+      return;
+    }
+    const vocation = character.vocationId === null
+      ? undefined
+      : this.#options.vocations?.get(character.vocationId);
+    if (vocation === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL['no-vocation'] });
+      return;
+    }
+    const result = character.promote(vocation, character.gold + character.goldDelta);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: PROMOTE_REFUSAL[result.reason] });
+      return;
+    }
+    this.#markDirty(character.id);
+    const stats = this.#statsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+  }
+
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
@@ -2500,6 +2562,13 @@ export class SessionHost {
       );
     }
     this.#botByCharacter.set(characterId, decision.config);
+    // Semeia o ruleset também (#792): quem chega direto na Cidade (o caminho comum de login,
+    // invariante 8) precisa da barra de ações carregada ali para `use-slot` conjurar — sem
+    // isto, `CityRuleset#useSlot` nunca vê a config até o jogador salvar uma nova em `bot-
+    // config` (que já passava por `#applyBotConfig`). Ruleset sem `configureBot` ignora
+    // (hunt já a recebe pelo `botConfig` da própria criação — recompilar de novo aqui é
+    // idempotente, a mesma configuração).
+    (session.ruleset as Partial<HuntRuleset>).configureBot?.(session, decision.config, characterId);
     // A v1 migrada, e a config com slot sanitizado, são DADO NOVO: persiste pelo caminho
     // write-behind (ADR 0028, DT-07) — senão toda entrada repetiria a migração/sanitização e a
     // coluna seguiria com a referência morta. `saveBotConfig` só existe quando o papel aceita
@@ -2837,6 +2906,9 @@ export class SessionHost {
         name: definition?.name ?? event.monsterId,
         health: event.health,
         maxHealth: event.maxHealth,
+        // A invocação do JOGADOR (#598, M38-01, ADR 0057 decisão 4): o cliente marca "sua
+        // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
+        ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
       };
     } else if (event.kind === 'creature-vanished') {
       const id = hosted.creatureIds.get(key);
@@ -4137,6 +4209,10 @@ export class SessionHost {
       // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
       // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
       ...(owner === undefined ? {} : { soul: owner.soul }),
+      // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
+      // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
+      // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
+      ...(owner?.promoted ? { promoted: true } : {}),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -4197,7 +4273,17 @@ export class SessionHost {
       },
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      // A promoção (#566, ADR 0042 decisão 1): AUSENTE/`false` nunca é gravado — `promoted` só
+      // sobe no ledger (`characters.promoted OR receipt.promoted`), nunca desce.
+      ...(owner.promoted ? { promoted: true } : {}),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // O estoque de supply/munição (#792, ADR 0044 d.2): conjurar na Cidade credita
+      // `supplyStock`/`ammunitionStock` do mesmo jeito que o loot da hunt credita — ABSOLUTO,
+      // como `ammo` (`receipts.ts`). Sem isto, a carga conjurada na praça sumia no logout: o
+      // shard nunca grava as duas fora deste extrato de estado durável.
+      ...(owner.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+      ...(owner.ammunitionStock.size === 0
+        ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
       // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
       // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
       // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
@@ -4330,6 +4416,9 @@ export class SessionHost {
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
+        // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
+        // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
+        ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
       });
     }
 
@@ -4353,6 +4442,7 @@ export class SessionHost {
         level: self.level,
         xp: self.xp,
         vocationId: self.vocationId,
+        promoted: self.promoted,
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,

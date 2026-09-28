@@ -7,6 +7,7 @@
     "acid-blob": 314,
     "acolyte-of-darkness": 9,
     "acolyte-of-the-cult": 194,
+    "adept-of-the-cult": 194,
     "adult-goanna": 1195,
     "adventurer": 129,
     "afflicted-strider": 1403,
@@ -57,19 +58,23 @@
     "bashmu": 1408,
     "bat": 122,
     "battlemaster-zunzu": 343,
+    "bazir": 35,
     "bear": 16,
     "beast-hulking-prehemoth": 1553,
     "behemoth": 55,
     "berserker-chicken": 111,
+    "bibby-bloodbath": 2,
     "big-boss-trolliver": 281,
     "biting-book": 1066,
     "biting-cold": 53,
     "black-knight": 131,
     "black-sheep": 13,
     "black-sphinx-acolyte": 1200,
+    "black-vixen": 1038,
     "blazing-fire-elemental": 49,
     "blemished-spawn": 1401,
     "blood-crab": 200,
+    "bloodback": 1039,
     "bloodpaw": 42,
     "blue-butterfly": 227,
     "boar": 380,
@@ -171,9 +176,11 @@
     "dark-faun": 980,
     "dark-knight": 131,
     "dark-knowledge": 1061,
+    "dark-magician": 133,
     "dark-monk": 225,
     "dark-paladin": 129,
     "dark-sorcerer": 130,
+    "dark-soul": 714,
     "darklight-source": 1660,
     "dawn-bat": 122,
     "dawn-scorpion": 43,
@@ -214,6 +221,7 @@
     "destroyer": 236,
     "dharalion": 203,
     "diamond-servant": 397,
+    "diblis-the-fair": 287,
     "dipthrah": 87,
     "dire-penguin": 250,
     "diseased-bill": 299,
@@ -251,6 +259,7 @@
     "dwarf-miner": 160,
     "dwarf-soldier": 71,
     "dworc-fleshhunter": 215,
+    "dworc-voodoomaster": 214,
     "earth-overlord": 285,
     "earworm": 26,
     "echo-of-chagorz": 1670,
@@ -271,6 +280,7 @@
     "energetic-book": 1061,
     "energuardian-of-tales": 1063,
     "energy-overlord": 290,
+    "enlightened-of-the-cult": 193,
     "enpa-yolo": 26,
     "enraged-crystal-golem": 508,
     "enraged-sand-brood": 82,
@@ -358,6 +368,7 @@
     "gnomevil": 504,
     "gnorre-chyllson": 251,
     "goblin": 61,
+    "goblin-assassin": 296,
     "goblin-leader": 61,
     "goblin-scavenger": 297,
     "goggle-cake": 1740,
@@ -373,7 +384,9 @@
     "grand-chaplain-gaunder": 1071,
     "grand-commander-soeren": 1071,
     "grand-master-oberon": 1072,
+    "grandfather-tridian": 193,
     "grave-guard": 234,
+    "gravedigger": 558,
     "greater-death-minion": 65,
     "greater-splinter-of-madness": 1268,
     "green-frog": 224,
@@ -388,6 +401,7 @@
     "guardian-of-tales": 1063,
     "hacker": 8,
     "hairman-the-huge": 116,
+    "hand-of-cursed-fate": 230,
     "hardened-usurper-archer": 1316,
     "hateful-soul": 1268,
     "haunted-treeling": 310,
@@ -395,6 +409,7 @@
     "hellgorak": 12,
     "hellhound": 240,
     "hellhunter-inferniarch": 1793,
+    "herald-of-gloom": 320,
     "hero": 73,
     "hibernal-moth": 1149,
     "hide": 219,
@@ -421,7 +436,9 @@
     "imp-intruder": 237,
     "incineron": 243,
     "incredibly-old-witch": 54,
+    "infected-weeper": 489,
     "infernal-frog": 224,
+    "infernalist": 130,
     "insect-swarm": 349,
     "insectoid-scout": 403,
     "insectoid-worker": 403,
@@ -436,6 +453,7 @@
     "jagged-earth-elemental": 285,
     "jailer": 298,
     "jaul": 444,
+    "jellyfish": 452,
     "jesse-the-wicked": 134,
     "juggernaut": 244,
     "jungle-moa": 1534,
@@ -444,6 +462,7 @@
     "kalyassa": 947,
     "kerberos": 240,
     "killer-caiman": 358,
+    "killer-rabbit": 74,
     "king-zelos": 1224,
     "knowledge-raider": 878,
     "kollos": 458,
@@ -484,7 +503,9 @@
     "lost-basher": 538,
     "lost-berserker": 496,
     "lost-gnome": 493,
+    "lost-husher": 537,
     "lost-soul": 232,
+    "lost-thrower": 539,
     "lovely-deer": 31,
     "lovely-polar-bear": 42,
     "lovely-rotworm": 26,
@@ -535,9 +556,11 @@
     "memory-of-an-ogre": 857,
     "menace": 113,
     "menacing-carnivor": 1138,
+    "mephiles": 237,
     "mercury-blob": 316,
     "merlkin": 117,
     "midnight-asura": 150,
+    "midnight-panther": 385,
     "midnight-spawn": 315,
     "mighty-splinter-of-madness": 1268,
     "mind-wrecking-dream": 300,
@@ -562,16 +585,20 @@
     "monk-of-the-order": 57,
     "monstor": 244,
     "moohtant": 607,
+    "morguthis": 84,
     "morik-the-gladiator": 131,
     "mornenion": 64,
+    "morshabaal": 1468,
     "mountain-troll": 15,
     "mozradek": 240,
     "mr-punish": 234,
+    "muglex-clan-assassin": 296,
     "muglex-clan-footman": 61,
     "muglex-clan-scavenger": 297,
     "mummy": 65,
     "munster": 56,
     "mushroom-sniffer": 60,
+    "mutated-tiger": 318,
     "mutated-visco": 554,
     "mutated-zalamon": 357,
     "nargol-the-impaler": 1222,
@@ -612,18 +639,23 @@
     "old-wasp": 923,
     "old-wolf": 918,
     "omnivora": 717,
+    "omruc": 90,
     "orc": 5,
+    "orc-armor": 2,
     "orc-berserker": 8,
     "orc-cult-fanatic": 59,
     "orc-cult-inquisitor": 8,
     "orc-cult-minion": 50,
     "orc-cultist": 7,
+    "orc-helmet": 2,
     "orc-leader": 59,
     "orc-marauder": 342,
     "orc-rider": 4,
     "orc-sambackpack": 5,
     "orc-shaman": 6,
+    "orc-shield": 2,
     "orc-spearman": 50,
+    "orc-warlord": 2,
     "orc-warrior": 7,
     "orchid-frog": 226,
     "orclops-ravager": 935,
@@ -666,9 +698,11 @@
     "psychic-spirit-elemental": 1840,
     "purple-butterfly": 213,
     "putrid-mummy": 976,
+    "pythius-the-rotten": 231,
     "quara-constrictor-scout": 46,
     "quara-hydromancer": 47,
     "quara-hydromancer-scout": 47,
+    "quara-mantassin": 72,
     "quara-mantassin-scout": 72,
     "quara-pincher": 77,
     "quara-pincher-scout": 77,
@@ -682,12 +716,14 @@
     "ravenous-beyondling": 876,
     "raxias": 980,
     "red-butterfly": 228,
+    "redeemed-soul": 714,
     "reflection-of-mawhawk": 595,
     "reflection-of-obujos": 445,
     "regenerating-mass": 238,
     "renegade-knight": 268,
     "renegade-orc": 59,
     "renegade-quara-hydromancer": 47,
+    "renegade-quara-mantassin": 72,
     "renegade-quara-pincher": 77,
     "renegade-quara-predator": 20,
     "retainer-of-baeloc": 100,
@@ -701,7 +737,9 @@
     "rift-phantom": 48,
     "rift-scythe": 300,
     "rift-spawn": 12,
+    "rift-worm": 295,
     "ripper-spectre": 1122,
+    "risen-soldier": 306,
     "roaring-lion": 570,
     "roaring-water-elemental": 11,
     "robby-the-reckless": 129,
@@ -712,6 +750,7 @@
     "rottie-the-rotworm": 26,
     "rotworm": 26,
     "rotworm-queen": 295,
+    "rukor-zad": 152,
     "running-elite-orc-guard": 2,
     "sacred-snake": 28,
     "sacred-spider": 219,
@@ -740,6 +779,8 @@
     "sibang": 118,
     "silver-rabbit": 262,
     "sir-baeloc": 1222,
+    "sir-nictros": 1222,
+    "sir-valorcrest": 287,
     "skeleton": 33,
     "skeleton-elite-warrior": 298,
     "skeleton-warrior": 298,
@@ -777,7 +818,9 @@
     "splasher": 47,
     "squid-warden": 1059,
     "squidgy-slime": 19,
+    "squire-of-nictros": 306,
     "squirrel": 274,
+    "stalker": 128,
     "stalking-stalk": 1554,
     "starving-wolf": 27,
     "stolen-knowledge-of-armor": 1061,
@@ -804,6 +847,7 @@
     "swan-maiden": 138,
     "swarmer": 460,
     "swarmer-hatchling": 460,
+    "tainted-soul": 712,
     "tainted-soul-splinter": 1219,
     "tame-terror-bird": 218,
     "tanjis": 446,
@@ -820,13 +864,16 @@
     "the-axeorcist": 8,
     "the-baron-from-below": 1045,
     "the-blazing-rose": 1068,
+    "the-blightfather": 348,
     "the-bloodtusk": 199,
     "the-bloodweb": 263,
     "the-book-of-death": 1061,
     "the-brainstealer": 1412,
     "the-cold-of-winter": 53,
     "the-collector": 261,
+    "the-count": 287,
     "the-count-of-the-core": 1046,
+    "the-dark-dancer": 58,
     "the-devourer-of-secrets": 309,
     "the-diamond-blossom": 1068,
     "the-dreadorian": 234,
@@ -839,9 +886,12 @@
     "the-fire-empowered-duke": 1047,
     "the-first-dragon": 947,
     "the-frog-prince": 224,
+    "the-hag": 264,
     "the-hairy-one": 116,
     "the-halloween-hare": 74,
+    "the-handmaiden": 230,
     "the-heat-of-summer": 49,
+    "the-horned-fox": 202,
     "the-keeper": 220,
     "the-lily-of-night": 1068,
     "the-many": 121,
@@ -864,6 +914,8 @@
     "the-spellstealer": 12,
     "the-unarmored-voidborn": 987,
     "the-unwelcome": 1277,
+    "the-weakened-count": 68,
+    "thieving-squirrel": 274,
     "thorn-minion": 717,
     "thorn-steed": 626,
     "thornback-tortoise": 198,
@@ -881,18 +933,23 @@
     "troll": 15,
     "troll-champion": 281,
     "troll-guard": 281,
+    "troll-legionnaire": 53,
     "troll-marauder": 281,
     "troll-trained-salamander": 529,
     "true-dawnfire-asura": 1068,
     "true-frost-flower-asura": 1068,
+    "true-midnight-asura": 1068,
     "truffle": 1750,
     "truffle-cook": 1751,
     "twisted-shaper": 932,
     "two-headed-turtle": 1535,
+    "ugly-monster": 1218,
     "unaz-the-mean": 1268,
     "unbeatable-dragon": 39,
     "unbound-demon": 35,
     "undead-cavebear": 384,
+    "undead-elite-gladiator": 306,
+    "undead-gladiator": 306,
     "undead-mine-worker": 33,
     "undead-minion": 37,
     "undead-prospector": 18,
@@ -922,16 +979,22 @@
     "waspoid": 462,
     "water-buffalo": 523,
     "weak-soul": 48,
+    "weakened-demon": 12,
     "weakened-glooth-horror": 677,
     "webster": 263,
+    "weeper": 489,
     "weeping-soul": 48,
+    "werebadger": 729,
     "werebear": 720,
+    "wereboar": 721,
     "werecrocodile": 1647,
+    "werefox": 1030,
     "werelioness": 1301,
     "werepanther": 1648,
     "whirling-blades": 102,
     "white-deer": 400,
     "white-lion": 1290,
+    "white-shade": 560,
     "white-tiger": 1649,
     "wild-dog": 32,
     "wild-horse": 393,
@@ -939,6 +1002,7 @@
     "wild-warrior": 131,
     "willi-wasp": 44,
     "winter-wolf": 52,
+    "wisp": 294,
     "witch": 54,
     "wolf": 27,
     "worker-golem": 304,
@@ -957,9 +1021,11 @@
     "zamulosh2": 862,
     "zamulosh3": 862,
     "zarcorix-of-yalahar": 309,
+    "zevelon-duskbringer": 287,
     "zomba": 570,
     "zombie": 311,
     "zoralurk": 12,
+    "zugurosh": 12,
     "zulazza-the-corruptor": 334,
     "zushuka": 149
   },
@@ -2987,6 +3053,15 @@
     "cure-curse": {
       "effect": 13
     },
+    "invisibility-druid": {
+      "effect": 13
+    },
+    "invisibility-sorcerer": {
+      "effect": 13
+    },
+    "cancel-invisibility": {
+      "effect": 13
+    },
     "bruise-bane": {
       "effect": 13
     },
@@ -3003,6 +3078,9 @@
       "effect": 10
     },
     "blood-rage": {
+      "effect": 14
+    },
+    "train-party": {
       "effect": 14
     },
     "protector": {
@@ -3105,6 +3183,9 @@
     "magic-shield-sorcerer": {
       "effect": 13
     },
+    "summon-creature-sorcerer": {
+      "effect": 14
+    },
     "death-strike": {
       "effect": 17,
       "missile": 11
@@ -3184,8 +3265,17 @@
     "haste-druid": {
       "effect": 14
     },
+    "protect-party": {
+      "effect": 14
+    },
+    "enchant-party": {
+      "effect": 14
+    },
     "magic-shield-druid": {
       "effect": 13
+    },
+    "summon-creature-druid": {
+      "effect": 14
     },
     "physical-strike": {
       "effect": 10,
@@ -3204,6 +3294,9 @@
       "effect": 13
     },
     "heal-friend-druid": {
+      "effect": 13
+    },
+    "heal-party": {
       "effect": 13
     },
     "terra-wave": {
@@ -3292,6 +3385,9 @@
     },
     "antidote-rune": {
       "effect": 13
+    },
+    "paralyze-rune": {
+      "effect": 14
     },
     "mana-potion": {
       "effect": 13
@@ -3390,6 +3486,53 @@
     },
     "magic-shield-potion": {
       "effect": 38
+    },
+    "fire-field-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "fire-wall-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "fire-bomb-rune": {
+      "effect": 7,
+      "missile": 4
+    },
+    "poison-field-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "poison-wall-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "poison-bomb-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "energy-field-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "energy-wall-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "energy-bomb-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "magic-wall-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "wild-growth-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "destroy-field-rune": {
+      "effect": 10
     }
   },
   "hits": {

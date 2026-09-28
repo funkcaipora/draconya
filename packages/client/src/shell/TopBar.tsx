@@ -115,8 +115,13 @@ export function TopBar({ open, toggle, chatBadge }: {
   const gold = useHudSlice((state) => state.gold);
   // A vocação ao lado do level: o NOME vem do catálogo, o id do `player-stats` (herdado, #154).
   const vocationId = useHudSlice((state) => state.vocationId);
-  const vocationName = useHudSlice((state) =>
-    state.catalogue?.vocations.find((vocation) => vocation.id === state.vocationId)?.name ?? null);
+  // Promovido (#566, ADR 0042 decisão 1): troca pelo `promotion.name` da vocação — "Elite
+  // Knight" em vez de "Knight" — quando o servidor confirmou a promoção.
+  const vocationName = useHudSlice((state) => {
+    const vocation = state.catalogue?.vocations.find((v) => v.id === state.vocationId);
+    if (vocation === undefined) return null;
+    return state.promoted ? vocation.promotion?.name ?? vocation.name : vocation.name;
+  });
   // "—" até o primeiro `player-count`/`session-state.onlinePlayers` (SV-15): nunca `0` inventado.
   const onlinePlayers = useHudSlice((state) => state.onlinePlayers);
   const characters = useStoreSlice(account, (state) => state.characters);

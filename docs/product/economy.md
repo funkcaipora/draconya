@@ -14,6 +14,13 @@ cada tiro debita o `price` da munição escolhida da família, sem pilha e sem m
 preços usam o Tibia como referência inicial de balanceamento, e todos os valores são
 configuráveis.
 
+**Conjuração CRIA estoque em vez de gastá-lo (#594, ADR 0044).** É a MESMA moeda de gold-no-ato
+acima, na direção oposta: a magia de conjuração debita mana, alma (#593) e o preço da runa em
+branco (10 gold, uma runa de cada vez) do LANÇADOR, e credita cargas no `supplyStock`/
+`ammunitionStock` dele — nunca um item de runa físico. A munição do Paladin (Conjure Arrow/
+Sniper Arrow/Power Bolt) não paga runa em branco nenhuma (`blankId` zero no Canary): só mana e
+alma. Ver `docs/product/items.md` §"Conjuração CREDITA o mesmo estoque, pelo lançador".
+
 Se o gold do personagem acabar durante a hunt: com a regra "sair quando o gold acabar" ativa no
 bot, ele sai da hunt; sem essa regra, ele permanece, mas deixa de conseguir pagar o próximo
 supply e o próximo tiro, e pode morrer (ver `bot.md`, §13.9).
