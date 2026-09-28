@@ -6,7 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  CharacterRuntime, Rng, Session, createCityRuleset, createHuntSession,
+  CharacterRuntime, DEFAULT_DIFFICULTY_NAME, Rng, Session, createCityRuleset, createHuntSession,
   huntRulesetFromSnapshot, materializeStamina, statsForLevel,
 } from '@draconya/sim';
 import type {
@@ -395,15 +395,17 @@ function huntFor(
   character: CharacterRuntime,
   now: () => number,
 ): Session | null {
-  if (request.huntId === undefined || request.difficulty === undefined) return null;
+  if (request.huntId === undefined) return null;
   try {
     const session = createHuntSession({
       id: randomUUID(),
       content,
       huntId: request.huntId,
-      // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um
-      // enum no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
-      difficulty: request.difficulty as HuntDifficultyName,
+      // #584: `difficulty` é aceito e IGNORADO pelo `sim` desde o #583 (ADR 0039, fim do
+      // pull por dificuldade) — não seleciona mais nada no conteúdo. Ausente (cliente novo)
+      // vira o único nome compat que o conteúdo ainda expõe, só para o snapshot/extrato
+      // continuarem redondos; presente (cliente antigo) é aceito sem validar contra nada.
+      difficulty: (request.difficulty ?? DEFAULT_DIFFICULTY_NAME) as HuntDifficultyName,
       createdAtMs: now(),
       // A configuração do bot já vem VALIDADA (FUN-81): quem a aceitou foi o host, no socket
       // ou ao ler o ticket. Aqui ela só é compilada — e é a hunt que a guarda no snapshot.

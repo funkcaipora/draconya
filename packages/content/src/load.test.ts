@@ -434,6 +434,22 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       'sudden-death-rune': { damageType: 'death', skillMin: 4.605, skillMax: 7.395, baseMin: 28, baseMax: 46, missile: 11 },
       'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59, missile: 5 },
       'explosion-rune': { damageType: 'physical', shape: 'cross', skillMin: 0, skillMax: 4.8 },
+      // #597 — as 5 runas que faltavam para as 12 do Canary (`staging/runes/generated/general.json`).
+      'fireball-rune': {
+        damageType: 'fire', skillMin: 1.81, skillMax: 3, baseMin: 10, baseMax: 18, missile: 4,
+      },
+      'icicle-rune': {
+        damageType: 'ice', skillMin: 1.81, skillMax: 3, baseMin: 10, baseMax: 18, missile: 29,
+      },
+      'light-magic-missile-rune': {
+        damageType: 'energy', skillMin: 0.4, skillMax: 0.81, baseMin: 2, baseMax: 4, missile: 5,
+      },
+      'light-stone-shower-rune': {
+        damageType: 'earth', shape: 'cross', skillMin: 0.3, skillMax: 0.45, baseMin: 2, baseMax: 3, missile: 30,
+      },
+      'stalagmite-rune': {
+        damageType: 'earth', skillMin: 0.4, skillMax: 1.59, baseMin: 2, baseMax: 10, missile: 30,
+      },
     };
     for (const [id, want] of Object.entries(expected)) {
       const effect = content.supplies.get(id)?.effect;
@@ -651,6 +667,9 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'front-sweep': { level: 70, mana: 200, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 80 },
     'fierce-berserk': { level: 90, mana: 340, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 90 },
     'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 1000, cdMs: 600000, kind: 'heal', bp: 500 },
+    // #589: força o alvo do monstro; não tem `basePower` — o efeito é `challenge`, não dano.
+    'challenge': { level: 20, mana: 30, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'challenge' },
+    'chivalrous-challenge': { level: 150, mana: 80, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'challenge' },
   },
   paladin: {
     'lesser-ethereal-spear': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 9 },
@@ -732,7 +751,7 @@ const EXCLUDED_SPELLS = [
   // agora existe (CMB-07 generalizou a `Condition`). Continuam de fora as magias que INFLIGEM
   // condição (Envenom, Curse, Ignite, Electrify): o #590 é só a metade que remove.
   'inflict-wound', 'holy-flash', 'ignite', 'electrify', 'curse', 'envenom',
-  'shield-bash', 'shield-slam', 'challenge', 'train-party', 'protect-party', 'enchant-party',
+  'shield-bash', 'shield-slam', 'train-party', 'protect-party', 'enchant-party',
   'heal-party', 'elemental-synthesis', 'shared-conservation',
   'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
@@ -767,17 +786,19 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 16 + 17 + 24 + 27 vocation spells, plus the four generic ones', () => {
+  it('has exactly the catalogue: 18 + 17 + 24 + 27 vocation spells, plus the four generic ones', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
     // Curse no Paladin (+1), Cure Burning e Cure Electrification só no Druid (+2) — e Cure
-    // Poison é a QUARTA magia genérica (sem `vocationId`), como as três de antes.
+    // Poison é a QUARTA magia genérica (sem `vocationId`), como as três de antes. #589
+    // acrescentou Challenge e Chivalrous Challenge no Knight (+2, de 16 para 18) — revisita a
+    // exclusão antiga (ver `EXCLUDED_SPELLS`, abaixo, que não a lista mais).
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(16);
+    expect(byVocation.get('knight')).toBe(18);
     expect(byVocation.get('paladin')).toBe(17);
     expect(byVocation.get('sorcerer')).toBe(24);
     expect(byVocation.get('druid')).toBe(27);
@@ -1186,6 +1207,28 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
   it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
     for (const id of ['dragon', 'dragon-lord']) {
       expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
+    }
+  });
+
+  it('the dragon lord firefield follows the Canary decayTo chain (#560, items.xml:4212-4246)', () => {
+    for (const id of ['dragon-lord', 'dragon-lord-hatchling']) {
+      const field = content.monsters.get(id)?.abilities.find((a) => a.id === 'firefield')?.field;
+      expect(field?.stages, id).toHaveLength(3);
+      const stages = field?.stages ?? [];
+      // 2118 (dano 20, 200s) → decayTo 2119 (10, 148s) → 2120 (sem field, 98s) → some.
+      expect(stages[0]?.durationMs, id).toBe(200_000);
+      expect(stages[0]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[0]?.condition?.effect.kind === 'damage-over-time' && stages[0].condition.effect.form === 'rounds') {
+        expect(stages[0].condition.effect.rounds[0]?.damage, id).toBe(20);
+      }
+      expect(stages[1]?.durationMs, id).toBe(148_000);
+      expect(stages[1]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[1]?.condition?.effect.kind === 'damage-over-time' && stages[1].condition.effect.form === 'rounds') {
+        expect(stages[1].condition.effect.rounds[0]?.damage, id).toBe(10);
+      }
+      // O último estágio não causa dano — só ocupa o tile até sumir.
+      expect(stages[2]?.durationMs, id).toBe(98_000);
+      expect(stages[2]?.condition, id).toBeUndefined();
     }
   });
 

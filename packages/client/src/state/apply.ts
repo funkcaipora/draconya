@@ -126,6 +126,18 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       if (world.fields.delete(message.id)) world.fieldsVersion += 1;
       return;
 
+    // O campo trocou de estágio (#560, `decayTo`): mesmo `id` e `tiles`, aparência NOVA já
+    // resolvida pelo servidor — o cliente só substitui a entrada, nunca redesenha por conta
+    // própria (invariante 6). Campo que a tela nunca viu (reconectou entre o `field-appear` e
+    // esta troca, e o `session-state` ainda não chegou) é ignorado: nada para trocar ainda.
+    case 'field-stage-change': {
+      const field = world.fields.get(message.id);
+      if (field === undefined) return;
+      world.fields.set(message.id, { ...field, appearanceId: message.appearanceId });
+      world.fieldsVersion += 1;
+      return;
+    }
+
     // A resposta ao `look` (#729): o texto do "You see …" entra no mesmo canal do
     // `system-message`, nível info — não é recusa, é o que a placa/o cenário dizem.
     case 'look-result':

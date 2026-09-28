@@ -1440,10 +1440,12 @@ export class SessionHost {
         return;
       }
       case 'enter-hunt':
-        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt e qual
-        // dificuldade, e quem decide se cabe, cria a instância e credita é o servidor.
+        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt, e quem decide se
+        // cabe, cria a instância e credita é o servidor. `difficulty` é aceito e IGNORADO
+        // desde o #584 (ADR 0039) — mantido no protocolo só por compatibilidade (ADR 0014).
         void this.#requestTransition(viewer, {
-          to: 'hunt', huntId: message.huntId, difficulty: message.difficulty,
+          to: 'hunt', huntId: message.huntId,
+          ...(message.difficulty === undefined ? {} : { difficulty: message.difficulty }),
           // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
           // da última `bot-config` desta conexão.
           ...(this.#botByCharacter.has(viewer.characterId)
@@ -2576,6 +2578,7 @@ export class SessionHost {
         case 'ground-item-vanished':
         case 'field-appeared':
         case 'field-vanished':
+        case 'field-stage-changed':
           this.#presentPresence(hosted, event);
           continue;
         case 'creature-hit':
@@ -2716,6 +2719,17 @@ export class SessionHost {
       if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
       const vanished: S2CMessage = { type: 'field-disappear', id: event.fieldId };
       for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
+    // O campo trocou de estágio (#560): `stageIndex` é 1, 2, … — o índice 0 é o nascimento, já
+    // resolvido por `appearances.fields`. Sem entrada aqui (cadeia sem arte declarada, ou campo
+    // que nunca teve `field-appear` sabido — mesma defesa de `field-vanished`), MUDO.
+    if (event.kind === 'field-stage-changed') {
+      if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
+      const appearanceId = this.#options.appearances?.fieldStages[event.fieldId]?.[event.stageIndex - 1];
+      if (appearanceId === undefined) return;
+      const changed: S2CMessage = { type: 'field-stage-change', id: event.fieldId, appearanceId };
+      for (const viewer of hosted.viewers) viewer.send(changed);
       return;
     }
     const key = String(event.creatureId);
@@ -4241,9 +4255,14 @@ export class SessionHost {
         // carrega — a MESMA resolução de `tile-update`, pela tabela `appearances.scenery`.
         tileUpdates: this.#tileUpdatesFor(ruleset.tileAppearanceChanges ?? []),
         // Os campos ATIVOS agora (#561, M31-06), com a arte da tabela; sem linha, sem campo —
-        // a MESMA regra de `groundItems` acima.
+        // a MESMA regra de `groundItems` acima. Quem reanexa no MEIO da cadeia (#560) recebe a
+        // arte do ESTÁGIO ATUAL, não sempre a do nascimento — `stageIndex` ausente (campo de
+        // um estágio só) ou 0 continua caindo em `appearances.fields`, como sempre.
         fields: (ruleset.fields ?? []).flatMap((field) => {
-          const appearanceId = this.#options.appearances?.fields[field.id];
+          const stageIndex = field.stageIndex ?? 0;
+          const appearanceId = stageIndex === 0
+            ? this.#options.appearances?.fields[field.id]
+            : this.#options.appearances?.fieldStages[field.id]?.[stageIndex - 1];
           return appearanceId === undefined
             ? []
             : [{ id: field.id, tiles: [...field.tiles], appearanceId }];

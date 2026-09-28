@@ -18,11 +18,11 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY, ITEM_SLOTS,
-  SPELL_SKILL_WEAPON, floorChangeAt, floorChangeToward, isBlocked, migrateBotConfigV1,
+  SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt, floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
-  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt,
+  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
   PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
   Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
@@ -305,6 +305,14 @@ const SOUL_CONDITION_DURATION_MS = 4 * 60 * 1000;
  */
 const FIELD_TICK = 'field-tick';
 const FIELD_EXPIRE = 'field-expire';
+/**
+ * O campo troca para o PRÓXIMO estágio da cadeia (#560, `decayTo` do Canary) — só quando há um
+ * próximo; o último estágio vence por `FIELD_EXPIRE`, como sempre. Nunca os dois agendados ao
+ * mesmo tempo para o mesmo campo: o vencimento do estágio atual dispara UM dos dois, nunca
+ * ambos — quem decide qual, em `applyField`/`#onFieldStageAdvance`, é `stageIndex + 1 <
+ * stages.length`.
+ */
+const FIELD_STAGE_ADVANCE = 'field-stage-advance';
 const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
 /**
  * No MESMO instante, o vencimento roda ANTES do tique — de condição e de campo. É a ordem
@@ -1638,9 +1646,11 @@ export class HuntRuleset implements Ruleset {
   #nextGroundItemId = 1;
   /**
    * Os campos de tile ativos (CMB-07), indexados por chave NUMÉRICA de tile. O `Tilemap` é
-   * conteúdo imutável; o campo é estado do ruleset (DT-01).
+   * conteúdo imutável; o campo é estado do ruleset (DT-01). `TileOccupancy.fields` referencia
+   * esta MESMA instância desde o construtor (#560, como `#tileOverrides`); `restore()` a
+   * atualiza por mutação (`restoreState`), nunca a substitui.
    */
-  #fields = new Fields();
+  readonly #fields = new Fields();
 
   /**
    * O overlay de cenário usável desta sessão (#728, ADR 0050 d.2): porta, capim, stone pile e
@@ -1749,7 +1759,9 @@ export class HuntRuleset implements Ruleset {
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length);
     this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
-    this.#world = new TileOccupancy(options.map, { overrides: this.#tileOverrides });
+    this.#world = new TileOccupancy(
+      options.map, { overrides: this.#tileOverrides, fields: this.#fields },
+    );
     // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
     const basics = new Map<AmmoFamily, Ammunition>();
     for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -2977,6 +2989,7 @@ export class HuntRuleset implements Ruleset {
       case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
+      case FIELD_STAGE_ADVANCE: return this.#onFieldStageAdvance(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
@@ -3322,9 +3335,11 @@ export class HuntRuleset implements Ruleset {
       ownerId: corpse.ownerId ?? null,
       eligible: corpse.eligible ?? [],
     }));
-    // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
-    // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
-    this.#fields = Fields.fromState(restored.fields);
+    // Os campos voltam indexados por tile (CMB-07); os eventos de tique, avanço de estágio e
+    // vencimento já vêm na fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
+    // MUTAÇÃO, não substituição (#560, o mesmo motivo de `#tileOverrides` duas linhas abaixo):
+    // `TileOccupancy.fields` já referencia esta MESMA instância desde o construtor.
+    this.#fields.restoreState(restored.fields);
     // MUTAÇÃO, não substituição (#728): `TileOccupancy.overrides` já referencia esta MESMA
     // instância desde o construtor — trocar `this.#tileOverrides` deixaria o mundo lendo um
     // objeto velho, sempre no estado inicial do conteúdo. Ausente é "nenhuma sessão anterior
@@ -5193,7 +5208,9 @@ const slots = bot.groups.get(group);
       ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
       : spell.effect.kind === 'damage-over-time'
         ? this.#aimFor(character, spell.effect.range, undefined, explicit)
-        : null;
+        : spell.effect.kind === 'challenge'
+          ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
+          : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
     const healArea = spell.effect.kind === 'heal'
@@ -5270,8 +5287,36 @@ const slots = bot.groups.get(group);
       return result;
     }
 
+    // Provocação (#589): NÃO passa por `#applyHits` — não há dano nenhum a resolver, só a
+    // troca forçada de alvo e a suspensão de fuga em cada monstro atingido.
+    if (spell.effect.kind === 'challenge') {
+      this.#applyChallenge(session, character, spell.effect.durationMs);
+      return result;
+    }
+
     this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
     return result;
+  }
+
+  /**
+   * Aplica Challenge/Chivalrous Challenge (#589, Canary `doChallengeCreature`/
+   * `challengeFocusDuration`): força cada monstro atingido (`#spellHits`, já colhido por
+   * `#aimFor`) a mirar quem lançou e agenda a condição `'challenge'`, que `isMonsterFleeing`
+   * (`monster/monster.ts`) consulta para suspender a fuga enquanto ela durar. A escrita de
+   * `targetId` é direta — como qualquer outro lugar que força alvo (#4900/#4946/#4984/#5232) —
+   * porque é a sessão DONA quem escreve `MonsterRuntime` (invariante 9). Relançar no mesmo
+   * monstro RENOVA o prazo: `merge` ausente é `'refresh'`, o default de `ConditionState`.
+   */
+  #applyChallenge(session: Session, character: CharacterRuntime, durationMs: number): void {
+    for (const monster of this.#spellHits) {
+      monster.targetId = character.id;
+      this.#applyConditionTo(session, monster, {
+        key: 'challenge',
+        targetId: this.#subjectOf(monster),
+        sourceId: character.id,
+        expiresAtMs: session.nowMs + durationMs,
+      });
+    }
   }
 
   /**
@@ -5819,16 +5864,21 @@ const slots = bot.groups.get(group);
   applyField(session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell'): TileFieldState {
     const subject = fieldSubject(spec.id);
     const previous = this.#fields.get(spec.id);
-    const interval = specTickIntervalMs(spec.condition);
+    const stages = fieldStagesOf(spec);
+    const stage = stages[0] as FieldStage;
+    const multiStage = stages.length > 1;
+    const interval = stage.condition === undefined ? null : specTickIntervalMs(stage.condition);
     // Relançar no MESMO ritmo reaproveita o tique pendente: cancelar e reagendar a cada
     // relançamento empurraria o tique para sempre quando a cadência do campo coincide com a da
     // ability — o mesmo defeito de inanição que o DOT tem. Só o vencimento é sempre reagendado.
     // Mas só reaproveita quando HÁ de fato um evento pendente (#334): um `nextTickAtMs` ausente
-    // ou vencido é o fantasma que não corresponde a nenhum evento na fila.
+    // ou vencido é o fantasma que não corresponde a nenhum evento na fila. Relançar SEMPRE volta
+    // ao estágio 0 (#560) — mesmo que o campo anterior já tivesse decaído.
+    const previousInterval = previous?.condition === undefined ? null : specTickIntervalMs(previous.condition);
     const keepTick = previous !== null
       && previous.nextTickAtMs !== undefined
       && previous.nextTickAtMs <= previous.expiresAtMs
-      && specTickIntervalMs(previous.condition) === interval;
+      && previousInterval === interval;
     const nextTickAtMs = interval === null
       ? undefined
       : keepTick
@@ -5841,18 +5891,26 @@ const slots = bot.groups.get(group);
       // cobriria 69 tiles em vez dos 21 que o raio 4 do Canary de fato cobre, enquanto a bola
       // de fogo do mesmo ataque já usa os 21 certos.
       tiles: areaTiles(spec.shape, at, 'south', at, source),
-      expiresAtMs: session.nowMs + spec.durationMs,
-      condition: spec.condition,
+      expiresAtMs: session.nowMs + stage.durationMs,
+      ...(stage.condition === undefined ? {} : { condition: stage.condition }),
       ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
+      // A cadeia inteira viaja no estado (#560): `#onFieldStageAdvance` roda bem depois deste
+      // método, sem o `FieldSpec` que criou o campo à mão — o ruleset não indexa spec por id.
+      ...(multiStage ? { stageIndex: 0, stages } : {}),
+      ...(spec.blocksMovement ? { blocksMovement: true } : {}),
+      ...(spec.blocksProjectile ? { blocksProjectile: true } : {}),
     };
     if (previous !== null) {
       session.cancelEvent(FIELD_EXPIRE, subject);
+      session.cancelEvent(FIELD_STAGE_ADVANCE, subject);
       if (!keepTick) session.cancelEvent(FIELD_TICK, subject);
     }
     this.#fields.apply(field);
     // O vencimento roda ANTES do tique no mesmo instante (prioridade explícita): o tique do
-    // instante de expiração encontra o campo removido. Ordem documentada e testada.
-    session.scheduleIn(FIELD_EXPIRE, spec.durationMs, {
+    // instante de expiração encontra o campo removido. Ordem documentada e testada. Um campo
+    // com mais de um estágio agenda a TROCA em vez do vencimento — o vencimento de verdade só
+    // chega no último estágio, de dentro de `#onFieldStageAdvance`.
+    session.scheduleIn(multiStage ? FIELD_STAGE_ADVANCE : FIELD_EXPIRE, stage.durationMs, {
       priority: EXPIRE_PRIORITY, subject,
     });
     if (!keepTick && nextTickAtMs !== undefined) {
@@ -5870,7 +5928,10 @@ const slots = bot.groups.get(group);
 
   #onFieldTick(session: Session, subject: string): void {
     const field = this.#fields.get(subject.slice(2));
-    if (field === null) return;
+    // Estágio sem condição (Magic Wall, Wild Growth, ou o último estágio mudo do fire field,
+    // #560) não tem o que tiquetar — a defesa é de graça: `applyField`/`#onFieldStageAdvance`
+    // nunca agendam `FIELD_TICK` para um estágio assim.
+    if (field === null || field.condition === undefined) return;
     const interval = specTickIntervalMs(field.condition);
     if (interval === null) return;
     // Quem PISA no campo agora. Um evento por campo, e `at` é O(1) por criatura — nenhum passo
@@ -5905,6 +5966,49 @@ const slots = bot.groups.get(group);
     if (removed !== null) session.emit({ kind: 'field-vanished', fieldId });
   }
 
+  /**
+   * O campo troca para o PRÓXIMO estágio da cadeia (#560, `decayTo` do Canary). Só existe
+   * evento agendado para isto quando `applyField` viu mais de um estágio — o último estágio
+   * vence por `FIELD_EXPIRE`, como sempre.
+   */
+  #onFieldStageAdvance(session: Session, subject: string): void {
+    const fieldId = subject.slice(2);
+    const field = this.#fields.get(fieldId);
+    if (field === null || field.stages === undefined) return;
+    const nextIndex = (field.stageIndex ?? 0) + 1;
+    const nextStage = field.stages[nextIndex];
+    // Não deveria acontecer — `applyField`/esta própria função só agendam ADVANCE quando há um
+    // próximo estágio —, mas a defesa é de graça: cai no mesmo caminho do vencimento final.
+    if (nextStage === undefined) { this.#onFieldExpire(session, subject); return; }
+    // O tique do estágio anterior NÃO atravessa: o novo pode ter outra cadência, ou nenhuma —
+    // reaproveitar tiquetaria a condição de dano do estágio que já passou.
+    session.cancelEvent(FIELD_TICK, subject);
+    const interval = nextStage.condition === undefined ? null : specTickIntervalMs(nextStage.condition);
+    const nextTickAtMs = interval === null ? undefined : session.nowMs + interval;
+    const updated: TileFieldState = {
+      id: field.id,
+      tiles: field.tiles,
+      expiresAtMs: session.nowMs + nextStage.durationMs,
+      stageIndex: nextIndex,
+      stages: field.stages,
+      ...(nextStage.condition === undefined ? {} : { condition: nextStage.condition }),
+      ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
+      ...(field.blocksMovement === true ? { blocksMovement: true } : {}),
+      ...(field.blocksProjectile === true ? { blocksProjectile: true } : {}),
+    };
+    this.#fields.replace(updated);
+    if (nextTickAtMs !== undefined) {
+      session.scheduleIn(FIELD_TICK, interval as number, { priority: TICK_PRIORITY, subject });
+    }
+    const hasMoreStages = field.stages[nextIndex + 1] !== undefined;
+    session.scheduleIn(hasMoreStages ? FIELD_STAGE_ADVANCE : FIELD_EXPIRE, nextStage.durationMs, {
+      priority: EXPIRE_PRIORITY, subject,
+    });
+    // A tela fica sabendo (#560): o hospedeiro resolve a arte por ÍNDICE em
+    // `appearances.fieldStages[fieldId]` — campo sem entrada troca de estágio MUDO.
+    session.emit({ kind: 'field-stage-changed', fieldId, stageIndex: nextIndex, tiles: field.tiles });
+  }
+
   /** Quem está sobre os tiles do campo: participantes e monstros vivos. */
   #occupants(session: Session, field: TileFieldState): ConditionTarget[] {
     const occupants: ConditionTarget[] = [];
@@ -5925,7 +6029,9 @@ const slots = bot.groups.get(group);
    */
   #enterField(session: Session, target: ConditionTarget): void {
     const field = this.#fields.at(this.#at(target));
-    if (field === null) return;
+    // Estágio sem condição (#560: Magic Wall, Wild Growth, o último estágio mudo do fire
+    // field) não aplica nada a quem entra — só ocupa o tile, e talvez bloqueie.
+    if (field === null || field.condition === undefined) return;
     const condition = conditionFromSpec(
       field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
       { baseSpeed: target.speed, rng: session.rng },
@@ -6276,7 +6382,12 @@ const slots = bot.groups.get(group);
     if (action.kind === 'spell') {
       const spell = this.#options.spells.get(action.spellId);
       if (spell === undefined) return null;
-      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'damage-over-time') return null;
+      // Challenge (#589) mira como dano — alvo único centrado no alvo, ou área centrada no
+      // lançador — e precisa da MESMA contagem de `targets` por alcance/área que `damage` já
+      // tem: sem isto, um Knight com Challenge (alcance 3+) só disparava a regra do bot com o
+      // monstro colado (o alcance da arma), o que não é o que a magia alcança de verdade.
+      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'damage-over-time'
+        && spell.effect.kind !== 'challenge') return null;
       return 'range' in spell.effect ? spell.effect.range ?? null : null;
     }
     const supply = this.#options.supplies.get(action.supplyId);
@@ -6285,13 +6396,16 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * A forma de área declarada por uma ação de DANO do bot, ou `undefined` (#480). Magia de cura
-   * e ação sem área devolvem `undefined`, e o `targets` cai na contagem por alcance.
+   * A forma de área declarada por uma ação de DANO (ou Challenge, #589 — MESMA mira) do bot, ou
+   * `undefined` (#480). Magia de cura e ação sem área devolvem `undefined`, e o `targets` cai na
+   * contagem por alcance.
    */
   #actionArea(action: BotActionV2): SpellArea | undefined {
     if (action.kind === 'spell') {
       const spell = this.#options.spells.get(action.spellId);
-      return spell?.effect.kind === 'damage' ? spell.effect.area : undefined;
+      const effect = spell?.effect;
+      if (effect === undefined) return undefined;
+      return effect.kind === 'damage' || effect.kind === 'challenge' ? effect.area : undefined;
     }
     const supply = this.#options.supplies.get(action.supplyId);
     return supply?.effect.kind === 'damage' ? supply.effect.area : undefined;
@@ -7271,13 +7385,16 @@ const slots = bot.groups.get(group);
    * `Creature::getNextStep`/`onWalk` — o sorteio é UM por DECISÃO de movimento, nunca um por
    * tentativa física de chegar lá.
    *
-   * Para um MONSTRO, o campo é revalidado aqui, no COMMIT — não só na decisão (M29-05, achado da
-   * revisão do #650): `decideMonsterAction` já filtrou os candidatos com `#blockedForMonster`,
-   * mas o destino que chega até aqui pode ter sido REESCRITO depois da decisão (o desvio de
-   * embriaguez do #558, logo acima) sem passar de novo por aquele predicado — e `move()`/`canOccupy` não
-   * conhecem `Fields`, porque são genéricos e servem a Cidade também. Sem esta segunda checagem,
-   * qualquer reescrita futura do destino bastaria para pisar num campo que o monstro não pode
-   * cruzar, quebrando o invariante que esta issue existe para estabelecer.
+   * Para um MONSTRO, o DESVIO DE DANO é revalidado aqui, no COMMIT — não só na decisão (M29-05,
+   * achado da revisão do #650): `decideMonsterAction` já filtrou os candidatos com
+   * `#blockedForMonster`, mas o destino que chega até aqui pode ter sido REESCRITO depois da
+   * decisão (o desvio de embriaguez do #558, logo acima) sem passar de novo por aquele
+   * predicado. Isto é `canMonsterEnterField` (M29-05) — a preferência que só o monstro respeita
+   * e só quando o campo tem `damageType` (`Movable`/`MovementWorld` continuam genéricos e
+   * servem a Cidade também, então o desvio não pode morar ali). O campo BLOQUEANTE (#560, Magic
+   * Wall/Wild Growth) é outra checagem, e já mora dentro de `move()`/`canOccupy`
+   * (`TileOccupancy.blockedAt` consulta `Fields.blockedAt`) — vale para QUALQUER criatura sem
+   * precisar de uma segunda checagem aqui, e é por isso que só o desvio de dano precisa dela.
    */
   #step<P extends GridPoint>(
     session: Session, mover: Movable<P>, to: P, creatureId: string, rollDrunk = true,
