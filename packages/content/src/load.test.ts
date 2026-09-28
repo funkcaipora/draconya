@@ -55,6 +55,13 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
+  it('carrega a Boosted Creature real: vira à meia-noite UTC (#615)', () => {
+    // Opcional no `buildContent` (fixture): sem ele o `jobs` não sorteia nada. Mutação que
+    // mata: apagar `boosted/` de `load.ts`.
+    const content = loadContent(DATA);
+    expect(content.boosted?.rolloverHourUtc).toBe(0);
+  });
+
   it('carrega a party real, e todo item do repositório tem preço de venda (#188)', () => {
     // O multiplicador de XP saiu do conteúdo no #525 (ADR 0027 emenda 2026-09-24/25) — é
     // `sharedExperiencePercent` em `packages/sim/src/party.ts`, a fórmula do Canary. E `value`

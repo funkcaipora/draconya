@@ -362,6 +362,36 @@ Esta hunt (a Darashia Dragon Lair) já usava `spawnPoints[i].monsterId`/`at`/`re
 ponto desde o #519; o #583 só torna esse formato obrigatório para toda hunt, em vez de um caso
 especial só dela.
 
+## Boosted Creature do dia (#615, ADR 0054 decisão 7)
+
+Uma vez por dia, na hora de virada (`boosted.rolloverHourUtc`, conteúdo), o `jobs` sorteia um
+monstro entre todos os que têm ficha de Bestiário (`content.bestiary.entries`) e grava a linha em
+`world_daily` (Postgres, uma por dia) mais uma cópia em Redis para a `api` — a primeira tarefa
+diária real do esqueleto do `jobs` (`packages/server/src/jobs/boosted.ts`,
+`packages/server/src/world-daily.ts`). O sorteio é IDEMPOTENTE no mesmo dia: rodar o ciclo de novo
+não sorteia de novo, porque `day` é a chave primária e o `INSERT` é `ON CONFLICT DO NOTHING`.
+
+A `api` lê o cache do Redis ao emitir um ticket e o inclui em `InitialCharacter.boostedMonsterId`.
+A partir daí a boosted é FIXADA no personagem — como a versão de conteúdo (invariante 7) — e
+carregada por toda transição Cidade↔hunt daquele login; a hunt que atravessa a virada continua com
+a boosted com que nasceu, mesmo que o mundo já tenha sorteado outra. Uma hunt criada direto de um
+ticket de party lê o valor do TICKET DO LÍDER; a transição de Cidade para hunt (sem ticket novo)
+lê o valor já fixado no personagem.
+
+Efeitos, só para o monstro que É a boosted do dia (`packages/sim/src/rulesets/hunt.ts`):
+
+- **`spawntime / 2`** em todo ponto em que ele nasce (`#respawnDelayFor`) — a mesma regra do
+  `SpawnMonster::addMonster` do Canary, sem o `rateSpawn` global que o Draconya não tem.
+- **XP ×2**, dobrado na BASE do pool antes da divisão por vocações únicas e do bônus de
+  Bestiário/level (`#grantPartyXp`) — o dobro vale para todo elegível na mesma proporção que a
+  XP normal já dividia.
+- **Um roll extra de loot inteiro** (`#rollLootFor`, `ondroploot_boosted.lua`, `factor 1.0`): a
+  MESMA tabela sorteada de novo, logo depois do sorteio normal, na mesma ordem — nunca uma
+  chance maior na mesma rolagem.
+
+Sem `boosted/baseline.json` no conteúdo, ou sem `content.bestiary`, o `jobs` não sorteia nada e
+nenhum efeito liga — é o conteúdo de teste que não fala de engajamento diário.
+
 ## O ruleset, e por que ele é o molde dos outros cinco
 
 Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, boss e guild war:
@@ -598,6 +628,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Prazo do cadáver no chão | 670 s (670000 ms) em rat, rotworm, spider, rabbit, bug, cave-rat, terramite, dragon e dragon-lord — a soma da cadeia real `duration`/`decayTo` do Canary `items.xml`, campo do MONSTRO desde o #585 (era 30 s em Rat Cellars/Rotworm Caves, cópia do Huntera que só olhava o primeiro estágio da cadeia) | `data/monsters/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
+| Hora de virada da Boosted Creature (#615, `boosted.rolloverHourUtc`) | `0` (meia-noite UTC) — o mesmo instante do server-save do Canary | `data/boosted/baseline.json`, campo `rolloverHourUtc` |
 | Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |

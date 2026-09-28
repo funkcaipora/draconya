@@ -84,7 +84,7 @@ import {
   splitLootOf, uniqueVocations, xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
-import type { LootAmmunition, LootItem, LootSupply } from '../loot.js';
+import type { LootAmmunition, LootItem, LootResult, LootSupply } from '../loot.js';
 import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
 import { compileBot, percentOf } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
@@ -993,6 +993,16 @@ export interface HuntRulesetOptions {
    * personagem, e por isso entra por aqui em vez de morar no `CharacterRuntime`.
    */
   readonly premium?: boolean;
+  /**
+   * A Boosted Creature do dia (M42, #615, ADR 0054 decisão 7): o `monsterId` sorteado pelo
+   * `jobs`, FIXADO nesta instância como a versão de conteúdo (invariante 7) — nunca relido do
+   * mundo depois de criada, para a hunt que atravessa a virada continuar com a boosted com
+   * que nasceu. Efeitos: `spawntime / 2` nos lugares deste monstro, XP ×2, e um roll extra de
+   * loot inteiro (`ondroploot_boosted.lua`, ADR 0054 decisão 7). Ausente é dia sem sorteio
+   * (conteúdo sem `boosted/baseline.json`, ou personagem cujo ticket não o carregava): nenhum
+   * efeito aplica.
+   */
+  readonly boostedMonsterId?: string;
 }
 
 /**
@@ -1220,6 +1230,15 @@ const isLegacyBag = (bag: unknown): bag is LegacyPartyBagState =>
 export interface HuntRulesetState {
   readonly huntId: string;
   readonly difficulty: HuntDifficultyName;
+  /**
+   * A Boosted Creature FIXADA nesta instância (#615). Como `huntId`/`difficulty`, é IDENTIDADE
+   * da instância, e não estado mutável: `huntRulesetFromSnapshot` a lê daqui para reconstruir o
+   * ruleset com o mesmo `HuntRulesetOptions.boostedMonsterId` de antes da queda — é o que faz a
+   * hunt retomada depois da virada continuar com a boosted com que nasceu (ADR 0054 decisão 7),
+   * em vez de herdar a do dia em que o `game` reiniciou. Ausente é sessão sem boosted (mesma
+   * regra de `botConfig`).
+   */
+  readonly boostedMonsterId?: string;
   readonly route: RouteState;
   readonly spawner: SpawnerState;
   /**
@@ -3214,6 +3233,9 @@ export class HuntRuleset implements Ruleset {
     return {
       huntId: this.#options.hunt.id,
       difficulty: this.#options.difficulty,
+      ...(this.#options.boostedMonsterId === undefined
+        ? {}
+        : { boostedMonsterId: this.#options.boostedMonsterId }),
       route: state.route,
       spawner: this.#spawner.getState(),
       pendingSpawns: [...this.#pendingSpawns].map(([slot, p]) => ({ slot, ...p })),
@@ -3424,6 +3446,18 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O intervalo de respawn deste monstro, pela metade quando ele é a Boosted Creature do dia
+   * (#615, ADR 0054 decisão 7, `SpawnMonster::addMonster`, `spawn_monster.cpp:379-386`: o
+   * intervalo é dividido por `rateSpawn × 2` para a boosted — o Draconya não tem `rateSpawn`
+   * global, então aqui é só `/ 2`). `Math.max(1, …)` porque zero viraria evento imediato, e um
+   * "respawn instantâneo" não é o que a boosted promete — só o dobro de frequência.
+   */
+  #respawnDelayFor(monsterId: string, baseDelayMs: number): number {
+    if (monsterId !== this.#options.boostedMonsterId) return baseDelayMs;
+    return Math.max(1, Math.floor(baseDelayMs / 2));
+  }
+
+  /**
    * A população INICIAL de um lugar (#583, `SpawnMonster::startup` do Canary — `scheduleSpawn`
    * chamado com `interval: 0`, que pula direto para `spawnMonster` sem passar por
    * `checkSpawnMonster`): nasce na hora, sem checar `blockable` nem telegraph. As duas regras
@@ -3492,7 +3526,10 @@ export class HuntRuleset implements Ruleset {
       if (this.#hasVisibleParticipant(session, point.at, point.at.z)) {
         // À vista: o relógio REINICIA — a próxima checagem só vence dali a `respawnDelayMs`
         // inteiro, nunca um retry curto (`spawn_monster.cpp`, `sb.lastSpawn = OTSYS_TIME()`).
-        session.scheduleIn(SPAWN, point.respawnDelayMs, { priority: EventPriority.Spawn, subject });
+        // Metade para a Boosted Creature do dia (#615, ADR 0054 decisão 7).
+        session.scheduleIn(SPAWN, this.#respawnDelayFor(monsterId, point.respawnDelayMs), {
+          priority: EventPriority.Spawn, subject,
+        });
         return;
       }
     }
@@ -8596,7 +8633,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = rollLoot(definition.loot, session.rng, this.#options.progression.rates.loot);
+        const loot = this.#rollLootFor(monster, definition.loot, session.rng);
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -8616,9 +8653,7 @@ const slots = bot.groups.get(group);
       // `corpseItems` alimentam o cadáver logo abaixo, e `#collectFromCorpse` roda no MESMO
       // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
       // isso é o W3/#722.
-      const loot = rollLoot(
-        this.#lootTableFor(definition, recipient), session.rng, this.#options.progression.rates.loot,
-      );
+      const loot = this.#rollLootFor(monster, this.#lootTableFor(definition, recipient), session.rng);
       corpseGold = loot.gold;
       corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
       // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold —
@@ -8645,7 +8680,11 @@ const slots = bot.groups.get(group);
       const pointIndex = this.#spawner.slots[slot]?.pointIndex;
       const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
       if (point !== undefined) {
-        session.scheduleIn(SPAWN, point.respawnDelayMs, {
+        // Metade para a Boosted Creature do dia (#615, ADR 0054 decisão 7, `SpawnMonster::
+        // addMonster`, `spawn_monster.cpp:379-386`): o monstro que acabou de morrer é o mesmo
+        // que vai respawnar neste lugar, então o `monsterId` DELE decide, não o do ponto —
+        // pontos com `monsters` (peso) só sabem qual nasceu depois do sorteio.
+        session.scheduleIn(SPAWN, this.#respawnDelayFor(monster.monsterId, point.respawnDelayMs), {
           priority: EventPriority.Spawn, subject: String(slot),
         });
       }
@@ -8845,7 +8884,13 @@ const slots = bot.groups.get(group);
     credit: KillCredit,
   ): void {
     if (eligible.length === 0) return;
-    const shares = this.#xpShares(session, eligible, definition.experience, credit);
+    // Boosted Creature (#615, ADR 0054 decisão 7): XP ×2 — dobrado na BASE do pool, antes da
+    // divisão por vocações únicas e do bônus de Bestiário/level, para o dobro valer para todo
+    // elegível na mesma proporção que a XP normal já dividia entre eles.
+    const baseExperience = monster.monsterId === this.#options.boostedMonsterId
+      ? definition.experience * 2
+      : definition.experience;
+    const shares = this.#xpShares(session, eligible, baseExperience, credit);
     const solo = session.participants.length === 1;
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
@@ -9161,6 +9206,29 @@ const slots = bot.groups.get(group);
    */
   #lootTableFor(definition: Monster, _recipient: CharacterRuntime): Monster['loot'] {
     return definition.loot;
+  }
+
+  /**
+   * O sorteio de loot deste monstro — com o roll extra da Boosted Creature do dia (#615, ADR
+   * 0054 decisão 7, `ondroploot_boosted.lua`, `factor 1.0`): a mesma tabela sorteada DE NOVO,
+   * logo depois do sorteio normal, na mesma ordem (gold → itens na ordem da tabela) — nunca
+   * antes, e nunca misturado no meio, porque a ORDEM do RNG é contrato (FUN-63) e o roll extra
+   * não pode deslocar a sequência de quem não encontra a boosted. `factor 1.0` — e não um fator
+   * maior — é por quê o roll extra é uma tabela INTEIRA a mais, não uma chance melhorada na
+   * mesma tabela: dobra a EXPECTATIVA de drop, não a chance de cada linha.
+   */
+  #rollLootFor(monster: MonsterRuntime, table: Monster['loot'], rng: Rng): LootResult {
+    const first = rollLoot(table, rng, this.#options.progression.rates.loot);
+    if (monster.monsterId !== this.#options.boostedMonsterId) return first;
+    const second = rollLoot(table, rng, this.#options.progression.rates.loot);
+    return {
+      gold: first.gold + second.gold,
+      items: second.items.length === 0 ? first.items : [...first.items, ...second.items],
+      supplies: second.supplies.length === 0 ? first.supplies : [...first.supplies, ...second.supplies],
+      ammunition: second.ammunition.length === 0
+        ? first.ammunition
+        : [...first.ammunition, ...second.ammunition],
+    };
   }
 
   /**
@@ -10077,6 +10145,8 @@ export interface HuntSessionOptions {
   readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
+  /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
+  readonly boostedMonsterId?: string;
 }
 
 export class HuntUnavailableError extends Error {
@@ -10119,6 +10189,8 @@ export interface HuntRulesetExtras {
   readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
+  /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
+  readonly boostedMonsterId?: string;
 }
 
 export function createHuntRuleset(
@@ -10127,7 +10199,7 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator } = extras;
+  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator, boostedMonsterId } = extras;
   // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
   // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
   // de quem entrasse pela outra. Já aconteceu.
@@ -10170,6 +10242,7 @@ export function createHuntRuleset(
     ...(botConfigs === undefined ? {} : { botConfigs }),
     ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
+    ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
     // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
     botCooldownMs: content.bot.categoryCooldownMs,
@@ -10194,6 +10267,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.botConfigs === undefined ? {} : { botConfigs: options.botConfigs }),
       ...(options.partyOptions === undefined ? {} : { partyOptions: options.partyOptions }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
+      ...(options.boostedMonsterId === undefined ? {} : { boostedMonsterId: options.boostedMonsterId }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
     // que torna "por que eu morri" uma pergunta investigável.
@@ -10216,10 +10290,13 @@ export function huntRulesetFromSnapshot(
   const state = snapshot.ruleset as Partial<HuntRulesetState> | undefined;
   if (state?.huntId === undefined || state.difficulty === undefined) return null;
   try {
-    // Sem `extras`: o bot volta do próprio estado do ruleset, em `restore`, e não daqui. Quem
-    // monta o ruleset não conhece o snapshot inteiro — só a hunt e a dificuldade, que são a
-    // IDENTIDADE da instância. O resto é estado, e estado é assunto de `restore`.
-    return createHuntRuleset(content, state.huntId, state.difficulty);
+    // Sem o resto dos `extras` (bot, party…): eles voltam do próprio estado do ruleset, em
+    // `restore`, e não daqui. `boostedMonsterId` é a ÚNICA exceção — é IDENTIDADE da instância
+    // como `huntId`/`difficulty` (#615), não estado mutável, e por isso vem do snapshot aqui,
+    // não de `restore`.
+    return createHuntRuleset(content, state.huntId, state.difficulty, {
+      ...(state.boostedMonsterId === undefined ? {} : { boostedMonsterId: state.boostedMonsterId }),
+    });
   } catch {
     return null;
   }
@@ -10260,6 +10337,9 @@ export function changeDifficulty(
     huntId: state.huntId,
     difficulty: options.to,
     createdAtMs: options.nowMs,
+    // A boosted É a mesma (#615): trocar de dificuldade não é entrar de novo — o personagem
+    // continua no mesmo dia, e a instância nova herda a identidade da antiga.
+    ...(state.boostedMonsterId === undefined ? {} : { boostedMonsterId: state.boostedMonsterId }),
   });
   for (const character of characters) next.enter(character);
   return { session: next, receipts };

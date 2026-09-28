@@ -18,11 +18,11 @@ import {
   attackRange,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
+  bestiarySchema, boostedSchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
   supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Boosted, BotLimits, Combat, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
@@ -54,6 +54,12 @@ export interface Content {
    * não fala de progressão permanente. O conteúdo REAL o tem, e `load.test.ts` prende.
    */
   readonly bestiary?: Bestiary;
+  /**
+   * A Boosted Creature diária (M42, #615, ADR 0054 decisão 7): a hora de virada. Opcional —
+   * sem ela o `jobs` não sorteia nada, e nenhuma hunt aplica o bônus. É o conteúdo de teste que
+   * não fala de engajamento diário.
+   */
+  readonly boosted?: Boosted;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -121,6 +127,7 @@ export interface RawContent {
   readonly stamina?: readonly unknown[];
   readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
+  readonly boosted?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -574,6 +581,7 @@ export function buildContent(raw: RawContent): Content {
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
   const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
+  const boosted = parseAll('boosted', raw.boosted ?? [], boostedSchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -1474,6 +1482,8 @@ export function buildContent(raw: RawContent): Content {
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
+    // `boosted` não tem `_open`: a hora de virada não é um número disputado do PRD, é
+    // configuração de operação — não pede uma seção de `docs/product` para justificar.
     ...openOf('spell', spells),
     ...openOf('supply', supplies),
     ...openOf('skill', skills),
@@ -1507,6 +1517,7 @@ export function buildContent(raw: RawContent): Content {
     stamina: stamina as Stamina,
     party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
+    ...(boosted === undefined ? {} : { boosted }),
     maps,
     routes,
     openValues,
