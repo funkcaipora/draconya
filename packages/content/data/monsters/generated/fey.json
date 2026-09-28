@@ -141,6 +141,61 @@
     }
   },
   {
+    "id": "cream-blob",
+    "name": "Cream Blob",
+    "class": "fey",
+    "health": 76,
+    "experience": 21,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 7,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.25,
+        "fire": -0.15,
+        "ice": 0.15,
+        "holy": 0.1,
+        "death": -0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 76,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/cream_blob.lua"
+    }
+  },
+  {
     "id": "dark-faun",
     "name": "Dark Faun",
     "class": "fey",
@@ -590,6 +645,61 @@
     }
   },
   {
+    "id": "fruit-drop",
+    "name": "Fruit Drop",
+    "class": "fey",
+    "health": 63,
+    "experience": 18,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.4,
+        "fire": -0.1,
+        "holy": 0.1,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 63,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/fruit_drop.lua"
+    }
+  },
+  {
     "id": "nymph",
     "name": "Nymph",
     "class": "fey",
@@ -928,6 +1038,116 @@
     }
   },
   {
+    "id": "sugar-cube",
+    "name": "Sugar Cube",
+    "class": "fey",
+    "health": 28,
+    "experience": 19,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": 0.2,
+        "fire": -0.1,
+        "ice": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.36,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 28,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/sugar_cube.lua"
+    }
+  },
+  {
+    "id": "sugar-cube-worker",
+    "name": "Sugar Cube Worker",
+    "class": "fey",
+    "health": 65,
+    "experience": 20,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 8,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.05,
+        "earth": 0.3,
+        "fire": -0.05,
+        "ice": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 480,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 65,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/sugar_cube_worker.lua"
+    }
+  },
+  {
     "id": "swan-maiden",
     "name": "Swan Maiden",
     "class": "fey",
@@ -1126,6 +1346,116 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/fey/swan_maiden.lua"
+    }
+  },
+  {
+    "id": "truffle",
+    "name": "Truffle",
+    "class": "fey",
+    "health": 70,
+    "experience": 15,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.3,
+        "fire": -0.1,
+        "ice": -0.05,
+        "holy": -0.05,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.38,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 70,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/truffle.lua"
+    }
+  },
+  {
+    "id": "truffle-cook",
+    "name": "Truffle Cook",
+    "class": "fey",
+    "health": 54,
+    "experience": 13,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": 0.25,
+        "fire": 0.05,
+        "ice": -0.05,
+        "holy": -0.05,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.3,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 320,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 54,
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/fey/truffle_cook.lua"
     }
   }
 ]

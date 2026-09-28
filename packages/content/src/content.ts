@@ -734,6 +734,16 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
     }
+    if (effect.kind === 'challenge') {
+      const selfOrigin = effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
+      if (selfOrigin && effect.range !== undefined) {
+        problems.push(`${where}: forma que sai do lançador não tem alcance`);
+      }
+      if (!selfOrigin && effect.range === undefined) {
+        problems.push(`${where}: challenge no alvo precisa de range`);
+      }
+    }
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
@@ -1554,6 +1564,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     corpses: {},
     // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
     fields: {},
+    // Sem estágio de campo: idem, campo sem cadeia de arte é válido (#560).
+    fieldStages: {},
     // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
     scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [

@@ -23,7 +23,7 @@ beforeEach(async () => {
 // `PartyStore` de verdade, no Redis; ticket, banco e diretório são falsos.
 
 const character = (id: string, accountId: string, over: Partial<CharacterRecord> = {}): CharacterRecord => ({
-  id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, gold: 50,
+  id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, soul: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, fedMs: 0,
@@ -173,9 +173,10 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect((await as('p1').post(`/api/party/${id}/configure`, { vocationTargets: { necromancer: 2 } })).json()).toEqual({ error: 'unknown-vocation' });
     // Soma > maxMembers do conteúdo (4 aqui): 400 composition-too-large — nunca um 8 escrito à mão.
     expect((await as('p1').post(`/api/party/${id}/configure`, { vocationTargets: { knight: 3, druid: 2 } })).json()).toEqual({ error: 'composition-too-large' });
-    // Hunt e dificuldade validadas pelo conteúdo, cada eixo sozinho.
+    // Hunt validada pelo conteúdo; dificuldade NÃO É MAIS VALIDADA POR VALOR (#584, ADR 0039 —
+    // fim do pull por dificuldade): um valor que não existe em nenhuma hunt é aceito e ignorado.
     expect((await as('p1').post(`/api/party/${id}/configure`, { huntId: 'nope' })).json()).toEqual({ error: 'unknown-hunt' });
-    expect((await as('p1').post(`/api/party/${id}/configure`, { difficulty: 'nope' })).json()).toEqual({ error: 'unknown-difficulty' });
+    expect((await as('p1').post(`/api/party/${id}/configure`, { difficulty: 'nope' })).statusCode).toBe(200);
     // `none` é chave válida (personagem sem vocação, level < 8).
     const configured = await as('p1').post(`/api/party/${id}/configure`, {
       huntId: 'arena', difficulty: 'bold', minLevel: 10, vocationTargets: { [NO_VOCATION]: 4 },
@@ -189,6 +190,39 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect((await as('p1').post(`/api/party/${id}/configure`, { splitLoot: false })).json()).toMatchObject({ shareCosts: false, splitLoot: false, mode: 'split' });
     // A composição continua lá: o patch dos eixos não tocou nela.
     expect(((await as('p1').post(`/api/party/${id}/configure`, { minLevel: 1 })).json() as { vocationTargets: unknown }).vocationTargets).toEqual({ [NO_VOCATION]: 4 });
+  });
+
+  it('configure without difficulty auto-fills DEFAULT_DIFFICULTY_NAME, and start never refuses by difficulty value (#584, RF-03/RF-04)', async () => {
+    const { as } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    // O líder configura SÓ `huntId`, sem `difficulty` — o cliente novo nunca manda o campo.
+    const configured = await as('p1').post(`/api/party/${id}/configure`, {
+      huntId: 'arena', minLevel: 1, vocationTargets: { [NO_VOCATION]: 4 },
+    });
+    expect(configured.statusCode).toBe(200);
+    // Sem o auto-preenchimento, `difficulty` ficaria `null` e `/start` recusaria com
+    // `nothing-proposed` — o bug que o #584 fecha.
+    expect((configured.json() as { difficulty: string | null }).difficulty).toBe('default');
+    // `/start` não recusa mais nem por VALOR (`difficulty: 'nope'` — um nome que nenhuma hunt
+    // define) nem por AUSÊNCIA — as duas causas de `unknown-difficulty`/`nothing-proposed` que
+    // existiam antes desta issue.
+    await as('p1').post(`/api/party/${id}/configure`, { difficulty: 'nope' });
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(200);
+  });
+
+  it('propose and configure never refuse by difficulty VALUE — only an unknown hunt does (#584, RF-04)', async () => {
+    const { as } = build();
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    // `/propose` (shim legado) continua recusando hunt desconhecida, mas não mais um valor de
+    // dificuldade que nenhuma hunt define — o cliente antigo manda `'bold'`/`'reckless'` e o
+    // conteúdo real só declara `'default'` desde o #583.
+    expect((await as('p1').post(`/api/party/${id}/propose`, { huntId: 'nope', difficulty: 'bold', mode: 'shared' })).statusCode).toBe(400);
+    const proposed = await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'legendary', mode: 'shared' });
+    expect(proposed.statusCode).toBe(200);
+    expect((proposed.json() as { difficulty: string | null }).difficulty).toBe('legendary');
   });
 
   it('publish validates the configured state and has no body (RF-03); unpublish closes without undoing', async () => {

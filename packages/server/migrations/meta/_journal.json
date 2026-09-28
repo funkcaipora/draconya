@@ -122,6 +122,13 @@
       "breakpoints": true
     },
     {
+      "idx": 17,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0017_593-soul",
+      "breakpoints": true
+    },
+    {
       "idx": 18,
       "version": "7",
       "when": 1790700000000,

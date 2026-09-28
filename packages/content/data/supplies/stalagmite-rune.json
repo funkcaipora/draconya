@@ -1,0 +1,26 @@
+{
+  "id": "stalagmite-rune",
+  "name": "Stalagmite Rune",
+  "description": "Faz brotar uma estalagmite sob o alvo selecionado.",
+  "price": 12,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "actionExhaustMs": 1000,
+  "requires": {
+    "level": 24,
+    "magicLevel": 3
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.4,
+      "skillMax": 1.59,
+      "baseMin": 2,
+      "baseMax": 10
+    },
+    "range": 8,
+    "damageType": "earth"
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#595, `staging/runes/generated/general.json`, `stalagmite.lua`): min = level/5 + ml*0.4 + 2, max = level/5 + ml*1.59 + 10 — a mesma da Heavy Magic Missile (elemento diferente). Level 24 e magic level 3 (`rune:level`/`rune:magicLevel`), sem área — alvo único. `price` 12: menor `buy` de `data-otservbr-global/npc/asima.lua` para o clientId 3179 (M34-03/#574, `SUPPLY_CANARY_IDS`). Aparência: efeito 17 e projétil 30, reaproveitados de `stone-shower-rune` (mesmo elemento terra) — biblioteca parcial (47/4171 folhas, `docs/combat-presentation-audit.md`), conferência visual pendente."
+}

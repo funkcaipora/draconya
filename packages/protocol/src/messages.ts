@@ -352,15 +352,26 @@ export const SERVER_TO_CLIENT = {
    */
   'field-disappear': 41,
   /**
+   * O campo trocou de estágio (#560, `decayTo` do Canary — `items.xml:4212-4246`): o fire
+   * field enfraquece antes de sumir de vez. `id` de conteúdo e o `appearanceId` JÁ RESOLVIDO
+   * pelo hospedeiro (invariante 6, `appearances.fieldStages[id][stageIndex - 1]`) — a mesma
+   * indireção de `field-appear`, sem repetir `tiles` (a área não muda entre estágios, e o
+   * cliente já a tem do `field-appear`/catch-up). Campo sem entrada na tabela troca de estágio
+   * MUDO: nem chega a sair esta mensagem.
+   *
+   * 42: o 41 é do `field-disappear`.
+   */
+  'field-stage-change': 42,
+  /**
    * As bênçãos do personagem (#570, ADR 0052): o BITMASK que `CharacterRuntime.blessings`
    * guarda — um bit por `order` de `content.blessings` (invariante 6: nada de nome de bênção
    * aqui, o cliente resolve pelo catálogo que `catalogue` já manda). Sai no attach/enter e a
    * cada mudança: compra (`buy-blessing`) ou consumo na morte — nunca broadcast, como
    * `slot-state`/`active-conditions`: bênção é de UM personagem, mesmo na Cidade compartilhada.
    *
-   * 42: o 41 é do `field-disappear` (#561).
+   * 43: o 42 é do `field-stage-change` (#560).
    */
-  blessings: 42,
+  blessings: 43,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

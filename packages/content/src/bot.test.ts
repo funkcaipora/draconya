@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateBotConfig, validateBotConfigV2 } from './bot.js';
+import { sanitizeBotConfigV2, validateBotConfig, validateBotConfigV2 } from './bot.js';
 import { buildContent } from './content.js';
 import {
   BOT_CATEGORIES, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema,
@@ -384,14 +384,16 @@ describe('lure e ring swap: a seção AVANÇADA do vocabulário (FUN-87, §13.7 
   });
 });
 
+// Compartilhados com o describe de `sanitizeBotConfigV2` abaixo — a mesma fixture v2.
+const emptySlots = (): (BotSlot | null)[] => Array.from({ length: 24 }, () => null);
+const set = (slots = emptySlots()) => ({ slots });
+const v2 = (over: Partial<BotConfigV2> = {}): BotConfigV2 => botConfigV2Schema.parse({
+  version: 2,
+  sets: [set(), set(), set(), set()],
+  ...over,
+});
+
 describe('o juiz do vocabulário v2 (AB-03)', () => {
-  const emptySlots = (): (BotSlot | null)[] => Array.from({ length: 24 }, () => null);
-  const set = (slots = emptySlots()) => ({ slots });
-  const v2 = (over: Partial<BotConfigV2> = {}): BotConfigV2 => botConfigV2Schema.parse({
-    version: 2,
-    sets: [set(), set(), set(), set()],
-    ...over,
-  });
 
   it('recusa magia e supply inexistentes nomeando conjunto e slot', () => {
     const badSpell = v2({
@@ -427,6 +429,60 @@ describe('o juiz do vocabulário v2 (AB-03)', () => {
     const problems = validateBotConfigV2(badAutomation, content);
     expect(problems[0]).toContain('renew-ring');
     expect(problems[0]).toContain('nao-existe');
+  });
+});
+
+describe('sanitizeBotConfigV2 — CARGA de configuração já persistida, nunca recusa tudo (ADR 0014)', () => {
+  // O cenário exato que motivou a função: uma magia removida do catálogo (`strike`, #596) num
+  // slot de um personagem já criado. Ao contrário de `validateBotConfigV2` (a EDIÇÃO, que
+  // recusaria a configuração inteira), a CARGA precisa deixar o personagem entrar na hunt com
+  // o resto do bot intacto.
+  it('esvazia SÓ o slot com magia/supply removida, e preserva o resto da configuração', () => {
+    const config = v2({
+      activeSet: 2,
+      sets: [
+        set([
+          { do: { kind: 'spell', spellId: 'strike' }, when: [], auto: true },
+          { do: { kind: 'spell', spellId: 'strong-heal' }, when: [], auto: true },
+          ...emptySlots().slice(2),
+        ]),
+        set([
+          { do: { kind: 'supply', supplyId: 'nao-existe-mais' }, when: [], auto: true },
+          ...emptySlots().slice(1),
+        ]),
+        set(), set(),
+      ],
+      automations: [{ model: 'renew-ring', params: { itemId: 'life-ring' }, enter: [], exit: [] }],
+    });
+
+    const { config: sanitized, removed } = sanitizeBotConfigV2(config, content);
+
+    // Os dois slots tortos viraram vazios...
+    expect(sanitized.sets[0]?.slots[0]).toBeNull();
+    expect(sanitized.sets[1]?.slots[0]).toBeNull();
+    // ...mas a magia que EXISTE, no slot vizinho do mesmo conjunto, sobrevive intacta.
+    expect(sanitized.sets[0]?.slots[1]?.do).toEqual({ kind: 'spell', spellId: 'strong-heal' });
+    // E o resto da configuração — automação, conjunto ativo — não é tocado.
+    expect(sanitized.activeSet).toBe(2);
+    expect(sanitized.automations).toEqual(config.automations);
+
+    expect(removed).toHaveLength(2);
+    expect(removed[0]).toMatchObject({ setIndex: 0, slotIndex: 0 });
+    expect(removed[0]?.reason).toContain('strike');
+    expect(removed[1]).toMatchObject({ setIndex: 1, slotIndex: 0 });
+    expect(removed[1]?.reason).toContain('nao-existe-mais');
+  });
+
+  it('config sem nenhuma referência morta sai IDÊNTICA, com `removed` vazio', () => {
+    const config = v2({
+      sets: [
+        set([{ do: { kind: 'spell', spellId: 'strong-heal' }, when: [], auto: true }, ...emptySlots().slice(1)]),
+        set(), set(), set(),
+      ],
+    });
+    const { config: sanitized, removed } = sanitizeBotConfigV2(config, content);
+    expect(sanitized).toEqual(config);
+    expect(removed).toEqual([]);
   });
 });
 

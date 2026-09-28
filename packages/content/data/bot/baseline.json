@@ -6,15 +6,11 @@
   "slots": {"heal": 3, "potion": 4, "attack": 10, "rune": 10, "support": 10, "exit": 4},
   "defaultConfig": {
     "version": 1,
-    "heal": [
-      {"when": {"kind": "hp", "op": "<=", "percent": 70}, "do": {"kind": "spell", "spellId": "heal"}}
-    ],
+    "heal": [],
     "potion": [
       {"when": {"kind": "hp", "op": "<=", "percent": 40}, "do": {"kind": "supply", "supplyId": "health-potion"}}
     ],
-    "attack": [
-      {"when": {"kind": "targets", "op": ">=", "count": 1}, "do": {"kind": "spell", "spellId": "strike"}}
-    ],
+    "attack": [],
     "rune": [],
     "support": [],
     "exit": [],
@@ -26,9 +22,9 @@
       "activeSet": 0,
       "sets": [
         {"slots": [
-          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "spell", "spellId": "bruise-bane"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
           {"do": {"kind": "supply", "supplyId": "health-potion"}, "when": [{"kind": "hp", "op": "<=", "percent": 40}]},
-          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          {"do": {"kind": "spell", "spellId": "lesser-front-sweep"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
           null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         ]},
         {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
@@ -52,9 +48,9 @@
       "activeSet": 0,
       "sets": [
         {"slots": [
-          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "spell", "spellId": "light-healing-paladin"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
           {"do": {"kind": "supply", "supplyId": "health-potion"}, "when": [{"kind": "hp", "op": "<=", "percent": 40}]},
-          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          {"do": {"kind": "spell", "spellId": "lesser-ethereal-spear"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
           null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         ]},
         {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
@@ -78,9 +74,9 @@
       "activeSet": 0,
       "sets": [
         {"slots": [
-          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "spell", "spellId": "magic-patch-sorcerer"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
           {"do": {"kind": "supply", "supplyId": "mana-potion"}, "when": [{"kind": "mana", "op": "<=", "percent": 40}]},
-          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          {"do": {"kind": "spell", "spellId": "buzz"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
           null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         ]},
         {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
@@ -104,9 +100,9 @@
       "activeSet": 0,
       "sets": [
         {"slots": [
-          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "spell", "spellId": "magic-patch-druid"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
           {"do": {"kind": "supply", "supplyId": "mana-potion"}, "when": [{"kind": "mana", "op": "<=", "percent": 40}]},
-          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          {"do": {"kind": "spell", "spellId": "chill-out"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
           null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         ]},
         {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},

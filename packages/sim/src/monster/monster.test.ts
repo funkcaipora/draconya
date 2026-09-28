@@ -415,6 +415,18 @@ describe('isMonsterFleeing (#518)', () => {
   it('is false for the dead — a corpse does not flee', () => {
     expect(isMonsterFleeing(monsterAt(0, 0, { health: 0 }), runsAt300)).toBe(false);
   });
+
+  it('#589: is suspended while the "challenge" condition is active, HP below threshold and all', () => {
+    const challenged = monsterAt(0, 0, {
+      health: 300,
+      conditions: [{ key: 'challenge', expiresAtMs: 6_000 }],
+    });
+    expect(isMonsterFleeing(challenged, runsAt300)).toBe(false);
+    // Removing the condition (as CONDITION_EXPIRE does at expiry) restores fleeing with the
+    // same HP — the condition is the only thing that changed.
+    const noLongerChallenged = monsterAt(0, 0, { health: 300 });
+    expect(isMonsterFleeing(noLongerChallenged, runsAt300)).toBe(true);
+  });
 });
 
 describe('decideMonsterAction fleeing (#518)', () => {
@@ -444,6 +456,22 @@ describe('decideMonsterAction fleeing (#518)', () => {
     const monster = monsterAt(0, 0, { health: 301 });
     expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, open))
       .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('#589: Challenge suspends the flee step, and it comes back once the condition drops out', () => {
+    const monster = monsterAt(5, 5, {
+      health: 300,
+      conditions: [{ key: 'challenge', expiresAtMs: 6_000 }],
+    });
+    // Well inside reach, HP at the threshold: without the condition this would step AWAY
+    // (the case right above). With it, the monster attacks instead — RF-03.
+    expect(decideMonsterAction(monster, prey('p', 6, 5), runsAt300, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+
+    // Same monster, condition gone (as CONDITION_EXPIRE removes it) — the same HP flees again.
+    const expired = monsterAt(5, 5, { health: 300 });
+    expect(decideMonsterAction(expired, prey('p', 6, 5), runsAt300, open))
+      .toEqual({ kind: 'step', to: { x: 4, y: 5 } });
   });
 });
 
