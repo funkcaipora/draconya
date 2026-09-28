@@ -64,7 +64,7 @@ import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { rollCombatValue } from '../combat/combat-value.js';
 import { resolveWeaponHit } from '../combat/weapon-power.js';
 import type { WeaponHit } from '../combat/weapon-power.js';
-import { rollDistanceHit } from '../combat/distance-hit.js';
+import { missShotTile, rollDistanceHit } from '../combat/distance-hit.js';
 import {
   afterAttackBlock, afterShieldBlock, distanceTries, meleeTries,
 } from '../combat/attack-practice.js';
@@ -7241,13 +7241,19 @@ const slots = bot.groups.get(group);
           session.credit(character.id, 'goldSpent', ammo.price);
         }
       }
+      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
+      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta. Rolada
+      // ANTES do `emit` (#555): o destino do `shot` depende de `hit` só no `combat-v3` — errado
+      // E a mais de 1 tile do alvo, o projétil visualmente cai num tile adjacente. `v1`/`v2`
+      // continuam com `to` fixo no monstro mesmo no erro (ADR 0031/0040: perfil já publicado é
+      // bit a bit, e `#missDestination` consome um sorteio A MAIS do `session.rng` que esses
+      // dois perfis não podiam ganhar sem virar um perfil novo).
+      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
-        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
+        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character),
+        to: hit || !this.#isV3() ? this.#at(monster) : this.#missDestination(session, character, monster),
       });
-      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
-      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
-      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
       // `combat-v1`/`v2`: a prática é do TIRO, não do acerto (CMB-05) — imunidade, bloqueio e
       // o erro de pontaria não impedem a skill de subir. No `combat-v3` (#686) quantos tries o
       // tiro rende vem do tipo de bloqueio (`distanceTries`): 2 limpo, 1 bloqueado, 0 imune.
@@ -7533,6 +7539,20 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O destino do `shot` de um tiro à distância que ERROU, só sob `combat-v3` (#555,
+   * `missShotTile`, `combat/distance-hit.ts`) — os dois chamadores (`#strike`, `#throwWeapon`)
+   * só entram aqui depois de conferir `this.#isV3()`, nunca em `v1`/`v2`. Adjacente ao alvo, o
+   * Canary não redireciona, e o destino continua sendo o próprio alvo; a mais de 1 tile,
+   * sorteia com `session.rng` um tile ANDÁVEL entre os nove do quadro 3×3 centrado nele.
+   * Compartilhada pela munição por família (`#strike`) e pelo arremessável (`#throwWeapon`) —
+   * os dois caminhos de tiro que podem errar.
+   */
+  #missDestination(session: Session, character: CharacterRuntime, monster: MonsterRuntime): WorldPoint {
+    const tiles = distance(character.position, monster.position);
+    return missShotTile(this.#world.map, tiles, this.#at(monster), session.rng);
+  }
+
+  /**
    * O arremessável (#575, ADR 0026 d.3 NÃO se aplica): sem `ammoFamily`, o item na mão É o
    * próprio projétil — não há seleção por família nem lançador, e não é munição abstrata: é um
    * item de verdade, `stackable: true` (spear, throwing star — como o `royal-spear.json`
@@ -7546,11 +7566,15 @@ const slots = bot.groups.get(group);
     how: ResolvedWeapon, damagePercent: number, defender: Defender,
     reflectAttacker: ReflectAttacker | undefined,
   ): void {
+    // A chance de acerto é rolada ANTES do `emit` (#555): no `combat-v3`, errado E a mais de 1
+    // tile do alvo, o destino cai num tile adjacente — ver `#missDestination`. `v1`/`v2` mantêm
+    // `to` fixo no monstro mesmo no erro (ADR 0031/0040: perfil já publicado é bit a bit).
+    const hit = this.#rollThrowHit(session, character, monster, how);
     session.emit({
       kind: 'shot', attackerId: character.id, targetId: monster.subject,
-      weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+      weaponItemId: weapon.id, from: this.#at(character),
+      to: hit || !this.#isV3() ? this.#at(monster) : this.#missDestination(session, character, monster),
     });
-    const hit = this.#rollThrowHit(session, character, monster, how);
     if (!this.#isV3()) this.#practice(session, character, how.family, 1);
     // A quebra é rolagem SEMPRE consumida (ADR 0031): a sequência de RNG não pode depender do
     // valor de `breakChance` — a mesma regra do bloqueio e do crítico.
