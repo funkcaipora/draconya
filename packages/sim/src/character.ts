@@ -41,6 +41,17 @@ export interface CharacterState {
   /** XP ACUMULADA, não o progresso dentro do level. Ver `progression.ts` (FUN-37). */
   readonly xp: number;
   /**
+   * Pontos de alma (#593), o `spell:soul(n)` do Canary — hoje só a plumbing: nenhuma magia do
+   * catálogo real ainda declara `soulCost` (a conjuração é a #594). PODE DESCER — é gasto, não
+   * progressão monotônica como skill/Bestiário — e por isso o extrato o leva como valor
+   * ABSOLUTO, última-escrita-vence, nunca fundido por máximo no ledger (ver `receipts.ts`).
+   *
+   * Opcional: personagem e snapshot anteriores a esta issue não têm a chave, e `0` é onde todo
+   * personagem sem vocação está — o Tibia sempre tem vocação e por isso sempre tem alma; aqui
+   * o personagem nasce sem uma (§7.4), e `chooseVocation` é quem a enche pela primeira vez.
+   */
+  readonly soul?: number;
+  /**
    * A vocação escolhida, ou ausente enquanto não há uma — o personagem nasce sem e escolhe no
    * level 8 (§7.4).
    *
@@ -305,6 +316,7 @@ export class CharacterRuntime {
   maxMana: number;
   level: number;
   xp: number;
+  soul: number;
   vocationId: string | null;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
@@ -376,6 +388,7 @@ export class CharacterRuntime {
     this.maxMana = state.maxMana;
     this.level = state.level;
     this.xp = state.xp;
+    this.soul = state.soul ?? 0;
     this.vocationId = state.vocationId ?? null;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
@@ -499,6 +512,10 @@ export class CharacterRuntime {
     // A vocação PRIMEIRO: `equip` confere `requires.vocationId` contra `this.vocationId`, e a
     // arma exige exatamente a que está sendo escolhida.
     this.vocationId = vocation.id;
+    // A alma nasce CHEIA (#593): o Tibia sempre tem vocação e por isso sempre tem alma; aqui
+    // ela só existe a partir de agora, e o personagem que acabou de escolher não pode começar
+    // devendo — é a mesma decisão de "vestir o kit completo", não "vestir aos poucos".
+    this.soul = vocation.soulMax;
     if (options.kitItems !== undefined && options.kitItems.length > 0) {
       const kit: VocationPieceResult[] = [];
       for (const { item } of options.kitItems) {
@@ -552,6 +569,7 @@ export class CharacterRuntime {
       maxMana: this.maxMana,
       level: this.level,
       xp: this.xp,
+      soul: this.soul,
       vocationId: this.vocationId,
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
@@ -622,6 +640,17 @@ export class CharacterRuntime {
   heal(amount: number): number {
     const applied = Math.min(amount, this.maxHealth - this.health);
     this.health += applied;
+    return applied;
+  }
+
+  /**
+   * Ganha alma (#593), capada no `soulMax` da vocação. Devolve o quanto de fato entrou — como
+   * `heal` devolve o quanto de fato curou —, para quem chama saber se vale a pena continuar
+   * tiquetando (o Canary não cancela a condição ao encher, mas o chamador pode).
+   */
+  gainSoul(amount: number, max: number): number {
+    const applied = Math.min(amount, Math.max(0, max - this.soul));
+    this.soul += applied;
     return applied;
   }
 }

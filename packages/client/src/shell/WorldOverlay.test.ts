@@ -148,12 +148,14 @@ describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
     expect(html).not.toContain('Bênção');
   });
 
-  it('shows the hunt name and difficulty when present in hud and catalogue (#348, SV-12)', async () => {
+  it('shows the hunt name, without a difficulty, when present in hud and catalogue (#348, SV-12, #584)', async () => {
     hud.set((state) => ({ ...state, huntId: 'rat-cellars', difficulty: 'cautious', catalogue: mockCatalogue }));
 
     const html = await render(createElement(WorldOverlay, { hunting: true }));
 
-    expect(html).toContain('Rat Cellars · Cauteloso');
+    // #584 (ADR 0039, fim do pull por dificuldade): a área mostra só o nome da hunt.
+    expect(html).toContain('Rat Cellars');
+    expect(html).not.toContain('Cauteloso');
     expect(html).toContain('world-overlay-area');
     expect(html).toContain('0 criaturas no alcance');
   });

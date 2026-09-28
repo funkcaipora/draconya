@@ -40,7 +40,7 @@ import { SessionDirectory } from '../directory.js';
 import { createGame, type GameRole } from '../game/server.js';
 import { buildCatalogue } from '../game/catalogue.js';
 import {
-  createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  createBotConfigLoader, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
   createSessionRestorer,
 } from '../game/sessions.js';
 import { writePendingReceipts } from '../jobs/ledger.js';
@@ -193,8 +193,11 @@ async function startNode(nodeId: string): Promise<GameRole> {
     restoreSession: createSessionRestorer(content),
     // O nó de VERDADE tem os dois: sem o validador, `bot-config` é recusado com "este
     // servidor não aceita configuração", e o teste mediria um servidor que não é o de
-    // produção. O catálogo entra pela mesma razão.
+    // produção. O catálogo entra pela mesma razão. `loadBotConfig` (#596/ADR 0014): sem ele
+    // `#adoptTicketBotConfig` nunca adota a config persistida na admissão — a config do ticket
+    // ficaria sempre ausente do `session-state`, mesmo já salva no Postgres/Redis.
     acceptBotConfig: createBotConfigValidator(content),
+    loadBotConfig: createBotConfigLoader(content),
     itemCatalog: content.items,
     catalogue: () => buildCatalogue(content),
     now: () => clockMs,

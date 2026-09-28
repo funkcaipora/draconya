@@ -87,9 +87,11 @@
     "brain-squid": 1059,
     "braindeath": 256,
     "bretzecutioner": 236,
+    "brinebrute-inferniarch": 1794,
     "brittle-skeleton": 33,
     "broken-shaper": 932,
     "brokul": 1076,
+    "broodrider-inferniarch": 1796,
     "brother-chill": 261,
     "brother-freeze": 261,
     "brother-worm": 295,
@@ -100,6 +102,8 @@
     "burster-spectre": 1122,
     "butterfly": 227,
     "calamary": 451,
+    "candy-floss-elemental": 1749,
+    "candy-horror": 1739,
     "captain-jones": 196,
     "captured-dwarf": 538,
     "carniphila": 120,
@@ -118,6 +122,7 @@
     "cheese-thief": 534,
     "chicken": 111,
     "chikhaton": 361,
+    "chocolate-blob": 1732,
     "clay-guardian": 333,
     "clomp": 860,
     "clubarc-the-plunderer": 342,
@@ -138,6 +143,7 @@
     "crazed-dwarf": 69,
     "crazed-summer-rearguard": 1136,
     "crazed-winter-rearguard": 1136,
+    "cream-blob": 1757,
     "crimson-frog": 226,
     "crocodile": 119,
     "crustacea-gigantica": 383,
@@ -303,6 +309,7 @@
     "flamingo": 212,
     "fleabringer": 341,
     "fleshslicer": 457,
+    "flickering-spirit-elemental": 1840,
     "flimsy-lost-soul": 1268,
     "floating-savant": 1063,
     "fluffy": 240,
@@ -318,6 +325,7 @@
     "frost-troll": 53,
     "frostfur": 52,
     "frozen-soul": 560,
+    "fruit-drop": 1754,
     "furious-orc-berserker": 8,
     "furious-scorpion": 398,
     "fury-of-the-emperor": 351,
@@ -335,6 +343,7 @@
     "giant-beaver": 1536,
     "giant-spider": 38,
     "giant-spider-wyda": 38,
+    "gingerbread-man": 1738,
     "girtablilu-warrior": 1407,
     "gladiator": 131,
     "glitterscale": 34,
@@ -351,6 +360,7 @@
     "goblin": 61,
     "goblin-leader": 61,
     "goblin-scavenger": 297,
+    "goggle-cake": 1740,
     "golden-servant": 396,
     "golden-servant-replica": 396,
     "goldhanded-cultist": 132,
@@ -384,10 +394,12 @@
     "haunter": 320,
     "hellgorak": 12,
     "hellhound": 240,
+    "hellhunter-inferniarch": 1793,
     "hero": 73,
     "hibernal-moth": 1149,
     "hide": 219,
     "high-voltage-elemental": 293,
+    "honey-elemental": 1733,
     "honour-guard": 298,
     "horestis": 91,
     "horse": 435,
@@ -568,6 +580,7 @@
     "necropharus": 209,
     "neferi-the-spy": 149,
     "neutral-deepling-warrior": 441,
+    "nibblemaw": 1737,
     "nightfiend": 556,
     "nightmare": 245,
     "nightmare-of-gazharagoth": 587,
@@ -650,6 +663,7 @@
     "priestess": 58,
     "primitive": 143,
     "prince-drazzak": 12,
+    "psychic-spirit-elemental": 1840,
     "purple-butterfly": 213,
     "putrid-mummy": 976,
     "quara-constrictor-scout": 46,
@@ -745,6 +759,7 @@
     "soulless-minion": 68,
     "spawn-of-havoc": 49,
     "spectral-scum": 195,
+    "spellreaper-inferniarch": 1792,
     "sphere-of-wrath": 979,
     "sphinx": 1188,
     "spider": 30,
@@ -755,6 +770,7 @@
     "spirit-of-earth": 67,
     "spirit-of-fertility": 11,
     "spirit-of-fire": 242,
+    "spirit-overlord": 1840,
     "spite-of-the-emperor": 351,
     "spiteful-spitter": 1295,
     "spitter": 461,
@@ -775,6 +791,10 @@
     "stone-rhino": 936,
     "stonecracker": 55,
     "strong-soul": 566,
+    "sugar-cube": 1753,
+    "sugar-cube-worker": 1756,
+    "sugar-daddy": 1764,
+    "sugar-mommy": 1764,
     "sulphur-scuttler": 352,
     "supercharged-mazzinor": 979,
     "superior-death-minion": 84,
@@ -834,6 +854,7 @@
     "the-pale-worm": 1272,
     "the-pit-lord": 55,
     "the-red-knight": 1223,
+    "the-rootkraken": 1765,
     "the-sandking": 1013,
     "the-sandking-fake": 1013,
     "the-scion-of-havoc": 875,
@@ -864,6 +885,8 @@
     "troll-trained-salamander": 529,
     "true-dawnfire-asura": 1068,
     "true-frost-flower-asura": 1068,
+    "truffle": 1750,
+    "truffle-cook": 1751,
     "twisted-shaper": 932,
     "two-headed-turtle": 1535,
     "unaz-the-mean": 1268,
@@ -2929,10 +2952,23 @@
     "dragon-lord-firefield": 2118,
     "dragon-lord-hatchling-firefield": 2118
   },
+  "fieldStages": {
+    "dragon-lord-firefield": [
+      2119,
+      2120
+    ],
+    "dragon-lord-hatchling-firefield": [
+      2119,
+      2120
+    ]
+  },
   "maps": {},
   "spells": {
-    "heal": {
+    "challenge": {
       "effect": 13
+    },
+    "chivalrous-challenge": {
+      "effect": 219
     },
     "cure-poison": {
       "effect": 13
@@ -2951,13 +2987,6 @@
     },
     "cure-curse": {
       "effect": 13
-    },
-    "strike": {
-      "effect": 12,
-      "missile": 5
-    },
-    "blast": {
-      "effect": 38
     },
     "bruise-bane": {
       "effect": 13
@@ -3015,9 +3044,6 @@
     "intense-healing-paladin": {
       "effect": 13
     },
-    "divine-defiance": {
-      "effect": 39
-    },
     "sharpshooter": {
       "effect": 14
     },
@@ -3043,14 +3069,6 @@
     },
     "salvation": {
       "effect": 13
-    },
-    "ethereal-barrage": {
-      "effect": 2,
-      "missile": 28
-    },
-    "divine-barrage": {
-      "effect": 39,
-      "missile": 31
     },
     "buzz": {
       "effect": 12,
@@ -3205,10 +3223,6 @@
       "effect": 17,
       "missile": 30
     },
-    "forked-thorns": {
-      "effect": 45,
-      "missile": 39
-    },
     "strong-ice-strike": {
       "effect": 43,
       "missile": 29
@@ -3223,6 +3237,54 @@
     "ultimate-energy-strike": {
       "effect": 12,
       "missile": 5
+    },
+    "annihilation": {
+      "effect": 10,
+      "missile": 10
+    },
+    "ultimate-flame-strike": {
+      "effect": 16,
+      "missile": 4
+    },
+    "ultimate-ice-strike": {
+      "effect": 43,
+      "missile": 29
+    },
+    "ultimate-terra-strike": {
+      "effect": 17,
+      "missile": 30
+    },
+    "ignite": {
+      "effect": 7,
+      "missile": 4
+    },
+    "electrify": {
+      "effect": 12,
+      "missile": 5
+    },
+    "envenom": {
+      "effect": 17,
+      "missile": 30
+    },
+    "inflict-wound": {
+      "effect": 10,
+      "missile": 10
+    },
+    "holy-flash": {
+      "effect": 39,
+      "missile": 31
+    },
+    "strong-haste-sorcerer": {
+      "effect": 14
+    },
+    "strong-haste-druid": {
+      "effect": 14
+    },
+    "cancel-magic-shield-sorcerer": {
+      "effect": 13
+    },
+    "cancel-magic-shield-druid": {
+      "effect": 13
     }
   },
   "supplies": {
@@ -3288,6 +3350,26 @@
     "heavy-magic-missile-rune": {
       "effect": 12,
       "missile": 5
+    },
+    "fireball-rune": {
+      "effect": 16,
+      "missile": 4
+    },
+    "icicle-rune": {
+      "effect": 43,
+      "missile": 29
+    },
+    "light-magic-missile-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "light-stone-shower-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "stalagmite-rune": {
+      "effect": 17,
+      "missile": 30
     },
     "explosion-rune": {
       "effect": 10

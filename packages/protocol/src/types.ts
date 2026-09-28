@@ -194,15 +194,17 @@ export const C2S_SCHEMAS = {
   say: z.object({ channel: z.string(), text: z.string().max(255) }),
   logout: z.object({}),
   /**
-   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt e
-   * qual dificuldade, e o servidor decide se a transição é válida, cria a instância e
-   * responde com o estado novo (invariante 4).
+   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt, e o
+   * servidor decide se a transição é válida, cria a instância e responde com o estado novo
+   * (invariante 4).
    *
-   * A dificuldade vem como string livre e é validada contra o CONTEÚDO, não contra um enum
-   * aqui: uma hunt define as dificuldades que fazem sentido para ela, não obrigatoriamente as
-   * quatro, e repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+   * `difficulty` é opcional desde o #584 (ADR 0039, fim do pull por dificuldade — #583 já
+   * eliminou a escolha de tamanho de pull no `sim`/`content`). Campo mantido no protocolo só
+   * por compatibilidade (ADR 0014): um cliente ANTIGO ainda manda um nome de antes do #583
+   * (`'cautious'`/`'bold'`/`'reckless'`) e é ACEITO E IGNORADO — nunca validado contra um
+   * enum aqui nem contra o conteúdo.
    */
-  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
+  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1).optional() }),
   /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
   'leave-hunt': z.object({}),
   /**
@@ -641,6 +643,9 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
+      soul: z.number().int().nonnegative().default(0),
+      soulMax: z.number().int().nonnegative().default(0),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -1198,6 +1203,14 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+    /**
+     * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
+     * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um
+     * nó `game` anterior a esta issue manda sem, e o HUD mostra "0/0" em vez de recusar o
+     * parse inteiro — a mesma degradação de `speed`/`ammo` acima.
+     */
+    soul: z.number().int().nonnegative().default(0),
+    soulMax: z.number().int().nonnegative().default(0),
   }),
   /**
    * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o
@@ -1325,6 +1338,14 @@ export const S2C_SCHEMAS = {
   'field-appear': FieldTile,
   /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
   'field-disappear': z.object({ id: z.string().min(1) }),
+  /**
+   * O campo trocou de estágio (#560): o mesmo `id` de `field-appear`, e o `appearanceId` NOVO
+   * já resolvido pelo hospedeiro — sem `tiles`, que não muda entre estágios.
+   */
+  'field-stage-change': z.object({
+    id: z.string().min(1),
+    appearanceId: z.number().int().positive(),
+  }),
   /**
    * A economia de Charms do personagem (M39-02, #602, ADR 0052 d.1): o registro CRU, como
    * `bestiary` manda os abates crus — o cliente deriva ganho/disponível cruzando com

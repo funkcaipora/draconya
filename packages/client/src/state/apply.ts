@@ -126,6 +126,18 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       if (world.fields.delete(message.id)) world.fieldsVersion += 1;
       return;
 
+    // O campo trocou de estágio (#560, `decayTo`): mesmo `id` e `tiles`, aparência NOVA já
+    // resolvida pelo servidor — o cliente só substitui a entrada, nunca redesenha por conta
+    // própria (invariante 6). Campo que a tela nunca viu (reconectou entre o `field-appear` e
+    // esta troca, e o `session-state` ainda não chegou) é ignorado: nada para trocar ainda.
+    case 'field-stage-change': {
+      const field = world.fields.get(message.id);
+      if (field === undefined) return;
+      world.fields.set(message.id, { ...field, appearanceId: message.appearanceId });
+      world.fieldsVersion += 1;
+      return;
+    }
+
     // A resposta ao `look` (#729): o texto do "You see …" entra no mesmo canal do
     // `system-message`, nível info — não é recusa, é o que a placa/o cenário dizem.
     case 'look-result':
@@ -229,6 +241,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         vocationId: message.vocationId,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        soul: message.soul,
+        soulMax: message.soulMax,
       }));
       return;
 
@@ -453,6 +467,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         vocationId: message.self.vocationId,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        soul: message.self.soul,
+        soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre

@@ -178,6 +178,22 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('removedInstances');
   });
 
+  it('carries the soul points through Redis and back, and a receipt without one stays without (#593)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: alma gravada tem de voltar inteira,
+    // e o extrato sem ela não pode ganhar a chave — diferente do Bestiário, o ledger NÃO funde
+    // por máximo aqui (alma pode descer), então "a chave sumiu" e "a chave voltou zero" são
+    // coisas diferentes que este teste também distingue.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { soul: 42 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.soul).toBe(42);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('soul');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um

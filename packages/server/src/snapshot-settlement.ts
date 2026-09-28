@@ -134,6 +134,8 @@ export async function settleSnapshotAsReceipt(
     // Vocação e o que a sessão criou (#154): sem isto, um item equipado numa sessão liquidada
     // por fora se perdia, e a arma de vocação com ele.
     ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+    // Pontos de alma (#593): ABSOLUTO, última-escrita-vence, como a vocação acima.
+    ...(owner?.soul === undefined ? {} : { soul: owner.soul }),
     ...(owner?.inventory === undefined ? {} : {
       equipment: equipmentOfState(owner.inventory),
       layout: layoutOfState(owner.inventory),
