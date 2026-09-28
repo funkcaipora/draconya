@@ -17,6 +17,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -220,6 +224,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -353,6 +361,769 @@
     "outfitId": 68
   },
   {
+    "id": "bazir",
+    "name": "Bazir",
+    "health": 110000,
+    "experience": 30000,
+    "attack": {
+      "min": 0,
+      "max": 2625
+    },
+    "armor": 160,
+    "defense": 160,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "earth",
+        "energy",
+        "fire",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 530,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.999,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "ancient-amulet",
+          "chance": 0.035
+        },
+        {
+          "itemId": "big-bone",
+          "chance": 0.09
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.15,
+          "min": 1,
+          "max": 15
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.015
+        },
+        {
+          "itemId": "boots-of-haste",
+          "chance": 0.04
+        },
+        {
+          "itemId": "moonlight-rod",
+          "chance": 0.035
+        },
+        {
+          "itemId": "crystal-ball",
+          "chance": 0.025
+        },
+        {
+          "itemId": "crystal-necklace",
+          "chance": 0.015
+        },
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.055
+        },
+        {
+          "itemId": "demon-shield",
+          "chance": 0.155
+        },
+        {
+          "itemId": "devil-helmet",
+          "chance": 0.11
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.2
+        },
+        {
+          "itemId": "dragon-hammer",
+          "chance": 0.045
+        },
+        {
+          "itemId": "energy-ring",
+          "chance": 0.135
+        },
+        {
+          "itemId": "fire-axe",
+          "chance": 0.17
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.125
+        },
+        {
+          "itemId": "gold-ring",
+          "chance": 0.08
+        },
+        {
+          "itemId": "golden-legs",
+          "chance": 0.05
+        },
+        {
+          "itemId": "golden-mug",
+          "chance": 0.075
+        },
+        {
+          "itemId": "golden-sickle",
+          "chance": 0.045
+        },
+        {
+          "itemId": "snakebite-rod",
+          "chance": 0.035
+        },
+        {
+          "itemId": "green-gem",
+          "chance": 0.015
+        },
+        {
+          "itemId": "wand-of-decay",
+          "chance": 0.025
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.075
+        },
+        {
+          "itemId": "life-crystal",
+          "chance": 0.01
+        },
+        {
+          "itemId": "magic-light-wand",
+          "chance": 0.115
+        },
+        {
+          "itemId": "magic-plate-armor",
+          "chance": 0.03
+        },
+        {
+          "itemId": "mastermind-shield",
+          "chance": 0.075
+        },
+        {
+          "itemId": "might-ring",
+          "chance": 0.05
+        },
+        {
+          "itemId": "mind-stone",
+          "chance": 0.04
+        },
+        {
+          "itemId": "orb",
+          "chance": 0.12
+        },
+        {
+          "itemId": "platinum-amulet",
+          "chance": 0.045
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.045
+        },
+        {
+          "itemId": "purple-tome",
+          "chance": 0.026
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.13
+        },
+        {
+          "itemId": "ring-of-the-sky",
+          "chance": 0.035
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.13
+        },
+        {
+          "itemId": "silver-dagger",
+          "chance": 0.155
+        },
+        {
+          "itemId": "skull-staff",
+          "chance": 0.05
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.135,
+          "min": 1,
+          "max": 20
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.095,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "small-emerald",
+          "chance": 0.155,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.135,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.095
+        },
+        {
+          "itemId": "stone-skin-amulet",
+          "chance": 0.04
+        },
+        {
+          "itemId": "strange-symbol",
+          "chance": 0.025
+        },
+        {
+          "itemId": "talon",
+          "chance": 0.14,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "teddy-bear",
+          "chance": 0.145
+        },
+        {
+          "itemId": "thunder-hammer",
+          "chance": 0.135
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.2
+        },
+        {
+          "itemId": "voodoo-doll",
+          "chance": 0.001
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.035
+        },
+        {
+          "itemId": "white-pearl",
+          "chance": 0.125,
+          "min": 1,
+          "max": 15
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 2625
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 100,
+          "max": 1000
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyarea"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 700
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "loseenergy"
+        }
+      },
+      {
+        "id": "manadrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 700
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 60000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -1000
+          }
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 1000,
+        "chance": 0.34,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 900
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 850
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "heal": {
+          "min": 5000,
+          "max": 10000
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "heal-2",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "heal": {
+          "min": 2000,
+          "max": 3000
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.08,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 1901
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 1000,
+        "chance": 0.04,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "invisible-2",
+        "cadenceMs": 1000,
+        "chance": 0.17,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 3000,
+    "staticAttack": 0.95,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/bazir.lua"
+    },
+    "summons": {
+      "max": 1,
+      "entries": [
+        {
+          "monsterId": "bazir",
+          "intervalMs": 1000,
+          "chance": 0.15,
+          "count": 1
+        }
+      ]
+    },
+    "outfitId": 35
+  },
+  {
+    "id": "bibby-bloodbath",
+    "name": "Bibby Bloodbath",
+    "health": 1200,
+    "experience": 1500,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 58,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "earth": -0.2
+      },
+      "immunities": [
+        "fire",
+        "ice"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 240,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.3291
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.2468
+        },
+        {
+          "itemId": "throwing-star",
+          "chance": 0.196,
+          "min": 1,
+          "max": 18
+        },
+        {
+          "itemId": "mana-potion",
+          "chance": 0.152,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "dark-armor",
+          "chance": 0.14
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.12,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.103
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.103
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.081
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0696
+        },
+        {
+          "itemId": "magma-amulet",
+          "chance": 0.057
+        },
+        {
+          "itemId": "giant-sword",
+          "chance": 0.0316
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.019
+        },
+        {
+          "itemId": "butchers-axe",
+          "chance": 0.0127
+        },
+        {
+          "itemId": "orc-trophy",
+          "chance": 0.0127
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalwave",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blockhit"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 3,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blockhit"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -300
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/bibby_bloodbath.lua"
+    },
+    "outfitId": 2
+  },
+  {
     "id": "big-boss-trolliver",
     "name": "Big Boss Trolliver",
     "health": 150,
@@ -368,6 +1139,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -467,6 +1242,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -642,6 +1421,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 3.27,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -713,6 +1496,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1001,6 +1788,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1101,6 +1892,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1267,6 +2061,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1472,6 +2270,170 @@
     "outfitId": 203
   },
   {
+    "id": "diblis-the-fair",
+    "name": "Diblis the Fair",
+    "health": 1500,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 380
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.4,
+        "holy": -0.05
+      },
+      "immunities": [
+        "death",
+        "earth",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 280,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 1
+      },
+      "items": [
+        {
+          "itemId": "vampire-lord-token",
+          "chance": 1
+        },
+        {
+          "itemId": "blood-preservation",
+          "chance": 0.94
+        },
+        {
+          "itemId": "vampire-shield",
+          "chance": 0.22
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.18
+        },
+        {
+          "itemId": "ring-of-healing",
+          "chance": 0.12
+        },
+        {
+          "itemId": "skull",
+          "chance": 0.12
+        },
+        {
+          "itemId": "spellbook-of-lost-souls",
+          "chance": 0.02
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 380
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 0,
+          "max": 155
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "heal": {
+          "min": 100,
+          "max": 235
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/diblis_the_fair.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "banshee",
+          "intervalMs": 4500,
+          "chance": 0.5,
+          "count": 3
+        }
+      ]
+    },
+    "outfitId": 287
+  },
+  {
     "id": "diseased-bill",
     "name": "Diseased Bill",
     "health": 1000,
@@ -1496,6 +2458,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1681,6 +2647,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1867,6 +2837,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2048,6 +3022,9 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2219,6 +3196,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.02,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2278,6 +3258,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2329,6 +3313,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2547,6 +3535,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2650,6 +3642,206 @@
     "outfitId": 34
   },
   {
+    "id": "grandfather-tridian",
+    "name": "Grandfather Tridian",
+    "health": 1800,
+    "experience": 1400,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.35,
+        "energy": 0.05,
+        "earth": 0.2,
+        "fire": 0.25
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 80
+      },
+      "items": [
+        {
+          "itemId": "jewelled-backpack",
+          "chance": 1
+        },
+        {
+          "itemId": "strong-mana-potion",
+          "chance": 0.05
+        },
+        {
+          "itemId": "brown-mushroom",
+          "chance": 0.05,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "music-sheet",
+          "chance": 0.03
+        },
+        {
+          "itemId": "music-sheet",
+          "chance": 0.03
+        },
+        {
+          "itemId": "music-sheet",
+          "chance": 0.03
+        },
+        {
+          "itemId": "music-sheet",
+          "chance": 0.03
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "melee",
+        "presentation": {
+          "impactKey": "drawblood"
+        }
+      },
+      {
+        "id": "lifedrainball",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 138,
+          "max": 362
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "holy",
+          "impactKey": "holyarea"
+        }
+      },
+      {
+        "id": "lifedrainball-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 1,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 50
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.25,
+        "heal": {
+          "min": 60,
+          "max": 90
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.5,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/grandfather_tridian.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "crypt-shambler",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 1
+        },
+        {
+          "monsterId": "ghost",
+          "intervalMs": 2000,
+          "chance": 0.1,
+          "count": 1
+        }
+      ]
+    },
+    "outfitId": 193
+  },
+  {
     "id": "groam",
     "name": "Groam",
     "health": 400,
@@ -2671,6 +3863,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2782,6 +3978,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3148,6 +4348,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3202,6 +4406,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3591,6 +4799,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3980,6 +5192,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4050,6 +5266,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4141,6 +5361,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4411,6 +5635,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4556,6 +5784,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4679,6 +5911,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4767,6 +6002,445 @@
       "path": "data-otservbr-global/monster/bosses/mornenion.lua"
     },
     "outfitId": 64
+  },
+  {
+    "id": "morshabaal",
+    "name": "Morshabaal",
+    "health": 1000000,
+    "experience": 3000000,
+    "attack": {
+      "min": 0,
+      "max": 2625
+    },
+    "armor": 160,
+    "defense": 160,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.05,
+        "fire": 0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "drunk",
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 1060,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.6,
+        "min": 10000,
+        "max": 350000
+      },
+      "items": [
+        {
+          "itemId": "ultimate-mana-potion",
+          "chance": 0.4,
+          "min": 1,
+          "max": 100
+        },
+        {
+          "itemId": "ultimate-health-potion",
+          "chance": 0.3,
+          "min": 1,
+          "max": 100
+        },
+        {
+          "itemId": "ultimate-spirit-potion",
+          "chance": 0.3,
+          "min": 1,
+          "max": 100
+        },
+        {
+          "itemId": "morshabaals-extract",
+          "chance": 1
+        },
+        {
+          "itemId": "watermelon-tourmaline",
+          "chance": 1
+        },
+        {
+          "itemId": "watermelon-tourmaline",
+          "chance": 1
+        },
+        {
+          "itemId": "amber-with-a-dragonfly",
+          "chance": 0.4
+        },
+        {
+          "itemId": "unicorn-figurine",
+          "chance": 0.2
+        },
+        {
+          "itemId": "sea-horse-figurine",
+          "chance": 0.2
+        },
+        {
+          "itemId": "morshabaals-mask",
+          "chance": 0.1
+        },
+        {
+          "itemId": "giant-emerald",
+          "chance": 0.1
+        },
+        {
+          "itemId": "bar-of-gold",
+          "chance": 0.1
+        },
+        {
+          "itemId": "morshabaals-brain",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "green-demon-armor",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "green-demon-helmet",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "green-demon-legs",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "green-demon-slippers",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "dragon-figurine",
+          "chance": 0.06666
+        },
+        {
+          "itemId": "thunder-hammer",
+          "chance": 0.06666
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "physicalbeam",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 5500
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "white-energy-spark"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 4000,
+          "max": 30000
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "iceattack"
+        }
+      },
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 2625
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 100,
+          "max": 1000
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "poff"
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 1000,
+        "chance": 0.07,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "energy",
+          "impactKey": "energyarea"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "lifedrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.13,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 700
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "loseenergy"
+        }
+      },
+      {
+        "id": "manadrainburst",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "target": {
+          "range": 6,
+          "area": {
+            "shape": "circle",
+            "radius": 8,
+            "centered": "caster"
+          }
+        },
+        "power": {
+          "min": 400,
+          "max": 700
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 4,
+          "area": {
+            "shape": "circle",
+            "radius": 6,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 60000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -1000
+          }
+        }
+      },
+      {
+        "id": "fireball",
+        "cadenceMs": 1000,
+        "chance": 0.34,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 7,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 900
+        },
+        "damageType": "fire",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 850
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "heal": {
+          "min": 5000,
+          "max": 10000
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "heal-2",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "heal": {
+          "min": 2000,
+          "max": 3000
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.08,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 1901
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 1000,
+        "chance": 0.04,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "invisible-2",
+        "cadenceMs": 1000,
+        "chance": 0.17,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 2000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.7,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/morshabaal.lua"
+    },
+    "outfitId": 1468
   },
   {
     "id": "munster",
@@ -4882,6 +6556,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -5136,6 +6814,213 @@
     "outfitId": 554
   },
   {
+    "id": "pythius-the-rotten",
+    "name": "Pythius The Rotten",
+    "health": 9000,
+    "experience": 7000,
+    "attack": {
+      "min": 0,
+      "max": 475
+    },
+    "armor": 40,
+    "defense": 45,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "death",
+        "earth",
+        "energy",
+        "lifedrain"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 350,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 475
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalball",
+        "cadenceMs": 2000,
+        "chance": 0.16,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 165,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "fire",
+          "impactKey": "firearea"
+        }
+      },
+      {
+        "id": "earthball",
+        "cadenceMs": 2000,
+        "chance": 0.17,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 55,
+          "max": 155
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "earthwave",
+        "cadenceMs": 2500,
+        "chance": 0.14,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3,
+              5,
+              5,
+              5
+            ]
+          }
+        },
+        "power": {
+          "min": 333,
+          "max": 413
+        },
+        "damageType": "earth",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "poisonarea"
+        }
+      },
+      {
+        "id": "manadrainball",
+        "cadenceMs": 2500,
+        "chance": 0.22,
+        "target": {
+          "range": 7,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 85,
+          "max": 110
+        },
+        "damageType": "manadrain",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "ice",
+          "impactKey": "loseenergy"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -300
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 5000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/pythius_the_rotten.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "undead-gladiator",
+          "intervalMs": 1000,
+          "chance": 0.1,
+          "count": 2
+        }
+      ]
+    },
+    "outfitId": 231
+  },
+  {
     "id": "raxias",
     "name": "Raxias",
     "health": 1100,
@@ -5153,6 +7038,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -5272,6 +7160,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -5417,6 +7308,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5461,6 +7355,197 @@
     "outfitId": 129
   },
   {
+    "id": "rukor-zad",
+    "name": "Rukor Zad",
+    "health": 380,
+    "experience": 380,
+    "attack": {
+      "min": 0,
+      "max": 170
+    },
+    "armor": 15,
+    "defense": 15,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.01,
+        "energy": 0.1,
+        "earth": 0.2,
+        "fire": 0.05,
+        "death": 0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 214,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.9321,
+        "min": 1,
+        "max": 50
+      },
+      "items": [
+        {
+          "itemId": "throwing-star",
+          "chance": 0.0921,
+          "min": 1,
+          "max": 14
+        },
+        {
+          "itemId": "viper-star",
+          "chance": 0.062,
+          "min": 1,
+          "max": 7
+        },
+        {
+          "itemId": "steel-helmet",
+          "chance": 0.0419
+        },
+        {
+          "itemId": "steel-shield",
+          "chance": 0.0194
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 170
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingstar"
+        }
+      },
+      {
+        "id": "physicalstrike-2",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "poisonarrow"
+        }
+      },
+      {
+        "id": "poisoned",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "earth",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "poisoned",
+          "merge": "strongest",
+          "durationMs": 16000,
+          "effect": {
+            "kind": "damage-over-time",
+            "form": "generated",
+            "totalDamage": 8,
+            "intervalMs": 2000,
+            "damageType": "earth"
+          }
+        }
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 3000,
+        "chance": 0.34,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "drunk",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/rukor_zad.lua"
+    },
+    "outfitId": 152
+  },
+  {
     "id": "smuggler-baron-silvertoe",
     "name": "Smuggler Baron Silvertoe",
     "health": 280,
@@ -5476,6 +7561,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5600,6 +7689,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -5816,6 +7909,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6047,6 +8144,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -6320,6 +8421,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6576,6 +8681,102 @@
     "outfitId": 1393
   },
   {
+    "id": "the-blightfather",
+    "name": "The Blightfather",
+    "health": 400,
+    "experience": 400,
+    "attack": {
+      "min": 0,
+      "max": 200
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": [
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 290,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.02,
+        "min": 1,
+        "max": 61
+      },
+      "items": [
+        {
+          "itemId": "lump-of-dirt",
+          "chance": 0.175
+        },
+        {
+          "itemId": "poisonous-slime",
+          "chance": 0.125
+        },
+        {
+          "itemId": "lancer-beetle-shell",
+          "chance": 0.07
+        },
+        {
+          "itemId": "beetle-necklace",
+          "chance": 0.004
+        },
+        {
+          "itemId": "small-amethyst",
+          "chance": 0.008
+        }
+      ]
+    },
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.12
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "runOnHealth": 80,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/the_blightfather.lua"
+    },
+    "outfitId": 348
+  },
+  {
     "id": "the-book-of-death",
     "name": "The Book of Death",
     "health": 7800,
@@ -6597,6 +8798,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6709,6 +8914,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 3.27,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7009,6 +9218,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7143,6 +9356,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7458,6 +9675,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -7720,6 +9941,11 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "drunk",
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -7940,6 +10166,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -8255,6 +10485,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -8356,6 +10590,71 @@
       ]
     },
     "outfitId": 2
+  },
+  {
+    "id": "weakened-demon",
+    "name": "Weakened Demon",
+    "health": 5,
+    "experience": 0,
+    "attack": {
+      "min": 0,
+      "max": 0
+    },
+    "armor": 2,
+    "defense": 2,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 400,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.15
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.85,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/weakened_demon.lua"
+    },
+    "outfitId": 12
   },
   {
     "id": "willi-wasp",
@@ -8462,6 +10761,177 @@
     "outfitId": 44
   },
   {
+    "id": "zevelon-duskbringer",
+    "name": "Zevelon Duskbringer",
+    "health": 1400,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 282
+    },
+    "armor": 30,
+    "defense": 30,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.5,
+        "holy": -0.05
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 310,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 75
+      },
+      "items": [
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.04
+        },
+        {
+          "itemId": "black-pearl",
+          "chance": 0.08
+        },
+        {
+          "itemId": "vampire-lord-token",
+          "chance": 1
+        },
+        {
+          "itemId": "vampire-shield",
+          "chance": 0.045
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 282
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 11
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": 0
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "heal": {
+          "min": 100,
+          "max": 235
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/bosses/zevelon_duskbringer.lua"
+    },
+    "summons": {
+      "max": 3,
+      "entries": [
+        {
+          "monsterId": "vampire",
+          "intervalMs": 3000,
+          "chance": 0.4,
+          "count": 3
+        }
+      ]
+    },
+    "outfitId": 287
+  },
+  {
     "id": "zoralurk",
     "name": "Zoralurk",
     "health": 55000,
@@ -8486,6 +10956,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -8725,6 +11199,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,

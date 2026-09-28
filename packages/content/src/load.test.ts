@@ -778,7 +778,8 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 
 /** As excluídas por nome (ADR 0026 decisão 5) — em kebab-case, como um id seria. */
 const EXCLUDED_SPELLS = [
-  'invisible', 'cancel-invisibility', 'creature-illusion',
+  'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
+  'creature-illusion',
   // Cure Poison/Burning/Electrification/Bleeding/Curse entraram no #590 — a cura de condição
   // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
   // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
@@ -788,6 +789,9 @@ const EXCLUDED_SPELLS = [
   // as trouxe. `challenge`/`chivalrous-challenge` (#589) também saíram — ver
   // `VOCATION_SPELLS.knight`, acima.
   'curse',
+  // Invisibility/Cancel Invisibility entraram no #592 (`invisibility-druid`,
+  // `invisibility-sorcerer`, `cancel-invisibility`) — a condição `invisible` (CMB-07) e o
+  // dispel em área agora existem, e por isso saem desta allowlist.
   'shield-bash', 'shield-slam', 'train-party', 'protect-party', 'enchant-party',
   'heal-party', 'elemental-synthesis', 'shared-conservation',
   'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
@@ -823,7 +827,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 20 + 15 + 29 + 31 vocation spells, plus one generic (Cure Poison)', () => {
+  it('has exactly the catalogue: 20 + 16 + 30 + 32 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -837,15 +841,17 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // 17−2=15; Sorcerer +5 (Ultimate Flame Strike, Ignite, Electrify, Strong Haste, Cancel
     // Magic Shield) → 29; Druid −1 (Forked Thorns removida) +5 (Ultimate Ice/Terra Strike,
     // Envenom, Strong Haste, Cancel Magic Shield) → 27+4=31. As três genéricas pré-vocação
-    // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`.
+    // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`. #592
+    // acrescentou: Cancel Invisibility no Paladin (15+1=16), Invisibility no Sorcerer (29+1=30)
+    // e no Druid (31+1=32).
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
     expect(byVocation.get('knight')).toBe(20);
-    expect(byVocation.get('paladin')).toBe(15);
-    expect(byVocation.get('sorcerer')).toBe(29);
-    expect(byVocation.get('druid')).toBe(31);
+    expect(byVocation.get('paladin')).toBe(16);
+    expect(byVocation.get('sorcerer')).toBe(30);
+    expect(byVocation.get('druid')).toBe(32);
     expect(byVocation.get(undefined)).toBe(1);
   });
 

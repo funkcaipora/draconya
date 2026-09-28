@@ -21,6 +21,13 @@ export interface TargetLike {
   readonly health: number;
   readonly alive: boolean;
   readonly position: FloorPoint;
+  /**
+   * Invisível (#559/#592) — um monstro que ficou invisível sozinho (`monster.defenses`). Ausente
+   * é o de sempre; `MonsterRuntime.invisible` expõe `true` via `Conditions.hasInvisible`. O bot
+   * do jogador nunca vê o próprio Killer Rabbit invisível como candidato: sem `seesInvisible` do
+   * lado do jogador (ele não é monstro), a checagem aqui é incondicional.
+   */
+  readonly invisible?: boolean;
 }
 
 /** A política compilada. Conjuntos em vez de arrays: a checagem é por candidato por varredura. */
@@ -81,6 +88,9 @@ export function selectTarget<M extends TargetLike>(
   for (let i = 0; i < monsters.length; i += 1) {
     const monster = monsters[i] as M;
     if (!monster.alive) continue;
+    // Invisibilidade (#559/#592): o bot do jogador não mira monstro invisível — ele nunca "vê
+    // invisível" (isso é exclusividade de monstro, `Monster.conditionImmunities`/`seesInvisible`).
+    if (monster.invisible) continue;
     if (targeting.ignore.has(monster.monsterId)) continue;
     // Andar diferente é tela diferente (#519): mirar por (x, y) sem conferir o andar acertaria
     // um monstro atrás do chão, na Darashia Dragon Lair, onde os três andares compartilham a
@@ -135,6 +145,7 @@ export function countTargets<M extends TargetLike>(
   for (let i = 0; i < monsters.length; i += 1) {
     const monster = monsters[i] as M;
     if (!monster.alive) continue;
+    if (monster.invisible) continue;
     if (targeting.ignore.has(monster.monsterId)) continue;
     if (!sameFloor(from.z, monster.position.z)) continue;
     if (distance(from, monster.position) <= maxDistance) count += 1;
@@ -171,6 +182,7 @@ export function countAreaTargets<M extends TargetLike>(
   for (let i = 0; i < monsters.length; i += 1) {
     const monster = monsters[i] as M;
     if (!monster.alive) continue;
+    if (monster.invisible) continue;
     if (targeting.ignore.has(monster.monsterId)) continue;
     if (!sameFloor(areaZ, monster.position.z)) continue;
     if (keys.has(`${String(monster.position.x)},${String(monster.position.y)}`)) count += 1;

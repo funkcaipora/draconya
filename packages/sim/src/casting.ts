@@ -156,6 +156,18 @@ export interface SpellTarget {
    * reflexo precisa (`ReflectAttacker`). Ausente, nada reflete.
    */
   readonly attacker?: ReflectAttacker | undefined;
+  /**
+   * Id de CONTEÚDO do alvo (#592, Paralyze Rune) — o `subject` que `ConditionState.targetId`
+   * carrega. Só o efeito `condition` com `target: 'enemy'` lê; dano/cura não precisam, porque
+   * quem aplica o resultado já tem o `MonsterRuntime` pela mesma ordem da mira.
+   */
+  readonly creatureId?: string | undefined;
+  /**
+   * A velocidade BASE do alvo (#592) — o `baseSpeed` que `resolveSpeedPercent`/`SpeedContext`
+   * precisam para a fórmula da runa de paralyze (`ConditionSpeed` do Canary). Só o mesmo efeito
+   * acima lê; ausente em qualquer outro caminho (dano, cura), que nunca precisou de velocidade.
+   */
+  readonly speed?: number | undefined;
 }
 
 /**
@@ -202,10 +214,11 @@ export function groupCooldownKey(group: string): string {
 }
 
 /**
- * A chave do cooldown individual de um supply SEM grupo declarado.
- *
- * O supply de grupo usa `group:<g>`; o supply sem grupo cai no livro próprio, para não
- * inventar prioridade compartilhada que o conteúdo não declarou (DT-06).
+ * A chave do cooldown INDIVIDUAL de um supply — hoje só usada quando o conteúdo declara
+ * `cooldownMs` PRÓPRIO (#592, a Paralyze Rune: `groupCooldownMs` 2 s ao lado de `cooldownMs`
+ * 6 s, os dois iniciados e conferidos juntos). O supply de grupo usa `group:<g>`; este livro
+ * soma ao dele, nunca o substitui — dois livros trancando ao mesmo uso, não prioridade
+ * compartilhada nenhuma (DT-06).
  */
 export function supplyCooldownKey(supplyId: string): string {
   return `supply:${supplyId}`;
@@ -580,6 +593,10 @@ export function castSpell(
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    // Invisibilidade (#592, Invisibility): sem campo além do prazo — a chave RESERVADA
+    // (`INVISIBLE_CONDITION_KEY`) é o que `Conditions.hasInvisible` reconhece, como mana-shield.
+    case 'invisible':
+      return cast({ key: 'invisible', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
     // Provocação (#589): não devolve condição do LANÇADOR — quem recebe o efeito é o(s)
     // monstro(s) atingido(s), e é o ruleset (que tem `#spellHits` e escreve `MonsterRuntime`)
     // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
@@ -688,6 +705,15 @@ export function useSupply(
    */
   modifiers?: DamageModifiers,
 ): CastResult {
+  // O cooldown PRÓPRIO do supply (#592, Paralyze Rune: 6 s ao lado do grupo de 2 s) — ANTES de
+  // qualquer outra recusa, como o `spellCooldownKey` de `castSpell`: sem `nowMs` (fixture) o
+  // relógio lógico não existe, e a checagem é pulada — a mesma degradação de `startSupplyCooldown`.
+  if (supply.cooldownMs !== undefined && nowMs !== undefined) {
+    const ownKey = supplyCooldownKey(supply.id);
+    if (!user.cooldowns.isReady(ownKey, nowMs)) {
+      return { ok: false, reason: 'on-cooldown', retryInMs: user.cooldowns.remainingMs(ownKey, nowMs) };
+    }
+  }
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
   if (supply.effect.kind === 'damage') {
@@ -842,6 +868,47 @@ export function useSupply(
     };
   }
 
+  // Runa de condição a DISTÂNCIA (#592, Paralyze Rune: `rune:needTarget(true)`/
+  // `allowFarUse(true)`) — a mesma ordem da runa de ataque: requisitos, alvo, alcance, e só
+  // então o gold. `conditionFromSpec` aqui precisa do `SpeedContext` do ALVO (a velocidade dele,
+  // não a do usuário) para a fórmula `ConditionSpeed` do efeito `speed` — por isso só existe com
+  // `rng` no contexto, como a runa de dano nunca causa dano sem ele.
+  if (supply.effect.kind === 'condition' && supply.effect.target === 'enemy') {
+    const effect = supply.effect;
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
+      return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined && (scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    // `effect.range` é obrigatório com `target: 'enemy'` (o `.refine` do schema já garante) —
+    // o `?? 0` é só para o TypeScript, nunca alcançado com conteúdo válido.
+    if (aim.distance > (effect.range ?? 0)) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    const hasStockCondition = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockCondition && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    // Sem `rng` a condição não existe — nunca um efeito de velocidade sem o sorteio da fórmula
+    // (a mesma regra que barra dano sem `rng`/`combat`/`scaling` acima).
+    if (rng === undefined) return NOT_IN_CATALOG;
+    const paidFromStockCondition = hasStockCondition && spendStock(user, supply.id);
+    if (!paidFromStockCondition) purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    const target = aim.targets[0] as SpellTarget;
+    const condition = conditionFromSpec(
+      effect.condition, target.creatureId ?? '', user.id, nowMs ?? 0, 'rune',
+      effect.condition.effect.kind === 'speed' ? { baseSpeed: target.speed ?? 0, rng } : undefined,
+    );
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS,
+      goldSpent: paidFromStockCondition ? 0 : supply.price, condition,
+    };
+  }
+
   // Poção de BUFF (#576: Berserk, Mastermind, Bullseye, Magic Shield). Auto-alvo SEMPRE — nunca
   // o `recipient` (as quatro do Tibia não têm alcance nem alvo, ao contrário da runa de cura) —,
   // e a mesma ordem de sempre: level, vocação, e só então o gold. Sem estoque (#520): nenhuma
@@ -907,6 +974,11 @@ export function useSupply(
 function startSupplyCooldown(user: CharacterRuntime, supply: Supply, nowMs: number | undefined): void {
   if (nowMs === undefined) return;
   user.cooldowns.start(groupCooldownKey(supply.group), nowMs, supply.groupCooldownMs);
+  // O livro PRÓPRIO (#592, Paralyze Rune) inicia AO LADO do grupo, nunca no lugar dele — os dois
+  // trancam ao mesmo uso, e o gate no topo desta função confere os dois antes de agir.
+  if (supply.cooldownMs !== undefined) {
+    user.cooldowns.start(supplyCooldownKey(supply.id), nowMs, supply.cooldownMs);
+  }
   // A exaustão de ação compartilhada (#690) só AVANÇA, como o `setNextPotionAction` do Canary:
   // `Cooldowns.start` sobrescreve o prazo, então só se grava quando o novo é MAIOR que o que
   // falta — um supply de exaustão curta nunca encurta a de outro.

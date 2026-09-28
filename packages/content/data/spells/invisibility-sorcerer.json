@@ -1,0 +1,16 @@
+{
+  "id": "invisibility-sorcerer",
+  "name": "Invisibility",
+  "description": "Torna você invisível por 200 segundos.",
+  "vocationId": "sorcerer",
+  "minLevel": 35,
+  "manaCost": 440,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "invisible",
+    "durationMs": 200000
+  },
+  "_open": "A mesma magia de `invisibility-druid.json` (DT-02), duplicada por vocação (Canary `spell:vocation(\"druid;true\", \"elder druid;true\", \"sorcerer;true\", \"master sorcerer;true\")`) — ver o `_open` dela para a fonte completa."
+}

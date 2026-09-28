@@ -713,6 +713,12 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
     }
+    // Dispel em área (#592, Cancel Invisibility) é sempre centrado no LANÇADOR, como a cura em
+    // grupo: forma no alvo exigiria mira e alcance que este efeito não declara.
+    if (effect.kind === 'dispel' && effect.area !== undefined
+      && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
+      problems.push(`${where}: dispel em área precisa ser centrado no lançador`);
+    }
     if (effect.kind === 'challenge') {
       const selfOrigin = effect.area !== undefined
         && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
