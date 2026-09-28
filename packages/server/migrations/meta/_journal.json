@@ -120,6 +120,13 @@
       "when": 1790500000000,
       "tag": "0016_569-skills-updated-at",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0018_570-blessings",
+      "breakpoints": true
     }
   ]
 }

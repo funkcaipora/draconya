@@ -364,6 +364,11 @@ export const C2S_SCHEMAS = {
    * `instanceId` nesta entrega — sem gatilho de UI hoje (spec da #729, DT-04).
    */
   look: z.object({ position: Point }),
+  /**
+   * Comprar UMA bênção na Cidade (#570, ADR 0052 decisão 2). INTENÇÃO: só o id do catálogo
+   * (`content.blessings`); preço, saldo e "já tem esta bênção" são do servidor (invariante 4).
+   */
+  'buy-blessing': z.object({ blessingId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1096,6 +1101,33 @@ export const S2C_SCHEMAS = {
         manaPerSecond: z.number().nonnegative(),
       }),
     }).optional(),
+    /**
+     * As sete bênçãos PvE (#570, ADR 0052): catálogo (nome, `order` — o bit — e `enhanced`) e
+     * o preço por level, para a tela de compra da Cidade calcular o valor localmente sem
+     * perguntar ao servidor a cada dígito do level. `.optional()`, como `progression` acima:
+     * conteúdo sem bênção/Cidade manda `catalogue` sem a chave, e a tela de compra não aparece.
+     */
+    blessings: z.object({
+      list: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        order: z.number().int().min(0).max(6),
+        enhanced: z.boolean(),
+      })),
+      pricing: z.object({
+        freeBelowLevel: z.number().int().nonnegative(),
+        flatUntilLevel: z.number().int().positive(),
+        flatPrice: z.number().int().nonnegative(),
+        highFromLevel: z.number().int().positive(),
+        midOffset: z.number().int().nonnegative(),
+        midMultiplier: z.number().int().positive(),
+        midEnhancedMultiplier: z.number().int().positive(),
+        highBase: z.number().int().nonnegative(),
+        highEnhancedBase: z.number().int().nonnegative(),
+        highMultiplier: z.number().int().positive(),
+        highEnhancedMultiplier: z.number().int().positive(),
+      }),
+    }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   /**
@@ -1281,6 +1313,11 @@ export const S2C_SCHEMAS = {
   'field-appear': FieldTile,
   /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
   'field-disappear': z.object({ id: z.string().min(1) }),
+  /**
+   * As bênçãos do personagem (#570, ADR 0052): o BITMASK — o cliente resolve os nomes pelo
+   * catálogo (`catalogue.blessings`, invariante 6). Só para o dono, como `slot-state`.
+   */
+  blessings: z.object({ mask: z.number().int().nonnegative() }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

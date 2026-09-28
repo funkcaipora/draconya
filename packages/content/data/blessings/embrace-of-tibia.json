@@ -1,0 +1,7 @@
+{
+  "id": "embrace-of-tibia",
+  "name": "Embrace of Tibia",
+  "order": 2,
+  "enhanced": false,
+  "_open": "#570, `Blessings.All` do Canary, id 4. Mesma regra das demais regulares: ver `inquisition.json`."
+}

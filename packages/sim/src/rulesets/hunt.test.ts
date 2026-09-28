@@ -138,7 +138,7 @@ const progression = {
   startingSpeed: 300, speedPerLevel: 0,
   regen: { health: { ticksMs: 1000, amount: 1 }, mana: { ticksMs: 1000, amount: 1 } },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessingReduction: 0.56, promotionReduction: 0.3 },
   skillMultipliers: {},
 };
 
@@ -7913,10 +7913,10 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     };
     // Level 10 < `cubicFromLevel` (24): a perda é `flatFraction` da XP ACUMULADA (não mais uma
     // fração de `xpToCompleteLevel`). Quem está abençoado tem a redução TETADA em 50% neste
-    // ramo (Canary `Player::getLostPercent`, `level < 24`) — `blessedReduction` (56%) é ≥ 40%,
+    // ramo (Canary `Player::getLostPercent`, `level < 24`) — `blessingReduction` (56%) é ≥ 40%,
     // então o teto entra, não o valor bruto.
-    const { flatFraction, blessedReduction } = (progression as Progression).deathPenalty;
-    expect(blessedReduction).toBeGreaterThanOrEqual(0.40);
+    const { flatFraction, blessingReduction } = (progression as Progression).deathPenalty;
+    expect(blessingReduction).toBeGreaterThanOrEqual(0.40);
     expect(xpOf('premium')).toBe(-Math.round(flatFraction * startXp * (1 - 0.50)));
     expect(xpOf('free')).toBe(-Math.round(flatFraction * startXp));
   });

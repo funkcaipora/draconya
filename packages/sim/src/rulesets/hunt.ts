@@ -118,7 +118,8 @@ import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
-import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS, MAX_BLESSINGS } from '../food.js';
+import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
+import { blessingCount } from '../blessings.js';
 import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
@@ -1930,9 +1931,10 @@ export class HuntRuleset implements Ruleset {
    * A execução DE VERDADE de `use-item`/`use-item-on`, sem checar exaustão (o chamador já
    * checou, ou é o vencimento do adiamento). Resolve `ref` pelo catálogo — `supply` reaproveita
    * `#useSupply`/`casting.ts` por inteiro (ADR 0049 decisão 3: "o mesmo caminho do slot, sem
-   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5) ou a carga de
-   * bênção (consome, soma `blessings` — o executor que a TP-03/M22 esperava; ligar a bênção à
-   * redução de perda de item na morte é o ADR 0042, fora do escopo desta issue).
+   * passar pela barra"); `instance` executa comida (soma `fedMs`, ADR 0049 d.5). A carga de
+   * bênção (`blessing-charge`) foi REMOVIDA pelo #570: bênção virou serviço de Cidade (ADR
+   * 0052), nunca item de mochila — ver `#onCharacterDied` para o consumo e `rulesets/city.ts`
+   * para a compra.
    */
   #performItemUse(
     session: Session, character: CharacterRuntime, ref: ItemRef, target: UseSlotTarget | undefined,
@@ -1983,14 +1985,6 @@ export class HuntRuleset implements Ruleset {
       // "Munch." etc. do Canary, e o `fedMs` novo em si, ficam fora — nenhum dos dois tem campo
       // de protocolo hoje (`player-stats`/`session-state` não expõem `fedMs`); ver desvios da
       // spec desta issue.
-      session.emit({ kind: 'equipment-changed', characterId: character.id });
-      character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
-      return { ok: true };
-    }
-    if (item.effect.kind === 'blessing') {
-      if (character.blessings >= MAX_BLESSINGS) return refuseItem('not-usable', 0);
-      character.inventory.consumeOne(instanceId);
-      character.blessings += 1;
       session.emit({ kind: 'equipment-changed', characterId: character.id });
       character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
       return { ok: true };
@@ -3083,18 +3077,26 @@ export class HuntRuleset implements Ruleset {
     this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
-    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
-    // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
-    const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
+    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). A contagem de
+    // bênçãos (#570) é do PERSONAGEM morto — bênção é comprada por personagem, nunca por
+    // sessão/party, ao contrário do antigo `premium` binário que este parâmetro substituiu.
+    const blessings = blessingCount(character.blessings);
     // `promoted` ainda não existe como estado do personagem (#566/ADR 0042) — o parâmetro é o
     // ponto de extensão que a promoção vai acionar quando o estado existir (#569).
     const penalty = applyDeathPenalty(
       character,
-      { premium },
+      { blessings },
       this.#vocationOf(character),
       this.#options.progression,
       this.#options.skills,
     );
+    // Morrer CONSOME todas as bênçãos de uma vez (#570, `Player::death` do Canary) — nunca uma
+    // de cada vez, e nunca proporcional à perda. Depois daqui `character.blessings` é `0`
+    // até a próxima compra na Cidade.
+    if (blessings > 0) {
+      character.blessings = 0;
+      session.record('blessings-consumed', String(blessings));
+    }
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
       // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.

@@ -473,18 +473,16 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
-  it('blessing-charge é o ÚNICO item consumable NÃO-EMPILHÁVEL, sem group nem restock (ADR 0026 d.3)', () => {
+  it('a comida é o único consumable, EMPILHÁVEL — a carga de bênção saiu no #570 (ADR 0026 d.3, emenda)', () => {
     const content = loadContent(DATA);
     const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
-    // A comida (#726, ADR 0049 d.5) entrou como `consumable` também — cheese, ham, meat,
-    // dragon-ham, green-mushroom —, mas EMPILHÁVEL, ao contrário da carga de bênção.
+    // `blessing-charge` foi REMOVIDO pelo #570: bênção é serviço de Cidade (ADR 0052), nunca
+    // item de mochila. Sobra só a comida (#726, ADR 0049 d.5) — cheese, ham, meat, dragon-ham,
+    // green-mushroom —, todas EMPILHÁVEIS.
     expect(consumables.map((item) => item.id).sort()).toEqual(
-      ['blessing-charge', 'cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
+      ['cheese', 'dragon-ham', 'green-mushroom', 'ham', 'meat'].sort(),
     );
-    const blessing = content.items.get('blessing-charge');
-    expect(blessing?.stackable).toBe(false);
-    expect(blessing?.effect).toEqual({ kind: 'blessing' });
-    expect(blessing?.weight).toBeGreaterThan(0);
+    expect(content.items.has('blessing-charge')).toBe(false);
     const cheese = content.items.get('cheese');
     expect(cheese?.stackable).toBe(true);
     expect(cheese?.effect).toEqual({ kind: 'food', durationMs: 108_000 });

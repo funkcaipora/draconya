@@ -17,12 +17,13 @@ import {
   appearancesSchema,
   attackRange,
   packSchema,
+  blessingSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
   supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, Blessing, BotLimits, Combat, CompiledMitigation,
   CompiledReflect, DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility, MonsterDefense,
   MonsterDefinition, Pack, PartyConfig, Progression, Rates, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, VocationRequirement, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind,
@@ -63,6 +64,12 @@ export interface Content {
    * sem item físico nem pilha. O `group` é o grupo de cooldown do motor v2.
    */
   readonly supplies: ReadonlyMap<string, Supply>;
+  /**
+   * As sete bênçãos PvE do Tibia (#570, ADR 0052): compradas na Cidade, consumidas na morte.
+   * `order` (em cada `Blessing`) é o índice do bit que `CharacterRuntime.blessings` guarda —
+   * ver `packages/sim/src/blessings.ts`.
+   */
+  readonly blessings: ReadonlyMap<string, Blessing>;
   /** Skills que sobe por uso (§9.4). Vazio é um jogo em que nada sobe por fazer. */
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (§21.2). Atributos base fixos: item melhor é item diferente. */
@@ -124,6 +131,8 @@ export interface RawContent {
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
+  /** As sete bênçãos PvE (#570), `blessings/*.json`. */
+  readonly blessings?: readonly unknown[];
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
   /** As munições abstratas, `ammunition/*.json` (ADR 0026 d.3). */
@@ -605,6 +614,18 @@ export function buildContent(raw: RawContent): Content {
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
   // O catálogo de suprimentos (§20.1): poção e runa abstratas, gold no uso.
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
+  // As sete bênçãos PvE (#570): `order` é o índice do bit em `CharacterRuntime.blessings`, e
+  // precisa ser ÚNICO — duas bênçãos no mesmo bit fariam comprar uma marcar a outra como dona.
+  const blessings = parseAll('blessing', raw.blessings ?? [], blessingSchema, problems);
+  const blessingOrders = new Map<number, string>();
+  for (const blessing of blessings.values()) {
+    const owner = blessingOrders.get(blessing.order);
+    if (owner !== undefined) {
+      problems.push(`blessing "${blessing.id}" usa o mesmo order (${blessing.order}) de "${owner}"`);
+      continue;
+    }
+    blessingOrders.set(blessing.order, blessing.id);
+  }
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   // As famílias de arma (CMB-05) são compiladas com as skills: o `damagePerLevel` da skill
   // apontada vira o `skillFactor` da família, e rebalanceá-la rebalanceia todas as famílias.
@@ -1426,6 +1447,7 @@ export function buildContent(raw: RawContent): Content {
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     ...openOf('spell', spells),
     ...openOf('supply', supplies),
+    ...openOf('blessing', blessings),
     ...openOf('skill', skills),
     ...openOf('item', items),
     ...openOf('munição', ammunition),
@@ -1444,6 +1466,7 @@ export function buildContent(raw: RawContent): Content {
     bot: bot as BotLimits,
     spells,
     supplies,
+    blessings,
     skills,
     items,
     ammunition,

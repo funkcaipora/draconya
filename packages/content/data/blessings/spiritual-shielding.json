@@ -1,0 +1,7 @@
+{
+  "id": "spiritual-shielding",
+  "name": "Blessing of the Spiritual Shielding",
+  "order": 1,
+  "enhanced": false,
+  "_open": "#570, `Blessings.All` do Canary, id 3. Mesma regra das demais regulares: ver `inquisition.json`."
+}

@@ -19,9 +19,6 @@ import type { CharacterRuntime } from './character.js';
 /** Teto de `fedMs` (`foods.lua`: `>= 1200` segundos recusa "You are full"). */
 export const FOOD_CAP_MS = 1_200_000;
 
-/** Bênçãos máximas (#726): o teto de 5 do Tibia, mesmo sem consumidor ainda (ver ADR 0042/TP-03). */
-export const MAX_BLESSINGS = 5;
-
 /** Drena o tempo de hunt decorrido. Nunca zera sozinho — comida acaba por CONSUMO, não por espera. */
 export function drainFedMs(character: CharacterRuntime, dtMs: number): void {
   if (character.fedMs <= 0) return;

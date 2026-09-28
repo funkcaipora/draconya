@@ -194,12 +194,17 @@ export interface CharacterState {
    */
   readonly fedMs?: number;
   /**
-   * Bênçãos ativas (#726, ADR 0049 decisão 3/consequências — o executor da `blessing-charge`
-   * que a TP-03/M22 esperava): cada carga consumida soma uma, capada em `MAX_BLESSINGS` (5,
-   * como o Tibia). **Ainda não é lida por ninguém** — ligar a bênção à redução de perda de item
-   * na morte é o ADR 0042/TP-03, fora do escopo desta issue; o campo existe para o `use-item`
-   * ter O QUE fazer com a carga, sem inventar comportamento de morte que outra decisão ainda não
-   * tomou. Ausente é `0`, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   * As sete bênçãos PvE compradas na Cidade (#570, ADR 0052 — substitui o executor de
+   * `blessing-charge` do #726, removido): um BITMASK, um bit por `order` do catálogo
+   * (`content.blessings`, `packages/sim/src/blessings.ts`), nunca uma contagem — a identidade
+   * importa porque comprar de novo a mesma bênção é recusado, e só `blessingCount(mask)` entra
+   * na redução da penalidade de morte (`applyDeathPenalty`, `progression.ts`).
+   *
+   * **DESCE**: `HuntRuleset#onCharacterDied` zera o campo inteiro na morte (o Tibia consome
+   * TODAS de uma vez, nunca uma de cada vez) — é por isso que o extrato manda o valor absoluto
+   * e o ledger NUNCA funde por máximo (ao contrário do Bestiário/skills, que só sobem): fundir
+   * por máximo ressuscitaria bênção que acabou de ser consumida se um extrato antigo chegasse
+   * depois. Ausente é `0`, sem bump de `SNAPSHOT_FORMAT_VERSION`, como `fedMs`.
    */
   readonly blessings?: number;
   /**
@@ -348,7 +353,7 @@ export class CharacterRuntime {
   attackPractice: AttackPracticeState;
   /** Comida ativa (#726). Só `drainFedMs`/`feed` (`food.ts`) escrevem — invariante 9. */
   fedMs: number;
-  /** Bênçãos consumidas (#726). Só o executor da `blessing-charge` escreve. */
+  /** Bitmask de bênçãos (#570). Só o ruleset de Cidade (compra) e a morte (consumo) escrevem. */
   blessings: number;
   /** A ação manual adiada (#726). `null` é nenhuma. Só o ruleset escreve. */
   pendingManualAction: PendingManualActionState | null;

@@ -1,0 +1,7 @@
+{
+  "id": "inquisition",
+  "name": "Blessing of the Inquisition",
+  "order": 0,
+  "enhanced": false,
+  "_open": "#570, `data/libs/systems/blessing.lua` do Canary (`Blessings.All`, id 2 — o 1, Twist of Fate, é PvP e fica fora do catálogo PvE). Regular: preço por `blessingPricing`, redução 8% (`deathPenalty.blessingReduction`) como as outras seis. Grátis abaixo do level 21 (Adventurer's Blessing, `config.lua.dist:496`)."
+}

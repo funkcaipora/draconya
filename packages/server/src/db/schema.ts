@@ -207,6 +207,16 @@ export const characters = pgTable(
      */
     fedMs: bigint('fed_ms', { mode: 'number' }).notNull().default(0),
 
+    /**
+     * As sete bênçãos PvE (#570, ADR 0052): BITMASK, um bit por `order` de
+     * `content.blessings` — `packages/sim/src/blessings.ts`. Mesmo padrão de `fedMs`:
+     * `bigint`/`number`, ABSOLUTO, última escrita vence — nunca fundido por máximo, porque
+     * bênção DESCE na morte (fundir pelo maior ressuscitaria uma bênção recém-consumida se um
+     * extrato antigo, fora de ordem, chegasse depois de um mais novo já aplicado). Default 0:
+     * quem nunca comprou, ou todo personagem anterior a esta migração.
+     */
+    blessings: bigint('blessings', { mode: 'number' }).notNull().default(0),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

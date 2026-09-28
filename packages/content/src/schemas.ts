@@ -681,8 +681,12 @@ export const CONSUMABLE_GROUPS = ['potion', 'attack', 'healing', 'support'] as c
 export type ConsumableGroup = (typeof CONSUMABLE_GROUPS)[number];
 
 /**
- * O efeito do consumível. `blessing` entra agora (a TP-03 a consome em M22); o `sim` v1 a
- * recusa até lá — a projeção `Supply` a deixa de fora justamente por isso.
+ * O efeito do consumível. `blessing` EXISTIU aqui (M22/#726) como andaime — a carga de
+ * `blessing-charge` que a TP-03 nunca chegou a executar de verdade — e foi REMOVIDO pelo #570:
+ * bênção passou a ser serviço de Cidade (compra por intenção, ADR 0052), nunca item de mochila.
+ * Sem consumível `blessing` hoje, o catálogo real fica sem `kind: 'consumable'` nenhum — o que
+ * a ADR 0026 d.3 chamava de "o único que sobrevive" deixou de existir, e é o esperado: nada do
+ * recorte atual usa item físico consumível.
  */
 export const consumableEffectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
@@ -698,7 +702,6 @@ export const consumableEffectSchema = z.discriminatedUnion('kind', [
     }),
     damageType: z.enum(DAMAGE_TYPES).default('arcane'),
   }),
-  z.object({ kind: z.literal('blessing') }),
   /**
    * Comida (#726, ADR 0049 decisão 5, emenda ao ADR 0043): `durationMs` é `value × 12` segundos
    * em milissegundos, o mecanismo do Canary (`foods.lua`: `itemFood[1] * 12`, teto de 1200 s —
@@ -806,8 +809,10 @@ export const itemSchema = z.strictObject({
   /**
    * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
    * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). `consumable`
-   * é o único tipo que sobrevive ao modelo abstrato (a `blessing-charge`, M22): poção, runa e
-   * munição NÃO são itens — são `supply`/`ammunition`, uma seleção que debita gold no uso/tiro.
+   * é o tipo que sobrevive ao modelo abstrato: poção, runa e munição NÃO são itens — são
+   * `supply`/`ammunition`, uma seleção que debita gold no uso/tiro. A comida é `consumable` real
+   * (#726); a carga de bênção que também era (`blessing-charge`, M22) foi removida pelo #570 —
+   * bênção virou serviço de Cidade, nunca item de mochila.
    */
   kind: z.enum([
     'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable',
@@ -838,8 +843,9 @@ export const itemSchema = z.strictObject({
    */
   value: z.number().int().nonnegative(),
   /**
-   * Empilha na mesma linha de inventário? Queijo empilha; espada não. A `blessing-charge` NÃO
-   * empilha — é carga única, e o schema não impõe mais `stackable: true` a consumível.
+   * Empilha na mesma linha de inventário? Queijo empilha; espada não. O schema não impõe
+   * `stackable: true` a consumível — a `blessing-charge` (removida no #570) era o exemplo de
+   * carga única não-empilhável, e um consumível futuro pode voltar a precisar disso.
    */
   stackable: z.boolean().default(false),
   attack: z.number().int().nonnegative().default(0),
@@ -1000,7 +1006,7 @@ export const itemSchema = z.strictObject({
   cleavePercent: z.number().int().positive().max(100).optional(),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
-  /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
+  /** O efeito do consumível. Só em `kind: 'consumable'` — hoje só a comida (#726). */
   effect: consumableEffectSchema.optional(),
   /** De onde um item IMPORTADO veio (ADR 0038 decisão 2). Ausente em item autorado à mão. */
   source: catalogSourceSchema.optional(),
@@ -1205,6 +1211,59 @@ const rangeSchema = z.object({
   min: z.number().int().positive(),
   max: z.number().int().positive(),
 }).refine((range) => range.min <= range.max, { message: 'faixa invertida: min maior que max' });
+
+/**
+ * Uma das sete bênçãos PvE do Tibia (#570, `data/libs/systems/blessing.lua` do Canary —
+ * `Blessings.All` tem 8 ids; o 1º, Twist of Fate, é PvP e fica fora deste catálogo). `order` é
+ * o índice do BIT que `CharacterRuntime.blessings` usa (`packages/sim/src/blessings.ts`): a
+ * identidade importa porque comprar de novo a mesma bênção é recusado, e a redução da morte
+ * olha só a CONTAGEM de bits — o Tibia dá o mesmo 8% por bênção, regular ou `enhanced`.
+ * `enhanced` (Heart/Blood of the Mountain, ids 7-8) custa mais caro pela mesma tabela
+ * (`blessingPricing`), nunca reduz mais que uma regular.
+ */
+export const blessingSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Índice do bit em `CharacterRuntime.blessings` (0-6, um por bênção). Único no catálogo. */
+  order: z.number().int().min(0).max(6),
+  /** Heart/Blood of the Mountain (#570): custam mais caro pela `blessingPricing`. */
+  enhanced: z.boolean().default(false),
+});
+
+/**
+ * O preço por level de UMA bênção (#570, `getBlessingCost` do Canary,
+ * `data/libs/systems/blessing.lua:148-166`, e o Adventurer's Blessing grátis de
+ * `config.lua.dist:496`). Piecewise em três faixas de level, com multiplicador maior para
+ * `enhanced`; `blessingCost` (`packages/sim/src/blessings.ts`) é a função pura que soma o
+ * mecanismo — os números abaixo são os do Tibia, e são dado, não código.
+ */
+export const blessingPricingSchema = z.object({
+  /** Abaixo deste level a bênção é GRÁTIS (o Adventurer's Blessing). Tibia: 21. */
+  freeBelowLevel: z.number().int().nonnegative(),
+  /** Até este level (inclusive) o preço é fixo, `flatPrice`. Tibia: 30. */
+  flatUntilLevel: z.number().int().positive(),
+  /** Preço fixo da faixa acima (level ≤ `flatUntilLevel`, e ≥ `freeBelowLevel`). Tibia: 2000. */
+  flatPrice: z.number().int().nonnegative(),
+  /** A partir de qual level a faixa alta (`highBase` + `highMultiplier`) substitui a faixa média. Tibia: 120. */
+  highFromLevel: z.number().int().positive(),
+  /** Deduzido do level antes de multiplicar, na faixa MÉDIA (`flatUntilLevel < level < highFromLevel`). Tibia: 20. */
+  midOffset: z.number().int().nonnegative(),
+  /** Multiplicador da faixa média, bênção regular. Tibia: 200. */
+  midMultiplier: z.number().int().positive(),
+  /** Multiplicador da faixa média, bênção `enhanced`. Tibia: 260. */
+  midEnhancedMultiplier: z.number().int().positive(),
+  /** Base fixa da faixa alta, bênção regular. Tibia: 20000. */
+  highBase: z.number().int().nonnegative(),
+  /** Base fixa da faixa alta, bênção `enhanced`. Tibia: 26000. */
+  highEnhancedBase: z.number().int().nonnegative(),
+  /** Multiplicador da faixa alta (sobre `level - highFromLevel`), bênção regular. Tibia: 75. */
+  highMultiplier: z.number().int().positive(),
+  /** Multiplicador da faixa alta, bênção `enhanced`. Tibia: 100. */
+  highEnhancedMultiplier: z.number().int().positive(),
+});
+
+export type Blessing = z.infer<typeof blessingSchema>;
+export type BlessingPricing = z.infer<typeof blessingPricingSchema>;
 
 /**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
@@ -2726,8 +2785,9 @@ export const progressionSchema = z.object({
    * 10% dos levels 8–23); a partir dali a perda é a fórmula cúbica clássica —
    * `((L+50) / 100) × 50 × (L² − 5L + 8)`, com `L` incluindo a fração de progresso dentro do
    * level, para a perda não saltar na fronteira — sobre a XP acumulada, não mais uma fração de
-   * `xpToCompleteLevel`. `blessedReduction` mapeia o conceito de bênção do repo (`premium` na
-   * chamada de `applyDeathPenalty`) na redução aditiva do Tibia: sete bênçãos × 8% = 56%. O
+   * `xpToCompleteLevel`. `blessingReduction` (#570) é a redução POR BÊNÇÃO — 8% no Tibia —, e a
+   * penalidade multiplica pelo NÚMERO de bênçãos que o morto tinha (`CharacterRuntime.blessings`,
+   * `packages/sim/src/blessings.ts`), nunca mais um binário `premium`. Sete bênçãos × 8% = 56%. O
    * MESMO percentual (menos a redução) tira também os tries de skill e a mana gasta (#569) —
    * não só a XP.
    */
@@ -2736,8 +2796,13 @@ export const progressionSchema = z.object({
     flatFraction: z.number().min(0).max(1),
     /** A partir de qual level a fórmula cúbica substitui a fração fixa. Tibia: 24. */
     cubicFromLevel: z.number().int().positive(),
-    /** Redução de quem está "abençoado" (mapeia `premium`). Tibia: 56% (7 bênçãos × 8%). */
-    blessedReduction: z.number().min(0).max(1),
+    /**
+     * Redução ADITIVA de UMA bênção (#570, `getSkullClient`/`Player::getLostPercent`: cada
+     * bênção soma 1/7 dos 56% cheios). Tibia: 8%. Multiplicada por
+     * `blessingCount(character.blessings)` — nunca mais um binário `premium` — antes de aplicar
+     * o teto de 50% do ramo `level < cubicFromLevel` (ver `applyDeathPenalty`).
+     */
+    blessingReduction: z.number().min(0).max(1),
     /**
      * Redução ADITIVA de quem já se promoveu (`Player::getLostPercent`: `percentReduction +=
      * 0.30`), somada à redução de bênção — nunca tetada pelo teto de 50% do ramo
@@ -2749,6 +2814,12 @@ export const progressionSchema = z.object({
      */
     promotionReduction: z.number().min(0).max(1),
   }),
+  /**
+   * O preço por level de bênção (#570). Opcional: conteúdo de teste sem Cidade/bênção não
+   * precisa dele — a compra recusa sem ele (`blessing-service-unavailable`), nunca inventa um
+   * default de código (a regra de sempre: número é dado, não código).
+   */
+  blessingPricing: blessingPricingSchema.optional(),
   /**
    * O bônus de XP por FAIXA de level (#563), em faixas ORDENADAS: `maxLevel` é o teto INCLUSIVO
    * e a primeira faixa que contém o level vence; a última pode OMITIR `maxLevel` para ser o
