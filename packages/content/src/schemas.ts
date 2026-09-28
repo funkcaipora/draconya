@@ -1237,6 +1237,7 @@ export const blessingSchema = z.strictObject({
   order: z.number().int().min(0).max(6),
   /** Heart/Blood of the Mountain (#570): custam mais caro pela `blessingPricing`. */
   enhanced: z.boolean().default(false),
+  _open: z.string().optional(),
 });
 
 /**

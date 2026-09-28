@@ -958,20 +958,22 @@ describe('level up e penalidade de morte dentro da hunt', () => {
     expect(session.notableEvents.find((e) => e.type === 'level-down')?.detail).toBe('20 → 19');
   });
 
-  it('Premium paga menos por morrer', () => {
-    const cobrança = (premium: boolean): number => {
+  it('quem tem bênção paga menos por morrer (#570 — substitui o antigo binário Premium)', () => {
+    const cobrança = (blessings: number): number => {
       const session = createHuntSession({
         id: 's', content: content({ routes: [threeRatsRoute] }), huntId: 'arena', difficulty: 'bold',
-        createdAtMs: 0, premium,
+        createdAtMs: 0,
       });
       const hero = character({ health: 12 });
       hero.level = 20;
       hero.xp = totalXpForLevel(20, progression as Progression);
+      hero.blessings = blessings;
       session.enter(hero);
       run(session, 60_000, 100);
       return Number(session.notableEvents.find((e) => e.type === 'xp-penalty')?.detail);
     };
-    expect(cobrança(true)).toBeLessThan(cobrança(false));
+    // 0b1111111 = 127: as sete bênçãos, todos os bits ligados.
+    expect(cobrança(127)).toBeLessThan(cobrança(0));
   });
 
   it('a vocação escolhida no level 8 rege o level 9, e só ele (#154, ADR 0026 decisão 1)', () => {
@@ -6294,10 +6296,6 @@ describe('useItem/useItemOn (#726, ADR 0049 decisão 3)', () => {
     id: 'cheese-726', name: 'Cheese', kind: 'consumable' as const, weight: 4, value: 0,
     stackable: true, effect: { kind: 'food' as const, durationMs: 108_000 },
   };
-  const blessingItem = {
-    id: 'blessing-726', name: 'Carga de Bênção', kind: 'consumable' as const, weight: 1, value: 0,
-    stackable: false, effect: { kind: 'blessing' as const },
-  };
   const swordItem = { id: 'sword-726', name: 'Sword', kind: 'weapon' as const, slot: 'hand' as const, weight: 10, value: 0, attack: 5 };
 
   it('use-item com ref.supplyId gasta o ESTOQUE antes do gold, como o slot (RF-01)', () => {
@@ -6339,27 +6337,6 @@ describe('useItem/useItemOn (#726, ADR 0049 decisão 3)', () => {
     const outcome = ruleset.useItem(session, 'hero', { instanceId: 'i1' }, 1);
     expect(outcome).toEqual({ ok: false, reason: 'you-are-full', retryInMs: 0 });
     expect(hero.inventory.backpack.find((it) => it?.instanceId === 'i1')?.quantity).toBe(1);
-  });
-
-  it('use-item numa carga de bênção soma `blessings`, capado em 5 (RF-06)', () => {
-    const { session, hero, ruleset } = withSpells(botConfig({}), {
-      items: [blessingItem], monsters: false,
-      inventory: {
-        backpack: [
-          { instanceId: 'b1', itemId: 'blessing-726', quantity: 1 },
-          { instanceId: 'b2', itemId: 'blessing-726', quantity: 1 },
-        ],
-        satchel: [], equipped: {},
-      },
-    });
-    hero.blessings = 5;
-    const capped = ruleset.useItem(session, 'hero', { instanceId: 'b1' }, 1);
-    expect(capped).toEqual({ ok: false, reason: 'not-usable', retryInMs: 0 });
-    expect(hero.blessings).toBe(5);
-    hero.blessings = 4;
-    const ok = ruleset.useItem(session, 'hero', { instanceId: 'b2' }, 2);
-    expect(ok).toEqual({ ok: true });
-    expect(hero.blessings).toBe(5);
   });
 
   it('instância desconhecida recusa `not-carried`; item não-consumível recusa `not-usable`', () => {
@@ -8047,24 +8024,27 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     expect(session.aggregates.goldSpent).toBe(paid * 5);
   });
 
-  it('a penalidade de morte lê o Premium (bênção) do morto: perde menos XP (#521, ADR 0037)', () => {
+  it('a penalidade de morte lê as bênçãos (#570) do morto: perde menos XP, e a morte as consome', () => {
     const killer = { ...rat, health: 1_000_000, attack: 50, attackRange: 1, experience: 0 };
     const deadly = content({ monsters: [killer] });
     const stats = statsForLevel(10, null, progression as Progression);
     const startXp = totalXpForLevel(10, progression as Progression);
-    const dying = (id: string) => new CharacterRuntime({
+    const dying = (id: string, blessings?: number) => new CharacterRuntime({
       id, position: { x: 0, y: 0, z: 7 },
       health: 1, maxHealth: stats.maxHealth,
       mana: 0, maxMana: stats.maxMana, level: 10, xp: startXp, vocationId: null,
       staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
       gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+      ...(blessings === undefined ? {} : { blessings }),
     });
-    const { session } = make([dying('premium'), dying('free'), member('survivor', { health: 100_000 })], {
+    // Uma bênção só: `blessingReduction` deste conteúdo de teste (0.56, o mesmo valor que o
+    // antigo binário `premium` usava por inteiro) × 1 bênção reproduz os mesmos 56% de antes.
+    const blessed = dying('blessed', 1);
+    const { session } = make([blessed, dying('free'), member('survivor', { health: 100_000 })], {
       content: deadly,
       partyOptions: {
-        leaderId: 'premium',
+        leaderId: 'blessed',
         settings: { shareCosts: false, splitLoot: false, collect: null, autoSell: [] },
-        premiumByCharacter: { premium: true },
       },
     });
     run(session, 30_000, 100);
@@ -8075,13 +8055,16 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
       return event.departure.receipt.aggregates.xpGained;
     };
     // Level 10 < `cubicFromLevel` (24): a perda é `flatFraction` da XP ACUMULADA (não mais uma
-    // fração de `xpToCompleteLevel`). Quem está abençoado tem a redução TETADA em 50% neste
-    // ramo (Canary `Player::getLostPercent`, `level < 24`) — `blessingReduction` (56%) é ≥ 40%,
+    // fração de `xpToCompleteLevel`). Quem tem bênção tem a redução TETADA em 50% neste ramo
+    // (Canary `Player::getLostPercent`, `level < 24`) — `blessingReduction` × 1 (56%) é ≥ 40%,
     // então o teto entra, não o valor bruto.
     const { flatFraction, blessingReduction } = (progression as Progression).deathPenalty;
     expect(blessingReduction).toBeGreaterThanOrEqual(0.40);
-    expect(xpOf('premium')).toBe(-Math.round(flatFraction * startXp * (1 - 0.50)));
+    expect(xpOf('blessed')).toBe(-Math.round(flatFraction * startXp * (1 - 0.50)));
     expect(xpOf('free')).toBe(-Math.round(flatFraction * startXp));
+    // A morte CONSOME todas as bênçãos de uma vez (#570): o personagem morreu, então o
+    // bitmask que ele carregava não sobrevive.
+    expect(blessed.blessings).toBe(0);
   });
 
   it('1 Hz == 10 Hz alternando os dois eixos no meio da corrida', () => {

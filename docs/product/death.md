@@ -150,7 +150,7 @@ sessão (invariante 8): "a hunt acabou" nunca pode significar "ficou sem sessão
 |---|---|---|
 | Penalidade — fração fixa (< level 24) | 10% da XP/skill/mana acumulada | `packages/content/data/progression/baseline.json`, `deathPenalty.flatFraction` |
 | Penalidade — limiar da fórmula cúbica | level 24 | `packages/content/data/progression/baseline.json`, `deathPenalty.cubicFromLevel` |
-| Redução de quem está abençoado (`premium`) | 56% (tetada em 50% abaixo do level 24) | `packages/content/data/progression/baseline.json`, `deathPenalty.blessedReduction` |
+| Redução por bênção (#570) | 8% por bênção — sete dão 56%, tetada em 50% abaixo do level 24 | `packages/content/data/progression/baseline.json`, `deathPenalty.blessingReduction` |
 | Redução de quem está promovido (`promoted`) | 30%, aditiva e nunca tetada — parâmetro sem estado ainda (#566) | `packages/content/data/progression/baseline.json`, `deathPenalty.promotionReduction` |
 | Piso de proteção de level | **removido pelo #569** | — |
 
@@ -165,9 +165,12 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
   morte —, então esta questão não tem evidência do Huntera para se apoiar e segue exatamente como
   o ADR 0042 a deixou: em aberto, aguardando decisão do dono, não uma captura. `docs/tibia-parity-plan.md`
   §6 lista o que uma captura de morte precisaria mostrar, se uma acontecer.
-- **Bênção de verdade (#570)** e **promoção como estado do personagem (#566)** são os dois
-  parâmetros que a #569 deixou como extensão (`options.premium`, `options.promoted`) sem
-  implementar o mecanismo por trás deles.
+- **Bênção de verdade (#570) já está implementada**: `applyDeathPenalty` recebe
+  `options.blessings` — a CONTAGEM de bênçãos do morto (`blessingCount(character.blessings)`,
+  `packages/sim/src/blessings.ts`), nunca mais o binário `premium` que a #569 deixou como ponto
+  de extensão. A morte consome todas de uma vez (`HuntRuleset#onCharacterDied`). Ver
+  `docs/product/blessings.md`. **Promoção como estado do personagem (#566)** segue em aberto:
+  `options.promoted` continua o ponto de extensão, sem mecanismo por trás ainda.
 
 ## Divergências do PRD
 

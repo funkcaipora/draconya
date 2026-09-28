@@ -174,6 +174,13 @@ export interface InitialCharacter {
    */
   readonly fedMs?: number;
   /**
+   * As sete bênçãos PvE (#570, ADR 0052): o BITMASK, lido de `characters.blessings`. Entra na
+   * sessão, e não só sai dela — sem isto, quem comprou na Cidade morreria na hunt seguinte sem
+   * a redução que pagou. Ausente é quem nunca comprou, ou ticket de um `api` antigo: a sessão
+   * parte de `0`.
+   */
+  readonly blessings?: number;
+  /**
    * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
    * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
    * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
@@ -639,6 +646,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0
       ? { fedMs: initial['fedMs'] }
+      : {}),
+    // As bênçãos (#570): mesma régua — inteiro seguro não negativo, ou AUSENTE.
+    ...(typeof initial['blessings'] === 'number' && Number.isSafeInteger(initial['blessings'])
+      && initial['blessings'] >= 0
+      ? { blessings: initial['blessings'] }
       : {}),
     // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
     // recusado — como o Bestiário.

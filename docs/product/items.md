@@ -99,9 +99,8 @@ de eventos (ver "Duração e carga do equipamento", abaixo).
 Poção e runa **não são itens físicos**: voltaram a ser o catálogo abstrato `data/supplies/`, com
 `price`, `effect`, `requires` e `group` (grupo de cooldown do motor v2). Usar debita o `price` do
 gold no ato por `useSupply` — **sem pilha, sem reposição por lote e sem caminho `purchase` no
-ledger**. A carga de bênção é a exceção: segue item `kind: 'consumable'` **não-empilhável** em
-`data/items/blessing-charge.json`, sem `restock` nem `group` obrigatórios, e quem a consome é a
-TP-03 (M22). Ver `economy.md` e `bot.md`.
+ledger**. A carga de bênção (`blessing-charge`, item `consumable` do M22) foi **removida pelo
+#570**: bênção virou serviço de Cidade — ver `docs/product/blessings.md`, `economy.md` e `bot.md`.
 
 | Suprimento | Efeito | `group` | `price` | Arquivo |
 |---|---|---|---|---|
@@ -153,9 +152,8 @@ todo `switch`/`if` sobre `effect.kind` que já trata "isto cura" (auto-target do
 `CastSuccess.healed`/`manaRestored` já existiam separados; a poção de espírito é o primeiro caminho que
 preenche os dois ao mesmo tempo.
 
-| Item | Efeito | Arquivo |
-|---|---|---|
-| `blessing-charge` | `blessing` — consome a carga e soma `CharacterRuntime.blessings` (capado em 5, `MAX_BLESSINGS`), o executor que a TP-03/M22 esperava (#726, ADR 0049 decisão 3/consequências) | `data/items/blessing-charge.json` |
+O único item `kind: 'consumable'` do catálogo real hoje é a comida (#726); a carga de bênção
+(`blessing-charge`) foi removida pelo #570 — ver `docs/product/blessings.md`.
 
 A aparência de EFEITO continua em `data/appearances/baseline.json` (seção `supplies`), conferida
 de um lado só (FUN-109).
@@ -805,7 +803,6 @@ Glacier Amulet manualmente.
 | Preço de venda do Energy Ring / Life Ring | 100 / 50 gold — maior `sell` de NPC do Canary (M34-03/#574, não mais provisório; Life Ring reconciliado em `overrides/life-ring.json`) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
 | Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |
 | Suprimentos — `price` / `group` | poção de vida 50 / `potion`; poção de mana 56 / `potion`; avalanche rune 64 / `attack` — menor `buy` de NPC do Canary (M34-03/#574, não mais provisório) | `packages/content/data/supplies/*.json` |
-| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` (não é item do Canary `items.xml`, fora do corte de #574) | `packages/content/data/items/blessing-charge.json` |
 | Munição — `attack` / `price` / `requires.level` | arrow 25 / 2 / —; burst arrow 27 / 15 / —; sniper arrow 28 / 5 / 20; onyx arrow 38 / 7 / 40 — `price` é o menor `buy` de NPC do Canary (M34-03/#574, não mais provisório; `attack`/`requires.level` continuam do TibiaWiki) | `packages/content/data/ammunition/*.json` |
 | Colar — `charges` / resistência / peso / `value` / level | glacier amulet 200 cargas / gelo 0,2 / 5 oz / 1500 / level 60 — cargas, peso, `value` (M34-03/#574, maior `sell` do NPC Rashid) e level reconciliados contra o Canary `items.xml` id 815 pelo importador de itens (`overrides/glacier-amulet.json`) | `packages/content/data/items/glacier-amulet.json`, `overrides/` |
 | Escudo — `defense` / peso / `value` | wooden shield 14 `[ABERTO — defense e peso provisórios]` / 40 oz `[ABERTO — idem]` / 5 (M34-03/#574, maior `sell` de NPC do Canary, `overrides/wooden-shield.json`, não mais provisório) | `packages/content/data/items/wooden-shield.json`, `overrides/` |

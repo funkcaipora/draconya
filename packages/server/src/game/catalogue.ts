@@ -225,6 +225,20 @@ export function buildCatalogue(content: Content): Catalogue {
         manaPerSecond: (content.progression.regen.mana.amount * 1000) / content.progression.regen.mana.ticksMs,
       },
     },
+    // As sete bênçãos PvE (#570, ADR 0052): ausente sem catálogo/preço no conteúdo — a tela de
+    // compra da Cidade não aparece, como `bestiary` some sem marco (mesma degradação de sempre).
+    ...(content.blessings.size === 0 || content.progression.blessingPricing === undefined
+      ? {}
+      : {
+        blessings: {
+          list: [...content.blessings.values()]
+            .map((blessing) => ({
+              id: blessing.id, name: blessing.name, order: blessing.order, enhanced: blessing.enhanced,
+            }))
+            .sort((a, b) => a.order - b.order),
+          pricing: content.progression.blessingPricing,
+        },
+      }),
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o

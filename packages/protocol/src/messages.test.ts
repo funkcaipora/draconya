@@ -1587,12 +1587,19 @@ describe('blessings: buy-blessing, blessings (#570, ADR 0052)', () => {
   });
 
   it('the catalogue carries the blessing list and pricing, optional', () => {
-    const withoutBlessings = S2C_SCHEMAS.catalogue.parse({ hunts: [], vocations: [] });
+    const minimalCatalogue = {
+      hunts: [], items: [], ammunition: [],
+      bot: {
+        vocabularyVersion: 2,
+        setCount: 4, slotsPerSet: 24, setNames: [], hotkeys: [], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
+    };
+    const withoutBlessings = S2C_SCHEMAS.catalogue.parse(minimalCatalogue);
     expect(withoutBlessings.blessings).toBeUndefined();
 
     const withBlessings = S2C_SCHEMAS.catalogue.parse({
-      hunts: [],
-      vocations: [],
+      ...minimalCatalogue,
       blessings: {
         list: [{ id: 'fire-of-the-suns', name: 'Fire of the Suns', order: 3, enhanced: false }],
         pricing: {

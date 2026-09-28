@@ -245,6 +245,12 @@ async function applyProgression(
   // acima — drena dentro da sessão, então o valor final é o único que os dois lados concordam.
   const fedMs = receipt.fedMs === undefined ? {} : { fedMs: receipt.fedMs };
 
+  // As bênçãos (#570, ADR 0052): ABSOLUTAS e última-escrita-vence, NUNCA fundidas pelo maior
+  // (ao contrário do Bestiário/skills-antes-do-#569) — bênção DESCE na morte, e "ficar com o
+  // maior de cada extrato" ressuscitaria uma bênção recém-consumida se um extrato antigo, fora
+  // de ordem, chegasse depois de um mais novo já aplicado.
+  const blessings = receipt.blessings === undefined ? {} : { blessings: receipt.blessings };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -320,6 +326,7 @@ async function applyProgression(
       ...supplyStock,
       ...ammunitionStock,
       ...fedMs,
+      ...blessings,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

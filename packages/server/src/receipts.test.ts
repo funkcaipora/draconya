@@ -176,6 +176,24 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('soul');
   });
 
+  it('carries the blessings bitmask through Redis and back, and a receipt without one stays without (#570)', async () => {
+    // A mesma lista de PERMISSÃO. E a mesma disciplina da alma: bênção DESCE na morte, então o
+    // ledger nunca funde por máximo (ver jobs/ledger.ts) — "a chave sumiu" (extrato de sessão
+    // sem o campo, nunca tocou a linha) e "a chave voltou zero" (a morte zerou de verdade) são
+    // coisas diferentes, e este teste distingue as duas indo e voltando pelo Redis de verdade.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, { blessings: 0b1010101 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2, blessings: 0 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.blessings).toBe(0b1010101);
+    expect(found.find((receipt) => receipt.seq === 2)?.blessings).toBe(0);
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('blessings');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um

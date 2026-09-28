@@ -1,7 +1,7 @@
 {
   "id": "fire-of-the-suns",
-  "name": "Fire of the Suns",
-  "order": 3,
+  "name": "The Fire of the Suns",
+  "order": 2,
   "enhanced": false,
-  "_open": "#570, `Blessings.All` do Canary, id 5. Mesma regra das demais regulares: ver `inquisition.json`."
+  "_open": "#570, `Blessings.All` do Canary, id 4. Mesma regra das demais regulares: ver `wisdom-of-solitude.json`."
 }

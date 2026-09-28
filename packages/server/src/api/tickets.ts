@@ -225,6 +225,9 @@ export function initialCharacterOf(
     // Comida ativa (#726, ADR 0049 decisão 5): sem isto, quem comeu antes de deslogar voltaria
     // em jejum na hunt seguinte.
     fedMs: character.fedMs,
+    // As bênçãos (#570, ADR 0052): sem isto, quem comprou na Cidade entraria na hunt sem elas
+    // e morreria sem redução nenhuma, apesar de ter pago.
+    blessings: character.blessings,
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
     // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,

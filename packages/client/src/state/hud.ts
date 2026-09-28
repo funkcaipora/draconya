@@ -118,6 +118,9 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** As sete bênçãos e o preço por level (#570). Ausente do catálogo: este servidor não as tem. */
+export type BlessingsConfig = NonNullable<Catalogue['blessings']>;
+export type BlessingDefinition = BlessingsConfig['list'][number];
 /** A party (#196): quem está nela, do `session-state` e do `party-state`. */
 export type PartyView = Readonly<S2CProps<'party-state'>>;
 export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
@@ -290,6 +293,13 @@ export interface HudState {
    */
   readonly bestiary: BestiaryCounts | null;
   /**
+   * As sete bênçãos PvE (#570, ADR 0052): o BITMASK — um bit por `order` do catálogo
+   * (`catalogue.blessings.list`), nunca uma lista de nomes (invariante 6: a tela resolve o
+   * nome pelo catálogo, o servidor só manda o número). `0` até o attach/enter responder — é
+   * também "nenhuma bênção", o estado real de quem nunca comprou.
+   */
+  readonly blessings: number;
+  /**
    * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
    * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
    * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
@@ -362,6 +372,7 @@ export const INITIAL_HUD: HudState = {
   slotStates: {},
   slotResults: {},
   bestiary: null,
+  blessings: 0,
   party: null,
   partyBag: null,
   lastSettlement: null,
