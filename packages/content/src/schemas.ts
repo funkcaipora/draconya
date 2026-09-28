@@ -1351,6 +1351,8 @@ export const supplySchema = z.object({
      * espírito é só do Paladin, a grande poção de mana é Sorcerer/Druid/Paladin). */
     vocationId: vocationRequirementSchema.optional(),
   }).default(() => ({})),
+  /** De onde um suprimento IMPORTADO veio (ADR 0038 decisão 2). Ausente em supply autorado à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 });
 
@@ -4135,6 +4137,8 @@ export const spellSchema = z.object({
   effect: spellEffectSchema.transform((effect): SpellEffect =>
     effect.kind === 'heal' ? { ...effect, target: effect.target ?? 'self' } : effect,
   ),
+  /** De onde uma magia IMPORTADA veio (ADR 0038 decisão 2). Ausente em magia autorada à mão. */
+  source: catalogSourceSchema.optional(),
   _open: z.string().optional(),
 });
 

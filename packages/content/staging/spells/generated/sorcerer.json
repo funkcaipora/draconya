@@ -1,0 +1,612 @@
+[
+  {
+    "id": "apprentices-strike-sorcerer",
+    "name": "Apprentice's Strike",
+    "manaCost": 6,
+    "cooldownMs": 2000,
+    "minLevel": 8,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.4,
+        "skillMax": 0.7,
+        "baseMin": 3,
+        "baseMax": 5,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/apprentice's_strike.lua"
+    }
+  },
+  {
+    "id": "buzz",
+    "name": "Buzz",
+    "manaCost": 6,
+    "cooldownMs": 2000,
+    "minLevel": 1,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.4,
+        "skillMax": 0.7,
+        "baseMin": 3,
+        "baseMax": 5,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/buzz.lua"
+    }
+  },
+  {
+    "id": "death-strike",
+    "name": "Death Strike",
+    "manaCost": 20,
+    "cooldownMs": 2000,
+    "minLevel": 16,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.403,
+        "skillMax": 2.203,
+        "baseMin": 8,
+        "baseMax": 13,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/death_strike.lua"
+    }
+  },
+  {
+    "id": "energy-strike-sorcerer",
+    "name": "Energy Strike",
+    "manaCost": 20,
+    "cooldownMs": 2000,
+    "minLevel": 12,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.403,
+        "skillMax": 2.203,
+        "baseMin": 8,
+        "baseMax": 13,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/energy_strike.lua"
+    }
+  },
+  {
+    "id": "fire-wave",
+    "name": "Fire Wave",
+    "manaCost": 25,
+    "cooldownMs": 4000,
+    "minLevel": 18,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.25,
+        "skillMax": 2,
+        "baseMin": 4,
+        "baseMax": 12,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/fire_wave.lua"
+    }
+  },
+  {
+    "id": "flame-strike-sorcerer",
+    "name": "Flame Strike",
+    "manaCost": 20,
+    "cooldownMs": 2000,
+    "minLevel": 14,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.403,
+        "skillMax": 2.203,
+        "baseMin": 8,
+        "baseMax": 13,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/flame_strike.lua"
+    }
+  },
+  {
+    "id": "great-death-beam",
+    "name": "Great Death Beam",
+    "manaCost": 140,
+    "cooldownMs": 10000,
+    "minLevel": 300,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 5.5,
+        "skillMax": 9,
+        "baseMin": 0,
+        "baseMax": 0,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/great_death_beam.lua"
+    }
+  },
+  {
+    "id": "great-fire-wave",
+    "name": "Great Fire Wave",
+    "manaCost": 120,
+    "cooldownMs": 4000,
+    "minLevel": 38,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 2.8,
+        "skillMax": 4.4,
+        "baseMin": 16,
+        "baseMax": 28,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/great_fire_wave.lua"
+    }
+  },
+  {
+    "id": "hells-core",
+    "name": "Hell's Core",
+    "manaCost": 1100,
+    "cooldownMs": 40000,
+    "minLevel": 60,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 4000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 10,
+        "skillMax": 14,
+        "baseMin": 0,
+        "baseMax": 0,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/hells_core.lua"
+    }
+  },
+  {
+    "id": "ice-strike-sorcerer",
+    "name": "Ice Strike",
+    "manaCost": 20,
+    "cooldownMs": 2000,
+    "minLevel": 15,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.403,
+        "skillMax": 2.203,
+        "baseMin": 8,
+        "baseMax": 13,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/ice_strike.lua"
+    }
+  },
+  {
+    "id": "intense-healing-sorcerer",
+    "name": "Intense Healing",
+    "manaCost": 70,
+    "cooldownMs": 1000,
+    "minLevel": 20,
+    "vocationId": "sorcerer",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 3.184,
+        "skillMax": 5.59,
+        "baseMin": 20,
+        "baseMax": 35,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/intense_healing.lua"
+    }
+  },
+  {
+    "id": "light-healing-sorcerer",
+    "name": "Light Healing",
+    "manaCost": 20,
+    "cooldownMs": 1000,
+    "minLevel": 8,
+    "vocationId": "sorcerer",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.4,
+        "skillMax": 1.795,
+        "baseMin": 8,
+        "baseMax": 11,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/light_healing.lua"
+    }
+  },
+  {
+    "id": "lightning",
+    "name": "Lightning",
+    "manaCost": 60,
+    "cooldownMs": 8000,
+    "minLevel": 55,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 2.2,
+        "skillMax": 3.4,
+        "baseMin": 12,
+        "baseMax": 21,
+        "scaling": "magic"
+      },
+      "range": 4
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/lightning.lua"
+    }
+  },
+  {
+    "id": "magic-patch-sorcerer",
+    "name": "Magic Patch",
+    "manaCost": 6,
+    "cooldownMs": 1000,
+    "minLevel": 1,
+    "vocationId": "sorcerer",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0,
+        "skillMin": 0.1614,
+        "skillMax": 0.2468,
+        "baseMin": 8,
+        "baseMax": 15,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/magic_patch.lua"
+    }
+  },
+  {
+    "id": "rage-of-the-skies",
+    "name": "Rage of the Skies",
+    "manaCost": 600,
+    "cooldownMs": 40000,
+    "minLevel": 55,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 4000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 7,
+        "skillMax": 14,
+        "baseMin": 0,
+        "baseMax": 0,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/rage_of_the_skies.lua"
+    }
+  },
+  {
+    "id": "restoration-sorcerer",
+    "name": "Restoration",
+    "manaCost": 260,
+    "cooldownMs": 6000,
+    "minLevel": 300,
+    "vocationId": "sorcerer",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.28,
+        "skillMin": 12.908,
+        "skillMax": 15.106,
+        "baseMin": 61.6,
+        "baseMax": 110.6,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/restoration.lua"
+    }
+  },
+  {
+    "id": "scorch",
+    "name": "Scorch",
+    "manaCost": 8,
+    "cooldownMs": 4000,
+    "minLevel": 1,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.3,
+        "skillMax": 0.6,
+        "baseMin": 2,
+        "baseMax": 4,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/scorch.lua"
+    }
+  },
+  {
+    "id": "strong-energy-strike",
+    "name": "Strong Energy Strike",
+    "manaCost": 60,
+    "cooldownMs": 8000,
+    "minLevel": 80,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 2.8,
+        "skillMax": 4.4,
+        "baseMin": 16,
+        "baseMax": 28,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/strong_energy_strike.lua"
+    }
+  },
+  {
+    "id": "strong-flame-strike",
+    "name": "Strong Flame Strike",
+    "manaCost": 60,
+    "cooldownMs": 8000,
+    "minLevel": 70,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 2.8,
+        "skillMax": 4.4,
+        "baseMin": 16,
+        "baseMax": 28,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/strong_flame_strike.lua"
+    }
+  },
+  {
+    "id": "terra-strike-sorcerer",
+    "name": "Terra Strike",
+    "manaCost": 20,
+    "cooldownMs": 2000,
+    "minLevel": 13,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.403,
+        "skillMax": 2.203,
+        "baseMin": 8,
+        "baseMax": 13,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/terra_strike.lua"
+    }
+  },
+  {
+    "id": "ultimate-energy-strike",
+    "name": "Ultimate Energy Strike",
+    "manaCost": 100,
+    "cooldownMs": 30000,
+    "minLevel": 100,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4.5,
+        "skillMax": 7.3,
+        "baseMin": 35,
+        "baseMax": 55,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/ultimate_energy_strike.lua"
+    }
+  },
+  {
+    "id": "ultimate-flame-strike",
+    "name": "Ultimate Flame Strike",
+    "manaCost": 100,
+    "cooldownMs": 30000,
+    "minLevel": 90,
+    "vocationId": "sorcerer",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 4.5,
+        "skillMax": 7.3,
+        "baseMin": 35,
+        "baseMax": 55,
+        "scaling": "magic"
+      },
+      "range": 3
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/attack/ultimate_flame_strike.lua"
+    }
+  },
+  {
+    "id": "ultimate-healing-sorcerer",
+    "name": "Ultimate Healing",
+    "manaCost": 160,
+    "cooldownMs": 1000,
+    "minLevel": 30,
+    "vocationId": "sorcerer",
+    "group": "healing",
+    "groupCooldownMs": 1000,
+    "effect": {
+      "kind": "heal",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 6.8,
+        "skillMax": 12.9,
+        "baseMin": 42,
+        "baseMax": 90,
+        "scaling": "magic"
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/spells/healing/ultimate_healing.lua"
+    }
+  }
+]
