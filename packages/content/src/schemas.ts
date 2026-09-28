@@ -2352,9 +2352,27 @@ export const monsterSchema = z.strictObject({
    * referência §15-19). Ausente é nenhuma — o comportamento de sempre.
    */
   summons: monsterSummonsSchema.optional(),
+  /**
+   * O monstro pode ser invocado por um PERSONAGEM (#598, M38-01, ADR 0057; TFS/Canary
+   * `MonsterType::isSummonable()`, `data/scripts/spells/support/summon_creature.lua`: só monstro
+   * com o campo marcado entra no parâmetro de `summon`). Distinto de `summons` acima — aquele é
+   * o monstro CONVOCANDO outro; este é o monstro sendo convocado pelo JOGADOR. Ausente é `false`:
+   * a maioria do bestiário do Canary não é invocável, e nenhum dos quatro monstros do recorte
+   * atual (rat, rotworm, dragon, dragon-lord) declara.
+   */
+  summonable: z.boolean().default(false),
+  /**
+   * `manaCost` da invocação (#598, `MonsterType::info.manaCost`, o custo de mana que
+   * `summon_creature.lua` debita do mestre por invocação) — 184 monstros do Canary o declaram.
+   * Obrigatório quando `summonable` é `true` (`.refine` abaixo); sem uso quando `false`.
+   */
+  manaCost: z.number().int().positive().optional(),
   /** Nota de proveniência do arquivo inteiro — número medido, fonte TFS/Canary, decisão tomada. */
   _open: z.string().optional(),
-});
+}).refine(
+  (monster) => !monster.summonable || monster.manaCost !== undefined,
+  { message: 'monster.summonable exige manaCost', path: ['manaCost'] },
+);
 
 /**
  * O nome de dificuldade que ainda chega no protocolo (`enter-hunt.difficulty`, #584). O modelo de
@@ -2875,11 +2893,38 @@ export const COMBAT_V3: CombatCompatibilityProfile = {
 };
 
 /**
+ * O perfil `combat-v4` (ADR 0052 decisão 7): o veículo ÚNICO do endgame inteiro (M38–M44,
+ * #598–#632/#643). Enquanto `tibia-parity` for a branch de integração, toda issue do endgame
+ * que muda resultado ou ordem de sorteio emenda este MESMO perfil — um estágio declarado por
+ * issue, documentado em `docs/product/combat-conformance.md` — em vez de ganhar um `combat-v5`
+ * próprio; ele só congela (vira imutável) no merge na `main` (ADR 0040 decisão 3). Ele SOMA em
+ * cima do `combat-v3`, nunca revoga: `HuntRuleset#isV3()` trata os dois ids como o mesmo
+ * mecanismo de bloqueio/defesa/mitigação do jogador, e cada campo do `combat-v3` que este
+ * perfil não menciona continua valendo sem mudança.
+ *
+ * **Estágio #598** (M38-01, invocação do jogador — ADR 0057): a invocação vira alvo válido do
+ * `chooseTarget` de monstro e credita dano ao MESTRE via `Contribution`/mapa de dano — não
+ * existe hoje nenhum cenário sem invocação onde isso mude ordem de sorteio ou resultado
+ * resolvido (o teste de conformance §11 prende que a hunt sem ninguém invocando consome
+ * `session.rng` exatamente como antes). Por isso a política aqui é `additive`, como o
+ * `combat-v1`: o mecanismo é novo, mas nenhum abate ou golpe que já existia muda de número.
+ */
+export const COMBAT_V4: CombatCompatibilityProfile = {
+  id: 'combat-v4',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'additive',
+};
+
+/**
  * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
  * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
  */
 export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
-  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2], [COMBAT_V3.id, COMBAT_V3]]);
+  new Map([
+    [COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2], [COMBAT_V3.id, COMBAT_V3],
+    [COMBAT_V4.id, COMBAT_V4],
+  ]);
 
 /**
  * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
@@ -3475,8 +3520,10 @@ export const botConditionSchemaV1 = z.discriminatedUnion('kind', [
   }),
 ]);
 
-/** Os cinco tipos de condição da v2 (ADR 0032 d.2). */
-export const BOT_CONDITION_KINDS_V2 = ['hp', 'mana', 'targets', 'target-hp', 'condition'] as const;
+/** Os seis tipos de condição da v2 (ADR 0032 d.2; `summons` do #598, M38-01, ADR 0057 d.4). */
+export const BOT_CONDITION_KINDS_V2 = [
+  'hp', 'mana', 'targets', 'target-hp', 'condition', 'summons',
+] as const;
 export type BotConditionKindV2 = (typeof BOT_CONDITION_KINDS_V2)[number];
 
 /**
@@ -3502,6 +3549,15 @@ export const botConditionSchema = z.discriminatedUnion('kind', [
     conditionId: z.string().min(1),
     present: z.boolean().default(true),
   }),
+  /**
+   * Quantas invocações VIVAS este personagem tem agora (#598, M38-01, ADR 0057 decisão 4 —
+   * "sem invocação viva → invocar" do preset Druid/Sorcerer). Campo NOVO no vocabulário v2, com
+   * o MESMO desenho de `targets` — contagem, nunca a lista —, e por isso não sobe
+   * `BOT_VOCABULARY_VERSION` (aditivo, como `condition` foi ao entrar).
+   */
+  z.object({
+    kind: z.literal('summons'), op: botOperator, count: z.number().int().nonnegative(),
+  }),
 ]);
 
 /**
@@ -3525,9 +3581,18 @@ export const botActionV1Schema = botActionSchema;
  * A ação da v2: `spell` ou `supply`. O suprimento voltou a ser ABSTRATO (gold no uso), então o
  * token `supplyId` volta ao vocabulário; o `item` de slot saiu — item de equipamento é das
  * automações, não de um slot da barra.
+ *
+ * `monsterId` em `spell` (#598, M38-01, ADR 0057 decisão 4) é o PARÂMETRO de uma magia cujo
+ * efeito é `summon` — "Summon Creature com parâmetro": a barra escolhe QUAL `summonable`
+ * nascer, e a magia (level, vocação, cooldown, grupo) continua sendo o `spellId` de sempre.
+ * Campo NOVO e OPCIONAL: uma ação `spell` sem `monsterId` continua válida — é toda magia que
+ * não é invocação —, então nenhuma configuração salva antes desta issue muda de forma, e
+ * `BOT_VOCABULARY_VERSION` não sobe.
  */
 export const botActionV2Schema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('spell'), spellId: z.string().min(1) }),
+  z.object({
+    kind: z.literal('spell'), spellId: z.string().min(1), monsterId: z.string().min(1).optional(),
+  }),
   z.object({ kind: z.literal('supply'), supplyId: z.string().min(1) }),
 ]);
 
@@ -4093,6 +4158,18 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('dispel'),
     types: z.array(z.string().min(1)).min(1),
   }),
+  /**
+   * Invocação do jogador (#598, M38-01, ADR 0057; TFS/Canary `summon_creature.lua`): SEM
+   * `monsterId` fixo no conteúdo — o parâmetro vem da barra (`BotAction` `kind: 'spell'` com
+   * `monsterId`, ver `botActionV2Schema`) ou do preset do bot, e é ele que escolhe QUAL
+   * `summonable` nascer. A magia em si só declara o portão (level, vocação, cooldown, grupo) —
+   * `manaCost` do CATÁLOGO desta magia fica sem uso aqui: o custo real é o `manaCost` do
+   * MONSTRO (`MonsterType::getManaCost()`), e é assim que a mesma "Summon Creature" custa mais
+   * mana para um Fire Elemental do que para um Poison Spider. `HuntRuleset#castSpell` lê o
+   * monstro do catálogo e faz esse desvio — `casting.ts` continua puro e genérico, sem
+   * conhecer monstro nenhum.
+   */
+  z.object({ kind: z.literal('summon') }),
 ]);
 export type SpellEffect = z.infer<typeof spellEffectSchema>;
 

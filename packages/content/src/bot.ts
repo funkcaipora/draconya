@@ -175,6 +175,24 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
       if (slot.do.kind === 'supply' && !content.supplies.has(slot.do.supplyId)) {
         problems.push(`${where}: supply "${slot.do.supplyId}" não existe`);
       }
+      // A invocação (#598, M38-01, ADR 0057 decisão 4): `monsterId` só faz sentido junto de uma
+      // magia cujo efeito é `summon`, e uma magia `summon` SEM `monsterId` nunca vai saber o que
+      // invocar — o mesmo formato "slot morto sem dizer por quê" que o resto desta função evita.
+      if (slot.do.kind === 'spell') {
+        const spellEffect = content.spells.get(slot.do.spellId)?.effect;
+        if (spellEffect?.kind === 'summon' && slot.do.monsterId === undefined) {
+          problems.push(`${where}: magia "${slot.do.spellId}" invoca e precisa de "monsterId"`);
+        } else if (spellEffect !== undefined && spellEffect.kind !== 'summon' && slot.do.monsterId !== undefined) {
+          problems.push(`${where}: "monsterId" só vale numa magia que invoca`);
+        } else if (slot.do.monsterId !== undefined) {
+          const monster = content.monsters.get(slot.do.monsterId);
+          if (monster === undefined) {
+            problems.push(`${where}: monstro "${slot.do.monsterId}" não existe`);
+          } else if (!monster.summonable) {
+            problems.push(`${where}: monstro "${slot.do.monsterId}" não é invocável`);
+          }
+        }
+      }
       // Alvo ≠ self só vale quando a ação aceita amigo (§26-30, ADR 0035 d.10). Ação
       // inexistente já foi reportada acima; aqui só quem existe mas não serve.
       if ((slot.target?.kind ?? 'self') !== 'self') {

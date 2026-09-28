@@ -1,0 +1,13 @@
+{
+  "id": "summon-creature-sorcerer",
+  "name": "Summon Creature",
+  "description": "Invoca uma criatura aliada para lutar ao seu lado.",
+  "vocationId": "sorcerer",
+  "minLevel": 25,
+  "manaCost": 0,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": { "kind": "summon" },
+  "_open": "Level 25, ambos Sorcerer e Druid (`data/scripts/spells/support/summon_creature.lua`, referência ADR 0057). `manaCost: 0` é PLACEHOLDER — o custo real sai do `manaCost` do monstro invocado (`MonsterType::getManaCost()`), lido por `HuntRuleset#castSpell` (#598, M38-01): esta magia nunca debita o próprio campo. `groupCooldownMs`/`cooldownMs` de 2000 ms são o `Support` do Canary — não conferidos linha a linha contra o `.lua` ainda, ficam como o número observado do Tibia (docs/reference/huntera-observed.md não tem entrada própria para invocação)."
+}

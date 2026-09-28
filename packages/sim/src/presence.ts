@@ -20,6 +20,12 @@ export interface CreatureAppeared {
   readonly position: WorldPoint;
   readonly health: number;
   readonly maxHealth: number;
+  /**
+   * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
+   * 4). Ausente é "não é invocação de personagem" — o de sempre, inclusive para toda invocação
+   * de MONSTRO (#546), que a apresentação não precisa marcar.
+   */
+  readonly masterId?: string;
 }
 
 export interface CreatureVanished {

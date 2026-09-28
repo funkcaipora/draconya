@@ -259,6 +259,10 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
   // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
   'attack-locked': 'Você está exausto.',
+  // A invocação (#598, M38-01, ADR 0057 decisão 3): monstro fora do catálogo, não invocável, ou
+  // teto de 2 invocações vivas já atingido — as três causas caem na mesma frase, como
+  // `not-in-catalog` já faz para magia/supply/level/vocação.
+  'not-summonable': 'Você não pode invocar essa criatura agora.',
 };
 
 /**
@@ -2723,6 +2727,9 @@ export class SessionHost {
         name: definition?.name ?? event.monsterId,
         health: event.health,
         maxHealth: event.maxHealth,
+        // A invocação do JOGADOR (#598, M38-01, ADR 0057 decisão 4): o cliente marca "sua
+        // invocação". Ausente para todo o resto, inclusive invocação de MONSTRO (#546).
+        ...(event.masterId === undefined ? {} : { masterId: event.masterId }),
       };
     } else if (event.kind === 'creature-vanished') {
       const id = hosted.creatureIds.get(key);
@@ -4180,6 +4187,9 @@ export class SessionHost {
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
         maxHealth: definition?.health ?? monster.health,
+        // A invocação do JOGADOR (#598) — o mesmo espalhamento do `creature-appear`, para quem
+        // reanexa no meio ver a invocação já marcada, sem esperar um segundo aparecimento.
+        ...(typeof monster.masterId === 'string' ? { masterId: monster.masterId } : {}),
       });
     }
 

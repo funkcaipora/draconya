@@ -99,6 +99,15 @@ const CreatureState = z.object({
    * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
    */
   colors: OutfitColors.optional(),
+  /**
+   * O `characterId` do MESTRE, só para a invocação do JOGADOR (#598, M38-01, ADR 0057 decisão
+   * 4). **Opcional**, pela mesma razão de `colors`: um nó `game` anterior manda a criatura sem
+   * isto, e um cliente que exigisse recusaria a mensagem inteira em silêncio. Ausente é "não é
+   * invocação de personagem" — o de sempre, inclusive para toda invocação de MONSTRO (#546),
+   * que o cliente não precisa marcar. O cliente usa isto só para destacar "sua invocação" —
+   * nunca para decidir dono de loot, alvo ou qualquer resultado (invariante 4).
+   */
+  masterId: z.string().optional(),
 });
 
 /** Os agregados da sessão — o que o §16.2 chama de "quanto rendeu". */
