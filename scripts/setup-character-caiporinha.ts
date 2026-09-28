@@ -40,9 +40,9 @@ export const TOP_SETS_BY_VOCATION: Record<string, readonly GearPiece[]> = {
     { slot: 'legs', itemId: 'zaoan-legs' },
     { slot: 'feet', itemId: 'boots-of-haste' },
     { slot: 'shield', itemId: 'spellbook-of-mind-control' },
-    { slot: 'hand', itemId: 'hailstorm-rod' },
+    { slot: 'hand', itemId: 'underworld-rod' },
     { slot: 'neck', itemId: 'dragon-necklace' },
-    { slot: 'finger', itemId: 'might-ring' },
+    { slot: 'finger', itemId: 'ring-of-healing' },
   ],
   sorcerer: [
     { slot: 'back', itemId: 'backpack' },
@@ -53,7 +53,7 @@ export const TOP_SETS_BY_VOCATION: Record<string, readonly GearPiece[]> = {
     { slot: 'shield', itemId: 'spellbook-of-mind-control' },
     { slot: 'hand', itemId: 'wand-of-starstorm' },
     { slot: 'neck', itemId: 'dragon-necklace' },
-    { slot: 'finger', itemId: 'might-ring' },
+    { slot: 'finger', itemId: 'ring-of-healing' },
   ],
   paladin: [
     { slot: 'back', itemId: 'backpack' },
@@ -64,6 +64,28 @@ export const TOP_SETS_BY_VOCATION: Record<string, readonly GearPiece[]> = {
     { slot: 'hand', itemId: 'royal-crossbow' },
     { slot: 'neck', itemId: 'dragon-necklace' },
     { slot: 'finger', itemId: 'might-ring' },
+  ],
+};
+
+export const BACKPACK_ITEMS_BY_VOCATION: Record<string, readonly string[]> = {
+  druid: [
+    'energy-ring',
+    'ring-of-healing',
+    'springsprout-rod',
+    'hailstorm-rod',
+  ],
+  sorcerer: [
+    'energy-ring',
+    'ring-of-healing',
+    'wand-of-inferno',
+  ],
+  paladin: [
+    'energy-ring',
+    'might-ring',
+  ],
+  knight: [
+    'energy-ring',
+    'might-ring',
   ],
 };
 
@@ -139,11 +161,17 @@ export async function setupCaiporinha(
 
   const effectiveVocation = options.vocation ?? character.vocation ?? 'druid';
   const gearList = TOP_SETS_BY_VOCATION[effectiveVocation] ?? DEFAULT_SET;
+  const backpackList = BACKPACK_ITEMS_BY_VOCATION[effectiveVocation] ?? [];
 
   // Validação: garante que todos os itens existam no catálogo de conteúdo
   for (const piece of gearList) {
     if (!content.items.has(piece.itemId)) {
       throw new Error(`Item "${piece.itemId}" do set não existe em content.items`);
+    }
+  }
+  for (const itemId of backpackList) {
+    if (!content.items.has(itemId)) {
+      throw new Error(`Item "${itemId}" da mochila não existe em content.items`);
     }
   }
 
@@ -175,16 +203,32 @@ export async function setupCaiporinha(
         values (${instanceId}, ${piece.itemId}, ${character.id}, 'setup-caiporinha', ${piece.slot}, 1)
       `;
     }
+
+    // 4. Insere os itens extras na mochila
+    for (let i = 0; i < backpackList.length; i++) {
+      const itemId = backpackList[i]!;
+      const instanceId = `${character.id}:bag:${itemId}:${i + 1}`;
+      await tx`
+        insert into "item_instance" (id, item_id, owner_character_id, origin, container, slot_index, quantity)
+        values (${instanceId}, ${itemId}, ${character.id}, 'setup-caiporinha', 'backpack', ${i}, 1)
+      `;
+    }
   });
 
   log(`✓ Personagem "${character.name}" atualizado:`);
   log(`  - Saldo de gold: ${targetGold.toLocaleString('pt-BR')} gp`);
   log(`  - Vocação: ${effectiveVocation}`);
-  log(`  - Inventário limpo`);
   log(`  - Set equipado (${gearList.length} peças):`);
   for (const piece of gearList) {
     const item = content.items.get(piece.itemId);
     log(`      [${piece.slot.toUpperCase()}] ${item?.name ?? piece.itemId}`);
+  }
+  if (backpackList.length > 0) {
+    log(`  - Itens na mochila (${backpackList.length} itens):`);
+    for (const itemId of backpackList) {
+      const item = content.items.get(itemId);
+      log(`      [MOCHILA] ${item?.name ?? itemId}`);
+    }
   }
 
   return {

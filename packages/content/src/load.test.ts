@@ -292,6 +292,8 @@ describe('loadContent', () => {
       'snakebite-rod': { missile: 39 },
       'wand-of-starstorm': { missile: 5 },
       'hailstorm-rod': { missile: 29 },
+      'springsprout-rod': { missile: 39 },
+      'underworld-rod': { missile: 32 },
       'wand-of-inferno': { missile: 4 },
     });
     const distance = content.skills.get('distance');
