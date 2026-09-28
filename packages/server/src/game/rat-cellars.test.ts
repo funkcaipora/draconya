@@ -37,32 +37,42 @@ function run(session: Session, durationMs: number, stepMs: number): void {
   for (let t = 0; t < durationMs && session.ended === null; t += stepMs) session.advanceBy(stepMs);
 }
 
-describe('a Rat Cellars real (FUN-123, #583)', () => {
-  it('todos os 14 pontos de spawn nascem — sem pull, sem escolha de tamanho (ADR 0039)', () => {
-    // Fim do pull por dificuldade: os 14 pontos da rota nascem juntos, na entrada — a
-    // densidade não é mais 2/5/8 escolhidos, é o total de pontos que a rota declara. `blockable`
-    // (o rato declara `true`, #519) segura o ponto onde o herói está em cima, então o teto
-    // observável é 14, mas o instante inicial pode ficar um a menos enquanto esse ponto espera
-    // a vista limpar.
+describe('a Rat Cellars real (FUN-123, #583, #586)', () => {
+  it('todos os 56 pontos de spawn nascem — sem pull, sem escolha de tamanho (ADR 0039)', () => {
+    // Fim do pull por dificuldade: os 56 pontos da rota (importados do recorte real do Canary
+    // pelo #586, `pnpm catalog:spawns --map rat-cellars`) nascem juntos, na entrada — a
+    // densidade não é mais 2/5/8 escolhidos, é o total de pontos que a rota declara. A
+    // população INICIAL nunca checa `blockable` (#583, `SpawnMonster::startup` do Canary); só o
+    // tile onde o herói entra pode ficar ocupado no primeiro instante, então o teto observável
+    // é 56, mas o instante inicial pode ficar um a menos.
     const { session, ruleset } = enter(real());
     let most = 0;
     for (let t = 0; t < 10_000; t += 100) {
       session.advanceBy(100);
       const alive = ruleset.monsters.filter((m) => m.alive).length;
-      expect(alive).toBeLessThanOrEqual(14);
+      expect(alive).toBeLessThanOrEqual(56);
       most = Math.max(most, alive);
     }
-    expect(most).toBeGreaterThanOrEqual(13);
+    expect(most).toBeGreaterThanOrEqual(55);
   });
 
   it('o herói percorre o laço e o bueiro rende: abates, XP, gold e queijo em dez minutos', () => {
-    const { session, ruleset } = enter(real());
+    const content = real();
+    const { session, ruleset } = enter(content);
     run(session, 600_000, 100);
     expect(session.ended).toBeNull();
     expect(session.aggregates.kills).toBeGreaterThan(20);
-    // 5 XP base por rato × 3: o bônus de level do conteúdo real é +200% até o level 300
-    // (o herói do teste nunca chega perto disso), #563.
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 5 * 3);
+    // O recorte real (#586) não é monotemático: rat, spider, rabbit, bug e cave-rat, cada um com
+    // a própria XP base. O bestiário do herói (permanente, por monstro) diz quantos de cada um
+    // morreram; ×3 é o bônus de level do conteúdo real, +200% até o level 300 (o herói do teste
+    // nunca chega perto disso), #563.
+    const hero = session.participants[0] as CharacterRuntime;
+    const kills = hero.bestiary.getState();
+    const expectedXp = Object.entries(kills).reduce((sum, [monsterId, count]) => {
+      const experience = content.monsters.get(monsterId)?.experience ?? 0;
+      return sum + count * experience * 3;
+    }, 0);
+    expect(session.aggregates.xpGained).toBe(expectedXp);
     expect(session.aggregates.goldGained).toBeGreaterThan(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThan(0);
     // A rota é um laço de 160 tiles: o walker deu a volta ao menos uma vez.
@@ -80,7 +90,7 @@ describe('a Rat Cellars real (FUN-123, #583)', () => {
 
   it('dez minutos a 1 Hz e a 10 Hz dão o MESMO resultado no bueiro real', () => {
     // O teste que define o projeto (ADR 0003), agora sobre o conteúdo de verdade: nada aqui é
-    // escrito por tick, então o extrato e a posição de cada rato não dependem da taxa.
+    // escrito por tick, então o extrato e a posição de cada monstro não dependem da taxa.
     const slow = enter(real());
     const fast = enter(real());
     run(slow.session, 600_000, 1_000);

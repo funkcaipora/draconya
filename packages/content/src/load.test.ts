@@ -128,23 +128,28 @@ describe('loadContent', () => {
     const map = content.maps.get('rat-cellars');
     const route = content.routes.get('rat-cellars');
     // O bueiro real (FUN-123, ADR 0025): importado, um andar (o 8), e a rota traçada por
-    // `pnpm route:trace` sobre ele — um laço de 160 tiles com um spawn por corredor de rato.
+    // `pnpm route:trace` sobre ele — um laço de 160 tiles. Os 56 pontos de spawn (#586) são os
+    // reais do recorte do Canary, não um por corredor escolhido à mão.
     expect(map?.source?.file).toBe('otservbr.otbm');
     expect(map?.width).toBe(118);
     expect(map?.height).toBe(80);
     expect(map?.z).toBe(8);
     expect(route?.tiles.length).toBe(160);
-    expect(route?.spawnPoints.length).toBe(14);
+    expect(route?.spawnPoints.length).toBe(56);
   });
 
-  it('a Rat Cellars é o bueiro real, com um rato por ponto de spawn (#583), o rato do Tibia e o queijo (FUN-123)', () => {
+  it('a Rat Cellars é o bueiro real, com os spawns reais do Canary (#586), o rato do Tibia e o queijo (FUN-123)', () => {
     const content = loadContent(DATA);
     const hunt = content.hunts.get('rat-cellars');
     const route = content.routes.get('rat-cellars');
-    // Fim do pull por dificuldade (#583, ADR 0039): os 14 pontos da rota nascem TODOS, cada um
-    // declarando o próprio `rat` — não há mais `difficulties`/`monsterCount` para escolher
-    // quantos nascem.
-    expect(route?.spawnPoints.every((point) => point.monsterId === 'rat')).toBe(true);
+    // Fim do pull por dificuldade (#583, ADR 0039), com a composição REAL do Canary desde o
+    // #586: o recorte não é monotemático — rato é a maioria (48/56), mas o corte também tem
+    // spider, rabbit, bug e cave-rat, exatamente como `otservbr-monster.xml` declara.
+    const monsterIds = new Set(
+      route?.spawnPoints.map((point) => point.monsterId).filter((id) => id !== undefined),
+    );
+    expect(monsterIds).toEqual(new Set(['rat', 'spider', 'rabbit', 'bug', 'cave-rat']));
+    expect(route?.spawnPoints.filter((point) => point.monsterId === 'rat')).toHaveLength(48);
     expect(hunt?.ambience).toBe('cavern');
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
@@ -166,7 +171,7 @@ describe('loadContent', () => {
     expect(content.items.get('cheese')?.appearanceId).toBe(3607);
   });
 
-  it('a Rotworm Caves é a caverna de Darashia do Huntera, com os três pulls e o rotworm do Canary (#515)', () => {
+  it('a Rotworm Caves é a caverna de Darashia do Huntera, com os spawns reais do Canary (#586) e o rotworm do Canary (#515)', () => {
     const content = loadContent(DATA);
     const map = content.maps.get('rotworm-caves');
     const route = content.routes.get('rotworm-caves');
@@ -175,11 +180,18 @@ describe('loadContent', () => {
     expect(map?.height).toBe(73);
     expect(map?.z).toBe(8);
     expect(route?.tiles.length).toBe(444);
-    expect(route?.spawnPoints.length).toBe(13);
+    expect(route?.spawnPoints.length).toBe(42);
     // A caixa importada tem duas componentes andáveis (Huntera Parte VI §38): a principal, de
     // 823 tiles, e um corredor isolado de 79 na borda direita (a partir de x === 78). A rota
     // nunca visita o corredor isolado — só a componente principal.
     expect(route?.tiles.every((t) => t.x < 80)).toBe(true);
+    // Composição real do Canary (#586): não é só rotworm — 35 rotworm e 7 terramite.
+    const monsterIds = new Set(
+      route?.spawnPoints.map((point) => point.monsterId).filter((id) => id !== undefined),
+    );
+    expect(monsterIds).toEqual(new Set(['rotworm', 'terramite']));
+    expect(route?.spawnPoints.filter((point) => point.monsterId === 'rotworm')).toHaveLength(35);
+    expect(route?.spawnPoints.filter((point) => point.monsterId === 'terramite')).toHaveLength(7);
     const rotworm = content.monsters.get('rotworm');
     expect(rotworm?.class).toBe('vermin');
     // data-otservbr-global/monster/vermins/rotworm.lua (Canary local 47dfd51): attack 0-40,
