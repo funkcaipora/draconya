@@ -141,6 +141,14 @@ export interface Prey {
    * nada à parte.
    */
   readonly health: number;
+  /**
+   * Invisível (#592, `CONDITION_INVISIBLE`). Ausente/`false` é o de sempre — só `CharacterRuntime`
+   * expõe `true` (via `Conditions.hasInvisible`); monstro nunca é alvo invisível de outro
+   * monstro. `chooseTarget` (abaixo) recusa como candidato — e DROPA o alvo já retido — quem
+   * carrega isto, a menos que `seesInvisible(definition)` seja `true` (`canSeeInvisibility` do
+   * Canary/TFS, ADR 0041 d.2 — a imunidade à condição `invisible`).
+   */
+  readonly invisible?: boolean;
 }
 
 /**
@@ -249,6 +257,15 @@ export class MonsterRuntime {
     return this.conditions.speedScale();
   }
 
+  /**
+   * Invisível (#559/#592) — o que `TargetLike.invisible` (`targeting.ts`) lê em `selectTarget`:
+   * o BOT do jogador não mira o monstro que ficou invisível sozinho (`monster.defenses`).
+   * Reconhecida pela chave reservada da condição, como `speedScale`/`CharacterRuntime.invisible`.
+   */
+  get invisible(): boolean {
+    return this.conditions.hasInvisible();
+  }
+
   getState(): MonsterState {
     return {
       id: this.id,
@@ -337,6 +354,17 @@ const TARGET_THINK_COOLDOWN_KEY = 'target-think';
  * os demais devolvem o `current` retido, como o Canary faria entre um `onThink_async` e o
  * próximo.
  */
+/**
+ * `Monster::canSeeInvisibility()` do Canary/TFS (#559, ADR 0041 d.2): a MESMA imunidade a
+ * `invisible` que, para qualquer outra condição, bloquearia a aplicação — aqui vira "enxerga
+ * quem está invisível". Nunca lida como `conditionImmunities` genérico em `chooseTarget`: um
+ * monstro imune a `invisible` continuaria mirando alvo invisível igual, se a leitura fosse a
+ * mesma checagem de bloqueio que `#applyConditionTo` usa para `paralyze`/`drunk`.
+ */
+export function seesInvisible(definition: Pick<Monster, 'conditionImmunities'>): boolean {
+  return definition.conditionImmunities.includes('invisible');
+}
+
 export function chooseTarget(
   monster: MonsterRuntime,
   prey: readonly Prey[],
@@ -348,7 +376,17 @@ export function chooseTarget(
     ? undefined
     : prey.find((p) => p.id === monster.targetId);
 
-  if (current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
+  // Invisibilidade (#559/#592): quem não "vê invisível" não retém o alvo que virou invisível —
+  // o `Creature::onAddCondition`/`canSee` do Canary/TFS já testado do lado de ATAQUE (o
+  // passo/ataque em si segue sem alvo, como qualquer outro `chooseTarget` devolvendo `null`).
+  // Cai direto para a reaquisição abaixo, que já filtra o mesmo candidato pela mesma razão —
+  // "largar" é não conseguir reter, nunca um terceiro ramo.
+  const currentVisible = current === undefined
+    || !current.invisible
+    || seesInvisible(definition);
+
+  if (currentVisible
+    && current !== undefined && current.alive && sameFloor(monster.position.z, current.position.z)) {
     const leash = definition.leashRadius;
     // Zero significa "nunca desiste": um monstro que larga o alvo no meio de uma hunt AFK
     // faria o jogador voltar e encontrar tudo parado sem explicação.
@@ -369,6 +407,7 @@ export function chooseTarget(
         const candidates: TargetRankCandidate[] = [];
         for (const candidate of prey) {
           if (!candidate.alive) continue;
+          if (candidate.invisible && !seesInvisible(definition)) continue;
           if (!sameFloor(monster.position.z, candidate.position.z)) continue;
           const d = distance(monster.position, candidate.position);
           if (d > definition.aggroRadius) continue;
@@ -391,6 +430,7 @@ export function chooseTarget(
   let closestDistance = Number.POSITIVE_INFINITY;
   for (const candidate of prey) {
     if (!candidate.alive) continue;
+    if (candidate.invisible && !seesInvisible(definition)) continue;
     // Andar diferente é tela diferente (#519): o monstro de z10 não persegue quem está em
     // z11, mesmo que o (x, y) coincida — os três andares da Darashia Dragon Lair
     // compartilham a mesma caixa. Sem isto o Dragon Lord do meio agrediria o Dragon de cima
@@ -432,21 +472,30 @@ export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Pre
  * Pura e recalculada a cada decisão — não é estado guardado, como o `attackReady` é: fugir é
  * uma FUNÇÃO do HP atual, e o HP já é o estado. Guardar um segundo booleano derivado dele
  * divergiria na primeira cura que não passasse por aqui.
+ *
+ * Provocação (#589, Canary `Monster::isFleeing`: `challengeFocusDuration <= 0`) suspende a fuga
+ * enquanto a condição `'challenge'` vale — o mesmo lookup O(1) em `Conditions` que qualquer
+ * outra condição já usa, sem campo novo.
  */
 export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
   return definition.runOnHealth !== undefined
     && monster.alive
-    && monster.health <= definition.runOnHealth;
+    && monster.health <= definition.runOnHealth
+    && monster.conditions.get('challenge') === null;
 }
 
 /**
  * O tipo de dano de um campo, quando ele CAUSA dano ao longo do tempo (CMB-07). Um campo de
  * outro efeito (velocidade, cura) não tem `damageType` — nunca conta para `canWalkOnFieldType`,
  * porque o Tibia só tem o par `canWalkOn*` para fogo/veneno/energia (o resto do switch do TFS/
- * Canary devolve sempre `true`).
+ * Canary devolve sempre `true`). Estágio SEM condição (#560: Magic Wall, Wild Growth, o último
+ * estágio mudo do fire field) também devolve `null` — não é dano, é bloqueio, e quem julga
+ * bloqueio é `canOccupy`/`TileOccupancy`, não este predicado.
  */
 function fieldDamageType(field: TileFieldState): DamageType | null {
-  return field.condition.effect.kind === 'damage-over-time' ? field.condition.effect.damageType : null;
+  return field.condition !== undefined && field.condition.effect.kind === 'damage-over-time'
+    ? field.condition.effect.damageType
+    : null;
 }
 
 /**

@@ -88,6 +88,9 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -379,6 +382,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,

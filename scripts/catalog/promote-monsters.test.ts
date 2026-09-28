@@ -80,8 +80,13 @@ function badger(overrides: Record<string, unknown> = {}): Record<string, unknown
 }
 
 describe('HAND_AUTHORED_MONSTER_IDS', () => {
-  it('é exatamente rat, rotworm, dragon e dragon-lord (#581)', () => {
-    expect([...HAND_AUTHORED_MONSTER_IDS].sort()).toEqual(['dragon', 'dragon-lord', 'rat', 'rotworm']);
+  it('é exatamente rat, rotworm, dragon, dragon-lord e dragon-lord-hatchling (#581, #560/#785)', () => {
+    // dragon-lord-hatchling entrou no #560 (a mesma cadeia hand-authored de estágios de campo
+    // que dragon-lord já tinha) — sem ele aqui, a primeira promoção depois do merge reescrevia
+    // a fatia com a staging fresca, sem `stages`, apagando o trabalho do #560 em silêncio (#785).
+    expect([...HAND_AUTHORED_MONSTER_IDS].sort()).toEqual([
+      'dragon', 'dragon-lord', 'dragon-lord-hatchling', 'rat', 'rotworm',
+    ]);
   });
 });
 

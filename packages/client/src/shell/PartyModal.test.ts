@@ -107,7 +107,8 @@ describe('PartyModal (#503)', () => {
     const html = await render({ view: 'mine' });
     expect(html).toContain('Sala do líder');
     expect(html).toContain('Caçada: Arena');
-    expect(html).toContain('Tamanho do pull: Ousado');
+    // Não há mais "Tamanho do pull" desde o #584 (ADR 0039, fim do pull por dificuldade).
+    expect(html).not.toContain('Tamanho do pull');
     expect(html).toContain('Level mínimo: 12');
     expect(html).toContain('Composição: Cavaleiro 2');
     expect(html).toContain('Vagas abertas: Cavaleiro ×1');
@@ -126,9 +127,9 @@ describe('PartyModal (#503)', () => {
     }));
     const html = await render({ view: 'mine' });
     expect(html).toContain('aria-label="caçada"');
-    expect(html).toContain('aria-label="dificuldade"');
+    // Não há mais seletor de dificuldade desde o #584 (ADR 0039, fim do pull por dificuldade).
+    expect(html).not.toContain('aria-label="dificuldade"');
     expect(html).toContain('aria-label="level mínimo da sala"');
-    expect(html).toContain('<option value="bold" selected="">Ousado · 4</option>');
     expect(html).toContain('aria-label="menos Cavaleiro"');
     expect(html).toContain('aria-label="mais Paladino"');
     // O total é o do estado real, e a contagem é o TOTAL desejado por vocação (não vagas).
@@ -209,7 +210,9 @@ describe('PartyModal (#503)', () => {
     expect(roomsList).toContain('aria-label="vagas da sala de Alice"');
     expect(roomsList).toContain('Cavaleiro ×1');
     expect(roomsList).toContain('Paladino ×2');
-    expect(roomsList).toContain('Arena · Ousado · level 10+');
+    // Não há mais dificuldade na linha da sala desde o #584 (ADR 0039, fim do pull por
+    // dificuldade) — só a hunt e o level mínimo.
+    expect(roomsList).toContain('Arena · level 10+');
     // Nenhum "Entrar" desabilitado: o servidor só mandou salas elegíveis (RF-07).
     expect(roomsList).not.toMatch(/<button[^>]*disabled[^>]*>Entrar<\/button>/);
     expect((roomsList.match(/>Entrar<\/button>/g) ?? []).length).toBe(2);

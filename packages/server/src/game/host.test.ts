@@ -17,7 +17,9 @@ import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
-import { CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder } from './sessions.js';
+import {
+  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+} from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
   TEST_COMBAT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
@@ -73,6 +75,7 @@ function buildHost(
     // `NonNullable`: `SessionHostOptions['x']` já inclui `undefined`, e espalhar uma opcional
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
+    loadBotConfig?: NonNullable<SessionHostOptions['loadBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
     ammunitionCatalog?: NonNullable<SessionHostOptions['ammunitionCatalog']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
@@ -86,11 +89,23 @@ function buildHost(
   // `level` é do PERSONAGEM de teste, não do host: tirar do espalhamento é o que impede
   // `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
   const { level, ...hostOptions } = options;
+  // `loadBotConfig` é a CARGA (ADR 0014) — função separada de `acceptBotConfig`, a EDIÇÃO. Um
+  // teste que só configura `acceptBotConfig` (a maioria, escrita antes do #596) ainda precisa
+  // do ticket adotar o bot: adapta o mesmo julgador para a forma de carga, com `removed: []` —
+  // nenhum teste aqui exercita conteúdo removido debaixo de uma config, e `sanitizeBotConfigV2`
+  // tem cobertura própria em `packages/content/src/bot.test.ts`/`bot-migration.test.ts`.
+  const loadBotConfig = hostOptions.loadBotConfig ?? (hostOptions.acceptBotConfig === undefined
+    ? undefined
+    : (raw: unknown, lvl: number) => {
+      const decision = (hostOptions.acceptBotConfig as NonNullable<SessionHostOptions['acceptBotConfig']>)(raw, lvl);
+      return decision.ok ? { ok: true as const, config: decision.config, removed: [] } : decision;
+    });
   const host = new SessionHost({
     nodeId: 'n1',
     contentVersion: 'v-test',
     logger,
     ...hostOptions,
+    ...(loadBotConfig === undefined ? {} : { loadBotConfig }),
     createSession: (characterId) => {
       const session = new Session({
         id: `s-${characterId}`,
@@ -3432,6 +3447,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // O campo de tile que uma ability deixa no chão (#561, M31-06): o id de CONTEÚDO do campo
     // (`FieldSpec.id`) vira o id de arte daqui — a MESMA indireção de `corpses`.
     fields: { flame: 2118 },
+    // A arte dos estágios 1, 2, … da cadeia `decayTo` (#560) — o índice 0 continua em `fields`.
+    fieldStages: { flame: [2119, 2120] as number[] },
   } as const;
   /** As armas de tiro do #152, e a munição abstrata que o bow dispara. */
   const BOW = {
@@ -4370,6 +4387,59 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(gone[0]).toMatchObject({ id: 'flame' });
   });
 
+  // As três a seguir aplicam o campo DIRETO por `ruleset.applyField` (como o describe de campos
+  // de `hunt.test.ts` já faz), em vez de por uma ability de monstro: a ability recasta a cada
+  // `cadenceMs` e `applyField` SEMPRE reinicia no estágio 0 ao relançar — com uma cadência curta
+  // o bastante para caber na janela do teste, o recast apagava a troca de estágio antes do
+  // `session-attach` correr, e é exatamente o que aconteceu na primeira versão deste teste.
+  // Aplicar direto tira essa corrida: o campo decai sozinho, sem ninguém para relançá-lo.
+  const stagedFire = {
+    id: 'flame', durationMs: 1_000, // ignorado — `stages` manda.
+    shape: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+    stages: [
+      {
+        durationMs: 500,
+        condition: {
+          key: 'flame', merge: 'refresh' as const, durationMs: 500,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 1, intervalMs: 500, damage: 4 }], damageType: 'fire' as const,
+          },
+        },
+      },
+      { durationMs: 500 }, // estágio 2, mudo — some sem mais dano.
+    ],
+  };
+
+  it('a troca de estágio (#560, decayTo) vira field-stage-change com o appearanceId do índice certo', () => {
+    const { host, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    (session.ruleset as HuntRuleset).applyField(session, stagedFire, { x: 1, y: 1, z: 7 });
+
+    runFor(600); // passa dos 500 do estágio 0: a troca já aconteceu.
+    const all = received();
+    expect(ofType(all, 'field-appear')[0]).toMatchObject({ id: 'flame', appearanceId: 2118 });
+    // Estágio 1: `fieldStages.flame[0]` (índice `stageIndex - 1`).
+    expect(ofType(all, 'field-stage-change')[0]).toMatchObject({ id: 'flame', appearanceId: 2119 });
+
+    runFor(500); // passa dos 500 do estágio 1: o campo desaparece de vez.
+    expect(ofType(received(), 'field-disappear').length).toBeGreaterThan(0);
+  });
+
+  it('SEM linha em appearances.fieldStages a troca de estágio é MUDA — nem chega a sair (invariante 6)', () => {
+    const { host, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const ruleset = session.ruleset as HuntRuleset;
+    ruleset.applyField(session, { ...stagedFire, id: 'unmapped-stage' }, { x: 1, y: 1, z: 7 });
+
+    runFor(600);
+    expect(ofType(received(), 'field-stage-change')).toHaveLength(0);
+    // A mecânica continua rodando — a ausência é só da apresentação (invariante 6).
+    expect(ruleset.fields[0]?.stageIndex).toBe(1);
+  });
+
   it('quem reanexa no meio da hunt vê os campos ATIVOS em session-state.world.fields', () => {
     const ability = {
       id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
@@ -4397,6 +4467,29 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const state = ofType(received(), 'session-state').at(-1);
     expect(state?.world.fields).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2118 })]),
+    );
+  });
+
+  it('quem reanexa NO MEIO da cadeia (#560) vê a arte do estágio ATUAL, não a do nascimento', () => {
+    const { host, viewer, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    // Estágio 1 LONGO de propósito: o reanexo precisa cair dentro dele, não no 2 (mudo).
+    const [firstStage] = stagedFire.stages;
+    if (firstStage === undefined) throw new Error('faltou o primeiro estágio da fixture');
+    (session.ruleset as HuntRuleset).applyField(
+      session, { ...stagedFire, stages: [firstStage, { durationMs: 10_000 }] },
+      { x: 1, y: 1, z: 7 },
+    );
+
+    runFor(600); // passa dos 500 do estágio 0: já está no estágio 1 quando reanexa.
+    expect(ofType(received(), 'field-stage-change').length).toBeGreaterThan(0);
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    expect(state?.world.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2119 })]),
     );
   });
 
@@ -6595,6 +6688,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
       progression: content.progression,
       skillCatalog: content.skills,
       acceptBotConfig: createBotConfigValidator(content),
+      loadBotConfig: createBotConfigLoader(content),
       saveBotConfig: async (characterId, config) => { saved.push({ characterId, config }); },
       createSession: (characterId) => {
         const session = createHuntSession({
@@ -6729,6 +6823,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: content.version, logger,
       acceptBotConfig: createBotConfigValidator(content),
+      loadBotConfig: createBotConfigLoader(content),
       saveBotConfig: async (_id, config) => { saved.push(config); },
       createSession: createCitySessionFactory(content),
     });

@@ -74,6 +74,30 @@ describe('chooseTarget', () => {
     expect(chooseTarget(monster, [prey('runner', 50, 0)], leashed, rng, 0)).toBeNull();
   });
 
+  describe('invisibilidade (#559/#592, ADR 0041 d.2)', () => {
+    const invisiblePrey = (id: string, x: number, y: number): Prey =>
+      ({ id, position: { x, y }, alive: true, health: 100, invisible: true });
+
+    it('não seleciona um invisível na aquisição, e escolhe o outro candidato visível', () => {
+      const monster = monsterAt(0, 0);
+      expect(chooseTarget(monster, [invisiblePrey('ghost', 1, 0)], rat, rng, 0)).toBeNull();
+      expect(chooseTarget(monster, [invisiblePrey('ghost', 1, 0), prey('visible', 2, 0)], rat, rng, 0))
+        .toBe('visible');
+    });
+
+    it('larga o alvo retido que ficou invisível — a mesma semântica de "morreu"/"trocou de andar"', () => {
+      const monster = monsterAt(0, 0, { targetId: 'hero' });
+      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], rat, rng, 0)).toBeNull();
+    });
+
+    it('um monstro que "vê invisível" (`conditionImmunities: [\'invisible\']`) seleciona e retém igual', () => {
+      const seer: Monster = { ...rat, conditionImmunities: ['invisible'] };
+      expect(chooseTarget(monsterAt(0, 0), [invisiblePrey('ghost', 1, 0)], seer, rng, 0)).toBe('ghost');
+      const monster = monsterAt(0, 0, { targetId: 'hero' });
+      expect(chooseTarget(monster, [invisiblePrey('hero', 1, 0)], seer, rng, 0)).toBe('hero');
+    });
+  });
+
   describe('andar (#519, hunt multiandar)', () => {
     // Um monstro com `z` na posição só enxerga presa NO MESMO `z` — os três andares da
     // Darashia Dragon Lair compartilham a mesma caixa (x, y), então ignorar o andar faria um
@@ -415,6 +439,18 @@ describe('isMonsterFleeing (#518)', () => {
   it('is false for the dead — a corpse does not flee', () => {
     expect(isMonsterFleeing(monsterAt(0, 0, { health: 0 }), runsAt300)).toBe(false);
   });
+
+  it('#589: is suspended while the "challenge" condition is active, HP below threshold and all', () => {
+    const challenged = monsterAt(0, 0, {
+      health: 300,
+      conditions: [{ key: 'challenge', expiresAtMs: 6_000 }],
+    });
+    expect(isMonsterFleeing(challenged, runsAt300)).toBe(false);
+    // Removing the condition (as CONDITION_EXPIRE does at expiry) restores fleeing with the
+    // same HP — the condition is the only thing that changed.
+    const noLongerChallenged = monsterAt(0, 0, { health: 300 });
+    expect(isMonsterFleeing(noLongerChallenged, runsAt300)).toBe(true);
+  });
 });
 
 describe('decideMonsterAction fleeing (#518)', () => {
@@ -444,6 +480,22 @@ describe('decideMonsterAction fleeing (#518)', () => {
     const monster = monsterAt(0, 0, { health: 301 });
     expect(decideMonsterAction(monster, prey('p', 1, 0), runsAt300, open))
       .toEqual({ kind: 'attack', targetId: 'p' });
+  });
+
+  it('#589: Challenge suspends the flee step, and it comes back once the condition drops out', () => {
+    const monster = monsterAt(5, 5, {
+      health: 300,
+      conditions: [{ key: 'challenge', expiresAtMs: 6_000 }],
+    });
+    // Well inside reach, HP at the threshold: without the condition this would step AWAY
+    // (the case right above). With it, the monster attacks instead — RF-03.
+    expect(decideMonsterAction(monster, prey('p', 6, 5), runsAt300, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
+
+    // Same monster, condition gone (as CONDITION_EXPIRE removes it) — the same HP flees again.
+    const expired = monsterAt(5, 5, { health: 300 });
+    expect(decideMonsterAction(expired, prey('p', 6, 5), runsAt300, open))
+      .toEqual({ kind: 'step', to: { x: 4, y: 5 } });
   });
 });
 

@@ -1,0 +1,1942 @@
+[
+  {
+    "id": "bash-1",
+    "name": "Bash",
+    "description": "Raises club fighting skill by 1.",
+    "categoryId": "13",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "club",
+      "bonus": 1
+    },
+    "materials": [
+      {
+        "itemId": "cyclops-toe",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "bash-2",
+    "name": "Bash",
+    "description": "Raises club fighting skill by 2.",
+    "categoryId": "13",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "club",
+      "bonus": 2
+    },
+    "materials": [
+      {
+        "itemId": "cyclops-toe",
+        "count": 20
+      },
+      {
+        "itemId": "ogre-nose-ring",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "bash-3",
+    "name": "Bash",
+    "description": "Raises club fighting skill by 4.",
+    "categoryId": "13",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "club",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "cyclops-toe",
+        "count": 20
+      },
+      {
+        "itemId": "ogre-nose-ring",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "blockade-1",
+    "name": "Blockade",
+    "description": "Raises shielding skill by 1.",
+    "categoryId": "14",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "shield",
+      "bonus": 1
+    },
+    "materials": [],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "blockade-2",
+    "name": "Blockade",
+    "description": "Raises shielding skill by 2.",
+    "categoryId": "14",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "shield",
+      "bonus": 2
+    },
+    "materials": [
+      {
+        "itemId": "brimstone-shell",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "blockade-3",
+    "name": "Blockade",
+    "description": "Raises shielding skill by 4.",
+    "categoryId": "14",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "shield",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "brimstone-shell",
+        "count": 25
+      },
+      {
+        "itemId": "frazzle-skin",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "chop-1",
+    "name": "Chop",
+    "description": "Raises axe fighting skill by 1.",
+    "categoryId": "11",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "axe",
+      "bonus": 1
+    },
+    "materials": [
+      {
+        "itemId": "orc-tooth",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "chop-2",
+    "name": "Chop",
+    "description": "Raises axe fighting skill by 2.",
+    "categoryId": "11",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "axe",
+      "bonus": 2
+    },
+    "materials": [
+      {
+        "itemId": "orc-tooth",
+        "count": 20
+      },
+      {
+        "itemId": "battle-stone",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "chop-3",
+    "name": "Chop",
+    "description": "Raises axe fighting skill by 4.",
+    "categoryId": "11",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "axe",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "orc-tooth",
+        "count": 20
+      },
+      {
+        "itemId": "battle-stone",
+        "count": 25
+      },
+      {
+        "itemId": "moohtant-horn",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "cloud-fabric-1",
+    "name": "Cloud Fabric",
+    "description": "Reduces energy damage by 3%.",
+    "categoryId": "8",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "reduction",
+      "combat": "energy",
+      "percent": 3
+    },
+    "materials": [
+      {
+        "itemId": "wyvern-talisman",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "cloud-fabric-2",
+    "name": "Cloud Fabric",
+    "description": "Reduces energy damage by 8%.",
+    "categoryId": "8",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "energy",
+      "percent": 8
+    },
+    "materials": [
+      {
+        "itemId": "wyvern-talisman",
+        "count": 20
+      },
+      {
+        "itemId": "crawler-head-plating",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "cloud-fabric-3",
+    "name": "Cloud Fabric",
+    "description": "Reduces energy damage by 15%.",
+    "categoryId": "8",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "energy",
+      "percent": 15
+    },
+    "materials": [
+      {
+        "itemId": "wyvern-talisman",
+        "count": 20
+      },
+      {
+        "itemId": "crawler-head-plating",
+        "count": 15
+      },
+      {
+        "itemId": "wyrm-scale",
+        "count": 10
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "demon-presence-1",
+    "name": "Demon Presence",
+    "description": "Reduces holy damage by 3%.",
+    "categoryId": "9",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "reduction",
+      "combat": "holy",
+      "percent": 3
+    },
+    "materials": [
+      {
+        "itemId": "cultish-robe",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "demon-presence-2",
+    "name": "Demon Presence",
+    "description": "Reduces holy damage by 8%.",
+    "categoryId": "9",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "holy",
+      "percent": 8
+    },
+    "materials": [
+      {
+        "itemId": "cultish-robe",
+        "count": 25
+      },
+      {
+        "itemId": "cultish-mask",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "demon-presence-3",
+    "name": "Demon Presence",
+    "description": "Reduces holy damage by 15%.",
+    "categoryId": "9",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "holy",
+      "percent": 15
+    },
+    "materials": [
+      {
+        "itemId": "cultish-robe",
+        "count": 25
+      },
+      {
+        "itemId": "cultish-mask",
+        "count": 25
+      },
+      {
+        "itemId": "hellspawn-tail",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "dragon-hide-1",
+    "name": "Dragon Hide",
+    "description": "Reduces fire damage by 3%.",
+    "categoryId": "6",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "reduction",
+      "combat": "fire",
+      "percent": 3
+    },
+    "materials": [
+      {
+        "itemId": "green-dragon-leather",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "dragon-hide-2",
+    "name": "Dragon Hide",
+    "description": "Reduces fire damage by 8%.",
+    "categoryId": "6",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "fire",
+      "percent": 8
+    },
+    "materials": [
+      {
+        "itemId": "green-dragon-leather",
+        "count": 20
+      },
+      {
+        "itemId": "blazing-bone",
+        "count": 10
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "dragon-hide-3",
+    "name": "Dragon Hide",
+    "description": "Reduces fire damage by 15%.",
+    "categoryId": "6",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "fire",
+      "percent": 15
+    },
+    "materials": [
+      {
+        "itemId": "green-dragon-leather",
+        "count": 20
+      },
+      {
+        "itemId": "blazing-bone",
+        "count": 10
+      },
+      {
+        "itemId": "draken-sulphur",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "electrify-1",
+    "name": "Electrify",
+    "description": "Converts 10% of the physical damage to energy damage.",
+    "categoryId": "0",
+    "baseId": "1",
+    "premium": false,
+    "subgroup": "(Energy)",
+    "effect": {
+      "type": "damage",
+      "combat": "energy",
+      "percent": 10
+    },
+    "materials": [
+      {
+        "itemId": "rorc-feather",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "electrify-2",
+    "name": "Electrify",
+    "description": "Converts 25% of the physical damage to energy damage.",
+    "categoryId": "0",
+    "baseId": "2",
+    "premium": true,
+    "subgroup": "(Energy)",
+    "effect": {
+      "type": "damage",
+      "combat": "energy",
+      "percent": 25
+    },
+    "materials": [
+      {
+        "itemId": "rorc-feather",
+        "count": 25
+      },
+      {
+        "itemId": "peacock-feather-fan",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "electrify-3",
+    "name": "Electrify",
+    "description": "Converts 50% of the physical damage to energy damage.",
+    "categoryId": "0",
+    "baseId": "3",
+    "premium": true,
+    "subgroup": "(Energy)",
+    "effect": {
+      "type": "damage",
+      "combat": "energy",
+      "percent": 50
+    },
+    "materials": [
+      {
+        "itemId": "rorc-feather",
+        "count": 25
+      },
+      {
+        "itemId": "peacock-feather-fan",
+        "count": 5
+      },
+      {
+        "itemId": "energy-vein",
+        "count": 1
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "epiphany-1",
+    "name": "Epiphany",
+    "description": "Raises magic level by 1.",
+    "categoryId": "16",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "magicpoints",
+      "bonus": 1
+    },
+    "materials": [
+      {
+        "itemId": "elvish-talisman",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "epiphany-2",
+    "name": "Epiphany",
+    "description": "Raises magic level by 2.",
+    "categoryId": "16",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "magicpoints",
+      "bonus": 2
+    },
+    "materials": [
+      {
+        "itemId": "elvish-talisman",
+        "count": 25
+      },
+      {
+        "itemId": "broken-shamanic-staff",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "epiphany-3",
+    "name": "Epiphany",
+    "description": "Raises magic level by 4.",
+    "categoryId": "16",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "magicpoints",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "elvish-talisman",
+        "count": 25
+      },
+      {
+        "itemId": "broken-shamanic-staff",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "featherweight-1",
+    "name": "Featherweight",
+    "description": "Raises capacity by 3.",
+    "categoryId": "17",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "capacity",
+      "amount": 3
+    },
+    "materials": [
+      {
+        "itemId": "fairy-wings",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "featherweight-2",
+    "name": "Featherweight",
+    "description": "Raises capacity by 8.",
+    "categoryId": "17",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "capacity",
+      "amount": 8
+    },
+    "materials": [
+      {
+        "itemId": "fairy-wings",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "featherweight-3",
+    "name": "Featherweight",
+    "description": "Raises capacity by 15.",
+    "categoryId": "17",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "capacity",
+      "amount": 15
+    },
+    "materials": [
+      {
+        "itemId": "fairy-wings",
+        "count": 20
+      },
+      {
+        "itemId": "goosebump-leather",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "frost-1",
+    "name": "Frost",
+    "description": "Converts 10% of the physical damage to ice damage.",
+    "categoryId": "0",
+    "baseId": "1",
+    "premium": false,
+    "subgroup": "(Ice)",
+    "effect": {
+      "type": "damage",
+      "combat": "ice",
+      "percent": 10
+    },
+    "materials": [
+      {
+        "itemId": "frosty-heart",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "frost-2",
+    "name": "Frost",
+    "description": "Converts 25% of the physical damage to ice damage.",
+    "categoryId": "0",
+    "baseId": "2",
+    "premium": true,
+    "subgroup": "(Ice)",
+    "effect": {
+      "type": "damage",
+      "combat": "ice",
+      "percent": 25
+    },
+    "materials": [
+      {
+        "itemId": "frosty-heart",
+        "count": 25
+      },
+      {
+        "itemId": "seacrest-hair",
+        "count": 10
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "frost-3",
+    "name": "Frost",
+    "description": "Converts 50% of the physical damage to ice damage.",
+    "categoryId": "0",
+    "baseId": "3",
+    "premium": true,
+    "subgroup": "(Ice)",
+    "effect": {
+      "type": "damage",
+      "combat": "ice",
+      "percent": 50
+    },
+    "materials": [
+      {
+        "itemId": "frosty-heart",
+        "count": 25
+      },
+      {
+        "itemId": "seacrest-hair",
+        "count": 10
+      },
+      {
+        "itemId": "polar-bear-paw",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "lich-shroud-1",
+    "name": "Lich Shroud",
+    "description": "Reduces death damage by 2%.",
+    "categoryId": "4",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "reduction",
+      "combat": "death",
+      "percent": 2
+    },
+    "materials": [],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "lich-shroud-2",
+    "name": "Lich Shroud",
+    "description": "Reduces death damage by 5%.",
+    "categoryId": "4",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "death",
+      "percent": 5
+    },
+    "materials": [
+      {
+        "itemId": "gloom-wolf-fur",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "lich-shroud-3",
+    "name": "Lich Shroud",
+    "description": "Reduces death damage by 10%.",
+    "categoryId": "4",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "death",
+      "percent": 10
+    },
+    "materials": [
+      {
+        "itemId": "gloom-wolf-fur",
+        "count": 20
+      },
+      {
+        "itemId": "mystical-hourglass",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "precision-1",
+    "name": "Precision",
+    "description": "Raises distance fighting skill by 1.",
+    "categoryId": "15",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "distance",
+      "bonus": 1
+    },
+    "materials": [
+      {
+        "itemId": "elven-scouting-glass",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "precision-2",
+    "name": "Precision",
+    "description": "Raises distance fighting skill by 2.",
+    "categoryId": "15",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "distance",
+      "bonus": 2
+    },
+    "materials": [
+      {
+        "itemId": "elven-scouting-glass",
+        "count": 25
+      },
+      {
+        "itemId": "elven-hoof",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "precision-3",
+    "name": "Precision",
+    "description": "Raises distance fighting skill by 4.",
+    "categoryId": "15",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "distance",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "elven-scouting-glass",
+        "count": 25
+      },
+      {
+        "itemId": "elven-hoof",
+        "count": 20
+      },
+      {
+        "itemId": "metal-spike",
+        "count": 10
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "punch-1",
+    "name": "Punch",
+    "description": "Raises fist fighting skill by 1.",
+    "categoryId": "18",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "fist",
+      "bonus": 1
+    },
+    "materials": [
+      {
+        "itemId": "ghostly-tissue",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "punch-2",
+    "name": "Punch",
+    "description": "Raises fist fighting skill by 2.",
+    "categoryId": "18",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "fist",
+      "bonus": 2
+    },
+    "materials": [
+      {
+        "itemId": "tarantula-egg",
+        "count": 25
+      },
+      {
+        "itemId": "mantassin-tail",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "punch-3",
+    "name": "Punch",
+    "description": "Raises fist fighting skill by 4.",
+    "categoryId": "18",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "fist",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "tarantula-egg",
+        "count": 25
+      },
+      {
+        "itemId": "mantassin-tail",
+        "count": 20
+      },
+      {
+        "itemId": "gold-brocaded-cloth",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "quara-scale-1",
+    "name": "Quara Scale",
+    "description": "Reduces ice damage by 3%.",
+    "categoryId": "7",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "reduction",
+      "combat": "ice",
+      "percent": 3
+    },
+    "materials": [
+      {
+        "itemId": "winter-wolf-fur",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "quara-scale-2",
+    "name": "Quara Scale",
+    "description": "Reduces ice damage by 8%.",
+    "categoryId": "7",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "ice",
+      "percent": 8
+    },
+    "materials": [
+      {
+        "itemId": "winter-wolf-fur",
+        "count": 25
+      },
+      {
+        "itemId": "thick-fur",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "quara-scale-3",
+    "name": "Quara Scale",
+    "description": "Reduces ice damage by 15%.",
+    "categoryId": "7",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "ice",
+      "percent": 15
+    },
+    "materials": [
+      {
+        "itemId": "winter-wolf-fur",
+        "count": 25
+      },
+      {
+        "itemId": "thick-fur",
+        "count": 15
+      },
+      {
+        "itemId": "deepling-warts",
+        "count": 10
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "reap-1",
+    "name": "Reap",
+    "description": "Converts 10% of the physical damage to death damage.",
+    "categoryId": "0",
+    "baseId": "1",
+    "premium": false,
+    "subgroup": "(Death)",
+    "effect": {
+      "type": "damage",
+      "combat": "death",
+      "percent": 10
+    },
+    "materials": [],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "reap-2",
+    "name": "Reap",
+    "description": "Converts 25% of the physical damage to death damage.",
+    "categoryId": "0",
+    "baseId": "2",
+    "premium": true,
+    "subgroup": "(Death)",
+    "effect": {
+      "type": "damage",
+      "combat": "death",
+      "percent": 25
+    },
+    "materials": [
+      {
+        "itemId": "demonic-skeletal-hand",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "reap-3",
+    "name": "Reap",
+    "description": "Converts 50% of the physical damage to death damage.",
+    "categoryId": "0",
+    "baseId": "3",
+    "premium": true,
+    "subgroup": "(Death)",
+    "effect": {
+      "type": "damage",
+      "combat": "death",
+      "percent": 50
+    },
+    "materials": [
+      {
+        "itemId": "demonic-skeletal-hand",
+        "count": 20
+      },
+      {
+        "itemId": "petrified-scream",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "scorch-1",
+    "name": "Scorch",
+    "description": "Converts 10% of the physical damage to fire damage.",
+    "categoryId": "0",
+    "baseId": "1",
+    "premium": false,
+    "subgroup": "(Fire)",
+    "effect": {
+      "type": "damage",
+      "combat": "fire",
+      "percent": 10
+    },
+    "materials": [
+      {
+        "itemId": "fiery-heart",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "scorch-2",
+    "name": "Scorch",
+    "description": "Converts 25% of the physical damage to fire damage.",
+    "categoryId": "0",
+    "baseId": "2",
+    "premium": true,
+    "subgroup": "(Fire)",
+    "effect": {
+      "type": "damage",
+      "combat": "fire",
+      "percent": 25
+    },
+    "materials": [
+      {
+        "itemId": "fiery-heart",
+        "count": 25
+      },
+      {
+        "itemId": "green-dragon-scale",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "scorch-3",
+    "name": "Scorch",
+    "description": "Converts 50% of the physical damage to fire damage.",
+    "categoryId": "0",
+    "baseId": "3",
+    "premium": true,
+    "subgroup": "(Fire)",
+    "effect": {
+      "type": "damage",
+      "combat": "fire",
+      "percent": 50
+    },
+    "materials": [
+      {
+        "itemId": "fiery-heart",
+        "count": 25
+      },
+      {
+        "itemId": "green-dragon-scale",
+        "count": 5
+      },
+      {
+        "itemId": "demon-horn",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "slash-1",
+    "name": "Slash",
+    "description": "Raises sword fighting skill by 1.",
+    "categoryId": "12",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "sword",
+      "bonus": 1
+    },
+    "materials": [],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "slash-2",
+    "name": "Slash",
+    "description": "Raises sword fighting skill by 2.",
+    "categoryId": "12",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "sword",
+      "bonus": 2
+    },
+    "materials": [],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "slash-3",
+    "name": "Slash",
+    "description": "Raises sword fighting skill by 4.",
+    "categoryId": "12",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "sword",
+      "bonus": 4
+    },
+    "materials": [
+      {
+        "itemId": "war-crystal",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "snake-skin-1",
+    "name": "Snake Skin",
+    "description": "Reduces earth damage by 3%.",
+    "categoryId": "5",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "reduction",
+      "combat": "earth",
+      "percent": 3
+    },
+    "materials": [],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "snake-skin-2",
+    "name": "Snake Skin",
+    "description": "Reduces earth damage by 8%.",
+    "categoryId": "5",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "earth",
+      "percent": 8
+    },
+    "materials": [
+      {
+        "itemId": "snake-skin",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "snake-skin-3",
+    "name": "Snake Skin",
+    "description": "Reduces earth damage by 15%.",
+    "categoryId": "5",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "reduction",
+      "combat": "earth",
+      "percent": 15
+    },
+    "materials": [
+      {
+        "itemId": "snake-skin",
+        "count": 20
+      },
+      {
+        "itemId": "brimstone-fangs",
+        "count": 10
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "strike-1",
+    "name": "Strike",
+    "description": "Raises crit hit damage by 15% and crit hit chance by 10%.",
+    "categoryId": "3",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "critical",
+      "bonus": 1500,
+      "chance": 1000
+    },
+    "materials": [
+      {
+        "itemId": "protective-charm",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "strike-2",
+    "name": "Strike",
+    "description": "Raises crit hit damage by 25% and crit hit chance by 10%.",
+    "categoryId": "3",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "critical",
+      "bonus": 2500,
+      "chance": 1000
+    },
+    "materials": [
+      {
+        "itemId": "protective-charm",
+        "count": 20
+      },
+      {
+        "itemId": "sabretooth",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "strike-3",
+    "name": "Strike",
+    "description": "Raises crit hit damage by 50% and crit hit chance by 10%.",
+    "categoryId": "3",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "critical",
+      "bonus": 5000,
+      "chance": 1000
+    },
+    "materials": [
+      {
+        "itemId": "protective-charm",
+        "count": 20
+      },
+      {
+        "itemId": "sabretooth",
+        "count": 25
+      },
+      {
+        "itemId": "vexclaw-talon",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "swiftness-1",
+    "name": "Swiftness",
+    "description": "Raises walking speed by 10.",
+    "categoryId": "10",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "speed",
+      "amount": 10
+    },
+    "materials": [
+      {
+        "itemId": "damselfly-wing",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "swiftness-2",
+    "name": "Swiftness",
+    "description": "Raises walking speed by 15.",
+    "categoryId": "10",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "speed",
+      "amount": 15
+    },
+    "materials": [
+      {
+        "itemId": "damselfly-wing",
+        "count": 15
+      },
+      {
+        "itemId": "compass",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "swiftness-3",
+    "name": "Swiftness",
+    "description": "Raises walking speed by 30.",
+    "categoryId": "10",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "speed",
+      "amount": 30
+    },
+    "materials": [
+      {
+        "itemId": "damselfly-wing",
+        "count": 15
+      },
+      {
+        "itemId": "compass",
+        "count": 25
+      },
+      {
+        "itemId": "waspoid-wing",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "vampirism-1",
+    "name": "Vampirism",
+    "description": "Converts 5% of damage to HP with a chance of 100%.",
+    "categoryId": "1",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "lifeleech",
+      "bonus": 500,
+      "chance": 100
+    },
+    "materials": [
+      {
+        "itemId": "vampire-teeth",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "vampirism-2",
+    "name": "Vampirism",
+    "description": "Converts 10% of damage to HP with a chance of 100%.",
+    "categoryId": "1",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "lifeleech",
+      "bonus": 1000,
+      "chance": 100
+    },
+    "materials": [
+      {
+        "itemId": "vampire-teeth",
+        "count": 25
+      },
+      {
+        "itemId": "bloody-pincers",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "vampirism-3",
+    "name": "Vampirism",
+    "description": "Converts 25% of damage to HP with a chance of 100%.",
+    "categoryId": "1",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "lifeleech",
+      "bonus": 2500,
+      "chance": 100
+    },
+    "materials": [
+      {
+        "itemId": "vampire-teeth",
+        "count": 25
+      },
+      {
+        "itemId": "bloody-pincers",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "venom-1",
+    "name": "Venom",
+    "description": "Converts 10% of the physical damage to earth damage.",
+    "categoryId": "0",
+    "baseId": "1",
+    "premium": false,
+    "subgroup": "(Earth)",
+    "effect": {
+      "type": "damage",
+      "combat": "earth",
+      "percent": 10
+    },
+    "materials": [
+      {
+        "itemId": "swamp-grass",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "venom-2",
+    "name": "Venom",
+    "description": "Converts 25% of the physical damage to earth damage.",
+    "categoryId": "0",
+    "baseId": "2",
+    "premium": true,
+    "subgroup": "(Earth)",
+    "effect": {
+      "type": "damage",
+      "combat": "earth",
+      "percent": 25
+    },
+    "materials": [
+      {
+        "itemId": "swamp-grass",
+        "count": 25
+      },
+      {
+        "itemId": "poisonous-slime",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "venom-3",
+    "name": "Venom",
+    "description": "Converts 50% of the physical damage to earth damage.",
+    "categoryId": "0",
+    "baseId": "3",
+    "premium": true,
+    "subgroup": "(Earth)",
+    "effect": {
+      "type": "damage",
+      "combat": "earth",
+      "percent": 50
+    },
+    "materials": [
+      {
+        "itemId": "swamp-grass",
+        "count": 25
+      },
+      {
+        "itemId": "poisonous-slime",
+        "count": 20
+      },
+      {
+        "itemId": "slime-heart",
+        "count": 2
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "vibrancy-1",
+    "name": "Vibrancy",
+    "description": "Removes paralysis with a chance of 15% and always deflects PvP paralysis upon additional paralyse attacks.",
+    "categoryId": "19",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "paralysis",
+      "chance": 15,
+      "pvpDeflect": true
+    },
+    "materials": [
+      {
+        "itemId": "wereboar-hooves",
+        "count": 20
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "vibrancy-2",
+    "name": "Vibrancy",
+    "description": "Removes paralysis with a chance of 25% and always deflects PvP paralysis upon additional paralyse attacks.",
+    "categoryId": "19",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "paralysis",
+      "chance": 25,
+      "pvpDeflect": true
+    },
+    "materials": [
+      {
+        "itemId": "wereboar-hooves",
+        "count": 20
+      },
+      {
+        "itemId": "crystallized-anger",
+        "count": 15
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "vibrancy-3",
+    "name": "Vibrancy",
+    "description": "Removes paralysis with a chance of 50% and always deflects PvP paralysis upon additional paralyse attacks.",
+    "categoryId": "19",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "paralysis",
+      "chance": 50,
+      "pvpDeflect": true
+    },
+    "materials": [
+      {
+        "itemId": "wereboar-hooves",
+        "count": 20
+      },
+      {
+        "itemId": "crystallized-anger",
+        "count": 15
+      },
+      {
+        "itemId": "quill",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "void-1",
+    "name": "Void",
+    "description": "Converts 3% of damage to MP with a chance of 100%.",
+    "categoryId": "2",
+    "baseId": "1",
+    "premium": false,
+    "effect": {
+      "type": "skill",
+      "skill": "manaleech",
+      "bonus": 300,
+      "chance": 100
+    },
+    "materials": [
+      {
+        "itemId": "rope-belt",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "void-2",
+    "name": "Void",
+    "description": "Converts 5% of damage to MP with a chance of 100%.",
+    "categoryId": "2",
+    "baseId": "2",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "manaleech",
+      "bonus": 500,
+      "chance": 100
+    },
+    "materials": [
+      {
+        "itemId": "rope-belt",
+        "count": 25
+      },
+      {
+        "itemId": "silencer-claws",
+        "count": 25
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "void-3",
+    "name": "Void",
+    "description": "Converts 8% of damage to MP with a chance of 100%.",
+    "categoryId": "2",
+    "baseId": "3",
+    "premium": true,
+    "effect": {
+      "type": "skill",
+      "skill": "manaleech",
+      "bonus": 800,
+      "chance": 100
+    },
+    "materials": [
+      {
+        "itemId": "rope-belt",
+        "count": 25
+      },
+      {
+        "itemId": "silencer-claws",
+        "count": 25
+      },
+      {
+        "itemId": "some-grimeleech-wings",
+        "count": 5
+      }
+    ],
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  }
+]

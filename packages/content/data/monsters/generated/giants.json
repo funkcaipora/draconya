@@ -23,6 +23,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -111,6 +114,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -962,6 +969,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.51,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1108,6 +1119,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1292,6 +1306,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.63,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1455,6 +1473,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 2.72,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1610,6 +1631,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.51,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1832,6 +1857,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1973,6 +2002,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2181,6 +2214,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.24,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,

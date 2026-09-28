@@ -24,6 +24,7 @@ import type { S2CProps } from '@draconya/protocol';
 import type { Content, Spell, Supply } from '@draconya/content';
 import {
   BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
+  manaCostDisplayOf,
 } from '@draconya/content';
 import { DEFAULT_DIFFICULTY_NAME, huntListings } from '@draconya/sim';
 
@@ -87,7 +88,10 @@ export function buildCatalogue(content: Content): Catalogue {
       spells: [...content.spells.values()].map((spell) => ({
         id: spell.id,
         name: spell.name,
-        manaCost: spell.manaCost,
+        // O ANUNCIADO (#588): o custo escalado pela party depende de quem está no alcance no
+        // instante do cast, e só a sessão sabe isso — o catálogo é conteúdo fixado (invariante
+        // 7) e mostra o `base`, como o grimório do Tibia sempre mostrou.
+        manaCost: manaCostDisplayOf(spell.manaCost),
         minLevel: spell.minLevel,
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
@@ -230,13 +234,30 @@ export function buildCatalogue(content: Content): Catalogue {
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
     // cliente não simula (invariante 4).
     monsters: [...content.monsters.values()]
-      .map((monster) => ({
-        id: monster.id,
-        name: monster.name,
-        ...(monster.class !== undefined ? { class: monster.class } : {}),
-        health: monster.health,
-        experience: monster.experience,
-      }))
+      .map((monster) => {
+        const bestiaryEntry = content.bestiary?.entries[monster.id];
+        return {
+          id: monster.id,
+          name: monster.name,
+          ...(monster.class !== undefined ? { class: monster.class } : {}),
+          health: monster.health,
+          experience: monster.experience,
+          // A ficha do Canary (#601, ADR 0053 d.1): estágio e pontos são DERIVADOS no cliente a
+          // partir destes limiares e do contador de `bestiary.counts` — não calculados aqui.
+          ...(bestiaryEntry === undefined
+            ? {}
+            : {
+              bestiary: {
+                stars: bestiaryEntry.stars,
+                occurrence: bestiaryEntry.occurrence,
+                firstUnlock: bestiaryEntry.firstUnlock,
+                secondUnlock: bestiaryEntry.secondUnlock,
+                toKill: bestiaryEntry.toKill,
+                charmsPoints: bestiaryEntry.charmsPoints,
+              },
+            }),
+        };
+      })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
     // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o

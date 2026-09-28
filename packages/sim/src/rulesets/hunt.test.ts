@@ -172,6 +172,11 @@ const spells = [
     id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 1_000,
     effect: { kind: 'damage', power: 80, range: 3, area: { shape: 'circle', radius: 2, centered: 'target' } },
   },
+  // #596: Cancel Magic Shield — remove a condição do lançador NA HORA, sem agendar nada.
+  {
+    id: 'cancel-magic-shield', name: 'Cancel Magic Shield', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'remove-condition', key: 'mana-shield' },
+  },
 ];
 // Poção e runa são suprimentos ABSTRATOS (FUN-77, §20.1): usar debita gold, sem pilha. Os
 // números são redondos de propósito, como os das magias.
@@ -2384,6 +2389,92 @@ describe('cura em área — Mass Healing (#475, RF-05)', () => {
   });
 });
 
+// --- alvo de party e custo escalado (#588: Heal/Protect/Enchant/Train Party) ------------------
+
+describe('alvo de party e custo por tamanho da party (#588)', () => {
+  const healParty = {
+    id: 'heal-party', name: 'Heal Party', manaCost: { kind: 'party-scaled' as const, base: 120, decay: 0.9 },
+    cooldownMs: 1_000, group: 'support', groupCooldownMs: 1_000, minLevel: 1,
+    effect: {
+      kind: 'heal-over-time' as const, amount: 20, intervalMs: 2_000, durationMs: 120_000,
+      target: 'party' as const, range: 3,
+    },
+  };
+  const castHealParty = () => ({
+    heal: [{
+      when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+      do: { kind: 'spell' as const, spellId: 'heal-party' },
+    }],
+  });
+  const make = (id: string): CharacterRuntime => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 },
+    health: 100, maxHealth: 100, mana: 500, maxMana: 500,
+    level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+
+  it('cobra o custo do Canary escalado por quem está no alcance, e aplica a MESMA condição a cada um', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 500, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, healParty],
+    }));
+    const session = createHuntSession({
+      id: 'heal-party', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(castHealParty()),
+    });
+    const caster = make('hero');
+    session.enter(caster);
+    const near = make('near');
+    session.enter(near);
+    const far = make('far');
+    session.enter(far);
+    // Posiciona à mão DEPOIS de `enter` (que coloca "perto") — a mesma ordem do teste de Mass
+    // Healing acima. `range: 3`: `far` fica a 5 tiles — fora do alcance, nunca recebe e nunca
+    // conta para `n`.
+    near.position = { x: caster.position.x + 2, y: caster.position.y, z: caster.position.z };
+    far.position = { x: caster.position.x + 5, y: caster.position.y, z: caster.position.z };
+
+    session.advanceBy(50);
+
+    // n = 2 (hero + near; `far` não conta): ceil((0.9^1 * 120) * 2) = 216, não os 120 do `base`.
+    expect(caster.mana).toBe(500 - 216);
+    // Os dois no alcance carregam a MESMA condição — regen 20/2s por 2 minutos.
+    for (const member of [caster, near]) {
+      const condition = member.conditions.get('heal-over-time');
+      expect(condition, member.id).toMatchObject({
+        spellId: 'heal-party', tick: { amount: 20, intervalMs: 2_000 },
+      });
+    }
+    // Quem ficou fora do alcance não recebe nada.
+    expect(far.conditions.get('heal-over-time')).toBeNull();
+  });
+
+  it('recusa "no-target" com o lançador sozinho no alcance, e não gasta mana', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 500, regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, healParty],
+    }));
+    const session = createHuntSession({
+      id: 'heal-party-solo', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(castHealParty()),
+    });
+    const caster = make('hero');
+    session.enter(caster);
+
+    session.advanceBy(50);
+
+    expect(caster.mana).toBe(500);
+    expect(caster.conditions.get('heal-over-time')).toBeNull();
+  });
+});
+
 // --- a contagem de "targets" usa o alcance da ARMA (#216) -------------------------------------
 
 describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desarmado (#216)', () => {
@@ -2620,6 +2711,118 @@ describe('magia (FUN-74)', () => {
 
     expect(() => run(session, 3_000, 100)).not.toThrow();
     expect(hero.mana).toBe(200);
+  });
+
+  it('Cancel Magic Shield (#596) remove a condição do lançador NA HORA, sem evento agendado', () => {
+    const { session, hero } = withSpells(botConfig({
+      support: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'cancel-magic-shield' },
+      }],
+    }), { health: 1_000, mana: 100, monsters: false });
+    // Mana Shield já ativo — como uma poção ou magia anterior teria deixado.
+    hero.conditions.apply({ key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000 });
+    expect(hero.conditions.hasManaShield()).toBe(true);
+
+    session.advanceBy(50);
+
+    // A remoção é IMEDIATA — não é uma condição nova com prazo curto, é a ausência da anterior.
+    expect(hero.conditions.hasManaShield()).toBe(false);
+    expect(hero.mana).toBe(90);
+  });
+});
+
+describe('Challenge e Chivalrous Challenge (#589): provocação que força o alvo do monstro', () => {
+  // Cooldown ABSURDO (999 999 ms), como o Dragon do #520 abaixo: garante UM lançamento só na
+  // janela do teste, para a asserção não competir com o bot recastando sozinho. `range: 5` e
+  // `radius: 3` cobrem a sala inteira (interior 4×3, Chebyshev máximo 3) — nenhum teste aqui
+  // depende de onde exatamente a rota/spawn colocou quem está sendo provocado.
+  const challengeSpell = {
+    id: 'challenge', name: 'Challenge', manaCost: 30, cooldownMs: 999_999,
+    effect: { kind: 'challenge', durationMs: 6_000, range: 5 },
+  };
+  const chivalrousChallengeSpell = {
+    id: 'chivalrous-challenge', name: 'Chivalrous Challenge', manaCost: 80, cooldownMs: 999_999,
+    effect: {
+      kind: 'challenge', durationMs: 12_000,
+      area: { shape: 'circle' as const, radius: 3, centered: 'caster' as const },
+    },
+  };
+  // O rato já nasce na faixa de fuga (`runOnHealth` igual ao próprio HP): nenhum teste aqui
+  // precisa acertar um golpe primeiro para provar RF-01/03/04 — o combate `pacifist` mantém o
+  // HP parado a janela inteira, porque o assunto é a CONDIÇÃO, não a sobrevivência. A suspensão
+  // de `isMonsterFleeing`/`decideMonsterAction` em si já tem teste unitário determinístico em
+  // `monster.test.ts` (RF-03); aqui o que se prova é a integração pelo `castSpell` do ruleset.
+  const fleeingRat = { ...rat, runOnHealth: 50 };
+  const pacifist = [{ ...combat, player: { ...combat.player, attackPower: 0 } }];
+  const alwaysTarget = { kind: 'targets' as const, op: '>=' as const, count: 1 };
+
+  it('RF-01/RF-04: força o alvo no alcance, e a condição vence sozinha pela fila de eventos', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId: 'challenge' } }],
+    }), { spells: [...spells, challengeSpell], monstersRaw: [fleeingRat], combat: pacifist });
+
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // RF-01: o `targetId` foi forçado para quem lançou, e a condição está armada com o prazo
+    // certo — o cast aconteceu em algum instante dentro dos primeiros 100 ms.
+    expect(monster.targetId).toBe(hero.id);
+    const condition = monster.conditions.get('challenge');
+    expect(condition).not.toBeNull();
+    expect(condition?.expiresAtMs).toBeGreaterThanOrEqual(6_000);
+    expect(condition?.expiresAtMs).toBeLessThanOrEqual(6_100);
+
+    // RF-04: passado o prazo, a condição SOME sozinha — `CONDITION_EXPIRE`, sem acumulador
+    // novo. `cooldownMs: 999_999` garante que nenhum recast a renove no meio do caminho.
+    session.advanceBy(6_200);
+    expect(monster.conditions.get('challenge')).toBeNull();
+  });
+
+  it('RF-02: Chivalrous Challenge atinge TODOS os monstros da área, num lançamento só', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId: 'chivalrous-challenge' } }],
+    }), {
+      spells: [...spells, chivalrousChallengeSpell], monstersRaw: [fleeingRat], combat: pacifist,
+    }, 'bold');
+
+    session.advanceBy(100);
+    // Densidade "bold" (`threeRatsRoute`, #583): três ratos no mesmo cenário — a prova de que a
+    // área pega TODOS, não só o alvo principal.
+    expect(ruleset.monsters.length).toBeGreaterThanOrEqual(2);
+    for (const monster of ruleset.monsters) {
+      expect(monster.targetId).toBe(hero.id);
+      expect(monster.conditions.get('challenge')).not.toBeNull();
+    }
+  });
+
+  it('RF-05: relançar no mesmo monstro RENOVA o prazo — não empilha', () => {
+    // Cooldown normal (curto): dá para o bot recastar dentro da janela do teste, ao contrário
+    // do `challengeSpell` acima — aqui o recast É o assunto.
+    const renewable = {
+      ...challengeSpell, cooldownMs: 100,
+      effect: { ...challengeSpell.effect, range: 5 },
+    };
+    const { session, hero, ruleset } = withSpells(botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId: 'challenge' } }],
+    }), { spells: [...spells, renewable], monstersRaw: [fleeingRat], combat: pacifist });
+
+    session.advanceBy(50);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    const first = monster.conditions.get('challenge');
+    expect(first).not.toBeNull();
+    expect(monster.targetId).toBe(hero.id);
+
+    // Passa o cooldown da CATEGORIA do bot (1000 ms) e o da magia (100 ms): um segundo cast
+    // acontece, e `#applyConditionTo` (`merge` ausente é `'refresh'`) troca o prazo em vez de
+    // somar. Só uma entrada em `monster.conditions` — é um `Map` por chave, não uma lista —,
+    // com o `expiresAtMs` do SEGUNDO cast.
+    session.advanceBy(1_100);
+    const second = monster.conditions.get('challenge');
+    expect(second).not.toBeNull();
+    expect(second?.expiresAtMs).toBeGreaterThan(first?.expiresAtMs ?? 0);
   });
 });
 
@@ -9184,6 +9387,52 @@ describe('condição de velocidade com sinal — paralyze de ataque e haste de d
   });
 });
 
+describe('Paralyze Rune e imunidade de monstro (#559/#592, ADR 0041 d.2)', () => {
+  // Requisitos simplificados (`requires: {}`, como `attack-rune-726` acima) — o assunto aqui é
+  // o PORTÃO de imunidade, não o gate de level/magicLevel que `casting.test.ts` já prende.
+  const paralyzeRuneTest = {
+    id: 'paralyze-rune-test', name: 'Paralyze Rune', price: 10, group: 'support', groupCooldownMs: 2_000,
+    cooldownMs: 6_000, requires: {},
+    effect: {
+      kind: 'condition' as const, target: 'enemy' as const, range: 4,
+      condition: {
+        key: 'speed', merge: 'replace' as const, durationMs: 6_000,
+        effect: {
+          kind: 'speed' as const, type: 'paralyze' as const,
+          formula: { mina: -1, minb: 0, maxa: -1, maxb: 0 },
+        },
+      },
+    },
+  };
+
+  it('paralisa um monstro SEM imunidade — o alvo mirado, não o lançador', () => {
+    const { session, ruleset } = withSpells(botConfig({}), { supplies: [paralyzeRuneTest] });
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'paralyze-rune-test' }, 1, target);
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.conditions.get('speed')?.speedPercent).toBeLessThan(0);
+    expect(monster.conditions.get('speed')?.targetId).toBe(monster.subject);
+  });
+
+  it('um monstro IMUNE (`conditionImmunities: ["paralyze"]`) não recebe a condição — a runa sai igual', () => {
+    const immuneRat = { ...rat, conditionImmunities: ['paralyze'] };
+    const { session, ruleset } = withSpells(
+      botConfig({}), { supplies: [paralyzeRuneTest], monstersRaw: [immuneRat] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato imune');
+    const target = { kind: 'monster' as const, subject: monsterSubject(monster.id) };
+    const outcome = ruleset.useItemOn(session, 'hero', { supplyId: 'paralyze-rune-test' }, 1, target);
+    // A runa SAI (gasta gold e cooldown) — só a condição não entra, como `Monster::isImmune`.
+    expect(outcome).toEqual({ ok: true });
+    expect(monster.conditions.get('speed')).toBeNull();
+  });
+});
+
 describe('Invocação de monstro por monstro (#546, TFS/Canary monster.summon/maxSummons)', () => {
   // Fraco e sem drama de posicionamento: o que estes testes conferem é a MECÂNICA da invocação
   // — quem nasce, quando PARA de nascer, e o que ganha quem mata —, não o balanceamento de um
@@ -10656,6 +10905,170 @@ describe('dispel: cura de condição (#590, Cure Poison e afins)', () => {
     // Dois lançamentos (cooldown 1 s em 1 500 ms) — a magia SAI toda vez, mesmo sem "poison"
     // nenhum para limpar: gastou a mana as duas vezes.
     expect(hero.mana).toBe(980);
+  });
+});
+
+describe('Invisibility e Cancel Invisibility (#592, ADR 0041 d.2)', () => {
+  const invisibilityTest = {
+    id: 'invisibility-test', name: 'Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'invisible' as const, durationMs: 200_000 },
+  };
+  const cancelInvisibilityTest = {
+    id: 'cancel-invisibility-test', name: 'Cancel Invisibility', manaCost: 10, cooldownMs: 1_000,
+    effect: {
+      kind: 'dispel' as const, types: ['invisible'],
+      area: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+    },
+  };
+
+  it('lança e fica invisível — a chave reservada, no LANÇADOR', () => {
+    const { session, hero } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'invisible', present: false }],
+        do: { kind: 'spell', spellId: 'invisibility-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [invisibilityTest], monsters: false },
+    );
+    session.advanceBy(1);
+    expect(hero.conditions.get('invisible')).not.toBeNull();
+  });
+
+  it('remove a invisibilidade dos MONSTROS na área — não dos aliados, fora do recorte (#12)', () => {
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{
+        when: [{ kind: 'condition', conditionId: 'poison', present: false }],
+        do: { kind: 'spell', spellId: 'cancel-invisibility-test' },
+      }]),
+      { mana: 1_000, health: 1_000, spells: [cancelInvisibilityTest] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    // O spawn da rota nasce longe do herói (routeIndex 4, radius 2) — o raio 1 desta magia sai
+    // do LANÇADOR, então o teste o reposiciona adjacente, como quem mira a mesma forma que a
+    // ability em área já usa em outros describes deste arquivo.
+    monster.position = { ...hero.position, x: hero.position.x + 1 };
+    monster.conditions.apply({ key: 'invisible', targetId: monster.subject, expiresAtMs: session.nowMs + 200_000 });
+    expect(monster.invisible).toBe(true);
+    session.advanceBy(1_500); // 1 lançamento (cooldown 1 s), sem depender de "poison" nenhum.
+    expect(monster.invisible).toBe(false);
+    void hero;
+  });
+});
+
+describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic Wall/Wild Growth)', () => {
+  // Cadeia sintética curta (o firefield real do Dragon Lord tem a mesma FORMA, testada em
+  // `content/src/load.test.ts` contra os números reais do Canary): estágio 0 com dano, estágio
+  // 1 mais fraco, estágio 2 MUDO (some sem causar nada) — a forma exata de 2118 → 2119 → 2120.
+  const stagedFire: FieldSpec = {
+    id: 'fire-chain', durationMs: 1_000, // ignorado: `stages` manda quando presente.
+    shape: { shape: 'circle', radius: 0, centered: 'caster' },
+    stages: [
+      {
+        durationMs: 1_000,
+        condition: {
+          key: 'burning', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 1, intervalMs: 500, damage: 20 }], damageType: 'fire',
+          },
+        },
+      },
+      {
+        durationMs: 800,
+        condition: {
+          key: 'burning', merge: 'refresh', durationMs: 800,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 1, intervalMs: 400, damage: 10 }], damageType: 'fire',
+          },
+        },
+      },
+      { durationMs: 600 }, // sem `condition`: o estágio mudo, só ocupa até sumir.
+    ],
+  };
+
+  it('avança de estágio ao vencer cada duração, emite `field-stage-changed`, e some no fim (`field-vanished`)', () => {
+    const { session, ruleset } = start({ health: 1_000_000 });
+    ruleset.applyField(session, stagedFire, { x: 0, y: 0, z: 7 });
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.stageIndex ?? 0).toBe(0);
+    expect(ruleset.fields[0]?.condition?.effect.kind).toBe('damage-over-time');
+
+    session.advanceBy(999); // ainda dentro do estágio 0 (vence em 1000).
+    expect(ruleset.fields[0]?.stageIndex ?? 0).toBe(0);
+
+    session.advanceBy(2); // passou de 1000: o estágio 1 (mais fraco) entra.
+    expect(ruleset.fields[0]?.stageIndex).toBe(1);
+    const stage1 = ruleset.fields[0]?.condition;
+    expect(stage1?.effect.kind).toBe('damage-over-time');
+    if (stage1?.effect.kind === 'damage-over-time' && stage1.effect.form === 'rounds') {
+      expect(stage1.effect.rounds[0]?.damage).toBe(10);
+    }
+
+    session.advanceBy(800); // vence o estágio 1 (800 ms): o estágio 2, MUDO, entra.
+    expect(ruleset.fields[0]?.stageIndex).toBe(2);
+    expect(ruleset.fields[0]?.condition).toBeUndefined();
+
+    const midEvents = session.drainEvents();
+    expect(ofKind(midEvents, 'field-stage-changed').map((e) => e.stageIndex)).toEqual([1, 2]);
+
+    session.advanceBy(600); // vence o último estágio: o campo desaparece de vez.
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ofKind(session.drainEvents(), 'field-vanished')).toHaveLength(1);
+  });
+
+  it('campo bloqueante (Magic Wall) impede o passo do JOGADOR, como parede, e libera quando some', () => {
+    const { session, hero, ruleset } = start({ health: 1_000_000 });
+    const ahead = { x: hero.position.x + 1, y: hero.position.y, z: hero.position.z };
+    const magicWall: FieldSpec = {
+      id: 'magic-wall', durationMs: 500,
+      shape: { shape: 'circle', radius: 0, centered: 'caster' },
+      blocksMovement: true,
+    };
+    ruleset.applyField(session, magicWall, ahead);
+
+    expect(ruleset.requestMove(session, hero.id, ahead)).toEqual({ ok: false, reason: 'tile-blocked' });
+    expect(hero.position).not.toEqual(ahead);
+
+    session.advanceBy(600); // vence: o campo some, sem `decayTo` (estágio único).
+    expect(ruleset.fields).toHaveLength(0);
+    expect(ruleset.requestMove(session, hero.id, ahead)).toMatchObject({ ok: true, to: ahead });
+  });
+
+  it('campo bloqueante impede o passo do MONSTRO igual — sem exceção de dano (ao contrário do desvio do M29-05)', () => {
+    // Rato COMUM, sem `canWalkOnFire: false`: a M29-05 só desvia de campo com dano que o
+    // monstro não pode encaixar — este bloqueio vale para QUALQUER monstro, porque mora em
+    // `canOccupy`/`TileOccupancy.blockedAt`, não no predicado de desvio de dano.
+    const stuckRoute = {
+      id: 'wall-stuck-route', mapId: 'arena',
+      tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
+      spawnPoints: [{ routeIndex: 0, monsterId: 'rat', respawnDelayMs: 30_000 }],
+    };
+    const stuckHunt = {
+      ...hunt, routeId: 'wall-stuck-route',
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+        },
+      },
+    };
+    const loaded = content({ routes: [stuckRoute], hunts: [stuckHunt] });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    monster.position = { x: 4, y: 1, z: 7 };
+    // Uma parede de 3 tiles na coluna x=3, cobrindo as únicas rotas de fuga do monstro preso em
+    // (4,1) rumo ao herói a oeste — a MESMA geometria do bloco M29-05 acima, mas SEM dano algum.
+    ruleset.applyField(session, {
+      id: 'wild-growth', durationMs: 9_999_999,
+      shape: { shape: 'beam', length: 3 },
+      blocksMovement: true,
+    }, { x: 3, y: 0, z: 7 });
+
+    run(session, 20_000, 100);
+    expect(monster?.position.x).toBe(4); // nunca cruzou — bloqueado como parede.
   });
 });
 

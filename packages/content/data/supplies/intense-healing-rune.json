@@ -19,7 +19,12 @@
       "skillMax": 5.4,
       "baseMin": 20,
       "baseMax": 40
+    },
+    "dispel": {
+      "types": [
+        "paralyze"
+      ]
     }
   },
-  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula (a mesma da Intense Healing, paridade Canary). `price` 95 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 3152, não mais provisório. Aparência: efeito 13 (magic blue) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md). Fórmula e level do Canary (`data/scripts/runes/intense_healing_rune.lua`, main, 2026-09-24): level 8→15."
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula (a mesma da Intense Healing, paridade Canary). `price` 95 (M34-03/#574): menor `buy` de `data-otservbr-global/npc/*.lua` para o clientId 3152, não mais provisório. Aparência: efeito 13 (magic blue) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md). Fórmula e level do Canary (`data/scripts/runes/intense_healing_rune.lua`, main, 2026-09-24): level 8→15. #592: dispel CONDITION_PARALYZE ao lado da cura, conferido no script do Canary (COMBAT_PARAM_DISPEL)."
 }

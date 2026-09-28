@@ -408,6 +408,14 @@ describe('construtor de sessão de destino (FUN-30)', () => {
       .not.toBeNull();
   });
 
+  it('entra na hunt sem `difficulty` nenhum — o cliente novo nunca manda o campo (#584)', () => {
+    // ANTES do #584, `huntFor` recusava (devolvia `null`) quando `request.difficulty` estava
+    // ausente, mesmo com `huntId` válido — a recusa SILENCIOSA que impedia um cliente novo de
+    // simplesmente omitir o campo. Este teste falharia com o `huntFor` de antes.
+    const hunt = build({ to: 'hunt', huntId: 'arena' }, cityWith(), 'p1');
+    expect(hunt?.ruleset.type).toBe('hunt');
+  });
+
   it('recusa os destinos que ainda não têm ruleset', () => {
     // Treino, quest, boss e guild war. `null` recusa com erro claro, que é melhor que
     // construir uma sessão que mente sobre o que é.

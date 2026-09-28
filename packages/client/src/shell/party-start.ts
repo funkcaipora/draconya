@@ -6,8 +6,9 @@
 // XP, e NENHUMA decisão manda a intenção de hunt solo — o início da party vai por HTTP
 // (`configure` + `start`), e a entrada na hunt segue sendo o ticket oferecido à conexão de
 // sempre. O patch é montado do ESTADO REAL da party (`minLevel`, `vocationTargets`,
-// `shareCosts`, `splitLoot`), com caçada e dificuldade da seleção — nada inventado, nada de
-// estado "aguardando aprovação" (a aprovação pré-start não existe mais desde a #501).
+// `shareCosts`, `splitLoot`), com a caçada da seleção — nada inventado, nada de estado
+// "aguardando aprovação" (a aprovação pré-start não existe mais desde a #501). Não há mais eixo
+// de dificuldade desde o #584 (ADR 0039, fim do pull por dificuldade).
 
 import type { PartyConfigInput, PartyView } from '../party/api.js';
 
@@ -29,7 +30,7 @@ export interface StartWithTeamDecision {
  * eixos em tempo de hunt ficam no rodapé de `PartyMembers`.
  */
 export function startWithTeam(
-  current: PartyView | null, me: string, huntId: string | null, difficulty: string | null,
+  current: PartyView | null, me: string, huntId: string | null,
 ): StartWithTeamDecision {
   if (current === null) {
     return { enabled: false, reason: 'Você não está numa party.', patch: null };
@@ -43,16 +44,15 @@ export function startWithTeam(
   if (current.members.length < 2) {
     return { enabled: false, reason: 'Uma party precisa de pelo menos dois.', patch: null };
   }
-  if (huntId === null || difficulty === null) {
-    return { enabled: false, reason: 'Escolha a caçada e o tamanho do pull.', patch: null };
+  if (huntId === null) {
+    return { enabled: false, reason: 'Escolha a caçada.', patch: null };
   }
-  const sameTarget = current.huntId === huntId && current.difficulty === difficulty;
+  const sameTarget = current.huntId === huntId;
   // O patch é o estado REAL, pass-through: os eixos e a composição configurados não mudam por
-  // causa do início — só a caçada e o pull da seleção entram. `minLevel ?? 1` é o piso que o
-  // servidor aceita, para a sala configurada sobreviver ao primeiro `publish`.
+  // causa do início — só a caçada da seleção entra. `minLevel ?? 1` é o piso que o servidor
+  // aceita, para a sala configurada sobreviver ao primeiro `publish`.
   const patch: PartyConfigInput | null = sameTarget ? null : {
     huntId,
-    difficulty,
     minLevel: current.minLevel ?? 1,
     vocationTargets: current.vocationTargets,
     shareCosts: current.shareCosts,

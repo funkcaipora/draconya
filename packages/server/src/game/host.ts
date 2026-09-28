@@ -22,7 +22,7 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
+  Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, RemovedBotSlot, Skill, Vocation,
 } from '@draconya/content';
 import { containerRulesFor, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf } from '@draconya/sim';
 import type {
@@ -115,6 +115,14 @@ export interface SessionHostOptions {
    * jogador recebe um aviso — um host montado sem conteúdo não tem como julgar vocabulário.
    */
   readonly acceptBotConfig?: (raw: unknown, level: number) => BotConfigDecision;
+  /**
+   * Carrega uma configuração de bot JÁ PERSISTIDA — a que chega no TICKET, não a que o jogador
+   * acabou de editar (FUN-81, ADR 0014). Diferente de `acceptBotConfig`: nunca recusa a
+   * configuração inteira por causa de conteúdo removido/renomeado (uma magia que saiu do
+   * catálogo, #596) — o slot torto vira vazio, e o resto sobrevive. Ausente: `bot-config` do
+   * ticket é ignorada, como sem `acceptBotConfig`.
+   */
+  readonly loadBotConfig?: (raw: unknown, level: number) => BotConfigLoadResult;
   /**
    * Registra a preferência no Redis para jobs/api gravarem no Postgres (ADR 0028).
    * Ausente ou falhando: aplica na sessão, mas devolve falha de salvamento ao jogador.
@@ -740,6 +748,11 @@ function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CPro
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
   | { readonly ok: true; readonly config: BotConfigV2 }
+  | { readonly ok: false; readonly reason: string };
+
+/** Ver `createBotConfigLoader` em `sessions.ts` — a CARGA de uma config já persistida (ADR 0014). */
+export type BotConfigLoadResult =
+  | { readonly ok: true; readonly config: BotConfigV2; readonly removed: readonly RemovedBotSlot[] }
   | { readonly ok: false; readonly reason: string };
 
 interface HostedSession {
@@ -1440,10 +1453,12 @@ export class SessionHost {
         return;
       }
       case 'enter-hunt':
-        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt e qual
-        // dificuldade, e quem decide se cabe, cria a instância e credita é o servidor.
+        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt, e quem decide se
+        // cabe, cria a instância e credita é o servidor. `difficulty` é aceito e IGNORADO
+        // desde o #584 (ADR 0039) — mantido no protocolo só por compatibilidade (ADR 0014).
         void this.#requestTransition(viewer, {
-          to: 'hunt', huntId: message.huntId, difficulty: message.difficulty,
+          to: 'hunt', huntId: message.huntId,
+          ...(message.difficulty === undefined ? {} : { difficulty: message.difficulty }),
           // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
           // da última `bot-config` desta conexão.
           ...(this.#botByCharacter.has(viewer.characterId)
@@ -2384,33 +2399,43 @@ export class SessionHost {
   }
 
   /**
-   * A configuração que veio no ticket (FUN-81). Recusada é IGNORADA, nunca fatal.
-   *
-   * O caso real é conteúdo mudando debaixo de uma configuração salva: uma magia renomeada, um
-   * vocabulário novo. Derrubar a conexão por isso trancaria o personagem fora do jogo por um
-   * arquivo de balanceamento — entrar sem bot e avisar é a degradação certa.
+   * A configuração que veio no ticket (FUN-81). Recusada é IGNORADA, nunca fatal — e desde o
+   * #596/ADR 0014, "recusada" aqui é só o formato genuinamente irreconhecível (versão
+   * desconhecida, vocabulário que nem migra): um SLOT cuja magia/supply saiu do catálogo (uma
+   * magia renomeada ou removida) não derruba a configuração inteira — `loadBotConfig`
+   * (`createBotConfigLoader`) esvazia só aquele slot e devolve o resto intacto. Derrubar tudo
+   * por um arquivo de balanceamento trancaria o personagem fora dos próprios automatismos —
+   * entrar com a config sanitizada (ou sem bot nenhum, no caso raro de corrupção de verdade) é
+   * a degradação certa.
    */
   #adoptTicketBotConfig(
     characterId: string, session: Session, initial: InitialCharacter | undefined,
   ): void {
     const raw = initial?.botConfig;
-    const accept = this.#options.acceptBotConfig;
-    if (raw === undefined || accept === undefined) return;
+    const load = this.#options.loadBotConfig;
+    if (raw === undefined || load === undefined) return;
 
     const level = session.participants.find((p) => p.id === characterId)?.level
       ?? initial?.level ?? 1;
-    const decision = accept(raw, level);
+    const decision = load(raw, level);
     if (!decision.ok) {
       this.#logger.warn(
         { characterId, reason: decision.reason }, 'Stored bot configuration refused',
       );
       return;
     }
+    if (decision.removed.length > 0) {
+      this.#logger.warn(
+        { characterId, removed: decision.removed },
+        'Stored bot configuration had stale references — affected slots were cleared',
+      );
+    }
     this.#botByCharacter.set(characterId, decision.config);
-    // A v1 migrada é DADO NOVO: persiste pelo caminho write-behind (ADR 0028, DT-07), senão
-    // toda entrada repetiria a migração e a coluna seguiria na v1. `saveBotConfig` só existe
-    // quando o papel aceita persistir; falha não é fatal — a config vale nesta sessão.
-    if (!isBotConfigV2(raw)) {
+    // A v1 migrada, e a config com slot sanitizado, são DADO NOVO: persiste pelo caminho
+    // write-behind (ADR 0028, DT-07) — senão toda entrada repetiria a migração/sanitização e a
+    // coluna seguiria com a referência morta. `saveBotConfig` só existe quando o papel aceita
+    // persistir; falha não é fatal — a config vale nesta sessão.
+    if (!isBotConfigV2(raw) || decision.removed.length > 0) {
       void this.#options.saveBotConfig?.(characterId, decision.config).catch(() => undefined);
     }
   }
@@ -2576,6 +2601,7 @@ export class SessionHost {
         case 'ground-item-vanished':
         case 'field-appeared':
         case 'field-vanished':
+        case 'field-stage-changed':
           this.#presentPresence(hosted, event);
           continue;
         case 'creature-hit':
@@ -2716,6 +2742,17 @@ export class SessionHost {
       if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
       const vanished: S2CMessage = { type: 'field-disappear', id: event.fieldId };
       for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
+    // O campo trocou de estágio (#560): `stageIndex` é 1, 2, … — o índice 0 é o nascimento, já
+    // resolvido por `appearances.fields`. Sem entrada aqui (cadeia sem arte declarada, ou campo
+    // que nunca teve `field-appear` sabido — mesma defesa de `field-vanished`), MUDO.
+    if (event.kind === 'field-stage-changed') {
+      if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
+      const appearanceId = this.#options.appearances?.fieldStages[event.fieldId]?.[event.stageIndex - 1];
+      if (appearanceId === undefined) return;
+      const changed: S2CMessage = { type: 'field-stage-change', id: event.fieldId, appearanceId };
+      for (const viewer of hosted.viewers) viewer.send(changed);
       return;
     }
     const key = String(event.creatureId);
@@ -4241,9 +4278,14 @@ export class SessionHost {
         // carrega — a MESMA resolução de `tile-update`, pela tabela `appearances.scenery`.
         tileUpdates: this.#tileUpdatesFor(ruleset.tileAppearanceChanges ?? []),
         // Os campos ATIVOS agora (#561, M31-06), com a arte da tabela; sem linha, sem campo —
-        // a MESMA regra de `groundItems` acima.
+        // a MESMA regra de `groundItems` acima. Quem reanexa no MEIO da cadeia (#560) recebe a
+        // arte do ESTÁGIO ATUAL, não sempre a do nascimento — `stageIndex` ausente (campo de
+        // um estágio só) ou 0 continua caindo em `appearances.fields`, como sempre.
         fields: (ruleset.fields ?? []).flatMap((field) => {
-          const appearanceId = this.#options.appearances?.fields[field.id];
+          const stageIndex = field.stageIndex ?? 0;
+          const appearanceId = stageIndex === 0
+            ? this.#options.appearances?.fields[field.id]
+            : this.#options.appearances?.fieldStages[field.id]?.[stageIndex - 1];
           return appearanceId === undefined
             ? []
             : [{ id: field.id, tiles: [...field.tiles], appearanceId }];

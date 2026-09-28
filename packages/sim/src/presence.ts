@@ -82,7 +82,22 @@ export interface FieldVanished {
   readonly fieldId: string;
 }
 
+/**
+ * O campo trocou de estágio (#560, `decayTo` do Canary): o fire field enfraquece antes de
+ * sumir de vez. `stageIndex` é o estágio NOVO (1, 2, …) — o hospedeiro resolve a arte por
+ * índice em `appearances.fieldStages[fieldId]` (invariante 6); campo sem entrada troca de
+ * estágio MUDO, a mesma regra de `FieldAppeared`. `tiles` viaja de novo porque a troca é
+ * emitida sem depender de quem viu o `field-appear` original — a mesma redundância que
+ * `CreatureHealthChanged` aceita para não obrigar reconstrução no cliente.
+ */
+export interface FieldStageChanged {
+  readonly kind: 'field-stage-changed';
+  readonly fieldId: string;
+  readonly stageIndex: number;
+  readonly tiles: readonly WorldPoint[];
+}
+
 export type PresenceEvent =
   | CreatureAppeared | CreatureVanished | CreatureHealthChanged
   | GroundItemAppeared | GroundItemVanished
-  | FieldAppeared | FieldVanished;
+  | FieldAppeared | FieldVanished | FieldStageChanged;

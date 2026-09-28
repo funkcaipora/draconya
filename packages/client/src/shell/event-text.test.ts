@@ -13,7 +13,9 @@ describe('describeEvent (FUN-110)', () => {
     // A lista está ao vivo desde a FUN-110, e `entered-hunt · rat-cellars/cautious` era a
     // primeira linha que todo jogador via. Mutação que mata: apagar um `case`.
     const lines = [
-      ['entered-hunt', 'rat-cellars/cautious', 'Entrou em Rat Cellars · Cauteloso'],
+      // #584 (ADR 0039, fim do pull por dificuldade): o `detail` ainda traz `huntId/difficulty`
+      // (o `sim` não mudou o formato do evento), mas a dificuldade não é mais mostrada.
+      ['entered-hunt', 'rat-cellars/cautious', 'Entrou em Rat Cellars'],
       ['entered-city', 'c1', 'Voltou para a cidade'],
       ['level-up', '4', 'Subiu de level · 4'],
       ['level-down', '9 → 8', 'Perdeu level · 9 → 8'],
@@ -39,7 +41,7 @@ describe('describeEvent (FUN-110)', () => {
 
   it('sem catálogo, o id fica no lugar do nome — estável, e não vazio', () => {
     expect(describeEvent({ atMs: 0, type: 'entered-hunt', detail: 'rat-cellars/cautious' }))
-      .toBe('Entrou em rat-cellars · Cauteloso');
+      .toBe('Entrou em rat-cellars');
     expect(describeEvent({ atMs: 0, type: 'supply-unaffordable', detail: 'mana-potion' }))
       .toBe('Gold acabou para mana-potion');
   });
