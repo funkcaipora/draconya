@@ -21,7 +21,7 @@ import { createLogger } from '../log.js';
 import { SessionHost } from './host.js';
 import { FakeSocket } from './testing.js';
 import { createBotConfigValidator } from './sessions.js';
-import { TEST_CITY_MAP, TEST_HUNT, TEST_PROGRESSION, rawTestContent } from '../testing/content.js';
+import { TEST_CITY_MAP, TEST_PROGRESSION, rawTestContent } from '../testing/content.js';
 import realAvalancheRune from '../../../content/data/supplies/avalanche-rune.json';
 
 const logger = createLogger('silent', 'test');
@@ -51,7 +51,17 @@ const ROUTE = {
   tiles: [
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 2, radius: 1 }],
+  spawnPoints: [{ routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 }],
+};
+
+/** A mesma rota, com dois pontos (#583: fim do pull por dificuldade) — o que `monsterCount: 2`
+ * costumava dar de graça, agora um ponto por rato. */
+const ROUTE_TWO = {
+  ...ROUTE,
+  spawnPoints: [
+    { routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+    { routeIndex: 0, radius: 1, monsterId: 'rat', respawnDelayMs: 30_000 },
+  ],
 };
 
 /** A tabela de aparências (invariante 6): a Avalanche projeta o míssil 29 e estoura o efeito 41. */
@@ -98,7 +108,7 @@ function hunt(options: {
   const shaped: RawContent = {
     ...raw,
     maps: [MAP, TEST_CITY_MAP],
-    routes: [ROUTE],
+    routes: [options.monsterCount === undefined ? ROUTE : ROUTE_TWO],
     supplies: [...(raw.supplies ?? []), realAvalancheRune],
     skills: SKILLS,
     progression: [{
@@ -107,16 +117,6 @@ function hunt(options: {
     }],
     monsters: (raw.monsters as Array<Record<string, unknown>>).map((monster) =>
       monster['id'] === 'rat' ? { ...monster, attack: 0, health: options.ratHealth ?? 100_000 } : monster),
-    ...(options.monsterCount === undefined
-      ? {}
-      : {
-        hunts: [{
-          ...TEST_HUNT,
-          difficulties: {
-            cautious: { ...TEST_HUNT.difficulties.cautious, monsterCount: options.monsterCount },
-          },
-        }],
-      }),
   };
   const content = buildContent(shaped);
   const appearances = {

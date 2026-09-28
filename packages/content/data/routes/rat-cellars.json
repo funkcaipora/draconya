@@ -44,19 +44,19 @@
     { "x": 48, "y": 53, "z": 8 }, { "x": 48, "y": 52, "z": 8 }, { "x": 48, "y": 51, "z": 8 }, { "x": 47, "y": 51, "z": 8 }
   ],
   "spawnPoints": [
-    { "routeIndex": 0, "radius": 2 },
-    { "routeIndex": 11, "radius": 2 },
-    { "routeIndex": 20, "radius": 2 },
-    { "routeIndex": 26, "radius": 2 },
-    { "routeIndex": 37, "radius": 2 },
-    { "routeIndex": 59, "radius": 2 },
-    { "routeIndex": 80, "radius": 2 },
-    { "routeIndex": 92, "radius": 2 },
-    { "routeIndex": 95, "radius": 2 },
-    { "routeIndex": 105, "radius": 2 },
-    { "routeIndex": 136, "radius": 2 },
-    { "routeIndex": 148, "radius": 2 },
-    { "routeIndex": 154, "radius": 2 },
-    { "routeIndex": 157, "radius": 2 }
+    { "routeIndex": 0, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 11, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 20, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 26, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 37, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 59, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 80, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 92, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 95, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 105, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 136, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 148, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 154, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 },
+    { "routeIndex": 157, "radius": 2, "monsterId": "rat", "respawnDelayMs": 2000 }
   ]
 }

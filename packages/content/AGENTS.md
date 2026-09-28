@@ -514,24 +514,27 @@ entre arquivos resolvem.
   da escada assim que o passo pisa nela — exatamente como `move()` do `sim` resolve de verdade.
   Um tile que É origem de escada nunca é o problema por si só; o que é sempre um erro é um ponto
   de PASSAGEM (`--via` do `trace-route.ts`) sobre um degrau, porque ninguém "para" numa escada.
-- **`routeSchema.spawnPoints` ganhou `monsterId`, `at` e `respawnDelayMs`, todos opcionais e
-  todos por PONTO** (#519, o formato do spawn do Canary — um `<monster>` por posição, com
-  `spawntime` próprio, nunca um sorteio por zona). Ausentes, o comportamento é o de sempre:
-  `Spawner` sorteia da composição, a posição é o tile do `routeIndex`, o respawn usa o
-  `respawnDelayMs` da DIFICULDADE. `routeIndex` continua obrigatório mesmo com `at` declarado —
-  ele ancora ao laço (ordem, andar de referência); `at` é só a posição de nascimento.
+- **`routeSchema.spawnPoints[i].monsterId`/`at`/`respawnDelayMs` são OBRIGATÓRIOS desde o #583**
+  (nasceram opcionais no #519, o formato do spawn do Canary — um `<monster>` por posição, com
+  `spawntime` próprio, nunca um sorteio por zona; `at` continua opcional, só posição de
+  nascimento). Um de `monsterId`/`monsters` é exigido por `.refine` — não existe mais
+  composição de dificuldade para cair como fallback quando o ponto não declara nada (fim do
+  pull por dificuldade, ADR 0039). `routeIndex` continua obrigatório mesmo com `at` declarado —
+  ele ancora ao laço (ordem, andar de referência).
 - **`routeSchema.spawnPoints` ganhou `monsters` (#582)**: vários candidatos com peso na MESMA
   posição — o caso do Canary em que dois `<monster>` do mesmo `<spawn>` caem exatamente no
   mesmo ponto (`spawn_monster.cpp:90-96`). Mutuamente exclusivo com `monsterId` (`.refine`); o
-  `Spawner` sorteia entre os candidatos DO PONTO, nunca junto com a composição da dificuldade.
+  `Spawner` sorteia entre os candidatos DO PONTO, um sorteio só por resolução de spawn.
   Nenhum ponto do recorte real (Darashia Dragon Lair, 47 pontos) usa este campo — `weight` não
   ocorre em nenhuma das 187081 linhas de `otservbr-monster.xml` —, mas o mecanismo existe no
   Canary e `scripts/catalog/spawns.ts` precisa reconhecê-lo sem quebrar quando aparecer.
 - **`monsterSchema.blockable` é o `isBlockable` do TFS/Canary, e o default é `false`** (#519) —
   NÃO esperar o jogador sair da vista antes de respawnar, porque é isso que 1.640 dos 1.656
-  monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. `spawnClearRadius`
-  (#236) da hunt só vale para quem declara `blockable: true` — Rat e Rotworm o fazem, porque o
-  comportamento deles vem do Huntera observado, não do Canary, e não podia mudar aqui.
+  monstros do bestiário do Canary fazem, Dragon e Dragon Lord inclusive. O campo da HUNT que
+  fazia isso antes (`spawnClearRadius`, #236) foi REMOVIDO no #583; hoje `blockable: true` no
+  MONSTRO — Rat e Rotworm o declaram, comportamento do Huntera observado, preservado por decisão
+  explícita, não do Canary — só vale para RESPAWN pós-morte, nunca para a população inicial da
+  hunt (que sempre nasce na hora, como o `startup()` do Canary).
 - **A condição `speed` (CMB-11, #556) é `delta` OU `formula`, nunca os dois nem nenhum, e a
   `key` é FIXA** (`conditionEffectSchema`/`conditionSpecSchema`). `delta` (inteiro, milésimos) é
   o formato do `speedChange` de ATAQUE/DEFESA de monstro, copiado sem conversão do Lua; `formula`

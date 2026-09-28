@@ -22,9 +22,9 @@ import {
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Combat,
-  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt, HuntDifficulty,
+  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
+  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina,
   Supply, Tilemap, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
@@ -71,8 +71,8 @@ import {
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
-import { Spawner } from '../hunt/spawner.js';
-import type { SpawnerState } from '../hunt/spawner.js';
+import { pickByWeight, Spawner } from '../hunt/spawner.js';
+import type { SpawnArea, SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
   applyAttackRate, applyRate, creatureRatesFor, experienceRateFor, skillRateFor,
@@ -198,6 +198,18 @@ const DANCE_INTERVAL_MS = 1_000;
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
+/**
+ * A população INICIAL da hunt (#583, `SpawnMonster::startup` do Canary): todo ponto nasce na
+ * hora, sem `blockable`/telegraph — essas regras só valem para o RESPAWN depois de uma morte.
+ * Ver `#onSpawnInitial`.
+ */
+const SPAWN_INITIAL = 'spawn-initial';
+/**
+ * O lugar NÃO BLOQUEÁVEL já sorteou o monstro e a posição, e o telegraph de 4200 ms venceu
+ * (#583, `spawn_monster.cpp:317-341`, 3× `NONBLOCKABLE_SPAWN_MONSTER_INTERVAL`): o monstro
+ * materializa agora, mesmo com participante em cima do ponto. Ver `#pendingSpawns`.
+ */
+const SPAWN_MATERIALIZE = 'spawn-materialize';
 /** O cadáver apodreceu (FUN-123): sai do chão. */
 const CORPSE = 'corpse';
 /**
@@ -532,6 +544,26 @@ const EXIT_RULE_INTERVAL_MS = 250;
 const SPAWN_RETRY_MS = 1000;
 
 /**
+ * O telegraph do monstro NÃO BLOQUEÁVEL (#583, `spawn_monster.hpp:97`,
+ * `NONBLOCKABLE_SPAWN_MONSTER_INTERVAL`): 3× 1400 ms = 4200 ms entre o efeito de teleporte e o
+ * monstro de fato materializar, mesmo com um participante em cima do ponto. A apresentação do
+ * efeito em si (`CONST_ME_TELEPORT` do Canary) fica para o protocolo/cliente (#584/M36-03) — o
+ * que este número garante aqui é só o ATRASO antes do monstro existir de verdade no mundo.
+ */
+const NONBLOCKABLE_SPAWN_TELEGRAPH_MS = 4200;
+
+/**
+ * A janela de "à vista" que segura o respawn de um monstro `blockable` (#583, `isBlockable` do
+ * TFS/Canary, `Spawn::findPlayer`/`Spectators::find`). O Canary usa o VIEWPORT do cliente
+ * (`MAP_MAX_VIEW_PORT_X`/`_Y`, 11 tiles nas duas direções — `MAP_MAX_CLIENT_VIEW_PORT_X` + 3 /
+ * `_Y` + 5) em vez de um raio fixo; a Chebyshev de 11 tiles é a mesma simplificação
+ * retangular→quadrada que `distance` já faz em todo o resto do motor (`monster/step.ts`), e é a
+ * decisão desta issue para a pergunta que o ADR 0039 deixou aberta ("viewport do Canary ou do
+ * cliente do Draconya") — ver a emenda do ADR para o registro.
+ */
+const SPAWN_VISIBILITY_RADIUS = 11;
+
+/**
  * Quanto tempo LÓGICO o lure pode ficar PARADO (§13.7, `#luring`) antes de retomar a rota mesmo
  * sem a contagem ter caído abaixo de `min` (#527).
  *
@@ -738,7 +770,12 @@ const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
 /** Nenhum candidato de party para a regra (alvo inválido, fora de alcance ou efeito self-only). */
 const NO_CANDIDATES: readonly CharacterRuntime[] = [];
 
-export type HuntDifficultyName = keyof Hunt['difficulties'];
+/**
+ * O nome de dificuldade que ainda chega no protocolo (`enter-hunt.difficulty`, #584). Aceito e
+ * IGNORADO pelo `sim` desde o #583 (ADR 0039, fim do pull por dificuldade) — não seleciona mais
+ * nada no conteúdo, e por isso não há mais um conjunto fechado de nomes válidos por hunt.
+ */
+export type HuntDifficultyName = string;
 
 /** O `SpellTarget` do lado de quem o PREENCHE. Ver `HuntRuleset.#spellTarget`. */
 type MutableSpellTarget = { -readonly [K in keyof SpellTarget]: SpellTarget[K] };
@@ -1166,6 +1203,15 @@ export interface HuntRulesetState {
   readonly difficulty: HuntDifficultyName;
   readonly route: RouteState;
   readonly spawner: SpawnerState;
+  /**
+   * Lugares NÃO BLOQUEÁVEIS já resolvidos, teleportando (#583). Ausente é nenhum — snapshot
+   * anterior a esta issue, ou nenhum lugar no meio dos 4200 ms de telegraph agora.
+   */
+  readonly pendingSpawns?: readonly {
+    readonly slot: number;
+    readonly monsterId: string;
+    readonly position: WorldPoint;
+  }[];
   readonly monsters: readonly MonsterState[];
   readonly nextCreatureId: number;
   /** Os cadáveres no chão (FUN-123). Ausente é nenhum: snapshot anterior. */
@@ -1548,7 +1594,15 @@ export class HuntRuleset implements Ruleset {
    * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
    */
   #pendingRunners: { readonly byId: Readonly<Record<string, RunnerState>> | null; readonly legacy: RunnerState | null } | null = null;
-  readonly #difficulty: HuntDifficulty;
+  /**
+   * Os lugares NÃO BLOQUEÁVEIS já resolvidos e teleportando (#583, `spawn_monster.cpp:317-341`):
+   * o monstro e a posição já foram sorteados quando o efeito de teleporte saiu, e ficam aqui até
+   * o evento de materialização vencer — sem isto, uma sessão retomada no meio dos 4200 ms
+   * perderia qual monstro estava a caminho e sorteria outro (quebrando o determinismo do peso,
+   * #582, para quem restaura bem no meio da janela). Indexado por slot: só um pedido pendente por
+   * lugar, porque o slot não é reocupado enquanto o lugar não nasce de verdade.
+   */
+  #pendingSpawns = new Map<number, { readonly monsterId: string; readonly position: WorldPoint }>();
   /**
    * As regras injetadas por quem montou o ruleset, separadas das do jogador.
    *
@@ -1670,16 +1724,12 @@ export class HuntRuleset implements Ruleset {
   #occupancyStale = true;
 
   constructor(options: HuntRulesetOptions) {
-    const difficulty = options.hunt.difficulties[options.difficulty];
-    if (difficulty === undefined) {
-      throw new Error(
-        `hunt "${options.hunt.id}" não define a dificuldade "${options.difficulty}"`,
-      );
-    }
+    // `options.difficulty` chega do protocolo (#584) e não é mais validada nem lida aqui
+    // (#583, ADR 0039 — fim do pull por dificuldade): o campo é aceito e IGNORADO, guardado só
+    // para o snapshot/`changeDifficulty` continuarem redondos enquanto o protocolo o mandar.
     this.#options = options;
     this.#party = normalizePartyOptions(options.partyOptions);
     if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
-    this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
       'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
@@ -1687,7 +1737,7 @@ export class HuntRuleset implements Ruleset {
       'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
       'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
-    this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
+    this.#spawner = new Spawner(options.route.spawnPoints.length);
     this.#tileOverrides = TileOverrides.fromInteractables(options.map.interactables);
     this.#world = new TileOccupancy(options.map, { overrides: this.#tileOverrides });
     // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
@@ -2696,10 +2746,15 @@ export class HuntRuleset implements Ruleset {
     }
 
     // Spawn e regras de saída são da INSTÂNCIA, não do participante (#203): entram na fila com
-    // o primeiro, e o segundo não os dobra.
+    // o primeiro, e o segundo não os dobra. A população INICIAL usa `SPAWN_INITIAL`, não
+    // `SPAWN` (#583, `SpawnMonster::startup` do Canary): no boot, todo ponto nasce na hora,
+    // sem checar `blockable`/telegraph — essas duas regras só existem para o RESPAWN depois de
+    // uma morte (`#onMonsterDied` agenda `SPAWN`, o evento gated). Sem essa distinção, um
+    // monstro `blockable` nunca nasceria numa hunt pequena onde o personagem já entra à vista
+    // do ponto, e um não bloqueável levaria 4200 ms mesmo na primeira vez.
     if (this.#runners.size === 1) {
       for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
-        session.scheduleIn(SPAWN, 0, { priority: EventPriority.Spawn, subject: String(slot) });
+        session.scheduleIn(SPAWN_INITIAL, 0, { priority: EventPriority.Spawn, subject: String(slot) });
       }
       session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
         priority: EventPriority.Housekeeping,
@@ -2901,8 +2956,10 @@ export class HuntRuleset implements Ruleset {
       case MONSTER_DANCE: return this.#onMonsterDance(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
+      case SPAWN_INITIAL: return this.#onSpawnInitial(session, event.subject);
       case PENDING_MANUAL_ACTION: return this.#onPendingManualAction(session, event.subject);
       case SPAWN: return this.#onSpawn(session, event.subject);
+      case SPAWN_MATERIALIZE: return this.#onSpawnMaterialize(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case TILE_REVERT: return this.#onTileRevert(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
@@ -3135,6 +3192,7 @@ export class HuntRuleset implements Ruleset {
       difficulty: this.#options.difficulty,
       route: state.route,
       spawner: this.#spawner.getState(),
+      pendingSpawns: [...this.#pendingSpawns].map(([slot, p]) => ({ slot, ...p })),
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
@@ -3219,22 +3277,18 @@ export class HuntRuleset implements Ruleset {
 
   restore(state: unknown): void {
     const restored = state as HuntRulesetState;
-    // A hunt e a dificuldade são a IDENTIDADE da instância. Restaurar o estado de uma hunt
-    // dentro de outra produziria monstros de um mapa andando em outro — e o §14.7 diz que
-    // trocar de dificuldade cria instância nova justamente para isso nunca acontecer.
-    if (
-      restored.huntId !== this.#options.hunt.id ||
-      restored.difficulty !== this.#options.difficulty
-    ) {
+    // A hunt é a IDENTIDADE da instância. Restaurar o estado de uma hunt dentro de outra
+    // produziria monstros de um mapa andando em outro. A dificuldade DEIXOU de ser parte dessa
+    // identidade (#583, ADR 0039): ela não seleciona mais nada no conteúdo, e comparar o campo
+    // ignorado recusaria uma retomada legítima só porque o cliente mandou outro texto.
+    if (restored.huntId !== this.#options.hunt.id) {
       throw new Error(
-        `snapshot é de "${restored.huntId}/${restored.difficulty}", mas este ruleset é de ` +
-          `"${this.#options.hunt.id}/${this.#options.difficulty}"`,
+        `snapshot é de "${restored.huntId}", mas este ruleset é de "${this.#options.hunt.id}"`,
       );
     }
-    this.#spawner = new Spawner(
-      this.#options.route.spawnPoints.length,
-      this.#difficulty,
-      restored.spawner,
+    this.#spawner = new Spawner(this.#options.route.spawnPoints.length, restored.spawner);
+    this.#pendingSpawns = new Map(
+      (restored.pendingSpawns ?? []).map((p) => [p.slot, { monsterId: p.monsterId, position: p.position }]),
     );
     this.#monsters = restored.monsters.map((m) => new MonsterRuntime(m));
     // Snapshot anterior à FUN-119 não traz a velocidade; ela é do conteúdo, e repor daqui é
@@ -3332,50 +3386,135 @@ export class HuntRuleset implements Ruleset {
   // --- eventos ------------------------------------------------------------------------------
 
   /**
-   * Um lugar de spawn venceu. Nasce um monstro, ou tenta de novo mais tarde.
+   * O ponto de spawn de um índice, na forma que o `Spawner` espera. `resolvedMonsterId` força
+   * o monstro já decidido por `#onSpawn` (`monsterId` OU o sorteio de `monsters`) — sem isto, o
+   * `Spawner` sortearia de novo internamente para um ponto com `monsters`, consumindo uma
+   * SEGUNDA rolagem do `Rng` que poderia cair num monstro diferente do que a checagem de
+   * `blockable` já decidiu, quebrando o contrato de UM sorteio por spawn.
+   */
+  #spawnAreaOf(pointIndex: number, resolvedMonsterId: string): SpawnArea {
+    const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
+    return { at: point.at, radius: point.radius, monsterId: resolvedMonsterId };
+  }
+
+  /**
+   * A população INICIAL de um lugar (#583, `SpawnMonster::startup` do Canary — `scheduleSpawn`
+   * chamado com `interval: 0`, que pula direto para `spawnMonster` sem passar por
+   * `checkSpawnMonster`): nasce na hora, sem checar `blockable` nem telegraph. As duas regras
+   * do respawn normal (`#onSpawn`) existem para o monstro que MORREU e está voltando — nunca
+   * para popular a hunt vazia, senão um monstro `blockable` nunca nasceria numa hunt pequena
+   * onde o personagem já entra à vista do próprio ponto, e todo não bloqueável levaria
+   * 4200 ms extras só para a hunt começar.
    *
-   * O monstro nasce já com os eventos dele vencendo AGORA, o que reproduz o comportamento
-   * anterior — cooldown novo começa pronto, então ele agia no mesmo tick em que nascia. Como
-   * `Spawn` tem prioridade menor que `Movement` e `Attack`, isso acontece neste mesmo
-   * instante lógico, na ordem certa.
+   * Só parede/ocupação adiam aqui (o `#spawnBlockedFor` de sempre) — e adiam para o caminho
+   * NORMAL (`SPAWN`, com todas as regras), nunca de volta para este.
+   */
+  #onSpawnInitial(session: Session, subject: string): void {
+    const slot = Number(subject);
+    const slotState = this.#spawner.slots[slot];
+    if (slotState === undefined || slotState.occupantId !== null) return;
+
+    const point = this.#options.route.spawnPoints[slotState.pointIndex] as SpawnPoint;
+    const monsterId = point.monsterId
+      ?? (point.monsters !== undefined ? pickByWeight(point.monsters, session.rng) : null);
+    if (monsterId === null) {
+      session.scheduleIn(SPAWN, SPAWN_RETRY_MS, { priority: EventPriority.Spawn, subject });
+      return;
+    }
+    if (this.#options.monsters.get(monsterId) === undefined) return;
+
+    const request = this.#spawner.fill(
+      slot, (i) => this.#spawnAreaOf(i, monsterId), this.#spawnBlockedFor(), session.rng,
+    );
+    if (request === null) {
+      session.scheduleIn(SPAWN, SPAWN_RETRY_MS, { priority: EventPriority.Spawn, subject });
+      return;
+    }
+    this.#materializeSpawn(session, request.slot, request.monsterId, request.position);
+  }
+
+  /**
+   * Um lugar de spawn venceu. Nasce um monstro, ou tenta de novo mais tarde — ou, para quem
+   * não é `blockable`, agenda o telegraph e só nasce depois dele (#583).
+   *
+   * A janela de visão de `blockable` é decidida AQUI, sobre a posição NOMINAL do ponto
+   * (`point.at`) — ANTES de o `Spawner` sondar tile nenhum — porque é essa a mecânica do
+   * `Spawn::findPlayer` do TFS/Canary: o ponto tem uma posição fixa, e é ela que é olhada, não
+   * cada candidato de uma busca em raio. Quem está bloqueando por parede/ocupação continua
+   * sendo o `Spawner` (`#spawnBlockedFor`), com o retry curto de sempre.
    */
   #onSpawn(session: Session, subject: string): void {
     const slot = Number(subject);
+    const slotState = this.#spawner.slots[slot];
+    // Ocupado é caso normal (o monstro está vivo) e não pede reagendamento: quem devolve o
+    // lugar é `#onMonsterDied`, e é ele que marca a próxima hora.
+    if (slotState === undefined || slotState.occupantId !== null) return;
+
+    const point = this.#options.route.spawnPoints[slotState.pointIndex] as SpawnPoint;
+    const monsterId = point.monsterId
+      ?? (point.monsters !== undefined ? pickByWeight(point.monsters, session.rng) : null);
+    if (monsterId === null) {
+      session.scheduleIn(SPAWN, SPAWN_RETRY_MS, { priority: EventPriority.Spawn, subject });
+      return;
+    }
+    const definition = this.#options.monsters.get(monsterId);
+    // Conteúdo válido não chega aqui com monstro inexistente: `buildContent` checa a
+    // referência cruzada e derruba o boot. Sair é o resto defensivo, não a regra.
+    if (definition === undefined) return;
+
+    if (definition.blockable) {
+      if (this.#hasVisibleParticipant(session, point.at, point.at.z)) {
+        // À vista: o relógio REINICIA — a próxima checagem só vence dali a `respawnDelayMs`
+        // inteiro, nunca um retry curto (`spawn_monster.cpp`, `sb.lastSpawn = OTSYS_TIME()`).
+        session.scheduleIn(SPAWN, point.respawnDelayMs, { priority: EventPriority.Spawn, subject });
+        return;
+      }
+    }
+
     const request = this.#spawner.fill(
-      slot,
-      this.#difficulty,
-      (pointIndex) => {
-        const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
-        return {
-          at: point.at, radius: point.radius,
-          ...(point.monsterId === undefined ? {} : { monsterId: point.monsterId }),
-          ...(point.monsters === undefined ? {} : { monsters: point.monsters }),
-        };
-      },
-      this.#spawnBlockedFor(session),
-      session.rng,
+      slot, (i) => this.#spawnAreaOf(i, monsterId), this.#spawnBlockedFor(), session.rng,
     );
     if (request === null) {
-      // Lugar ocupado é caso normal (o monstro está vivo) e não pede reagendamento: quem
-      // devolve o lugar é `#onMonsterDied`, e é ele que marca a próxima hora.
-      if (this.#spawner.slots[slot]?.occupantId != null) return;
-      session.scheduleIn(SPAWN, SPAWN_RETRY_MS, {
+      session.scheduleIn(SPAWN, SPAWN_RETRY_MS, { priority: EventPriority.Spawn, subject });
+      return;
+    }
+
+    if (!definition.blockable) {
+      // Não bloqueável: nasce de qualquer forma, mas só depois do telegraph (#583,
+      // `NONBLOCKABLE_SPAWN_MONSTER_INTERVAL` × 3) — a apresentação do efeito de teleporte é
+      // do protocolo/cliente (#584/M36-03); aqui só o atraso importa. O lugar fica reservado
+      // (`#pendingSpawns`) sem ocupar o slot: o monstro ainda não existe no mundo.
+      this.#pendingSpawns.set(slot, { monsterId: request.monsterId, position: request.position });
+      session.scheduleIn(SPAWN_MATERIALIZE, NONBLOCKABLE_SPAWN_TELEGRAPH_MS, {
         priority: EventPriority.Spawn, subject,
       });
       return;
     }
 
-    const definition = this.#options.monsters.get(request.monsterId);
-    // Conteúdo válido não chega aqui com monstro inexistente: `buildContent` checa a
-    // referência cruzada e derruba o boot. Sair é o resto defensivo, não a regra.
-    if (definition === undefined) return;
+    this.#materializeSpawn(session, request.slot, request.monsterId, request.position);
+  }
 
+  /** O telegraph do monstro não bloqueável venceu (#583): ele nasce agora, mesmo com jogador em cima. */
+  #onSpawnMaterialize(session: Session, subject: string): void {
+    const slot = Number(subject);
+    const pending = this.#pendingSpawns.get(slot);
+    this.#pendingSpawns.delete(slot);
+    // Defensivo: não deveria faltar — só quem agenda `SPAWN_MATERIALIZE` é `#onSpawn`, e é
+    // sempre com um pedido resolvido.
+    if (pending === undefined) return;
+    this.#materializeSpawn(session, slot, pending.monsterId, pending.position);
+  }
+
+  /** Cria o monstro de fato e ocupa o lugar — o passo final de `#onSpawn`/`#onSpawnMaterialize`. */
+  #materializeSpawn(session: Session, slot: number, monsterId: string, position: Point): void {
+    const definition = this.#options.monsters.get(monsterId);
+    if (definition === undefined) return;
     // O tile já foi escolhido livre pelo spawner. O `z` é do PONTO, não do mapa (#519, hunt
     // multiandar) — é o que faz um Dragon Lord nascer em z11 e não em z10.
     const monster = this.#spawnMonster(session, definition, {
-      x: request.position.x, y: request.position.y, z: request.position.z,
+      x: position.x, y: position.y, z: position.z,
     }, null);
-    this.#spawner.occupy(request.slot, monster.id);
+    this.#spawner.occupy(slot, monster.id);
   }
 
   /**
@@ -8209,17 +8348,18 @@ const slots = bot.groups.get(group);
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
     // O lugar volta a contar o tempo — e é aqui que a próxima hora dele é marcada, agora que
-    // o spawner não guarda mais instante nenhum. O `spawntime` do PONTO (#519, o `<monster
-    // spawntime="...">` do Canary é por posição, não por zona nem por dificuldade) prevalece
-    // quando a rota o declara; sem ele, o `respawnDelayMs` da dificuldade continua valendo,
-    // como sempre foi — é o caminho de rat-cellars/rotworm-caves, que não declaram nada por ponto.
+    // o spawner não guarda mais instante nenhum. O `spawntime` do PONTO (#519/#583, o `<monster
+    // spawntime="...">` do Canary é por posição, não por zona) é OBRIGATÓRIO desde o #583: não
+    // há mais dificuldade nenhuma para cair como fallback.
     const slot = this.#spawner.release(monster.id);
     if (slot !== null) {
       const pointIndex = this.#spawner.slots[slot]?.pointIndex;
       const point = pointIndex === undefined ? undefined : this.#options.route.spawnPoints[pointIndex];
-      session.scheduleIn(SPAWN, point?.respawnDelayMs ?? this.#difficulty.respawnDelayMs, {
-        priority: EventPriority.Spawn, subject: String(slot),
-      });
+      if (point !== undefined) {
+        session.scheduleIn(SPAWN, point.respawnDelayMs, {
+          priority: EventPriority.Spawn, subject: String(slot),
+        });
+      }
     }
     // O andar de FATO do monstro (#519) — nunca o do mapa: é o que libera o tile certo quando
     // ele morre em z11 num mapa cujo andar padrão é z10.
@@ -9547,47 +9687,45 @@ const slots = bot.groups.get(group);
    * MESMO instante em que nascia (`Spawn` vence antes de `Attack`): o cliente recebia
    * appear + hit + disappear num lote só e desenhava o dano num tile vazio.
    *
-   * Recusar aqui é ADIAR, não cancelar: `#onSpawn` reagenda em `SPAWN_RETRY_MS`. A densidade
-   * continua sendo a da dificuldade — é a diferença para a supressão que a referência (§29)
-   * manda não copiar. Morto não conta: ele está saindo, e um cadáver que segura o spawn
-   * seria um raio que ninguém vê.
+   * Recusar aqui é ADIAR, não cancelar: `#onSpawn` reagenda em `SPAWN_RETRY_MS`. Só parede e
+   * ocupação — desde o #583 a janela de visão de quem é `blockable` é decidida ANTES desta
+   * checagem, em `#onSpawn`/`#hasVisibleParticipant` (ela precisa rodar sobre a posição NOMINAL
+   * do ponto, não sobre cada tile candidato que o `Spawner` sonda). Morto não conta para
+   * ocupação: ele está saindo.
    *
    * **O `z` é do PONTO, nunca o do mapa (#519).** `Spawner.#freeTile` passa o andar de cada
    * tile que sonda; sem isto, todo ponto seria checado no andar padrão do mapa, e um lugar
    * de z11 nasceria "livre" mesmo bloqueado por parede em z11 só porque o tile equivalente em
-   * z10 está livre. Pela mesma razão, "à vista" (a distância do `spawnClearRadius`, o
-   * `Spawn::findPlayer` do TFS) só conta um participante do MESMO andar do ponto — os três
-   * andares da Darashia Dragon Lair compartilham a caixa x/y, e um jogador em z10 não pode
-   * segurar o respawn de um Dragon Lord em z12 só por estar no (x, y) parecido.
-   *
-   * **`blockable` é a EXCEÇÃO, não a regra (#519, `isBlockable` do TFS/Canary).** No Canary,
-   * 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — têm
-   * `isBlockable: false`: eles respawnam OLHANDO PARA O JOGADOR, ignorando quem está perto.
-   * Só quem declara `blockable: true` espera a vista limpar. `spawnClearRadius` continua
-   * existindo para quem precisa dele (o rato/rotworm de antes, que não declara `blockable` —
-   * ausente é `false`, então a checagem abaixo já os isenta também: era o comportamento ANTIGO
-   * que estava invertido, ligado para todo mundo por um `spawnClearRadius` > 0 só do lado da
-   * hunt). Sem `monsterId` (chamador que ainda não resolveu o monstro do ponto) a checagem
-   * roda — é o caminho defensivo, nunca o normal.
+   * z10 está livre.
    */
-  #spawnBlockedFor(session: Session): Blocked {
-    const radius = this.#options.hunt.spawnClearRadius;
-    return (x, y, z = this.#world.map.z, monsterId) => {
-      if (this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z)) return true;
-      if (radius <= 0) return false;
-      const definition = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
-      if (definition !== undefined && !definition.blockable) return false;
-      for (const participant of session.participants) {
-        if (!participant.alive || this.#floorOf(participant) !== z) continue;
-        if (distance(participant.position, { x, y }) < radius) return true;
-      }
-      return false;
-    };
+  #spawnBlockedFor(): Blocked {
+    return (x, y, z = this.#world.map.z) =>
+      this.#world.blockedAt(x, y, z) || this.#world.occupied(x, y, z);
+  }
+
+  /**
+   * "À vista" para o respawn de um monstro `blockable` (#583, `Spawn::findPlayer`/
+   * `Spectators::find` do TFS/Canary): algum participante VIVO, no MESMO andar do ponto, dentro
+   * da janela de visão (`SPAWN_VISIBILITY_RADIUS`).
+   *
+   * **`blockable` é a EXCEÇÃO, não a regra** (`isBlockable` do TFS/Canary). No Canary, 1.640 dos
+   * 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — têm `isBlockable: false`:
+   * eles respawnam olhando para o jogador, ignorando quem está perto. Só quem declara
+   * `blockable: true` (rato e rotworm, o comportamento do Huntera preservado) espera a vista
+   * limpar antes de nascer.
+   */
+  #hasVisibleParticipant(session: Session, at: Point, z: number): boolean {
+    for (const participant of session.participants) {
+      if (!participant.alive || this.#floorOf(participant) !== z) continue;
+      if (distance(participant.position, at) <= SPAWN_VISIBILITY_RADIUS) return true;
+    }
+    return false;
   }
 
   /**
    * Onde uma INVOCAÇÃO não nasce (#546, TFS/Canary `Map::placeCreature`): só parede e tile
-   * ocupado — NUNCA a supressão de `spawnClearRadius`/`blockable` de `#spawnBlockedFor`.
+   * ocupado — NUNCA a janela de visão de `blockable` que `#hasVisibleParticipant` aplica ao
+   * RESPAWN (#583).
    *
    * As duas checagens têm o MESMO formato (`Blocked`) e o mesmo primeiro passo, mas são
    * mecanismos diferentes da fonte: `Spawn::findPlayer` (TFS/Canary) segura o RESPAWN do

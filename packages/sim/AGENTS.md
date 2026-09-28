@@ -314,15 +314,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   DESTINO da escada (`floorChangeAt`), não o degrau; o monstro — posição sem `z` — vê o degrau
   como parede, como no Tibia. A ocupação é por andar (`tileKey(x, y, z)`), e `occupied(x, y)`
   sem `z` é o andar padrão do mapa.
-- **`monsterCount` é o TOTAL da instância, e o `Spawner` o ESPALHA pelo laço** (FUN-123, cópia
-  do Huntera: 2/5/8 no bueiro). O lugar `i` fica no ponto `⌊i × pontos / total⌋` — com menos
-  monstros que pontos eles cobrem o laço em intervalos iguais (o rodízio `i % pontos` deixava
-  seis dos catorze pontos do bueiro sem monstro em qualquer pull), com mais cada ponto recebe
-  o mesmo tanto; determinístico, igual em dois servidores com o mesmo conteúdo. O tile livre é
-  procurado até o `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem
-  monstro. Com `spawnClearRadius` da hunt (#236), tile a menos disso de um participante vivo
-  conta como bloqueado: o spawn ADIA (`SPAWN_RETRY_MS`), nunca cancela — a densidade é a da
-  dificuldade, e é o que a referência §29 pede ao mandar não copiar a supressão do TFS.
+- **Fim do pull por dificuldade: `Spawner` tem UM slot por ponto de spawn da rota, e todos
+  nascem juntos, na entrada** (#583, ADR 0039 — revoga o `monsterCount`/espalhamento por laço
+  da FUN-123, cópia do Huntera de 2/5/8 no bueiro). Cada ponto declara o próprio `monsterId`
+  (ou `monsters`, com peso, para o caso raro do #582) e o próprio `respawnDelayMs` — não existe
+  mais composição de dificuldade para cair como fallback. O tile livre é procurado até o
+  `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem monstro.
+  **A população INICIAL usa um evento próprio, `SPAWN_INITIAL`/`#onSpawnInitial`, que
+  BYPASSA `blockable`/janela de visão/telegraph inteiramente** — é o `startup(bool delayed)`
+  do Canary (`spawn_monster.cpp`), que chama `scheduleSpawn` direto, sem passar por
+  `checkSpawnMonster`. Só o RESPAWN pós-morte (`SPAWN`/`#onSpawn`) passa pela gating abaixo.
+  Parede/tile ocupado adia (`SPAWN_RETRY_MS`), nunca cancela — mecanismo de sempre.
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
@@ -537,9 +539,10 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **`Blocked` (`monster/step.ts`) ganhou dois parâmetros opcionais, `z` e `monsterId` — nesta
   ordem, e os dois só importam para o spawner.** O passo guloso de personagem e monstro continua
   chamando com dois argumentos; `Spawner.#freeTile` é quem passa os quatro, porque só ele
-  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
-  para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
-  1.640/1.656 do bestiário, não a exceção).
+  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale — o campo da hunt que fazia
+  isso (`spawnClearRadius`, #236) foi REMOVIDO no #583; quem decide hoje é `blockable` DO
+  MONSTRO (#519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de 1.640/1.656 do
+  bestiário, não a exceção) — e só no RESPAWN pós-morte, nunca na população inicial (ver acima).
 - **A condição `speed` (CMB-11, #556) sempre nasce com a chave RESERVADA `SPEED_CONDITION_KEY`
   (`'speed'`, exportada de `@draconya/content`), e `conditionFromSpec` confia nisso — não a
   reescreve.** É o CONTEÚDO (`conditionSpecSchema`) quem recusa `key` diferente para

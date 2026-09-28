@@ -28,7 +28,12 @@ const route = {
     { x: 4, y: 2, z: 7 }, { x: 4, y: 3, z: 7 }, { x: 3, y: 3, z: 7 }, { x: 2, y: 3, z: 7 },
     { x: 1, y: 3, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'dummy', respawnDelayMs: 30_000 }],
+};
+
+/** A mesma rota, com o Brawler no lugar do Dummy (#583: um ponto por rota, não mais dificuldade). */
+const routeBrawler = {
+  ...route, spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'brawler', respawnDelayMs: 30_000 }],
 };
 
 /** Um monstro inofensivo: serve para o mundo existir, não para machucar. */
@@ -37,6 +42,8 @@ const dummy = {
   health: 1_000_000, experience: 0, attack: 0, armor: 0,
   attackIntervalMs: 10_000, speed: 1500, aggroRadius: 1, attackRange: 1,
   loot: { items: [] },
+  // `blockable: true` (#583): estes testes contam com o monstro já vivo na entrada.
+  blockable: true,
 };
 
 const brawler = {
@@ -44,18 +51,11 @@ const brawler = {
   health: 1_000_000, experience: 0, attack: 40, armor: 0,
   attackIntervalMs: 10_000, speed: 1500, aggroRadius: 8, attackRange: 1,
   loot: { items: [] },
+  blockable: true,
 };
 
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: {
-      monsterCount: 1, composition: [{ monsterId: 'dummy', weight: 1 }], respawnDelayMs: 30_000,
-    },
-    bold: {
-      monsterCount: 1, composition: [{ monsterId: 'brawler', weight: 1 }], respawnDelayMs: 30_000,
-    },
-  },
 };
 
 const progression = {
@@ -185,7 +185,7 @@ describe('renew-ring no mundo real (AB-08, ADR 0032 d.8)', () => {
 describe('renew-amulet no mundo real (AB-08, ADR 0032 d.8)', () => {
   it('o colar esgota as cargas e a automação equipa o próximo', () => {
     const session = createHuntSession({
-      id: 'renew-amulet', content: content(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      id: 'renew-amulet', content: content({ routes: [routeBrawler] }), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
       botConfig: v2([{ model: 'renew-amulet', params: { itemId: 'glacier-amulet' } }]),
     });
     const character = hero({
@@ -228,7 +228,7 @@ describe('#onAutomation não aborta na primeira automação bloqueada (RF-09)', 
 describe('swap-weapon-shield-by-hp no mundo real (AB-08, ADR 0032 d.9)', () => {
   it('troca com o dano recebido, sem depender de tick nem de opcode', () => {
     const session = createHuntSession({
-      id: 'swap', content: content(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      id: 'swap', content: content({ routes: [routeBrawler] }), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
       botConfig: v2([{
         model: 'swap-weapon-shield-by-hp',
         params: { oneHanded: 'spike-sword', shield: 'wooden-shield', twoHanded: 'bow' },

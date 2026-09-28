@@ -80,8 +80,12 @@ export interface SpawnPoint {
   readonly monsterId?: string;
   /** Vários monstros no MESMO ponto, com peso (#582). Exclusivo com `monsterId`. */
   readonly monsters?: ReadonlyArray<{ readonly monsterId: string; readonly weight: number }>;
-  /** O `spawntime` deste ponto, em ms (#519). Ausente cai no `respawnDelayMs` da dificuldade. */
-  readonly respawnDelayMs?: number;
+  /**
+   * O `spawntime` deste ponto, em ms (#519) — o Canary é por posição, não por zona. Obrigatório
+   * desde o #583 (fim do pull por dificuldade, ADR 0039): não há mais dificuldade para cair
+   * como fallback quando o ponto não declara.
+   */
+  readonly respawnDelayMs: number;
 }
 
 export interface Route {
@@ -265,9 +269,9 @@ export function buildRoute(data: RouteData, map: Tilemap): Route {
       // raramente cai em cima da rota; sem ela, o tile do `routeIndex` continua sendo a posição,
       // como sempre foi.
       at: s.at ?? (data.tiles[s.routeIndex] as Point),
+      respawnDelayMs: s.respawnDelayMs,
       ...(s.monsterId === undefined ? {} : { monsterId: s.monsterId }),
       ...(s.monsters === undefined ? {} : { monsters: s.monsters }),
-      ...(s.respawnDelayMs === undefined ? {} : { respawnDelayMs: s.respawnDelayMs }),
     })),
   };
 }

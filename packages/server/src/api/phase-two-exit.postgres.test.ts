@@ -86,11 +86,26 @@ const raw: RawContent = {
     id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5,
     requires: { level: 20 },
   }],
+  // Fim do pull por dificuldade (#583, ADR 0039): o ponto declara o próprio monstro — a hunt
+  // letal precisa da ROTA PRÓPRIA para isso, porque `arena-loop` (a de `rawTestContent`) já
+  // fixou o dela em `monsterId: 'rat'`, e reaproveitá-la faria o Ceifador nunca nascer.
+  routes: [
+    ...(base.routes ?? []),
+    {
+      id: 'lethal-loop', mapId: 'arena',
+      tiles: [
+        { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
+      ],
+      spawnPoints: [{
+        routeIndex: 2, radius: 1, monsterId: 'reaper', respawnDelayMs: 1_000,
+      }],
+    },
+  ],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num
     // rato de 6 de dano levaria horas simuladas — o que este teste mede é o CAMINHO da morte
     // (encerrar, creditar, devolver à Cidade), não quanto tempo ela demora.
-    id: 'lethal', name: 'Arena Letal', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
+    id: 'lethal', name: 'Arena Letal', recommendedLevel: 1, mapId: 'arena', routeId: 'lethal-loop',
     difficulties: {
       cautious: {
         monsterCount: 1, composition: [{ monsterId: 'reaper', weight: 1 }],

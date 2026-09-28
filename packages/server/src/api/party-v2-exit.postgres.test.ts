@@ -32,7 +32,7 @@ import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
-import { totalXpForLevel } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, totalXpForLevel } from '@draconya/sim';
 import { and, eq } from 'drizzle-orm';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
@@ -101,7 +101,12 @@ const LOOP = {
     for (let y = hiY - 1; y > lo; y--) tiles.push({ x: lo, y, z: 7 });
     return tiles;
   })(),
-  spawnPoints: [{ routeIndex: 8, radius: 2 }, { routeIndex: 24, radius: 2 }],
+  // Fim do pull por dificuldade (#583, ADR 0039): cada ponto declara o próprio monstro e o
+  // próprio `respawnDelayMs` — não há mais dificuldade nenhuma para cair como fallback.
+  spawnPoints: [
+    { routeIndex: 8, radius: 2, monsterId: 'rat', respawnDelayMs: 1_000 },
+    { routeIndex: 24, radius: 2, monsterId: 'rat', respawnDelayMs: 1_000 },
+  ],
 };
 const raw: RawContent = {
   ...base,
@@ -342,10 +347,7 @@ beforeAll(async () => {
       maxMembers: content.party.maxMembers,
       contentVersion: content.version,
       vocations: [...content.vocations.keys()],
-      difficultiesOf: (huntId) => {
-        const hunt = content.hunts.get(huntId);
-        return hunt === undefined ? null : Object.keys(hunt.difficulties);
-      },
+      difficultiesOf: (huntId) => (content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null),
     },
   });
   baseUrl = await api.listen({ port: 0, host: '127.0.0.1' });
@@ -416,7 +418,7 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     // oito caem no teto de `maxMembers` (8) do conteúdo (ADR 0035 D12).
     const created = await (await post(leader, '/api/party')).json() as { id: string };
     expect((await post(leader, `/api/party/${created.id}/configure`, {
-      huntId: 'arena', difficulty: 'cautious', minLevel: 10,
+      huntId: 'arena', difficulty: DEFAULT_DIFFICULTY_NAME, minLevel: 10,
       vocationTargets: { knight: 2, druid: 2, sorcerer: 2, paladin: 2 },
       shareCosts: true, splitLoot: true,
     })).status).toBe(200);

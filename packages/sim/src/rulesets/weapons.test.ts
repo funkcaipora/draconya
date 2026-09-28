@@ -29,7 +29,7 @@ const map = {
 const route = {
   id: 'corridor', mapId: 'corridor',
   tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-  spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'rat', respawnDelayMs: 60_000 }],
 };
 // O rato é LENTO de propósito (`speed: 1` é um passo a cada 150 s pela fórmula do Tibia): depois
 // do primeiro golpe ele quer vir atrás do herói, e com essa velocidade não sai do lugar em que o
@@ -43,9 +43,6 @@ const rat = {
 };
 const hunt = {
   id: 'range', name: 'Range', recommendedLevel: 1, mapId: 'corridor', routeId: 'corridor',
-  difficulties: {
-    cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 60_000 },
-  },
 };
 const progression = {
   id: 'baseline', startingHealth: 1_000, startingMana: 10, startingCapacity: 1_000,

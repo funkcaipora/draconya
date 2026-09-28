@@ -21,16 +21,13 @@ export const TEST_ROUTE = {
   tiles: [
     { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 2, radius: 1 }],
+  // Fim do pull por dificuldade (#583, ADR 0039): o ponto declara o próprio monstro e o
+  // próprio `respawnDelayMs` — não há mais dificuldade nenhuma para cair como fallback.
+  spawnPoints: [{ routeIndex: 2, radius: 1, monsterId: 'rat', respawnDelayMs: 1000 }],
 };
 
 export const TEST_HUNT = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-  difficulties: {
-    cautious: {
-      monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
-    },
-  },
 };
 
 export const TEST_PROGRESSION = {

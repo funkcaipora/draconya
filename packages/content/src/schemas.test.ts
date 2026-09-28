@@ -12,7 +12,7 @@ describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#5
 
   it('aceita `monsters` com dois ou mais candidatos e peso default 1', () => {
     const parsed = routeSchema.parse(route([
-      { routeIndex: 0, monsters: [{ monsterId: 'dragon' }, { monsterId: 'dragon-lord', weight: 3 }] },
+      { routeIndex: 0, respawnDelayMs: 1000, monsters: [{ monsterId: 'dragon' }, { monsterId: 'dragon-lord', weight: 3 }] },
     ]));
     expect(parsed.spawnPoints[0]?.monsters).toEqual([
       { monsterId: 'dragon', weight: 1 }, { monsterId: 'dragon-lord', weight: 3 },
@@ -21,14 +21,35 @@ describe('routeSchema.spawnPoints — `monsters` com peso na mesma posição (#5
 
   it('recusa `monsterId` e `monsters` juntos no mesmo ponto', () => {
     expect(() => routeSchema.parse(route([
-      { routeIndex: 0, monsterId: 'dragon', monsters: [{ monsterId: 'dragon' }, { monsterId: 'wyvern' }] },
+      { routeIndex: 0, respawnDelayMs: 1000, monsterId: 'dragon', monsters: [{ monsterId: 'dragon' }, { monsterId: 'wyvern' }] },
     ]))).toThrow(/exclusivos/);
   });
 
   it('recusa `monsters` com um candidato só — isso é `monsterId`', () => {
     expect(() => routeSchema.parse(route([
-      { routeIndex: 0, monsters: [{ monsterId: 'dragon' }] },
+      { routeIndex: 0, respawnDelayMs: 1000, monsters: [{ monsterId: 'dragon' }] },
     ]))).toThrow();
+  });
+});
+
+describe('routeSchema.spawnPoints — obrigatório declarar monstro e respawnDelayMs (#583)', () => {
+  const route = (spawnPoints: unknown): unknown => ({
+    id: 'r', mapId: 'm', tiles: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], spawnPoints,
+  });
+
+  it('recusa ponto sem `monsterId` nem `monsters` — não há mais composição de dificuldade como fallback', () => {
+    expect(() => routeSchema.parse(route([{ routeIndex: 0, respawnDelayMs: 1000 }])))
+      .toThrow(/monsterId.*OU.*monsters/);
+  });
+
+  it('recusa ponto sem `respawnDelayMs`', () => {
+    expect(() => routeSchema.parse(route([{ routeIndex: 0, monsterId: 'rat' }])))
+      .toThrow();
+  });
+
+  it('aceita ponto completo', () => {
+    const parsed = routeSchema.parse(route([{ routeIndex: 0, monsterId: 'rat', respawnDelayMs: 2000 }]));
+    expect(parsed.spawnPoints[0]).toMatchObject({ monsterId: 'rat', respawnDelayMs: 2000 });
   });
 });
 
@@ -89,13 +110,6 @@ describe('huntSchema (#360)', () => {
     recommendedLevel: 1,
     mapId: 'rat-cellars',
     routeId: 'rat-cellars',
-    difficulties: {
-      cautious: {
-        monsterCount: 2,
-        composition: [{ monsterId: 'rat', weight: 1 }],
-        respawnDelayMs: 30_000,
-      },
-    },
   };
 
   it('valida hunt válida sem exitDelayMs (opcional)', () => {
