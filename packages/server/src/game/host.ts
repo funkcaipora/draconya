@@ -248,6 +248,8 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // jogador precisa ler isso, não "ação indisponível".
   'magic-level-too-low': 'Magic level insuficiente.',
   'not-enough-mana': 'Mana insuficiente.',
+  // Alma (#593): a mesma régua da mana. Só magia de conjuração declara custo hoje (#594).
+  'not-enough-soul': 'Alma insuficiente.',
   'not-enough-gold': 'Gold insuficiente.',
   // Reservado ao consumível FÍSICO (a carga de bênção da M22): supply e magia debitam gold no
   // uso, e o que falta ali é gold, não item.
@@ -441,6 +443,9 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
+    // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD.
+    soul: character?.soul ?? 0,
+    soulMax: vocation?.soulMax ?? 0,
   };
 }
 
@@ -485,7 +490,9 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
-    && sameSkillProgress(a.magicLevel, b.magicLevel);
+    && sameSkillProgress(a.magicLevel, b.magicLevel)
+    && a.soul === b.soul
+    && a.soulMax === b.soulMax;
 }
 
 /**
@@ -4008,6 +4015,10 @@ export class SessionHost {
       ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
+      // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
+      // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
+      ...(owner === undefined ? {} : { soul: owner.soul }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -4069,6 +4080,10 @@ export class SessionHost {
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
+      // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
+      // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
+      soul: owner.soul,
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
@@ -4220,6 +4235,8 @@ export class SessionHost {
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,
+        soul: self.soul,
+        soulMax: self.soulMax,
       },
       world: {
         // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.

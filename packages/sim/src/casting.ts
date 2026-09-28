@@ -46,6 +46,8 @@ export type CastRefusal =
   | 'no-target'
   | 'out-of-range'
   | 'not-enough-mana'
+  /** A magia pede alma (#593, `spell:soul(n)` do Canary) que este personagem não tem. */
+  | 'not-enough-soul'
   | 'not-enough-gold'
   /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
   | 'wrong-vocation'
@@ -475,8 +477,17 @@ export function castSpell(
   if (caster.mana < spell.manaCost) {
     return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
   }
+  // Alma sai pela MESMA regra da mana (#593): recusa sem lançar nada, nunca fica devendo. Só
+  // depois da mana porque, hoje, nenhuma magia real declara `soulCost` — a ordem entre as duas
+  // recusas tardias não é observável ainda, e fica ao lado da mana por serem o mesmo tipo de
+  // recurso do lançador. Ausente é toda magia de hoje: zero, como `manaCost` sempre foi.
+  const soulCost = spell.soulCost ?? 0;
+  if (caster.soul < soulCost) {
+    return { ok: false, reason: 'not-enough-soul', retryInMs: NOT_WAITING };
+  }
 
   caster.mana -= spell.manaCost;
+  caster.soul -= soulCost;
   // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
   caster.cooldowns.start(key, nowMs, spell.cooldownMs);
   if (groupKey !== null && spell.groupCooldownMs !== undefined) {

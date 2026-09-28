@@ -241,6 +241,7 @@ export function characterFromTicket(
       ...INITIAL_FLAGS,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
+      soul: initialCharacter.soul ?? 0,
       vocationId,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,

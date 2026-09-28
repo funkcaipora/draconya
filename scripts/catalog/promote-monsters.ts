@@ -46,9 +46,12 @@ import {
 /** Rat, Rotworm, Dragon e Dragon Lord — regenerados só pelo #581, nunca por esta promoção. Desde
  *  o #581 eles JÁ VIVEM em `generated/<fatia>.json` (`preserveHandAuthored` os mantém lá); este
  *  conjunto continua existindo para que uma reimportação futura do Canary NUNCA os sobrescreva
- *  em silêncio — a regeneração deles é sempre um ato deliberado, nunca automático. */
+ *  em silêncio — a regeneração deles é sempre um ato deliberado, nunca automático.
+ *  `dragon-lord-hatchling` entrou no #560: ganhou a MESMA cadeia hand-authored de estágios de
+ *  campo que `dragon-lord` (`docs/reference/catalog/monsters-report.md`), e sem esta entrada a
+ *  promoção normal a REESCREVIA com a fatia fresca — sem `stages` — na primeira reimportação. */
 export const HAND_AUTHORED_MONSTER_IDS: ReadonlySet<string> = new Set([
-  'rat', 'rotworm', 'dragon', 'dragon-lord',
+  'rat', 'rotworm', 'dragon', 'dragon-lord', 'dragon-lord-hatchling',
 ]);
 
 export interface ItemCatalogEntry {

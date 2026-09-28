@@ -2953,8 +2953,14 @@
     "dragon-lord-hatchling-firefield": 2118
   },
   "fieldStages": {
-    "dragon-lord-firefield": [2119, 2120],
-    "dragon-lord-hatchling-firefield": [2119, 2120]
+    "dragon-lord-firefield": [
+      2119,
+      2120
+    ],
+    "dragon-lord-hatchling-firefield": [
+      2119,
+      2120
+    ]
   },
   "maps": {},
   "spells": {
