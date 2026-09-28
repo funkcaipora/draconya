@@ -123,6 +123,17 @@ export const characters = pgTable(
      */
     skillsUpdatedAt: timestamp('skills_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
+    /**
+     * Pontos de alma (#593): o `soul` do Canary — teto e cadência de ganho na vocação
+     * (`content`), custo na magia. O valor inicial do Canary é `soul = 100` desde a criação
+     * (todo personagem lá nasce com vocação); aqui o personagem nasce sem uma (§7.4), então o
+     * default é `0` — sem vocação, sem alma — e `chooseVocation` (`sim`) enche pela primeira
+     * vez ao escolher. PODE DESCER (gasto): é por isso que o ledger o escreve como valor
+     * ABSOLUTO, última-escrita-vence — a mesma régua de `ammo`/`equipment`, nunca a fusão por
+     * máximo de `skills`/`bestiary` (ver `jobs/ledger.ts`).
+     */
+    soul: integer('soul').notNull().default(0),
+
     gold: bigint('gold', { mode: 'number' }).notNull().default(0),
     capacity: integer('capacity').notNull().default(400),
 

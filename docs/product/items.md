@@ -534,6 +534,37 @@ escolhida: `#persistReceipt`/`#creditUnrestorable` (`host.ts`) escrevem no extra
 (`tickets.ts`/`api/tickets.ts`) levam de volta para o ticket da PRÓXIMA sessão — sem isso, uma
 Strong Health Potion caída do Dragon sumiria no logout mesmo sem ser gasta.
 
+### Conjuração CREDITA o mesmo estoque, pelo lançador (#594, ADR 0044)
+
+A conjuração de runa/munição do Tibia é a MESMA moeda do loot acima, na direção contrária: em
+vez de sortear e creditar quem recebeu o drop, o lançador credita a si mesmo. `spellEffectSchema`
+ganhou o `kind: 'conjure'` (`packages/content/src/schemas.ts`) — `supplyId`/`ammunitionId`
+(exatamente um dos dois, como `lootTableSchema` já exige), `charges` (o terceiro argumento de
+`conjureItem` do Canary) e `blankPrice` (o preço da runa em branco, 10 gold — `buy` do clientId
+3147 em `npc/alexander.lua` — cobrado JUNTO da mana e da alma; ausente/`0` na conjuração de
+MUNIÇÃO do Paladin, cujo `blankId` no Canary é zero: nasce sem consumir runa nenhuma). O
+`castSpell` (`casting.ts`) soma `charges` no `Map` do PRÓPRIO lançador — nunca cria item físico,
+o mesmo modelo abstrato do ADR 0026/0032 — e não sorteia nada: o Canary credita uma quantidade
+FIXA por lançamento.
+
+**O custo é mana + alma + a runa em branco, na mesma ordem de sempre: recusa antes, débito
+depois.** A alma segue a regra do #593 (`spell:soul(n)` do Canary — cerca de 50 magias de
+conjuração são as ÚNICAS a exigi-la hoje); o preço da runa em branco é a primeira vez que uma
+MAGIA (não um supply) debita gold — `castSpell` ganhou um parâmetro `purse` opcional, default a
+bolsa SOLO do lançador (o rateio de party do gold de conjuração fica fora desta issue, §12 da
+spec). `goldSpent` do resultado chega ao MESMO agregado que `useSupply` já alimenta
+(`session.aggregates.goldSpent`), e o estoque creditado é o MESMO `supplyStock`/`ammunitionStock`
+acima — sem campo novo no extrato, sem migração nova: `supplyStock`/`ammunitionStock` já eram
+lista de permissão em `receipts.ts` desde o #520.
+
+**As 14 magias de conjuração do catálogo** (`packages/content/data/spells/conjure-*.json`) usam
+os NÚMEROS do Canary (`data/scripts/spells/conjuring/*.lua`: nível, mana, alma, cargas) para as
+runas de ataque/cura e a munição já existentes no catálogo abstrato — Avalanche/Explosion/Great
+Fireball/Heavy Magic Missile/Stone Shower/Sudden Death/Thunderstorm Rune, Intense/Ultimate
+Healing Rune, e Conjure Arrow/Sniper Arrow/Power Bolt (Paladin). Runas/munição de ataque
+restantes do Tibia (M37-10) e runa de campo/parede (M37-04) reusam o mesmo `kind: 'conjure'` sem
+decisão nova.
+
 ## Estado por instância: o overlay (#604, ADR 0046)
 
 **A exceção nomeada à regra "atributos base são fixos".** O item de CATÁLOGO continua fixo pelo
@@ -800,7 +831,7 @@ Glacier Amulet manualmente.
 | Autovenda — tipos configuráveis (Premium) | 20 | `party.autoSellItemTypes.premium` (`packages/content/data/party/baseline.json`) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
 | Slots de imbuement por item | 1–3 (`imbuementslot` do Canary); o importador de itens (#573) preenche em todo item gerado e reconciliou 19 dos 73 autorais (sword 2, spike sword 2, magic plate armor 2, entre outros) | `packages/content/data/items/*.json`, `overrides/*.json`, campo `imbuementSlots` |
-| Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
+| Catálogo de efeitos/materiais/valores de imbuement | 3 bases (Basic 5000/90%, Intricate 30000/70%, Powerful 200000/50%, `removeCost` 15000 e `durationSeconds` 72000 iguais nas 3), 20 categorias e 72 entradas do `imbuements.xml` do Canary (M40-02, #605) — materiais resolvidos contra o catálogo real de itens (22 sem correspondente e os 46 scrolls, ambos fora da entidade gerada e contados em `docs/reference/catalog/imbuements-report.md`, nunca em silêncio); **compatibilidade** (quais categorias cabem em qual slot de equipamento) continua `[ABERTO]` — decisão de mecânica de #606 | `packages/content/data/imbuements/generated/{bases,categories,imbuements}.json` |
 | Peso do Energy Ring / Life Ring | 0,8 oz cada (Canary `items.xml` id 3051/3052, weight 80 — reconciliado pelo importador de itens, `overrides/{energy-ring,life-ring}.json`, #573) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
 | Preço de venda do Energy Ring / Life Ring | 100 / 50 gold — maior `sell` de NPC do Canary (M34-03/#574, não mais provisório; Life Ring reconciliado em `overrides/life-ring.json`) | `packages/content/data/items/{energy-ring,life-ring}.json`, `overrides/` |
 | Regeneração do Life Ring | +2 vida e +8 mana a cada 6 000 ms, somados à vocação (Canary id 3089, #688) | `packages/content/data/items/life-ring.json`, campo `bonuses.regeneration` |

@@ -1,0 +1,202 @@
+[
+  {
+    "id": "0",
+    "name": "Elemental Damage",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "1",
+    "name": "Life Leech",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "10",
+    "name": "Increase Speed",
+    "aggressive": false,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "11",
+    "name": "Skillboost (Axe Fighting)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "12",
+    "name": "Skillboost (Sword Fighting)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "13",
+    "name": "Skillboost (Club Fighting)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "14",
+    "name": "Skillboost (Shielding)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "15",
+    "name": "Skillboost (Distance Fighting)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "16",
+    "name": "Skillboost (Magic Level)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "17",
+    "name": "Increase Capacity",
+    "aggressive": false,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "18",
+    "name": "Skillboost (Fist Fighting)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "19",
+    "name": "Paralysis Deflection",
+    "aggressive": false,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "2",
+    "name": "Mana Leech",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "3",
+    "name": "Critical Hit",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "4",
+    "name": "Elemental Protection (Death)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "5",
+    "name": "Elemental Protection (Earth)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "6",
+    "name": "Elemental Protection (Fire)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "7",
+    "name": "Elemental Protection (Ice)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "8",
+    "name": "Elemental Protection (Energy)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "9",
+    "name": "Elemental Protection (Holy)",
+    "aggressive": true,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  }
+]

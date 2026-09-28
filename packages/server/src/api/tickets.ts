@@ -213,6 +213,7 @@ export function initialCharacterOf(
     xp: character.xp,
     name: character.name,
     gold: character.gold,
+    soul: character.soul,
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.

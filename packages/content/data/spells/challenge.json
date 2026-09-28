@@ -1,0 +1,13 @@
+{
+  "id": "challenge",
+  "name": "Challenge",
+  "description": "Força o monstro atingido a mirar você e suspende a fuga dele, por 6 segundos.",
+  "vocationId": "knight",
+  "minLevel": 20,
+  "manaCost": 30,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": { "kind": "challenge", "durationMs": 6000, "range": 3 },
+  "_open": "Canary (things/sources/canary, 47dfd51, `data/scripts/spells/support/challenge.lua`, conferido 2026-09-27): level 20, mana 30, cooldown 2 s, `doChallengeCreature(creature, target, 6000)` — 6000 é o DEFAULT de `targetChangeCooldown` (`global_functions.cpp:582`, luaDoChallengeCreature), não um número que o .lua escreve. O Canary exige a vocação Elite Knight (`spell:vocation(\"elite knight;true\")`); o Draconya não modela promoção ainda (#566, aberta) — entra com `vocationId: \"knight\"` sozinho, e o gate de Elite Knight fica pendente de #566 (ver docs/product/combat.md). `range`: o Canary não declara `spell:range()` (default -1, `spells.hpp:281`, sem checagem no .lua) — 3 é um palpite conservador de suporte corpo a corpo, a confirmar contra o TibiaWiki quando alguém for jogar de perto. Efeito visual CONST_ME_MAGIC_BLUE (13) sem conferência de PNG (biblioteca parcial, docs/combat-presentation-audit.md)."
+}

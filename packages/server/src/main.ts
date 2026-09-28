@@ -18,8 +18,8 @@ import { buildCatalogue } from './game/catalogue.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  CityShard, createBotConfigValidator, createCitySessionFactory, createLateJoiner, createSessionBuilder,
-  createSessionRestorer,
+  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory,
+  createLateJoiner, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { createSingletonLock } from './jobs/lock.js';
@@ -201,6 +201,10 @@ async function main(): Promise<void> {
       // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
       // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
       acceptBotConfig: createBotConfigValidator(content),
+      // A CARGA de uma config já persistida (ADR 0014) é função separada da EDIÇÃO acima —
+      // ver `createBotConfigLoader`: um slot com magia/supply removida (#596) esvazia, em vez
+      // de derrubar a configuração inteira do personagem que está entrando.
+      loadBotConfig: createBotConfigLoader(content),
       catalogue: () => catalogue,
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
