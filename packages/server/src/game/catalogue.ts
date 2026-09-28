@@ -230,13 +230,30 @@ export function buildCatalogue(content: Content): Catalogue {
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
     // cliente não simula (invariante 4).
     monsters: [...content.monsters.values()]
-      .map((monster) => ({
-        id: monster.id,
-        name: monster.name,
-        ...(monster.class !== undefined ? { class: monster.class } : {}),
-        health: monster.health,
-        experience: monster.experience,
-      }))
+      .map((monster) => {
+        const bestiaryEntry = content.bestiary?.entries[monster.id];
+        return {
+          id: monster.id,
+          name: monster.name,
+          ...(monster.class !== undefined ? { class: monster.class } : {}),
+          health: monster.health,
+          experience: monster.experience,
+          // A ficha do Canary (#601, ADR 0053 d.1): estágio e pontos são DERIVADOS no cliente a
+          // partir destes limiares e do contador de `bestiary.counts` — não calculados aqui.
+          ...(bestiaryEntry === undefined
+            ? {}
+            : {
+              bestiary: {
+                stars: bestiaryEntry.stars,
+                occurrence: bestiaryEntry.occurrence,
+                firstUnlock: bestiaryEntry.firstUnlock,
+                secondUnlock: bestiaryEntry.secondUnlock,
+                toKill: bestiaryEntry.toKill,
+                charmsPoints: bestiaryEntry.charmsPoints,
+              },
+            }),
+        };
+      })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
     // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o

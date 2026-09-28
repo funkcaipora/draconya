@@ -74,16 +74,28 @@ describe('loadContent', () => {
   });
 
   it('o conteúdo real tem o bot padrão do personagem novo, e mana para a primeira magia (FUN-114)', () => {
-    // O MVP é "hunt + magias + poção funcionando" no PRIMEIRO minuto: sem isto o personagem
-    // novo entrava só no golpe básico até abrir a tela do bot, e sem mana até o level 4.
+    // O MVP é "hunt + poção funcionando" no PRIMEIRO minuto para quem ainda não escolheu
+    // vocação — sem isto o personagem novo entrava só no golpe básico até abrir a tela do bot.
+    // Desde o #596, o Tibia real não dá magia NENHUMA antes do level 8 (§7.4) — `heal`/`strike`
+    // eram genéricas inventadas antes da auditoria do #523/#596 e saíram do catálogo; o
+    // `defaultConfig` PRÉ-VOCAÇÃO fica sem `spellId`, e o golpe básico (sem custo de mana) cobre
+    // o ataque até a vocação escolhida trazer a primeira magia real de verdade.
     const content = loadContent(DATA);
     const config = content.bot.defaultConfig;
-    expect(config?.heal.map((rule) => rule.do)).toEqual([{ kind: 'spell', spellId: 'heal' }]);
+    expect(config?.heal).toEqual([]);
     expect(config?.potion.map((rule) => rule.do)).toEqual([{ kind: 'supply', supplyId: 'health-potion' }]);
-    expect(config?.attack.map((rule) => rule.do)).toEqual([{ kind: 'spell', spellId: 'strike' }]);
-    // E dá para lançar qualquer uma das duas magias no level 1.
-    const costs = [...content.spells.values()].map((spell) => spell.manaCost);
-    expect(content.progression.startingMana).toBeGreaterThanOrEqual(Math.min(...costs));
+    expect(config?.attack).toEqual([]);
+    // E cada `defaultConfigByVocation` aponta uma magia REAL de mana acessível no level em que a
+    // vocação é escolhida (level 8, §7.4) — nunca um id que o #596 removeu.
+    for (const [vocationId, vocationConfig] of Object.entries(content.bot.defaultConfigByVocation ?? {})) {
+      for (const slot of vocationConfig.sets[0]?.slots ?? []) {
+        if (slot?.do.kind !== 'spell') continue;
+        const spell = content.spells.get(slot.do.spellId);
+        expect(spell, `${vocationId}: ${slot.do.spellId}`).toBeDefined();
+        expect(content.progression.startingMana, `${vocationId}: ${slot.do.spellId}`)
+          .toBeGreaterThanOrEqual(spell?.manaCost ?? Infinity);
+      }
+    }
   });
 
   it('o teto de stamina real é 12 h, o valor do Huntera (M32-01, #562, ADR 0043 emenda 2026-09-25)', () => {
@@ -379,10 +391,10 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // O contrato que o `game` lê para transformar o que o `sim` emite em `effect` e
     // `missile` no fio. Os números são do pacote 1332 e foram conferidos visualmente; o que
     // se prende aqui é que o arquivo REAL passa pelo schema e pela referência cruzada — e
-    // que `strike` tem projétil, porque é a única magia à distância do catálogo.
+    // que `electrify` tem projétil, porque é uma magia à distância do catálogo (#596).
     // Mutação que mata: trocar `"missile": 5` por `"missile": 6` em `baseline.json`.
     const content = loadContent(DATA);
-    expect(content.appearances?.spells['strike']).toEqual({ effect: 12, missile: 5 });
+    expect(content.appearances?.spells['electrify']).toEqual({ effect: 12, missile: 5 });
     expect(content.appearances?.supplies['health-potion']).toEqual({ effect: 14 });
     expect(content.appearances?.hits.melee).toBe(1);
     // Toda magia e todo supply do repositório TÊM efeito. Não é regra do carregador — magia
@@ -434,6 +446,22 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       'sudden-death-rune': { damageType: 'death', skillMin: 4.605, skillMax: 7.395, baseMin: 28, baseMax: 46, missile: 11 },
       'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59, missile: 5 },
       'explosion-rune': { damageType: 'physical', shape: 'cross', skillMin: 0, skillMax: 4.8 },
+      // #597 — as 5 runas que faltavam para as 12 do Canary (`staging/runes/generated/general.json`).
+      'fireball-rune': {
+        damageType: 'fire', skillMin: 1.81, skillMax: 3, baseMin: 10, baseMax: 18, missile: 4,
+      },
+      'icicle-rune': {
+        damageType: 'ice', skillMin: 1.81, skillMax: 3, baseMin: 10, baseMax: 18, missile: 29,
+      },
+      'light-magic-missile-rune': {
+        damageType: 'energy', skillMin: 0.4, skillMax: 0.81, baseMin: 2, baseMax: 4, missile: 5,
+      },
+      'light-stone-shower-rune': {
+        damageType: 'earth', shape: 'cross', skillMin: 0.3, skillMax: 0.45, baseMin: 2, baseMax: 3, missile: 30,
+      },
+      'stalagmite-rune': {
+        damageType: 'earth', skillMin: 0.4, skillMax: 1.59, baseMin: 2, baseMax: 10, missile: 30,
+      },
     };
     for (const [id, want] of Object.entries(expected)) {
       const effect = content.supplies.get(id)?.effect;
@@ -651,13 +679,17 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'front-sweep': { level: 70, mana: 200, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 80 },
     'fierce-berserk': { level: 90, mana: 340, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 90 },
     'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 1000, cdMs: 600000, kind: 'heal', bp: 500 },
+    // #589: força o alvo do monstro; não tem `basePower` — o efeito é `challenge`, não dano.
+    'challenge': { level: 20, mana: 30, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'challenge' },
+    'chivalrous-challenge': { level: 150, mana: 80, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'challenge' },
+    'annihilation': { level: 110, mana: 300, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage' },
+    'inflict-wound': { level: 40, mana: 30, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage-over-time' },
   },
   paladin: {
     'lesser-ethereal-spear': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 9 },
     'light-healing-paladin': { level: 8, mana: 20, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 40 },
     'haste-paladin': { level: 14, mana: 60, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
     'intense-healing-paladin': { level: 20, mana: 70, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 120 },
-    'divine-defiance': { level: 20, mana: 250, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'buff', secondary: ['stance', 10000] },
     'sharpshooter': { level: 60, mana: 450, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'buff', secondary: ['focus', 10000] },
     'ethereal-spear': { level: 23, mana: 25, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 25 },
     'divine-healing': { level: 35, mana: 160, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 250 },
@@ -666,9 +698,8 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'recovery-paladin': { level: 50, mana: 75, group: 'healing', groupMs: 1000, cdMs: 60000, kind: 'heal-over-time' },
     'swift-foot': { level: 55, mana: 400, group: 'support', groupMs: 2000, cdMs: 10000, kind: 'haste', secondary: ['focus', 10000] },
     'salvation': { level: 60, mana: 210, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 500 },
-    'ethereal-barrage': { level: 60, mana: 135, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 100 },
-    'divine-barrage': { level: 70, mana: 175, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 130 },
     'strong-ethereal-spear': { level: 90, mana: 55, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', bp: 70 },
+    'holy-flash': { level: 70, mana: 30, group: 'attack', groupMs: 2000, cdMs: 40000, kind: 'damage-over-time' },
   },
   sorcerer: {
     'buzz': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
@@ -695,6 +726,11 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'strong-flame-strike': { level: 70, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 125 },
     'strong-energy-strike': { level: 80, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 125 },
     'ultimate-energy-strike': { level: 100, mana: 100, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage', secondary: ['ultimatestrikes', 30000], bp: 180 },
+    'ultimate-flame-strike': { level: 90, mana: 100, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage', secondary: ['ultimatestrikes', 30000], bp: 180 },
+    'ignite': { level: 26, mana: 30, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage-over-time' },
+    'electrify': { level: 34, mana: 30, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage-over-time' },
+    'strong-haste-sorcerer': { level: 20, mana: 100, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
+    'cancel-magic-shield-sorcerer': { level: 14, mana: 50, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'remove-condition' },
   },
   druid: {
     'mud-attack': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
@@ -719,20 +755,28 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'wrath-of-nature': { level: 55, mana: 700, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 175 },
     'eternal-winter': { level: 60, mana: 1050, group: 'attack', groupMs: 4000, cdMs: 40000, kind: 'damage', secondary: ['focus', 40000], bp: 200 },
     'strong-terra-strike': { level: 70, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 115 },
-    'forked-thorns': { level: 80, mana: 180, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 97 },
     'strong-ice-strike': { level: 80, mana: 60, group: 'attack', groupMs: 2000, cdMs: 8000, kind: 'damage', secondary: ['special', 8000], bp: 115 },
+    'ultimate-ice-strike': { level: 100, mana: 100, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage', secondary: ['ultimatestrikes', 30000], bp: 180 },
+    'ultimate-terra-strike': { level: 90, mana: 100, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage', secondary: ['ultimatestrikes', 30000], bp: 180 },
+    'envenom': { level: 50, mana: 30, group: 'attack', groupMs: 2000, cdMs: 40000, kind: 'damage-over-time' },
+    'strong-haste-druid': { level: 20, mana: 100, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
+    'cancel-magic-shield-druid': { level: 14, mana: 50, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'remove-condition' },
   },
 };
 
 /** As excluídas por nome (ADR 0026 decisão 5) — em kebab-case, como um id seria. */
 const EXCLUDED_SPELLS = [
-  'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
-  'invisible', 'cancel-invisibility', 'cancel-magic-shield', 'creature-illusion',
+  'invisible', 'cancel-invisibility', 'creature-illusion',
   // Cure Poison/Burning/Electrification/Bleeding/Curse entraram no #590 — a cura de condição
-  // agora existe (CMB-07 generalizou a `Condition`). Continuam de fora as magias que INFLIGEM
-  // condição (Envenom, Curse, Ignite, Electrify): o #590 é só a metade que remove.
-  'inflict-wound', 'holy-flash', 'ignite', 'electrify', 'curse', 'envenom',
-  'shield-bash', 'shield-slam', 'challenge', 'train-party', 'protect-party', 'enchant-party',
+  // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
+  // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
+  // `spellEffectSchema.damage-over-time` não modela (um valor fixo só). Fica fora, reportada na
+  // spec da issue; as outras cinco DOTs de tique único da mesma issue (`ignite`/`electrify`/
+  // `envenom`/`inflict-wound`/`holy-flash`) e `cancel-magic-shield` saíram desta lista — o #596
+  // as trouxe. `challenge`/`chivalrous-challenge` (#589) também saíram — ver
+  // `VOCATION_SPELLS.knight`, acima.
+  'curse',
+  'shield-bash', 'shield-slam', 'train-party', 'protect-party', 'enchant-party',
   'heal-party', 'elemental-synthesis', 'shared-conservation',
   'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
@@ -767,35 +811,71 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 16 + 17 + 24 + 27 vocation spells, plus the four generic ones', () => {
+  it('has exactly the catalogue: 20 + 15 + 29 + 31 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
     // Curse no Paladin (+1), Cure Burning e Cure Electrification só no Druid (+2) — e Cure
-    // Poison é a QUARTA magia genérica (sem `vocationId`), como as três de antes.
+    // Poison é a magia genérica (sem `vocationId`) que sobrevive ao #596, abaixo. #589
+    // acrescentou Challenge e Chivalrous Challenge no Knight (+2, de 16 para 18) — revisita a
+    // exclusão antiga (ver `EXCLUDED_SPELLS`, abaixo, que não a lista mais).
+    // #596 fechou o catálogo fora da Roda do Destino, em cima do que #589/#590 já tinham
+    // deixado: Knight +2 (Annihilation, Inflict Wound) → 20; Paladin −3 (Divine Defiance/
+    // Barrage, Ethereal Barrage removidas — sem correspondente no Canary) +1 (Holy Flash) →
+    // 17−2=15; Sorcerer +5 (Ultimate Flame Strike, Ignite, Electrify, Strong Haste, Cancel
+    // Magic Shield) → 29; Druid −1 (Forked Thorns removida) +5 (Ultimate Ice/Terra Strike,
+    // Envenom, Strong Haste, Cancel Magic Shield) → 27+4=31. As três genéricas pré-vocação
+    // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(16);
-    expect(byVocation.get('paladin')).toBe(17);
-    expect(byVocation.get('sorcerer')).toBe(24);
-    expect(byVocation.get('druid')).toBe(27);
-    expect(byVocation.get(undefined)).toBe(4);
+    expect(byVocation.get('knight')).toBe(20);
+    expect(byVocation.get('paladin')).toBe(15);
+    expect(byVocation.get('sorcerer')).toBe(29);
+    expect(byVocation.get('druid')).toBe(31);
+    expect(byVocation.get(undefined)).toBe(1);
+  });
+
+  it('nenhuma das 13 magias novas do #596 cai no default `arcane` de `damageType`', () => {
+    // `arcane` continua no enum `DAMAGE_TYPES` — é o default de `weaponSchema` (wand/rod) e de
+    // dez magias físicas ANTERIORES a esta issue (`berserk`, `physical-strike`, etc., um
+    // `[ABERTO]` já registrado em `docs/product/combat.md`, fora do escopo do #596). O que esta
+    // issue garante é que NENHUMA das 13 que ela introduz depende do default por omissão.
+    const NEW_IN_596 = [
+      'annihilation', 'ultimate-flame-strike', 'ultimate-ice-strike', 'ultimate-terra-strike',
+      'ignite', 'electrify', 'envenom', 'inflict-wound', 'holy-flash',
+      'strong-haste-sorcerer', 'strong-haste-druid',
+      'cancel-magic-shield-sorcerer', 'cancel-magic-shield-druid',
+    ];
+    for (const id of NEW_IN_596) {
+      const spell = content.spells.get(id);
+      expect(spell, id).toBeDefined();
+      if (spell?.effect.kind === 'damage' || spell?.effect.kind === 'damage-over-time') {
+        expect(spell.effect.damageType, id).not.toBe('arcane');
+      }
+    }
+    // As sete sem correspondente no Canary saíram do catálogo — inclusive as duas (`strike`/
+    // `blast`) que dependiam do default `arcane` por omissão.
+    for (const removed of [
+      'strike', 'blast', 'heal', 'divine-defiance', 'divine-barrage', 'ethereal-barrage', 'forked-thorns',
+    ]) {
+      expect(content.spells.has(removed), removed).toBe(false);
+    }
   });
 
   it('leaves out, by name, what the engine does not express (ADR 0026 decisão 5)', () => {
     for (const excluded of EXCLUDED_SPELLS) expect(content.spells.has(excluded), excluded).toBe(false);
   });
 
-  // Conformidade #523: toda magia/runa de dano ou cura que TEM correspondente real no Canary
-  // declara `formula`. Só três magias por vocação NÃO têm: as três genéricas pré-vocação
-  // (`heal`, `strike`, `blast`, level 1-7, sem `vocationId` — não existem no Tibia, que não dá
-  // magia nenhuma antes da escolha de vocação) e três magias inventadas antes desta auditoria
-  // que não correspondem a nenhum nome do Canary (`divine-barrage`, `ethereal-barrage`,
-  // `forked-thorns` — ver o `_open` de cada uma). A lista é a allowlist EXATA: crescer sem
-  // atualizar aqui é o teste fazendo o trabalho.
-  const NOT_FROM_CANARY = ['heal', 'strike', 'blast', 'divine-barrage', 'ethereal-barrage', 'forked-thorns'];
+  // Conformidade #523/#596: toda magia/runa de dano ou cura que TEM correspondente real no
+  // Canary declara `formula`. As sete que não tinham correspondente saíram do catálogo no #596
+  // (as três genéricas pré-vocação `heal`/`strike`/`blast` e as quatro sem fonte no Canary
+  // `divine-defiance`/`divine-barrage`/`ethereal-barrage`/`forked-thorns`) — a allowlist fica
+  // VAZIA. `annihilation` (#596) escala por SKILL, não por level/magic level, mas ainda declara
+  // `formula` (a forma `skillAttackMin/skillAttackMax`) — não precisa de exceção. A lista
+  // continua existindo (em vez de apagada) para o próximo caso real ter onde entrar.
+  const NOT_FROM_CANARY: readonly string[] = [];
 
   it('toda magia de dano/cura com correspondente no Canary declara `formula` (#523)', () => {
     const missing: string[] = [];
@@ -851,14 +931,20 @@ describe('the vocation spell catalogues (#156–#159)', () => {
       'scorch', 'strong-energy-strike', 'strong-flame-strike', 'terra-strike-sorcerer',
       'ultimate-energy-strike',
       'divine-caldera', 'divine-missile',
+      // #596: as três Ultimate X Strike de topo (Fire/Ice/Terra), mesma fórmula/`scaling: 'magic'`
+      // de `ultimate-energy-strike` (#523).
+      'ultimate-flame-strike', 'ultimate-ice-strike', 'ultimate-terra-strike',
     ];
     // `CALLBACK_PARAM_SKILLVALUE`: a skill da vocação (e o ataque da arma), sem `scaling`.
     const SKILL_VALUE = [
       'berserk', 'brutal-strike', 'fierce-berserk', 'front-sweep', 'groundshaker',
       'lesser-front-sweep', 'whirlwind-throw',
       'ethereal-spear', 'lesser-ethereal-spear', 'strong-ethereal-spear',
+      // #596: Annihilation também é `CALLBACK_PARAM_SKILLVALUE` (forma `skillAttackMin`/
+      // `skillAttackMax`, sem `scaling` — a mesma família de Groundshaker/Berserk/Front Sweep).
+      'annihilation',
     ];
-    expect(LEVEL_MAGIC).toHaveLength(37);
+    expect(LEVEL_MAGIC).toHaveLength(40);
     const declared: string[] = [];
     const undeclared: string[] = [];
     for (const spell of content.spells.values()) {
@@ -869,15 +955,14 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     expect(undeclared.sort()).toEqual([...SKILL_VALUE].sort());
   });
 
-  it('a allowlist do que NÃO vem do Canary não cresce sem ninguém notar', () => {
-    // As três genéricas pré-vocação (nunca tiveram vocationId nem BP do TibiaWiki) e as três
-    // inventadas (têm vocationId e basePower, mas nome sem correspondente em
-    // `data/scripts/spells/**` do Canary — a varredura do #523 não achou).
-    for (const id of ['heal', 'strike', 'blast']) {
-      expect(content.spells.get(id)?.vocationId, id).toBeUndefined();
-    }
-    for (const id of ['divine-barrage', 'ethereal-barrage', 'forked-thorns']) {
-      expect(content.spells.get(id)?.vocationId, id).toBeDefined();
+  it('as sete magias sem correspondente no Canary saíram do catálogo (#596)', () => {
+    // As três genéricas pré-vocação (nunca tiveram vocationId nem BP do TibiaWiki) e as quatro
+    // sem fonte no Canary (a varredura do #523 não achou, e a decisão de 2026-09-25 na issue
+    // #596 mandou remover) não existem mais.
+    for (const id of [
+      'heal', 'strike', 'blast', 'divine-defiance', 'divine-barrage', 'ethereal-barrage', 'forked-thorns',
+    ]) {
+      expect(content.spells.has(id), id).toBe(false);
     }
   });
 
@@ -1186,6 +1271,28 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
   it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
     for (const id of ['dragon', 'dragon-lord']) {
       expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
+    }
+  });
+
+  it('the dragon lord firefield follows the Canary decayTo chain (#560, items.xml:4212-4246)', () => {
+    for (const id of ['dragon-lord', 'dragon-lord-hatchling']) {
+      const field = content.monsters.get(id)?.abilities.find((a) => a.id === 'firefield')?.field;
+      expect(field?.stages, id).toHaveLength(3);
+      const stages = field?.stages ?? [];
+      // 2118 (dano 20, 200s) → decayTo 2119 (10, 148s) → 2120 (sem field, 98s) → some.
+      expect(stages[0]?.durationMs, id).toBe(200_000);
+      expect(stages[0]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[0]?.condition?.effect.kind === 'damage-over-time' && stages[0].condition.effect.form === 'rounds') {
+        expect(stages[0].condition.effect.rounds[0]?.damage, id).toBe(20);
+      }
+      expect(stages[1]?.durationMs, id).toBe(148_000);
+      expect(stages[1]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[1]?.condition?.effect.kind === 'damage-over-time' && stages[1].condition.effect.form === 'rounds') {
+        expect(stages[1].condition.effect.rounds[0]?.damage, id).toBe(10);
+      }
+      // O último estágio não causa dano — só ocupa o tile até sumir.
+      expect(stages[2]?.durationMs, id).toBe(98_000);
+      expect(stages[2]?.condition, id).toBeUndefined();
     }
   });
 

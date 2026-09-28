@@ -1,0 +1,12 @@
+-- #593: pontos de alma (soul) — teto e cadência de ganho na vocação (`content`), custo na
+-- conjuração (a magia em si é a #594). Aditiva por construção (ADR 0014): uma coluna nova,
+-- NOT NULL com default 0 — sem vocação escolhida (o personagem nasce sem uma, §7.4), não há
+-- alma, e é o que todo personagem gravado antes desta issue tem.
+--
+-- Inteira, como `capacity`/`level`, e não `bigint` como `xp`/`gold`: o teto do Canary é 100/200,
+-- ordens de grandeza abaixo do que justificaria bigint.
+--
+-- ÚLTIMA ESCRITA VENCE, como `ammo`/`equipment` — NUNCA fundida por máximo como `skills`/
+-- `bestiary` no ledger (`jobs/ledger.ts`): alma DESCE (é gasta na conjuração), e fundir pelo
+-- maior de duas gravações fora de ordem manteria um saldo que o jogador já gastou.
+ALTER TABLE character ADD COLUMN soul integer NOT NULL DEFAULT 0;

@@ -86,6 +86,8 @@ export function SkillsPanel() {
   const staminaMs = useHudSlice((state) => state.staminaMs);
   const speed = useHudSlice((state) => state.speed);
   const skills = useHudSlice((state) => state.skills);
+  const soul = useHudSlice((state) => state.soul);
+  const soulMax = useHudSlice((state) => state.soulMax);
 
   const [collapsed, setCollapsed] = useState(false);
   const [visible, setVisible] = useState<readonly SkillId[]>(() => loadVisibleSkills());
@@ -104,6 +106,8 @@ export function SkillsPanel() {
     capacity: count(capacity) + ' oz',
     speed: count(speed),
     stamina: staminaClock(staminaMs),
+    // `0/0` é "sem vocação escolhida" — a mesma degradação de `vocationId: null` no HUD.
+    soul: count(soul) + '/' + count(soulMax),
     magic: String(skills.magic.level),
     fist: String(skills.fist.level),
     club: String(skills.club.level),

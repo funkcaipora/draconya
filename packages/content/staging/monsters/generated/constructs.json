@@ -1129,6 +1129,285 @@
     "outfitId": 345
   },
   {
+    "id": "gingerbread-man",
+    "name": "Gingerbread Man",
+    "class": "construct",
+    "health": 85,
+    "experience": 22,
+    "attack": {
+      "min": 0,
+      "max": 1
+    },
+    "armor": 13,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.2,
+        "earth": 0.4,
+        "fire": -0.1,
+        "holy": 0.1,
+        "death": 0.2
+      },
+      "immunities": []
+    },
+    "defenseMitigation": 0.41,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 230,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 85,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 15000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/gingerbread_men.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 2549,
+      "toKill": 25,
+      "firstUnlock": 5,
+      "secondUnlock": 10,
+      "charmsPoints": 1,
+      "stars": 1,
+      "occurrence": 0
+    },
+    "outfitId": 1738
+  },
+  {
+    "id": "goggle-cake",
+    "name": "Goggle Cake",
+    "class": "construct",
+    "health": 2700,
+    "experience": 2700,
+    "attack": {
+      "min": 0,
+      "max": 350
+    },
+    "armor": 38,
+    "defense": 38,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.05,
+        "energy": -0.15,
+        "ice": -0.15,
+        "holy": -0.05,
+        "death": -0.15
+      },
+      "immunities": [
+        "drown",
+        "earth",
+        "fire",
+        "lifedrain",
+        "manadrain"
+      ]
+    },
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 244,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 4,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "small-enchanted-sapphire",
+          "chance": 0.0673,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "itemId": "combat-knife",
+          "chance": 0.0571
+        },
+        {
+          "itemId": "great-mana-potion",
+          "chance": 0.0569
+        },
+        {
+          "itemId": "rainbow-quartz",
+          "chance": 0.0381,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.0359,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "red-gem",
+          "chance": 0.0266
+        },
+        {
+          "itemId": "spirit-cloak",
+          "chance": 0.0174
+        },
+        {
+          "itemId": "gummy-rotworm",
+          "chance": 0.0169
+        },
+        {
+          "itemId": "churro-heart",
+          "chance": 0.0152
+        },
+        {
+          "itemId": "glacier-amulet",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "egg",
+          "chance": 0.01
+        },
+        {
+          "itemId": "milk-chocolate-coin",
+          "chance": 0.0078,
+          "min": 1,
+          "max": 15
+        },
+        {
+          "itemId": "flour",
+          "chance": 0.0069
+        },
+        {
+          "itemId": "cookie",
+          "chance": 0.0052,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "glacier-robe",
+          "chance": 0.005
+        },
+        {
+          "itemId": "epee",
+          "chance": 0.004
+        },
+        {
+          "itemId": "ice-rapier",
+          "chance": 0.0021
+        },
+        {
+          "itemId": "cream-cake",
+          "chance": 0.0014
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 350
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "energystrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 170,
+          "max": 300
+        },
+        "damageType": "energy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "cherrybomb",
+          "impactKey": "starburst"
+        }
+      },
+      {
+        "id": "icestrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 120,
+          "max": 260
+        },
+        "damageType": "ice",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "cherrybomb",
+          "impactKey": "cream"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/constructs/goggle_cake.lua"
+    },
+    "bestiary": {
+      "class": "construct",
+      "race": "construct",
+      "raceId": 2534,
+      "toKill": 2500,
+      "firstUnlock": 100,
+      "secondUnlock": 1000,
+      "charmsPoints": 50,
+      "stars": 4,
+      "occurrence": 0
+    },
+    "outfitId": 1740
+  },
+  {
     "id": "golden-servant",
     "name": "Golden Servant",
     "class": "construct",

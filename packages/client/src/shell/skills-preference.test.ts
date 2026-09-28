@@ -18,9 +18,9 @@ afterEach(() => {
 });
 
 describe('skills preference', () => {
-  it('has the thirteen kit rows, in the fixed order SV-10/#568 specifies', () => {
+  it('has the fourteen kit rows, in the fixed order SV-10/#568/#593 specifies', () => {
     expect(SKILL_ORDER).toEqual([
-      'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic',
+      'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'soul', 'magic',
       'fist', 'club', 'sword', 'axe', 'distance',
     ]);
   });
