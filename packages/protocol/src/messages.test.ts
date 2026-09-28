@@ -463,6 +463,55 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decodedWithout?.[0]?.monsters[0]).not.toHaveProperty('class');
   });
 
+  it('round trips the Canary bestiary entry per monster, and an older node decodes with it absent (#601, ADR 0053 d.1)', () => {
+    const withEntry = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [], supplies: [],
+      },
+      items: [], ammunition: [],
+      monsters: [{
+        id: 'dragon',
+        name: 'Dragon',
+        bestiary: {
+          stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+        },
+      }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(withEntry)) as Array<{
+      monsters: Array<{
+        id: string; name: string;
+        bestiary?: {
+          stars: number; occurrence: number; firstUnlock: number; secondUnlock: number;
+          toKill: number; charmsPoints: number;
+        };
+      }>;
+    }> | null;
+    expect(decoded?.[0]?.monsters).toEqual([{
+      id: 'dragon',
+      name: 'Dragon',
+      bestiary: {
+        stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+      },
+    }]);
+
+    const older = {
+      ...withEntry,
+      monsters: [{ id: 'dragon', name: 'Dragon' }],
+    } as unknown as S2CMessage;
+    const decodedOlder = decodeS2C(encodeS2C(older)) as Array<{ monsters: Array<{ id: string; name: string; bestiary?: unknown }> }> | null;
+    expect(decodedOlder?.[0]?.monsters[0]?.id).toBe('dragon');
+    expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('bestiary');
+  });
+
   describe('vocation statics in the catalogue — speed and regen (#361, SV-25)', () => {
     const baseCatalogue = {
       type: 'catalogue',

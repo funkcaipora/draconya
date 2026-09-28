@@ -885,6 +885,21 @@ export const S2C_SCHEMAS = {
       class: z.string().optional(),
       health: z.number().int().positive().optional(),
       experience: z.number().int().nonnegative().optional(),
+      /**
+       * A ficha de Bestiário do Canary por monstro (#601, ADR 0053 d.1): estágio, estrelas,
+       * ocorrência e pontos de Charm são DERIVADOS no cliente a partir dela e do contador de
+       * `bestiary.counts` — nada aqui é calculado no servidor além do que o conteúdo já fixa na
+       * sessão (invariante 7). Ausente: monstro sem ficha em `content.bestiary.entries` (nenhum
+       * do catálogo real hoje) ou nó `game` anterior a esta issue.
+       */
+      bestiary: z.object({
+        stars: z.number().int().min(0).max(5),
+        occurrence: z.number().int().min(0).max(3),
+        firstUnlock: z.number().int().positive(),
+        secondUnlock: z.number().int().positive(),
+        toKill: z.number().int().positive(),
+        charmsPoints: z.number().int().nonnegative(),
+      }).optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
