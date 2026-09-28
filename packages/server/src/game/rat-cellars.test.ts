@@ -105,6 +105,9 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
     return new CharacterRuntime({
       id: 'hero', position: { x: 0, y: 0, z: 8 },
       health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 100_000, maxMana: 100_000,
+      // #594: a conjuração é mais um `effect.kind`, e pede alma e o gold da runa em branco além
+      // da mana — o mesmo motivo de `mana: 100_000` acima, só que para os dois custos novos.
+      soul: 100, gold: 100_000,
       level, xp: 0, vocationId, goldDelta: 0, alive: true, cooldowns: {},
     });
   };

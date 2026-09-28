@@ -2746,6 +2746,64 @@ describe('poção abstrata: gold no uso (FUN-77, §20.1)', () => {
   });
 });
 
+describe('conjuração no modelo de suprimento abstrato (#594, ADR 0044)', () => {
+  const conjureTestRune = {
+    id: 'conjure-test-rune', name: 'Test Rune', manaCost: 30, soulCost: 2, cooldownMs: 1_000, minLevel: 1,
+    effect: { kind: 'conjure', supplyId: 'test-rune', charges: 5, blankPrice: 7 },
+  };
+  const testRune = {
+    id: 'test-rune', name: 'Test Rune', price: 1, group: 'potion', groupCooldownMs: 1_000,
+    requires: {}, effect: { kind: 'mana', amount: 10 },
+  };
+
+  it('credita o estoque do lançador e leva mana, alma e gold ao extrato — via o slot de magia normal', () => {
+    const { session, hero } = withSpells(
+      botConfig({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'conjure-test-rune' },
+      }] }),
+      {
+        health: 1_000, mana: 30, gold: 7, monsters: false,
+        spells: [conjureTestRune], supplies: [testRune],
+      },
+    );
+    // #593: a alma só existe depois de escolher vocação — o herói de teste nasce sem uma, e
+    // `hero.soul` começa em 0. A magia recusaria por `not-enough-soul` sem isto.
+    hero.soul = 2;
+
+    session.advanceBy(50);
+
+    expect((hero.supplyStock as Map<string, number>).get('test-rune')).toBe(5);
+    expect(hero.mana).toBe(0);
+    expect(hero.soul).toBe(0);
+    expect(hero.goldDelta).toBe(-7);
+    // O gold da runa em branco chega ao mesmo agregado que `useSupply` já alimenta — o extrato
+    // não ganha campo novo, `supplyStock` já é lista de permissão em `receipts.ts` desde o #520.
+    expect(session.aggregates.goldSpent).toBe(7);
+  });
+
+  it('não é aplicável em munição: a conjuração de flecha não toca `supplyStock`', () => {
+    const conjureAmmo = {
+      id: 'conjure-test-ammo', name: 'Test Ammo', manaCost: 10, cooldownMs: 1_000, minLevel: 1,
+      effect: { kind: 'conjure', ammunitionId: 'arrow', charges: 8 },
+    };
+    const { session, hero } = withSpells(
+      botConfig({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'conjure-test-ammo' },
+      }] }),
+      { health: 1_000, mana: 10, gold: 0, monsters: false, spells: [conjureAmmo] },
+    );
+
+    session.advanceBy(50);
+
+    expect((hero.ammunitionStock as Map<string, number>).get('arrow')).toBe(8);
+    expect((hero.supplyStock as Map<string, number>).size).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
+  });
+});
+
 // --- o combate chega ao cliente como evento (FUN-109) ----------------------------------------
 
 /** Só os eventos de um tipo, com o tipo estreitado — para não repetir o `filter` com cast. */

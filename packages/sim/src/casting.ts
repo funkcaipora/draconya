@@ -420,6 +420,12 @@ export function castSpell(
    * básico) —, e é isso que este parâmetro passa adiante para `resolveDamage`.
    */
   modifiers: DamageModifiers | undefined = undefined,
+  /**
+   * Quem paga o gold da conjuração (#594, ADR 0044) — a runa em branco, `effect.blankPrice`.
+   * NENHUM outro efeito de magia lê `purse`: mana e alma bastam para todo o resto do catálogo.
+   * Ausente: a bolsa do próprio lançador — o solo de sempre, como `useSupply`.
+   */
+  purse: Purse = ownPurse(caster),
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -485,9 +491,17 @@ export function castSpell(
   if (caster.soul < soulCost) {
     return { ok: false, reason: 'not-enough-soul', retryInMs: NOT_WAITING };
   }
+  // O preço da runa em branco (#594, ADR 0044) sai pela MESMA regra: recusa sem lançar nada,
+  // ao lado de mana/alma — os três são custo do LANÇADOR, e a conjuração é o único efeito que
+  // soma gold aos dois. Ausente/zero (toda magia que não conjura munição-runa) não confere nada.
+  const blankPrice = effect.kind === 'conjure' ? effect.blankPrice : 0;
+  if (blankPrice > 0 && !purse.canAfford(blankPrice)) {
+    return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+  }
 
   caster.mana -= spell.manaCost;
   caster.soul -= soulCost;
+  if (blankPrice > 0) purse.pay(blankPrice);
   // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
   caster.cooldowns.start(key, nowMs, spell.cooldownMs);
   if (groupKey !== null && spell.groupCooldownMs !== undefined) {
@@ -588,6 +602,18 @@ export function castSpell(
           damageType: effect.damageType, source: 'spell',
         },
       });
+    /**
+     * Conjuração (#594, ADR 0044): credita CARGAS no estoque abstrato do próprio lançador —
+     * nunca item físico, nunca sorteio (o Canary credita um número FIXO por lançamento, sem
+     * `Rng` nenhum). `goldSpent` é o preço da runa em branco, já debitado acima — o mesmo campo
+     * que `useSupply` usa para o extrato, só que aqui é gold GASTO CRIANDO carga, não gastando.
+     */
+    case 'conjure': {
+      const stock = effect.supplyId !== undefined ? caster.supplyStock : caster.ammunitionStock;
+      const id = (effect.supplyId ?? effect.ammunitionId) as string;
+      stock.set(id, (stock.get(id) ?? 0) + effect.charges);
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: blankPrice };
+    }
   }
 }
 

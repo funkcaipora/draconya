@@ -1,0 +1,19 @@
+{
+  "id": "conjure-thunderstorm-rune",
+  "name": "Thunderstorm Rune",
+  "description": "Conjura cargas da Thunderstorm Rune, consumindo uma runa em branco.",
+  "vocationId": "sorcerer",
+  "minLevel": 28,
+  "manaCost": 430,
+  "soulCost": 3,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "conjure",
+    "supplyId": "thunderstorm-rune",
+    "charges": 4,
+    "blankPrice": 10
+  },
+  "_open": "Números do Canary (#594, ADR 0044): `data/scripts/spells/conjuring/thunderstorm_rune.lua` — `creature:conjureItem(3147, 3202, 4)`, `spell:level(28)`, `spell:mana(430)`, `spell:soul(3)`, vocação `sorcerer;true`/`master sorcerer;true` (sem promoção, ADR 0044 §Em aberto). O Canary também declara `spell:isPremium(true)`, fora do recorte desta issue, como em `conjure-stone-shower-rune.json`. `blankPrice` 10, como em toda runa."
+}

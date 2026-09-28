@@ -388,7 +388,20 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     // Toda magia e todo supply do repositório TÊM efeito. Não é regra do carregador — magia
     // muda é válida —, é o estado do conteúdo hoje, e a asserção existe para a magia nova
     // que nascer sem efeito ser uma decisão, e não um esquecimento.
+    //
+    // As 14 magias de conjuração do #594 (ADR 0044) ainda não têm entrada: a auditoria visual
+    // (CMB-09, `docs/combat-presentation-audit.md`) já está bloqueada pela biblioteca parcial
+    // (nenhum sprite de efeito/projétil tem PNG nesta máquina) e não foi feita para elas — magia
+    // MUDA é válida, e ficam de fora desta asserção até a auditoria acontecer.
+    const MUTE_UNTIL_PRESENTATION_AUDIT = new Set([
+      'conjure-avalanche-rune', 'conjure-explosion-rune-druid', 'conjure-explosion-rune-sorcerer',
+      'conjure-great-fireball-rune', 'conjure-heavy-magic-missile-rune-druid',
+      'conjure-heavy-magic-missile-rune-sorcerer', 'conjure-stone-shower-rune',
+      'conjure-sudden-death-rune', 'conjure-thunderstorm-rune', 'conjure-intense-healing-rune',
+      'conjure-ultimate-healing-rune', 'conjure-arrow', 'conjure-sniper-arrow', 'conjure-power-bolt',
+    ]);
     for (const id of content.spells.keys()) {
+      if (MUTE_UNTIL_PRESENTATION_AUDIT.has(id)) continue;
       expect(content.appearances?.spells[id]?.effect, `spell "${id}"`).toBeGreaterThan(0);
     }
     for (const id of content.supplies.keys()) {
@@ -734,7 +747,9 @@ const EXCLUDED_SPELLS = [
   'inflict-wound', 'holy-flash', 'ignite', 'electrify', 'curse', 'envenom',
   'shield-bash', 'shield-slam', 'challenge', 'train-party', 'protect-party', 'enchant-party',
   'heal-party', 'elemental-synthesis', 'shared-conservation',
-  'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
+  // 'conjure-arrow' saiu daqui na #594 (ADR 0044): a conjuração de munição do Paladin existe
+  // agora (`packages/content/data/spells/conjure-arrow.json`), no modelo de estoque abstrato.
+  'arrow-call', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
 ];
@@ -767,20 +782,24 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 16 + 17 + 24 + 27 vocation spells, plus the four generic ones', () => {
+  it('has exactly the catalogue: 16 + 20 + 29 + 33 vocation spells, plus the four generic ones', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
     // Curse no Paladin (+1), Cure Burning e Cure Electrification só no Druid (+2) — e Cure
     // Poison é a QUARTA magia genérica (sem `vocationId`), como as três de antes.
+    // #594 (conjuração, ADR 0044) acrescentou: Paladin +3 (Conjure Arrow/Sniper Arrow/Power
+    // Bolt, 17→20), Sorcerer +5 (Great Fireball, Sudden Death, Thunderstorm, a metade Sorcerer
+    // de Explosion e de Heavy Magic Missile, 24→29), Druid +6 (Avalanche, Intense/Ultimate
+    // Healing, Stone Shower, a metade Druid de Explosion e de Heavy Magic Missile, 27→33).
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
     expect(byVocation.get('knight')).toBe(16);
-    expect(byVocation.get('paladin')).toBe(17);
-    expect(byVocation.get('sorcerer')).toBe(24);
-    expect(byVocation.get('druid')).toBe(27);
+    expect(byVocation.get('paladin')).toBe(20);
+    expect(byVocation.get('sorcerer')).toBe(29);
+    expect(byVocation.get('druid')).toBe(33);
     expect(byVocation.get(undefined)).toBe(4);
   });
 
