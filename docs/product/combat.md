@@ -1304,7 +1304,8 @@ Rat, Rotworm, Dragon e Dragon Lord ficaram fora daquela promoção por decisão
 (`HAND_AUTHORED_MONSTER_IDS`, `scripts/catalog/promote-monsters.ts`) — o #581 os regenerou à parte,
 uma única vez, direto na mesma pasta (Rat em `mammals.json`, Rotworm em `vermins.json`, Dragon e
 Dragon Lord em `dragons.json`), com override (`data/monsters/overrides/`) para o `blockable: true`
-temporário que Rat Cellars e Rotworm Caves ainda exigem até o #582+/M36-05. O que ficou de fora do
+temporário que Rat Cellars e Rotworm Caves exigiram até o #586 (M36-05) converter as duas para os
+spawns reais do Canary e apagar os dois arquivos de override. O que ficou de fora do
 corte e por quê — inclusive as linhas de loot removidas por item ainda não catalogado (#573/#574)
 — está em `docs/reference/catalog/monsters-promotion-report.md`;
 `scripts/catalog/promote-monsters.ts` é quem separa `bestiary`/`outfitId` do monstro ao promover.

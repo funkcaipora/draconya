@@ -1,5 +1,0 @@
-{
-  "id": "rotworm",
-  "reason": "O Canary declara isBlockable false — o Rotworm respawna olhando para o jogador (#519). Rotworm Caves (#236/#520) ainda conta com o spawnClearRadius antigo, que só se aplica a quem declara blockable: true; virar false junto com a regeneração do #581 esvaziaria o bueiro no meio de uma hunt em andamento. Override temporário até o #582+ (M36-05) converter Rotworm Caves para o comportamento real do Canary — aí este arquivo é apagado, não editado.",
-  "patch": { "blockable": true }
-}
