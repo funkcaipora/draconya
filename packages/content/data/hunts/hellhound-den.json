@@ -1,0 +1,10 @@
+{
+  "id": "hellhound-den",
+  "name": "Hellhound Den",
+  "recommendedLevel": 250,
+  "mapId": "hellhound-den",
+  "routeId": "hellhound-den",
+  "ambience": "cavern",
+  "description": "Uma toca de rocha vulcânica onde matilhas de Hellhound uivam nas trevas. É a hunt mais dura do primeiro lote — cada uma delas sozinha já derruba quem não está preparado.",
+  "_open": "#587 (M36-06). Recorte real do Canary: `pnpm map:import --id hellhound-den --x 33215..33265 --y 31605..31650 --z 11` sobre `otservbr.otbm` (51×46, 598 tiles andáveis, sem `--keep-from` — caixa reta, bate com `--check` por construção). `pnpm catalog:spawns`: 18 pontos reais, só Hellhound nesta fatia (nenhum outro monstro do Canary cai dentro da caixa), todos os 18 alcançáveis a pé, 0 desconhecidos. `recommendedLevel: 250`: não achei um Gate/TibiaWiki único para Hellhound — a TibiaWiki cita várias tocas em níveis MUITO diferentes (Infernatil Seal a partir de 950, mas também tocas bem mais baixas compartilhadas com outros monstros); Hellhound (exp 6000 no catálogo local, `stars: 4` no bestiário — o mesmo tier de Demon) é o monstro mais forte das seis hunts, e o piso da faixa 250+ que o #587 pede para esta hunt cobrir é o número usado aqui por fallback ('senão a do monstro mais forte'), não fato de fonte."
+}

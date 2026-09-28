@@ -1,0 +1,10 @@
+{
+  "id": "minotaur-camp",
+  "name": "Minotaur Camp",
+  "recommendedLevel": 60,
+  "mapId": "minotaur-camp",
+  "routeId": "minotaur-camp",
+  "ambience": "cavern",
+  "description": "Um acampamento de Minotaurs escavado na rocha, porcos e um contrabandista fugitivo escondidos entre os currais. O machado dos Minotaurs não perdoa quem chega perto demais.",
+  "_open": "#587 (M36-06). Recorte real do Canary: `pnpm map:import --id minotaur-camp --x 32717..32760 --y 31301..31350 --z 7` sobre `otservbr.otbm` (44×50, 1205 tiles andáveis — sem `--keep-from`, pelo mesmo motivo do cyclopolis: caixa reta bate com `--check` por construção). `pnpm catalog:spawns`: 39 pontos reais na caixa (Minotaur, Pig, Smuggler — a fauna inteira da zona), dos quais 25 estão no pedaço andável alcançável a pé a partir da entrada (873 tiles) e entram na rota; os outros 14 ficam do outro lado de uma porta/parede que o recorte não conecta e não são visitados pelo bot (ainda ganham `spawnPoint`, ancorado no tile de rota mais próximo — ficam ociosos, não quebram nada). `recommendedLevel: 60`: não achei um Gate/TibiaWiki específico para ESTE acampamento (a Minotaurs Cult Cave tem página própria, mas os monstros de lá — Cult Follower/Prophet/Zealot — são outra fatia do bestiário, não a que este recorte trouxe); usei o piso da faixa 60–100 que o #587 pede para esta hunt cobrir, com a nota de que é estimativa, não fato de fonte — regra de fallback ('senão a do monstro mais forte') do próprio #587."
+}

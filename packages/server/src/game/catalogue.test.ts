@@ -603,10 +603,17 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
 
-  it('o catálogo lista as três hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520)', () => {
+  it('o catálogo lista as nove hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #587)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
-    expect(hunts.map((h) => h.id)).toEqual(['rat-cellars', 'rotworm-caves', 'darashia-dragon-lair']);
+    // Ordem por recommendedLevel crescente, empate por id (huntListings, packages/sim/src/hunt/
+    // catalogue.ts): rat-cellars=1, dwarf-mines=rotworm-caves=8 (empate, "dwarf-mines" <
+    // "rotworm-caves"), cyclopolis=34, darashia-dragon-lair=40, minotaur-camp=60, bone-crypt=100,
+    // hydra-mountain=150, hellhound-den=250 — o primeiro lote de hunts reais por faixa (#587).
+    expect(hunts.map((h) => h.id)).toEqual([
+      'rat-cellars', 'dwarf-mines', 'rotworm-caves', 'cyclopolis', 'darashia-dragon-lair',
+      'minotaur-camp', 'bone-crypt', 'hydra-mountain', 'hellhound-den',
+    ]);
     const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
     expect(rotworm?.monsters).toEqual([{ id: 'rotworm', name: 'Rotworm' }]);
     expect(rotworm?.loot.map((l) => l.itemId).sort()).toEqual(
