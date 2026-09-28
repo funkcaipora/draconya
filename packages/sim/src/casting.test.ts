@@ -36,11 +36,12 @@ const manaPotion: Supply = {
 };
 
 const hero = (over: Partial<{
-  health: number; mana: number; level: number; gold: number; goldDelta: number;
+  health: number; mana: number; soul: number; level: number; gold: number; goldDelta: number;
 }> = {}): CharacterRuntime => new CharacterRuntime({
   id: 'hero', position: { x: 1, y: 1, z: 7 },
   health: over.health ?? 100, maxHealth: 100,
   mana: over.mana ?? 100, maxMana: 100,
+  soul: over.soul ?? 100,
   level: over.level ?? 10, xp: 0, vocationId: null,
   staminaMs: null, staminaUpdatedAtMs: 0,
   gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
@@ -140,6 +141,23 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
       caster.attackLockedUntil = 2_000;
       expect(castSpell(caster, strike, near(), 0, combat, rng()).ok).toBe(true);
     });
+  });
+
+  it('sem alma, recusa — pela MESMA regra da mana (#593)', () => {
+    const caster = hero({ soul: 2 });
+    const costly: Spell = { ...heal, soulCost: 3 };
+    expect(castSpell(caster, costly, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-soul', retryInMs: 0 });
+    // Nada foi gasto: a recusa não fica devendo.
+    expect(caster.mana).toBe(100);
+    expect(caster.soul).toBe(2);
+  });
+
+  it('com alma suficiente, a magia gasta o custo declarado', () => {
+    const caster = hero({ soul: 5 });
+    const costly: Spell = { ...heal, soulCost: 3 };
+    expect(castSpell(caster, costly, null, 0, combat, rng()).ok).toBe(true);
+    expect(caster.soul).toBe(2);
   });
 });
 

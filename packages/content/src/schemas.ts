@@ -2520,6 +2520,28 @@ export const vocationSchema = z.object({
   meleeDamageMultiplier: z.number().positive().default(1),
   distDamageMultiplier: z.number().positive().default(1),
   /**
+   * Pontos de alma (#593): teto e cadência de ganho, de `vocations.xml` (Canary) —
+   * `soulmax`/`gainsoulticks`, verificados em `opentibiabr/canary` `data/XML/vocations.xml`,
+   * `main` 2026-09-27. `soulGainTicksMs` é o `gainsoulticks` já em milissegundos (o Canary
+   * também mede em ms); um ponto de alma a cada intervalo, nunca por tick (invariante 2).
+   *
+   * O Canary distingue vocação base (100/120000) de PROMOVIDA (200/15000) — Draconya não tem
+   * promoção ainda, então cada vocação carrega só o número da base; o dia em que a promoção
+   * existir, ela reescreve estes dois campos como já reescreve stats por level.
+   *
+   * Sem vocação (personagem antes do level 8, §7.4) não há alma: o Canary sempre tem vocação
+   * (mesmo `VOCATION_NONE` declara os dois), mas aqui o personagem nasce sem uma, e a alma só
+   * passa a existir quando ele escolhe — `chooseVocation` é quem a enche pela primeira vez.
+   *
+   * `default` é o número BASE (as quatro vocações reais o repetem explicitamente, como
+   * `meleeDamageMultiplier: 1` — documentação, não silêncio): sem promoção implementada ainda,
+   * é o único número que existe, e um default poupa cada conteúdo de TESTE — dezenas, entre
+   * `content.test.ts`, `hunt.test.ts` e `catalogue.test.ts` — de declarar um par que não muda
+   * o resultado de nenhum deles.
+   */
+  soulMax: z.number().int().positive().default(100),
+  soulGainTicksMs: z.number().int().positive().default(120_000),
+  /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.
    */
@@ -4121,6 +4143,16 @@ export const spellSchema = z.object({
   description: z.string().min(1).optional(),
   /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
   manaCost: z.number().int().nonnegative(),
+  /**
+   * Alma gasta ao lançar (#593), a `spell:soul(n)` do Canary — hoje só a conjuração de runa a
+   * declara (`spells/conjuring/*.lua`), e a conjuração em si é a #594, fora desta issue.
+   * OPCIONAL, como `group`/`groupCooldownMs`, e não `.default(0)`: um default preenchido
+   * obrigaria todo `Spell` literal do repositório (as `.trace.ts` e os testes de conformidade)
+   * a declarar o campo mesmo sem custo nenhum. Ausente é toda magia de hoje: sem recusa nova.
+   * Como a mana, sem alma o lançamento é RECUSADO, nunca fica devendo — e sai por ÚLTIMO, junto
+   * da mana.
+   */
+  soulCost: z.number().int().nonnegative().optional(),
   /** O cooldown DA MAGIA. Evento na fila, nunca acumulador (ADR 0020). */
   cooldownMs: z.number().int().positive(),
   /**

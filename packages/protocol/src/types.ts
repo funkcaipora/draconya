@@ -627,6 +627,9 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
+      soul: z.number().int().nonnegative().default(0),
+      soulMax: z.number().int().nonnegative().default(0),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -1154,6 +1157,14 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+    /**
+     * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
+     * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um
+     * nó `game` anterior a esta issue manda sem, e o HUD mostra "0/0" em vez de recusar o
+     * parse inteiro — a mesma degradação de `speed`/`ammo` acima.
+     */
+    soul: z.number().int().nonnegative().default(0),
+    soulMax: z.number().int().nonnegative().default(0),
   }),
   /**
    * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o

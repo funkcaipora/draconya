@@ -229,6 +229,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         vocationId: message.vocationId,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        soul: message.soul,
+        soulMax: message.soulMax,
       }));
       return;
 
@@ -453,6 +455,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         vocationId: message.self.vocationId,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        soul: message.self.soul,
+        soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre

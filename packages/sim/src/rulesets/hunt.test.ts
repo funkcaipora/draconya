@@ -1004,6 +1004,52 @@ describe('level up e penalidade de morte dentro da hunt', () => {
     expect(at(1)).toEqual(ten);
   });
 
+  it('ganha alma passivamente ao ganhar XP ≥ level, capada no soulMax da vocação (#593)', () => {
+    // `soulGainTicksMs`/`soulMax` pequenos de propósito: o teste mede o MECANISMO (condição
+    // aplicada pelo ganho de XP, tique periódico, teto), não o número real do Canary — esse já
+    // está fixado em `content.test.ts` e nas quatro vocações reais.
+    const knight = {
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      soulMax: 3, soulGainTicksMs: 500,
+    };
+    // XP alta o bastante para bater o portão `experience >= levelBeforeGain` no level 8.
+    const fatRat = { ...rat, experience: 100, health: 1 };
+    const withKnight = content({ vocations: [knight], monsters: [fatRat] });
+    const { session, hero } = start({ loaded: withKnight, difficulty: 'bold' });
+    hero.level = 8;
+    const chosen = hero.chooseVocation(
+      withKnight.vocations.get('knight') as NonNullable<ReturnType<typeof withKnight.vocations.get>>,
+      null, {
+        catalog: withKnight.items, vocationLevel: 8, instanceId: 's:hero:vocation',
+        rules: { backpackSlots: 0, satchelSlots: 0, row: 1 },
+      },
+    );
+    expect(chosen.ok).toBe(true);
+    // A escolha enche a alma na hora, no soulMax da vocação — antes de qualquer abate.
+    expect(hero.soul).toBe(3);
+
+    // Simula gasto: sem magia real de custo ainda (a conjuração é a #594), a alma só desce por
+    // ação manual neste teste — é o que deixa espaço para o ganho aparecer.
+    hero.soul = 0;
+    // Um abate (100 XP ≥ level 8) aplica a condição de ganho; ticando a cada 500 ms, o teto de
+    // 3 é alcançado bem dentro dos quatro minutos fixos da condição.
+    run(session, 30_000, 100);
+    expect(hero.soul).toBeGreaterThan(0);
+    expect(hero.soul).toBeLessThanOrEqual(3);
+    run(session, 30_000, 100);
+    expect(hero.soul).toBe(3);
+  });
+
+  it('sem vocação escolhida, XP não gera alma nenhuma (#593)', () => {
+    // O personagem nasce sem vocação (§7.4) e o Canary sempre tem uma — o portão simplesmente
+    // não abre até o level 8 acontecer de verdade.
+    const fatRat = { ...rat, experience: 100, health: 1 };
+    const withoutVocation = content({ monsters: [fatRat] });
+    const { session, hero } = start({ loaded: withoutVocation, difficulty: 'bold' });
+    run(session, 30_000, 100);
+    expect(hero.soul).toBe(0);
+  });
+
   it('sair ou ser encerrado por regra NÃO custa XP: quem paga é quem morre', () => {
     const { session, hero } = start({ difficulty: 'bold' });
     hero.level = 20;

@@ -191,6 +191,7 @@ describe('outfit colours on the creature (FUN-104)', () => {
       self: {
         creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
       },
       world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -249,6 +250,7 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
     self: {
       creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      soul: 0, soulMax: 0,
     },
     world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -603,6 +605,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       magic: { level: 2, percentToNext: 80 },
     },
     magicLevel: { level: 2, percentToNext: 80 },
+    soul: 42,
+    soulMax: 100,
   };
 
   it('round-trips player-stats with the 3 fields', () => {
@@ -623,6 +627,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
+      soul: 0,
+      soulMax: 0,
     }]);
   });
 
@@ -639,6 +645,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
         melee: { level: 15, percentToNext: 45 },
       },
       magicLevel: { level: 2, percentToNext: 80 },
+      soul: 42,
+      soulMax: 100,
     },
     world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'arena', creatures: [] },
     aggregates: { durationMs: 12000, xpGained: 500, goldGained: 100, goldSpent: 0, kills: 5, deaths: 0 },
@@ -650,7 +658,9 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
   });
 
   it('decodes session-state.self without the 3 fields using defaults (compatibilidade com nó anterior)', () => {
-    const { speed: _s, skills: _sk, magicLevel: _m, ...selfWithoutNewFields } = fullSessionState.self;
+    const {
+      speed: _s, skills: _sk, magicLevel: _m, soul: _soul, soulMax: _soulMax, ...selfWithoutNewFields
+    } = fullSessionState.self;
     const olderSessionState = {
       ...fullSessionState,
       self: selfWithoutNewFields,
@@ -663,6 +673,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
         speed: 0,
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0,
+        soulMax: 0,
       },
     }]);
   });
@@ -1058,6 +1070,7 @@ describe('the party block of the analyzer and the session state (#393)', () => {
       self: {
         creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
       },
       world: { mapId: null, creatures: [], groundItems: [], tileUpdates: [] },
       aggregates,
@@ -1296,6 +1309,8 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
         speed: 200,
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0,
+        soulMax: 0,
       },
       world: { mapId: 'rats-cave', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
       aggregates: { durationMs: 5000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -1316,7 +1331,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       health: 100, maxHealth: 100, mana: 50, maxMana: 50,
       level: 5, xp: 1000, capacity: 300, gold: 50, staminaMs: 50000,
       ammo: { arrow: null, bolt: null }, vocationId: 'knight', speed: 250,
-      skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     };
     expect('targetId' in stats).toBe(false);
     expect(decodeS2C(encodeS2C(stats))).toEqual([stats]);

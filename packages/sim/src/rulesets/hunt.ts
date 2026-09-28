@@ -291,6 +291,15 @@ const CONDITION_EXPIRE = 'condition-expire';
 const CONDITION_TICK = 'condition-tick';
 const conditionSubject = (targetId: string, key: string): string => `${targetId}/${key}`;
 /**
+ * A chave e a duração do `CONDITION_SOUL` do Canary (#593, `Player::onGainExperience`,
+ * `data/events/scripts/player.lua`): quatro minutos, fixo — não é `_open` porque o Canary não
+ * varia isto por vocação nem por conteúdo, ao contrário do teto e da cadência (`soulMax`/
+ * `soulGainTicksMs`, que SÃO conteúdo). Relançar (`merge: 'refresh'`) reinicia o prazo, como o
+ * Canary faz a cada XP ganha.
+ */
+const SOUL_CONDITION_KEY = 'soul-regen';
+const SOUL_CONDITION_DURATION_MS = 4 * 60 * 1000;
+/**
  * Os campos de tile (CMB-07): um evento POR CAMPO. O tique aplica a condição a quem pisa nos
  * tiles; o vencimento tira o campo. `subject` é `f:<id>`.
  */
@@ -379,7 +388,7 @@ export type UseItemOutcome =
  */
 export type SlotRefusal =
   | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
-  | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
+  | 'not-enough-mana' | 'not-enough-soul' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown'
   /** Stairhop (#554, M30-07): a magia é agressiva e a trava de ataque ainda não venceu. */
   | 'attack-locked';
@@ -507,6 +516,7 @@ function refusalOf(result: CastRefused): SlotRefusal {
     case 'no-target': return 'no-target';
     case 'out-of-range': return 'out-of-range';
     case 'not-enough-mana': return 'not-enough-mana';
+    case 'not-enough-soul': return 'not-enough-soul';
     // O suprimento v2 é ABSTRATO: o "estoque" é o saldo, e a falta dele tem motivo próprio —
     // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
     case 'not-enough-gold': return 'not-enough-gold';
@@ -5529,6 +5539,32 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O ganho passivo de alma (#593, `Player::onGainExperience` do Canary): com vocação escolhida,
+   * alma abaixo do teto e esta XP (JÁ com bônus) ≥ o level que o personagem tinha ANTES do
+   * ganho, (re)aplica `CONDITION_SOUL` por quatro minutos — um ponto a cada
+   * `soulGainTicksMs` da vocação, a mesma máquina de tique/vencimento do #155/CMB-07.
+   *
+   * Sem vocação não há teto nem cadência para ler (o personagem nasce sem uma, §7.4, e o
+   * Canary sempre tem — ver o comentário de `soulMax` em `content/schemas.ts`), então o portão
+   * simplesmente não abre: nenhuma alma antes do level 8, como nenhuma magia de vocação.
+   */
+  #gainSoulFromExperience(
+    session: Session, member: CharacterRuntime, experience: number, levelBeforeGain: number,
+  ): void {
+    const vocation = this.#vocationOf(member);
+    if (vocation === null) return;
+    if (member.soul >= vocation.soulMax) return;
+    if (experience < levelBeforeGain) return;
+    this.#applyConditionTo(session, member, {
+      key: SOUL_CONDITION_KEY,
+      targetId: member.id,
+      expiresAtMs: session.nowMs + SOUL_CONDITION_DURATION_MS,
+      merge: 'refresh',
+      tick: { kind: 'soul', amount: 1, intervalMs: vocation.soulGainTicksMs },
+    });
+  }
+
+  /**
    * Aplica uma condição a um ALVO — personagem ou monstro (CMB-07) — e agenda o vencimento e o
    * tique. Relançar segue a política `merge` declarada: o evento antigo é cancelado ANTES do
    * novo agendamento, sem deixar órfão.
@@ -5654,6 +5690,16 @@ const slots = bot.groups.get(group);
       if (target instanceof CharacterRuntime) {
         // A cura feita é de quem aplicou a condição (`sourceId`), não de quem a carrega (#431).
         this.#emitHealed(session, target, target.heal(tick.amount), 'spell', condition.sourceId);
+      }
+      return;
+    }
+    if (tick.kind === 'soul') {
+      // Só personagem tem alma (#593); monstro nunca carrega esta condição. Capado no
+      // `soulMax` da vocação — sem uma, não há teto e o tique não faz nada (não deveria
+      // acontecer: só `#grantPartyXp` aplica esta condição, e só com vocação escolhida).
+      if (target instanceof CharacterRuntime) {
+        const soulMax = this.#vocationOf(target)?.soulMax;
+        if (soulMax !== undefined) target.gainSoul(tick.amount, soulMax);
       }
       return;
     }
@@ -6089,6 +6135,7 @@ const slots = bot.groups.get(group);
         return blocked('not-in-catalog');
       }
       if (character.mana < spell.manaCost) return blocked('not-enough-mana');
+      if (character.soul < (spell.soulCost ?? 0)) return blocked('not-enough-soul');
       if (this.#needsTarget(spell.effect)) {
         const range = 'range' in spell.effect ? spell.effect.range : undefined;
         if (this.#targetInRange(character, range) === null) return blocked('no-target');
@@ -8570,8 +8617,13 @@ const slots = bot.groups.get(group);
         applyExperienceBonus(share, bonusPercent),
         experienceRateFor(this.#options.progression.rates, member.level),
       );
+      // O level de ANTES do ganho é o que o Canary compara (`onGainExperience`, DEPOIS do
+      // `grantXp` o level já teria subido, e o portão perderia o "esta XP foi grande o
+      // bastante para o level que eu TINHA" — o mesmo cuidado do bônus de Bestiário logo acima.
+      const levelBeforeGain = member.level;
       const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
       session.credit(member.id, 'xpGained', experience);
+      this.#gainSoulFromExperience(session, member, experience, levelBeforeGain);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
       // hunt de oito horas que o jogador quer ver ao voltar (§16.2). Em party o detalhe diz
       // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo.
