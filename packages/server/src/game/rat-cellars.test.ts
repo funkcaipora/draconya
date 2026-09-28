@@ -94,11 +94,12 @@ describe('a Rat Cellars real (FUN-123, #583)', () => {
 });
 
 describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {
-  // Um personagem de level 100 de cada vocação lança UMA magia de cada tipo da vocação dele:
+  // Um personagem de level 150 de cada vocação lança UMA magia de cada tipo da vocação dele:
   // sai com `ok`, paga a mana e tranca os livros de cooldown certos. Outra vocação leva
   // `wrong-vocation`; um level abaixo, `level-too-low`. São os NÚMEROS reais passando pelo
-  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 100 (não mais 80,
-  // #523): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100.
+  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 150 (não mais 100,
+  // #589): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100,
+  // Chivalrous Challenge pede 150 — o novo teto do Knight.
   const caster = (content: Content, vocationId: string, level: number): CharacterRuntime => {
     const vocation = content.vocations.get(vocationId) ?? null;
     const stats = statsForLevel(level, vocation, content.progression);
@@ -118,10 +119,12 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       const oneOfEach = new Map(mine.map((s) => [s.effect.kind, s]));
       let now = 0;
       for (const spell of oneOfEach.values()) {
-        const hero = caster(content, vocationId, 100);
+        const hero = caster(content, vocationId, 150);
         // Self-origin ou no alvo: a mira sintética serve às duas — `distance` 1 cabe em todo
-        // alcance, e a forma que sai do lançador ignora a distância.
-        const result = castSpell(hero, spell, spell.effect.kind === 'damage' ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
+        // alcance, e a forma que sai do lançador ignora a distância. Challenge (#589) mira
+        // como dano — precisa de alvo — mas não tem `formula`/`basePower`/`power` nenhum.
+        const needsAim = spell.effect.kind === 'damage' || spell.effect.kind === 'challenge';
+        const result = castSpell(hero, spell, needsAim ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
         expect(result.ok, spell.id).toBe(true);
         expect(hero.mana, spell.id).toBe(100_000 - spell.manaCost);
         expect(hero.cooldowns.isReady(spellCooldownKey(spell.id), now), spell.id).toBe(false);

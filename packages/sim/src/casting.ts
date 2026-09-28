@@ -462,7 +462,7 @@ export function castSpell(
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
   // e `range` não existe nela (o boot recusa). O dano ao longo do tempo (CMB-07) mira como o
   // dano: ele precisa de alvo, e o tique é que passa pelo resolver depois.
-  if (effect.kind === 'damage' || effect.kind === 'damage-over-time') {
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time' || effect.kind === 'challenge') {
     if (aim === null || aim.targets.length === 0) {
       return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     }
@@ -562,6 +562,11 @@ export function castSpell(
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    // Provocação (#589): não devolve condição do LANÇADOR — quem recebe o efeito é o(s)
+    // monstro(s) atingido(s), e é o ruleset (que tem `#spellHits` e escreve `MonsterRuntime`)
+    // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
+    case 'challenge':
+      return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
      * aplica (o ruleset) agenda o tique. O `targetId` fica vazio aqui porque o lançador não

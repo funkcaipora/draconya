@@ -2934,6 +2934,12 @@
     "heal": {
       "effect": 13
     },
+    "challenge": {
+      "effect": 13
+    },
+    "chivalrous-challenge": {
+      "effect": 219
+    },
     "cure-poison": {
       "effect": 13
     },
