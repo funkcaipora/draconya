@@ -3023,6 +3023,12 @@
     "heal": {
       "effect": 13
     },
+    "challenge": {
+      "effect": 13
+    },
+    "chivalrous-challenge": {
+      "effect": 219
+    },
     "cure-poison": {
       "effect": 13
     },
@@ -3389,6 +3395,26 @@
     "heavy-magic-missile-rune": {
       "effect": 12,
       "missile": 5
+    },
+    "fireball-rune": {
+      "effect": 16,
+      "missile": 4
+    },
+    "icicle-rune": {
+      "effect": 43,
+      "missile": 29
+    },
+    "light-magic-missile-rune": {
+      "effect": 12,
+      "missile": 5
+    },
+    "light-stone-shower-rune": {
+      "effect": 17,
+      "missile": 30
+    },
+    "stalagmite-rune": {
+      "effect": 17,
+      "missile": 30
     },
     "explosion-rune": {
       "effect": 10

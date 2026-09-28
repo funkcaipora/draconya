@@ -719,6 +719,16 @@ export function buildContent(raw: RawContent): Content {
       && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
       problems.push(`${where}: dispel em área precisa ser centrado no lançador`);
     }
+    if (effect.kind === 'challenge') {
+      const selfOrigin = effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
+      if (selfOrigin && effect.range !== undefined) {
+        problems.push(`${where}: forma que sai do lançador não tem alcance`);
+      }
+      if (!selfOrigin && effect.range === undefined) {
+        problems.push(`${where}: challenge no alvo precisa de range`);
+      }
+    }
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.

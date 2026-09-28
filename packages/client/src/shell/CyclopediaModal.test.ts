@@ -78,8 +78,24 @@ describe('Cyclopedia entries (#321, RC-08)', () => {
 
   it('keeps real kills but no fictional goal without a Bestiary configuration', () => {
     expect(entryOf(rat, 50_000, null)).toEqual({
-      monster: rat, kills: 50_000, progress: { reached: 0, next: null }, goal: 0, done: false, percent: 0,
+      monster: rat, kills: 50_000, progress: { reached: 0, next: null }, goal: 0, done: false,
+      percent: 0, stage: null,
     });
+  });
+
+  it('derives the Canary stage from the entry the catalogue carries (#601, ADR 0053 d.1)', () => {
+    const dragon: MonsterListing = {
+      id: 'dragon',
+      name: 'Dragon',
+      bestiary: { stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25 },
+    };
+    expect(entryOf(dragon, 0, config).stage).toBe(0);
+    expect(entryOf(dragon, 50, config).stage).toBe(1);
+    expect(entryOf(dragon, 500, config).stage).toBe(2);
+    expect(entryOf(dragon, 1_000, config).stage).toBe(3);
+    // Sem `bestiary` no catálogo (nó `game` anterior a esta issue), `null` — e não 0, que
+    // afirmaria uma ficha travada que o servidor nunca declarou.
+    expect(entryOf(rat, 1_000, config).stage).toBeNull();
   });
 
   it('filters by a case-insensitive name substring without reordering a blank query', () => {
@@ -161,6 +177,29 @@ describe('CyclopediaModal', () => {
     expect(html).toContain('title="Grade"');
     expect(html).toContain('title="Lista"');
     expect(html).toContain('cyclopedia-modal-grid');
+  });
+
+  it('shows the Canary stage, difficulty stars, occurrence and Charm points (#601)', async () => {
+    const dragon: MonsterListing = {
+      id: 'dragon',
+      name: 'Dragon',
+      bestiary: { stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25 },
+    };
+    hud.set((state) => ({
+      ...state,
+      catalogue: catalogue({ monsters: [...monsters, dragon] }),
+      bestiary: { rat: 10_000, bat: 25_000, mite: 0, dragon: 1_000 },
+    }));
+    const html = await render();
+    const text = visibleText(html);
+
+    // A ficha completa do Dragon: estágio, estrelas e ocorrência aparecem à parte do marco
+    // de XP (ADR 0053 d.2) — os dois vocabulários coexistem na mesma tela.
+    expect(text).toContain('Completo');
+    expect(text).toContain('★★★☆☆');
+    expect(text).toContain('Comum');
+    // Só o Dragon completou a ficha: os 25 pontos de Charm dele, nenhum dos outros três.
+    expect(html).toContain('Pontos de Charm: <b>25</b>');
   });
 
   it('shows real kills without a progress box or a zero bonus when the server has no config', async () => {

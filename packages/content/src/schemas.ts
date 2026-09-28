@@ -4139,6 +4139,19 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     damageDealtPercent: damagePercentBySource.optional(),
     damageTakenPercent: z.number().int().optional(),
   }),
+  /**
+   * Provocação (#589, Canary `doChallengeCreature`/`challengeFocusDuration`): força quem ela
+   * atinge a mirar o LANÇADOR por `durationMs`, suspendendo a fuga enquanto durar. Mesma forma de
+   * `damage` — alvo único centrado no alvo (`range`) OU área centrada no lançador (`area`,
+   * `buildContent` recusa a combinação errada) — porque é a MESMA mira: sempre um monstro inimigo,
+   * nunca a própria party.
+   */
+  z.object({
+    kind: z.literal('challenge'),
+    durationMs: z.number().int().positive(),
+    range: z.number().int().positive().optional(),
+    area: spellAreaSchema.optional(),
+  }),
   /** Dano vira mana enquanto vale. */
   z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
   /**

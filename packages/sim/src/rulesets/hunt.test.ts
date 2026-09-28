@@ -2577,6 +2577,100 @@ describe('magia (FUN-74)', () => {
   });
 });
 
+describe('Challenge e Chivalrous Challenge (#589): provocação que força o alvo do monstro', () => {
+  // Cooldown ABSURDO (999 999 ms), como o Dragon do #520 abaixo: garante UM lançamento só na
+  // janela do teste, para a asserção não competir com o bot recastando sozinho. `range: 5` e
+  // `radius: 3` cobrem a sala inteira (interior 4×3, Chebyshev máximo 3) — nenhum teste aqui
+  // depende de onde exatamente a rota/spawn colocou quem está sendo provocado.
+  const challengeSpell = {
+    id: 'challenge', name: 'Challenge', manaCost: 30, cooldownMs: 999_999,
+    effect: { kind: 'challenge', durationMs: 6_000, range: 5 },
+  };
+  const chivalrousChallengeSpell = {
+    id: 'chivalrous-challenge', name: 'Chivalrous Challenge', manaCost: 80, cooldownMs: 999_999,
+    effect: {
+      kind: 'challenge', durationMs: 12_000,
+      area: { shape: 'circle' as const, radius: 3, centered: 'caster' as const },
+    },
+  };
+  // O rato já nasce na faixa de fuga (`runOnHealth` igual ao próprio HP): nenhum teste aqui
+  // precisa acertar um golpe primeiro para provar RF-01/03/04 — o combate `pacifist` mantém o
+  // HP parado a janela inteira, porque o assunto é a CONDIÇÃO, não a sobrevivência. A suspensão
+  // de `isMonsterFleeing`/`decideMonsterAction` em si já tem teste unitário determinístico em
+  // `monster.test.ts` (RF-03); aqui o que se prova é a integração pelo `castSpell` do ruleset.
+  const fleeingRat = { ...rat, runOnHealth: 50 };
+  const pacifist = [{ ...combat, player: { ...combat.player, attackPower: 0 } }];
+  const alwaysTarget = { kind: 'targets' as const, op: '>=' as const, count: 1 };
+
+  it('RF-01/RF-04: força o alvo no alcance, e a condição vence sozinha pela fila de eventos', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId: 'challenge' } }],
+    }), { spells: [...spells, challengeSpell], monstersRaw: [fleeingRat], combat: pacifist });
+
+    session.advanceBy(100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+
+    // RF-01: o `targetId` foi forçado para quem lançou, e a condição está armada com o prazo
+    // certo — o cast aconteceu em algum instante dentro dos primeiros 100 ms.
+    expect(monster.targetId).toBe(hero.id);
+    const condition = monster.conditions.get('challenge');
+    expect(condition).not.toBeNull();
+    expect(condition?.expiresAtMs).toBeGreaterThanOrEqual(6_000);
+    expect(condition?.expiresAtMs).toBeLessThanOrEqual(6_100);
+
+    // RF-04: passado o prazo, a condição SOME sozinha — `CONDITION_EXPIRE`, sem acumulador
+    // novo. `cooldownMs: 999_999` garante que nenhum recast a renove no meio do caminho.
+    session.advanceBy(6_200);
+    expect(monster.conditions.get('challenge')).toBeNull();
+  });
+
+  it('RF-02: Chivalrous Challenge atinge TODOS os monstros da área, num lançamento só', () => {
+    const { session, hero, ruleset } = withSpells(botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId: 'chivalrous-challenge' } }],
+    }), {
+      spells: [...spells, chivalrousChallengeSpell], monstersRaw: [fleeingRat], combat: pacifist,
+    }, 'bold');
+
+    session.advanceBy(100);
+    // Densidade "bold" (`threeRatsRoute`, #583): três ratos no mesmo cenário — a prova de que a
+    // área pega TODOS, não só o alvo principal.
+    expect(ruleset.monsters.length).toBeGreaterThanOrEqual(2);
+    for (const monster of ruleset.monsters) {
+      expect(monster.targetId).toBe(hero.id);
+      expect(monster.conditions.get('challenge')).not.toBeNull();
+    }
+  });
+
+  it('RF-05: relançar no mesmo monstro RENOVA o prazo — não empilha', () => {
+    // Cooldown normal (curto): dá para o bot recastar dentro da janela do teste, ao contrário
+    // do `challengeSpell` acima — aqui o recast É o assunto.
+    const renewable = {
+      ...challengeSpell, cooldownMs: 100,
+      effect: { ...challengeSpell.effect, range: 5 },
+    };
+    const { session, hero, ruleset } = withSpells(botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell', spellId: 'challenge' } }],
+    }), { spells: [...spells, renewable], monstersRaw: [fleeingRat], combat: pacifist });
+
+    session.advanceBy(50);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro nesta cena');
+    const first = monster.conditions.get('challenge');
+    expect(first).not.toBeNull();
+    expect(monster.targetId).toBe(hero.id);
+
+    // Passa o cooldown da CATEGORIA do bot (1000 ms) e o da magia (100 ms): um segundo cast
+    // acontece, e `#applyConditionTo` (`merge` ausente é `'refresh'`) troca o prazo em vez de
+    // somar. Só uma entrada em `monster.conditions` — é um `Map` por chave, não uma lista —,
+    // com o `expiresAtMs` do SEGUNDO cast.
+    session.advanceBy(1_100);
+    const second = monster.conditions.get('challenge');
+    expect(second).not.toBeNull();
+    expect(second?.expiresAtMs).toBeGreaterThan(first?.expiresAtMs ?? 0);
+  });
+});
+
 describe('poção abstrata: gold no uso (FUN-77, §20.1)', () => {
   it('a poção de vida repõe HP, debita o `price` e conta o uso', () => {
     const { session, hero } = withSpells(

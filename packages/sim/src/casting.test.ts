@@ -25,6 +25,10 @@ const strike: Spell = {
   id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000, minLevel: 1,
   effect: { kind: 'damage', power: 40, range: 3, damageType: 'arcane' },
 };
+const challenge: Spell = {
+  id: 'challenge', name: 'Challenge', manaCost: 30, cooldownMs: 2_000, minLevel: 20,
+  effect: { kind: 'challenge', durationMs: 6_000, range: 3 },
+};
 
 const potion: Supply = {
   id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_000, requires: {},
@@ -165,6 +169,44 @@ describe('castSpell — o efeito', () => {
     // 40 de poder, 10 de armadura, efetividade mágica 1 neste conteúdo de teste.
     expect(result).toMatchObject({ ok: true, damage: 30, hits: [30], healed: 0 });
     expect(caster.mana).toBe(85);
+  });
+});
+
+describe('castSpell — Challenge (#589): o mesmo portão de dano, sem golpe nenhum', () => {
+  it('recusa abaixo do level mínimo, sem gastar mana', () => {
+    const caster = hero({ level: 1 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+  });
+
+  it('recusa em cooldown, com o prazo restante', () => {
+    const caster = hero({ level: 30 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()).ok).toBe(true);
+    expect(castSpell(caster, challenge, near(), 400, combat, rng()))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 1_600 });
+  });
+
+  it('sem alvo é `no-target`, e fora de alcance é `out-of-range` — mesma ordem de `damage`', () => {
+    const caster = hero({ level: 30 });
+    expect(castSpell(caster, challenge, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+    expect(castSpell(caster, challenge, near({ distance: 4 }), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+    expect(caster.mana).toBe(100);
+  });
+
+  it('sem mana suficiente, recusa depois de conferir o alvo', () => {
+    const caster = hero({ level: 30, mana: 5 });
+    expect(castSpell(caster, challenge, near(), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+  });
+
+  it('sucesso não causa dano nem cura — o efeito é todo do ruleset, que tem os monstros atingidos', () => {
+    const caster = hero({ level: 30 });
+    const result = castSpell(caster, challenge, near(), 0, combat, rng());
+    expect(result).toEqual({ ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0 });
+    expect(caster.mana).toBe(70);
   });
 });
 

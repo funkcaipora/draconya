@@ -596,8 +596,20 @@ uso**, por `useSupply`, como qualquer suprimento (ADR 0032 d.6).
 | Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.605 + 28` / `level/5 + ml×7.395 + 46` |
 | Heavy Magic Missile | `energy` | **alvo único** | 25 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Explosion | `physical` | **cruz** raio 1 | 31 / 6 | `level/5` (aprox.) / `level/5 + ml×4.8` |
+| Fireball | `fire` | **alvo único** | 27 / 4 | `level/5 + ml×1.81 + 10` / `level/5 + ml×3 + 18` |
+| Icicle | `ice` | **alvo único** | 28 / 4 | `level/5 + ml×1.81 + 10` / `level/5 + ml×3 + 18` |
+| Light Magic Missile | `energy` | **alvo único** | 15 / 0 | `level/5 + ml×0.4 + 2` / `level/5 + ml×0.81 + 4` |
+| Light Stone Shower | `earth` | **cruz** raio 1 | 1 / 0 | `level/5 + ml×0.3 + 2` / `level/5 + ml×0.45 + 3` |
+| Stalagmite | `earth` | **alvo único** | 24 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
 | Intense Healing (runa) | cura | **alvo único** | 15 / 1 | `level/5 + ml×3.2 + 20` / `level/5 + ml×5.4 + 40` |
 | Ultimate Healing (runa) | cura | **alvo único** | 24 / 4 | `level/5 + ml×7.3 + 42` / `level/5 + ml×12.4 + 90` |
+
+As 5 acima fecham o catálogo de 12 runas de ataque do Canary (#597; `data/scripts/runes/`,
+`things/sources/canary` 47dfd51). Fora desta contagem, de propósito: `lightest-magic-missile-rune`/
+`lightest-missile-rune` (dano quase nulo ou negativo — runa de treino de skill em dummy) e
+`holy-missile-rune` (restrita ao Paladin); nenhuma das três tem pedido explícito. Runas de campo
+(`fire_bomb`/`energy_bomb`/`poison_bomb`) continuam fora — mecanismo de campo lançável pelo
+jogador não existe ainda.
 
 A `formula` é a mesma da magia de dano (#474): `min = level × levelFactor + ml × skillMin +
 baseMin` (idem `max`), com `levelFactor` 0,2 — o `level / 5` da referência. Runa sem `formula`
@@ -2351,6 +2363,7 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 8 | Wound Cleansing | 40 | healing (1 s) | 1 s | cura | 70 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
 | 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 · skill×attack | 39 |
+| 20 | Challenge (#589) | 30 | support (2 s) | 2 s | provocação: força o alvo, suspende a fuga · alvo, alcance 3 · 6 s | — |
 | 25 | Charge | 100 | support (2 s) | 2 s | haste +90 % / 5 s | — |
 | 28 | Whirlwind Throw | 40 | attack (2 s) | 6 s | dano · alvo, alcance 5 · skill+attack | 32 |
 | 33 | Groundshaker | 160 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador · skill+attack | 32 |
@@ -2361,6 +2374,7 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave (3 tiles à frente) · skill×attack | 80 |
 | 80 | Intense Wound Cleansing | 200 | healing (1 s) | **10 min** | cura | 500 |
 | 90 | **Fierce Berserk** (`exori gran`, novo #523) | 340 | attack (2 s) | 6 s | dano · círculo raio 1 no lançador · skill+2×attack | 90 |
+| 150 | Chivalrous Challenge (#589) | 80 | support (2 s) | 2 s | provocação em área (raio 3): força o alvo, suspende a fuga · 12 s | — |
 
 Blood Rage e Protector eram level 20/mana 20 (um placeholder de bootstrap): o Canary real os
 pede level 60/mana 290 e level 55/mana 200. Groundshaker (mana 200→160) e Berserk (mana 125→115)
@@ -2470,10 +2484,19 @@ Strike (level 8→15) e Flame Strike (level 8→14) tinham level abaixo do real.
 tem correspondente no Canary/TibiaWiki (duas varreduras, a segunda com `data-otservbr-global/` e
 `src/` também) — conteúdo próprio, remoção planejada (ADR 0037), ver `_open`.
 
-**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Fair Wound Cleansing, Divine Grenade, Terra Burst (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo, porque o Tibia não dá magia nenhuma antes da escolha de vocação — não há "fórmula do Canary" para elas.
+**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Fair Wound Cleansing, Divine Grenade, Terra Burst (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo, porque o Tibia não dá magia nenhuma antes da escolha de vocação — não há "fórmula do Canary" para elas.
 
 ## Em aberto
 
+- `[ABERTO]` (#589) Challenge no Canary exige a vocação Elite Knight
+  (`spell:vocation("elite knight;true")`); o Draconya ainda não modela promoção de vocação (#566,
+  aberta, sem PR), então a magia entra com `vocationId: "knight"` sozinho, sem o gate. Chivalrous
+  Challenge não tem esse problema — o Canary já aceita `"knight;true"` OU `"elite knight;true"`.
+  Quando #566 fechar, Challenge ganha o mesmo gate que qualquer outra magia de promoção. A
+  Chivalrous Challenge também diverge do Canary por decisão (DT-03 da issue): vira `circle raio 3
+  centrado no lançador` em vez do chain-picker exato (até 5 monstros à distância, sem reward
+  boss/invocação) — o Draconya não tem chain-picker nem Wheel of Destiny, e não força
+  `changeTargetDistance` (o atirador melee temporário) — ver "Fora do escopo" da issue #589.
 - `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
   do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.

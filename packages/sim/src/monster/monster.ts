@@ -472,11 +472,16 @@ export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Pre
  * Pura e recalculada a cada decisão — não é estado guardado, como o `attackReady` é: fugir é
  * uma FUNÇÃO do HP atual, e o HP já é o estado. Guardar um segundo booleano derivado dele
  * divergiria na primeira cura que não passasse por aqui.
+ *
+ * Provocação (#589, Canary `Monster::isFleeing`: `challengeFocusDuration <= 0`) suspende a fuga
+ * enquanto a condição `'challenge'` vale — o mesmo lookup O(1) em `Conditions` que qualquer
+ * outra condição já usa, sem campo novo.
  */
 export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
   return definition.runOnHealth !== undefined
     && monster.alive
-    && monster.health <= definition.runOnHealth;
+    && monster.health <= definition.runOnHealth
+    && monster.conditions.get('challenge') === null;
 }
 
 /**

@@ -5,7 +5,7 @@
 //
 //   pnpm dev:dragon-party                       # cria/atualiza as quatro contas e a party
 //   pnpm dev:dragon-party --start                # e também inicia a hunt
-//   pnpm dev:dragon-party --hunt-id=rat-cellars --difficulty=bold   # testar sem a Dragon Lair
+//   pnpm dev:dragon-party --hunt-id=rat-cellars  # testar sem a Dragon Lair
 //   pnpm dev:dragon-party --reset                # devolve os quatro para a Cidade se travados
 
 import { dirname, resolve } from 'node:path';
@@ -25,7 +25,6 @@ function flag(name: string): string | undefined {
 const start = process.argv.includes('--start');
 const reset = process.argv.includes('--reset');
 const huntId = flag('hunt-id') ?? 'darashia-dragon-lair';
-const difficulty = flag('difficulty') ?? 'bold';
 const databaseUrl = flag('database-url') ?? process.env['DATABASE_URL'];
 // O `.env` da raiz traz `CONTENT_DIR=./packages/content/data`, relativo à raiz do repositório —
 // e o cwd AQUI é `packages/tools` (o script roda por `pnpm --filter`, como o `content:check`).
@@ -52,7 +51,7 @@ if (start && reset) {
 
 try {
   const result = await runDragonParty({
-    databaseUrl, contentDir, apiBaseUrl, clientOrigin, huntId, difficulty, start, reset,
+    databaseUrl, contentDir, apiBaseUrl, clientOrigin, huntId, start, reset,
     redisUrl,
     log: (message) => console.log(message),
   });

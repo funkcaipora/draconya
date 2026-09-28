@@ -5188,7 +5188,9 @@ const slots = bot.groups.get(group);
         ? this.#aimFor(character, spell.effect.range, undefined, explicit)
         : (spell.effect.kind === 'dispel' && spell.effect.area !== undefined)
           ? this.#aimFor(character, undefined, spell.effect.area)
-          : null;
+          : spell.effect.kind === 'challenge'
+            ? this.#aimFor(character, spell.effect.range, spell.effect.area, explicit)
+            : null;
     // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
     // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
     const healArea = spell.effect.kind === 'heal'
@@ -5278,8 +5280,36 @@ const slots = bot.groups.get(group);
       return result;
     }
 
+    // Provocação (#589): NÃO passa por `#applyHits` — não há dano nenhum a resolver, só a
+    // troca forçada de alvo e a suspensão de fuga em cada monstro atingido.
+    if (spell.effect.kind === 'challenge') {
+      this.#applyChallenge(session, character, spell.effect.durationMs);
+      return result;
+    }
+
     this.#applyHits(session, character, result.hits, result.hitOutcomes ?? []);
     return result;
+  }
+
+  /**
+   * Aplica Challenge/Chivalrous Challenge (#589, Canary `doChallengeCreature`/
+   * `challengeFocusDuration`): força cada monstro atingido (`#spellHits`, já colhido por
+   * `#aimFor`) a mirar quem lançou e agenda a condição `'challenge'`, que `isMonsterFleeing`
+   * (`monster/monster.ts`) consulta para suspender a fuga enquanto ela durar. A escrita de
+   * `targetId` é direta — como qualquer outro lugar que força alvo (#4900/#4946/#4984/#5232) —
+   * porque é a sessão DONA quem escreve `MonsterRuntime` (invariante 9). Relançar no mesmo
+   * monstro RENOVA o prazo: `merge` ausente é `'refresh'`, o default de `ConditionState`.
+   */
+  #applyChallenge(session: Session, character: CharacterRuntime, durationMs: number): void {
+    for (const monster of this.#spellHits) {
+      monster.targetId = character.id;
+      this.#applyConditionTo(session, monster, {
+        key: 'challenge',
+        targetId: this.#subjectOf(monster),
+        sourceId: character.id,
+        expiresAtMs: session.nowMs + durationMs,
+      });
+    }
   }
 
   /**
@@ -6276,7 +6306,12 @@ const slots = bot.groups.get(group);
     if (action.kind === 'spell') {
       const spell = this.#options.spells.get(action.spellId);
       if (spell === undefined) return null;
-      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'damage-over-time') return null;
+      // Challenge (#589) mira como dano — alvo único centrado no alvo, ou área centrada no
+      // lançador — e precisa da MESMA contagem de `targets` por alcance/área que `damage` já
+      // tem: sem isto, um Knight com Challenge (alcance 3+) só disparava a regra do bot com o
+      // monstro colado (o alcance da arma), o que não é o que a magia alcança de verdade.
+      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'damage-over-time'
+        && spell.effect.kind !== 'challenge') return null;
       return 'range' in spell.effect ? spell.effect.range ?? null : null;
     }
     const supply = this.#options.supplies.get(action.supplyId);
@@ -6285,13 +6320,16 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * A forma de área declarada por uma ação de DANO do bot, ou `undefined` (#480). Magia de cura
-   * e ação sem área devolvem `undefined`, e o `targets` cai na contagem por alcance.
+   * A forma de área declarada por uma ação de DANO (ou Challenge, #589 — MESMA mira) do bot, ou
+   * `undefined` (#480). Magia de cura e ação sem área devolvem `undefined`, e o `targets` cai na
+   * contagem por alcance.
    */
   #actionArea(action: BotActionV2): SpellArea | undefined {
     if (action.kind === 'spell') {
       const spell = this.#options.spells.get(action.spellId);
-      return spell?.effect.kind === 'damage' ? spell.effect.area : undefined;
+      const effect = spell?.effect;
+      if (effect === undefined) return undefined;
+      return effect.kind === 'damage' || effect.kind === 'challenge' ? effect.area : undefined;
     }
     const supply = this.#options.supplies.get(action.supplyId);
     return supply?.effect.kind === 'damage' ? supply.effect.area : undefined;
