@@ -1525,6 +1525,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     corpses: {},
     // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
     fields: {},
+    // Sem estágio de campo: idem, campo sem cadeia de arte é válido (#560).
+    fieldStages: {},
     // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
     scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [

@@ -243,6 +243,15 @@ export const appearancesSchema = z.object({
    */
   fields: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de campo → [appearanceId dos estágios 1, 2, …]` (#560): o segundo estágio do fire
+   * field, mais fraco, é OUTRA arte — a mesma indireção de `fields` acima, só que por índice em
+   * vez de um número só. `fields[id]` continua sendo a arte do NASCIMENTO (estágio 0); este
+   * array começa no estágio 1 — `fieldStages[id][stageIndex - 1]` é o id de quem recebe
+   * `field-stage-change` com aquele `stageIndex`. Campo cuja cadeia não tem entrada aqui troca
+   * de estágio MUDO — o cliente não redesenha, mas a mecânica (dano, bloqueio) já rodou no `sim`.
+   */
+  fieldStages: z.record(z.string().min(1), z.array(appearanceId)).default({}),
+  /**
    * `appearanceKey → { estado → id }` do cenário usável (#727, ADR 0050 d.1): a mesma
    * indireção de `corpses` para porta, capim, stone pile, rope spot, ladder, alavanca. GERADO
    * por `pnpm map:import` em `appearances/generated/scenery.json` — nunca escrito à mão —,
@@ -1745,18 +1754,77 @@ export const conditionSpecSchema = z.object({
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
 
 /**
+ * UM estágio da cadeia de decaimento de um campo (#560, `decayTo` do Canary —
+ * `items.xml:4212-4246`: o fire field 2118 (dano 20, 200s) decai para 2119 (dano 10, 148s) e
+ * depois para 2120 (sem dano, 98s) antes de sumir). `condition` AUSENTE é estágio sem efeito —
+ * o campo continua ocupando o tile (e bloqueando, se `fieldSpecSchema.blocksMovement`), mas
+ * ninguém que pisa nele sofre nada; é o caso do 2120 e de todo campo puramente bloqueante
+ * (Magic Wall, Wild Growth) — nenhum dos dois tem `field value="fire"` correspondente no
+ * Canary, então nunca houve condição para preservar bit a bit.
+ */
+export const fieldStageSchema = z.object({
+  durationMs: z.number().int().positive(),
+  condition: conditionSpecSchema.optional(),
+});
+export type FieldStage = z.infer<typeof fieldStageSchema>;
+
+/**
  * Um CAMPO de tile declarativo (CMB-07): uma condição que vive no chão por um prazo, numa forma
  * (`spellAreaSchema`, a MESMA geometria da magia e da ability). O `sim` resolve os tiles no
  * momento da aplicação e indexa por chave NUMÉRICA de tile — nunca varre todos os campos por
  * passo. O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01: conteúdo é imutável).
+ *
+ * **`condition` é OPCIONAL desde o #560** — era obrigatória até então, e a mudança é o que
+ * permite um campo puramente bloqueante (Magic Wall, Wild Growth: nenhum dano, só parede
+ * temporária). `durationMs`/`condition` no NÍVEL DO SPEC continuam sendo o estágio ÚNICO de
+ * sempre — todo campo declarado antes desta issue não tem `stages`, e por isso preserva bit a
+ * bit o sorteio e a cadência: `fieldStagesOf` (abaixo) devolve exatamente
+ * `[{ durationMs, condition }]` quando `stages` está ausente, o mesmo par que `applyField` já
+ * lia direto do spec.
+ *
+ * **`stages`, quando presente, é a cadeia inteira** (o `decayTo` do Canary) — o primeiro
+ * elemento é o estado de nascimento do campo, e `durationMs`/`condition` do próprio spec ficam
+ * como documentação do primeiro estágio (não lidos por quem usa `fieldStagesOf`).
  */
 export const fieldSpecSchema = z.object({
   id: z.string().min(1),
   durationMs: z.number().int().positive(),
   shape: spellAreaSchema,
-  condition: conditionSpecSchema,
+  condition: conditionSpecSchema.optional(),
+  /** A cadeia de decaimento (#560). Ausente: um estágio só, do próprio spec. */
+  stages: z.array(fieldStageSchema).min(1).optional(),
+  /**
+   * Bloqueia movimento, como parede (#560, Magic Wall/Wild Growth: `blocking="1"` no
+   * `items.xml`)? Vale para QUALQUER criatura — jogador e monstro — ao contrário do desvio de
+   * dano (`canMonsterEnterField`, M29-05), que só o monstro respeita e só quando o campo tem
+   * `damageType`. **`optional`, não `default`** (ao contrário do padrão do resto do schema): um
+   * default preenchido tornaria o campo OBRIGATÓRIO no tipo `FieldSpec` — toda fixture de teste
+   * que já constrói um `FieldSpec` literal (e são muitas) passaria a exigir as duas flags à toa.
+   * Ausente é `false` em todo consumidor (`spec.blocksMovement ?? false`), o que preserva bit a
+   * bit todo campo de hoje (fogo, veneno, energia — nenhum bloqueia passagem no Canary).
+   */
+  blocksMovement: z.boolean().optional(),
+  /**
+   * Bloqueia projétil e linha de visão (#560, `CONST_PROP_BLOCKPROJECTILE`)? Consultado por
+   * `isSightClear` (`packages/sim/src/line-of-sight.ts`) quando o M30-06 estiver completo — a
+   * TASK atual só declara o campo; o consumo em LOS já está fiado a `fieldBlocksProjectileAt`.
+   * `optional`, pelo mesmo motivo de `blocksMovement` acima. Ausente é `false`.
+   */
+  blocksProjectile: z.boolean().optional(),
 });
 export type FieldSpec = z.infer<typeof fieldSpecSchema>;
+
+/**
+ * A cadeia de estágios de um `FieldSpec`, NORMALIZADA — sempre pelo menos um elemento, nunca
+ * lida por `spec.stages` diretamente (que pode estar ausente). É o `sim` quem consome isto, não
+ * o schema: mora aqui porque é função pura sobre o tipo de conteúdo, sem estado de sessão.
+ */
+export function fieldStagesOf(spec: FieldSpec): readonly FieldStage[] {
+  if (spec.stages !== undefined) return spec.stages;
+  return spec.condition === undefined
+    ? [{ durationMs: spec.durationMs }]
+    : [{ durationMs: spec.durationMs, condition: spec.condition }];
+}
 
 
 /**

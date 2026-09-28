@@ -1181,6 +1181,28 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
     }
   });
 
+  it('the dragon lord firefield follows the Canary decayTo chain (#560, items.xml:4212-4246)', () => {
+    for (const id of ['dragon-lord', 'dragon-lord-hatchling']) {
+      const field = content.monsters.get(id)?.abilities.find((a) => a.id === 'firefield')?.field;
+      expect(field?.stages, id).toHaveLength(3);
+      const stages = field?.stages ?? [];
+      // 2118 (dano 20, 200s) → decayTo 2119 (10, 148s) → 2120 (sem field, 98s) → some.
+      expect(stages[0]?.durationMs, id).toBe(200_000);
+      expect(stages[0]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[0]?.condition?.effect.kind === 'damage-over-time' && stages[0].condition.effect.form === 'rounds') {
+        expect(stages[0].condition.effect.rounds[0]?.damage, id).toBe(20);
+      }
+      expect(stages[1]?.durationMs, id).toBe(148_000);
+      expect(stages[1]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[1]?.condition?.effect.kind === 'damage-over-time' && stages[1].condition.effect.form === 'rounds') {
+        expect(stages[1].condition.effect.rounds[0]?.damage, id).toBe(10);
+      }
+      // O último estágio não causa dano — só ocupa o tile até sumir.
+      expect(stages[2]?.durationMs, id).toBe(98_000);
+      expect(stages[2]?.condition, id).toBeUndefined();
+    }
+  });
+
   it('the dragon and dragon lord firewave is the Canary setupArea(8, 3): 26 tiles', () => {
     for (const id of ['dragon', 'dragon-lord']) {
       const ability = content.monsters.get(id)?.abilities.find((a) => a.id === 'firewave');

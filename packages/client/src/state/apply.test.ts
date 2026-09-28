@@ -177,6 +177,23 @@ describe('world deltas', () => {
     expect([...world.fields.keys()]).toEqual(['energy']);
   });
 
+  it('field-stage-change (#560): substitui a appearanceId do campo já conhecido, mantendo id/tiles', () => {
+    applyMessage({
+      type: 'field-appear', id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2118,
+    }, 0);
+    const before = world.fieldsVersion;
+    applyMessage({ type: 'field-stage-change', id: 'fire', appearanceId: 2119 }, 0);
+    expect(world.fields.get('fire')).toEqual({ id: 'fire', tiles: [{ x: 1, y: 2, z: 8 }], appearanceId: 2119 });
+    expect(world.fieldsVersion).toBe(before + 1);
+  });
+
+  it('field-stage-change para um campo que a tela nunca viu é IGNORADO — nada para trocar ainda', () => {
+    const before = world.fieldsVersion;
+    applyMessage({ type: 'field-stage-change', id: 'unknown-field', appearanceId: 2120 }, 0);
+    expect(world.fields.has('unknown-field')).toBe(false);
+    expect(world.fieldsVersion).toBe(before);
+  });
+
   it('removes a creature that disappeared', () => {
     applyMessage(spawn(1), 0);
     applyMessage({ type: 'creature-disappear', id: 1 }, 0);

@@ -563,3 +563,23 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
   `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
   `SKILL_SHIELD`.
+- **Campo bloqueante é PAREDE, não desvio de dano** (#560). `Fields.blockedAt`/
+  `TileOccupancy.blockedAt` bloqueiam para QUALQUER criatura, e valem em `canOccupy`/`move`
+  sem checagem extra em `hunt.ts` — ao contrário do desvio de dano do M29-05
+  (`canMonsterEnterField`), que só o MONSTRO respeita e só quando o campo declara
+  `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
+  ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
+  quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
+  também usa.
+- **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
+  isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
+  devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra
+  `map.width`/`map.height`. Um teste que mira um monstro DELIBERADAMENTE fora do mapa (para
+  testar `out-of-range` sem se importar com LOS) passava por acidente. Dar ao parâmetro
+  `blocksProjectileAt` um valor não-`undefined` desliga esse atalho e faz o passeio rodar de
+  verdade — e a conferência de limite, agora executada, reprova a mira fora do mapa como
+  bloqueada, quebrando três testes que dependiam do atalho sem saber. **Por isso os call sites
+  de combate em `hunt.ts` continuam passando só três argumentos para `isSightClear`** (o
+  parâmetro existe e tem teste próprio em `line-of-sight.test.ts`, mas não está fiado à
+  produção): ligá-lo de verdade é trabalho do M30-06, com mapa e conteúdo reais para testar
+  contra, não desta issue.

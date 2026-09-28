@@ -1659,11 +1659,19 @@ interface ConditionSpec {                 // declarado em content
   readonly effect: ConditionEffect;       // speed | buff | mana-shield | heal-over-time | damage-over-time
 }
 
+interface FieldStage {                    // declarado em content (#560)
+  readonly durationMs: number;
+  readonly condition?: ConditionSpec;     // ausente: estágio MUDO (só ocupa/bloqueia)
+}
+
 interface FieldSpec {                     // declarado em content
   readonly id: string;
   readonly durationMs: number;
   readonly shape: SpellArea;              // a MESMA geometria da magia/ability
-  readonly condition: ConditionSpec;
+  readonly condition?: ConditionSpec;     // #560: opcional — campo puramente bloqueante não tem
+  readonly stages?: readonly FieldStage[]; // #560: a cadeia `decayTo`; ausente é UM estágio só
+  readonly blocksMovement?: boolean;      // #560: Magic Wall/Wild Growth
+  readonly blocksProjectile?: boolean;    // #560: alimenta a LOS quando o M30-06 existir
 }
 ```
 
@@ -1772,14 +1780,45 @@ interface FieldSpec {                     // declarado em content
   Campo sem linha na tabela é MUDO — a mecânica do tique (acima) não muda, só a apresentação —,
   e o `session-state.world.fields` leva os campos ATIVOS para quem reanexa no meio da hunt,
   como `session-state.world.groundItems` já leva os cadáveres. Opcodes S2C `field-appear` (40) e
-  `field-disappear` (41). **Trocar de ESTÁGIO (a cadeia `decayTo` do fogo do Canary) continua
-  fora do escopo aqui**: o `sim` só tem UM campo por relançamento, sem a cadeia decrescente de
-  estágios — isso é o #560 (M31-05), ainda não implementado; o protocolo desta issue não reserva
-  opcode nenhum para isso, porque a forma de uma mensagem de estágio depende de como o #560
-  vier a representar a cadeia no `sim`.
+  `field-disappear` (41).
+- **A cadeia de estágios (`decayTo` do Canary, #560, M31-05).** `fieldSpecSchema.stages` é a
+  cadeia inteira — `items.xml:4212-4246`: o fire field 2118 (dano 20, 200 s) decai para 2119
+  (10, 148 s) e depois para 2120 (sem dano, 98 s) antes de sumir, e o `dragon-lord`/
+  `dragon-lord-hatchling` do catálogo já declaram os três estágios (`load.test.ts` prende os
+  números). `stages` AUSENTE é um estágio só, do próprio `durationMs`/`condition` do spec — todo
+  campo declarado antes desta issue continua bit a bit (`fieldStagesOf`, `content/schemas.ts`).
+  `TileFieldState` ganhou `stageIndex` (ausente é 0) e, só quando há mais de um estágio, a
+  cadeia INTEIRA (`stages`) — ela precisa viajar no estado porque `#onFieldStageAdvance` roda
+  bem depois de `applyField`, sem mais acesso ao `FieldSpec` que criou o campo. Um evento novo,
+  `FIELD_STAGE_ADVANCE`, troca de estágio no vencimento do atual — reagendando ele mesmo se
+  sobrar outro estágio, ou caindo em `FIELD_EXPIRE` no último —, cancela e reagenda o tique da
+  condição do estágio novo (nunca herda a cadência do estágio anterior) e emite
+  `field-stage-changed` (S2C opcode 42) com o `stageIndex` novo; o hospedeiro resolve a arte por
+  ÍNDICE em `appearances.fieldStages[id][stageIndex − 1]` (o índice 0 continua em
+  `appearances.fields`, como sempre) — campo sem entrada troca de estágio MUDO. Quem reanexa no
+  MEIO da cadeia recebe, no `session-state`, a arte do estágio ATUAL, não sempre a do nascimento.
+- **Campo bloqueante (Magic Wall, Wild Growth, #560).** `blocksMovement` (default falso) faz o
+  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro, diferente do desvio de
+  dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
+  `damageType`. Mecanismo: `Fields.blockedAt`/`blocksProjectileAt` (novos métodos em
+  `sim/fields.ts`) e `TileOccupancy.blockedAt` os combina com o mapa e com `TileOverrides`
+  (#728) — a MESMA composição de três fontes, uma pergunta só para `canOccupy`/`move`, o passo
+  guloso do monstro e o BFS do `walk-to` distante. Magic Wall (Canary id 2128) e Wild Growth
+  (rush wood, id 2130) são um estágio só, `blocking="1"`/`duration=20`/`decayTo=0` — 20 s e
+  sumiu, sem cadeia decrescente. `blocksProjectile` (também default falso) alimenta
+  `isSightClear` (`sim/line-of-sight.ts`, parâmetro novo e opcional) para quando o M30-06
+  importar a flag `unsight` do pacote de aparências — **nenhum conteúdo declara a flag hoje**
+  (Magic Wall no Canary é `blockSolid`, não `blockProjectile` — a segunda vem do pacote de
+  assets, não de `items.xml`), e por isso os chamadores de combate em `hunt.ts` continuam
+  passando só três argumentos: testado ligar os dez pontos de LOS de `hunt.ts` ao predicado
+  revelou que ele quebrava mira explícita num alvo fora do mapa de teste (a checagem de limites
+  do passeio, antes escondida atrás do atalho "sem camada de sight, sempre livre", passou a
+  rodar de verdade) — a fiação de produção fica para quando o M30-06 tiver conteúdo real e mapa
+  real para testar contra.
 
-**Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
-e a UI detalhada de buff.
+**Fora do escopo**, por decisão: runa de campo e parede jogável (Magic Wall/Wild Growth por
+mágica do jogador — #591), novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de
+buff.
 
 ## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
 

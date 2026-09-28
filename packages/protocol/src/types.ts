@@ -1281,6 +1281,14 @@ export const S2C_SCHEMAS = {
   'field-appear': FieldTile,
   /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
   'field-disappear': z.object({ id: z.string().min(1) }),
+  /**
+   * O campo trocou de estágio (#560): o mesmo `id` de `field-appear`, e o `appearanceId` NOVO
+   * já resolvido pelo hospedeiro — sem `tiles`, que não muda entre estágios.
+   */
+  'field-stage-change': z.object({
+    id: z.string().min(1),
+    appearanceId: z.number().int().positive(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

@@ -430,10 +430,14 @@ export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): 
  * O tipo de dano de um campo, quando ele CAUSA dano ao longo do tempo (CMB-07). Um campo de
  * outro efeito (velocidade, cura) não tem `damageType` — nunca conta para `canWalkOnFieldType`,
  * porque o Tibia só tem o par `canWalkOn*` para fogo/veneno/energia (o resto do switch do TFS/
- * Canary devolve sempre `true`).
+ * Canary devolve sempre `true`). Estágio SEM condição (#560: Magic Wall, Wild Growth, o último
+ * estágio mudo do fire field) também devolve `null` — não é dano, é bloqueio, e quem julga
+ * bloqueio é `canOccupy`/`TileOccupancy`, não este predicado.
  */
 function fieldDamageType(field: TileFieldState): DamageType | null {
-  return field.condition.effect.kind === 'damage-over-time' ? field.condition.effect.damageType : null;
+  return field.condition !== undefined && field.condition.effect.kind === 'damage-over-time'
+    ? field.condition.effect.damageType
+    : null;
 }
 
 /**
