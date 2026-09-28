@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
+import { DEFAULT_DIFFICULTY_NAME } from '@draconya/sim';
 import { servedPackProblem } from './served-pack.js';
 import { loadConfiguration, type RoleName } from './config.js';
 import { createLogger } from './log.js';
@@ -17,8 +18,8 @@ import { buildCatalogue } from './game/catalogue.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  CityShard, createBotConfigValidator, createCitySessionFactory, createLateJoiner, createSessionBuilder,
-  createSessionRestorer,
+  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory,
+  createLateJoiner, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { createSingletonLock } from './jobs/lock.js';
@@ -30,6 +31,7 @@ import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
+import { readCachedBoostedMonsterId, WorldDailyStore } from './world-daily.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -118,6 +120,9 @@ async function main(): Promise<void> {
       const apiLogger = logger.child({ role: 'api' });
       return createApi(configuration, apiLogger, {
         tickets,
+        // A Boosted Creature do dia (#615): só Redis, nunca Postgres (ADR 0054 decisão 7) —
+        // é a cópia que o `jobs` publica para a `api` ler barato a cada ticket emitido.
+        currentBoostedMonsterId: () => readCachedBoostedMonsterId(redis),
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}
@@ -160,10 +165,12 @@ async function main(): Promise<void> {
                 // As vocações do catálogo fixado no boot (#501): as chaves da composição da
                 // sala são validadas contra isto ∪ `none`. Do conteúdo, nunca uma lista à mão.
                 vocations: [...content.vocations.keys()],
-                difficultiesOf: (huntId: string) => {
-                  const hunt = content.hunts.get(huntId);
-                  return hunt === undefined ? null : Object.keys(hunt.difficulties);
-                },
+                // Fim do pull por dificuldade (#583, ADR 0039): o conteúdo não define mais
+                // nomes de dificuldade nenhum. `DEFAULT_DIFFICULTY_NAME` é o único válido, para
+                // a validação de party continuar funcionando enquanto o protocolo mandar o
+                // campo (#584 tira a escolha da tela por completo).
+                difficultiesOf: (huntId: string) =>
+                  content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null,
               },
               settleProgress: (characterId: string) =>
                 settleCharacterState(characterId, {
@@ -194,6 +201,10 @@ async function main(): Promise<void> {
       // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
       // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
       acceptBotConfig: createBotConfigValidator(content),
+      // A CARGA de uma config já persistida (ADR 0014) é função separada da EDIÇÃO acima —
+      // ver `createBotConfigLoader`: um slot com magia/supply removida (#596) esvazia, em vez
+      // de derrubar a configuração inteira do personagem que está entrando.
+      loadBotConfig: createBotConfigLoader(content),
       catalogue: () => catalogue,
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
@@ -226,6 +237,18 @@ async function main(): Promise<void> {
       // achariam líderes — que é exatamente o que o lock existe para impedir.
       lock: createSingletonLock(redis, `${configuration.NODE_ID}:${randomUUID()}`),
       ...(database === null ? {} : { database: database.db }),
+      // A Boosted Creature do dia (#615): candidato é o Bestiário INTEIRO — todo monstro com
+      // ficha, nunca uma lista separada de conteúdo (ADR 0054 decisão 7). Ausente sem
+      // `boosted/baseline.json` ou sem Postgres: o ciclo roda igual, só não sorteia nada.
+      ...(database === null || content.boosted === undefined || content.bestiary === undefined
+        ? {}
+        : {
+            boosted: {
+              store: new WorldDailyStore(redis, database.db),
+              rolloverHourUtc: content.boosted.rolloverHourUtc,
+              monsterIds: Object.keys(content.bestiary.entries),
+            },
+          }),
     }),
   };
 

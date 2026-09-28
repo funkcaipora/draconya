@@ -25,6 +25,10 @@
         "manadrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.45,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -166,6 +170,10 @@
         "manadrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.05,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -312,6 +320,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.46,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -591,6 +603,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -981,6 +997,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1150,6 +1170,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1491,6 +1515,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.96,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1656,6 +1684,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1890,6 +1922,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.37,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2045,6 +2080,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.75,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2403,6 +2442,10 @@
         "manadrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.19,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2477,6 +2520,148 @@
     }
   },
   {
+    "id": "herald-of-gloom",
+    "name": "Herald of Gloom",
+    "class": "demon",
+    "health": 340,
+    "experience": 450,
+    "attack": {
+      "min": 0,
+      "max": 90
+    },
+    "armor": 25,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": -0.1,
+        "earth": 0.7,
+        "fire": 0.4,
+        "holy": -0.1,
+        "death": 0.1
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.32,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 170,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 90
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 3000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -600
+          }
+        }
+      },
+      {
+        "id": "holystrike",
+        "cadenceMs": 2000,
+        "chance": 0.24,
+        "target": {
+          "range": 4
+        },
+        "power": {
+          "min": 90,
+          "max": 170
+        },
+        "damageType": "holy",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "smallholy"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 20000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 200
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 5000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/herald_of_gloom.lua"
+    }
+  },
+  {
     "id": "juggernaut",
     "name": "Juggernaut",
     "class": "demon",
@@ -2500,6 +2685,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2693,6 +2882,10 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3034,6 +3227,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.43,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3155,6 +3352,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3253,6 +3454,10 @@
         "manadrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.13,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3355,6 +3560,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3622,6 +3831,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 2.11,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3899,6 +4112,335 @@
       "engine": "canary",
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/demons/true_frost_flower_asura.lua"
+    }
+  },
+  {
+    "id": "true-midnight-asura",
+    "name": "True Midnight Asura",
+    "class": "demon",
+    "health": 9000,
+    "experience": 7313,
+    "attack": {
+      "min": 0,
+      "max": 450
+    },
+    "armor": 75,
+    "defense": 55,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": -0.1,
+        "earth": -0.1,
+        "fire": 0.1,
+        "ice": 0.1,
+        "holy": 0.3
+      },
+      "immunities": [
+        "death"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 2.16,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.0576,
+        "min": 10000,
+        "max": 10000
+      },
+      "items": [
+        {
+          "itemId": "violet-gem",
+          "chance": 0.0139
+        },
+        {
+          "itemId": "demonic-essence",
+          "chance": 0.1073
+        },
+        {
+          "itemId": "small-diamond",
+          "chance": 0.1563,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "small-sapphire",
+          "chance": 0.1269,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "assassin-dagger",
+          "chance": 0.0098
+        },
+        {
+          "itemId": "blue-gem",
+          "chance": 0.0102
+        },
+        {
+          "itemId": "blue-robe",
+          "chance": 0.009
+        },
+        {
+          "itemId": "gold-ingot",
+          "chance": 0.009
+        },
+        {
+          "itemId": "golden-lotus-brooch",
+          "chance": 0.1244
+        },
+        {
+          "itemId": "necrotic-rod",
+          "chance": 0.0361
+        },
+        {
+          "itemId": "oriental-shoes",
+          "chance": 0.0182
+        },
+        {
+          "itemId": "peacock-feather-fan",
+          "chance": 0.1279
+        },
+        {
+          "itemId": "skullcracker-armor",
+          "chance": 0.0093
+        },
+        {
+          "itemId": "silver-brooch",
+          "chance": 0.1006
+        },
+        {
+          "itemId": "silver-amulet",
+          "chance": 0.0202
+        },
+        {
+          "itemId": "spellbook-of-mind-control",
+          "chance": 0.009
+        },
+        {
+          "itemId": "tribal-mask",
+          "chance": 0.0229
+        },
+        {
+          "itemId": "underworld-rod",
+          "chance": 0.0099
+        },
+        {
+          "itemId": "yellow-gem",
+          "chance": 0.009
+        },
+        {
+          "itemId": "crystal-ring",
+          "chance": 0.0093
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 450
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5
+        },
+        "power": {
+          "min": 500,
+          "max": 650
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "mortarea"
+        }
+      },
+      {
+        "id": "manadrainstrike",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 50,
+          "max": 280
+        },
+        "damageType": "manadrain",
+        "kind": "combat"
+      },
+      {
+        "id": "lifedrainbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 100,
+          "max": 240
+        },
+        "damageType": "lifedrain",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "purpleenergy"
+        }
+      },
+      {
+        "id": "deathbeam",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "target": {
+          "range": 8,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "power": {
+          "min": 500,
+          "max": 700
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blacksmoke"
+        }
+      },
+      {
+        "id": "paralyze",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 1,
+            "centered": "target"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "magic-red"
+        },
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 30000,
+          "effect": {
+            "kind": "speed",
+            "type": "paralyze",
+            "delta": -100
+          }
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "heal": {
+          "min": 50,
+          "max": 100
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.15,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 5000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 320
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.8,
+    "corpseTtlMs": 660000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/demons/true_midnight_asura.lua"
     }
   }
 ]

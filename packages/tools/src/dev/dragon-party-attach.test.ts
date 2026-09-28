@@ -44,6 +44,7 @@ const sessionStateFrame = (sessionType: string): ArrayBuffer => {
     self: {
       creatureId: 1, characterId: 'leader', health: 100, maxHealth: 100, mana: 10, maxMana: 10,
       level: 200, xp: 0, vocationId: 'knight', speed: 618, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      soul: 0, soulMax: 0,
     },
     world: { mapId: 'darashia', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },

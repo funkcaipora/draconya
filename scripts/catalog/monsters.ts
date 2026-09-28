@@ -540,7 +540,22 @@ interface MitigationResult {
   readonly clamped: string[];
   readonly elementImmunities: string[];
   readonly unmapped: string[];
+  /** Imunidade de CONDIÇÃO (#559, ADR 0041 decisão 2) que o schema reconhece hoje. */
+  readonly conditionImmunities: string[];
+  /** Imunidade de condição que o Lua declara mas o schema/sim ainda não modela (outfit, bleed…). */
+  readonly unmatchedConditionImmunities: string[];
 }
+
+/**
+ * O `type` do `immunities[].condition` do Canary → a chave de `monsterSchema.conditionImmunities`
+ * (#559). `invisible` aqui é `Monster::canSeeInvisibility` (ADR 0041 decisão 2: a imunidade À
+ * condição É o que faz o monstro ENXERGAR quem a carrega, não o monstro resistir a ficar
+ * invisível). `outfit`/`bleed`/os demais ficam de fora — o schema não os modela ainda, e entram
+ * em `unmatchedConditionImmunities` para o relatório, nunca descartados em silêncio.
+ */
+const CONDITION_IMMUNITY_MAP: ReadonlyMap<string, string> = new Map([
+  ['paralyze', 'paralyze'], ['drunk', 'drunk'], ['invisible', 'invisible'],
+]);
 
 function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly LuaValue[]): MitigationResult {
   const resistances: Record<string, number> = {};
@@ -548,6 +563,8 @@ function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly Lua
   const clamped: string[] = [];
   const elementImmunities: string[] = [];
   const unmapped: string[] = [];
+  const conditionImmunities = new Set<string>();
+  const unmatchedConditionImmunities: string[] = [];
   for (const raw of elements) {
     if (!isRecord(raw)) continue;
     const type = str(raw['type']);
@@ -574,18 +591,30 @@ function readElements(elements: readonly LuaValue[], immunitiesRaw: readonly Lua
     resistances[type] = percent / 100;
   }
   // `immunities` do Lua com `combat = true` é imunidade de DANO (a forma antiga); `condition = true`
-  // (paralyze, invisible, outfit, drunk, bleed) é imunidade de CONDIÇÃO, sem campo no schema.
+  // (paralyze, invisible, outfit, drunk, bleed) é imunidade de CONDIÇÃO (#559, ADR 0041 d.2) —
+  // um monstro pode ter as DUAS entradas para o MESMO nome (ex. `poison`: dano E condição), então
+  // as duas leituras seguem, sem `continue`/`else` entre si.
   for (const raw of immunitiesRaw) {
     if (!isRecord(raw)) continue;
     const type = str(raw['type']);
-    if (bool(raw['combat']) !== true || type === undefined) continue;
-    const damageType = type === 'poison' ? 'earth' : type;
-    if (DRACONYA_DAMAGE_TYPES.has(damageType)) {
-      immunities.add(damageType);
-      delete resistances[damageType];
+    if (type === undefined) continue;
+    if (bool(raw['combat']) === true) {
+      const damageType = type === 'poison' ? 'earth' : type;
+      if (DRACONYA_DAMAGE_TYPES.has(damageType)) {
+        immunities.add(damageType);
+        delete resistances[damageType];
+      }
+    }
+    if (bool(raw['condition']) === true) {
+      const mapped = CONDITION_IMMUNITY_MAP.get(type);
+      if (mapped !== undefined) conditionImmunities.add(mapped);
+      else unmatchedConditionImmunities.push(type);
     }
   }
-  return { resistances, immunities: [...immunities].sort(), clamped, elementImmunities, unmapped };
+  return {
+    resistances, immunities: [...immunities].sort(), clamped, elementImmunities, unmapped,
+    conditionImmunities: [...conditionImmunities].sort(), unmatchedConditionImmunities: unmatchedConditionImmunities.sort(),
+  };
 }
 
 function readBestiary(raw: LuaValue | undefined, raceId: number | undefined): BestiaryDraft | string | undefined {
@@ -697,8 +726,11 @@ export function convertMonster(
     .map((field) => `${field}${IGNORED_FIELD_OWNERS[field] === undefined ? '' : ` (${IGNORED_FIELD_OWNERS[field]})`}`)
     .sort();
   for (const key of [...loot.extraKeys].sort()) ignoredFields.push(`loot.${key}`);
-  if (positionalOf(raw['immunities']).some((entry) => isRecord(entry) && bool(entry['condition']) === true)) {
-    ignoredFields.push('immunities.condition (sem imunidade de condição no schema)');
+  // #559: paralyze/drunk/invisible viram `conditionImmunities`; o resto (outfit, bleed…) o
+  // schema ainda não modela, e cada nome entra individualmente — nunca a mensagem genérica de
+  // antes, que escondia QUAL condição foi descartada.
+  for (const unmatched of elements.unmatchedConditionImmunities) {
+    ignoredFields.push(`immunities.condition.${unmatched} (sem imunidade de condição no schema)`);
   }
   for (const flag of ['pushable', 'canPushItems', 'canPushCreatures']) {
     if (flags[flag] !== undefined) ignoredFields.push(`flags.${flag} (sem campo no schema)`);
@@ -715,6 +747,8 @@ export function convertMonster(
     defense: num(defenses['defense']) ?? 0,
     damageType: 'physical',
     mitigation: { resistances: elements.resistances, immunities: elements.immunities },
+    // #559: ausente é `[]`, o default do schema — só escreve quando o Lua de fato declara.
+    ...(elements.conditionImmunities.length === 0 ? {} : { conditionImmunities: elements.conditionImmunities }),
     defenseMitigation: Math.min(Math.max(mitigationRaw, 0), 30),
     ...(num(raw['critChance']) === undefined ? {} : { critChance: num(raw['critChance']) }),
     canWalkOnFire: bool(flags['canWalkOnFire']) ?? true,

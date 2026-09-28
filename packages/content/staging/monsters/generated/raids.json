@@ -15,6 +15,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.7,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -178,6 +182,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -314,6 +322,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -462,6 +474,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -623,6 +639,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -763,6 +783,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -912,6 +936,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -1114,6 +1142,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1330,6 +1362,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1401,6 +1436,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1538,6 +1576,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1781,6 +1823,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1914,6 +1960,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2030,6 +2080,9 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2188,6 +2241,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2381,6 +2438,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.18,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2630,6 +2691,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.99,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2754,6 +2819,410 @@
     "outfitId": 259
   },
   {
+    "id": "orc-armor",
+    "name": "Orc Warlord",
+    "health": 950,
+    "experience": 670,
+    "attack": {
+      "min": 0,
+      "max": 250
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": 0.8,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 234,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.18,
+        "min": 1,
+        "max": 45
+      },
+      "items": [
+        {
+          "itemId": "broken-helmet",
+          "chance": 0.25
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.2
+        },
+        {
+          "itemId": "throwing-star",
+          "chance": 0.14,
+          "min": 1,
+          "max": 18
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.108,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.095
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.052
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.052
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0511
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0461
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.0418
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.0355
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0219
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.018
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.014
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.0067
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0042
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.0034
+        },
+        {
+          "itemId": "dragon-hammer",
+          "chance": 0.0029
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "orc-trophy",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "amazon-armor",
+          "chance": 0.05
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 250
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingstar"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/orc_armor.lua"
+    },
+    "outfitId": 2
+  },
+  {
+    "id": "orc-helmet",
+    "name": "Orc Warlord",
+    "health": 950,
+    "experience": 670,
+    "attack": {
+      "min": 0,
+      "max": 250
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": 0.8,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 234,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.18,
+        "min": 1,
+        "max": 45
+      },
+      "items": [
+        {
+          "itemId": "broken-helmet",
+          "chance": 0.25
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.2
+        },
+        {
+          "itemId": "throwing-star",
+          "chance": 0.14,
+          "min": 1,
+          "max": 18
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.108,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.095
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.052
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.052
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0511
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0461
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.0418
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.0355
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0219
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.018
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.014
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.0067
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0042
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.0034
+        },
+        {
+          "itemId": "dragon-hammer",
+          "chance": 0.0029
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "orc-trophy",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "amazon-helmet",
+          "chance": 0.05
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 250
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingstar"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/orc_helmet.lua"
+    },
+    "outfitId": 2
+  },
+  {
     "id": "orc-sambackpack",
     "name": "Orc",
     "health": 70,
@@ -2855,6 +3324,208 @@
     "outfitId": 5
   },
   {
+    "id": "orc-shield",
+    "name": "Orc Warlord",
+    "health": 950,
+    "experience": 670,
+    "attack": {
+      "min": 0,
+      "max": 250
+    },
+    "armor": 35,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": -0.1,
+        "fire": 0.8,
+        "holy": 0.1,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 234,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.18,
+        "min": 1,
+        "max": 45
+      },
+      "items": [
+        {
+          "itemId": "broken-helmet",
+          "chance": 0.25
+        },
+        {
+          "itemId": "orc-leather",
+          "chance": 0.2
+        },
+        {
+          "itemId": "throwing-star",
+          "chance": 0.14,
+          "min": 1,
+          "max": 18
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.108,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "orc-tooth",
+          "chance": 0.095
+        },
+        {
+          "itemId": "orcish-axe",
+          "chance": 0.052
+        },
+        {
+          "itemId": "hunting-spear",
+          "chance": 0.052
+        },
+        {
+          "itemId": "plate-armor",
+          "chance": 0.0511
+        },
+        {
+          "itemId": "skull-belt",
+          "chance": 0.0461
+        },
+        {
+          "itemId": "plate-legs",
+          "chance": 0.0418
+        },
+        {
+          "itemId": "scimitar",
+          "chance": 0.0355
+        },
+        {
+          "itemId": "protection-amulet",
+          "chance": 0.0219
+        },
+        {
+          "itemId": "two-handed-sword",
+          "chance": 0.018
+        },
+        {
+          "itemId": "dark-helmet",
+          "chance": 0.014
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.0067
+        },
+        {
+          "itemId": "health-potion",
+          "chance": 0.0042
+        },
+        {
+          "itemId": "crusader-helmet",
+          "chance": 0.0034
+        },
+        {
+          "itemId": "dragon-hammer",
+          "chance": 0.0029
+        },
+        {
+          "itemId": "magma-boots",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "orc-trophy",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "stealth-ring",
+          "chance": 0.0008
+        },
+        {
+          "itemId": "amazon-shield",
+          "chance": 0.05
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 250
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingstar"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/orc_shield.lua"
+    },
+    "outfitId": 2
+  },
+  {
     "id": "orshabaal",
     "name": "Orshabaal",
     "health": 22500,
@@ -2880,6 +3551,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3375,6 +4050,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.2,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3661,6 +4340,372 @@
     "outfitId": 295
   },
   {
+    "id": "sir-valorcrest",
+    "name": "Sir Valorcrest",
+    "health": 1600,
+    "experience": 1800,
+    "attack": {
+      "min": 0,
+      "max": 380
+    },
+    "armor": 38,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "physical": 0.55,
+        "energy": -0.05,
+        "fire": -0.05,
+        "holy": -0.05
+      },
+      "immunities": [
+        "death",
+        "earth"
+      ]
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 1.04,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 270,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 93
+      },
+      "items": [
+        {
+          "itemId": "chaos-mace",
+          "chance": 0.0025
+        },
+        {
+          "itemId": "vampire-lord-token",
+          "chance": 1
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.015
+        },
+        {
+          "itemId": "sword-ring",
+          "chance": 0.014
+        },
+        {
+          "itemId": "skull",
+          "chance": 0.15
+        },
+        {
+          "itemId": "vampire-lord-token",
+          "chance": 1
+        },
+        {
+          "itemId": "vampire-shield",
+          "chance": 0.063
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 380
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "deathball",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "target"
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 190
+        },
+        "damageType": "death",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "suddendeath",
+          "impactKey": "mortarea"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.12,
+        "heal": {
+          "min": 100,
+          "max": 235
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 3000,
+        "chance": 0.25,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 10,
+      "random": 10
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/sir_valorcrest.lua"
+    },
+    "summons": {
+      "max": 4,
+      "entries": [
+        {
+          "monsterId": "vampire",
+          "intervalMs": 2000,
+          "chance": 0.3,
+          "count": 4
+        }
+      ]
+    },
+    "outfitId": 287
+  },
+  {
+    "id": "the-horned-fox",
+    "name": "The Horned Fox",
+    "health": 265,
+    "experience": 300,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 17,
+    "defense": 16,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "ice": -0.01,
+        "death": -0.01
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible"
+    ],
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 210,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.96,
+        "min": 1,
+        "max": 99
+      },
+      "items": [
+        {
+          "itemId": "nose-ring",
+          "chance": 1
+        },
+        {
+          "itemId": "minotaur-leather",
+          "chance": 0.96
+        },
+        {
+          "itemId": "minotaur-horn",
+          "chance": 0.9259,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "piece-of-warrior-armor",
+          "chance": 0.85
+        },
+        {
+          "itemId": "piercing-bolt",
+          "chance": 0.48,
+          "min": 1,
+          "max": 14
+        },
+        {
+          "itemId": "brass-armor",
+          "chance": 0.25
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.18,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "battle-shield",
+          "chance": 0.14
+        },
+        {
+          "itemId": "dwarven-helmet",
+          "chance": 0.05
+        },
+        {
+          "itemId": "fishing-rod",
+          "chance": 0.0741
+        },
+        {
+          "itemId": "strong-health-potion",
+          "chance": 0.0741
+        },
+        {
+          "itemId": "double-axe",
+          "chance": 0.037
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 1000,
+        "chance": 0.25,
+        "target": {
+          "range": 7
+        },
+        "power": {
+          "min": 0,
+          "max": 20
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "bolt"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "heal",
+        "cadenceMs": 1000,
+        "chance": 0.15,
+        "heal": {
+          "min": 25,
+          "max": 75
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 1000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.08
+    },
+    "targetStrategy": {
+      "nearest": 70,
+      "health": 10,
+      "damage": 20,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/raids/the_horned_fox.lua"
+    },
+    "summons": {
+      "max": 6,
+      "entries": [
+        {
+          "monsterId": "minotaur-archer",
+          "intervalMs": 1000,
+          "chance": 0.13,
+          "count": 2
+        },
+        {
+          "monsterId": "minotaur-guard",
+          "intervalMs": 1000,
+          "chance": 0.13,
+          "count": 2
+        },
+        {
+          "monsterId": "minotaur-mage",
+          "intervalMs": 1000,
+          "chance": 0.13,
+          "count": 2
+        }
+      ]
+    },
+    "outfitId": 202
+  },
+  {
     "id": "the-pale-count",
     "name": "The Pale Count",
     "health": 50000,
@@ -3683,6 +4728,9 @@
         "death"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3949,6 +4997,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.71,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4087,6 +5139,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.4,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4160,6 +5215,10 @@
         "energy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,

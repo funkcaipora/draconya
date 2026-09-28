@@ -15,6 +15,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.23,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -138,6 +142,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -287,6 +295,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -547,6 +559,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -677,6 +693,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.38,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -809,6 +829,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1038,6 +1062,191 @@
       "path": "data-otservbr-global/monster/dawnport/mountain_troll.lua"
     },
     "outfitId": 15
+  },
+  {
+    "id": "muglex-clan-assassin",
+    "name": "Muglex Clan Assassin",
+    "health": 75,
+    "experience": 48,
+    "attack": {
+      "min": 0,
+      "max": 15
+    },
+    "armor": 3,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 140,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 1,
+        "min": 1,
+        "max": 18
+      },
+      "items": [
+        {
+          "itemId": "bone",
+          "chance": 0.1076
+        },
+        {
+          "itemId": "bone-club",
+          "chance": 0.0489
+        },
+        {
+          "itemId": "dagger",
+          "chance": 0.1809
+        },
+        {
+          "itemId": "fish",
+          "chance": 0.11,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "leather-armor",
+          "chance": 0.0646
+        },
+        {
+          "itemId": "leather-helmet",
+          "chance": 0.0807
+        },
+        {
+          "itemId": "mouldy-cheese",
+          "chance": 0.0685
+        },
+        {
+          "itemId": "short-sword",
+          "chance": 0.0978
+        },
+        {
+          "itemId": "small-axe",
+          "chance": 0.0954
+        },
+        {
+          "itemId": "small-stone",
+          "chance": 0.1198,
+          "min": 1,
+          "max": 3
+        },
+        {
+          "itemId": "studded-armor",
+          "chance": 0.0171
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 15
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "drunk",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "target": {
+          "range": 11
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "poison",
+          "impactKey": "poisonarea"
+        },
+        "condition": {
+          "key": "drunk",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "drunk"
+          }
+        }
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.09,
+        "target": {
+          "range": 6
+        },
+        "power": {
+          "min": 0,
+          "max": 30
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "missileKey": "throwingknife"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.11,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "haste",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 145
+          }
+        },
+        "presentation": {
+          "impactKey": "magic-red"
+        }
+      }
+    ],
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 15,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/dawnport/muglex_clan_assassin.lua"
+    },
+    "outfitId": 296
   },
   {
     "id": "muglex-clan-footman",
@@ -1376,6 +1585,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.03,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1459,6 +1672,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1626,6 +1843,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.33,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1705,6 +1926,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1861,6 +2085,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.15,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,

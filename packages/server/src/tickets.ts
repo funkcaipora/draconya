@@ -84,6 +84,12 @@ export interface InitialCharacter {
    */
   readonly gold?: number;
   /**
+   * Pontos de alma (#593). Vem do banco pela mesma razão de gold: nada que o cliente manda
+   * participa da criação da sessão (invariante 4). Ausente é personagem gravado antes desta
+   * issue — a sessão entra com zero, que é o normal de quem ainda não escolheu vocação.
+   */
+  readonly soul?: number;
+  /**
    * A configuração do bot, crua e ainda NÃO validada (FUN-81).
    *
    * Vem do banco pelo mesmo caminho que level, XP e gold — o `api` lê a linha, e nada que o
@@ -183,6 +189,16 @@ export interface InitialCharacter {
    * `api` antigo — nunca ticket recusado (regra do Bestiário).
    */
   readonly premium?: boolean;
+  /**
+   * A Boosted Creature do dia (M42, #615, ADR 0052 decisão 5, ADR 0054 decisão 7): o
+   * `monsterId` que o `jobs` sorteou na última virada, lido pela `api` do cache em Redis que o
+   * `jobs` publica (`packages/server/src/world-daily.ts`) na hora da EMISSÃO do ticket — nunca
+   * relido depois. Fixado no personagem daqui em diante (`characterFromTicket`), como a versão
+   * de conteúdo: a hunt que atravessa a virada continua com a boosted com que nasceu. Ausente é
+   * conteúdo sem `boosted/baseline.json`, cache ainda vazio (primeiro ciclo do `jobs` não
+   * rodou), ou `api` antigo em deploy em rolagem — nenhuma hunt aplica o bônus.
+   */
+  readonly boostedMonsterId?: string;
 }
 
 export interface IssuedTicket {
@@ -642,6 +658,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // O Premium (ADR 0035 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
     // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
     ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),
+    // A Boosted Creature do dia (#615): string não vazia; qualquer outra coisa vira AUSENTE,
+    // nunca ticket recusado — como a vocação.
+    ...(typeof initial['boostedMonsterId'] === 'string' && initial['boostedMonsterId'].length > 0
+      ? { boostedMonsterId: initial['boostedMonsterId'] }
+      : {}),
   };
 }
 

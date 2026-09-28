@@ -96,7 +96,7 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
   heal: 'Cura', 'heal-over-time': 'Cura',
   mana: 'Mana',
   damage: 'Dano', 'damage-over-time': 'Dano',
-  haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte',
+  haste: 'Suporte', buff: 'Suporte', 'mana-shield': 'Suporte', 'remove-condition': 'Suporte',
 };
 
 function typeOf(effect: string): string {

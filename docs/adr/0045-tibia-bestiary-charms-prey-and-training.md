@@ -4,7 +4,9 @@
 decisão 1, que revoga para mecânica de jogo o limite 2 do [ADR 0019](0019-opentibia-as-domain-specification.md)
 sob o qual `docs/product/bestiary.md`, `prey.md` e `training.md` foram escritos; bloqueada por uma
 questão em aberto (ver seção própria); em 2026-09-25 o Huntera contestou a decisão 1 (bônus de XP
-do Bestiário) — conflito para o dono resolver, ver emenda
+do Bestiário) — conflito resolvido em 2026-09-27 pelo [ADR 0053](0053-bestiary-xp-line-kept-and-charms-added.md)
+(os dois sistemas coexistem); a decisão 3 é detalhada pelo [ADR 0054](0054-prey-task-hunting-concoctions-and-boosted-creature-on-hunt-time.md)
+e a decisão 4 pelo [ADR 0059](0059-training-session-and-offline-training-bank.md)
 **Data:** 2026-09-25
 **Contexto técnico:** `packages/content` (`bestiary/`, charms, prey, task hunting, `training/`),
 `packages/sim` (contadores de abate existentes, motor de treino), `docs/product/bestiary.md`,

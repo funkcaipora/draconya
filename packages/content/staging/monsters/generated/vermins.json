@@ -21,6 +21,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -252,6 +256,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -730,6 +738,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1136,6 +1148,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1312,6 +1327,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -1568,6 +1587,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -1778,6 +1800,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2230,6 +2256,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2397,6 +2427,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.82,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2653,6 +2687,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3082,6 +3119,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.56,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3195,6 +3235,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3316,6 +3359,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.71,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3553,6 +3599,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3675,6 +3724,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.28,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -3777,6 +3829,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3983,6 +4039,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4080,6 +4140,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.56,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4363,6 +4427,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.43,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -4670,6 +4738,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4857,6 +4928,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5044,6 +5118,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.74,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5172,6 +5250,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5399,6 +5480,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5548,6 +5632,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.07,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -5803,6 +5891,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.56,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -5920,6 +6011,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -6155,6 +6250,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -6415,6 +6514,10 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -6742,6 +6845,9 @@
         "earth"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.54,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,

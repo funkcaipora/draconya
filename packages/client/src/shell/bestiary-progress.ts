@@ -48,3 +48,57 @@ export function bonusPercent(
   for (const kills of Object.values(counts)) reached += progressOf(kills, milestones).reached;
   return reached * percentPerMilestone;
 }
+
+// O Bestiário do Canary (#601, ADR 0053 d.1): estágios por monstro e pontos de Charm, os DOIS
+// derivados aqui — apresentação, como o resto deste arquivo — do contador de abates e da ficha
+// que `catalogue.monsters[].bestiary` carrega. Coexiste com os marcos de XP acima (`progressOf`/
+// `bonusPercent`): os limiares são de ordens diferentes (o Dragon completa a ficha em 1 000
+// abates; o primeiro marco de XP são 10 000) e não disparam no mesmo abate — a linha de XP fica
+// como exceção de produto registrada (ADR 0053 d.2), não como o mesmo mecanismo.
+
+/** 0 sem ficha desbloqueada, 1/2 primeiro/segundo desbloqueio, 3 ficha completa. */
+export type BestiaryStage = 0 | 1 | 2 | 3;
+
+/** Os três limiares que o estágio precisa — o mesmo formato de `BestiaryEntry` (`content`). */
+export interface BestiaryStageThresholds {
+  readonly firstUnlock: number;
+  readonly secondUnlock: number;
+  readonly toKill: number;
+}
+
+/**
+ * O estágio de UM monstro, pelos limiares do Canary (`IOBestiary::addBestiaryKill`,
+ * `getBestiaryStageTwo`/`getBestiaryFinished`, referência §15-19): cada limiar é alcançado por
+ * `>=`, como os marcos de XP acima — "quantos já desbloqueou", não "este abate desbloqueou".
+ */
+export function bestiaryStageOf(kills: number, thresholds: BestiaryStageThresholds): BestiaryStage {
+  if (kills >= thresholds.toKill) return 3;
+  if (kills >= thresholds.secondUnlock) return 2;
+  if (kills >= thresholds.firstUnlock) return 1;
+  return 0;
+}
+
+/** O que `bestiaryStageOf` precisa MAIS os pontos que a ficha completa rende. */
+export interface BestiaryCharmThresholds extends BestiaryStageThresholds {
+  readonly charmsPoints: number;
+}
+
+/**
+ * Os pontos de Charm ganhos, somados sobre todo monstro cuja ficha está COMPLETA
+ * (`kills >= toKill`) — ADR 0053 d.1: "o que se persiste é só o gasto"; o total ganho é sempre
+ * derivado daqui, nunca de uma coluna à parte.
+ *
+ * Soma sobre os monstros do CATÁLOGO (ao contrário de `bonusPercent`, que soma sobre os
+ * contadores): sem a ficha (`toKill`/`charmsPoints`) não há como saber se um monstro fora do
+ * catálogo completou algo, e é essa ficha, não o contador sozinho, que diz quanto ela vale.
+ */
+export function charmPointsEarned(
+  counts: Readonly<Record<string, number>>,
+  entries: Readonly<Record<string, BestiaryCharmThresholds>>,
+): number {
+  let total = 0;
+  for (const [monsterId, thresholds] of Object.entries(entries)) {
+    if ((counts[monsterId] ?? 0) >= thresholds.toKill) total += thresholds.charmsPoints;
+  }
+  return total;
+}

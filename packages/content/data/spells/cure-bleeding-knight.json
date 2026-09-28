@@ -1,0 +1,16 @@
+{
+  "id": "cure-bleeding-knight",
+  "name": "Cure Bleeding",
+  "description": "Estanca o sangramento.",
+  "vocationId": "knight",
+  "manaCost": 30,
+  "cooldownMs": 6000,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "minLevel": 45,
+  "effect": {
+    "kind": "dispel",
+    "types": ["bleeding"]
+  },
+  "_open": "A mesma Cure Bleeding do Druid (`cure-bleeding-druid.json`), para a segunda vocação que o Canary declara (Knight/Elite Knight)."
+}

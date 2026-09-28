@@ -23,6 +23,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.26,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -224,6 +228,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -416,6 +424,10 @@
         "ice"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.6,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -579,6 +591,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.02,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -728,6 +744,9 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 2.16,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,

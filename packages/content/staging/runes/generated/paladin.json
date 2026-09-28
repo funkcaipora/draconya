@@ -1,0 +1,71 @@
+[
+  {
+    "id": "holy-missile-rune",
+    "name": "holy missile rune",
+    "magicLevel": 4,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 1.79,
+        "skillMax": 3.75,
+        "baseMin": 11,
+        "baseMax": 24
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/holy_missile.lua"
+    }
+  },
+  {
+    "id": "lightest-magic-missile-rune-paladin",
+    "name": "lightest magic missile rune",
+    "magicLevel": 0,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0,
+        "skillMin": 0,
+        "skillMax": 0,
+        "baseMin": -3,
+        "baseMax": -5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/lightest_magic_missile.lua"
+    }
+  },
+  {
+    "id": "lightest-missile-rune-paladin",
+    "name": "lightest missile rune",
+    "magicLevel": 0,
+    "vocationId": "paladin",
+    "group": "attack",
+    "groupCooldownMs": 2000,
+    "effect": {
+      "kind": "damage",
+      "formula": {
+        "levelFactor": 0.2,
+        "skillMin": 0.4,
+        "skillMax": 0.8,
+        "baseMin": 3,
+        "baseMax": 5
+      }
+    },
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/scripts/runes/lightest_missile.lua"
+    }
+  }
+]

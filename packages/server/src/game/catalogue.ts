@@ -24,8 +24,9 @@ import type { S2CProps } from '@draconya/protocol';
 import type { Content, Spell, Supply } from '@draconya/content';
 import {
   BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
+  manaCostDisplayOf,
 } from '@draconya/content';
-import { huntListings } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, huntListings } from '@draconya/sim';
 
 export type Catalogue = S2CProps<'catalogue'>;
 
@@ -87,7 +88,10 @@ export function buildCatalogue(content: Content): Catalogue {
       spells: [...content.spells.values()].map((spell) => ({
         id: spell.id,
         name: spell.name,
-        manaCost: spell.manaCost,
+        // O ANUNCIADO (#588): o custo escalado pela party depende de quem está no alcance no
+        // instante do cast, e só a sessão sabe isso — o catálogo é conteúdo fixado (invariante
+        // 7) e mostra o `base`, como o grimório do Tibia sempre mostrou.
+        manaCost: manaCostDisplayOf(spell.manaCost),
         minLevel: spell.minLevel,
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
@@ -230,13 +234,30 @@ export function buildCatalogue(content: Content): Catalogue {
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
     // cliente não simula (invariante 4).
     monsters: [...content.monsters.values()]
-      .map((monster) => ({
-        id: monster.id,
-        name: monster.name,
-        ...(monster.class !== undefined ? { class: monster.class } : {}),
-        health: monster.health,
-        experience: monster.experience,
-      }))
+      .map((monster) => {
+        const bestiaryEntry = content.bestiary?.entries[monster.id];
+        return {
+          id: monster.id,
+          name: monster.name,
+          ...(monster.class !== undefined ? { class: monster.class } : {}),
+          health: monster.health,
+          experience: monster.experience,
+          // A ficha do Canary (#601, ADR 0053 d.1): estágio e pontos são DERIVADOS no cliente a
+          // partir destes limiares e do contador de `bestiary.counts` — não calculados aqui.
+          ...(bestiaryEntry === undefined
+            ? {}
+            : {
+              bestiary: {
+                stars: bestiaryEntry.stars,
+                occurrence: bestiaryEntry.occurrence,
+                firstUnlock: bestiaryEntry.firstUnlock,
+                secondUnlock: bestiaryEntry.secondUnlock,
+                toKill: bestiaryEntry.toKill,
+                charmsPoints: bestiaryEntry.charmsPoints,
+              },
+            }),
+        };
+      })
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
     // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o
@@ -269,15 +290,30 @@ function groupsOf(content: Content): string[] {
   return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {
+/**
+ * Todo `monsterId` que os pontos de spawn da rota desta hunt citam (#583, ADR 0039) — direto
+ * (`monsterId`) ou entre os candidatos com peso (`monsters`, #582). Substitui a antiga leitura
+ * de `Object.values(hunt.difficulties).composition`, removida junto do pull por dificuldade:
+ * quem decide o monstro de uma hunt agora é a ROTA, nunca mais a dificuldade.
+ */
+function huntMonsterIdsOf(content: Content, huntId: string): readonly string[] {
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) return [];
+  const route = content.routes.get(hunt.routeId);
+  if (route === undefined) return [];
+  const ids = new Set<string>();
+  for (const point of route.spawnPoints) {
+    if (point.monsterId !== undefined) ids.add(point.monsterId);
+    for (const candidate of point.monsters ?? []) ids.add(candidate.monsterId);
+  }
+  return [...ids];
+}
+
+function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {
   const found = new Map<string, string>();
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const monster = content.monsters.get(entry.monsterId);
-      if (monster !== undefined) found.set(monster.id, monster.name);
-    }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const monster = content.monsters.get(monsterId);
+    if (monster !== undefined) found.set(monster.id, monster.name);
   }
   return [...found.entries()]
     .map(([id, name]) => ({ id, name }))
@@ -285,22 +321,18 @@ function monstersOf(content: Content, huntId: string): Array<{ id: string; name:
 }
 
 function lootOf(content: Content, huntId: string): Array<{ itemId: string; name: string }> {
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) return [];
   const found = new Map<string, string>();
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const loot = content.monsters.get(entry.monsterId)?.loot;
-      if (loot === undefined) continue;
-      for (const item of loot.items) {
-        if (item.chance <= 0) continue;
-        // Loot de supply (#520) não tem `itemId` — não é item físico, e esta lista é só do
-        // catálogo de item (FUN-76). Fica fora da vitrine da hunt por enquanto; ver o `_open`
-        // de `CharacterState.supplyStock`.
-        if (item.itemId === undefined) continue;
-        const definition = content.items.get(item.itemId);
-        if (definition !== undefined) found.set(item.itemId, definition.name);
-      }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const loot = content.monsters.get(monsterId)?.loot;
+    if (loot === undefined) continue;
+    for (const item of loot.items) {
+      if (item.chance <= 0) continue;
+      // Loot de supply (#520) não tem `itemId` — não é item físico, e esta lista é só do
+      // catálogo de item (FUN-76). Fica fora da vitrine da hunt por enquanto; ver o `_open`
+      // de `CharacterState.supplyStock`.
+      if (item.itemId === undefined) continue;
+      const definition = content.items.get(item.itemId);
+      if (definition !== undefined) found.set(item.itemId, definition.name);
     }
   }
   return [...found.entries()]
@@ -321,53 +353,44 @@ function lootOf(content: Content, huntId: string): Array<{ itemId: string; name:
  * (gold e queijo). Só o NÚMERO: a lista de loot possível é da tela de detalhe, que não existe.
  */
 function lootDropsOf(content: Content, huntId: string): number {
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) return 0;
   const items = new Set<string>();
   let gold = false;
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const loot = content.monsters.get(entry.monsterId)?.loot;
-      if (loot === undefined) continue;
-      if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
-      // Supply (#520) não conta aqui — mesma razão de `lootOf`, acima.
-      for (const item of loot.items) {
-        if (item.chance > 0 && item.itemId !== undefined) items.add(item.itemId);
-      }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const loot = content.monsters.get(monsterId)?.loot;
+    if (loot === undefined) continue;
+    if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
+    // Supply (#520) não conta aqui — mesma razão de `lootOf`, acima.
+    for (const item of loot.items) {
+      if (item.chance > 0 && item.itemId !== undefined) items.add(item.itemId);
     }
   }
   return items.size + (gold ? 1 : 0);
 }
 
 function monsterOutfitsOf(content: Content, huntId: string): number[] {
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) return [];
   const outfits = new Set<number>();
-  for (const difficulty of Object.values(hunt.difficulties)) {
-    for (const entry of difficulty.composition) {
-      const outfit = content.monsters.get(entry.monsterId)?.outfitId;
-      if (outfit !== undefined) outfits.add(outfit);
-    }
+  for (const monsterId of huntMonsterIdsOf(content, huntId)) {
+    const outfit = content.monsters.get(monsterId)?.outfitId;
+    if (outfit !== undefined) outfits.add(outfit);
   }
   return [...outfits].sort((a, b) => a - b);
 }
 
 /**
- * Quantos monstros cada dificuldade desta hunt mantém vivos, NO TOTAL (FUN-123,
- * `huntDifficultySchema.monsterCount`) — o "Ousado · 4" que o Huntera mostra ao lado do nome
- * da dificuldade. Mesma ORDEM de `Object.keys(hunt.difficulties)`, que é a MESMA fonte que
- * `huntListings` usa para `difficulties` (`packages/sim/src/hunt/catalogue.ts:40`) — os dois
- * lêem o mesmo objeto, então a ordem entre os dois campos é garantida sem precisar reordenar
- * nada aqui.
+ * Quantos monstros a hunt mantém vivos, NO TOTAL — antes do #583 era por dificuldade
+ * (`huntDifficultySchema.monsterCount`, o "Ousado · 4" do Huntera); sem pull nenhum, o total é
+ * simplesmente quantos pontos de spawn a rota tem, porque todos nascem (ADR 0039). Só existe
+ * UM nome agora (`DEFAULT_DIFFICULTY_NAME`), a mesma fonte que `huntListings` usa para
+ * `difficulties` (`packages/sim/src/hunt/catalogue.ts`) — o campo sobrevive no protocolo só
+ * por compatibilidade (#584).
  */
 function difficultyDetailsOf(content: Content, huntId: string): { id: string; monsterCount: number }[] {
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) return [];
-  const details: { id: string; monsterCount: number }[] = [];
-  for (const [id, difficulty] of Object.entries(hunt.difficulties)) {
-    if (difficulty === undefined) continue;
-    details.push({ id, monsterCount: difficulty.monsterCount });
-  }
+  const route = content.routes.get(hunt.routeId);
+  const details: { id: string; monsterCount: number }[] = [
+    { id: DEFAULT_DIFFICULTY_NAME, monsterCount: route?.spawnPoints.length ?? 0 },
+  ];
   return details;
 }
 

@@ -111,6 +111,28 @@ export const characters = pgTable(
     level: integer('level').notNull().default(1),
     xp: bigint('xp', { mode: 'number' }).notNull().default(0),
     skills: jsonb('skills').notNull().default({}),
+    /**
+     * O instante da SESSÃO que escreveu `skills` pela última vez (#569). Guarda contra o
+     * mesmo problema que `stamina_updated_at` já resolve: skill deixou de ser monotônica
+     * quando a penalidade de morte passou a derrubar tries (#569), então fundir pelo MAIOR de
+     * cada uma reergueria a perda se um extrato mais antigo chegasse depois de um mais novo já
+     * aplicado. `endedAtMs` do extrato é o relógio da SESSÃO, e como o personagem só está em
+     * uma sessão de cada vez (invariante 8), as sessões dele terminam em ordem cronológica
+     * real — comparar contra o instante já gravado decide sozinho qual dos dois é mais
+     * recente, sem precisar saber se a skill subiu ou desceu.
+     */
+    skillsUpdatedAt: timestamp('skills_updated_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * Pontos de alma (#593): o `soul` do Canary — teto e cadência de ganho na vocação
+     * (`content`), custo na magia. O valor inicial do Canary é `soul = 100` desde a criação
+     * (todo personagem lá nasce com vocação); aqui o personagem nasce sem uma (§7.4), então o
+     * default é `0` — sem vocação, sem alma — e `chooseVocation` (`sim`) enche pela primeira
+     * vez ao escolher. PODE DESCER (gasto): é por isso que o ledger o escreve como valor
+     * ABSOLUTO, última-escrita-vence — a mesma régua de `ammo`/`equipment`, nunca a fusão por
+     * máximo de `skills`/`bestiary` (ver `jobs/ledger.ts`).
+     */
+    soul: integer('soul').notNull().default(0),
 
     gold: bigint('gold', { mode: 'number' }).notNull().default(0),
     capacity: integer('capacity').notNull().default(400),
@@ -297,3 +319,17 @@ export const ledger = pgTable(
     byCharacter: index('ledger_by_character').on(t.characterId, t.createdAt),
   }),
 );
+
+/**
+ * A Boosted Creature do dia (M42, #615, ADR 0054 decisão 7): uma linha por dia. `day` é a
+ * data (UTC, deslocada por `boosted.rolloverHourUtc`) em formato `YYYY-MM-DD` — chave primária
+ * de propósito: o `jobs` faz `INSERT … ON CONFLICT (day) DO NOTHING` para sortear no máximo
+ * uma vez por dia mesmo rodando a cada ciclo (idempotência sem lock a mais, a mesma trava que
+ * o índice único já dá ao ledger, invariante 10). Sem `characterId`: é do MUNDO, não de quem
+ * joga — todo mundo vê a mesma boosted no mesmo dia.
+ */
+export const worldDaily = pgTable('world_daily', {
+  day: text('day').primaryKey(),
+  boostedMonsterId: text('boosted_monster_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

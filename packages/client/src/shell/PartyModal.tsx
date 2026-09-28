@@ -24,7 +24,6 @@ import type { Catalogue, HuntListing } from '../state/hud.js';
 import { party, partyActions, fetchRooms } from '../party/store.js';
 import type { PartyView, RoomView } from '../party/api.js';
 import { leaveHunt } from './HuntActions.js';
-import { pullLabel } from './HuntsModal.js';
 import type { SelectOption } from './ui/Select.js';
 import { Button } from './ui/Button.js';
 import { Input } from './ui/Input.js';
@@ -120,15 +119,6 @@ function huntNameOf(huntId: string, hunts: readonly HuntListing[]): string {
   return hunts.find((hunt) => hunt.id === huntId)?.name ?? huntId;
 }
 
-/** Os três tamanhos de pull do Huntera, em palavras — quando não há hunt do catálogo à mão. */
-const DIFFICULTY_TEXT: Record<string, string> = {
-  cautious: 'Cauteloso', bold: 'Ousado', reckless: 'Agressivo',
-};
-
-function difficultyLabelOf(difficulty: string): string {
-  return DIFFICULTY_TEXT[difficulty] ?? difficulty;
-}
-
 function PartyHome({ formation, busy, onCreate, onOpenMine, onSearch }: {
   formation: PartyView | null;
   busy: boolean;
@@ -148,8 +138,9 @@ function PartyHome({ formation, busy, onCreate, onOpenMine, onSearch }: {
 
 /**
  * "Minha Party": roster em leitura e, para o líder EM FORMAÇÃO, a configuração da sala —
- * caçada, dificuldade, `minLevel`, composição por vocação (TOTAL desejado, incluindo quem já
- * está), os DOIS toggles independentes (cada clique manda SÓ o seu patch) e abrir/fechar vagas.
+ * caçada, `minLevel`, composição por vocação (TOTAL desejado, incluindo quem já está), os DOIS
+ * toggles independentes (cada clique manda SÓ o seu patch) e abrir/fechar vagas. Não há mais
+ * eixo de dificuldade desde o #584 (ADR 0039, fim do pull por dificuldade).
  *
  * O rascunho de edição nasce do estado REAL (`useState` inicializa com o `PartyView` da
  * montagem) e o botão "Aplicar" manda o patch — as validações de UI espelham as do servidor,
@@ -162,7 +153,6 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
   const busy = useStoreSlice(party, (state) => state.busy);
   const [draft, setDraft] = useState(() => ({
     huntId: formation?.huntId ?? '',
-    difficulty: formation?.difficulty ?? '',
     minLevel: formation?.minLevel ?? 1,
     targets: { ...(formation?.vocationTargets ?? {}) } as Record<string, number>,
   }));
@@ -183,22 +173,18 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
   const vocations = catalogue?.vocations ?? [];
 
   // O rascunho resolve a seleção como `resolveSelection`: caçada fora do catálogo cai na
-  // primeira; dificuldade que não pertence mais à caçada cai na primeira DELA.
+  // primeira.
   const draftHunt = draft.huntId !== ''
     ? hunts.find((hunt) => hunt.id === draft.huntId) ?? null
     : (hunts[0] ?? null);
   const effectiveHuntId = draftHunt?.id ?? '';
-  const effectiveDifficulty = draftHunt !== null && draftHunt.difficulties.includes(draft.difficulty)
-    ? draft.difficulty
-    : (draftHunt?.difficulties[0] ?? '');
   const draftChanged = (formation.huntId ?? '') !== effectiveHuntId
-    || (formation.difficulty ?? '') !== effectiveDifficulty
     // `null` → 1 é mudança: aplicar compromete o piso que `publish` exige.
     || (formation.minLevel ?? null) !== draft.minLevel
     || !sameTargets(formation.vocationTargets, draft.targets);
   const sumTargets = Object.values(draft.targets).reduce((total, slots) => total + slots, 0);
   const cap = maxMembersOf(catalogue);
-  const draftInvalid = effectiveHuntId === '' || effectiveDifficulty === ''
+  const draftInvalid = effectiveHuntId === ''
     || draft.minLevel < 1
     // Sem o campo no catálogo, a soma não é validada aqui — quem recusa é o servidor (D8).
     || (cap !== null && sumTargets > cap);
@@ -211,7 +197,6 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
     if (!draftChanged || draftInvalid) return;
     void partyActions.configure({
       huntId: effectiveHuntId,
-      difficulty: effectiveDifficulty,
       minLevel: draft.minLevel,
       vocationTargets: draft.targets,
     });
@@ -219,7 +204,7 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
 
   // Abrir vagas espelha o `/publish` (RF-03): caçada configurada, level mínimo e pelo menos
   // uma vaga pública — contadas sobre o ESTADO REAL, não sobre o rascunho.
-  const canPublish = formation.huntId !== null && formation.difficulty !== null
+  const canPublish = formation.huntId !== null
     && formation.minLevel !== null && formation.minLevel >= 1
     && Object.values(formation.openSlots).some((slots) => slots > 0);
   const published = formation.published;
@@ -230,9 +215,6 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
       : 'Configure caçada, level mínimo e pelo menos uma vaga antes de abrir.');
 
   const huntOptions: readonly SelectOption[] = hunts.map((hunt) => ({ value: hunt.id, label: hunt.name }));
-  const difficultyOptions: readonly SelectOption[] = draftHunt === null
-    ? []
-    : draftHunt.difficulties.map((difficulty) => ({ value: difficulty, label: pullLabel(draftHunt, difficulty) }));
 
   return (
     <div className="party-modal-mine">
@@ -264,10 +246,7 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
           <div className="party-row">
             <Select size="sm" ariaLabel="caçada" options={huntOptions} value={effectiveHuntId}
               disabled={busy}
-              onChange={(value) => { setDraft((current) => ({ ...current, huntId: value, difficulty: '' })); }} />
-            <Select size="sm" ariaLabel="dificuldade" options={difficultyOptions} value={effectiveDifficulty}
-              disabled={busy}
-              onChange={(value) => { setDraft((current) => ({ ...current, difficulty: value })); }} />
+              onChange={(value) => { setDraft((current) => ({ ...current, huntId: value })); }} />
           </div>
           <div className="party-row">
             <Input
@@ -321,7 +300,7 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
             />
           </div>
           <Button variant="primary" size="sm" block disabled={busy || !draftChanged || draftInvalid}
-            {...(draftInvalid ? { title: 'Escolha caçada, dificuldade, level mínimo e uma composição válida.' } : {})}
+            {...(draftInvalid ? { title: 'Escolha caçada, level mínimo e uma composição válida.' } : {})}
             onClick={applyDraft}>
             Aplicar configuração
           </Button>
@@ -352,9 +331,6 @@ function PartyMine({ setView }: { setView: (view: PartyModalView) => void }) {
           <Kicker tone="muted">Sala do líder</Kicker>
           <p className="entry-meta">
             {`Caçada: ${formation.huntId !== null ? huntNameOf(formation.huntId, hunts) : '—'}`}
-          </p>
-          <p className="entry-meta">
-            {`Tamanho do pull: ${formation.difficulty !== null ? difficultyLabelOf(formation.difficulty) : '—'}`}
           </p>
           <p className="entry-meta">
             {`Level mínimo: ${formation.minLevel !== null ? String(formation.minLevel) : '—'}`}
@@ -414,7 +390,7 @@ export function PartyRooms({ rooms, busy, onJoin }: {
             {`${room.leader.name} · LV ${String(room.leader.level)} · ${String(room.members)}/${String(room.maxMembers)}`}
           </span>
           <span className="entry-meta">
-            {`${huntNameOf(room.huntId, hunts)} · ${difficultyLabelOf(room.difficulty)} · level ${String(room.minLevel)}+`}
+            {`${huntNameOf(room.huntId, hunts)} · level ${String(room.minLevel)}+`}
           </span>
           <span className="party-room-slots" aria-label={`vagas da sala de ${room.leader.name}`}>
             {slotsLabel(room.openSlots, vocations) || '—'}

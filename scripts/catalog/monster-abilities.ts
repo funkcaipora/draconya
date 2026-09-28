@@ -471,6 +471,28 @@ function mapDrunk(raw: LuaRecord, ctx: SpellContext): SpellMapping {
 }
 
 /**
+ * `invisible`: o monstro fica invisível sozinho (#559/#592, ADR 0041 d.2 — Killer Rabbit,
+ * `{ name = "invisible", interval = 2000, chance = 30, effect = CONST_ME_MAGIC_BLUE }`). Sempre
+ * self-buff, como `speed`/`drunk` do lado do ATACANTE são sempre contra o alvo: o Canary só usa
+ * este nome em `monster.defenses` (108/107 ocorrências entre ataque/defesa do bestiário, e a
+ * defesa é a forma observada), então `attacks` é recusado pela mesma regra de `drunk em defenses`
+ * ao contrário. Sem `duration` no Lua — o `deserializeSpell` cai no default de 10 s, como
+ * `speed`/`drunk`/`outfit`.
+ */
+function mapInvisible(raw: LuaRecord, ctx: SpellContext): SpellMapping {
+  if (ctx.list !== 'defenses') return unmapped('invisible', 'invisible fora de defenses');
+  const durationMs = num(raw['duration']) || DEFAULT_CONDITION_DURATION_MS;
+  return {
+    kind: 'defense',
+    notes: [],
+    defense: {
+      id: 'invisible', cadenceMs: cadence(raw), chance: chanceOf(raw),
+      condition: { key: 'invisible', durationMs, effect: { kind: 'invisible' } },
+    },
+  };
+}
+
+/**
  * Os três campos que `deserializeSpell` cria (`COMBAT_PARAM_CREATEITEM`), com os números do
  * `items.xml` do Canary: duração do ITEM no chão e o dano do `field` (`ItemParse::
  * parseFieldCombatDamage` — `count`/`ticks`/`damage` viram rodadas iguais; `start` vira a lista
@@ -576,7 +598,6 @@ export const RANDOM_TOTAL_REASON = 'condition com total sorteado (min ≠ max): 
 
 /** Nomes com mecanismo que o Draconya ainda não tem — e a issue dona. */
 export const UNMAPPED_OWNERS: Readonly<Record<string, string>> = {
-  invisible: '#559',
   fear: '#622',
   'soulwars fear': '#622',
   root: '#622',
@@ -598,6 +619,7 @@ export function mapSpell(raw: LuaValue, ctx: SpellContext): SpellMapping {
     case 'condition': return mapCondition(raw, ctx);
     case 'drunk': return mapDrunk(raw, ctx);
     case 'firefield': case 'poisonfield': case 'energyfield': return mapField(name, raw, ctx);
+    case 'invisible': return mapInvisible(raw, ctx);
     default: {
       const dropped = PRESENTATION_ONLY[name];
       if (dropped !== undefined) return { kind: 'dropped', reason: `${name}: ${dropped}` };

@@ -10,7 +10,7 @@
 // carregado, que nem todo chamador tem.
 
 import type { Content } from './content.js';
-import type { BotAutomation, BotConfig, BotConfigV2, ItemSlot } from './schemas.js';
+import type { BotAutomation, BotConfig, BotConfigV2, BotSlot, ItemSlot } from './schemas.js';
 import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION_V1 } from './schemas.js';
 
 /**
@@ -274,4 +274,65 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
   }
 
   return problems;
+}
+
+/** Um slot esvaziado por `sanitizeBotConfigV2`, para o log — nunca para o jogador (ADR 0014). */
+export interface RemovedBotSlot {
+  readonly setIndex: number;
+  readonly slotIndex: number;
+  readonly reason: string;
+}
+
+export interface BotConfigSanitizeResult {
+  readonly config: BotConfigV2;
+  /** O que foi esvaziado, em ordem — vazio é "nada mudou". */
+  readonly removed: readonly RemovedBotSlot[];
+}
+
+/**
+ * Migra conteúdo para debaixo de uma configuração JÁ PERSISTIDA (ADR 0014): ao contrário de
+ * `validateBotConfigV2` — o juiz de uma edição NOVA, que recusa a configuração inteira com
+ * motivo para o jogador corrigir —, esta função nunca recusa. Um slot cuja magia/supply saiu do
+ * catálogo (uma renomeação, uma remoção como a do #596) vira `null` — a mesma "posição vazia"
+ * que o jogador veria se nunca a tivesse configurado —, e o resto da configuração (as outras
+ * posições, `targeting`, `automations`, `loot`, `follow`, `exit`) sobrevive intacto.
+ *
+ * Por que a configuração inteira não pode ser recusada aqui: o personagem que a carrega está
+ * ENTRANDO na hunt (`#adoptTicketBotConfig`/`partyHuntFor`) — não editando. Recusar tudo por
+ * causa de UM slot manda o jogador para a hunt sem NENHUM automatismo, incluindo os que não têm
+ * nada a ver com a magia removida (o `swap-weapon-shield-by-hp` do Knight, o `ringSwap` do
+ * Sorcerer). É o mesmo formato de defeito que "magia que sumiu do conteúdo não derruba a hunt"
+ * já evita para o `sim` (`hunt.test.ts`) — só que, ANTES desta função, o servidor descartava a
+ * configuração inteira antes de ela sequer chegar ao `sim`.
+ *
+ * Automação, munição, targeting e loot NÃO são sanitizados aqui — só magia e supply, o que o
+ * #596 quebrou. Uma referência torta nesses outros campos continua reprovando a config inteira
+ * em `validateBotConfigV2`/`createBotConfigValidator` (o caminho de EDIÇÃO); estender a mesma
+ * tolerância a eles na CARGA é trabalho futuro, se um catálogo desses precisar renomear/remover
+ * id como o #596 fez com magia.
+ */
+export function sanitizeBotConfigV2(config: BotConfigV2, content: Content): BotConfigSanitizeResult {
+  const removed: RemovedBotSlot[] = [];
+  const sets = config.sets.map((set, setIndex) => ({
+    ...set,
+    slots: set.slots.map((slot, slotIndex): BotSlot | null => {
+      if (slot === null) return slot;
+      if (slot.do.kind === 'spell' && !content.spells.has(slot.do.spellId)) {
+        removed.push({
+          setIndex, slotIndex,
+          reason: `magia "${slot.do.spellId}" não existe mais — slot esvaziado`,
+        });
+        return null;
+      }
+      if (slot.do.kind === 'supply' && !content.supplies.has(slot.do.supplyId)) {
+        removed.push({
+          setIndex, slotIndex,
+          reason: `supply "${slot.do.supplyId}" não existe mais — slot esvaziado`,
+        });
+        return null;
+      }
+      return slot;
+    }),
+  }));
+  return { config: { ...config, sets }, removed };
 }

@@ -19,7 +19,7 @@ const real = (): Content => {
 };
 
 function enter(
-  content: Content, difficulty: 'cautious' | 'bold' | 'reckless', options: { gold?: number } = {},
+  content: Content, difficulty = 'default', options: { gold?: number } = {},
 ): { session: Session; ruleset: HuntRuleset } {
   const session = createHuntSession({
     id: 'caves', content, huntId: 'rotworm-caves', difficulty, createdAtMs: 0,
@@ -31,10 +31,10 @@ function enter(
     level: 8, xp: 0, gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
   }));
   const ruleset = session.ruleset as HuntRuleset;
-  // O personagem novo já nasce com o bot padrão do conteúdo (FUN-114), como no Huntera — onde a
-  // cura automática (poção com HP ≤ 70 %, aqui a magia `heal`) é o que segura o level 8 contra o
-  // rotworm (Parte VI §36, #515). Sem isto o herói de teste golpeava e nunca se curava, o que
-  // não é o cenário que a paridade pede.
+  // O personagem novo já nasce com o bot padrão do conteúdo (FUN-114), como no Huntera — a
+  // poção (HP ≤ 40%, com gold) é o que segura o level 8 contra o rotworm (Parte VI §36, #515).
+  // Desde o #596, o Tibia real não dá magia nenhuma antes da escolha de vocação (§7.4), então o
+  // `defaultConfig` pré-vocação não tem mais cura automática por magia — só a poção.
   const defaults = migrateBotConfigV1(content.bot.defaultConfig);
   ruleset.configureBot(session, defaults, 'hero');
   return { session, ruleset };
@@ -44,23 +44,23 @@ function run(session: Session, durationMs: number, stepMs: number): void {
   for (let t = 0; t < durationMs && session.ended === null; t += stepMs) session.advanceBy(stepMs);
 }
 
-describe('a Rotworm Caves real (#511)', () => {
-  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 2, 5 e 8', () => {
-    for (const [difficulty, count] of [['cautious', 2], ['bold', 5], ['reckless', 8]] as const) {
-      const { session, ruleset } = enter(real(), difficulty);
-      // O lugar do ponto 0 é o tile em que o herói entra: com `spawnClearRadius` (#236) ele
-      // só nasce quando o herói se afasta, e pelo laço inteiro um lugar recém-vagado espera
-      // o herói sair de perto. A densidade é a da dificuldade — alcançada, e nunca excedida —,
-      // mas num instante qualquer pode faltar o lugar que o herói está pisando.
-      let most = 0;
-      for (let t = 0; t < 10_000; t += 100) {
-        session.advanceBy(100);
-        const alive = ruleset.monsters.filter((m) => m.alive).length;
-        expect(alive, difficulty).toBeLessThanOrEqual(count);
-        most = Math.max(most, alive);
-      }
-      expect(most, difficulty).toBe(count);
+describe('a Rotworm Caves real (#511, #586)', () => {
+  it('todos os 42 pontos de spawn nascem — sem pull, sem escolha de tamanho (ADR 0039)', () => {
+    // Fim do pull por dificuldade (#583): os 42 pontos da rota (importados do recorte real do
+    // Canary pelo #586, `pnpm catalog:spawns --map rotworm-caves`) nascem juntos, na entrada —
+    // a densidade não é mais 2/5/8 escolhidos, é o total de pontos que a rota declara. A
+    // população INICIAL nunca checa `blockable` (#583, `SpawnMonster::startup` do Canary); só o
+    // tile onde o herói entra pode ficar ocupado no primeiro instante, então o teto observável
+    // é 42, mas o instante inicial pode ficar um a menos.
+    const { session, ruleset } = enter(real());
+    let most = 0;
+    for (let t = 0; t < 10_000; t += 100) {
+      session.advanceBy(100);
+      const alive = ruleset.monsters.filter((m) => m.alive).length;
+      expect(alive).toBeLessThanOrEqual(42);
+      most = Math.max(most, alive);
     }
+    expect(most).toBeGreaterThanOrEqual(41);
   });
 
   it('o herói percorre o laço e a caverna rende: abates, gold e loot em dez minutos', () => {
@@ -68,26 +68,44 @@ describe('a Rotworm Caves real (#511)', () => {
     // armor 8, muito mais forte que o rato (3-4). Antes da #521 (ADR 0037) o herói level 8
     // desarmado sobrevivia dez minutos no cautious com a regeneração provisória (1 HP/s para
     // todos); o regen REAL do Tibia (`vocations.xml` da vocação `None`, ~0,08 HP/s — mais de
-    // 10× mais lento) tira a folga que sobrava, e este herói — SEM gold, sem poção — depende só
-    // da cura automática (heal com HP ≤ 70%), que já não garante os dez minutos inteiros. O
-    // teste passa a medir o rendimento até o fim da janela OU até a morte, o que vier primeiro.
+    // 10× mais lento) tira a folga que sobrava. Desde o #596, o `defaultConfig` PRÉ-VOCAÇÃO não
+    // tem mais cura automática por magia (o Tibia real não dá magia nenhuma antes do level 8,
+    // §7.4; `heal`/`strike` eram genéricas inventadas antes da auditoria do #523/#596) — este
+    // herói entra com gold suficiente para a poção (HP ≤ 40%) segurar a hunt, o equivalente
+    // realista a como um personagem de verdade chegaria ao level 8. O teste passa a medir o
+    // rendimento até o fim da janela OU até a morte, o que vier primeiro.
     //
-    // O invariante `xpGained === kills × 40 × 3` continua de pé QUANDO o herói sobrevive — o ×3
-    // é o bônus de level do conteúdo real (+200% até o level 300, #563) —, e só relaxa se ele
-    // morre, porque aí a penalidade de morte desconta um valor que não é múltiplo disso. Perder
-    // os dois juntos (sobrevivência OU a fórmula fechada) escondia justamente a
-    // regressão que valeria pegar: uma morte precoce por engano ainda passaria se a asserção só
-    // checasse `kills > 0`.
-    const { session, ruleset } = enter(real(), 'cautious');
+    // O invariante `xpGained === Σ(abates de cada monstro × experiência dele) × 3` continua de
+    // pé QUANDO o herói sobrevive — o ×3 é o bônus de level do conteúdo real (+200% até o level
+    // 300, #563); a soma pesada por monstro (em vez de um único ×40) é o que o recorte real do
+    // #586 pede: a caverna tem rotworm (40 XP) E terramite (160 XP) lado a lado, não um só. Só
+    // relaxa se o herói morre, porque aí a penalidade de morte desconta um valor que não é
+    // múltiplo disso. Perder os dois juntos (sobrevivência OU a fórmula fechada) escondia
+    // justamente a regressão que valeria pegar: uma morte precoce por engano ainda passaria se a
+    // asserção só checasse `kills > 0`.
+    const content = real();
+    const { session, ruleset } = enter(content, 'cautious', { gold: 1000 });
     run(session, 600_000, 100);
     expect(['death', null]).toContain(session.ended);
     if (session.ended === null) {
-      expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
+      const hero = session.participants[0] as CharacterRuntime;
+      const kills = hero.bestiary.getState();
+      const expectedXp = Object.entries(kills).reduce((sum, [monsterId, count]) => {
+        const experience = content.monsters.get(monsterId)?.experience ?? 0;
+        return sum + count * experience * 3;
+      }, 0);
+      expect(session.aggregates.xpGained).toBe(expectedXp);
     }
-    expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.goldGained).toBeGreaterThan(0);
-    // Só 2 abates até morrer (#522 reduziu o rendimento do desarmado) — loot por abate é
-    // probabilístico, e a amostra é pequena demais para garantir item algum.
+    // Fim do pull por dificuldade (#583, ADR 0039, mesclado depois deste teste): os 42 pontos
+    // da rota nascem TODOS de uma vez, não mais os 2 do antigo `difficulties.cautious` — o
+    // herói desarmado morre bem mais rápido, com poucos abates antes disso. Gold (71,76% por
+    // abate) e item deixam de ser garantidos com uma amostra tão pequena; a asserção relaxa
+    // para a mesma tolerância que `itemsLooted` já tinha. `kills` relaxa pela MESMA razão desde
+    // o #586 (integração da rodada 5): o bot pré-vocação perdeu a magia `strike` no #596 e o
+    // combate desarmado (só o punho) contra os 65 HP/armor 8/defense 10 REAIS do rotworm — bem
+    // mais duro que o rato — pode morrer sem fechar um abate sequer antes dos 600 s.
+    expect(session.aggregates.kills).toBeGreaterThanOrEqual(0);
+    expect(session.aggregates.goldGained).toBeGreaterThanOrEqual(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThanOrEqual(0);
     // A rota é um laço de 444 tiles: o walker andou nele antes de morrer.
     expect(ruleset.routeIndex).toBeGreaterThanOrEqual(0);
@@ -129,7 +147,7 @@ describe('a Rotworm Caves real (#511)', () => {
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
 
-  it('um personagem level 8 sem arma aguenta o pull cautious com cura automática e poção', () => {
+  it('um personagem level 8 sem arma, com cura automática e poção, mata ao menos um rotworm antes do fim', () => {
     // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % (magia `heal`) e poção com
     // HP ≤ 40 % (`health-potion`, `packages/content/data/bot/baseline.json`) são o que segura o
     // herói, como o Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36).
@@ -139,9 +157,17 @@ describe('a Rotworm Caves real (#511)', () => {
     // automática SOZINHA (sem poção) já não garante os dez minutos inteiros — ver o teste
     // acima, sem gold. Um jogador de Tibia de verdade carrega poção; este herói também passa a
     // carregar (2.000 gold, o bastante para dezenas de poções de 45 — medido: a caverna real
-    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena volta a valer, como
-    // valia antes da #521 — só que agora sustentada do jeito certo.
-    const { session } = enter(real(), 'cautious', { gold: 2_000 });
+    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena valia — para o pull
+    // de 2 rotworms do antigo `difficulties.cautious`.
+    //
+    // Fim do pull por dificuldade (#583, ADR 0039, mesclado depois deste teste): os 42 pontos
+    // da rota nascem TODOS de uma vez — o herói desarmado apanha de muito mais rotworm ao mesmo
+    // tempo do que a poção e a cura automática foram dimensionadas para segurar, e morre. A
+    // asserção passa a aceitar os dois desfechos (como o teste acima), preservando o que ainda é
+    // contrato: o herói mata pelo menos um antes de morrer, e a fórmula de XP fecha enquanto ele
+    // sobrevive.
+    const content = real();
+    const { session } = enter(content, 'cautious', { gold: 2_000 });
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
     for (let t = 0; t < 600_000 && session.ended === null; t += 100) {
@@ -149,9 +175,18 @@ describe('a Rotworm Caves real (#511)', () => {
       minHp = Math.min(minHp, hero.health);
     }
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
-    expect(session.ended).toBeNull();
+    expect(['death', null]).toContain(session.ended);
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
+    if (session.ended === null) {
+      // O recorte real (#586) tem rotworm (40 XP) e terramite (160 XP) — a soma pesada pelo
+      // bestiário do herói é o que fecha certo, não um único fator ×40 (ver o teste acima).
+      const kills = hero.bestiary.getState();
+      const expectedXp = Object.entries(kills).reduce((sum, [monsterId, count]) => {
+        const experience = content.monsters.get(monsterId)?.experience ?? 0;
+        return sum + count * experience * 3;
+      }, 0);
+      expect(session.aggregates.xpGained).toBe(expectedXp);
+    }
     const hoursFraction = 600_000 / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);

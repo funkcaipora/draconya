@@ -10,9 +10,9 @@
 
 Hunts são instâncias isoladas: não existe disputa aberta por spawn nem necessidade de atravessar o mundo continuamente para chegar até elas. O jogador abre o menu de Hunt no client e escolhe entre as hunts disponíveis. Hunts base ficam acessíveis por padrão; hunts especiais podem exigir quest, conquista/controle de guilda, ou outro requisito futuro — mas Premium/VIP não deve, no MVP, ser usado como trava de acesso a uma hunt de loot superior. Na tela de seleção, o jogo mostra o level recomendado da hunt, mas não mostra estimativa oficial de XP/h ou gold/h antes da entrada.
 
-Cada hunt tem uma rota única, fixa e predeterminada — o bot nunca escolhe caminhos alternativos. A rota forma um loop lógico, seja circular, seja por subidas e descidas que retornam ao ponto de origem. Os pontos de respawn de monstros são definidos por design, e a quantidade/composição de monstros em cada ponto é um dado da hunt e da dificuldade escolhida; não existe variação aleatória de densidade no MVP.
+Cada hunt tem uma rota única, fixa e predeterminada — o bot nunca escolhe caminhos alternativos. A rota forma um loop lógico, seja circular, seja por subidas e descidas que retornam ao ponto de origem. Os pontos de spawn de monstros são definidos por design, na rota: cada um declara o próprio monstro e o próprio prazo de respawn; não existe variação aleatória de densidade no MVP, e não existe mais escolha de tamanho — ver "Spawn: todo ponto nasce, sem pull", abaixo.
 
-Existem três tamanhos de pull — Cauteloso, Ousado e Agressivo (FUN-123, cópia do Huntera; o PRD previa quatro dificuldades) — cada um aumentando a quantidade de monstros e podendo introduzir variantes mais fortes e tematicamente coerentes (por exemplo, uma hunt de vampiros pode reservar variantes cerimoniais/escuras para dificuldades mais altas). O jogador pode trocar de dificuldade durante sua jornada, mas isso encerra a instância atual e cria uma nova — não existe alteração dinâmica de dificuldade dentro da mesma instância. Em party, a troca de dificuldade exige votação/aprovação dos membros.
+**Não existe mais tamanho de pull** (#583, ADR 0039; histórico — ver "Divergências do PRD"). Até esta issue existiam três tamanhos — Cauteloso, Ousado e Agressivo (FUN-123, cópia do Huntera) —, removidos porque o Tibia real não tem essa escolha: todo ponto de spawn nasce, sempre. O campo `difficulty` sobrevive no protocolo só por compatibilidade (`enter-hunt.difficulty`, #584) e é ignorado pelo servidor.
 
 A hunt termina por ação manual do jogador, por uma regra automática de saída configurada no bot, por morte, ou por outras condições de sessão que venham a ser adicionadas depois. Stamina chegando a zero, isoladamente, não encerra a hunt (ver `stamina.md`).
 
@@ -71,11 +71,11 @@ se a hunt solta gold já tem isso em `lootDrops`. `catalogue.monsters[]` (a list
 Bestiário) ganha `health` e `experience` de cada monstro — nunca XP/h nem gold/h por hora, que
 continua fora por decisão de produto (parágrafo acima).
 
-**Contagem de monstros por dificuldade chega pelo catálogo** (SV-19, #355). Cada hunt leva
-`difficultyDetails: [{ id, monsterCount }]` — a quantidade total de monstros que cada
-dificuldade mantém vivos na instância, na mesma ordem de `difficulties`. É o que o cliente usa
-para exibir "Ousado · 4" nos botões de pull e no seletor de dificuldade da party, como no
-Huntera.
+**`difficultyDetails`/`difficulties` são vestígio de protocolo, não produto** (SV-19, #355; fim
+do pull no #583). Sem pull nenhum, o catálogo manda um nome só (`"default"`) com
+`monsterCount` igual ao total de pontos de spawn da rota — a tela deixa de mostrar "Ousado · 4"
+e passa a mostrar só a hunt, sem seletor de tamanho (#584 remove os dois campos do protocolo por
+completo quando o cliente parar de precisar deles).
 
 **Recomendação não é trava.** Abaixo do level recomendado a linha fica em âmbar e o botão
 continua lá: quem decide se a entrada vale é o servidor, e no MVP ele não recusa por level.
@@ -101,10 +101,14 @@ A saída da hunt pode ocorrer de duas maneiras principais quando não decorre de
 
 - Rota fixa e única por hunt; sem pathfinding dinâmico do bot dentro da hunt.
 - Rota forma loop lógico (circular ou com retorno ao ponto de origem).
-- Pontos de spawn e composição por dificuldade são dados de conteúdo, não aleatórios no MVP.
-- Três tamanhos de pull: Cauteloso, Ousado, Agressivo — `monsterCount` total de 2/5/8 na Rat Cellars.
-- Trocar de dificuldade encerra a instância atual e cria uma nova; sem mudança dinâmica na mesma instância.
-- Em party, troca de dificuldade exige aprovação dos membros.
+- Pontos de spawn são dados de conteúdo, não aleatórios no MVP: cada um declara o próprio
+  monstro e o próprio prazo de respawn, e todos nascem juntos, na entrada (#583).
+- Sem tamanho de pull (#583): não existe mais Cauteloso/Ousado/Agressivo nem escolha de
+  densidade — Rat Cellars nasce com os 56 pontos do recorte real do Canary vivos (#586, não mais
+  2/5/8), Rotworm Caves com os 42.
+- Respawn segue `blockable` do monstro (#583): quem é `blockable` espera a vista limpar (janela
+  de ±11 tiles) e reinicia o relógio se alguém está por perto; quem não é nasce sempre, com um
+  atraso de telegraph de 4200 ms.
 - Tela de seleção mostra level recomendado; não mostra XP/h nem gold/h estimados.
 - Premium/VIP não trava acesso a hunt de loot superior no MVP.
 - Encerramento por: ação manual, regra automática de saída, morte, ou outras condições futuras de sessão.
@@ -147,6 +151,29 @@ gatilho para o mesmo bypass — o passo aleatório de quem não tem alvo (`rando
 não existe aqui: este motor não faz o monstro "andar à toa" sem alvo (§ acima, "mantém o
 alvo"), então essa metade da condição do Canary nunca fica satisfeita, não por escolha, mas
 porque a situação que ela descreve não ocorre neste motor.
+
+**Ele empurra quem bloqueia o passo, em vez de tratar todo tile ocupado como parede (M29-08,
+TFS/Canary `Monster::pushCreatures`) — mas só sob `combat-v3`.** `canPushCreatures`, `pushable` e
+`canPushItems` são booleanos por monstro; ausentes são, respectivamente, `false`, `true` e
+`false` — os defaults do Canary. Rato e rotworm não declaram nenhum dos três. **Dragon e Dragon
+Lord declaram os três** no Canary (`dragon.lua`/`dragon_lord.lua`: `pushable = false,
+canPushItems = true, canPushCreatures = true`), mas o conteúdo autoral de hoje
+(`data/monsters/generated/dragons.json`, regenerado pelo #581) ainda não carrega o campo — os
+dois continuam nos defaults do schema até o valor real chegar (fora do escopo desta issue, o
+mesmo trabalho do leitor de bestiário, #578). Um monstro `canPushCreatures` que encontra o
+próprio caminho ocupado por outro monstro `pushable` o empurra para um tile CARDINAL livre (nunca
+diagonal), sorteado sem reposição pelo `Rng` da sessão — a mesma ordem embaralhada do Canary
+(`{norte, oeste, leste, sul}`). Sem nenhum cardinal livre, o empurrado morre no lugar, sem
+atacante: não paga XP a ninguém, e o loot segue a regra de "sem dono" que já vale para um abate
+cujo matador sumiu. `canPushItems` está no schema, validado, mas SEM EFEITO — não existe item
+móvel no chão (o cadáver é só visual, ADR 0048), então não há o que empurrar. **O jogador nunca é
+empurrado nem esmagado** — a checagem só considera outros monstros; um monstro parado no tile de
+um jogador continua bloqueando exatamente como antes. **Sob `combat-v1`/`v2` o tile ocupado
+continua parede, incondicionalmente** (ADR 0031/0040, a mesma regra que já governa o crítico de
+item e o hit chance de distância, #551/#555): o empurrão consome `session.rng` e move outra
+criatura, e as duas coisas mudariam o que uma hunt congelada nesses perfis rende — então o
+mecanismo inteiro (decisão e commit) sai sem efeito algum fora de `combat-v3`, mesmo que um
+monstro futuro declare `canPushCreatures: true`.
 
 ### Custo medido
 
@@ -272,55 +299,98 @@ compartilham a mesma caixa `(x, y)`, e um Dragon Lord de z11 pode ter coordenada
 Dragon em z10, um andar acima; sem a checagem, o monstro perseguiria e a magia acertaria através
 do chão.
 
-## Spawn: densidade é dado, composição é sorteio
+## Spawn: todo ponto nasce, sem pull (#583, ADR 0039)
 
-Os pontos de respawn são definidos por design, na rota. Quantos monstros a instância mantém
-vivos — o `monsterCount` TOTAL do pull escolhido, como o Huntera conta (FUN-123) — **não varia**:
-o §14.5 é explícito que não há variação aleatória de densidade no MVP. O total é ESPALHADO
-pelos pontos de spawn da rota (`Spawner`): o lugar `i` fica no ponto `⌊i × pontos / total⌋`,
-determinístico — com menos monstros que pontos eles cobrem o laço inteiro em intervalos iguais,
-com mais cada ponto recebe a mesma quantidade. Na Rat Cellars, 2/5/8 ratos sobre 14 pontos: o
-Cauteloso nasce nos pontos 0 e 7, o Agressivo em oito dos catorze. O `radius` de cada ponto é
-até onde o monstro procura tile livre para nascer.
+**Fim do pull por dificuldade.** Até o #583, a instância mantinha vivo um `monsterCount` TOTAL —
+2/5/8 na Rat Cellars, Cauteloso/Ousado/Agressivo — espalhado pelos pontos de spawn da rota. Esse
+modelo era uma característica OBSERVADA do Huntera (FUN-123), não do Canary/Tibia real: no jogo
+de verdade não existe escolha de tamanho de pull, e nenhuma hunt tem "densidade configurável".
+O #583 remove o modelo inteiro: **toda hunt nasce direto dos pontos de spawn da rota, um
+monstro por ponto, e TODOS os pontos nascem ao mesmo tempo, na entrada.** Rat Cellars e Rotworm
+Caves ainda usavam, na época do #583, os 14/13 pontos genéricos que a rota já tinha traçado (sem
+`monsterId` por ponto) com o `rat`/`rotworm` fixo como fallback de composição — um meio-termo,
+não o modelo final. O #586 (M36-05) terminou a conversão: rodou o importador de spawns do Canary
+(`pnpm catalog:spawns`, #582) sobre o recorte real das duas hunts, e a densidade e a composição
+finais são as do XML `otservbr-monster.xml`, não uma contagem escolhida à mão — **Rat Cellars
+sobe para 56 pontos** (48 `rat`, 3 `spider`, 2 `rabbit`, 2 `bug`, 1 `cave-rat` — o Canary povoa o
+bueiro com a fauna inteira da zona, não só rato) **e Rotworm Caves para 42** (35 `rotworm`, 7
+`terramite`). É uma mudança real de densidade E de composição, deliberada (ADR 0039 decisão 3) —
+não um efeito colateral a corrigir.
 
-O único sorteio do spawn é **qual** monstro, dentro dos pesos da composição. Peso zero é
-permitido e significa "não sai": é como se desliga uma variante sem apagar a linha, e apagar
-linha é como se perde o histórico de balanceamento.
+Cada ponto de spawn **declara o próprio monstro**: `monsterId` fixo, ou `monsters` — uma lista
+de candidatos com peso, para o caso (raro) do Canary em que dois `<monster>` do mesmo `<spawn>`
+caem exatamente na mesma posição (#582). Um dos dois é obrigatório — não existe mais composição
+de dificuldade para cair como fallback quando o ponto não declara nada. O único sorteio do
+spawn continua sendo **qual** monstro, entre os candidatos DO PONTO (nunca entre pontos
+vizinhos); peso zero continua significando "não sai", sem apagar a linha.
 
-**A posição também não sorteia.** O monstro nasce sempre no mesmo tile livre mais próximo do
-ponto. Uma hunt cujo spawn "anda" a cada respawn é uma hunt que o jogador não consegue
-planejar — e planejar é justamente o que se ganha ao tornar o monstro previsível (§17.1).
+**A posição não sorteia.** O monstro nasce sempre no mesmo tile livre mais próximo do ponto —
+até o `radius` que a rota autora. Uma hunt cujo spawn "anda" a cada respawn é uma hunt que o
+jogador não consegue planejar (§17.1).
 
-O respawn tem **prazo configurável por hunt**. Instantâneo faria a rota deixar de importar: o
-personagem mataria tudo parado num ponto só. Longo demais faz ele dar voltas em mapa vazio.
+Cada ponto também declara o próprio `respawnDelayMs` — o `spawntime` do Canary, por posição, não
+por zona nem por dificuldade — também obrigatório desde o #583.
 
-**O monstro não nasce colado num participante** (#236): `spawnClearRadius` da hunt é a menos de
-quantos tiles de um participante vivo o tile é recusado. O spawn **adia** — tenta de novo a cada
-segundo, no evento que já existia — e nunca cancela: a densidade continua sendo a da
-dificuldade, que é o que a referência (§29) exige ao mandar não copiar a supressão do TFS. Sem
-isso, com `respawnDelayMs` igual ao intervalo de ataque, o rato nascia e morria no mesmo
-instante, e o cliente desenhava o dano num tile vazio. `0` desliga.
+**O respawn segue o `SpawnMonster` do Canary, por `blockable` — não mais por
+`spawnClearRadius`.** O campo da hunt que segurava o respawn perto de qualquer participante
+(`spawnClearRadius`, #236) foi REMOVIDO do conteúdo; o que decide agora é uma propriedade do
+MONSTRO, `blockable` (#519, o `isBlockable` do TFS/Canary — já existia desde a issue anterior,
+só a regra que o consome mudou):
 
-**`spawnClearRadius` só vale para quem é `blockable`** (#519, o `isBlockable` do TFS/Canary). No
-Canary, 1.640 dos 1.656 monstros do bestiário — Dragon e Dragon Lord inclusive — respawnam
-olhando para o jogador: `isBlockable` é `false` neles, e a EXCEÇÃO é quem declara `true`. O
-monstro do Draconya ganha o mesmo campo, com o mesmo default (`blockable: false`); Rat e Rotworm
-DECLARAM `blockable: true`, porque o comportamento deles vem do Huntera observado (não do
-Canary) e não pode mudar por esta issue. A checagem de distância — o alcance é o mesmo
-`Spawn::findPlayer` do TFS, `±11` tiles no MESMO andar — só roda para quem é `blockable`.
+- **`blockable: true`** — o respawn espera nenhum participante VIVO, no MESMO
+  andar do ponto, dentro da janela de visão (`±11` tiles Chebyshev — a aproximação quadrada do
+  viewport retangular do Canary, `Spectators::find`/`MAP_MAX_VIEW_PORT_X`/`_Y`, a mesma
+  simplificação que o resto do motor já faz para distância). Enquanto há alguém à vista, o
+  relógio **reinicia inteiro** — a próxima checagem só vence dali a `respawnDelayMs` de novo,
+  nunca um retry curto. Sem ninguém à vista, nasce na hora (sujeito só a parede/ocupação). Rat e
+  Rotworm declararam `true` até o #586 — um override (`data/monsters/overrides/rat.json`/
+  `rotworm.json`) preservando o comportamento OBSERVADO do Huntera, não do Canary (o `rat.lua`/
+  `rotworm.lua` reais já são `isBlockable: false`) — enquanto as duas hunts ainda usavam pontos de
+  spawn genéricos e dependiam do `spawnClearRadius` antigo. Nenhum monstro do catálogo real
+  declara isto hoje: desde o #586, esta é uma exceção sem nenhum membro.
+- **`blockable: false`** (o default — 1.640 dos 1.656 monstros do bestiário do Canary, Rat,
+  Rotworm, Dragon e Dragon Lord inclusive) — nasce DE QUALQUER FORMA, ignorando quem
+  está no ponto, mas só depois de um atraso de telegraph de 4200 ms (3× o intervalo de teleporte
+  do Canary, `NONBLOCKABLE_SPAWN_MONSTER_INTERVAL`) depois que o `respawnDelayMs` do ponto vence.
+  O efeito visual de teleporte que o Canary mostra nesse intervalo é apresentação — fica para o
+  protocolo/cliente (#584/M36-03); o que existe hoje é só o atraso.
 
-**Cada ponto de spawn pode declarar o próprio monstro, a posição exata e o próprio `spawntime`**
-(#519, o formato do XML de spawn do Canary — um `<monster>` por posição, nunca um sorteio). Um
-ponto assim SEMPRE nasce aquele monstro: a composição sorteada da dificuldade vira fallback, só
-para quem não declara. A Darashia Dragon Lair é a primeira hunt a usar isto: 47 pontos, cada um
-com o `monsterId` (`dragon` ou `dragon-lord`), a coordenada exata do Canary e
-`respawnDelayMs: 90000` (o `spawntime="90"` do XML). Rat Cellars e Rotworm Caves continuam com o
-formato de sempre — `routeIndex` + `radius`, monstro sorteado, `respawnDelayMs` da dificuldade —,
-porque nenhuma delas declara os campos novos.
+Parede e tile ocupado continuam adiando (nunca cancelando) com retry curto — o mecanismo de
+sempre, sem mudança.
 
-Os três pulls — Cauteloso, Ousado, Agressivo — são **dados**, não código. Trocar `monsterCount`
-e a composição no JSON muda densidade e variedade sem tocar em lógica; há teste afirmando
-exatamente isso, porque se um pull novo exigisse código o formato estaria errado.
+Esta hunt (a Darashia Dragon Lair) já usava `spawnPoints[i].monsterId`/`at`/`respawnDelayMs` por
+ponto desde o #519; o #583 só torna esse formato obrigatório para toda hunt, em vez de um caso
+especial só dela.
+
+## Boosted Creature do dia (#615, ADR 0054 decisão 7)
+
+Uma vez por dia, na hora de virada (`boosted.rolloverHourUtc`, conteúdo), o `jobs` sorteia um
+monstro entre todos os que têm ficha de Bestiário (`content.bestiary.entries`) e grava a linha em
+`world_daily` (Postgres, uma por dia) mais uma cópia em Redis para a `api` — a primeira tarefa
+diária real do esqueleto do `jobs` (`packages/server/src/jobs/boosted.ts`,
+`packages/server/src/world-daily.ts`). O sorteio é IDEMPOTENTE no mesmo dia: rodar o ciclo de novo
+não sorteia de novo, porque `day` é a chave primária e o `INSERT` é `ON CONFLICT DO NOTHING`.
+
+A `api` lê o cache do Redis ao emitir um ticket e o inclui em `InitialCharacter.boostedMonsterId`.
+A partir daí a boosted é FIXADA no personagem — como a versão de conteúdo (invariante 7) — e
+carregada por toda transição Cidade↔hunt daquele login; a hunt que atravessa a virada continua com
+a boosted com que nasceu, mesmo que o mundo já tenha sorteado outra. Uma hunt criada direto de um
+ticket de party lê o valor do TICKET DO LÍDER; a transição de Cidade para hunt (sem ticket novo)
+lê o valor já fixado no personagem.
+
+Efeitos, só para o monstro que É a boosted do dia (`packages/sim/src/rulesets/hunt.ts`):
+
+- **`spawntime / 2`** em todo ponto em que ele nasce (`#respawnDelayFor`) — a mesma regra do
+  `SpawnMonster::addMonster` do Canary, sem o `rateSpawn` global que o Draconya não tem.
+- **XP ×2**, dobrado na BASE do pool antes da divisão por vocações únicas e do bônus de
+  Bestiário/level (`#grantPartyXp`) — o dobro vale para todo elegível na mesma proporção que a
+  XP normal já dividia.
+- **Um roll extra de loot inteiro** (`#rollLootFor`, `ondroploot_boosted.lua`, `factor 1.0`): a
+  MESMA tabela sorteada de novo, logo depois do sorteio normal, na mesma ordem — nunca uma
+  chance maior na mesma rolagem.
+
+Sem `boosted/baseline.json` no conteúdo, ou sem `content.bestiary`, o `jobs` não sorteia nada e
+nenhum efeito liga — é o conteúdo de teste que não fala de engajamento diário.
 
 ## O ruleset, e por que ele é o molde dos outros cinco
 
@@ -547,25 +617,27 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
-| Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
-| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) — Rat Cellars e Rotworm Caves usam o mesmo molde de três pulls | `data/hunts/*.json`, campo `monsterCount` |
+| Tamanhos de pull | NENHUM desde o #583 (ADR 0039) — removido; era 3 (Cauteloso/Ousado/Agressivo), cópia do Huntera, sem correspondente no Canary | histórico — `data/hunts/*.json` não tem mais o campo `difficulties` |
+| Monstros vivos, por hunt | um por ponto de spawn da rota, TODOS os pontos nascem (#583) — Rat Cellars 56 (48 rat, 3 spider, 2 rabbit, 2 bug, 1 cave-rat), Rotworm Caves 42 (35 rotworm, 7 terramite), Darashia Dragon Lair 47 (era 2/5/8 na Rat/Rotworm até o #583, e 14/13 pontos genéricos entre o #583 e o #586, que rodou o importador de spawns sobre o recorte real) | `data/routes/*.json`, `spawnPoints.length` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
-| Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
-| Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary — inclusive Rat e Rotworm regenerados pelo #581; um override temporário devolve `true` só para os dois, para preservar o `spawnClearRadius` observado no Huntera (#519) até o #582+/M36-05 converter as duas hunts | `data/monsters/generated/*.json`, campo `blockable`; `data/monsters/overrides/rat.json`/`rotworm.json` sobrescrevem para `true` |
-| Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Ausente é o de sempre (sorteio da composição, `respawnDelayMs` da dificuldade) — Rat Cellars e Rotworm Caves não declaram; a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
-| Prazo do cadáver no chão | 670 s (670000 ms) nos quatro monstros do catálogo (rat, rotworm, dragon, dragon-lord) — a soma da cadeia real `duration`/`decayTo` do Canary `items.xml`, campo do MONSTRO desde o #585 (era 30 s em Rat Cellars/Rotworm Caves, cópia do Huntera que só olhava o primeiro estágio da cadeia) | `data/monsters/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Prazo de respawn (`respawnDelayMs`, por PONTO desde o #583) | Desde o #586, o `spawntime` REAL do Canary por ponto: 90 s em 55/56 pontos de Rat Cellars e nos 42/42 de Rotworm Caves, 60 s no ponto restante de Rat Cellars — não mais os 2 s fixos que as duas hunts adotavam por comparação com a faixa 1,0–2,5 s que a captura do Huntera registrou (histórico, Parte II §15 + Cyclopedia Parte V §32, 2026-09-22; #510, PR #512); 90 s em cada ponto da Darashia Dragon Lair (`spawntime="90"` do Canary) | `data/routes/*.json`, campo `respawnDelayMs` de `spawnPoints` |
+| Janela de visão do respawn `blockable` (#583) | ±11 tiles Chebyshev — a aproximação quadrada do viewport do Canary (`MAP_MAX_VIEW_PORT_X`/`_Y`); substitui o `spawnClearRadius` por hunt (removido) | `packages/sim/src/rulesets/hunt.ts`, `SPAWN_VISIBILITY_RADIUS` — mecanismo, não conteúdo |
+| Telegraph do respawn não-`blockable` (#583) | 4200 ms (3× `NONBLOCKABLE_SPAWN_MONSTER_INTERVAL` do Canary) antes de o monstro materializar, mesmo com participante em cima do ponto | `packages/sim/src/rulesets/hunt.ts`, `NONBLOCKABLE_SPAWN_TELEGRAPH_MS` — mecanismo, não conteúdo |
+| Monstro espera a vista limpar para respawnar (`blockable`, o `isBlockable` do TFS/Canary) | `false` (não espera) é o default e o comportamento de 1.640/1.656 do bestiário do Canary — a MESMA proporção que Rat e Rotworm seguem desde o #586 (o `rat.lua`/`rotworm.lua` reais já são `isBlockable: false`; só o override de Draconya divergia). Até o #586, Rat e Rotworm declaravam `true` por um override (`data/monsters/overrides/rat.json`/`rotworm.json`), preservando o comportamento observado no Huntera (#519) enquanto as duas hunts dependiam do `spawnClearRadius` antigo; o #586 apagou os dois arquivos ao converter as hunts para os spawns reais | `data/monsters/generated/*.json`, campo `blockable` |
+| Monstro e `spawntime` por ponto de spawn (#519, o formato do Canary) | Obrigatório em todo ponto desde o #583 — Rat Cellars declara `rat`/`spider`/`rabbit`/`bug`/`cave-rat`, Rotworm Caves declara `rotworm`/`terramite`, todos lidos do recorte real (#586); a Darashia Dragon Lair declara os 47 (`dragon`/`dragon-lord`, 90 000 ms cada) | `data/routes/*.json`, campos `monsterId`/`at`/`respawnDelayMs` de `spawnPoints` |
+| Prazo do cadáver no chão | 670 s (670000 ms) em rat, rotworm, spider, rabbit, bug, cave-rat, terramite, dragon e dragon-lord — a soma da cadeia real `duration`/`decayTo` do Canary `items.xml`, campo do MONSTRO desde o #585 (era 30 s em Rat Cellars/Rotworm Caves, cópia do Huntera que só olhava o primeiro estágio da cadeia) | `data/monsters/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
+| Hora de virada da Boosted Creature (#615, `boosted.rolloverHourUtc`) | `0` (meia-noite UTC) — o mesmo instante do server-save do Canary | `data/boosted/baseline.json`, campo `rolloverHourUtc` |
 | Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 220 no level 1, +2 por level — o TFS clássico, RESOLVIDO pelo #527 (ADR 0037 decisão 4): mesma escala do passo abaixo e da velocidade de monstro | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
 | O rato (regenerado pelo importador, #581 — `data-otservbr-global/monster/mammals/rat.lua`) | 20 HP, 5 XP, ataque 0–8 sorteado por golpe, armadura 1, `defense 5`, speed 134; +20 % de dano de terra e sagrado, −10 % de gelo e morte (sinais invertidos em relação ao provisório do Huntera que valia antes do #581); `aggroRadius`/`targetDistance` 11/1 | `data/monsters/generated/mammals.json` |
-| Loot por abate (Rat Cellars) | Rat: gold 100 %, 1–4; queijo 39,41 % (`items/cheese.json`, aparência 3607) — mesmas linhas de antes, agora sorteadas pelo `rollModel: "canary"` (dois sorteios por linha, ver acima) | `data/monsters/generated/mammals.json`, bloco `loot` |
+| Loot por abate (Rat Cellars) | Rat: gold 100 %, 1–4; queijo 39,41 % (`items/cheese.json`, aparência 3607) — mesmas linhas de antes, agora sorteadas pelo `rollModel: "canary"` (dois sorteios por linha, ver acima). Desde o #586 o recorte também traz spider (gold 65,15 %, 1–5; spider fangs 0,96 %), rabbit (meat 85,62 %, 1–2, sem gold), bug (gold 51,17 %, 1–6, sem item) e cave-rat (gold 85 %, 1–2; queijo 30 %; worm 9,7 %, 1–2) | `data/monsters/generated/mammals.json`/`vermins.json`, bloco `loot` |
 | O rotworm (regenerado pelo importador, #581 — `data-otservbr-global/monster/vermins/rotworm.lua`) | 65 HP, 40 XP, ataque 0–40 sorteado por golpe, armadura 8, `defense 10`, speed 116; sem elementos (o Canary não declara nenhum); `aggroRadius`/`targetDistance` 11/1 | `data/monsters/generated/vermins.json` |
-| Loot por abate (Rotworm Caves) | Rotworm: gold 71,76 %, 1–17; sword 3 %; mace 4,5 %; meat 20 %; ham 20,12 %; worm 3 % (1–3 un.); lump of dirt 10 %; legion helmet 1,89 % — mesmas linhas de antes, agora `rollModel: "canary"` | `data/monsters/generated/vermins.json`, bloco `loot` |
+| Loot por abate (Rotworm Caves) | Rotworm: gold 71,76 %, 1–17; sword 3 %; mace 4,5 %; meat 20 %; ham 20,12 %; worm 3 % (1–3 un.); lump of dirt 10 %; legion helmet 1,89 % — mesmas linhas de antes, agora `rollModel: "canary"`. Desde o #586 o recorte também traz terramite (gold 97,52 %, 1–45; terramite shell 7,73 %; terramite legs 14,88 %) | `data/monsters/generated/vermins.json`, bloco `loot` |
 | O Dragon (regenerado pelo importador, #581 — `data-otservbr-global/monster/dragons/dragon.lua`) | 1000 HP, 700 XP, melee 0–120, armadura 25, `defense 30`, `defenseMitigation 0,99`, speed 172 (a escala do Canary — igual à do TFS para este monstro); terra +80 %, energia +20 %, gelo −10 % (vulnerável), fogo IMUNE; `aggroRadius 11` (§75, era 8 antes do #527), `targetDistance 1`, `staticAttack 80 %` (aceito, não ligado ao passo — ver `combat.md`), `runOnHealth 300`, troca de alvo 4 s/10 % | `data/monsters/generated/dragons.json` |
 | Abilities do Dragon (CMB-06/#518, regeneradas pelo #581) | bola de fogo (alvo, alcance 7, círculo raio 4, centrada no alvo): 60–140, 15 %; onda de fogo (comprimento 8, sem alvo): 100–170, 10 %; cura própria: +40–70, 15 % — mesmos números de antes do #581 | `data/monsters/generated/dragons.json`, blocos `abilities`/`defenses` |
 | O Dragon Lord (regenerado pelo importador, #581 — `data-otservbr-global/monster/dragons/dragon_lord.lua`) | 1900 HP, 2100 XP, melee 0–230, armadura 34 (era 35, um palpite de antes do #581 — 34 é o número real do Canary), `defense 34`, `defenseMitigation 1,29`, speed 200; mesmos elementos do Dragon; `aggroRadius 11` | `data/monsters/generated/dragons.json` |
@@ -574,7 +646,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Loot do Dragon (18 linhas, #581) | gold 89,92 %, 1–102; dragon ham 66,27 % (1–2); steel shield 15,65 %; dragon's tail 9,68 %; crossbow 9,12 %; longsword 3,83 %; steel helmet 3,49 %; broadsword 2,7 %; plate legs 2,029 %; double axe 1,58 %; green dragon leather 1,07 %; green dragon scale 1,01 %; wand of inferno 0,56 %; small diamond 0,45 %; serpent sword 0,23 %; dragon hammer 0,23 %; dragonbone staff 0,17 %; life crystal 0,17 %; dragon shield 0,11 % — `burst arrow` e `strong health potion` saíram: o importador só produz `itemId`, e os dois são munição/suprimento abstratos do Draconya (`ammunitionId`/`supplyId`), sem entidade own no catálogo de itens real; a linha é removida e contada em `docs/reference/catalog/monsters-promotion-report.md`, nunca creditada como item fantasma | `data/monsters/generated/dragons.json`, bloco `loot` |
 | Loot do Dragon Lord (16 linhas, #581) | gold 95,3 %, 1–237; dragon ham 79,79 % (1–2); green mushroom 12,03 %; royal spear 9,38 % (1–3); small sapphire 5,59 %; energy ring 4,55 %; golden mug 3,31 %; red dragon scale 1,94 %; red dragon leather 1,15 %; life crystal 0,65 %; strange helmet 0,52 %; tower shield 0,41 %; fire sword 0,35 %; royal helmet 0,26 %; dragon slayer 0,22 %; dragon lord trophy 0,13 %; dragon scale mail 0,09 % — `book`, `power bolt` e `strong health potion` saíram pelo mesmo motivo do Dragon (munição/suprimento abstrato, ou item sem entidade no catálogo real ainda) | `data/monsters/generated/dragons.json`, bloco `loot` |
 | Bestiário do Dragon/Dragon Lord (#520) | toKill 1000, firstUnlock 50, secondUnlock 500, charmsPoints 25, stars 3, occurrence 0 — ainda sem tela (ver `bestiary.md`) | `data/bestiary/baseline.json`, `entries` |
-| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); uma dificuldade só, `monsterCount: 47` = o total de `spawnPoints`, cada ponto nasce exatamente uma vez; `corpseTtlMs` saiu daqui e mora em `dragon`/`dragon-lord` desde o #585 (670000 ms cada, a mesma soma da cadeia de decaimento do Canary `items.xml`: dead dragon/dead dragon lord, 10 s → 300 s → 300 s → 60 s até `decayTo` sumir); `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
+| A hunt Darashia Dragon Lair (#520 fase 2) | `recommendedLevel` 40 (Gate of Expertise, TibiaWiki); sem dificuldade nenhuma desde o #583 — os 47 `spawnPoints` nascem todos, cada um exatamente uma vez; `corpseTtlMs` saiu do hunt e mora em `dragon`/`dragon-lord` desde o #585 (670000 ms cada, a mesma soma da cadeia de decaimento do Canary `items.xml`: dead dragon/dead dragon lord, 10 s → 300 s → 300 s → 60 s até `decayTo` sumir); Dragon e Dragon Lord são `blockable: false` (o default), então nascem com o telegraph de 4200 ms, nunca esperando a vista limpar; `spawnClearRadius` ausente (0, desligado — a referência pede não copiar a supressão do TFS) | `data/hunts/darashia-dragon-lair.json` |
 | Rate de loot e escala de monstro/boss (#691) | neutros (1); o conteúdo real não declara | `data/progression/baseline.json`, `rates.loot` / `rates.monster` / `rates.boss`; `data/monsters/*.json`, `boss` |
 | Monstro evita campo de fogo/veneno/energia (M29-05, `canWalkOnFieldType` do TFS/Canary) | `true` (anda por cima) é o default, como no Canary; nenhum dos quatro monstros do catálogo hoje declara `false` — Dragon e Dragon Lord declaram `true` explicitamente (`dragon.lua`/`dragon_lord.lua`, conferidos em 2026-09-25), rato e rotworm não declaram nada | `data/monsters/*.json`, campos `canWalkOnFire`/`canWalkOnPoison`/`canWalkOnEnergy` |
 
@@ -605,10 +677,14 @@ creditada como campo, não como item: gold nunca vira uma linha de `loot.items`.
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
 
-**Três tamanhos de pull, não quatro dificuldades** (ADR 0025, M11, em vigor desde a FUN-123).
-O §14.5 prevê Iniciante/Profissional/Herói/Lendário; a decisão é copiar o Huntera —
-Cauteloso/Ousado/Agressivo (`cautious`/`bold`/`reckless`), com um `monsterCount` total (2/5/8 na
-Rat Cellars) como o número que o jogador vê.
+~~**Três tamanhos de pull, não quatro dificuldades**~~ → **Superado (#583, ADR 0039):** o §14.5
+previa Iniciante/Profissional/Herói/Lendário; entre a FUN-123 (ADR 0025, M11) e o #583 a decisão
+foi copiar o Huntera — Cauteloso/Ousado/Agressivo (`cautious`/`bold`/`reckless`), com um
+`monsterCount` total (2/5/8 na Rat Cellars) escolhido pelo jogador. Nenhum dos dois é o que o
+Tibia real faz: ele não pergunta tamanho, todo ponto de spawn nasce, sempre — ver "Spawn: todo
+ponto nasce, sem pull" acima. O campo `difficulty` sobrevive no protocolo só por compatibilidade
+(#584) e o servidor o ignora; a UI que ainda mostra "Ousado · 4" (SV-19, #355, linha 35 acima) é
+dívida da #584, não deste registro.
 
 ~~**Cadáver no chão, só visual.**~~ → **Revertido (ADR 0048, 2026-09-26; FUN-123).** O abate
 deixa o cadáver do monstro no tile — `ground-item-appear`, com a arte de `appearances.corpses` —
@@ -623,21 +699,31 @@ simplesmente não é entregue.
 
 **A Rat Cellars é o bueiro de ratos de Rookgaard** (FUN-123), como no Huntera: o recorte real
 importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota traçada por
-`pnpm route:trace` sobre ele — um laço de 160 tiles com 14 pontos de spawn onde o mapa real põe
-rato —, e o rato do Tibia (20 HP, 5 XP, 3–4 de ataque, speed 172, gold e queijo). A entrada
-continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025).
+`pnpm route:trace` sobre ele — um laço de 160 tiles — e o rato do Tibia (20 HP, 5 XP, 3–4 de
+ataque, speed 172, gold e queijo). **Os pontos de spawn são os reais do #586**: até então a rota
+tinha 14 pontos genéricos traçados por heurística, sem `monsterId` próprio; `pnpm catalog:spawns
+--map rat-cellars` (#582) leu `otservbr-monster.xml` pelo recorte da região importada e regravou
+os 56 pontos que o Canary de fato usa ali — 48 rato, 3 spider, 2 rabbit, 2 bug, 1 cave-rat, cada
+um com o próprio `respawnDelayMs` (90 s em 55 deles, 60 s no restante). O override que fixava
+`blockable: true` no rato (preservando o comportamento do Huntera) foi apagado junto: o rato cai
+no `blockable: false` real do `rat.lua`. A entrada continua pelo menu, abrindo uma instância —
+sem portal na cidade (ADR 0025).
 
 **A Rotworm Caves é a caverna de rotworms de Darashia do Huntera** (#515), a segunda hunt do
 Draconya: o recorte real importado (88×101→88×73, andar 8, 902 tiles andáveis em duas
 componentes — 823 na principal e 79 num corredor isolado que a rota nunca visita — `ambience:
 cavern`, ADR 0025 emenda, Parte VI §38), a rota traçada por `pnpm route:trace` sobre ele — um
-laço de 444 tiles com 13 pontos de spawn escolhidos dentro da componente principal, evitando um
-funil estreito que prendia o combate corpo a corpo —, e o rotworm do Canary v3.6.1 (65 HP, 40
-XP, 24–30 de ataque, armadura 8, speed 180). É a primeira hunt do Draconya com loot de verdade
-além do gold: sete itens (`sword`, `mace`, `meat`, `ham`, `worm`, `lump-of-dirt`,
-`legion-helmet`), com `value` de TibiaWiki provisório para as três peças de equipamento e `0`
-para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada continua pelo menu,
-abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.
+laço de 444 tiles — e o rotworm do Canary v3.6.1 (65 HP, 40 XP, 24–30 de ataque, armadura 8,
+speed 180). É a primeira hunt do Draconya com loot de verdade além do gold: sete itens (`sword`,
+`mace`, `meat`, `ham`, `worm`, `lump-of-dirt`, `legion-helmet`), com `value` de TibiaWiki
+provisório para as três peças de equipamento e `0` para as quatro de comida/curiosidade (sem NPC
+de venda ainda). **Os pontos de spawn são os reais do #586**: até então a rota tinha 13 pontos
+genéricos escolhidos dentro da componente principal, evitando um funil estreito que prendia o
+combate corpo a corpo; `pnpm catalog:spawns --map rotworm-caves` regravou os 42 pontos reais —
+35 rotworm, 7 terramite, todos com `respawnDelayMs` 90 s. O override que fixava `blockable: true`
+no rotworm foi apagado junto: o rotworm cai no `blockable: false` real do `rotworm.lua`. A
+entrada continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat
+Cellars.
 
 **A Darashia Dragon Lair é a primeira hunt MULTIANDAR, e a primeira copiada do Canary em vez do
 Huntera** (#519, ADR 0025 emenda, ADR 0037): o recorte real importado (86×121, z10–z12 — 2.036

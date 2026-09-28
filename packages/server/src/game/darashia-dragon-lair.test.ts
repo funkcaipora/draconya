@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
 import type { Content } from '@draconya/content';
-import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
+import { CharacterRuntime, createHuntSession, distance, totalXpForLevel } from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 
 // A Darashia Dragon Lair REAL (#520 fase 2, sobre o mapa/rota do #519): 47 pontos de spawn, cada
@@ -108,46 +108,56 @@ describe('a Darashia Dragon Lair real (#520 fase 2)', () => {
     // A ÂNCORA é a posição de NASCIMENTO (o `at` do ponto), não a de morte: um Dragon persegue
     // a party antes de cair, então a posição do `ground-item-appeared` já pode estar alguns
     // tiles longe do ponto — e é NO PONTO, não onde ele morreu, que o respawn acontece.
-    run(session, 100, 100);
-    const spawned = ruleset.monsters.find((m) => m.alive);
-    if (spawned === undefined) throw new Error('sem monstro nascido');
-    const trackedId = spawned.id;
-    const homePosition = { ...spawned.position };
-    const monsterId = spawned.monsterId;
-    // A ÂNCORA que importa é `.home` (a origem do PONTO, #519), não a posição CORRENTE: com 19
-    // Dragon no mesmo andar perseguindo a party, outro Dragon ainda vivo pode passar a um tile
-    // do ponto morto por pura coincidência de rota, sem que o ponto tenha respawnado nada — foi
-    // exatamente esse falso positivo, achado depurando o #549 (combat-v3 do jogador muda o
-    // instante exato de cada abate, e por tabela o passo de todo mundo, inclusive de quem não
-    // tem nada a ver com este ponto). `.home` é fixo desde o nascimento (`#spawnMonster`) e só
-    // um monstro NASCIDO neste ponto — o original ou o respawn — o carrega.
-    const nearHome = (m: (typeof ruleset.monsters)[number]): boolean =>
-      m.alive && m.monsterId === monsterId
-      && Math.abs(m.home.x - homePosition.x) <= 1 && Math.abs(m.home.y - homePosition.y) <= 1
-      && m.home.z === homePosition.z;
-
-    // Deixa a party engajar e o alvo escolhido chegar perto de morrer, depois esvazia o HP DELE
-    // (pelo `id` rastreado, não "o primeiro vivo") para 1 — o próximo golpe da party o mata pelo
-    // PIPELINE de verdade, sem esperar minutos de dano desarmado contra 1000+ de HP.
+    //
+    // Este teste não fixa QUAL monstro vai morrer — "mata algum dragão perto da entrada" é
+    // literal, não um dos 47 em particular. Com 19 Dragon no mesmo corredor apertado, o passo
+    // guloso (ADR 0009: "empacado numa concavidade ... e é assim mesmo, não conserte") pode
+    // travar um monstro específico atrás de outros PARA SEMPRE — um impasse geométrico legítimo
+    // do algoritmo, não um defeito. A dança de alvo (#543) muda quantos monstros se mexem e
+    // quando, o que desloca a fila de sorteio da sessão inteira: o monstro que a semente atual
+    // deixa preso pode não ser mais o mesmo de antes. Por isso a cada vencimento o alvo do
+    // "esvazia o HP" é reavaliado — qualquer um ADJACENTE a algum membro vivo da party, nunca
+    // um id fixado de antemão — e o primeiro que a party de fato acertar decide o ponto.
     let killedAtMs: number | null = null;
-    let elapsedMs = 0;
-    for (; elapsedMs < 60_000 && killedAtMs === null; elapsedMs += 100) {
-      const stillTracked = ruleset.monsters.find((m) => m.id === trackedId);
-      if (stillTracked !== undefined && stillTracked.alive && stillTracked.health > 1) {
-        stillTracked.receiveDamage(stillTracked.health - 1);
+    let monsterId: string | null = null;
+    let anchor: { x: number; y: number; z?: number } | null = null;
+    for (let elapsedMs = 0; elapsedMs < 60_000 && killedAtMs === null; elapsedMs += 100) {
+      // `.home` de cada engajado ANTES do vencimento — não dá para lê-lo depois de morto, e o
+      // ponto (não a posição de morte) é a âncora que os dois `expect` abaixo cobram (#519).
+      const engagedHomes = new Map<number, { home: { x: number; y: number; z?: number }; monsterId: string }>();
+      for (const monster of ruleset.monsters) {
+        if (!monster.alive) continue;
+        const engaged = session.participants.some((p) => p.alive
+          && p.position.z === monster.position.z && distance(p.position, monster.position) <= 1);
+        if (!engaged) continue;
+        engagedHomes.set(monster.id, { home: { ...monster.home }, monsterId: monster.monsterId });
+        if (monster.health > 1) monster.receiveDamage(monster.health - 1);
       }
       session.advanceBy(100);
-      for (const event of session.drainEvents()) {
-        if (event.kind !== 'ground-item-appeared') continue;
-        if (event.monsterId !== monsterId) continue;
-        // Confere que É o rastreado: mais de um Dragon pode morrer perto da entrada, e só o
-        // ID rastreado conta para "instante 0" dos 90 s deste teste.
-        if (ruleset.monsters.some((m) => m.id === trackedId && m.alive)) continue;
+      // Quem estava engajado (HP forçado a 1) e já não está mais na lista morreu pelo golpe
+      // REAL da party neste vencimento (`resolveDeath`/`#onMonsterDied`, FUN-123) — é ele que
+      // decide o ponto, nunca "o primeiro id que sumiu" de uma varredura sem relação com o HP
+      // forçado. Mais de um pode morrer no mesmo vencimento; o primeiro da iteração decide, e
+      // como cada um é um PONTO diferente, o `expect` abaixo continua correto para qualquer um.
+      for (const [id, engaged] of engagedHomes) {
+        if (ruleset.monsters.some((m) => m.id === id)) continue;
         killedAtMs = elapsedMs;
+        monsterId = engaged.monsterId;
+        anchor = engaged.home;
         break;
       }
     }
-    if (killedAtMs === null) throw new Error('o alvo rastreado não morreu em 60 s');
+    if (killedAtMs === null || monsterId === null || anchor === null) {
+      throw new Error('nenhum monstro engajado morreu em 60 s');
+    }
+    const deadMonsterId = monsterId;
+    const homeAnchor = anchor;
+    // `.home` é fixo desde o nascimento (`#spawnMonster`) e só um monstro NASCIDO neste ponto —
+    // o original ou o respawn — o carrega.
+    const nearHome = (m: (typeof ruleset.monsters)[number]): boolean =>
+      m.alive && m.monsterId === deadMonsterId
+      && Math.abs(m.home.x - homeAnchor.x) <= 1 && Math.abs(m.home.y - homeAnchor.y) <= 1
+      && m.home.z === homeAnchor.z;
     expect(ruleset.monsters.some(nearHome)).toBe(false);
 
     // Ainda dentro dos 90 s do `spawntime` do ponto: o lugar continua vazio.

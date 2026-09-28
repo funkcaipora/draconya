@@ -26,6 +26,8 @@ import { getCatalogType, listCatalogTypes } from './registry.js';
 import './items.js';
 import './monsters.js';
 import './ammo.js';
+import './spells.js';
+import './imbuements.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 

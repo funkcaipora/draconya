@@ -1,0 +1,17 @@
+{
+  "id": "strong-haste-druid",
+  "name": "Strong Haste",
+  "description": "Aumenta a sua velocidade de movimento em 70% por 22 segundos.",
+  "vocationId": "druid",
+  "minLevel": 20,
+  "manaCost": 100,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "haste",
+    "speedPercent": 70,
+    "durationMs": 22000
+  },
+  "_open": "A mesma Strong Haste de `strong-haste-sorcerer.json` — arquivo por vocação porque `vocationId` é um só (DT-02, o mesmo padrão de `haste-knight.json`/`haste-paladin.json`/etc.). Ver a nota completa lá; o Canary declara as duas vocações no MESMO `spell:vocation(...)`, `data/scripts/spells/support/strong_haste.lua` (`druid;true`, `elder druid;true`, `sorcerer;true`, `master sorcerer;true`)."
+}

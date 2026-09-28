@@ -488,6 +488,10 @@
       "resistances": {},
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -666,6 +670,10 @@
         "drown"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.05,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -860,6 +868,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.7,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1272,6 +1284,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.78,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1361,6 +1377,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1585,6 +1605,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1649,6 +1672,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "paralyze"
+    ],
     "defenseMitigation": 0.51,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -1710,6 +1736,10 @@
         "physical"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2102,6 +2132,132 @@
     }
   },
   {
+    "id": "killer-rabbit",
+    "name": "Killer Rabbit",
+    "class": "mammal",
+    "health": 205,
+    "experience": 160,
+    "attack": {
+      "min": 0,
+      "max": 100
+    },
+    "armor": 17,
+    "defense": 35,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "defenseMitigation": 0.51,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 1200,
+    "speed": 340,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 90
+      },
+      "items": []
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 1200,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 100
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalstrike",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 50
+        },
+        "damageType": "physical",
+        "kind": "combat"
+      }
+    ],
+    "defenses": [
+      {
+        "id": "haste",
+        "cadenceMs": 1000,
+        "chance": 0.4,
+        "condition": {
+          "key": "speed",
+          "merge": "replace",
+          "durationMs": 8000,
+          "effect": {
+            "kind": "speed",
+            "type": "haste",
+            "delta": 380
+          }
+        },
+        "presentation": {
+          "impactKey": "energyhit"
+        }
+      },
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.3,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 5000,
+      "chance": 0.2
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "staticAttack": 0.9,
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/killer_rabbit.lua"
+    },
+    "summons": {
+      "max": 2,
+      "entries": [
+        {
+          "monsterId": "killer-rabbit",
+          "intervalMs": 2000,
+          "chance": 0.3,
+          "count": 2
+        }
+      ]
+    }
+  },
+  {
     "id": "kongra",
     "name": "Kongra",
     "class": "mammal",
@@ -2380,6 +2536,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 1.04,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -2579,6 +2738,10 @@
         "holy"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 4.26,
     "canWalkOnFire": false,
     "canWalkOnPoison": true,
@@ -2637,6 +2800,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2731,6 +2898,170 @@
     }
   },
   {
+    "id": "mutated-tiger",
+    "name": "Mutated Tiger",
+    "class": "mammal",
+    "health": 1100,
+    "experience": 750,
+    "attack": {
+      "min": 0,
+      "max": 150
+    },
+    "armor": 25,
+    "defense": 25,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {
+        "energy": 0.2,
+        "earth": 0.8,
+        "fire": 0.2,
+        "ice": 0.2,
+        "death": -0.05
+      },
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.99,
+    "canWalkOnFire": true,
+    "canWalkOnPoison": true,
+    "canWalkOnEnergy": true,
+    "attackIntervalMs": 2000,
+    "speed": 200,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "gold": {
+        "chance": 0.5,
+        "min": 1,
+        "max": 100
+      },
+      "items": [
+        {
+          "itemId": "life-ring",
+          "chance": 0.0558
+        },
+        {
+          "itemId": "guardian-shield",
+          "chance": 0.0038
+        },
+        {
+          "itemId": "meat",
+          "chance": 0.295,
+          "min": 1,
+          "max": 2
+        },
+        {
+          "itemId": "angelic-axe",
+          "chance": 0.0044
+        },
+        {
+          "itemId": "glorious-axe",
+          "chance": 0.0087
+        },
+        {
+          "itemId": "striped-fur",
+          "chance": 0.2013
+        },
+        {
+          "itemId": "sabretooth",
+          "chance": 0.106
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "id": "melee",
+        "cadenceMs": 2000,
+        "target": {
+          "range": 1
+        },
+        "power": {
+          "min": 0,
+          "max": 150
+        },
+        "damageType": "physical",
+        "kind": "melee"
+      },
+      {
+        "id": "physicalwave",
+        "cadenceMs": 2000,
+        "chance": 0.2,
+        "target": {
+          "range": 5,
+          "area": {
+            "shape": "rows",
+            "widths": [
+              1,
+              1,
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "power": {
+          "min": 0,
+          "max": 200
+        },
+        "damageType": "physical",
+        "kind": "combat",
+        "presentation": {
+          "impactKey": "blockhit"
+        }
+      }
+    ],
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      },
+      {
+        "id": "heal",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "heal": {
+          "min": 150,
+          "max": 300
+        },
+        "presentation": {
+          "impactKey": "blueshimmer"
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0.1
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 100,
+    "staticAttack": 0.9,
+    "corpseTtlMs": 910000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/mutated_tiger.lua"
+    }
+  },
+  {
     "id": "noble-lion",
     "name": "Noble Lion",
     "class": "mammal",
@@ -2753,6 +3084,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.02,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -2912,6 +3247,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.15,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -3349,6 +3688,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3504,6 +3847,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0.83,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -3819,6 +4165,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.33,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -3885,6 +4235,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 1.88,
     "canWalkOnFire": true,
     "canWalkOnPoison": false,
@@ -3950,6 +4304,71 @@
     }
   },
   {
+    "id": "thieving-squirrel",
+    "name": "Thieving Squirrel",
+    "health": 55,
+    "experience": 15,
+    "attack": 0,
+    "armor": 5,
+    "defense": 5,
+    "damageType": "physical",
+    "mitigation": {
+      "resistances": {},
+      "immunities": []
+    },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
+    "defenseMitigation": 0.1,
+    "canWalkOnFire": false,
+    "canWalkOnPoison": false,
+    "canWalkOnEnergy": false,
+    "attackIntervalMs": 2000,
+    "speed": 1000,
+    "aggroRadius": 11,
+    "attackRange": 1,
+    "targetDistance": 1,
+    "blockable": false,
+    "loot": {
+      "rollModel": "canary",
+      "items": []
+    },
+    "defenses": [
+      {
+        "id": "invisible",
+        "cadenceMs": 2000,
+        "chance": 0.1,
+        "condition": {
+          "key": "invisible",
+          "durationMs": 10000,
+          "effect": {
+            "kind": "invisible"
+          }
+        }
+      }
+    ],
+    "targetChange": {
+      "intervalMs": 4000,
+      "chance": 0
+    },
+    "targetStrategy": {
+      "nearest": 100,
+      "health": 0,
+      "damage": 0,
+      "random": 0
+    },
+    "runOnHealth": 55,
+    "staticAttack": 0.95,
+    "_open": "Sem ataque no Canary: attack 0 e attackIntervalMs 2000 são o preenchimento do schema, não um número do Tibia.",
+    "corpseTtlMs": 670000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data-otservbr-global/monster/mammals/thieving_squirrel.lua"
+    }
+  },
+  {
     "id": "thornfire-wolf",
     "name": "Thornfire Wolf",
     "class": "magical",
@@ -3972,6 +4391,10 @@
         "fire"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.64,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -4275,6 +4698,10 @@
         "lifedrain"
       ]
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.62,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
@@ -4571,6 +4998,10 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible",
+      "paralyze"
+    ],
     "defenseMitigation": 0.91,
     "canWalkOnFire": true,
     "canWalkOnPoison": true,
@@ -5057,6 +5488,9 @@
       },
       "immunities": []
     },
+    "conditionImmunities": [
+      "invisible"
+    ],
     "defenseMitigation": 0,
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
