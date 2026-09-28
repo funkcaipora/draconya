@@ -149,3 +149,27 @@ então.
 
 (Evidência: `docs/reference/huntera-observed.md` Parte I §7 linhas 121-126; Parte II §15 linhas
 311-317; Parte V §31 linhas 693-699; Parte VI §38 linhas 806-817.)
+
+## Emenda (#583): a janela de visibilidade do `findPlayer`, e a população inicial
+
+A questão que a seção "Consequências" deixou aberta — `Spectators::find`/±11 tiles do Canary, ou
+a viewport do cliente do Draconya — está decidida: **±11 tiles Chebyshev**, a aproximação
+quadrada do viewport retangular do Canary (`MAP_MAX_VIEW_PORT_X`/`_Y`), a mesma simplificação
+que o resto do `sim` já faz para distância (não há campo de visão retangular em lugar nenhum do
+motor). A viewport do CLIENTE nunca foi candidata séria: o `sim` é puro (invariante 1) e não
+conhece resolução de tela nem zoom — o servidor não tem como saber o que um cliente específico
+está desenhando, e não deveria precisar saber para decidir uma regra de jogo.
+
+**Achado durante a implementação, não previsto no ADR original: `SpawnMonster::startup(bool
+delayed)` do Canary bypassa `checkSpawnMonster` inteiramente.** A população INICIAL de uma hunt
+chama `scheduleSpawn` direto, com `interval = 0` — nunca passa pela gating de `blockable`/janela
+de visão que este ADR descreve. Essa gating (decisão 2) vale só para o RESPAWN pós-morte. Sem
+essa distinção, uma hunt cujo primeiro tile de entrada cai dentro do raio de visão de um ponto
+`blockable` nunca populava aquele ponto — a Rat Cellars, cujo herói entra a poucos tiles do
+primeiro rato `blockable`, é exatamente esse caso. O `sim` implementa os dois como eventos
+distintos (`SPAWN_INITIAL`/`SPAWN`), e é o que faz a hunt nascer cheia na entrada, como o Canary
+faz de verdade.
+
+O telegraph de 4200 ms (`NONBLOCKABLE_SPAWN_MONSTER_INTERVAL` × 3) para monstro não-`blockable`
+é apresentação — o efeito visual de teleporte que o Canary mostra nesse intervalo fica para o
+protocolo/cliente (#584/M36-03); o `sim` só aplica o atraso, sem efeito nenhum para desenhar.

@@ -191,8 +191,9 @@ describe('outfit colours on the creature (FUN-104)', () => {
       self: {
         creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
       },
-      world: { groundItems: [], tileUpdates: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -249,8 +250,9 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
     self: {
       creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
       level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      soul: 0, soulMax: 0,
     },
-    world: { groundItems: [], tileUpdates: [], mapId: null, creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
   };
@@ -463,6 +465,55 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decodedWithout?.[0]?.monsters[0]).not.toHaveProperty('class');
   });
 
+  it('round trips the Canary bestiary entry per monster, and an older node decodes with it absent (#601, ADR 0053 d.1)', () => {
+    const withEntry = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [], supplies: [],
+      },
+      items: [], ammunition: [],
+      monsters: [{
+        id: 'dragon',
+        name: 'Dragon',
+        bestiary: {
+          stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+        },
+      }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(withEntry)) as Array<{
+      monsters: Array<{
+        id: string; name: string;
+        bestiary?: {
+          stars: number; occurrence: number; firstUnlock: number; secondUnlock: number;
+          toKill: number; charmsPoints: number;
+        };
+      }>;
+    }> | null;
+    expect(decoded?.[0]?.monsters).toEqual([{
+      id: 'dragon',
+      name: 'Dragon',
+      bestiary: {
+        stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+      },
+    }]);
+
+    const older = {
+      ...withEntry,
+      monsters: [{ id: 'dragon', name: 'Dragon' }],
+    } as unknown as S2CMessage;
+    const decodedOlder = decodeS2C(encodeS2C(older)) as Array<{ monsters: Array<{ id: string; name: string; bestiary?: unknown }> }> | null;
+    expect(decodedOlder?.[0]?.monsters[0]?.id).toBe('dragon');
+    expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('bestiary');
+  });
+
   describe('vocation statics in the catalogue — speed and regen (#361, SV-25)', () => {
     const baseCatalogue = {
       type: 'catalogue',
@@ -603,6 +654,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       magic: { level: 2, percentToNext: 80 },
     },
     magicLevel: { level: 2, percentToNext: 80 },
+    soul: 42,
+    soulMax: 100,
   };
 
   it('round-trips player-stats with the 3 fields', () => {
@@ -623,6 +676,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
+      soul: 0,
+      soulMax: 0,
     }]);
   });
 
@@ -639,8 +694,10 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
         melee: { level: 15, percentToNext: 45 },
       },
       magicLevel: { level: 2, percentToNext: 80 },
+      soul: 42,
+      soulMax: 100,
     },
-    world: { groundItems: [], tileUpdates: [], mapId: 'arena', creatures: [] },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'arena', creatures: [] },
     aggregates: { durationMs: 12000, xpGained: 500, goldGained: 100, goldSpent: 0, kills: 5, deaths: 0 },
     notableEvents: [],
   };
@@ -650,7 +707,9 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
   });
 
   it('decodes session-state.self without the 3 fields using defaults (compatibilidade com nó anterior)', () => {
-    const { speed: _s, skills: _sk, magicLevel: _m, ...selfWithoutNewFields } = fullSessionState.self;
+    const {
+      speed: _s, skills: _sk, magicLevel: _m, soul: _soul, soulMax: _soulMax, ...selfWithoutNewFields
+    } = fullSessionState.self;
     const olderSessionState = {
       ...fullSessionState,
       self: selfWithoutNewFields,
@@ -663,6 +722,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
         speed: 0,
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0,
+        soulMax: 0,
       },
     }]);
   });
@@ -1058,6 +1119,7 @@ describe('the party block of the analyzer and the session state (#393)', () => {
       self: {
         creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
         level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0, soulMax: 0,
       },
       world: { mapId: null, creatures: [], groundItems: [], tileUpdates: [] },
       aggregates,
@@ -1296,8 +1358,10 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
         speed: 200,
         skills: {},
         magicLevel: { level: 0, percentToNext: 0 },
+        soul: 0,
+        soulMax: 0,
       },
-      world: { mapId: 'rats-cave', creatures: [], groundItems: [], tileUpdates: [] },
+      world: { mapId: 'rats-cave', creatures: [], groundItems: [], tileUpdates: [], fields: [] },
       aggregates: { durationMs: 5000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -1316,7 +1380,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       health: 100, maxHealth: 100, mana: 50, maxMana: 50,
       level: 5, xp: 1000, capacity: 300, gold: 50, staminaMs: 50000,
       ammo: { arrow: null, bolt: null }, vocationId: 'knight', speed: 250,
-      skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
     };
     expect('targetId' in stats).toBe(false);
     expect(decodeS2C(encodeS2C(stats))).toEqual([stats]);
@@ -1469,5 +1533,65 @@ describe('usable scenery: use-on-map, look, tile-update (#729, ADR 0050 d.7)', (
     expect(withOverlay.world.tileUpdates).toEqual([
       { position: { x: 1, y: 2, z: 3 }, replace: [{ from: 1, to: 2 }] },
     ]);
+  });
+});
+
+describe('fields on the world: field-appear, field-disappear (#561, M31-06)', () => {
+  it('round trips field-appear and field-disappear S2C', () => {
+    const fieldAppear: S2CMessage = {
+      type: 'field-appear',
+      id: 'fire',
+      tiles: [{ x: 10, y: 12, z: 7 }, { x: 11, y: 12, z: 7 }],
+      appearanceId: 2118,
+    };
+    const fieldDisappear: S2CMessage = { type: 'field-disappear', id: 'fire' };
+    expect(decodeS2C(encodeS2C(fieldAppear))).toEqual([fieldAppear]);
+    expect(decodeS2C(encodeS2C(fieldDisappear))).toEqual([fieldDisappear]);
+  });
+
+  it('the session state carries the active fields, empty by default', () => {
+    const base = {
+      sessionType: 'hunt' as const,
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0,
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    const withoutFields = S2C_SCHEMAS['session-state']
+      .parse({ ...base, world: { mapId: null, creatures: [] } });
+    expect(withoutFields.world.fields).toEqual([]);
+
+    const withFields = S2C_SCHEMAS['session-state'].parse({
+      ...base,
+      world: {
+        mapId: null,
+        creatures: [],
+        fields: [{ id: 'fire', tiles: [{ x: 1, y: 2, z: 3 }], appearanceId: 2118 }],
+      },
+    });
+    expect(withFields.world.fields).toEqual([
+      { id: 'fire', tiles: [{ x: 1, y: 2, z: 3 }], appearanceId: 2118 },
+    ]);
+  });
+});
+
+describe('enter-hunt without difficulty (#584, ADR 0039 — end of pull-by-difficulty)', () => {
+  it('round trips huntId alone through the codec, difficulty absent', () => {
+    // Um cliente NOVO nunca manda `difficulty` — o campo virou vestigial (ADR 0039). Se ele
+    // voltar a ser obrigatório, este parse falha primeiro.
+    const withoutDifficulty: C2SMessage = { type: 'enter-hunt', huntId: 'rat-cellars' };
+    expect(decodeC2S(encodeC2S(withoutDifficulty))).toEqual([withoutDifficulty]);
+    const parsed = C2S_SCHEMAS['enter-hunt'].safeParse({ huntId: 'rat-cellars' });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('still accepts a legacy client that sends an old difficulty name', () => {
+    // Compat (ADR 0014): um cliente anterior ao #583 manda um nome que não existe mais no
+    // conteúdo (`'cautious'`/`'bold'`/`'reckless'`) — o protocolo aceita, sem validar o valor.
+    const legacy: C2SMessage = { type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' };
+    expect(decodeC2S(encodeC2S(legacy))).toEqual([legacy]);
   });
 });

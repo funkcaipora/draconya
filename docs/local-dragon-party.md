@@ -103,7 +103,6 @@ Flags (todas opcionais):
 | Flag | Default | O quê |
 |---|---|---|
 | `--hunt-id=` | `darashia-dragon-lair` | qual hunt configurar na party |
-| `--difficulty=` | `bold` | qual dificuldade daquela hunt |
 | `--start` | — | inicia a hunt depois de configurar, e ANEXA o ticket do líder para o `game` criar a sessão de verdade (#527; exclusivo com `--reset`) |
 | `--reset` | — | tira os quatro da party, devolve à Cidade e liquida snapshot pendente (#527) |
 | `--database-url=`, `--redis-url=`, `--content-dir=`, `--api-base=`, `--api-port=`, `--client-origin=` | do `.env`/padrão | sobrescrevem o que o `.env` traz, para rodar fora do fluxo acima |
@@ -116,7 +115,7 @@ iniciar; as quatro contas, personagens e a party continuam formados e prontos, s
 configurar assim que a hunt chegar. Para testar o fluxo inteiro antes disso:
 
 ```bash
-pnpm dev:dragon-party --hunt-id=rat-cellars --difficulty=bold --start
+pnpm dev:dragon-party --hunt-id=rat-cellars --start
 ```
 
 **Idempotente**: rodar de novo atualiza as MESMAS quatro contas/personagens (por e-mail e nome) —

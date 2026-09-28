@@ -555,10 +555,13 @@ não mais a exceção. O que o motor ganhou:
   causado ×0,65, ou seja −35 %, não −15 %) porque o Canary já expressa Protector direto em
   percentual de dano, sem passar por skill.
 
-O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade, cura
-de condição, magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições
-de monstro, que ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o
-catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …). Também ficam
+O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade,
+magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições de monstro, que
+ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o catálogo nominal
+ainda não traz são as magias de DOT por nome (Envenom, Curse, …). **A cura de condição SAIU da
+lista no #590**: Cure Poison (genérica, todas as vocações), Cure Burning/Cure Electrification
+(Druid), Cure Bleeding (Druid e Knight), Cure Curse (Paladin) e a Antidote Rune (suprimento) — ver
+a subseção "Cura de condição (dispel)" logo após o CMB-07. Também ficam
 de fora as magias de "Wheel of Destiny" (o sistema de grades/`needLearn` do Canary moderno,
 level 300 — Fair Wound Cleansing, Divine Grenade, Terra Burst): o Draconya não modela o Wheel, e
 um level 200 não as alcançaria de qualquer forma. Great Death Beam já existia no catálogo com um
@@ -1441,12 +1444,18 @@ interface MonsterTargetStrategy {
   encurralado, fica parado (ADR 0009). As abilities CORPO A CORPO (`isMeleeAbility`: sem área,
   alcance 1) nem são armadas nem executam enquanto foge; as de alcance continuam saindo — passo
   e ataque são decisões independentes, como no TFS (`getNextStep` × `doAttacking`).
-- **`staticAttack` (aceito, ainda NÃO wired)**: o campo existe no schema
-  (`monster.staticAttack`, fração de vencimentos em que o monstro fica parado em vez de dar um
-  passo aleatório colado no alvo — TFS `staticattack`/`randomStepping`), mas o motor de passo
-  daqui não tem um "pensamento" periódico independente do passo em si; simular o shuffle exigiria
-  um evento novo só para isso. Decisão explícita do #518 ("implementar só se couber sem mexer no
-  determinismo; senão registrar como divergência") — ver "Divergências do PRD" abaixo.
+- **`staticAttack` (dança de alvo, #543, TFS `staticattack`/`randomStepping`,
+  `Monster::getDanceStep`)**: fração de vencimentos em que o monstro FICA PARADO colado no alvo;
+  `1 − staticAttack` é a fração de dança. Um evento `MONSTER_DANCE` próprio (1000 ms, decisão de
+  produto do Draconya — o Canary não tem um "think" de movimento separado do passo) só existe
+  agendado ENQUANTO o monstro está colado, sem passo a dar (`decideMonsterAction` devolvendo
+  `'attack'`) — armado e desarmado por `#onMonsterStep`, nunca uma varredura periódica fora do
+  engajamento (invariante 2). Cada vencimento rola UMA `rng.chance(1 − staticAttack)`; a dança
+  escolhida move o monstro por `danceStep` (`monster/step.ts`) para um dos até quatro vizinhos
+  CARDINAIS que preservam a MESMA distância Chebyshev ao alvo — nunca aproxima, nunca afasta, e
+  nunca perde a capacidade de atacar (a distância preservada garante isso sozinha). A dança
+  durante a fuga (`isMonsterFleeing`) fica fora do escopo: `decideMonsterAction` nunca devolve
+  `'attack'` fugindo, então o ramo nunca é armado nesse estado.
 - **`scheduledDefenses` viaja no snapshot** (opcional, sem bump de formato), como
   `scheduledAbilities`: sem ele, a hunt retomada reagendaria a defesa que já tinha evento na
   fila e curaria em dobro no primeiro vencimento.
@@ -1514,6 +1523,56 @@ outro motivo. Sem a camada `sight` (todo mapa hoje), o custo é um `if` e retorn
 máquina com `THINGS_DIR` apontando para o pacote 13.x; arremesso livre de item entre andares
 (mecânica que o Draconya não tem); e uma IA de monstro "persegue e recua sozinho" além do que
 `targetDistance` já cobre.
+
+## Trava de ataque ao trocar de andar (stairhop, #554, M30-07, ADR 0040 decisão 1)
+
+O TFS/Canary aplicam `CONDITION_PACIFIED` por `STAIRHOP_DELAY` (`stairJumpExhaustion`,
+`config.lua.dist:45`, `2 * 1000`) toda vez que a posição de um JOGADOR muda de andar ou é
+redirecionada por teleporte (`Player::internalCreatureChangeOutfit`/`onChangeZone`,
+`player.cpp:2857-2866` e `player.cpp:12417-12423`: `if (teleport || oldPos.z != newPos.z)`).
+Enquanto a condição vale, `Player::doAttacking` recusa o golpe corpo a corpo/distância inteiro
+(`player.cpp:3982`), e toda magia AGRESSIVA recusa com `RETURNVALUE_YOUAREEXHAUSTED`
+(`Spell::playerSpellCheck`, `spells.cpp:517`: `if (aggressive && player->hasCondition
+(CONDITION_PACIFIED))`) — `Spell::aggressive` é `true` por padrão, e só as magias que não
+precisam de alvo hostil (cura, condição própria) o desligam. Vale **só para jogador**: o monstro
+não conhece a condição.
+
+**O Draconya reproduz o MECANISMO, não a condição.** A `pacified` de verdade (M44-04) ainda não
+existe — `Conditions` (`packages/sim/src/conditions.ts`) é o vocabulário de haste/postura/magic
+shield/cura contínua, e nenhum deles é "recusa golpe". Migrar para lá é aditivo quando a
+condição existir; até então, `CharacterRuntime.attackLockedUntil` (opcional no `CharacterState`,
+`0` ausente, sem bump de `SNAPSHOT_FORMAT_VERSION`) é um instante ABSOLUTO do relógio lógico —
+como o cooldown de magia — escrito só por `HuntRuleset#step`, o ÚNICO lugar que escreve posição
+de criatura (FUN-69): pisar numa escada ou num teleporte (#734) redireciona o passo para um tile
+que não é o adjacente pedido — `z` diferente, ou a distância pedida — e é ESSE sinal (não um
+booleano "é escada?" separado) que dispara `attackLockedUntil = session.nowMs +
+stairhopDelayMs`. Um passo comum, adjacente e no mesmo andar, nunca grava nada.
+
+**`combat.stairhopDelayMs` é conteúdo, opcional, e só o `combat-v3` lê** (`HuntRuleset#isV3`,
+`packages/content/src/schemas.ts`) — a mesma disciplina aditiva do ADR 0031/0040: ausente é
+IDENTIDADE, e todo conteúdo `combat-v1`/`v2`, ou um `combat-v3` que não declare o campo, segue
+bit a bit sem trava nenhuma. A baseline real declara `2000` (o `stairJumpExhaustion` do Canary).
+
+**Dois portões conferem a trava, e os dois carregam o prazo exato de volta — como o
+cooldown:**
+
+1. **O golpe básico** (`#onPlayerAttack`): com `attackLockedUntil > nowMs`, o golpe engatilhado
+   NÃO sai — reagenda para o instante EXATO do destravamento (`attackLockedUntil - nowMs`), não
+   para o intervalo normal de ataque nem para o próximo vencimento do mundo. É a mesma
+   invariante de "engatilhado OU agendado, nunca os dois" que já vale para o cooldown de ataque:
+   a trava não some do relógio, ela move o vencimento.
+2. **A magia AGRESSIVA** (`castSpell`, `packages/sim/src/casting.ts`): `effect.kind === 'damage'`
+   ou `'damage-over-time'` recusam com a razão tipada `attack-locked` e `retryInMs` — ANTES da
+   conferência de alvo/alcance, na mesma posição relativa do `playerSpellCheck` do Canary. Cura,
+   cura contínua, haste, postura e magic shield **não conferem a trava**: são o vocabulário que
+   não precisa de alvo hostil, a mesma exceção que `Spell::aggressive` já declara.
+
+`attack-locked` entra em `SlotRefusal` (`packages/sim/src/rulesets/hunt.ts`, disparo manual de
+slot) e em `host.ts` (`'Você está exausto.'`, a mesma frase do `RETURNVALUE_YOUAREEXHAUSTED`).
+
+**Fora do escopo**: migrar para a condição `pacified` de verdade (M44-04); o `skull`/PvP do
+Canary que também gate a magia agressiva (o Draconya não tem PvP nem sistema de skull ainda);
+qualquer travamento fora de hunt/quest/boss/guild war — a Cidade não simula combate.
 
 ## Manter distância: o atirador recua quando o alvo chega perto (#542, `targetDistance`)
 
@@ -1671,11 +1730,19 @@ interface ConditionSpec {                 // declarado em content
   readonly effect: ConditionEffect;       // speed | buff | mana-shield | heal-over-time | damage-over-time
 }
 
+interface FieldStage {                    // declarado em content (#560)
+  readonly durationMs: number;
+  readonly condition?: ConditionSpec;     // ausente: estágio MUDO (só ocupa/bloqueia)
+}
+
 interface FieldSpec {                     // declarado em content
   readonly id: string;
   readonly durationMs: number;
   readonly shape: SpellArea;              // a MESMA geometria da magia/ability
-  readonly condition: ConditionSpec;
+  readonly condition?: ConditionSpec;     // #560: opcional — campo puramente bloqueante não tem
+  readonly stages?: readonly FieldStage[]; // #560: a cadeia `decayTo`; ausente é UM estágio só
+  readonly blocksMovement?: boolean;      // #560: Magic Wall/Wild Growth
+  readonly blocksProjectile?: boolean;    // #560: alimenta a LOS quando o M30-06 existir
 }
 ```
 
@@ -1774,13 +1841,55 @@ interface FieldSpec {                     // declarado em content
 - **Tique x vencimento.** No instante em que o tique do campo cai no vencimento, o VENCIMENTO
   vence (é agendado primeiro) e o tique encontra o campo removido. É a única ordem, e é testada.
   Alvo morto não tiqueta, e o campo é INDEPENDENTE: continua no chão até o próprio prazo.
-- **Sem arte (invariante 6).** Campo não tem `appearanceId`; a apresentação do tique reusa
-  `creature-hit` + `creature-health-changed`, e a ausência de aparência não muda a mecânica.
 - **Snapshot aditivo.** `MonsterState.conditions` e `HuntRulesetState.fields` são opcionais e o
   `tick` antigo (sem `kind`) lê como cura. `SNAPSHOT_FORMAT_VERSION` **não sobe**.
+- **O campo agora aparece no mundo (#561, M31-06).** `applyField` emite `field-appeared` (id de
+  conteúdo + os tiles da forma) ao aplicar OU relançar o mesmo id; `#onFieldExpire` emite
+  `field-vanished` quando de fato removeu um campo — a MESMA indireção de
+  `ground-item-appeared` resolvendo `corpses` (invariante 6): o `sim` diz QUE campo e ONDE, a
+  arte é `appearances.fields` (`id de conteúdo → appearanceId`), resolvida só no hospedeiro.
+  Campo sem linha na tabela é MUDO — a mecânica do tique (acima) não muda, só a apresentação —,
+  e o `session-state.world.fields` leva os campos ATIVOS para quem reanexa no meio da hunt,
+  como `session-state.world.groundItems` já leva os cadáveres. Opcodes S2C `field-appear` (40) e
+  `field-disappear` (41).
+- **A cadeia de estágios (`decayTo` do Canary, #560, M31-05).** `fieldSpecSchema.stages` é a
+  cadeia inteira — `items.xml:4212-4246`: o fire field 2118 (dano 20, 200 s) decai para 2119
+  (10, 148 s) e depois para 2120 (sem dano, 98 s) antes de sumir, e o `dragon-lord`/
+  `dragon-lord-hatchling` do catálogo já declaram os três estágios (`load.test.ts` prende os
+  números). `stages` AUSENTE é um estágio só, do próprio `durationMs`/`condition` do spec — todo
+  campo declarado antes desta issue continua bit a bit (`fieldStagesOf`, `content/schemas.ts`).
+  `TileFieldState` ganhou `stageIndex` (ausente é 0) e, só quando há mais de um estágio, a
+  cadeia INTEIRA (`stages`) — ela precisa viajar no estado porque `#onFieldStageAdvance` roda
+  bem depois de `applyField`, sem mais acesso ao `FieldSpec` que criou o campo. Um evento novo,
+  `FIELD_STAGE_ADVANCE`, troca de estágio no vencimento do atual — reagendando ele mesmo se
+  sobrar outro estágio, ou caindo em `FIELD_EXPIRE` no último —, cancela e reagenda o tique da
+  condição do estágio novo (nunca herda a cadência do estágio anterior) e emite
+  `field-stage-changed` (S2C opcode 42) com o `stageIndex` novo; o hospedeiro resolve a arte por
+  ÍNDICE em `appearances.fieldStages[id][stageIndex − 1]` (o índice 0 continua em
+  `appearances.fields`, como sempre) — campo sem entrada troca de estágio MUDO. Quem reanexa no
+  MEIO da cadeia recebe, no `session-state`, a arte do estágio ATUAL, não sempre a do nascimento.
+- **Campo bloqueante (Magic Wall, Wild Growth, #560).** `blocksMovement` (default falso) faz o
+  campo agir como PAREDE — para QUALQUER criatura, jogador e monstro, diferente do desvio de
+  dano do M29-05 (`canMonsterEnterField`), que só o monstro respeita e só quando o campo tem
+  `damageType`. Mecanismo: `Fields.blockedAt`/`blocksProjectileAt` (novos métodos em
+  `sim/fields.ts`) e `TileOccupancy.blockedAt` os combina com o mapa e com `TileOverrides`
+  (#728) — a MESMA composição de três fontes, uma pergunta só para `canOccupy`/`move`, o passo
+  guloso do monstro e o BFS do `walk-to` distante. Magic Wall (Canary id 2128) e Wild Growth
+  (rush wood, id 2130) são um estágio só, `blocking="1"`/`duration=20`/`decayTo=0` — 20 s e
+  sumiu, sem cadeia decrescente. `blocksProjectile` (também default falso) alimenta
+  `isSightClear` (`sim/line-of-sight.ts`, parâmetro novo e opcional) para quando o M30-06
+  importar a flag `unsight` do pacote de aparências — **nenhum conteúdo declara a flag hoje**
+  (Magic Wall no Canary é `blockSolid`, não `blockProjectile` — a segunda vem do pacote de
+  assets, não de `items.xml`), e por isso os chamadores de combate em `hunt.ts` continuam
+  passando só três argumentos: testado ligar os dez pontos de LOS de `hunt.ts` ao predicado
+  revelou que ele quebrava mira explícita num alvo fora do mapa de teste (a checagem de limites
+  do passeio, antes escondida atrás do atalho "sem camada de sight, sempre livre", passou a
+  rodar de verdade) — a fiação de produção fica para quando o M30-06 tiver conteúdo real e mapa
+  real para testar contra.
 
-**Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
-e a UI detalhada de buff.
+**Fora do escopo**, por decisão: runa de campo e parede jogável (Magic Wall/Wild Growth por
+mágica do jogador — #591), novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de
+buff.
 
 ## Condição de velocidade com sinal — paralyze e haste de monstro (CMB-11, #556)
 
@@ -1941,6 +2050,45 @@ concentrados em bosses de quest fora do recorte atual). `conditions.test.ts` pre
 (4/61 de desvio, 5/61 de fala, com seed fixa e 61 000 rolagens) e o mapeamento `r → direção`;
 `hunt.test.ts` prova a integração — o desvio passa pelo `#step` de verdade, para personagem e para
 monstro, sem consumir sorteio de quem não tem a condição.
+
+## Cura de condição (dispel, #590)
+
+Cure Poison, Cure Burning, Cure Electrification, Cure Bleeding e Cure Curse (Canary
+`data/scripts/spells/healing/cure_*.lua`) e a Antidote Rune (`data/scripts/runes/
+antidote_rune.lua`) removem uma condição do lançador — nada mais. É a metade "remove" da mecânica
+de condição do CMB-07: a metade "aplica" já existia (haste, postura, magic shield, cura ao longo
+do tempo, DOT); faltava como um efeito TIRA uma dessas do próprio personagem.
+
+- **`kind: 'dispel'`** é um efeito NOVO de `spellEffectSchema`/o `effect` do `supplySchema`:
+  `{ kind: 'dispel', types: string[] }` — sem sorteio, sem cura, sem mira. `types` são as MESMAS
+  chaves de `ConditionState.key` que `field.condition.key` já usa em conteúdo real (`"burning"`
+  no Dragon Lord) — vocabulário livre de string, não um enum fechado no schema. Uma magia com
+  `types: ["poison", "burning"]` removeria as duas de uma vez, embora nenhuma do catálogo real o
+  faça hoje (cada Cure X do Tibia remove uma condição só).
+- **`heal` ganhou um campo `dispel` opcional** (`{ types: string[] }`), para a cura COMPOSTA que o
+  Canary tem (Fair Wound Cleansing, Nature's Embrace, Restoration: cura E remove
+  `CONDITION_PARALYZE` no mesmo lançamento). O Draconya não modela paralisia (CMB-07 "Fora do
+  escopo" — ver acima), então nenhum conteúdo real usa o campo ainda; o mecanismo existe e tem
+  teste (`casting.test.ts`), pronto para o dia em que uma condição combinável com cura existir.
+- **`castSpell`/`useSupply` devolvem as chaves a remover** (`CastSuccess.dispel`), nunca removem
+  em si — a mesma divisão da `condition` que uma magia de haste devolve: só o ruleset tem a fila
+  de eventos (`condition-expire`/`condition-tick`) para cancelar. `HuntRuleset.#dispelConditions`
+  é quem de fato chama `Conditions.remove` e cancela os dois eventos, por CHAVE — ao contrário de
+  `#cancelConditions` (morte/saída), que zera TUDO, aqui só as chaves declaradas saem: Cure
+  Poison remove o poison e não toca o burning do mesmo personagem.
+- **Chave ausente no alvo não é erro.** A magia sai (gasta mana, entra em cooldown) mesmo sem
+  nada para remover — a mesma filosofia de recusa tipada de `castSpell`: só a AÇÃO é recusada por
+  algo, nunca o efeito por não ter alvo a limpar.
+- **Antidote Rune é self-target só, nesta primeira versão** (desvio do Canary, que permite mirar
+  qualquer criatura à distância com `allowFarUse`/`needTarget`): estender o alvo `friend` para o
+  efeito `dispel` tocaria `#healRangeOf`/a resolução de candidato do bot, fora do recorte de uma
+  issue sobre CURAR condição. Fica registrado para uma issue futura, se um suprimento de dispel
+  em aliado for pedido.
+- **Cure Poison é a QUARTA magia genérica** (sem `vocationId`): o Canary a dá para todas as
+  vocações do jogo (o Draconya não tem monge), como `heal`/`strike`/`blast` já eram as três
+  genéricas pré-vocação. Cure Bleeding tem DUAS linhas de catálogo (`cure-bleeding-druid`/
+  `cure-bleeding-knight`), como `recovery-knight`/`recovery-paladin` já fazem para a mesma magia
+  em duas vocações — o Canary a dá para Druid E Knight, não uma só.
 
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 
@@ -2153,6 +2301,7 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 8 | Wound Cleansing | 40 | healing (1 s) | 1 s | cura | 70 |
 | 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
 | 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 · skill×attack | 39 |
+| 20 | Challenge (#589) | 30 | support (2 s) | 2 s | provocação: força o alvo, suspende a fuga · alvo, alcance 3 · 6 s | — |
 | 25 | Charge | 100 | support (2 s) | 2 s | haste +90 % / 5 s | — |
 | 28 | Whirlwind Throw | 40 | attack (2 s) | 6 s | dano · alvo, alcance 5 · skill+attack | 32 |
 | 33 | Groundshaker | 160 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador · skill+attack | 32 |
@@ -2165,6 +2314,7 @@ existe, é o que o motor de fato rola; `círculo` no self-buff de área lista o 
 | 80 | Intense Wound Cleansing | 200 | healing (1 s) | **10 min** | cura | 500 |
 | 90 | **Fierce Berserk** (`exori gran`, novo #523) | 340 | attack (2 s) | 6 s | dano · círculo raio 1 no lançador · skill+2×attack | 90 |
 | 110 | **Annihilation** (`exori gran ico`, novo #596) | 300 | attack (2 s) | 30 s | dano · alvo, alcance 1 · skill×attack | — |
+| 150 | Chivalrous Challenge (#589) | 80 | support (2 s) | 2 s | provocação em área (raio 3): força o alvo, suspende a fuga · 12 s | — |
 
 Blood Rage e Protector eram level 20/mana 20 (um placeholder de bootstrap): o Canary real os
 pede level 60/mana 290 e level 55/mana 200. Groundshaker (mana 200→160) e Berserk (mana 125→115)
@@ -2299,10 +2449,19 @@ do Sorcerer, 17 estágios de dano DECRESCENTE) ficou de fora: a forma não é um
 curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `EXCLUDED_SPELLS` em
 `load.test.ts`).
 
-**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Curse (dano ao longo do tempo, forma não reconhecida — ver acima); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Divine Grenade, Executioner's Throw, Ice Burst, Terra Burst, Fair Wound Cleansing, Great Death Beam (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing. As três magias genéricas pré-vocação (`heal`, `strike`, `blast`) e as quatro sem fonte no Canary (`divine-defiance`, `divine-barrage`, `ethereal-barrage`, `forked-thorns`) saíram do catálogo no #596 — o Tibia não dá magia nenhuma antes da escolha de vocação, e não havia "fórmula do Canary" para nenhuma das sete.
+**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Curse (dano ao longo do tempo, forma não reconhecida — ver acima); Shield Bash, Shield Slam (defesa de escudo); Train Party, Protect Party, Enchant Party, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação); e o que só existe no Wheel of Destiny do Canary moderno — Divine Grenade, Executioner's Throw, Ice Burst, Terra Burst, Fair Wound Cleansing, Great Death Beam (level 300 + grade, não modelado). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing. Challenge/Chivalrous Challenge (#589) e Cancel Magic Shield (#596) SAÍRAM desta lista — estão implementadas, acima. As três magias genéricas pré-vocação (`heal`, `strike`, `blast`) e as quatro sem fonte no Canary (`divine-defiance`, `divine-barrage`, `ethereal-barrage`, `forked-thorns`) saíram do CATÁLOGO no #596 — o Tibia não dá magia nenhuma antes da escolha de vocação, e não havia "fórmula do Canary" para nenhuma das sete; Cure Poison é a única magia que segue sem `vocationId`.
 
 ## Em aberto
 
+- `[ABERTO]` (#589) Challenge no Canary exige a vocação Elite Knight
+  (`spell:vocation("elite knight;true")`); o Draconya ainda não modela promoção de vocação (#566,
+  aberta, sem PR), então a magia entra com `vocationId: "knight"` sozinho, sem o gate. Chivalrous
+  Challenge não tem esse problema — o Canary já aceita `"knight;true"` OU `"elite knight;true"`.
+  Quando #566 fechar, Challenge ganha o mesmo gate que qualquer outra magia de promoção. A
+  Chivalrous Challenge também diverge do Canary por decisão (DT-03 da issue): vira `circle raio 3
+  centrado no lançador` em vez do chain-picker exato (até 5 monstros à distância, sem reward
+  boss/invocação) — o Draconya não tem chain-picker nem Wheel of Destiny, e não força
+  `changeTargetDistance` (o atirador melee temporário) — ver "Fora do escopo" da issue #589.
 - `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
   do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
@@ -2340,10 +2499,24 @@ curva —, e `damage-over-time` não a modela; reportada, não aproximada (ver `
 - `[ABERTO]` `ammunition.maxHitChance` e `weapon.hitChance` (#524) não têm nenhum valor não-default
   no catálogo real hoje — nenhuma munição ou arma especial (power bolt, royal crossbow) existe
   ainda. Os campos e a leitura (#522) já existem; falta o item.
-- `[ABERTO]` O erro de tiro (#522) não tem apresentação própria: o cliente não recebe nenhum
-  evento no tiro que erra (sem `creature-hit`), e não existe efeito de "flecha na parede" nem
-  texto "MISS" — fica para quando a apresentação de combate (CMB-09/#242) sair do bloqueio da
-  biblioteca parcial.
+- O erro de tiro (#522) tem apresentação própria desde o #555, **só no `combat-v3`**: o `missile`
+  do `shot` — a MESMA mensagem de sempre, sem opcode nem campo novo — desenha o projétil num
+  tile ERRADO em vez do tile do alvo. `WeaponDistance::useWeapon` (Canary `things/sources/canary/
+  src/items/weapons/weapons.cpp:830-855`): adjacente ao alvo (distância Chebyshev ≤ 1) o Canary
+  não redireciona — o destino continua sendo o alvo; a mais de 1 tile, sorteia um tile ANDÁVEL
+  entre os nove do quadro 3×3 centrado nele (8 vizinhos + o próprio tile do alvo, que também é
+  candidato — um tiro que erra pode, por sorte, "acertar" visualmente sem causar dano).
+  `missShotTile` (`packages/sim/src/combat/distance-hit.ts`) reproduz o MECANISMO (ADR 0037
+  d.1/d.3): filtra os andáveis primeiro e sorteia um índice uniforme entre eles com
+  `session.rng`, em vez do `shuffle`+primeiro-válido do Canary — mesma distribuição, uma rolagem
+  por tiro errado a mais de 1 tile, nenhuma quando adjacente ou quando o tiro acerta.
+  **`combat-v1`/`v2` continuam com `to` fixo no tile do alvo mesmo no erro, sem NENHUMA rolagem
+  extra** (ADR 0031/0040): os dois perfis já publicados são contrato bit a bit, e o sorteio do
+  tile errado é uma rolagem NOVA que só o perfil aberto para mudança (`combat-v3`, ADR 0037
+  decisão 5) pode ganhar — `#strike`/`#throwWeapon` (`hunt.ts`) só chamam `#missDestination`
+  atrás de `this.#isV3()`. Ainda não existe texto "MISS" nem efeito de "flecha na parede" — só o
+  destino errado do projétil, que é o que a issue pediu; aquilo fica para quando a apresentação
+  de combate (CMB-09/#242) sair do bloqueio da biblioteca parcial.
 - `[ABERTO]` A #522 investigou se o monstro deveria ganhar um segundo atributo de defesa
   (`Monster::getMitigation`/`getDefense` do Canary — um redutor percentual, distinto do `armor`
   que já existe) para bloquear o corpo a corpo do jogador como o escudo do CMB-04 bloqueia o do
@@ -2374,14 +2547,6 @@ ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 
-- **`monster.staticAttack` é aceito no schema, mas não muda comportamento nenhum** (#518). O
-  TFS usa este número para decidir se o monstro, podendo atacar, fica parado ou dá um passo
-  aleatório colado no alvo (`randomStepping`/`getDanceStep`) — puramente cosmético, não afeta
-  dano nem cadência de ataque. O motor de passo do Draconya não tem um "pensamento" periódico
-  independente do passo em si (`decideMonsterAction` só roda quando o `MONSTER_STEP` vence), e
-  criar um evento novo só para o shuffle era escopo maior do que o #518 pedia. Fica registrado
-  aqui, não como `[ABERTO]` — o número é conhecido (Dragon: 80%, `staticAttack: 0.8`), só o
-  mecanismo que falta implementar.
 - **Três magias sem correspondente no Canary** (`divine-barrage.json`, `ethereal-barrage.json`,
   `forked-thorns.json`, mais o self-buff `divine-defiance.json`): DUAS varreduras do #523 no
   `opentibiabr/canary` local (`things/sources/canary` — `data/`, `data-otservbr-global/` e

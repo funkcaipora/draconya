@@ -314,15 +314,17 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   DESTINO da escada (`floorChangeAt`), não o degrau; o monstro — posição sem `z` — vê o degrau
   como parede, como no Tibia. A ocupação é por andar (`tileKey(x, y, z)`), e `occupied(x, y)`
   sem `z` é o andar padrão do mapa.
-- **`monsterCount` é o TOTAL da instância, e o `Spawner` o ESPALHA pelo laço** (FUN-123, cópia
-  do Huntera: 2/5/8 no bueiro). O lugar `i` fica no ponto `⌊i × pontos / total⌋` — com menos
-  monstros que pontos eles cobrem o laço em intervalos iguais (o rodízio `i % pontos` deixava
-  seis dos catorze pontos do bueiro sem monstro em qualquer pull), com mais cada ponto recebe
-  o mesmo tanto; determinístico, igual em dois servidores com o mesmo conteúdo. O tile livre é
-  procurado até o `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem
-  monstro. Com `spawnClearRadius` da hunt (#236), tile a menos disso de um participante vivo
-  conta como bloqueado: o spawn ADIA (`SPAWN_RETRY_MS`), nunca cancela — a densidade é a da
-  dificuldade, e é o que a referência §29 pede ao mandar não copiar a supressão do TFS.
+- **Fim do pull por dificuldade: `Spawner` tem UM slot por ponto de spawn da rota, e todos
+  nascem juntos, na entrada** (#583, ADR 0039 — revoga o `monsterCount`/espalhamento por laço
+  da FUN-123, cópia do Huntera de 2/5/8 no bueiro). Cada ponto declara o próprio `monsterId`
+  (ou `monsters`, com peso, para o caso raro do #582) e o próprio `respawnDelayMs` — não existe
+  mais composição de dificuldade para cair como fallback. O tile livre é procurado até o
+  `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem monstro.
+  **A população INICIAL usa um evento próprio, `SPAWN_INITIAL`/`#onSpawnInitial`, que
+  BYPASSA `blockable`/janela de visão/telegraph inteiramente** — é o `startup(bool delayed)`
+  do Canary (`spawn_monster.cpp`), que chama `scheduleSpawn` direto, sem passar por
+  `checkSpawnMonster`. Só o RESPAWN pós-morte (`SPAWN`/`#onSpawn`) passa pela gating abaixo.
+  Parede/tile ocupado adia (`SPAWN_RETRY_MS`), nunca cancela — mecanismo de sempre.
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
@@ -368,9 +370,27 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `isMonsterFleeing` (`monster.ts`) é PURA — `health <= runOnHealth`, recalculada
   a cada decisão, nunca um booleano guardado; fugindo, o passo é SEMPRE `fleeStep` (nunca
   aproxima) e as abilities CORPO A CORPO (`isMeleeAbility`) nem armam nem executam — as de
-  alcance continuam, porque passo e ataque são decisões independentes. `staticAttack` está no
-  schema mas NÃO é wired: sem "pensamento" periódico separado do passo, simular o shuffle do
-  TFS exigiria um evento novo só para isso — divergência registrada em `docs/product/combat.md`.
+  alcance continuam, porque passo e ataque são decisões independentes.
+- **A dança de alvo (`staticAttack`, #543, TFS `Monster::getDanceStep`) é um evento PRÓPRIO,
+  armado e DESARMADO — não uma varredura da vida inteira do monstro, como `MONSTER_TARGET_CHANGE`
+  e as defesas.** `MONSTER_DANCE` (subject `m:<id>` exato, cancelado de graça por `resolveDeath`
+  como `MONSTER_TARGET_CHANGE`) só existe agendado enquanto `decideMonsterAction` devolve
+  `'attack'` (colado, sem passo a dar): `#onMonsterStep` arma quando essa condição nasce e
+  DESARMA ativamente (`session.cancelEvent`) quando ela cai, em vez de deixar o timer rodando à
+  toa — o custo de um monstro fora de combate importa em escala (ver "custo" no topo deste
+  arquivo). `#onMonsterDance` reavalia a MESMA condição a cada vencimento (a condição pode ter
+  caído entre o armamento e o vencimento) e só reagenda a si mesmo enquanto ela se mantém — a
+  outra metade do "cancelado". `MonsterRuntime.danceArmed` é o que impede armar duas vezes o
+  mesmo evento (`scheduleIn` não deduplica por `(kind, subject)`) e precisa sobreviver ao
+  snapshot pela mesma razão de `lastStepBlocked`. `danceStep` (`monster/step.ts`) só tenta as
+  QUATRO direções CARDINAIS — nunca diagonal, diferente do guloso/fuga — e só aceita a
+  candidata que preserva EXATAMENTE a distância Chebyshev ao alvo: é o que garante, de graça,
+  que a dança nunca aproxima, nunca afasta e nunca perde a capacidade de atacar (o `keepAttack`
+  do Canary vira identidade sob essa restrição). Ausente `staticAttack`, o monstro nunca arma o
+  evento e não sorteia nada de novo — rato e rotworm continuam bit a bit. **Não toca o resolver
+  de combate** (`resolveDamage`/`resolveDefense`): os sorteios da dança são de uma fila
+  totalmente separada da sequência de combate, o mesmo argumento que já vale para `chooseTarget`
+  — por isso não exige perfil `combat-v1`/`v2`/`v3` novo (ADR 0031/0040).
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
   munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
   lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).
@@ -519,9 +539,10 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
 - **`Blocked` (`monster/step.ts`) ganhou dois parâmetros opcionais, `z` e `monsterId` — nesta
   ordem, e os dois só importam para o spawner.** O passo guloso de personagem e monstro continua
   chamando com dois argumentos; `Spawner.#freeTile` é quem passa os quatro, porque só ele
-  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale (`spawnClearRadius` só corre
-  para quem é `blockable` — #519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de
-  1.640/1.656 do bestiário, não a exceção).
+  precisa saber EM QUE andar e PARA QUAL monstro a checagem vale — o campo da hunt que fazia
+  isso (`spawnClearRadius`, #236) foi REMOVIDO no #583; quem decide hoje é `blockable` DO
+  MONSTRO (#519, o `isBlockable` do TFS/Canary, onde NÃO esperar é o padrão de 1.640/1.656 do
+  bestiário, não a exceção) — e só no RESPAWN pós-morte, nunca na população inicial (ver acima).
 - **A condição `speed` (CMB-11, #556) sempre nasce com a chave RESERVADA `SPEED_CONDITION_KEY`
   (`'speed'`, exportada de `@draconya/content`), e `conditionFromSpec` confia nisso — não a
   reescreve.** É o CONTEÚDO (`conditionSpecSchema`) quem recusa `key` diferente para
@@ -563,3 +584,35 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   escudo (`#shieldSkillLevelOf`) soma o bônus de equipamento** (`Inventory.skillBonus`) como
   `#skillLevelOf` já fazia para arma/punho — `getSkillLevel` do Canary não abre exceção para
   `SKILL_SHIELD`.
+- **Stairhop (#554, M30-07, ADR 0040 decisão 1): `#step` é quem detecta a travessia, não um
+  booleano "é escada?" separado.** Escada e teleporte (#734) são os DOIS únicos jeitos de
+  `move()` pousar num tile que não é o adjacente pedido — `z` diferente, ou distância — e é
+  ESSE sinal, lido do `MoveResult`, que grava `character.attackLockedUntil = session.nowMs +
+  stairhopDelayMs`. Um passo comum nunca bate essa condição. Só sob `combat-v3` (`#isV3`) e com
+  `combat.stairhopDelayMs` declarado (ausente é identidade, como `defense`/`modifiers`); v1/v2
+  nunca escrevem o campo. `#onPlayerAttack` reagenda para o INSTANTE EXATO do destravamento
+  (nunca para o intervalo normal de ataque) e `castSpell` (`casting.ts`) recusa só a magia
+  AGRESSIVA (`damage`/`damage-over-time`) com `attack-locked` — cura e o resto do vocabulário
+  continuam liberados, a mesma exceção do `Spell::aggressive` do Canary. `attackLockedUntil` é
+  campo solto no personagem, não `ConditionState`: migra para a condição `pacified` de verdade
+  quando ela existir (M44-04).
+- **Campo bloqueante é PAREDE, não desvio de dano** (#560). `Fields.blockedAt`/
+  `TileOccupancy.blockedAt` bloqueiam para QUALQUER criatura, e valem em `canOccupy`/`move`
+  sem checagem extra em `hunt.ts` — ao contrário do desvio de dano do M29-05
+  (`canMonsterEnterField`), que só o MONSTRO respeita e só quando o campo declara
+  `damageType`. Um campo com `blocksMovement: true` e SEM condição (Magic Wall, Wild Growth)
+  ainda passa pelo pipeline de tique normalmente — `#onFieldTick`/`#enterField` só saem cedo
+  quando `field.condition === undefined`, o mesmo `undefined` que o estágio mudo de uma cadeia
+  também usa.
+- **`isSightClear`'s atalho "sem camada de sight, sempre livre" escondia um bug de LIMITE, e
+  isso só apareceu ao tentar ligar o predicado de campo (#560).** Antes, mapa sem `sight`
+  devolvia `true` ANTES de percorrer a linha — nunca chegava a conferir `x/y` contra
+  `map.width`/`map.height`. Um teste que mira um monstro DELIBERADAMENTE fora do mapa (para
+  testar `out-of-range` sem se importar com LOS) passava por acidente. Dar ao parâmetro
+  `blocksProjectileAt` um valor não-`undefined` desliga esse atalho e faz o passeio rodar de
+  verdade — e a conferência de limite, agora executada, reprova a mira fora do mapa como
+  bloqueada, quebrando três testes que dependiam do atalho sem saber. **Por isso os call sites
+  de combate em `hunt.ts` continuam passando só três argumentos para `isSightClear`** (o
+  parâmetro existe e tem teste próprio em `line-of-sight.test.ts`, mas não está fiado à
+  produção): ligá-lo de verdade é trabalho do M30-06, com mapa e conteúdo reais para testar
+  contra, não desta issue.

@@ -23,7 +23,7 @@ import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
-import { totalXpForLevel } from '@draconya/sim';
+import { DEFAULT_DIFFICULTY_NAME, totalXpForLevel } from '@draconya/sim';
 import { and, eq } from 'drizzle-orm';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
@@ -76,7 +76,12 @@ const LOOP = {
     { x: 3, y: 5, z: 7 }, { x: 2, y: 5, z: 7 }, { x: 1, y: 5, z: 7 }, { x: 1, y: 4, z: 7 },
     { x: 1, y: 3, z: 7 }, { x: 1, y: 2, z: 7 },
   ],
-  spawnPoints: [{ routeIndex: 9, radius: 2 }, { routeIndex: 15, radius: 2 }],
+  // Fim do pull por dificuldade (#583, ADR 0039): cada ponto declara o próprio monstro e o
+  // próprio `respawnDelayMs` — não há mais dificuldade nenhuma para cair como fallback.
+  spawnPoints: [
+    { routeIndex: 9, radius: 2, monsterId: 'rat', respawnDelayMs: 1_000 },
+    { routeIndex: 15, radius: 2, monsterId: 'rat', respawnDelayMs: 1_000 },
+  ],
 };
 const raw: RawContent = {
   ...base,
@@ -267,10 +272,9 @@ beforeAll(async () => {
       maxMembers: content.party.maxMembers,
       contentVersion: content.version,
       vocations: [...content.vocations.keys()],
-      difficultiesOf: (huntId) => {
-        const hunt = content.hunts.get(huntId);
-        return hunt === undefined ? null : Object.keys(hunt.difficulties);
-      },
+      // Fim do pull por dificuldade (#583, ADR 0039): sem `difficulties` no conteúdo, o único
+      // nome válido é o vestígio de compatibilidade do protocolo (#584).
+      difficultiesOf: (huntId) => (content.hunts.has(huntId) ? [DEFAULT_DIFFICULTY_NAME] : null),
     },
   });
   baseUrl = await api.listen({ port: 0, host: '127.0.0.1' });
@@ -321,7 +325,7 @@ describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
       expect((await post(leader, `/api/party/${created.id}/invite`, { inviteeId: member.characterId })).status).toBe(200);
       expect((await post(member, `/api/party/${created.id}/join`)).status).toBe(200);
     }
-    expect((await post(leader, `/api/party/${created.id}/propose`, { huntId: 'arena', difficulty: 'cautious', mode: 'shared' })).status).toBe(200);
+    expect((await post(leader, `/api/party/${created.id}/propose`, { huntId: 'arena', difficulty: DEFAULT_DIFFICULTY_NAME, mode: 'shared' })).status).toBe(200);
     const started = await (await post(leader, `/api/party/${created.id}/start`)).json() as { sessionId: string; ticket: { wsUrl: string } | null };
     expect(started.ticket).not.toBeNull();
 

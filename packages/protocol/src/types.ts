@@ -21,6 +21,21 @@ const TileUpdate = z.object({
 });
 
 /**
+ * Um campo de tile apareceu ou está ativo AGORA (#561, M31-06): fogo, veneno, energia — a
+ * mesma indireção de `ground-item-appear` resolvendo `corpses`, aqui resolvendo
+ * `appearances.fields` (invariante 6). `id` é o do CONTEÚDO (`FieldSpec.id`, ex.: "fire"), não
+ * um id sequencial — relançar o MESMO reinicia, e é por isso que não há id numérico próprio
+ * como o de `ground-item-appear`. `tiles` cobre a área inteira: um campo nasce de uma forma,
+ * nunca de um tile só. Compartilhado por `field-appear` (evento) e por
+ * `session-state.world.fields` (catch-up de quem reanexa) — o mesmo contrato dos dois.
+ */
+const FieldTile = z.object({
+  id: z.string().min(1),
+  tiles: z.array(Point),
+  appearanceId: z.number().int().positive(),
+});
+
+/**
  * O TIPO de dano elemental (#479; drown/lifedrain/manadrain pelo #547, M29-07). Espelha
  * `DAMAGE_TYPES` do conteúdo, mas vive aqui pela mesma razão que todo contrato de rede: o
  * protocolo é a base da pilha e não importa `content`. A lista é fechada de propósito — um
@@ -179,15 +194,17 @@ export const C2S_SCHEMAS = {
   say: z.object({ channel: z.string(), text: z.string().max(255) }),
   logout: z.object({}),
   /**
-   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt e
-   * qual dificuldade, e o servidor decide se a transição é válida, cria a instância e
-   * responde com o estado novo (invariante 4).
+   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt, e o
+   * servidor decide se a transição é válida, cria a instância e responde com o estado novo
+   * (invariante 4).
    *
-   * A dificuldade vem como string livre e é validada contra o CONTEÚDO, não contra um enum
-   * aqui: uma hunt define as dificuldades que fazem sentido para ela, não obrigatoriamente as
-   * quatro, e repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+   * `difficulty` é opcional desde o #584 (ADR 0039, fim do pull por dificuldade — #583 já
+   * eliminou a escolha de tamanho de pull no `sim`/`content`). Campo mantido no protocolo só
+   * por compatibilidade (ADR 0014): um cliente ANTIGO ainda manda um nome de antes do #583
+   * (`'cautious'`/`'bold'`/`'reckless'`) e é ACEITO E IGNORADO — nunca validado contra um
+   * enum aqui nem contra o conteúdo.
    */
-  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
+  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1).optional() }),
   /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
   'leave-hunt': z.object({}),
   /**
@@ -612,6 +629,9 @@ export const S2C_SCHEMAS = {
       speed: z.number().int().nonnegative().default(0),
       skills: z.record(z.string().min(1), SkillProgress).default({}),
       magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+      /** Pontos de alma (#593), como em `player-stats` — para quem reanexa ver sem esperar. */
+      soul: z.number().int().nonnegative().default(0),
+      soulMax: z.number().int().nonnegative().default(0),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -631,6 +651,12 @@ export const S2C_SCHEMAS = {
        * de chegar. `default([])`: nó `game` anterior a esta issue, ou nada foi usado ainda.
        */
       tileUpdates: z.array(TileUpdate).default([]),
+      /**
+       * Os campos de tile ATIVOS agora (#561, M31-06): quem reanexa no meio de uma hunt precisa
+       * ver o fogo/veneno/energia já no chão, no MESMO contrato de `field-appear`. `default([])`:
+       * nó `game` anterior a esta issue, ou hunt sem campo nenhum ativo.
+       */
+      fields: z.array(FieldTile).default([]),
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
@@ -862,6 +888,21 @@ export const S2C_SCHEMAS = {
       class: z.string().optional(),
       health: z.number().int().positive().optional(),
       experience: z.number().int().nonnegative().optional(),
+      /**
+       * A ficha de Bestiário do Canary por monstro (#601, ADR 0053 d.1): estágio, estrelas,
+       * ocorrência e pontos de Charm são DERIVADOS no cliente a partir dela e do contador de
+       * `bestiary.counts` — nada aqui é calculado no servidor além do que o conteúdo já fixa na
+       * sessão (invariante 7). Ausente: monstro sem ficha em `content.bestiary.entries` (nenhum
+       * do catálogo real hoje) ou nó `game` anterior a esta issue.
+       */
+      bestiary: z.object({
+        stars: z.number().int().min(0).max(5),
+        occurrence: z.number().int().min(0).max(3),
+        firstUnlock: z.number().int().positive(),
+        secondUnlock: z.number().int().positive(),
+        toKill: z.number().int().positive(),
+        charmsPoints: z.number().int().nonnegative(),
+      }).optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
@@ -1133,6 +1174,14 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+    /**
+     * Pontos de alma (#593). `soulMax` é da VOCAÇÃO — zero é "sem vocação escolhida", o mesmo
+     * "sem teto para mostrar" que `vocationId: null` já significa. `default(0)` nos dois: um
+     * nó `game` anterior a esta issue manda sem, e o HUD mostra "0/0" em vez de recusar o
+     * parse inteiro — a mesma degradação de `speed`/`ammo` acima.
+     */
+    soul: z.number().int().nonnegative().default(0),
+    soulMax: z.number().int().nonnegative().default(0),
   }),
   /**
    * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o
@@ -1253,6 +1302,21 @@ export const S2C_SCHEMAS = {
    * `kind` de cenário. Só para quem pediu.
    */
   'look-result': z.object({ text: z.string() }),
+  /**
+   * Um campo de tile apareceu ou reiniciou (#561, M31-06). Broadcast para todos os viewers da
+   * sessão, como `tile-update` — campo é compartilhado, ao contrário de `player-stats`.
+   */
+  'field-appear': FieldTile,
+  /** O campo sumiu — o prazo venceu. Só o `id` de conteúdo, para o cliente remover pelo mesmo. */
+  'field-disappear': z.object({ id: z.string().min(1) }),
+  /**
+   * O campo trocou de estágio (#560): o mesmo `id` de `field-appear`, e o `appearanceId` NOVO
+   * já resolvido pelo hospedeiro — sem `tiles`, que não muda entre estágios.
+   */
+  'field-stage-change': z.object({
+    id: z.string().min(1),
+    appearanceId: z.number().int().positive(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

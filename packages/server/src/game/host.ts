@@ -256,6 +256,8 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   // jogador precisa ler isso, não "ação indisponível".
   'magic-level-too-low': 'Magic level insuficiente.',
   'not-enough-mana': 'Mana insuficiente.',
+  // Alma (#593): a mesma régua da mana. Só magia de conjuração declara custo hoje (#594).
+  'not-enough-soul': 'Alma insuficiente.',
   'not-enough-gold': 'Gold insuficiente.',
   // Reservado ao consumível FÍSICO (a carga de bênção da M22): supply e magia debitam gold no
   // uso, e o que falta ali é gold, não item.
@@ -264,6 +266,9 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'out-of-range': 'O alvo está fora de alcance.',
   'on-cooldown': 'Ainda em cooldown.',
   'group-cooldown': 'O grupo ainda está em cooldown.',
+  // Stairhop (#554, M30-07): trocou de andar ou foi teleportado há pouco — a mesma frase que o
+  // Canary usa (`RETURNVALUE_YOUAREEXHAUSTED`).
+  'attack-locked': 'Você está exausto.',
 };
 
 /**
@@ -446,6 +451,9 @@ function playerStatsOf(
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic'), vocation, progression),
+    // Alma (#593): `soulMax` é da VOCAÇÃO — zero sem uma escolhida, o "sem teto" do HUD.
+    soul: character?.soul ?? 0,
+    soulMax: vocation?.soulMax ?? 0,
   };
 }
 
@@ -490,7 +498,9 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
-    && sameSkillProgress(a.magicLevel, b.magicLevel);
+    && sameSkillProgress(a.magicLevel, b.magicLevel)
+    && a.soul === b.soul
+    && a.soulMax === b.soulMax;
 }
 
 /**
@@ -1443,10 +1453,12 @@ export class SessionHost {
         return;
       }
       case 'enter-hunt':
-        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt e qual
-        // dificuldade, e quem decide se cabe, cria a instância e credita é o servidor.
+        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt, e quem decide se
+        // cabe, cria a instância e credita é o servidor. `difficulty` é aceito e IGNORADO
+        // desde o #584 (ADR 0039) — mantido no protocolo só por compatibilidade (ADR 0014).
         void this.#requestTransition(viewer, {
-          to: 'hunt', huntId: message.huntId, difficulty: message.difficulty,
+          to: 'hunt', huntId: message.huntId,
+          ...(message.difficulty === undefined ? {} : { difficulty: message.difficulty }),
           // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
           // da última `bot-config` desta conexão.
           ...(this.#botByCharacter.has(viewer.characterId)
@@ -2587,6 +2599,9 @@ export class SessionHost {
         case 'creature-health-changed':
         case 'ground-item-appeared':
         case 'ground-item-vanished':
+        case 'field-appeared':
+        case 'field-vanished':
+        case 'field-stage-changed':
           this.#presentPresence(hosted, event);
           continue;
         case 'creature-hit':
@@ -2707,6 +2722,37 @@ export class SessionHost {
     if (event.kind === 'ground-item-vanished') {
       const vanished: S2CMessage = { type: 'ground-item-disappear', id: event.itemId };
       for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
+    // O campo de tile (#561, M31-06): o `sim` disse qual id de conteúdo e quais tiles; a arte
+    // é da tabela — a MESMA indireção de `ground-item-appear` resolvendo `corpses`. Campo sem
+    // linha em `appearances.fields` não aparece, e ninguém fica sabendo, de propósito.
+    if (event.kind === 'field-appeared') {
+      const appearanceId = this.#options.appearances?.fields[event.fieldId];
+      if (appearanceId === undefined) return;
+      const appeared: S2CMessage = {
+        type: 'field-appear', id: event.fieldId, tiles: [...event.tiles], appearanceId,
+      };
+      for (const viewer of hosted.viewers) viewer.send(appeared);
+      return;
+    }
+    if (event.kind === 'field-vanished') {
+      // MUDO como o aparecimento (invariante 6): sem linha na tabela, o cliente nunca recebeu
+      // um `field-appear` para este id, e mandar o sumiço seria apagar algo que nunca chegou.
+      if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
+      const vanished: S2CMessage = { type: 'field-disappear', id: event.fieldId };
+      for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
+    // O campo trocou de estágio (#560): `stageIndex` é 1, 2, … — o índice 0 é o nascimento, já
+    // resolvido por `appearances.fields`. Sem entrada aqui (cadeia sem arte declarada, ou campo
+    // que nunca teve `field-appear` sabido — mesma defesa de `field-vanished`), MUDO.
+    if (event.kind === 'field-stage-changed') {
+      if (this.#options.appearances?.fields[event.fieldId] === undefined) return;
+      const appearanceId = this.#options.appearances?.fieldStages[event.fieldId]?.[event.stageIndex - 1];
+      if (appearanceId === undefined) return;
+      const changed: S2CMessage = { type: 'field-stage-change', id: event.fieldId, appearanceId };
+      for (const viewer of hosted.viewers) viewer.send(changed);
       return;
     }
     const key = String(event.creatureId);
@@ -3992,6 +4038,10 @@ export class SessionHost {
       ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
+      // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
+      // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
+      ...(owner === undefined ? {} : { soul: owner.soul }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -4053,6 +4103,10 @@ export class SessionHost {
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // Alma (#593): escolher a vocação na praça enche a alma pela primeira vez
+      // (`CharacterRuntime.chooseVocation`), e sem este campo o shard perderia esse enchimento
+      // no logout — o mesmo buraco que a vocação e o equipamento já tapavam antes do #154.
+      soul: owner.soul,
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       overlays: overlaysOfState(owner.inventory.getState()),
@@ -4204,6 +4258,8 @@ export class SessionHost {
         speed: self.speed,
         skills: self.skills,
         magicLevel: self.magicLevel,
+        soul: self.soul,
+        soulMax: self.soulMax,
       },
       world: {
         // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
@@ -4221,6 +4277,19 @@ export class SessionHost {
         // difere do inicial, para quem reanexa aplicar por cima da pilha estática que já
         // carrega — a MESMA resolução de `tile-update`, pela tabela `appearances.scenery`.
         tileUpdates: this.#tileUpdatesFor(ruleset.tileAppearanceChanges ?? []),
+        // Os campos ATIVOS agora (#561, M31-06), com a arte da tabela; sem linha, sem campo —
+        // a MESMA regra de `groundItems` acima. Quem reanexa no MEIO da cadeia (#560) recebe a
+        // arte do ESTÁGIO ATUAL, não sempre a do nascimento — `stageIndex` ausente (campo de
+        // um estágio só) ou 0 continua caindo em `appearances.fields`, como sempre.
+        fields: (ruleset.fields ?? []).flatMap((field) => {
+          const stageIndex = field.stageIndex ?? 0;
+          const appearanceId = stageIndex === 0
+            ? this.#options.appearances?.fields[field.id]
+            : this.#options.appearances?.fieldStages[field.id]?.[stageIndex - 1];
+          return appearanceId === undefined
+            ? []
+            : [{ id: field.id, tiles: [...field.tiles], appearanceId }];
+        }),
       },
       // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.
       aggregates: { ...session.aggregatesOf(characterId) },

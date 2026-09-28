@@ -113,6 +113,31 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       applyTileUpdate(message.position, message.replace);
       return;
 
+    // Um campo apareceu ou reiniciou (#561, M31-06): `set` pelo MESMO id substitui — relançar
+    // o mesmo campo não deixa uma cópia velha para trás, exatamente como `ground-item-appear`.
+    case 'field-appear':
+      world.fields.set(message.id, {
+        id: message.id, tiles: message.tiles, appearanceId: message.appearanceId,
+      });
+      world.fieldsVersion += 1;
+      return;
+
+    case 'field-disappear':
+      if (world.fields.delete(message.id)) world.fieldsVersion += 1;
+      return;
+
+    // O campo trocou de estágio (#560, `decayTo`): mesmo `id` e `tiles`, aparência NOVA já
+    // resolvida pelo servidor — o cliente só substitui a entrada, nunca redesenha por conta
+    // própria (invariante 6). Campo que a tela nunca viu (reconectou entre o `field-appear` e
+    // esta troca, e o `session-state` ainda não chegou) é ignorado: nada para trocar ainda.
+    case 'field-stage-change': {
+      const field = world.fields.get(message.id);
+      if (field === undefined) return;
+      world.fields.set(message.id, { ...field, appearanceId: message.appearanceId });
+      world.fieldsVersion += 1;
+      return;
+    }
+
     // A resposta ao `look` (#729): o texto do "You see …" entra no mesmo canal do
     // `system-message`, nível info — não é recusa, é o que a placa/o cenário dizem.
     case 'look-result':
@@ -216,6 +241,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         vocationId: message.vocationId,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
+        soul: message.soul,
+        soulMax: message.soulMax,
       }));
       return;
 
@@ -397,6 +424,14 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // porta que fechou enquanto ninguém olhava não pode continuar desenhada aberta.
       // `?? []`: nó `game` anterior a esta issue manda sem o campo (default do protocolo).
       replaceTileOverrides(message.world.tileUpdates ?? []);
+      // Os campos também são substituídos (#561, M31-06): quem reanexa vê os ATIVOS agora, e
+      // um que apagou enquanto ninguém olhava não pode continuar desenhado. `?? []`: nó `game`
+      // anterior a esta issue manda sem o campo (default do protocolo).
+      world.fields.clear();
+      for (const field of message.world.fields ?? []) {
+        world.fields.set(field.id, { id: field.id, tiles: field.tiles, appearanceId: field.appearanceId });
+      }
+      world.fieldsVersion += 1;
       // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
       // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que
       // nunca some — por menos de um segundo, mas no primeiro quadro que o jogador vê.
@@ -432,6 +467,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         vocationId: message.self.vocationId,
         speed: message.self.speed,
         skills: skillsOf(message.self.skills, state.skills),
+        soul: message.self.soul,
+        soulMax: message.self.soulMax,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre

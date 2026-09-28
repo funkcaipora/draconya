@@ -6,38 +6,5 @@
   "routeId": "rotworm-caves",
   "ambience": "cavern",
   "description": "Cavernas úmidas dominadas por rotworms — vermes lentos que aguentam apanhar bastante antes de cair.",
-  "spawnClearRadius": 3,
-  "difficulties": {
-    "cautious": {
-      "monsterCount": 2,
-      "composition": [
-        {
-          "monsterId": "rotworm",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 2000
-    },
-    "bold": {
-      "monsterCount": 5,
-      "composition": [
-        {
-          "monsterId": "rotworm",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 2000
-    },
-    "reckless": {
-      "monsterCount": 8,
-      "composition": [
-        {
-          "monsterId": "rotworm",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 2000
-    }
-  },
-  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II §15). corpseTtlMs saiu daqui e mora no monstro (#585): `data/monsters/rotworm.json` declara 670000 ms, a soma da cadeia real do Canary `items.xml` — não mais os 30000 ms copiados do Huntera (Parte VI §36, #515), que eram só o prazo observado do PRIMEIRO estágio de decaimento. spawnClearRadius: ainda o provisório da Rat Cellars (3 tiles, #236), sem captura própria da Rotworm Caves no Huntera."
+  "_open": "Fim do pull por dificuldade (#583, ADR 0039): os 13 pontos da rota (`data/routes/rotworm-caves.json`) nascem TODOS ao mesmo tempo, cada um declarando `rotworm` direto — não há mais `difficulties`/`monsterCount`/`composition`/`spawnClearRadius` nesta hunt. O `rotworm` já declara `blockable: true` (#519, comportamento observado do Huntera): o respawn dele espera a vista limpar, como sempre foi via `spawnClearRadius`. recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000 por ponto: o mesmo valor adotado na Rat Cellars (#510, PR #512). corpseTtlMs saiu daqui e mora no monstro (#585): `data/monsters/rotworm.json` declara 670000 ms, a soma da cadeia real do Canary `items.xml` — não mais os 30000 ms copiados do Huntera (Parte VI §36, #515), que eram só o prazo observado do PRIMEIRO estágio de decaimento. Densidade: antes o pull limitava a 2/5/8 rotworms vivos ao mesmo tempo; agora os 13 pontos nascem todos — divergência DELIBERADA do ADR 0039 decisão 3."
 }

@@ -154,6 +154,15 @@ export interface World {
   readonly tileOverrides: Map<string, ReadonlyArray<{ readonly from: number; readonly to: number }>>;
   /** Sobe a cada mudança em `tileOverrides` — a MESMA razão de `groundItemsVersion`. */
   tileOverridesVersion: number;
+  /**
+   * Os campos de tile ativos (#561, M31-06): fogo, veneno, energia, pelo id de CONTEÚDO
+   * (`FieldSpec.id`, não numérico como o de `groundItems` — relançar o MESMO reinicia).
+   * Desenhados na pilha de CADA tile que cobrem, como itens comuns — a MESMA regra dos
+   * cadáveres.
+   */
+  readonly fields: Map<string, FieldTile>;
+  /** Sobe a cada mudança em `fields` — a MESMA razão de `groundItemsVersion`. */
+  fieldsVersion: number;
   /** A janela de tiles visíveis na tela agora (FUN-23, #254). Atualizada pelo viewport. */
   visibleWindow: TileWindow | null;
   readonly effects: Effect[];
@@ -170,6 +179,13 @@ export interface GroundItem {
   readonly lootable?: boolean;
 }
 
+/** Um campo de tile ativo (#561, M31-06): quais tiles, e com que arte. */
+export interface FieldTile {
+  readonly id: string;
+  readonly tiles: readonly Point[];
+  readonly appearanceId: number;
+}
+
 export const world: World = {
   instanceId: null,
   mapId: null,
@@ -178,6 +194,8 @@ export const world: World = {
   groundItemsVersion: 0,
   tileOverrides: new Map(),
   tileOverridesVersion: 0,
+  fields: new Map(),
+  fieldsVersion: 0,
   selfId: null,
   visibleWindow: null,
   creatures: new Map(),
@@ -335,6 +353,8 @@ export function enterInstance(
   world.groundItemsVersion += 1;
   world.tileOverrides.clear();
   world.tileOverridesVersion += 1;
+  world.fields.clear();
+  world.fieldsVersion += 1;
   world.selfId = null;
   world.creatures.clear();
   clearTransients();

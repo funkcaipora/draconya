@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1",
+    "name": "Basic",
+    "price": 5000,
+    "protectionPrice": 10000,
+    "percent": 90,
+    "removeCost": 15000,
+    "durationSeconds": 72000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "2",
+    "name": "Intricate",
+    "price": 30000,
+    "protectionPrice": 30000,
+    "percent": 70,
+    "removeCost": 15000,
+    "durationSeconds": 72000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  },
+  {
+    "id": "3",
+    "name": "Powerful",
+    "price": 200000,
+    "protectionPrice": 50000,
+    "percent": 50,
+    "removeCost": 15000,
+    "durationSeconds": 72000,
+    "source": {
+      "engine": "canary",
+      "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
+      "path": "data/XML/imbuements.xml"
+    }
+  }
+]

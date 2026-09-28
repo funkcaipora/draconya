@@ -149,11 +149,14 @@ describe('loadContent', () => {
     expect(route?.spawnPoints.length).toBe(14);
   });
 
-  it('a Rat Cellars é o bueiro real, com os três pulls do Huntera, o rato do Tibia e o queijo (FUN-123)', () => {
+  it('a Rat Cellars é o bueiro real, com um rato por ponto de spawn (#583), o rato do Tibia e o queijo (FUN-123)', () => {
     const content = loadContent(DATA);
     const hunt = content.hunts.get('rat-cellars');
-    expect(Object.keys(hunt?.difficulties ?? {})).toEqual(['cautious', 'bold', 'reckless']);
-    expect(Object.values(hunt?.difficulties ?? {}).map((d) => d.monsterCount)).toEqual([2, 5, 8]);
+    const route = content.routes.get('rat-cellars');
+    // Fim do pull por dificuldade (#583, ADR 0039): os 14 pontos da rota nascem TODOS, cada um
+    // declarando o próprio `rat` — não há mais `difficulties`/`monsterCount` para escolher
+    // quantos nascem.
+    expect(route?.spawnPoints.every((point) => point.monsterId === 'rat')).toBe(true);
     expect(hunt?.ambience).toBe('cavern');
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
@@ -676,6 +679,9 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'front-sweep': { level: 70, mana: 200, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 80 },
     'fierce-berserk': { level: 90, mana: 340, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 90 },
     'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 1000, cdMs: 600000, kind: 'heal', bp: 500 },
+    // #589: força o alvo do monstro; não tem `basePower` — o efeito é `challenge`, não dano.
+    'challenge': { level: 20, mana: 30, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'challenge' },
+    'chivalrous-challenge': { level: 150, mana: 80, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'challenge' },
     'annihilation': { level: 110, mana: 300, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage' },
     'inflict-wound': { level: 40, mana: 30, group: 'attack', groupMs: 2000, cdMs: 30000, kind: 'damage-over-time' },
   },
@@ -760,16 +766,17 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
 
 /** As excluídas por nome (ADR 0026 decisão 5) — em kebab-case, como um id seria. */
 const EXCLUDED_SPELLS = [
-  'light', 'great-light', 'ultimate-light', 'find-person', 'find-fiend', 'magic-rope', 'levitate',
   'invisible', 'cancel-invisibility', 'creature-illusion',
-  'cure-poison', 'cure-bleeding', 'cure-curse', 'cure-electrification', 'cure-burning',
-  // `curse` (#596): DOT multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado
-  // 17 vezes) — forma que `spellEffectSchema.damage-over-time` não modela (um valor fixo só).
-  // Fica fora, reportada na spec da issue; as outras cinco DOTs de tique único da mesma issue
-  // (`ignite`/`electrify`/`envenom`/`inflict-wound`/`holy-flash`) e `cancel-magic-shield` saíram
-  // desta lista — o #596 as trouxe.
+  // Cure Poison/Burning/Electrification/Bleeding/Curse entraram no #590 — a cura de condição
+  // agora existe (CMB-07 generalizou a `Condition`). `curse` (#596) é diferente: um DOT
+  // multi-estágio (17 valores decrescentes, `Condition:addDamage` chamado 17 vezes) — forma que
+  // `spellEffectSchema.damage-over-time` não modela (um valor fixo só). Fica fora, reportada na
+  // spec da issue; as outras cinco DOTs de tique único da mesma issue (`ignite`/`electrify`/
+  // `envenom`/`inflict-wound`/`holy-flash`) e `cancel-magic-shield` saíram desta lista — o #596
+  // as trouxe. `challenge`/`chivalrous-challenge` (#589) também saíram — ver
+  // `VOCATION_SPELLS.knight`, acima.
   'curse',
-  'shield-bash', 'shield-slam', 'challenge', 'train-party', 'protect-party', 'enchant-party',
+  'shield-bash', 'shield-slam', 'train-party', 'protect-party', 'enchant-party',
   'heal-party', 'elemental-synthesis', 'shared-conservation',
   'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
@@ -804,24 +811,30 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 17 + 14 + 29 + 28 vocation spells, no generic ones left (#596)', () => {
+  it('has exactly the catalogue: 20 + 15 + 29 + 31 vocation spells, plus one generic (Cure Poison)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
-    // #596 fechou o catálogo fora da Roda do Destino: Knight +2 (Annihilation, Inflict Wound);
-    // Paladin −3 (Divine Defiance/Barrage, Ethereal Barrage removidas — sem correspondente no
-    // Canary) +1 (Holy Flash) = −2; Sorcerer +5 (Ultimate Flame Strike, Ignite, Electrify,
-    // Strong Haste, Cancel Magic Shield); Druid −1 (Forked Thorns removida) +5 (Ultimate Ice/
-    // Terra Strike, Envenom, Strong Haste, Cancel Magic Shield) = +4. As três genéricas
-    // pré-vocação (`heal`/`strike`/`blast`) também saíram — não existem mais magias sem vocação.
+    // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
+    // Curse no Paladin (+1), Cure Burning e Cure Electrification só no Druid (+2) — e Cure
+    // Poison é a magia genérica (sem `vocationId`) que sobrevive ao #596, abaixo. #589
+    // acrescentou Challenge e Chivalrous Challenge no Knight (+2, de 16 para 18) — revisita a
+    // exclusão antiga (ver `EXCLUDED_SPELLS`, abaixo, que não a lista mais).
+    // #596 fechou o catálogo fora da Roda do Destino, em cima do que #589/#590 já tinham
+    // deixado: Knight +2 (Annihilation, Inflict Wound) → 20; Paladin −3 (Divine Defiance/
+    // Barrage, Ethereal Barrage removidas — sem correspondente no Canary) +1 (Holy Flash) →
+    // 17−2=15; Sorcerer +5 (Ultimate Flame Strike, Ignite, Electrify, Strong Haste, Cancel
+    // Magic Shield) → 29; Druid −1 (Forked Thorns removida) +5 (Ultimate Ice/Terra Strike,
+    // Envenom, Strong Haste, Cancel Magic Shield) → 27+4=31. As três genéricas pré-vocação
+    // (`heal`/`strike`/`blast`) saíram — só Cure Poison (#590) continua sem `vocationId`.
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
-    expect(byVocation.get('knight')).toBe(17);
-    expect(byVocation.get('paladin')).toBe(14);
+    expect(byVocation.get('knight')).toBe(20);
+    expect(byVocation.get('paladin')).toBe(15);
     expect(byVocation.get('sorcerer')).toBe(29);
-    expect(byVocation.get('druid')).toBe(28);
-    expect(byVocation.get(undefined)).toBeUndefined();
+    expect(byVocation.get('druid')).toBe(31);
+    expect(byVocation.get(undefined)).toBe(1);
   });
 
   it('nenhuma das 13 magias novas do #596 cai no default `arcane` de `damageType`', () => {
@@ -1258,6 +1271,28 @@ describe('wave and beam areas transcribed from the Canary AREA_* (#679)', () => 
   it('dragon and dragon lord corpses last 670000 ms, the Canary items.xml decay chain (#585)', () => {
     for (const id of ['dragon', 'dragon-lord']) {
       expect(content.monsters.get(id)?.corpseTtlMs, id).toBe(670000);
+    }
+  });
+
+  it('the dragon lord firefield follows the Canary decayTo chain (#560, items.xml:4212-4246)', () => {
+    for (const id of ['dragon-lord', 'dragon-lord-hatchling']) {
+      const field = content.monsters.get(id)?.abilities.find((a) => a.id === 'firefield')?.field;
+      expect(field?.stages, id).toHaveLength(3);
+      const stages = field?.stages ?? [];
+      // 2118 (dano 20, 200s) → decayTo 2119 (10, 148s) → 2120 (sem field, 98s) → some.
+      expect(stages[0]?.durationMs, id).toBe(200_000);
+      expect(stages[0]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[0]?.condition?.effect.kind === 'damage-over-time' && stages[0].condition.effect.form === 'rounds') {
+        expect(stages[0].condition.effect.rounds[0]?.damage, id).toBe(20);
+      }
+      expect(stages[1]?.durationMs, id).toBe(148_000);
+      expect(stages[1]?.condition?.effect.kind, id).toBe('damage-over-time');
+      if (stages[1]?.condition?.effect.kind === 'damage-over-time' && stages[1].condition.effect.form === 'rounds') {
+        expect(stages[1].condition.effect.rounds[0]?.damage, id).toBe(10);
+      }
+      // O último estágio não causa dano — só ocupa o tile até sumir.
+      expect(stages[2]?.durationMs, id).toBe(98_000);
+      expect(stages[2]?.condition, id).toBeUndefined();
     }
   });
 

@@ -71,6 +71,15 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.corpses)) {
     check(`corpses.${id}`, 'object', object);
   }
+  // O campo de tile (#561, M31-06): fogo/veneno/energia com id fora do pacote é o mesmo
+  // quadrado invisível, agora no chão da hunt inteira.
+  for (const [id, object] of Object.entries(appearances.fields)) {
+    check(`fields.${id}`, 'object', object);
+  }
+  // A arte de estágio (#560): o mesmo campo, mais fraco — cada índice é um id à parte.
+  for (const [id, stages] of Object.entries(appearances.fieldStages)) {
+    stages.forEach((object, stageIndex) => check(`fieldStages.${id}.${String(stageIndex)}`, 'object', object));
+  }
   // O cenário usável (#727, ADR 0050 d.1): cada estado de cada interativo é um id de arte —
   // uma porta com o id "aberto" fora do pacote é o mesmo quadrado invisível, ao trocar a placa.
   for (const [key, states] of Object.entries(appearances.scenery)) {

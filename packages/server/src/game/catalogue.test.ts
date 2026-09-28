@@ -2,9 +2,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_DIFFICULTY_NAME } from '@draconya/sim';
 import { loadContent } from '../../../content/src/load.js';
 import { buildCatalogue } from './catalogue.js';
-import { TEST_HUNT, rawTestContent, testContent } from '../testing/content.js';
+import { TEST_HUNT, TEST_ROUTE, rawTestContent, testContent } from '../testing/content.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data');
 const content = testContent();
@@ -43,26 +44,28 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([rat]);
   });
 
-  it('o mesmo monstro em duas dificuldades sai UMA vez, e a lista vem em ordem de id', () => {
+  it('o mesmo monstro em dois pontos de spawn sai UMA vez, e a lista vem em ordem de id', () => {
     // Um id repetido seria uma folha pedida duas vezes; a ordem é o que faz a mensagem ser a
     // mesma a cada boot. Mutação que mata: `push` num array em vez do `Set`, ou sem o `sort`.
     // O morcego entra ANTES do rato no conteúdo cru (placeholder: outfit 1), mas a hunt o lista
-    // depois — a ordem do catálogo tem que ser a do id, não a da composição.
+    // depois — a ordem do catálogo tem que ser a do id, não a da rota.
+    //
+    // Fim do pull por dificuldade (#583, ADR 0039): quem decide os monstros de uma hunt agora
+    // é a ROTA, não mais uma composição por dificuldade — um segundo ponto de spawn com
+    // `monsterId: 'bat'` é o equivalente atual de "dois monstros na mesma hunt".
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const rat = raw.monsters[0] as Record<string, unknown>;
     const bat = { ...rat, id: 'bat', name: 'Bat' };
     const twoTiers = {
       ...raw,
       monsters: [bat, rat],
-      hunts: [{
-        ...TEST_HUNT,
-        difficulties: {
-          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          reckless: {
-            monsterCount: 2, respawnDelayMs: 1000,
-            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
-          },
-        },
+      hunts: [TEST_HUNT],
+      routes: [{
+        ...TEST_ROUTE,
+        spawnPoints: [
+          TEST_ROUTE.spawnPoints[0],
+          { ...TEST_ROUTE.spawnPoints[0], routeIndex: 0, monsterId: 'bat' },
+        ],
       }],
     };
     const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
@@ -403,22 +406,22 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     });
   });
 
-  it('o mesmo monstro em duas dificuldades aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+  it('o mesmo monstro em dois pontos de spawn aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+    // #583: dois pontos de spawn (não mais duas dificuldades) é o que dá uma hunt com mais de
+    // um monstro.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const rat = raw.monsters[0] as Record<string, unknown>;
     const bat = { ...rat, id: 'bat', name: 'Bat' };
     const twoTiers = {
       ...raw,
       monsters: [bat, rat],
-      hunts: [{
-        ...TEST_HUNT,
-        difficulties: {
-          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          reckless: {
-            monsterCount: 2, respawnDelayMs: 1000,
-            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
-          },
-        },
+      hunts: [TEST_HUNT],
+      routes: [{
+        ...TEST_ROUTE,
+        spawnPoints: [
+          TEST_ROUTE.spawnPoints[0],
+          { ...TEST_ROUTE.spawnPoints[0], routeIndex: 0, monsterId: 'bat' },
+        ],
       }],
     };
     const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
@@ -465,15 +468,13 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
           },
         },
       ],
-      hunts: [{
-        ...TEST_HUNT,
-        difficulties: {
-          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          reckless: {
-            monsterCount: 2, respawnDelayMs: 1000,
-            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
-          },
-        },
+      hunts: [TEST_HUNT],
+      routes: [{
+        ...TEST_ROUTE,
+        spawnPoints: [
+          TEST_ROUTE.spawnPoints[0],
+          { ...TEST_ROUTE.spawnPoints[0], routeIndex: 0, monsterId: 'bat' },
+        ],
       }],
     };
     const content = buildContent({
@@ -539,11 +540,14 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     ]);
   });
 
-  it('leva a contagem de monstros por dificuldade na mesma ordem de difficulties (SV-19, #355)', () => {
+  it('leva a contagem de monstros por hunt — o total de pontos de spawn da rota (SV-19, #355; #583)', () => {
+    // Fim do pull por dificuldade (ADR 0039): só existe UM nome agora, `DEFAULT_DIFFICULTY_NAME`
+    // (vestígio de protocolo, #584), e a contagem é o total de pontos que a rota declara — não
+    // mais um número por dificuldade.
     const { hunts } = buildCatalogue(content);
     const arena = hunts.find((hunt) => hunt.id === 'arena');
     expect(arena?.difficultyDetails).toEqual([
-      { id: 'cautious', monsterCount: 1 },
+      { id: DEFAULT_DIFFICULTY_NAME, monsterCount: TEST_ROUTE.spawnPoints.length },
     ]);
   });
 
@@ -557,6 +561,9 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       class: 'mammal',
       health: 20,
       experience: 5,
+      bestiary: {
+        stars: 1, occurrence: 0, firstUnlock: 10, secondUnlock: 100, toKill: 250, charmsPoints: 5,
+      },
     });
     expect('class' in (rat ?? {})).toBe(true);
 
@@ -564,6 +571,21 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const withoutClass = buildCatalogue(content).monsters[0];
     expect(withoutClass).toBeDefined();
     expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('leva a ficha do Canary por monstro quando content.bestiary.entries a tem, e omite quando não (#601, ADR 0053 d.1)', () => {
+    const realContent = loadContent(DATA);
+    const { monsters } = buildCatalogue(realContent);
+    const dragon = monsters.find((m) => m.id === 'dragon');
+    // Os mesmos números do issue #601 e de `content/data/bestiary/baseline.json`.
+    expect(dragon?.bestiary).toEqual({
+      stars: 3, occurrence: 0, firstUnlock: 50, secondUnlock: 500, toKill: 1_000, charmsPoints: 25,
+    });
+
+    // A fixture de teste não tem `bestiary` no conteúdo: a chave fica AUSENTE, não `undefined`.
+    const withoutEntry = buildCatalogue(content).monsters[0];
+    expect(withoutEntry).toBeDefined();
+    expect('bestiary' in (withoutEntry ?? {})).toBe(false);
   });
 
   it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {

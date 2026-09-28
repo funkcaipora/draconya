@@ -713,6 +713,16 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
     }
+    if (effect.kind === 'challenge') {
+      const selfOrigin = effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
+      if (selfOrigin && effect.range !== undefined) {
+        problems.push(`${where}: forma que sai do lançador não tem alcance`);
+      }
+      if (!selfOrigin && effect.range === undefined) {
+        problems.push(`${where}: challenge no alvo precisa de range`);
+      }
+    }
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
@@ -1367,15 +1377,21 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
-  // Referência cruzada: validar formato não basta. Uma hunt apontando monstro inexistente
-  // passa em qualquer schema e só falha quando alguém entra nela.
+  // Referência cruzada: validar formato não basta. Um ponto de spawn apontando monstro
+  // inexistente passa em qualquer schema e só falha quando alguém entra na hunt (#583, ADR
+  // 0039 — toda hunt nasce dos pontos de spawn da rota, não de uma composição por dificuldade).
   for (const hunt of hunts.values()) {
-    for (const [difficultyName, difficulty] of Object.entries(hunt.difficulties)) {
-      for (const entry of difficulty?.composition ?? []) {
-        if (!monsterDefinitions.has(entry.monsterId)) {
+    const route = routes.get(hunt.routeId);
+    if (route === undefined) continue;
+    for (const [index, point] of route.spawnPoints.entries()) {
+      const monsterIds = point.monsterId !== undefined
+        ? [point.monsterId]
+        : (point.monsters ?? []).map((entry) => entry.monsterId);
+      for (const monsterId of monsterIds) {
+        if (!monsterDefinitions.has(monsterId)) {
           problems.push(
-            `hunt "${hunt.id}" (${difficultyName}) referencia monstro inexistente ` +
-              `"${entry.monsterId}"`,
+            `hunt "${hunt.id}": rota "${hunt.routeId}" ponto ${String(index)} referencia ` +
+              `monstro inexistente "${monsterId}"`,
           );
         }
       }
@@ -1523,6 +1539,10 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
+    // Sem campo: fixture não fala de arte, e campo sem linha aqui é válido (#561, M31-06).
+    fields: {},
+    // Sem estágio de campo: idem, campo sem cadeia de arte é válido (#560).
+    fieldStages: {},
     // Sem cenário: fixture não importa mapa nenhum, e chave sem uso é vocabulário à espera.
     scenery: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [

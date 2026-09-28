@@ -22,7 +22,7 @@ import {
 } from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
+  TEST_COMBAT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
   testContent,
 } from '../testing/content.js';
 
@@ -2707,7 +2707,10 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
       maps: [{ id: 'arena', z: 7, grid }, ...(raw.maps ?? []).filter((m) =>
         (m as { id: string }).id !== 'arena')],
       // O spawn no índice 10 é (6,6): o canto oposto ao herói em (1,1).
-      routes: [{ id: 'arena-loop', mapId: 'arena', tiles, spawnPoints: [{ routeIndex: 10, radius: 1 }] }],
+      routes: [{
+        id: 'arena-loop', mapId: 'arena', tiles,
+        spawnPoints: [{ routeIndex: 10, radius: 1, monsterId: 'rat', respawnDelayMs: 2_000 }],
+      }],
       monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
         m['id'] === 'rat' ? { ...m, health: 100_000, aggroRadius: 10 } : m),
     };
@@ -3441,6 +3444,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
     // que ela vira id de arte.
     abilities: { spit: { missile: 9 }, 'spit-hit': { effect: 8 } },
+    // O campo de tile que uma ability deixa no chão (#561, M31-06): o id de CONTEÚDO do campo
+    // (`FieldSpec.id`) vira o id de arte daqui — a MESMA indireção de `corpses`.
+    fields: { flame: 2118 },
+    // A arte dos estágios 1, 2, … da cadeia `decayTo` (#560) — o índice 0 continua em `fields`.
+    fieldStages: { flame: [2119, 2120] as number[] },
   } as const;
   /** As armas de tiro do #152, e a munição abstrata que o bow dispara. */
   const BOW = {
@@ -3562,14 +3570,17 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         ...(over.regen === false ? { regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } } } : {}),
       }],
       ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
+      // Fim do pull por dificuldade (#583, ADR 0039): "quantos ratos por ponto de spawn" virou
+      // "quantos pontos de spawn" — um ponto a mais por rato extra, no mesmo lugar de sempre.
       ...(over.monsterCount === undefined
         ? {}
         : {
-          hunts: [{
-            ...TEST_HUNT,
-            difficulties: {
-              cautious: { ...TEST_HUNT.difficulties.cautious, monsterCount: over.monsterCount },
-            },
+          routes: [{
+            ...TEST_ROUTE,
+            spawnPoints: Array.from(
+              { length: over.monsterCount },
+              () => TEST_ROUTE.spawnPoints[0],
+            ),
           }],
         }),
       ...(over.monsters === false
@@ -3762,8 +3773,12 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: `xp: 0` em `playerStatsOf` (a XP do fio fica em zero com o herói em
     // 30); `level: 0` idem, pelo level.
+    //
+    // 45 s, não 10 (#583, ADR 0039): o rato não é `blockable`, então cada respawn passa pelo
+    // telegraph de 4200 ms do Canary além do `respawnDelayMs` de 1000 — o ciclo de encontro
+    // de ~2,25 s vira ~7,5 s, e seis abates precisam de ~45 s, não mais dos ~13 s de antes.
     const { runFor, received, hero } = hunt();
-    runFor(10_000);
+    runFor(45_000);
 
     expect(hero().xp).toBeGreaterThan(0);
     expect(hero().level).toBeGreaterThan(1);
@@ -3852,14 +3867,19 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // explosão 12 (invariante 6). A ordem é a do Tibia: o projétil voa, o efeito estoura no
     // tile de chegada, o número cai.
     //
-    // Na arena de 2×2 o rato nasce colado e o primeiro morre no golpe engatilhado do herói,
-    // antes de bater; o segundo nasce com esse golpe em cooldown e bate primeiro — e é o dano
-    // levado que acorda a categoria `attack` do bot (é assim que o `sim` a arma). A magia sai
-    // aí, com `targets ≥ 1`, e por isso a hunt precisa de alguns segundos.
+    // Na arena de 2×2 o rato nasce colado ao herói. Antes do #583, o primeiro rato morria no
+    // golpe engatilhado do herói antes de bater, e o SEGUNDO nascia a tempo de bater primeiro
+    // enquanto o golpe do herói ainda estava em cooldown — e era o dano levado que acordava a
+    // categoria `attack` do bot. Desde o #583 (ADR 0039) um rato não-`blockable` só respawna
+    // depois do `respawnDelayMs` mais o telegraph de 4200 ms do Canary — tempo de sobra para o
+    // golpe do herói já estar pronto de novo e matar o segundo rato tão instantâneo quanto o
+    // primeiro, e a categoria nunca acordaria. Este rato tem vida de sobra para aguentar o
+    // golpe do herói e bater de volta NA PRIMEIRA vida — sem depender de respawn nenhum.
     //
     // Mutação que mata: trocar `from` e `to` no `missile` — o `effect` deixa de estourar
     // onde o projétil chegou. `effectId: look.missile` mata pelo id.
     const { runFor, received } = hunt({
+      rat: { health: 200 },
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
       }] }),
@@ -3962,8 +3982,14 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: ler `appearances.spells[spellId].effect` sem a guarda de `undefined`
     // — o ciclo explode num `TypeError` no primeiro lançamento.
+    //
+    // Vida extra pelo mesmo motivo do teste da magia com tabela (#583, ADR 0039): sem ela, o
+    // rato morre no golpe engatilhado do herói antes de bater, e o respawn não-`blockable`
+    // (`respawnDelayMs` + telegraph de 4200 ms) nunca chega a tempo do cooldown do herói ainda
+    // estar de pé — a categoria `attack` do bot nunca acordaria.
     const { runFor, received } = hunt({
       table: false,
+      rat: { health: 200 },
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
       }] }),
@@ -4302,7 +4328,12 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       },
     };
 
-    const withTable = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    // O rato sobrevive ao herói (#583, ADR 0039): com um único ponto de spawn e o telegraph
+    // não-`blockable` de 4200 ms, um rato com a vida padrão morreria no primeiro golpe do
+    // herói e o PRÓXIMO só nasceria depois do herói já estar pronto para outro golpe instantâneo
+    // — nunca sobraria tempo para o campo bater nem uma vez. A vida alta aqui é só para o rato
+    // aguentar os golpes do herói pelos 6 s inteiros; a ability é quem faz o dano que o teste mede.
+    const withTable = hunt({ rat: { abilities: [ability], health: 1_000 }, regen: false, table: true });
     withTable.runFor(6_000);
     const hitsWith = ofType(withTable.received(), 'creature-hit')
       .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
@@ -4311,12 +4342,181 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // vida — o que conta é o campo ter ferido depois disso.
     expect(withTable.hero().health).toBeLessThan(withTable.hero().maxHealth);
 
-    const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
+    const withoutTable = hunt({ rat: { abilities: [ability], health: 1_000 }, regen: false, table: false });
     withoutTable.runFor(6_000);
     const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
     expect(hitsWithout.length).toBeGreaterThan(0);
     expect(withoutTable.hero().health).toBeLessThan(withoutTable.hero().maxHealth);
+  });
+
+  it('o campo vira field-appear com a arte da tabela, e o vencimento vira field-disappear (#561, M31-06)', () => {
+    // A MESMA ability do teste acima, com uma linha em `appearances.fields` (TABLE.fields.flame).
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 2, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    // Vida extra pelo mesmo motivo do teste CMB-07 acima (#583, ADR 0039): sem ela, o rato de
+    // vida padrão morre no golpe engatilhado do herói antes de bater, e o respawn não-`blockable`
+    // (`respawnDelayMs` + telegraph de 4200 ms) nunca chega a tempo do herói ainda estar
+    // esperando — a ability nunca dispararia e nenhum `field-appear` sairia. Menos vida que o
+    // CMB-07 (50, não 1_000) DE PROPÓSITO: este teste também precisa do `field-disappear`, que só
+    // sai quando o rato PARA de relançar a ability — vida de sobra manteria o campo se
+    // reiniciando (`merge: 'refresh'`) para sempre dentro da janela de 3 s.
+    const { runFor, received } = hunt({
+      rat: { abilities: [ability], health: 50 }, regen: false, table: true,
+    });
+    runFor(3_000);
+    const all = received();
+    const appeared = ofType(all, 'field-appear');
+    expect(appeared.length).toBeGreaterThan(0);
+    expect(appeared[0]).toMatchObject({ id: 'flame', appearanceId: 2118 });
+    expect(appeared[0]?.tiles.length).toBeGreaterThan(0);
+    const gone = ofType(all, 'field-disappear');
+    expect(gone.length).toBeGreaterThan(0);
+    expect(gone[0]).toMatchObject({ id: 'flame' });
+  });
+
+  // As três a seguir aplicam o campo DIRETO por `ruleset.applyField` (como o describe de campos
+  // de `hunt.test.ts` já faz), em vez de por uma ability de monstro: a ability recasta a cada
+  // `cadenceMs` e `applyField` SEMPRE reinicia no estágio 0 ao relançar — com uma cadência curta
+  // o bastante para caber na janela do teste, o recast apagava a troca de estágio antes do
+  // `session-attach` correr, e é exatamente o que aconteceu na primeira versão deste teste.
+  // Aplicar direto tira essa corrida: o campo decai sozinho, sem ninguém para relançá-lo.
+  const stagedFire = {
+    id: 'flame', durationMs: 1_000, // ignorado — `stages` manda.
+    shape: { shape: 'circle' as const, radius: 1, centered: 'caster' as const },
+    stages: [
+      {
+        durationMs: 500,
+        condition: {
+          key: 'flame', merge: 'refresh' as const, durationMs: 500,
+          effect: {
+            kind: 'damage-over-time' as const, form: 'rounds' as const,
+            rounds: [{ count: 1, intervalMs: 500, damage: 4 }], damageType: 'fire' as const,
+          },
+        },
+      },
+      { durationMs: 500 }, // estágio 2, mudo — some sem mais dano.
+    ],
+  };
+
+  it('a troca de estágio (#560, decayTo) vira field-stage-change com o appearanceId do índice certo', () => {
+    const { host, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    (session.ruleset as HuntRuleset).applyField(session, stagedFire, { x: 1, y: 1, z: 7 });
+
+    runFor(600); // passa dos 500 do estágio 0: a troca já aconteceu.
+    const all = received();
+    expect(ofType(all, 'field-appear')[0]).toMatchObject({ id: 'flame', appearanceId: 2118 });
+    // Estágio 1: `fieldStages.flame[0]` (índice `stageIndex - 1`).
+    expect(ofType(all, 'field-stage-change')[0]).toMatchObject({ id: 'flame', appearanceId: 2119 });
+
+    runFor(500); // passa dos 500 do estágio 1: o campo desaparece de vez.
+    expect(ofType(received(), 'field-disappear').length).toBeGreaterThan(0);
+  });
+
+  it('SEM linha em appearances.fieldStages a troca de estágio é MUDA — nem chega a sair (invariante 6)', () => {
+    const { host, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const ruleset = session.ruleset as HuntRuleset;
+    ruleset.applyField(session, { ...stagedFire, id: 'unmapped-stage' }, { x: 1, y: 1, z: 7 });
+
+    runFor(600);
+    expect(ofType(received(), 'field-stage-change')).toHaveLength(0);
+    // A mecânica continua rodando — a ausência é só da apresentação (invariante 6).
+    expect(ruleset.fields[0]?.stageIndex).toBe(1);
+  });
+
+  it('quem reanexa no meio da hunt vê os campos ATIVOS em session-state.world.fields', () => {
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 10_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 10_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 20, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    // Vida extra pelo mesmo motivo do CMB-07 (#583, ADR 0039) — ver comentário acima.
+    const { host, viewer, runFor, received } = hunt({
+      rat: { abilities: [ability], health: 50 }, regen: false, table: true,
+    });
+    runFor(1_000);
+    expect(ofType(received(), 'field-appear').length).toBeGreaterThan(0);
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    expect(state?.world.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2118 })]),
+    );
+  });
+
+  it('quem reanexa NO MEIO da cadeia (#560) vê a arte do estágio ATUAL, não a do nascimento', () => {
+    const { host, viewer, runFor, received } = hunt({ regen: false, table: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    // Estágio 1 LONGO de propósito: o reanexo precisa cair dentro dele, não no 2 (mudo).
+    const [firstStage] = stagedFire.stages;
+    if (firstStage === undefined) throw new Error('faltou o primeiro estágio da fixture');
+    (session.ruleset as HuntRuleset).applyField(
+      session, { ...stagedFire, stages: [firstStage, { durationMs: 10_000 }] },
+      { x: 1, y: 1, z: 7 },
+    );
+
+    runFor(600); // passa dos 500 do estágio 0: já está no estágio 1 quando reanexa.
+    expect(ofType(received(), 'field-stage-change').length).toBeGreaterThan(0);
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(received(), 'session-state').at(-1);
+    expect(state?.world.fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'flame', appearanceId: 2119 })]),
+    );
+  });
+
+  it('SEM linha em appearances.fields o campo é mudo, e a mecânica não muda (invariante 6)', () => {
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'unmapped-flame', durationMs: 1_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'unmapped-flame', merge: 'refresh', durationMs: 1_000,
+          effect: {
+            kind: 'damage-over-time', form: 'rounds',
+            rounds: [{ count: 2, intervalMs: 500, damage: 4 }], damageType: 'fire',
+          },
+        },
+      },
+    };
+    // Vida extra pelo mesmo motivo do CMB-07 (#583, ADR 0039) — ver comentário acima.
+    const { runFor, received, hero } = hunt({
+      rat: { abilities: [ability], health: 50 }, regen: false, table: true,
+    });
+    runFor(3_000);
+    expect(ofType(received(), 'field-appear')).toHaveLength(0);
+    expect(ofType(received(), 'field-disappear')).toHaveLength(0);
+    // Sem arte, a chama ainda fere — a apresentação é que fica muda (invariante 6).
+    expect(hero().health).toBeLessThan(hero().maxHealth);
   });
 });
 
@@ -4388,7 +4588,7 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
   const knight = {
     id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
     startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
-    meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+    meleeDamageMultiplier: 1, distDamageMultiplier: 1, soulMax: 100, soulGainTicksMs: 120000,
   };
   const vocations = new Map([[knight.id, knight]]);
   const itemCatalog = new Map([[axe.id, axe]]);
@@ -4654,11 +4854,13 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
       ['knight', {
         id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
         spellSkill: 'magic', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+        soulMax: 100, soulGainTicksMs: 120000,
         startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
       ['paladin', {
         id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20,
         spellSkill: 'distance', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
+        soulMax: 100, soulGainTicksMs: 120000,
         startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
     ]);

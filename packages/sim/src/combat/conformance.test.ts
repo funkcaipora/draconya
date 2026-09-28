@@ -349,7 +349,7 @@ const ARENA_GRID = [
 const ARENA_ROUTE = {
   id: 'arena-loop', mapId: 'arena',
   tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-  spawnPoints: [{ routeIndex: 0, radius: 1 }],
+  spawnPoints: [{ routeIndex: 0, radius: 1, monsterId: 'flamer', respawnDelayMs: 30_000 }],
 };
 
 const PROGRESSION: Progression = {
@@ -359,7 +359,7 @@ const PROGRESSION: Progression = {
   regen: { health: { ticksMs: 1000, amount: 0 }, mana: { ticksMs: 1000, amount: 0 } },
   regeneration: { requiresFood: false },
   xp: { kind: 'power', base: 20, exponent: 2 },
-  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, levelFloor: 8 },
+  deathPenalty: { flatFraction: 0.1, cubicFromLevel: 24, blessedReduction: 0.56, promotionReduction: 0.3 },
   startingKit: [], satchelInitialSlots: 10, containerRow: 5, skillMultipliers: {},
   mitigation: { multiplier: 1.3, primaryShield: 2.05, secondaryShield: 1.25 },
   rates: NEUTRAL_RATES,
@@ -401,9 +401,6 @@ function engineContent(): ReturnType<typeof buildContent> {
     monsters: [HUNT_MONSTER],
     hunts: [{
       id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-      difficulties: {
-        cautious: { monsterCount: 1, composition: [{ monsterId: 'flamer', weight: 1 }], respawnDelayMs: 30_000 },
-      },
     }],
     vocations: [], progression: [PROGRESSION],
     combat: [{ ...COMBAT, player: { ...COMBAT.player, attackPower: 25, attackIntervalMs: 2_000 } }],

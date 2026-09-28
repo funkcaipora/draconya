@@ -19,7 +19,7 @@ const real = (): Content => {
 };
 
 function enter(
-  content: Content, difficulty: 'cautious' | 'bold' | 'reckless', options: { gold?: number } = {},
+  content: Content, difficulty = 'default', options: { gold?: number } = {},
 ): { session: Session; ruleset: HuntRuleset } {
   const session = createHuntSession({
     id: 'caves', content, huntId: 'rotworm-caves', difficulty, createdAtMs: 0,
@@ -45,22 +45,21 @@ function run(session: Session, durationMs: number, stepMs: number): void {
 }
 
 describe('a Rotworm Caves real (#511)', () => {
-  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 2, 5 e 8', () => {
-    for (const [difficulty, count] of [['cautious', 2], ['bold', 5], ['reckless', 8]] as const) {
-      const { session, ruleset } = enter(real(), difficulty);
-      // O lugar do ponto 0 é o tile em que o herói entra: com `spawnClearRadius` (#236) ele
-      // só nasce quando o herói se afasta, e pelo laço inteiro um lugar recém-vagado espera
-      // o herói sair de perto. A densidade é a da dificuldade — alcançada, e nunca excedida —,
-      // mas num instante qualquer pode faltar o lugar que o herói está pisando.
-      let most = 0;
-      for (let t = 0; t < 10_000; t += 100) {
-        session.advanceBy(100);
-        const alive = ruleset.monsters.filter((m) => m.alive).length;
-        expect(alive, difficulty).toBeLessThanOrEqual(count);
-        most = Math.max(most, alive);
-      }
-      expect(most, difficulty).toBe(count);
+  it('todos os 13 pontos de spawn nascem — sem pull, sem escolha de tamanho (ADR 0039)', () => {
+    // Fim do pull por dificuldade (#583): os 13 pontos da rota nascem juntos, na entrada — a
+    // densidade não é mais 2/5/8 escolhidos, é o total de pontos que a rota declara. `blockable`
+    // (o rotworm declara `true`, #519/#753) segura o ponto onde o herói está em cima, então o
+    // teto observável é 13, mas o instante inicial pode ficar um a menos enquanto esse ponto
+    // espera a vista limpar.
+    const { session, ruleset } = enter(real());
+    let most = 0;
+    for (let t = 0; t < 10_000; t += 100) {
+      session.advanceBy(100);
+      const alive = ruleset.monsters.filter((m) => m.alive).length;
+      expect(alive).toBeLessThanOrEqual(13);
+      most = Math.max(most, alive);
     }
+    expect(most).toBeGreaterThanOrEqual(12);
   });
 
   it('o herói percorre o laço e a caverna rende: abates, gold e loot em dez minutos', () => {
@@ -88,9 +87,12 @@ describe('a Rotworm Caves real (#511)', () => {
       expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
     }
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.goldGained).toBeGreaterThan(0);
-    // Só 2 abates até morrer (#522 reduziu o rendimento do desarmado) — loot por abate é
-    // probabilístico, e a amostra é pequena demais para garantir item algum.
+    // Fim do pull por dificuldade (#583, ADR 0039, mesclado depois deste teste): os 13 pontos
+    // da rota nascem TODOS de uma vez, não mais os 2 do antigo `difficulties.cautious` — o
+    // herói desarmado morre bem mais rápido, com poucos abates antes disso. Gold (71,76% por
+    // abate) e item deixam de ser garantidos com uma amostra tão pequena; a asserção relaxa
+    // para a mesma tolerância que `itemsLooted` já tinha.
+    expect(session.aggregates.goldGained).toBeGreaterThanOrEqual(0);
     expect(session.aggregates.itemsLooted).toBeGreaterThanOrEqual(0);
     // A rota é um laço de 444 tiles: o walker andou nele antes de morrer.
     expect(ruleset.routeIndex).toBeGreaterThanOrEqual(0);
@@ -132,7 +134,7 @@ describe('a Rotworm Caves real (#511)', () => {
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
 
-  it('um personagem level 8 sem arma aguenta o pull cautious com cura automática e poção', () => {
+  it('um personagem level 8 sem arma, com cura automática e poção, mata ao menos um rotworm antes do fim', () => {
     // Bot padrão (FUN-114, #515): cura automática com HP ≤ 70 % (magia `heal`) e poção com
     // HP ≤ 40 % (`health-potion`, `packages/content/data/bot/baseline.json`) são o que segura o
     // herói, como o Druid do Huntera segurou com HP mínimo 116/170 (Parte VI §36).
@@ -142,8 +144,15 @@ describe('a Rotworm Caves real (#511)', () => {
     // automática SOZINHA (sem poção) já não garante os dez minutos inteiros — ver o teste
     // acima, sem gold. Um jogador de Tibia de verdade carrega poção; este herói também passa a
     // carregar (2.000 gold, o bastante para dezenas de poções de 45 — medido: a caverna real
-    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena volta a valer, como
-    // valia antes da #521 — só que agora sustentada do jeito certo.
+    // gasta ~225 gold em dez minutos aqui), e com ela a sobrevivência plena valia — para o pull
+    // de 2 rotworms do antigo `difficulties.cautious`.
+    //
+    // Fim do pull por dificuldade (#583, ADR 0039, mesclado depois deste teste): os 13 pontos
+    // da rota nascem TODOS de uma vez — o herói desarmado apanha de muito mais rotworm ao mesmo
+    // tempo do que a poção e a cura automática foram dimensionadas para segurar, e morre. A
+    // asserção passa a aceitar os dois desfechos (como o teste acima), preservando o que ainda é
+    // contrato: o herói mata pelo menos um antes de morrer, e a fórmula de XP fecha enquanto ele
+    // sobrevive.
     const { session } = enter(real(), 'cautious', { gold: 2_000 });
     const hero = session.participants[0] as CharacterRuntime;
     let minHp = hero.health;
@@ -152,9 +161,11 @@ describe('a Rotworm Caves real (#511)', () => {
       minHp = Math.min(minHp, hero.health);
     }
     console.log(`HP mínimo: ${minHp}/${hero.maxHealth}`);
-    expect(session.ended).toBeNull();
+    expect(['death', null]).toContain(session.ended);
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
+    if (session.ended === null) {
+      expect(session.aggregates.xpGained).toBe(session.aggregates.kills * 40 * 3);
+    }
     const hoursFraction = 600_000 / 3_600_000;
     console.log(`XP/h: ${Math.round(session.aggregates.xpGained / hoursFraction)}`);
     console.log(`gp/h: ${Math.round(session.aggregates.goldGained / hoursFraction)}`);

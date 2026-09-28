@@ -6,38 +6,5 @@
   "routeId": "rat-cellars",
   "ambience": "cavern",
   "description": "Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia. Ratos disputam caixotes e barris pelos corredores baixos — o primeiro perigo que toda espada aprende a enfrentar.",
-  "spawnClearRadius": 3,
-  "difficulties": {
-    "cautious": {
-      "monsterCount": 2,
-      "composition": [
-        {
-          "monsterId": "rat",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 2000
-    },
-    "bold": {
-      "monsterCount": 5,
-      "composition": [
-        {
-          "monsterId": "rat",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 2000
-    },
-    "reckless": {
-      "monsterCount": 8,
-      "composition": [
-        {
-          "monsterId": "rat",
-          "weight": 1
-        }
-      ],
-      "respawnDelayMs": 2000
-    }
-  },
-  "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs: RESOLVIDO em 2000 ms (#510) — Huntera Parte II §15 registrou um rato novo 1,0–2,5 s depois de um sumir; 2 s é o meio da faixa observada, e a Cyclopedia (Parte V §32) não traz este número. corpseTtlMs saiu daqui e mora no monstro (#585): `data/monsters/rat.json` declara 670000 ms, a soma da cadeia real do Canary `items.xml` — não mais os 30000 ms copiados do Huntera (Parte VI §36, #515), que eram só o prazo observado do PRIMEIRO estágio de decaimento. spawnClearRadius [ABERTO — valor provisório: 3 tiles (#236); fora do alcance do golpe desarmado (1) e do passo de cada lado; o bow alcança 6 e ainda pode matar no instante do nascimento]."
+  "_open": "Fim do pull por dificuldade (#583, ADR 0039): os 14 pontos da rota (`data/routes/rat-cellars.json`) nascem TODOS ao mesmo tempo, cada um declarando `rat` direto — não há mais `difficulties`/`monsterCount`/`composition`/`spawnClearRadius` nesta hunt. O `rat` já declara `blockable: true` (#519, comportamento observado do Huntera, não o `isBlockable: false` do Canary): o respawn dele espera a vista limpar, como sempre foi via `spawnClearRadius`. `respawnDelayMs: 2000` por ponto é o MESMO valor que a dificuldade antiga usava (Huntera Parte II §15, #510) — só mudou de onde mora no arquivo. corpseTtlMs saiu daqui e mora no monstro (#585): `data/monsters/rat.json` declara 670000 ms, a soma da cadeia real do Canary `items.xml` — não mais os 30000 ms copiados do Huntera (Parte VI §36, #515), que eram só o prazo observado do PRIMEIRO estágio de decaimento. Densidade: antes o pull limitava a 2/5/8 ratos vivos ao mesmo tempo (Huntera, FUN-123); agora os 14 pontos nascem todos — divergência DELIBERADA do ADR 0039 decisão 3, que remove o modelo de pull inclusive desta hunt."
 }

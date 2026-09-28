@@ -112,6 +112,15 @@ export interface MonsterState {
    * é `false` — precisa sobreviver ao snapshot pela mesma razão de `lastStepBlocked`.
    */
   readonly ignoresFieldDamage?: boolean;
+  /**
+   * O timer de `MONSTER_DANCE` (#543) está agendado AGORA? Só existe enquanto o monstro está
+   * colado no alvo, sem passo a dar — diferente de `scheduledDefenses`/`scheduledAbilities`, que
+   * rodam a vida inteira, este é armado e DESARMADO conforme a adjacência muda (custo: quem
+   * persegue ou está sem alvo não paga o timer). Ausente é `false` — o monstro que nunca armou,
+   * ou snapshot anterior a esta issue. Precisa sobreviver ao snapshot: sem ele, uma hunt retomada
+   * armaria de novo por cima do evento que o snapshot já trouxe na fila, dobrando o timer.
+   */
+  readonly danceArmed?: boolean;
 }
 
 /**
@@ -198,6 +207,8 @@ export class MonsterRuntime {
   lastStepBlocked: boolean;
   /** Ver `MonsterState.ignoresFieldDamage` (M29-05). */
   ignoresFieldDamage: boolean;
+  /** Ver `MonsterState.danceArmed` (#543). */
+  danceArmed: boolean;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -218,6 +229,7 @@ export class MonsterRuntime {
     this.blockCharge = state.blockCharge ?? FULL_BLOCK_CHARGE;
     this.lastStepBlocked = state.lastStepBlocked ?? false;
     this.ignoresFieldDamage = state.ignoresFieldDamage ?? false;
+    this.danceArmed = state.danceArmed ?? false;
   }
 
   get alive(): boolean {
@@ -263,6 +275,7 @@ export class MonsterRuntime {
       ...(isFullBlockCharge(this.blockCharge) ? {} : { blockCharge: this.blockCharge }),
       ...(this.lastStepBlocked ? { lastStepBlocked: true } : {}),
       ...(this.ignoresFieldDamage ? { ignoresFieldDamage: true } : {}),
+      ...(this.danceArmed ? { danceArmed: true } : {}),
     };
   }
 
@@ -419,21 +432,30 @@ export function nearestPrey(origin: GridPoint, candidates: readonly Prey[]): Pre
  * Pura e recalculada a cada decisão — não é estado guardado, como o `attackReady` é: fugir é
  * uma FUNÇÃO do HP atual, e o HP já é o estado. Guardar um segundo booleano derivado dele
  * divergiria na primeira cura que não passasse por aqui.
+ *
+ * Provocação (#589, Canary `Monster::isFleeing`: `challengeFocusDuration <= 0`) suspende a fuga
+ * enquanto a condição `'challenge'` vale — o mesmo lookup O(1) em `Conditions` que qualquer
+ * outra condição já usa, sem campo novo.
  */
 export function isMonsterFleeing(monster: MonsterRuntime, definition: Monster): boolean {
   return definition.runOnHealth !== undefined
     && monster.alive
-    && monster.health <= definition.runOnHealth;
+    && monster.health <= definition.runOnHealth
+    && monster.conditions.get('challenge') === null;
 }
 
 /**
  * O tipo de dano de um campo, quando ele CAUSA dano ao longo do tempo (CMB-07). Um campo de
  * outro efeito (velocidade, cura) não tem `damageType` — nunca conta para `canWalkOnFieldType`,
  * porque o Tibia só tem o par `canWalkOn*` para fogo/veneno/energia (o resto do switch do TFS/
- * Canary devolve sempre `true`).
+ * Canary devolve sempre `true`). Estágio SEM condição (#560: Magic Wall, Wild Growth, o último
+ * estágio mudo do fire field) também devolve `null` — não é dano, é bloqueio, e quem julga
+ * bloqueio é `canOccupy`/`TileOccupancy`, não este predicado.
  */
 function fieldDamageType(field: TileFieldState): DamageType | null {
-  return field.condition.effect.kind === 'damage-over-time' ? field.condition.effect.damageType : null;
+  return field.condition !== undefined && field.condition.effect.kind === 'damage-over-time'
+    ? field.condition.effect.damageType
+    : null;
 }
 
 /**
