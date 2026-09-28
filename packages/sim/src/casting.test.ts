@@ -168,6 +168,53 @@ describe('castSpell — o efeito', () => {
   });
 });
 
+describe('castSpell/useSupply — dispel (#590, Cure Poison e afins)', () => {
+  const curePoison: Spell = {
+    ...heal, id: 'cure-poison', effect: { kind: 'dispel', types: ['poison'] },
+  };
+  const fairWoundCleansing: Spell = {
+    ...heal, id: 'fair-wound-cleansing',
+    effect: { kind: 'heal', amount: 40, dispel: { types: ['paralyze'] } },
+  };
+  const antidoteRune: Supply = {
+    id: 'antidote-rune', name: 'Antidote Rune', price: 15, group: 'healing',
+    groupCooldownMs: 1_000, requires: {}, effect: { kind: 'dispel', types: ['poison'] },
+  };
+
+  it('a magia de dispel puro devolve as chaves, sem curar e sem gastar sorteio', () => {
+    const caster = hero();
+    const result = castSpell(caster, curePoison, null, 0, combat, rng());
+    expect(result).toEqual({
+      ok: true, healed: 0, manaRestored: 0, damage: 0, hits: [], goldSpent: 0, dispel: ['poison'],
+    });
+    expect(caster.mana).toBe(80); // gastou a mana da magia (§4.4, `heal.manaCost`), como sempre.
+  });
+
+  it('a cura composta cura E devolve o dispel no MESMO lançamento', () => {
+    const caster = hero({ health: 50 });
+    const result = castSpell(caster, fairWoundCleansing, null, 0, combat, rng());
+    expect(result).toMatchObject({ ok: true, healed: 40, dispel: ['paralyze'] });
+  });
+
+  it('magia sem `dispel` declarado continua sem o campo — não inventa remoção', () => {
+    const result = castSpell(hero(), heal, null, 0, combat, rng());
+    expect(result.ok && result.dispel).toBeUndefined();
+  });
+
+  it('useSupply: a runa de dispel puro cobra gold e devolve as chaves, sem cura', () => {
+    const user = hero({ gold: 100 });
+    const result = useSupply(user, antidoteRune, null, combat, rng());
+    expect(result).toMatchObject({ ok: true, healed: 0, goldSpent: 15, dispel: ['poison'] });
+    expect(balanceOf(user)).toBe(85);
+  });
+
+  it('a runa de dispel recusa sem gold, como qualquer supply — e não devolve dispel nenhum', () => {
+    const user = hero({ gold: 0 });
+    const result = useSupply(user, antidoteRune, null, combat, rng());
+    expect(result).toEqual({ ok: false, reason: 'not-enough-gold', retryInMs: 0 });
+  });
+});
+
 describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
   it('debita o preço do delta da sessão e diz quanto gastou', () => {
     const user = hero({ health: 50, gold: 100 });

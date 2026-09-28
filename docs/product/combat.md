@@ -555,10 +555,13 @@ não mais a exceção. O que o motor ganhou:
   causado ×0,65, ou seja −35 %, não −15 %) porque o Canary já expressa Protector direto em
   percentual de dano, sem passar por skill.
 
-O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade, cura
-de condição, magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições
-de monstro, que ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o
-catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …). Também ficam
+O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade,
+magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições de monstro, que
+ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o catálogo nominal
+ainda não traz são as magias de DOT por nome (Envenom, Curse, …). **A cura de condição SAIU da
+lista no #590**: Cure Poison (genérica, todas as vocações), Cure Burning/Cure Electrification
+(Druid), Cure Bleeding (Druid e Knight), Cure Curse (Paladin) e a Antidote Rune (suprimento) — ver
+a subseção "Cura de condição (dispel)" logo após o CMB-07. Também ficam
 de fora as magias de "Wheel of Destiny" (o sistema de grades/`needLearn` do Canary moderno,
 level 300 — Fair Wound Cleansing, Divine Grenade, Terra Burst): o Draconya não modela o Wheel, e
 um level 200 não as alcançaria de qualquer forma. Great Death Beam já existia no catálogo com um
@@ -1979,6 +1982,45 @@ concentrados em bosses de quest fora do recorte atual). `conditions.test.ts` pre
 (4/61 de desvio, 5/61 de fala, com seed fixa e 61 000 rolagens) e o mapeamento `r → direção`;
 `hunt.test.ts` prova a integração — o desvio passa pelo `#step` de verdade, para personagem e para
 monstro, sem consumir sorteio de quem não tem a condição.
+
+## Cura de condição (dispel, #590)
+
+Cure Poison, Cure Burning, Cure Electrification, Cure Bleeding e Cure Curse (Canary
+`data/scripts/spells/healing/cure_*.lua`) e a Antidote Rune (`data/scripts/runes/
+antidote_rune.lua`) removem uma condição do lançador — nada mais. É a metade "remove" da mecânica
+de condição do CMB-07: a metade "aplica" já existia (haste, postura, magic shield, cura ao longo
+do tempo, DOT); faltava como um efeito TIRA uma dessas do próprio personagem.
+
+- **`kind: 'dispel'`** é um efeito NOVO de `spellEffectSchema`/o `effect` do `supplySchema`:
+  `{ kind: 'dispel', types: string[] }` — sem sorteio, sem cura, sem mira. `types` são as MESMAS
+  chaves de `ConditionState.key` que `field.condition.key` já usa em conteúdo real (`"burning"`
+  no Dragon Lord) — vocabulário livre de string, não um enum fechado no schema. Uma magia com
+  `types: ["poison", "burning"]` removeria as duas de uma vez, embora nenhuma do catálogo real o
+  faça hoje (cada Cure X do Tibia remove uma condição só).
+- **`heal` ganhou um campo `dispel` opcional** (`{ types: string[] }`), para a cura COMPOSTA que o
+  Canary tem (Fair Wound Cleansing, Nature's Embrace, Restoration: cura E remove
+  `CONDITION_PARALYZE` no mesmo lançamento). O Draconya não modela paralisia (CMB-07 "Fora do
+  escopo" — ver acima), então nenhum conteúdo real usa o campo ainda; o mecanismo existe e tem
+  teste (`casting.test.ts`), pronto para o dia em que uma condição combinável com cura existir.
+- **`castSpell`/`useSupply` devolvem as chaves a remover** (`CastSuccess.dispel`), nunca removem
+  em si — a mesma divisão da `condition` que uma magia de haste devolve: só o ruleset tem a fila
+  de eventos (`condition-expire`/`condition-tick`) para cancelar. `HuntRuleset.#dispelConditions`
+  é quem de fato chama `Conditions.remove` e cancela os dois eventos, por CHAVE — ao contrário de
+  `#cancelConditions` (morte/saída), que zera TUDO, aqui só as chaves declaradas saem: Cure
+  Poison remove o poison e não toca o burning do mesmo personagem.
+- **Chave ausente no alvo não é erro.** A magia sai (gasta mana, entra em cooldown) mesmo sem
+  nada para remover — a mesma filosofia de recusa tipada de `castSpell`: só a AÇÃO é recusada por
+  algo, nunca o efeito por não ter alvo a limpar.
+- **Antidote Rune é self-target só, nesta primeira versão** (desvio do Canary, que permite mirar
+  qualquer criatura à distância com `allowFarUse`/`needTarget`): estender o alvo `friend` para o
+  efeito `dispel` tocaria `#healRangeOf`/a resolução de candidato do bot, fora do recorte de uma
+  issue sobre CURAR condição. Fica registrado para uma issue futura, se um suprimento de dispel
+  em aliado for pedido.
+- **Cure Poison é a QUARTA magia genérica** (sem `vocationId`): o Canary a dá para todas as
+  vocações do jogo (o Draconya não tem monge), como `heal`/`strike`/`blast` já eram as três
+  genéricas pré-vocação. Cure Bleeding tem DUAS linhas de catálogo (`cure-bleeding-druid`/
+  `cure-bleeding-knight`), como `recovery-knight`/`recovery-paladin` já fazem para a mesma magia
+  em duas vocações — o Canary a dá para Druid E Knight, não uma só.
 
 ## O Dragon e o Dragon Lord (#520): a primeira ability wave/circle/defesa/fuga de verdade
 
