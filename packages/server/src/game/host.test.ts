@@ -17,7 +17,9 @@ import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
-import { CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder } from './sessions.js';
+import {
+  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+} from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
   TEST_COMBAT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
@@ -73,6 +75,7 @@ function buildHost(
     // `NonNullable`: `SessionHostOptions['x']` já inclui `undefined`, e espalhar uma opcional
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
+    loadBotConfig?: NonNullable<SessionHostOptions['loadBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
     ammunitionCatalog?: NonNullable<SessionHostOptions['ammunitionCatalog']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
@@ -86,11 +89,23 @@ function buildHost(
   // `level` é do PERSONAGEM de teste, não do host: tirar do espalhamento é o que impede
   // `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
   const { level, ...hostOptions } = options;
+  // `loadBotConfig` é a CARGA (ADR 0014) — função separada de `acceptBotConfig`, a EDIÇÃO. Um
+  // teste que só configura `acceptBotConfig` (a maioria, escrita antes do #596) ainda precisa
+  // do ticket adotar o bot: adapta o mesmo julgador para a forma de carga, com `removed: []` —
+  // nenhum teste aqui exercita conteúdo removido debaixo de uma config, e `sanitizeBotConfigV2`
+  // tem cobertura própria em `packages/content/src/bot.test.ts`/`bot-migration.test.ts`.
+  const loadBotConfig = hostOptions.loadBotConfig ?? (hostOptions.acceptBotConfig === undefined
+    ? undefined
+    : (raw: unknown, lvl: number) => {
+      const decision = (hostOptions.acceptBotConfig as NonNullable<SessionHostOptions['acceptBotConfig']>)(raw, lvl);
+      return decision.ok ? { ok: true as const, config: decision.config, removed: [] } : decision;
+    });
   const host = new SessionHost({
     nodeId: 'n1',
     contentVersion: 'v-test',
     logger,
     ...hostOptions,
+    ...(loadBotConfig === undefined ? {} : { loadBotConfig }),
     createSession: (characterId) => {
       const session = new Session({
         id: `s-${characterId}`,
@@ -6673,6 +6688,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
       progression: content.progression,
       skillCatalog: content.skills,
       acceptBotConfig: createBotConfigValidator(content),
+      loadBotConfig: createBotConfigLoader(content),
       saveBotConfig: async (characterId, config) => { saved.push({ characterId, config }); },
       createSession: (characterId) => {
         const session = createHuntSession({
@@ -6807,6 +6823,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: content.version, logger,
       acceptBotConfig: createBotConfigValidator(content),
+      loadBotConfig: createBotConfigLoader(content),
       saveBotConfig: async (_id, config) => { saved.push(config); },
       createSession: createCitySessionFactory(content),
     });

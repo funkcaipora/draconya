@@ -172,6 +172,11 @@ const spells = [
     id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 1_000,
     effect: { kind: 'damage', power: 80, range: 3, area: { shape: 'circle', radius: 2, centered: 'target' } },
   },
+  // #596: Cancel Magic Shield — remove a condição do lançador NA HORA, sem agendar nada.
+  {
+    id: 'cancel-magic-shield', name: 'Cancel Magic Shield', manaCost: 10, cooldownMs: 1_000,
+    effect: { kind: 'remove-condition', key: 'mana-shield' },
+  },
 ];
 // Poção e runa são suprimentos ABSTRATOS (FUN-77, §20.1): usar debita gold, sem pilha. Os
 // números são redondos de propósito, como os das magias.
@@ -2620,6 +2625,24 @@ describe('magia (FUN-74)', () => {
 
     expect(() => run(session, 3_000, 100)).not.toThrow();
     expect(hero.mana).toBe(200);
+  });
+
+  it('Cancel Magic Shield (#596) remove a condição do lançador NA HORA, sem evento agendado', () => {
+    const { session, hero } = withSpells(botConfig({
+      support: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'cancel-magic-shield' },
+      }],
+    }), { health: 1_000, mana: 100, monsters: false });
+    // Mana Shield já ativo — como uma poção ou magia anterior teria deixado.
+    hero.conditions.apply({ key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000 });
+    expect(hero.conditions.hasManaShield()).toBe(true);
+
+    session.advanceBy(50);
+
+    // A remoção é IMEDIATA — não é uma condição nova com prazo curto, é a ausência da anterior.
+    expect(hero.conditions.hasManaShield()).toBe(false);
+    expect(hero.mana).toBe(90);
   });
 });
 
@@ -10782,7 +10805,7 @@ describe('cadeia de estágios de campo e campo bloqueante (#560, decayTo/Magic W
     const stuckRoute = {
       id: 'wall-stuck-route', mapId: 'arena',
       tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }],
-      spawnPoints: [{ routeIndex: 0 }],
+      spawnPoints: [{ routeIndex: 0, monsterId: 'rat', respawnDelayMs: 30_000 }],
     };
     const stuckHunt = {
       ...hunt, routeId: 'wall-stuck-route',

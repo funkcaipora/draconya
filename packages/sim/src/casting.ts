@@ -109,6 +109,13 @@ export interface CastSuccess {
    * a mesma divisão de `condition` acima.
    */
   readonly dispel?: readonly string[];
+  /**
+   * A chave de condição a REMOVER do lançador, agora, sem evento (#596: `kind: 'remove-condition'`
+   * — Cancel Magic Shield). Mutuamente exclusivo com `condition`: uma magia ou agenda algo, ou
+   * remove algo, nunca as duas. Quem tem a `Conditions` do lançador (o ruleset) chama
+   * `conditions.remove(key)` direto — não há vencimento para uma remoção.
+   */
+  readonly removeConditionKey?: string;
 }
 
 export interface CastRefused {
@@ -578,6 +585,11 @@ export function castSpell(
     // quem aplica `targetId`/`ConditionState`, não `castSpell`. Aqui só confirma o sucesso.
     case 'challenge':
       return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0 };
+    case 'remove-condition':
+      return {
+        ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+        removeConditionKey: effect.key,
+      };
     /**
      * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
      * aplica (o ruleset) agenda o tique. O `targetId` fica vazio aqui porque o lançador não

@@ -648,6 +648,17 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
     });
   });
 
+  it('remove-condition (#596: Cancel Magic Shield) devolve a chave e NÃO agenda condição nenhuma', () => {
+    const caster = hero({ level: 20, mana: 1_000 });
+    const cancel: Spell = { ...heal, id: 'cancel-magic-shield', manaCost: 50, effect: { kind: 'remove-condition', key: 'mana-shield' } };
+    const result = castSpell(caster, cancel, null, 0, combat, rng());
+    expect(result).toMatchObject({ ok: true, removeConditionKey: 'mana-shield' });
+    // Ao contrário de `mana-shield`/`haste`/`heal-over-time` (acima), esta magia NÃO devolve
+    // `condition` — não há nada para o ruleset agendar na fila de eventos.
+    expect((result as { condition?: unknown }).condition).toBeUndefined();
+    expect(caster.mana).toBe(1_000 - 50);
+  });
+
   it('a self-origin shape needs no range and no primary distance; the posture scales the spell hit', () => {
     const wave: Spell = {
       ...strike, id: 'fire-wave', effect: { kind: 'damage', power: 40, area: { shape: 'wave', length: 3 }, damageType: 'fire' },
